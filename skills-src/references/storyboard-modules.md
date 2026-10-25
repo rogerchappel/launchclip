@@ -163,6 +163,10 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | shows when or where activity peaks across two dimensions ("busiest day and hour"): cells shade in a wave | heatmap |
 | ranks things ("top five", "the most popular", "number one"): rows land from last place to first | leaderboard |
 | compares products feature by feature ("unlike X, it…", "the only one that"): a table of ticks and crosses with the pick outlined | comparison-table |
+| gives a big running total ("so far", "all time", "and counting"): every digit rolls on its own reel to the figure | odometer |
+| counts down to a moment ("in 3, 2, 1", "launches in", "doors open"): each number punches in, then the end word | countdown |
+| turns a date, year or time over ("from 2024 to 2026", "at midnight"): split-flap cards flip to the new value | flip-clock |
+| names who or what it is for among several ("for founders, teachers or creators", "whatever you make"): a reel of words spins and lands on one | slot-roll |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -1097,6 +1101,91 @@ params:
 events: build, highlight
 variants: grid (default), striped, cards
 
+### odometer (keeps captions)
+A rolling odometer: every digit spins on its own reel and the figure lands, lower places turning faster; plain, tiles or mechanical counter.
+params:
+- value: number ≥ 0, required
+- from: start value (default 0; digits zero-pad)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- label: string ≤ 60 (optional)
+- sub: string ≤ 70, e.g. a source (optional)
+- span: seconds 0.4–4 (default 1.6)
+- tone: digit colour (primary | accent | paper | #rrggbb; default paper)
+- at: roll start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: count, landed
+
+### flip-clock (keeps captions)
+Split-flap cards flip through 2–10 values (a date, a time, a score, a year), each changed card falling on its hinge; classic, brand or light cards.
+params:
+- values: [string ≤ 10] 2–10, e.g. ["2025", "2026"] or ["11:58", "11:59", "12:00"]; shorter values right-align
+- interval: seconds between flips (default fits the scene, ≤ 0.9)
+- label: string ≤ 60 (optional)
+- sub: string ≤ 70 (optional)
+- at: first flip: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: flip, flip-<n>
+
+### ticker-tape (keeps captions)
+A scrolling ticker band of items, with optional values and ▲/▼ changes, looping seamlessly; brand band, minimal rules or an LED board, with an optional tag and title.
+params:
+- items: [string ≤ 24 | {label ≤ 16, value? (number or string ≤ 12), change? (percent)}] 3–14
+- tag: string ≤ 10 such as "LIVE" (optional)
+- title: string ≤ 60 above the band (optional)
+- speed: px per second at 1080 (default 170)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- at: scroll start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: roll
+
+### slot-roll (keeps captions)
+A slot-machine reel of words spins (motion-blurred) and lands on the final one; a boxed window, inline in a sentence ("Built for ___"), or a stack showing its neighbours.
+params:
+- items: [string ≤ 18] 2–10, the words on the reel
+- final: the word it lands on (an item or index; default the last)
+- prefix: string ≤ 36 before the reel (optional)
+- suffix: string ≤ 36 after it (optional)
+- spins: full turns before landing 1–5 (default 2)
+- span: seconds 0.5–4 (default 1.5)
+- tone: reel text colour (primary | accent | paper | #rrggbb)
+- at: spin start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: spin, land
+
+### countdown (keeps captions)
+A countdown from N to zero (or to `to`), each number punching in on its tick, then an optional end word; big digits, a depleting ring, or an mm:ss clock with a draining bar.
+params:
+- from: integer 1–3600, required
+- to: integer (default 0)
+- step: seconds per tick (default 1, shortened to fit the scene)
+- end: string ≤ 14 shown after zero, e.g. "Live" (optional)
+- label: string ≤ 60 (optional)
+- sub: string ≤ 70 (optional)
+- tone: colour (primary | accent | paper | #rrggbb)
+- at: first tick: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: start, zero
+
+### percent-fill (keeps captions)
+A shape fills to a share while the figure counts: a round flask of rising liquid with a sliding wave, a battery, or a thick bar.
+params:
+- value: number, required (0..max)
+- max: number (default 100: the value is a percent)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- label: string ≤ 60 (optional)
+- sub: string ≤ 70 (optional)
+- span: seconds 0.4–4 (default 1.6)
+- tone: fill colour (primary | accent | paper | #rrggbb)
+- at: fill start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: fill
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1207,6 +1296,12 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | heatmap | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | leaderboard | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | comparison-table | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| odometer | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| flip-clock | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| ticker-tape | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| slot-roll | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| countdown | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| percent-fill | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

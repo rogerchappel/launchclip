@@ -2507,6 +2507,20 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
+### Counters (`catalog-h-numbers.mjs`)
+
+Every counter formats with `params.format` and lands exactly on its value;
+counting text is precomputed per frame, reels and flaps are tweens.
+
+| Module | Variants | Params (beyond label, sub, at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `odometer` | plain, tiles, mechanical | `value`, `from` (digits zero-pad), `format`, `span`, `tone` | count, landed | Each digit is a reel of 0–9 that rolls forward (lower places turn more, up to three extra turns) and all land together |
+| `flip-clock` | classic, brand, light | `values` 2–10 strings (shorter ones right-align), `interval` | flip, flip-&lt;n&gt; | Split-flap cards: on each change the old top half falls (power2.in) and the new bottom half drops onto the hinge (bounce.out); unchanged cards stay |
+| `ticker-tape` | band, minimal, led | `items` 3–14 (string or `{label, value?, change?}`), `tag`, `title`, `speed` | roll | Items are laid out at fixed widths, copied to cover the band, and one linear loop slides one strip width per cycle, so the wrap is seamless |
+| `slot-roll` | window, inline, stack | `items` 2–10, `final`, `prefix`, `suffix`, `spins`, `span`, `tone` | spin, land | A reel of the items spins `spins` turns and lands with back.out; motion blur fades to 0 by the landing |
+| `countdown` | digits, ring, clock | `from`, `to`, `step` (fits the scene), `end`, `tone` | start, zero | Each tick sets the number and punches it in; the ring depletes and the clock's bar drains linearly; `end` replaces zero. The label sits above the count |
+| `percent-fill` | liquid, battery, bar | `value`, `max` (100), `format`, `span`, `tone` | fill | Liquid rises in a round flask under a sliding wave; a battery or bar fills; the figure counts and takes the fill's ink when it sits on the fill |
+
 ### Tools
 
 - `scripts/element-samples.mjs`: sample params for every module.
