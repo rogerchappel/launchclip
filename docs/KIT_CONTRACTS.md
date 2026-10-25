@@ -2140,3 +2140,72 @@ the phrase hints agree. `section-card` has none; it is chosen at section starts.
 Parity fixtures: `test/fixtures/parity/g-*.json` (motion lane, both aspects)
 and `test/fixtures/parity-footage/g-*.json` (`examples/story/vocabulary`:
 overlays and inserts over a recording).
+
+## Catalogue H (`kit/core/catalog-h.mjs`)
+
+The element library: charts, counters, frames and motion titles at the scale
+of a UI component kit, every element drawn in both renderers from one view
+tree (`catalogHView`) and one renderer-neutral op list (`catalogHTimeline`),
+under catalogue B's conventions (root enter and exit, `at` from the scene
+start, hits that time events of the same name, frame-pure per-frame text
+samples). Module code lives in `catalog-h-<group>.mjs` beside a shared base
+(`catalog-h-base.mjs`: variants, palette, number formats, data rows) and view
+helpers (`catalog-h-view.mjs`). Emitters are in `kit/hyperframes/catalog-h.mjs`;
+components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
+
+- **Variants.** Every module exports its `VARIANTS` (`VARIANTS[id]` from
+  `catalog-h.mjs`, also `MODULES[id].variants`), the default first.
+  `params.variant` wins, then the style's choice (`ctx.variants[id]`, from
+  `story.variants`, [SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) §3.2), then
+  the first. A variant changes layout, shapes and entrances, never the params;
+  an unknown name fails naming the module's variants.
+- **Fit before failing.** A layout that does not fit falls back to one that
+  does rather than failing a seeded variant: columns turn into rows when their
+  labels do not fit their slots (bar-chart, stacked-bar, waterfall).
+- **Palette.** Marks use the brand roles; extra series come from
+  `seriesColors(colors, n)` (primary, accent, paper, then blends), each at
+  least 3:1 on `bg`. Text on a filled shape takes `inkOn` (ink, paper or bg,
+  whichever reads best).
+- **Number formats** (`numberFormat`, `params.format`): `{style: number |
+  currency | percent | unit, currency (USD, EUR, GBP, JPY, AUD, …), unit,
+  decimals 0–3, compact (12.4K, 3.1M; whole numbers below 1,000 keep no
+  decimals), separator (default true), prefix, suffix}`. Deterministic text,
+  no locale lookup, so both renderers show the same characters.
+- **Extra op props.** `blur` (px, a CSS blur filter) and `clipT`/`clipR`/
+  `clipB`/`clipL` (percent insets of a clip-path; an op that sets one sets all
+  four). `cssProps` writes them as the `filter` and `clip-path` strings GSAP
+  tweens number by number; `catalogHStyle` applies the same values in
+  Remotion. Nothing stays blurred or clipped once a build settles.
+- **Data.** Charts take their data from params only, and the planner is told
+  to use figures from the brief or assets, never invented ones.
+
+### Charts (`catalog-h-charts.mjs`, `catalog-h-flows.mjs`)
+
+| Module | Variants | Params (beyond title, source, at, format, rect) | Events | Build |
+| --- | --- | --- | --- | --- |
+| `bar-chart` | columns, bars, lollipop, blocks | `data` 2–10 `{label, value, color?}`, `max`, `tone`, `highlight`, `highlightAt` | build, highlight | Bars grow (scale, or a clip for blocks) with 0.09 s stagger; values ride the bar ends and count; the highlight dims the others |
+| `stacked-bar` | columns, bars | `categories` 2–7, `series` 2–5 `{label, values, color?}`, `totals` | build | Each category builds series by series; legend and totals pop |
+| `pie-chart` | donut, pie, half | `data` 2–6, `percent`, `center` `{value?, label?}` or false, `highlight` | build, highlight | Slices sweep as one continuous turn (each slice linear over its share of an eased sweep); the centre counts to the total |
+| `area-chart` | gradient, line, steps | `labels` 3–16, `series` 1–3 `{values, label?, color?}`, `min`, `max` | build | The plot reveals left to right through a clip; the end value lands |
+| `scatter-plot` | dots, bubbles, rings | `points` 3–60 `{x, y, size?, label?, color?}`, `xLabel`, `yLabel`, `x`/`y` `{min, max}`, `trend`, `tone`, `highlight` | build, highlight | Axes draw, points pop in x order, the least-squares line draws, the highlight gets a label chip |
+| `radar-chart` | polygon, circles, dots | `axes` 3–8, `series` 1–3, `max` | build | The grid lands, each shape grows from the centre |
+| `sparkline` | line, area, bars | `values` 4–60, `label`, `value`, `delta` (or false), `tone` | build | A KPI card: the value counts along the trend, the line reveals, the delta chip pops |
+| `progress-ring` | ring, thick, segmented, half | `value`, `max` (100), `label`, `sub`, `tone` | build | The arc draws to the fraction (or segments light) while the centre counts |
+| `funnel-chart` | tapered, bars, steps | `stages` 2–6, `rates`, `tone` | build | Stages widen in top to bottom; the step-to-step rate pops between them |
+| `waterfall` | bridge, floating | `start` `{label, value}`, `steps` 1–8 `{label, delta}`, `total` | build | Each step grows from the last level (gains primary, losses accent); bridge draws the connectors |
+| `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
+| `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
+| `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
+| `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
+
+### Tools
+
+- `scripts/element-samples.mjs`: sample params for every module.
+- `node scripts/element-sheet.mjs`: a contact sheet of every variant (the
+  frame-pure state Remotion draws), or `--parity qa/parity` for the
+  HyperFrames stills of a parity run with their SSIM.
+- `node scripts/element-parity.mjs fixtures | run`: writes
+  `test/fixtures/parity/h-<module>-<variant>-<portrait|landscape>.json` (every
+  variant in portrait, the default in landscape) and renders them with one
+  Remotion bundle. The fixtures also run in `LAUNCHCLIP_PARITY=1 node --test
+  test/parity.test.js`.
