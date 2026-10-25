@@ -287,7 +287,9 @@ A style pack is `.launchclip/styles/<name>/style.json`:
                 sections?: boolean | {position?, color?},
                 progress?: boolean | {position?: top|bottom, color?, thickness?: 2-16 px},
                 show?: always|scenes},
- dials?: {energy?, density?, playfulness?, polish?: 0-1}}
+ dials?: {energy?, density?, playfulness?, polish?: 0-1},
+ segments?: [{id, title: ≤48, kicker?: ≤28, layout?: full|split-left|split-right|framed|stacked,
+              modules?: [id], icon?: name, match?: [phrase]}]}   // ≤12; see "Long form"
 ```
 
 - Layout names are `full`, `split-left`, `split-right`, `framed`, `stacked`,
@@ -1514,6 +1516,26 @@ A long video needs a change of picture at a steady interval: a layout change, an
   - else it warns.
   The result is `resets: {target, ceiling, times, longest, promoted, sections}`.
 - **Checks.** The coverage gate fails a run past the ceiling (`COVERAGE_GATE_MEASURES`) and adds a `sparseness` finding per run. `story validate` reports it as an error, unlike the other bands, because the fix is structural: `launchclip story long-form` places the resets.
+
+### Recurring segment formats
+
+A style can define named segment templates, so a series looks like a series: a "tool of the week" opens the same way and holds the same layout every episode (RFC §10.2).
+
+```json
+"segments": [
+  { "id": "tool-of-the-week", "title": "Tool of the week", "kicker": "Every Friday", "layout": "split-right",
+    "modules": ["object-card", "concept-card"], "icon": "wrench", "match": ["tool of the week", "this week's tool"] }
+]
+```
+
+- **The style.** `segmentErrors` (in `validateStylePack`) checks the shape: at most 12 segments, unique slug ids, a title, an optional kicker and icon, a footage layout other than `insert`, module ids (checked when the module list is passed), and match phrases.
+- **The planner.** `stylePromptLines` and the direction prompt (`segments`) list the segments. The model marks a section that is one with `"segment": "<id>"`. `validateDirection` allows `segment` on a section, and with `segments` (the style's) it errors on an unknown id. `story validate` passes the style's segments (`applyProjectStyle` now returns them on `style.segments`).
+- **The structure pass** (`options.segments`) reuses them:
+  - **Matching.** A map section or chapter without a segment gets one when its title contains the segment's title or a `match` phrase, ignoring case (`matchSegment`). The chapter carries `segment`.
+  - **The card.** The chapter's section card takes the segment's kicker (else its title, when the chapter's title differs) and its icon instead of the chapter number.
+  - **The layout.** The chapter holds the segment's layout as a `segment-<chapter>` footage section, and its map section's layout matches. A chapter that already has a section, or `stacked` in landscape, keeps its layout with a warning.
+  - **The modules.** It warns when none of the segment's modules play in the chapter. The result's `segments` lists `{chapter, segment, card, layout, modules}`.
+  - **Idempotence.** It drops its own `segment-*` and `reset-*` sections before planning again.
 
 ### Exports
 

@@ -28,6 +28,19 @@ If a scene is in a card's way, the scene starts a little later or the card gets 
 
 Give each chapter at least 10 seconds and make at least three. YouTube ignores a chapter list otherwise, and LaunchClip warns you when that would happen.
 
+## Recurring segments
+
+A series looks like a series when its regular segments look the same every episode. Define them once in your style:
+
+```json
+"segments": [
+  { "id": "tool-of-the-week", "title": "Tool of the week", "kicker": "Every Friday", "icon": "wrench",
+    "layout": "split-right", "modules": ["object-card", "concept-card"], "match": ["this week's tool"] }
+]
+```
+
+Any chapter titled like the segment ("Tool of the week", "This week's tool: Raycast") becomes that segment. It opens on a card with the segment's kicker and icon, keeps you on one side of the frame with a branded panel beside you, and the planner prefers the segment's graphics. You can also name the segment in the direction map yourself: `"segment": "tool-of-the-week"`.
+
 ## What you get
 
 `launchclip finish` puts the chapters in three places:
