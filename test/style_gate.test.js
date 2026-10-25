@@ -184,10 +184,16 @@ test("two stories in one style pass style check against each other (RFC §13 pha
       const drafted = await createStyleFromReferences(`episode-${i}`, { "from-reference": path.join(project, "renders/final.mp4") }, { root: path.join(dir, "styles"), cwd: dir });
       styles.push(path.join(drafted.path, "style.json"));
     }
-    for (const [i, project] of projects.entries()) {
+    // Each storyboard holds the scenes its render shows: style check counts our own cadence from the storyboard.
+    const storyFor = async (project, style, lengths) => {
       const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
-      await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...story, style: styles[1 - i], overlays: [{ type: "captions" }], frame: { kicker: { label: "Episode" } } }));
-    }
+      const { hits, ...template } = story.scenes[0];
+      let clock = 0;
+      const scenes = lengths.map((seconds, i) => { const scene = { ...template, id: `s${i + 1}`, start: Math.round(clock * 100) / 100, end: Math.round((clock + seconds) * 100) / 100 }; clock += seconds; return scene; });
+      await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...story, format: { ...story.format, duration: Math.round(clock * 100) / 100 }, scenes, style, overlays: [{ type: "captions" }], frame: { kicker: { label: "Episode" } } }));
+    };
+    const rhythm = Array.from({ length: 10 }, (_, i) => [1.6, 2.4][i % 2]);
+    for (const [i, project] of projects.entries()) await storyFor(project, styles[1 - i], rhythm);
     for (const [i, project] of projects.entries()) {
       const check = await checkStyleCommand(project, { against: styles[1 - i] });
       assert.equal(check.status, "consistent", JSON.stringify(check.checks ?? check.story_error, null, 2));
@@ -196,6 +202,7 @@ test("two stories in one style pass style check against each other (RFC §13 pha
     }
     // A render in another palette and rhythm drifts.
     makeVideo(path.join(projects[0], "renders/final.mp4"), [{ seconds: 9, bg: "0xf4e9d8", boxes: [["0x8a2be2", 40, 120, 280, 300]] }, { seconds: 9, bg: "0xf4e9d8", boxes: [["0x2e8b57", 40, 220, 280, 300]] }]);
+    await storyFor(projects[0], styles[1], [9, 9]);
     const drift = await checkStyleCommand(projects[0], { against: styles[1] });
     assert.equal(drift.status, "drift");
     assert.ok(drift.checks.some((entry) => entry.check === "palette" && !entry.ok), JSON.stringify(drift, null, 1));
