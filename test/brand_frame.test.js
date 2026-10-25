@@ -177,3 +177,69 @@ test("inside a footage layout panel, model.frame.safe is the panel safe area nar
   const outside = framed.scenes.find((entry) => !layoutAt(framed, Number(entry.start)));
   if (outside) assert.deepEqual(resolveModule(outside, framed).frame.safe, brandFrameSafe(framed), "no section: the frame's safe area alone");
 });
+
+test("per-scene colour: the frame swaps to a contrasting colour on light cast sets, a label colour overrides it, and both renderers agree", async () => {
+  const { frameColorSpans, frameBackdrop, FRAME_MIN_CONTRAST } = await import("../kit/core/brand-frame.mjs");
+  const { contrastRatio } = await import("../kit/core/catalog-b-base.mjs");
+  const cast = (id, start, end) => ({ id, module: "cast-scene", start, end });
+  const plate = (id, start, end) => ({ id, module: "hook-title", start, end });
+  const s = story({ progress: true, labels: [{ start: 0, label: "Take 1" }, { scene: "c", label: "Take 2", color: "accent" }] }, {
+    brand: { colors: { bg: "#0b0b0b", paper: "#ffffff", ink: "#0b0b0b", primary: "#ffe14d", accent: "#ff3d7f" }, fonts: {} },
+    scenes: [cast("a", 0, 4), plate("b", 4, 8), cast("c", 9, 12)]
+  });
+  const wall = frameBackdrop(s.scenes[0], s);
+  assert.ok(contrastRatio("#ffffff", wall) < 1.5, "paper on the cream wall is the bug");
+  const spans = frameColorSpans(s);
+  const at = (t) => spans.filter((span) => span.start <= t + 1e-6).at(-1);
+  assert.ok(contrastRatio(at(1).text, wall) >= FRAME_MIN_CONTRAST, "a contrasting colour on the set");
+  assert.notEqual(at(1).underline, "#ffe14d", "the yellow underline swaps too");
+  assert.equal(at(5).text, "#ffffff", "paper again on the dark plate");
+  assert.equal(at(10).text, "#ff3d7f", "frame.labels[].color overrides while its label shows");
+  const { validateStory } = await import("../kit/core/story.mjs");
+  const valid = (color) => validateStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, scenes: [{ id: "a", module: "hook-title", start: 0, end: 4, params: { headline: "Hi" } }], frame: { labels: [{ scene: "a", label: "Take 1", color }] } }).errors.join("\n");
+  assert.doesNotMatch(valid("ink"), /frame\.labels/);
+  assert.doesNotMatch(valid("#112233"), /frame\.labels/);
+  assert.match(valid("dark"), /frame\.labels\[0\]\.color must be a brand role/);
+  // No change anywhere: no colour tweens, the plan is as before.
+  for (const plain of PLANS) assert.equal(brandFramePlan(plain).tweens.filter((tween) => "color" in tween.to || "backgroundColor" in tween.to).length, 0);
+  assert.equal(frameColorSpans(story({})).length, 1);
+  // Footage behind (no insert): unknown backdrop, the frame keeps its colour.
+  assert.equal(frameBackdrop({ id: "x", module: "punch-in" }, { ...s, base: { src: "assets/base.mp4" } }), null);
+  // Seek-safe and identical in the GSAP runtime and the frame-pure evaluator.
+  const plan = brandFramePlan(s);
+  const colourTweens = plan.tweens.filter((tween) => "color" in tween.to || "backgroundColor" in tween.to);
+  assert.ok(colourTweens.length > 0);
+  const seen = new Set();
+  for (const tween of [...plan.tweens].sort((a, b) => a.at - b.at)) for (const prop of Object.keys(tween.to)) {
+    const key = `${tween.id}.${prop}`;
+    if (tween.ir) assert.ok(!seen.has(key), `${key} renders immediately after an earlier tween`);
+    if (!tween.from) assert.ok(seen.has(key), `${key} is a to() without a prior tween`);
+    seen.add(key);
+  }
+  const rgb = (value) => {
+    if (typeof value !== "string") return null;
+    if (value.startsWith("#")) return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
+    return value.match(/[\d.]+/g).slice(0, 3).map(Number);
+  };
+  const targets = new Map();
+  for (const tween of colourTweens) if (!targets.has(tween.id)) targets.set(tween.id, { ...(tween.from ?? {}) });
+  const tl = gsap.timeline({ paused: true });
+  for (const tween of colourTweens) {
+    const vars = { ...tween.to, duration: tween.dur, ease: tween.ease };
+    if (tween.from) { if (!tween.ir) vars.immediateRender = false; tl.fromTo(targets.get(tween.id), { ...tween.from }, vars, tween.at); }
+    else tl.to(targets.get(tween.id), vars, tween.at);
+  }
+  const index = indexCaptionTweens(colourTweens);
+  let worst = 0, compared = 0;
+  for (let frame = 0; frame <= 12 * 30; frame += 1) {
+    const t = frame / 30;
+    tl.seek(t, false);
+    for (const [id, values] of captionStateAt({ tweens: colourTweens }, t, index)) for (const [key, value] of Object.entries(values)) {
+      const a = rgb(value), b = rgb(targets.get(id)[key]);
+      if (a && b) { compared += 1; worst = Math.max(worst, ...a.map((c, i) => Math.abs(c - b[i]))); }
+    }
+  }
+  tl.kill();
+  assert.ok(compared > 300, `compared ${compared} colour samples`);
+  assert.ok(worst <= 1, `evaluator colour differs from GSAP by ${worst}`);
+});

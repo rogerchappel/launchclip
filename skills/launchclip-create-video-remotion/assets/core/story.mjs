@@ -774,6 +774,7 @@ function validateMotion(motion, err) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels point at real scenes.
 const FRAME_KEYS = ["enabled", "logo", "kicker", "sections", "progress", "show", "labels", "color"];
+const FRAME_COLOR_ROLES = ["bg", "paper", "ink", "primary", "accent"];
 function validateFrame(frame, { err, warn, scenes }) {
   if (frame === undefined || frame === false) return;
   if (!isObject(frame)) { err("frame must be the brand frame object or false"); return; }
@@ -785,6 +786,7 @@ function validateFrame(frame, { err, warn, scenes }) {
     if (!isObject(entry) || !nonEmpty(entry.label) || entry.label.length > 40) err(`frame.labels[${i}].label must be 1-40 characters`);
     else if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`frame.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
     else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`frame.labels[${i}].scene "${entry.scene}" is not a scene id; the label is skipped`);
+    if (isObject(entry) && entry.color !== undefined && !(typeof entry.color === "string" && (HEX.test(entry.color) || FRAME_COLOR_ROLES.includes(entry.color)))) err(`frame.labels[${i}].color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour: the frame's text colour while this label shows`);
   });
 }
 

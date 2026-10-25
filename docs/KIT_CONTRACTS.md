@@ -386,6 +386,16 @@ opposite top corner, each claiming a `78 × k` px band (k = short side / 1080).
   the panel's safe area (`kit/core/footage-layout.mjs` `layoutAt(story,
   scene.start).safe`) intersected (`intersectRects`) with it. Modules that place
   themselves inside `model.frame.safe` never collide with the frame.
+- `frameColorSpans(story)` → `[{start, backdrop, text, underline, dot}]`: the
+  frame's colours per track-0 scene. `frameBackdrop(scene, story)` is a cast
+  set's wall (`characters/sets.mjs` `setColors`), the brand `bg` behind a
+  plate or footage-led insert, or null over the recording (no change there).
+  `frame.color` stays while it reaches `FRAME_MIN_CONTRAST` (3) against the
+  backdrop, else the brand role with the most contrast; the underline, dots
+  and ticks switch only below `FRAME_MARK_CONTRAST` (1.6). A `frame.labels`
+  entry's `color` (role or hex) sets the text colour while that label shows.
+  The plan adds colour tweens (`FRAME_COLOR_SWITCH`, 0.1 s from each cut) only
+  when the colour changes, so a frame that never changes plans as before.
 - `launchclip layout-check` warns (`brand-frame`) when key text or a hero
   overlaps the kicker or section label (`brandFrameFindings`).
 - Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,
