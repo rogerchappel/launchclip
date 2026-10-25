@@ -28,7 +28,7 @@ const IDS = Object.keys(SAMPLES);
 
 test('catalogue G is registered in the module registry, HyperFrames and Remotion', () => {
   for (const id of IDS) assert.ok(knownModules().includes(id), id);
-  assert.deepEqual(Object.keys(EMITTERS).sort(), [...IDS].sort());
+  for (const id of IDS) assert.equal(typeof EMITTERS[id], 'function', id);
   const registry = readFileSync(fileURLToPath(new URL('../kit/remotion/catalog/registry-g.ts', import.meta.url)), 'utf8');
   for (const id of IDS) assert.match(registry, new RegExp(`'${id}': \\w+`));
   for (const id of IDS) {

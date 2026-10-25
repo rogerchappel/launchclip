@@ -78,7 +78,7 @@ export function createCardBase(moduleId, params, ctx, {allowed, required = []}) 
   b.surface = surface;
   b.pad = pad;
   b.place = (measure, {maxWidth = Infinity} = {}) => {
-    let firstError = null, tallest = 0;
+    let firstError = null, least = Infinity;
     for (const region of regions()) {
       const width = r2(Math.min(region.width, maxWidth));
       const inner = width - pad * 2;
@@ -86,7 +86,7 @@ export function createCardBase(moduleId, params, ctx, {allowed, required = []}) 
       try { layout = measure(inner, region.height - pad * 2); } catch (error) { firstError ??= error; continue; }
       if (!layout) continue;
       const height = r2(layout.height + pad * 2);
-      tallest = Math.max(tallest, height);
+      least = Math.min(least, height);
       if (height > region.height + 1e-6) continue;
       // The card takes its content's height; a plate (or an explicit rect)
       // keeps the whole region so the content centres in it.
@@ -102,8 +102,8 @@ export function createCardBase(moduleId, params, ctx, {allowed, required = []}) 
     }
     if (firstError) throw firstError;
     return check.fail('params', overlay
-      ? `do not fit beside the presenter: the content needs ${Math.round(tallest)} px and the room clear of their head is smaller; shorten it, or make the scene an insert`
-      : `do not fit the safe zone (${Math.round(tallest)} px tall); shorten them`);
+      ? `do not fit beside the presenter: the content needs at least ${Math.round(least)} px and the room clear of their head is smaller; shorten it, or make the scene an insert`
+      : `do not fit the safe zone (they need at least ${Math.round(least)} px); shorten them`);
   };
   b.model.content = null;
   return b;
@@ -127,19 +127,19 @@ export function cardSurface(model) {
 
 /**
  * The first layout variant (thunks, in preference order) whose height fits
- * maxHeight, else the first that resolves; rethrows the first error when
- * none does.
+ * maxHeight, else the shortest that resolves (so a failure reports the least
+ * height needed); rethrows the first error when none resolves.
  */
 export function pick(variants, maxHeight) {
-  let first = null, error = null;
+  let least = null, error = null;
   for (const variant of variants) {
     let out;
     try { out = variant(); } catch (caught) { error ??= caught; continue; }
     if (!out) continue;
-    first ??= out;
     if (out.height <= maxHeight + 1e-6) return out;
+    if (!least || out.height < least.height) least = out;
   }
-  if (first) return first;
+  if (least) return least;
   if (error) throw error;
   return null;
 }

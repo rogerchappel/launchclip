@@ -124,6 +124,9 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word | icon-row |
 | opens a new section or chapter ("part two", "first, the problem", "chapter", "let's start with"): the brand frame's kicker and the section title (usually an insert) | section-card |
 | talks about a thing the product is or makes (a box, a launch, a calendar, a laptop, an inbox): a simple illustrated object with a caption | object-card |
+| states a real figure with its source in the brief or assets ("87% of", "saves $1,400", "3× faster"): the figure counts up with a label and a source line (no source, no stat-card) | stat-card |
+| quotes a named person or outlet, with the exact words in the brief ("as Ada put it", "said", "wrote"): the quote with its attribution (never "a customer") | quote-card |
+| shows real lines from code, a README, docs, a changelog or an article, supplied verbatim: the lines in a window with the key ones highlighted | excerpt |
 | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
 | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
 | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge [footage-led] (needs the subject) | app-stage |
@@ -766,6 +769,46 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: object, caption
 
+### stat-card (keeps captions)
+One real figure, big, that counts up to its value and lands, with a label and its source line ("Source: …", required). For a number the script states: a result, a price, a count. Never for a made-up or illustrative figure.
+params:
+- value: the figure as said ≤ 12, with a digit ("87%", "3.2×", "$1,400")
+- label: what it measures ≤ 48
+- source: where it comes from ≤ 60 (required; not a placeholder)
+- icon: icon name (optional)
+- count: boolean (default true when the value starts with a number)
+- tone: value colour: primary (default) | accent | paper
+- at: count start
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: count, hit
+
+### quote-card (keeps captions)
+A real quote with its attribution: a quote mark, the words (one phrase can light up on a marker), then "— Name" and their role or where it was said. For a customer, press or expert line the user supplied. Never invent a quote or attribute one to "a customer".
+params:
+- quote: the exact words ≤ 180
+- author: the named person or organisation ≤ 40 (required; not "a customer")
+- role: title or company ≤ 48 (optional)
+- source: where it was said ≤ 60 (optional)
+- highlight: a phrase from the quote (optional)
+- at: quote time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: quote, author, highlight
+
+### excerpt (keeps captions)
+A real excerpt in a window: 1–8 lines of code or text exactly as written in the source (README, docs, an article, a commit), revealed line by line; marked lines get a highlight sweep while the rest dim. The source line is required. Never paraphrase or invent lines.
+params:
+- lines: [string | {text ≤ 64 (verbatim), highlight?: boolean}] 1–8
+- type: text (default) | code (monospace, one line each)
+- title: file name or document ≤ 48 (optional)
+- source: where it comes from ≤ 60 (required)
+- highlightAt: seconds from scene start (optional; default after the lines)
+- at: first line time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: lines, highlight
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -844,6 +887,9 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | icon-row | 2 s | 0.5 s | scene − 0.65 s | items pop in order; with no at, the first pops at 0.6 s and the rest follow by stagger (default 0.18 s) |
 | section-card | 2 s | 0.5 s | scene − 0.65 s | the kicker and rule land 0.25 s before the title |
 | object-card | 2 s | 0.5 s | scene − 0.65 s | the caption follows the object by 0.25 s; accents pop from 0.35 s after it |
+| stat-card | 2 s | 0.5 s | scene − 0.65 s | the count runs 0.9 s from at and hits on the exact value |
+| quote-card | 2 s | 0.5 s | scene − 0.65 s | the author follows the quote by 0.45 s; the highlight lands 0.35 s after the author (or on a highlight hit) |
+| excerpt | 2 s | 0.5 s | scene − 0.65 s | lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 

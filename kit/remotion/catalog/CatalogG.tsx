@@ -31,3 +31,6 @@ export const ConceptCard = typed('concept-card');
 export const IconRow = typed('icon-row');
 export const SectionCard = typed('section-card');
 export const ObjectCard = typed('object-card');
+export const StatCard = typed('stat-card');
+export const QuoteCard = typed('quote-card');
+export const Excerpt = typed('excerpt');

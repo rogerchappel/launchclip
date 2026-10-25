@@ -6,6 +6,9 @@
 //   icon-row      2–5 icons with labels that build on their words
 //   section-card  the brand frame's kicker and a section title
 //   object-card   a simple illustrated object from icons and brand shapes
+//   stat-card     a real figure that counts up, with its label and source
+//   quote-card    a real quote with a named attribution
+//   excerpt       real lines of code or text with highlights, in a window
 //
 // Every module works in the motion lanes (on the plate), as a footage-led
 // insert (full frame) and as a footage-led overlay (on a brand card clear of
@@ -17,9 +20,10 @@ import {rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
 import {cardSurface} from './catalog-g-base.mjs';
 import {conceptCard, iconRow, objectCard, sectionCard} from './catalog-g-cards.mjs';
+import {excerpt, quoteCard, statCard} from './catalog-g-proof.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard];
+const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard, statCard, quoteCard, excerpt];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, mood: def.mood}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
