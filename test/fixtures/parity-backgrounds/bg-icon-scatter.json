@@ -1,0 +1,17 @@
+{
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "describe": "icon-scatter: seeded non-overlapping icons with size and rotation jitter",
+  "patch": {
+    "background": {
+      "kind": "icon-scatter",
+      "params": {
+        "density": 0.7,
+        "jitter": 0.8
+      }
+    }
+  }
+}

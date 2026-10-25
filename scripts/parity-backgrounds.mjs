@@ -4,7 +4,7 @@
 //   node scripts/parity-backgrounds.mjs [--only bg-mesh,panel-glass-light] [--out qa/parity-backgrounds]
 //
 // Every fixture in test/fixtures/parity-backgrounds/ is {describe, project,
-// times, patch}: a story project with top-level storyboard keys replaced (a
+// times, patch, files?}: a story project with top-level storyboard keys replaced (a
 // background kind, a panel treatment, a light palette), rendered as whole
 // stills through both renderer adapters (scripts/parity.mjs runStoryParity).
 // Writes summary.md; exits 1 when any sample is below its SSIM threshold.
@@ -24,7 +24,7 @@ export async function backgroundFixtures() {
 
 /** Story parity for one fixture → runStoryParity's report. */
 export function runBackgroundParity(fixture, {out} = {}) {
-  return runStoryParity(path.join(ROOT, fixture.project), {times: fixture.times, patch: fixture.patch, out: out ?? path.join(ROOT, 'qa', 'parity-backgrounds', fixture.name)});
+  return runStoryParity(path.join(ROOT, fixture.project), {times: fixture.times, patch: fixture.patch, files: fixture.files, out: out ?? path.join(ROOT, 'qa', 'parity-backgrounds', fixture.name)});
 }
 
 async function main(argv) {
