@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
+  AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, SEED_WORLDS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
   fingerprintKey, generateStyle, hexToOklch, nearestStarter, normalizeSeed, oklchToHex, paletteContrast,
   randomSeed, seedSummaryLine, styleDistance, styleFingerprint, toneFromText
 } from "../kit/core/style-seed.mjs";
@@ -55,6 +55,10 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
     assert.ok(palette && music.genre && music.key && Number.isInteger(music.progression) && ambience === "auto", pack.name);
     assert.ok(music.bpm >= music.bpm_range[0] && music.bpm <= music.bpm_range[1]);
   }
+  // With no world in the direction, a topic-neutral world, mostly by day or dusk.
+  for (const pack of packs) assert.ok(SEED_WORLDS.includes(pack.world.kind), pack.name);
+  assert.ok(packs.filter((pack) => pack.world.time === "night").length < packs.filter((pack) => pack.world.time !== "night").length);
+  assert.ok(new Set(packs.map((pack) => pack.world.kind)).size >= 4);
   // The families spread: every theme, several grammars and pairings.
   assert.equal(new Set(packs.map((pack) => pack.generated.theme)).size, 3);
   assert.ok(new Set(packs.map((pack) => pack.motion.grammar)).size >= 5);

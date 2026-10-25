@@ -93,7 +93,13 @@ export const SEED_ICON_STYLES = Object.freeze(['outline']);
 export const SEED_ILLUSTRATIONS = Object.freeze(['flat']);
 export const SEED_DRAWING_STYLES = DRAWING_STYLES;
 export const SEED_CHARACTER_SETS = Object.freeze(['starter']);
-export const SEED_WORLDS = Object.freeze([]);
+// Topic-neutral worlds (from the worlds kit) the seed may draw for any prompt;
+// topical ones (kitchen, gym, server-room, ...) are left to art direction.
+// Props stay empty: a world dresses itself, and props are for direction.
+export const SEED_WORLDS = Object.freeze(['abstract-stage', 'skyline', 'rooftop', 'park', 'city-street', 'home-desk']);
+// [time, weight]: day and dusk above night, except for night-friendly tones.
+export const SEED_WORLD_TIMES = Object.freeze([['day', 2], ['dusk', 2], ['night', 1]].map(Object.freeze));
+const NIGHT_TONES = new Set(['premium', 'energetic']);
 // Catalogue modules with designed variants → the variants the seed may pick.
 // Today every module has only its default look.
 export const SEED_MODULE_VARIANTS = Object.freeze({
@@ -601,7 +607,7 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const worldStream = draw('world');
   const worldFixed = asObject(fixed.world, 'kind');
   const worldKind = SEED_WORLDS.length ? worldStream.pick(SEED_WORLDS) : null;
-  const worldTime = worldStream.pick(STYLE_WORLD_TIMES);
+  const worldTime = weighted(worldStream, NIGHT_TONES.has(toneName) ? STYLE_WORLD_TIMES.map((time) => [time, 1]) : SEED_WORLD_TIMES);
   const world = worldFixed ? { kind: worldFixed.kind, time: worldFixed.time ?? worldTime } : worldKind ? { kind: worldKind, time: worldTime } : undefined;
 
   const frame = draw('frame');
