@@ -20,6 +20,8 @@
  * @typedef {object} EditorialModel
  * @property {string} id
  * @property {string} kind                one of EDITORIAL_KINDS
+ * @property {string} [variant]           the designed variant, for kinds in
+ *   EDITORIAL_VARIANTS only (default: the first, the original look)
  * @property {'16:9'|'9:16'} aspect
  * @property {{width:number,height:number}} canvas
  * @property {number} start
@@ -524,10 +526,14 @@ export function resolveEditorialModule(input, options = {}) {
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label', 'palette', 'tones']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label', 'palette', 'tones', 'variant']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
+  const variants = EDITORIAL_VARIANTS[input.kind];
+  if (input.variant !== undefined && !variants) throw new Error(`variant: ${input.kind} has no designed variants`);
+  if (input.variant !== undefined && !variants.includes(input.variant)) throw new Error(`variant must be one of ${variants.join(', ')} (the ${input.kind} variants); got ${JSON.stringify(input.variant)}`);
+  const variant = variants ? input.variant ?? variants[0] : null;
   if (input.numbered !== undefined && (input.kind !== 'step-rail' || typeof input.numbered !== 'boolean')) throw new Error('numbered is a boolean for step-rail only');
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
   if (input.density !== undefined && !DENSITY_MODES.includes(input.density)) throw new Error('density must be fill or fixed');
@@ -596,6 +602,11 @@ function resolveAt(options, input, suppliedRect, density, source) {
     : {supplied: false, enter: 'down', exit: 'up', distance: 18, exitDistance: 8, scale: 1, enterDuration: shellEnter, exitDuration: shellExit,
       enterFrom: {opacity: 0, x: 0, y: 18, scale: 1}, exitTo: {opacity: 0, x: 0, y: -8, scale: 1}};
   Object.assign(motion, {enterStart: start, enterEnd: start + shellEnter, exitStart: start + duration - shellExit, end: start + duration, enterEase: grammarEase(grammar, 'power3.out'), exitEase: grammarEase(grammar, 'power2.in'), transformOrigin: '0px 0px'});
+  // A variant's own entrance, when the spec sets no motion: the shell's
+  // timing (and so every event window) stays the default's; only where it
+  // comes from changes. Renderers follow enterFrom/exitTo when supplied.
+  const entrance = !movement && VARIANT_ENTRANCES[variant];
+  if (entrance) Object.assign(motion, {supplied: true, enterFrom: {opacity: 0, ...entrance.from}, exitTo: {opacity: 0, ...entrance.to}, transformOrigin: entrance.origin});
   let content;
 
   if (kind === 'media-window') {
@@ -1012,10 +1023,69 @@ function resolveAt(options, input, suppliedRect, density, source) {
   const roles = textRoles(kind, content, font, input.numbered === true);
   const smallest = list => (list.length ? Math.round(Math.min(...list) * scale * 100) / 100 : null);
   return {id, kind, aspect: input.aspect, canvas: {...canvas}, start, duration, end: start + duration, rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
-    title, accent, theme, customTheme: custom !== null, presentation: input.presentation === 'glass' ? 'glass' : 'solid', surface: panel ? 'panel' : 'standard', track,
+    ...(variant ? {variant} : {}), title, accent, theme, customTheme: custom !== null, presentation: input.presentation === 'glass' ? 'glass' : 'solid', surface: panel ? 'panel' : 'standard', track,
     chrome: {font, titleFont: font + 4, pad, titleLines, header, statusWidth}, motion, content, events, layout,
     density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)},
     minTextPx: smallest(roles.key), minSecondaryTextPx: smallest(roles.secondary), textRole: 'body'};
+}
+
+// Designed variants (docs/SEEDED_STYLES_RFC.md §3.2): the main editorial
+// modules' looks, chosen by spec.variant (resolveModule passes the scene's
+// params.variant, else the story's variants[kind]). The first is the
+// original look. A variant keeps the content geometry the core computes (so
+// the layout check and both renderers agree) and changes the shell's shape
+// language, colour treatment and entrance:
+//   flat     no border or shadow, square corners, an accent bar inset on the
+//            title; slides in from the left
+//   outline  an accent outline with a soft accent halo, round corners;
+//            scales up from the centre
+//   banner   the title on a solid accent band; drops in from above
+export const EDITORIAL_VARIANTS = Object.freeze({
+  checklist: Object.freeze(['panel', 'flat', 'outline', 'banner']),
+  'step-rail': Object.freeze(['panel', 'flat', 'outline', 'banner']),
+  metric: Object.freeze(['panel', 'flat', 'outline', 'banner']),
+  callout: Object.freeze(['panel', 'flat', 'outline', 'banner'])
+});
+const VARIANT_ENTRANCES = Object.freeze({
+  flat: {from: {x: -64, y: 0, scale: 1}, to: {x: -24, y: 0, scale: 1}, origin: '0px 0px'},
+  outline: {from: {x: 0, y: 0, scale: .9}, to: {x: 0, y: 0, scale: .96}, origin: '50% 50%'},
+  banner: {from: {x: 0, y: -40, scale: 1}, to: {x: 0, y: -12, scale: 1}, origin: '0px 0px'}
+});
+
+/**
+ * The variant's stylesheet, appended after the base, kind and theme CSS by
+ * both renderers (empty for the default). Never changes a size, padding or
+ * border width, so text wraps exactly as the core measured it.
+ */
+export function editorialVariantCss(model) {
+  const {id, kind, variant, accent, theme} = model;
+  if (!variant || variant === EDITORIAL_VARIANTS[kind]?.[0]) return '';
+  const root = `#${id}`, at = selector => selector.split(',').map(part => `${root} ${part.trim()}`).join(',');
+  const treated = kind === 'callout' && model.content.variant === 'treated';
+  const heading = treated ? '.ui-callout-heading' : '.ui-title';
+  let css = '';
+  if (variant === 'flat') {
+    css += `${root}{border-color:transparent;border-radius:0;box-shadow:none}${at(heading)}{box-shadow:inset 8px 0 0 ${accent}}`;
+    if (kind === 'checklist') css += `${at('.ui-check')}{border-radius:50%}${at('.ui-row')}{border-top-color:${accent}40}`;
+    if (kind === 'step-rail') css += `${at('.ui-rail, .ui-fill')}{border-radius:0}${at('.ui-step-number')}{border-radius:0}`;
+    if (kind === 'metric') css += `${at('.ui-number')}{color:${theme.accentText}}`;
+  } else if (variant === 'outline') {
+    // An outline, not a wider border: the content box keeps its size.
+    css += `${root}{border-color:transparent;border-radius:28px;outline:3px solid ${accent};outline-offset:-3px;box-shadow:0 0 0 8px ${accent}24,0 18px 48px #00000066}${at(heading)}{color:${theme.accentText}}`;
+    if (kind === 'checklist') css += `${at('.ui-check')}{border-radius:50%;border-color:${accent}}`;
+    if (kind === 'step-rail') css += `${at('.ui-rail')}{outline:2px solid ${accent}59;outline-offset:3px}`;
+    if (kind === 'metric') css += `${at('.ui-number')}{color:${theme.accentText}}`;
+  } else if (variant === 'banner') {
+    // The band's text is whichever of the theme's surface and foreground reads
+    // on the accent; a pale band (neither reaches 3:1) tints instead.
+    const ink = [theme.surface, theme.foreground].sort((a, b) => statusContrast(b, accent) - statusContrast(a, accent))[0];
+    const solid = statusContrast(ink, accent) >= 3;
+    css += `${root}{border-radius:10px}${at(heading)}{background:${solid ? accent : `${accent}38`};color:${solid ? ink : theme.foreground}}`;
+    if (treated) css += `${at('.ui-title, .ui-symbol')}{color:${solid ? ink : theme.foreground}}`;
+    if (kind === 'checklist') css += `${at('.ui-check')}{border-radius:4px;background:${accent}1f}`;
+    if (kind === 'metric') css += `${at('.ui-number')}{color:${theme.accentText}}`;
+  }
+  return css;
 }
 
 // Rendered text sizes by role, in layout px (the model multiplies by the

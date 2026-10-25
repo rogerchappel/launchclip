@@ -3,7 +3,7 @@ import {gsapText} from './motion.mjs';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {resolveEditorialModule, EDITORIAL_KINDS, EDITORIAL_SYMBOLS, EDITORIAL_STYLE, TYPE_IN} from './editorial-core.mjs';
+import {resolveEditorialModule, editorialVariantCss, EDITORIAL_KINDS, EDITORIAL_SYMBOLS, EDITORIAL_STYLE, TYPE_IN} from './editorial-core.mjs';
 
 // HyperFrames emitter for the editorial modules. Validation, defaults,
 // geometry, timing, events and theme come from the renderer-neutral core
@@ -238,6 +238,8 @@ export function emitEditorialModule(model) {
     if (kind === 'media-window') css += `#${id}-media{background:${theme.surface}!important}`;
     if (glass) css += `@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){${scoped([''], `background:${theme.surface}${G.themeSupportedAlpha}`)}}`;
   }
+  // The designed variant's shell (after the theme, so it can recolour it).
+  css += editorialVariantCss(model);
   const density = model.density;
   if (density && density.scale !== 1 && kind !== 'media-window') {
     // Density: the kind markup lays out in the layout box and is scaled into

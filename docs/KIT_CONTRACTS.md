@@ -225,6 +225,36 @@ Details: skills-src/references/editorial-ui-modules.md, "Defaults and density".
 becomes the HyperFrames emitter on top of this, and its output stays
 byte-identical.
 
+### Editorial variants
+
+`checklist`, `step-rail`, `metric` and `callout` have designed variants
+(`EDITORIAL_VARIANTS`, [SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) §3.2):
+`panel` (the original look, the default), `flat`, `outline` and `banner`. The
+spec's `variant` names one. `resolveModule` passes the scene's
+`params.variant`, else the story's `variants[kind]`. The model carries
+`variant`, and an unknown name fails with the kind's list. A kind without
+variants refuses `variant` and ignores the story's entry.
+
+A variant keeps everything the core measures: rect, density, content, events
+and timing are the default's. That keeps the layout check and both
+renderers in step, so one storyboard renders in any variant. It changes the
+shell instead:
+
+- **CSS.** `editorialVariantCss(model)` is appended after the base, kind and
+  theme CSS by the HyperFrames emitter and by the Remotion `ModuleShell`, so
+  both renderers draw the same stylesheet. It never sets a size, padding,
+  margin, font or border width.
+- **Entrance.** When the spec sets no `motion`, the variant's entrance replaces
+  the default rise (`motion.enterFrom`, `exitTo` and `transformOrigin`, with
+  `supplied: true`), at the default's durations.
+
+| Variant | Shell | Entrance |
+| --- | --- | --- |
+| `panel` | the original panel | rises 18 px |
+| `flat` | no border, radius or shadow; an 8 px accent bar inset on the title (or the treated callout's heading); round checks, accent dividers, square rail and step numbers, the metric figure in `accentText` | slides in 64 px from the left |
+| `outline` | a 3 px accent outline (not a wider border) with an accent halo and 28 px corners; title in `accentText`; round accent checks; an outlined rail | scales up from 0.9 about the centre |
+| `banner` | the title (or heading) on a solid accent band, its text the theme's surface or foreground, whichever reads; a tint when neither reaches 3:1; 10 px corners; tinted square checks | drops in 40 px from above |
+
 React modules take `{model}` (the resolved model) and use `useCurrentFrame()`
 and `useVideoConfig().fps`, with `t = start + frame / fps` when they sit inside
 a `<Sequence from={start*fps}>`. Each module renders at absolute canvas

@@ -175,6 +175,7 @@ params:
 - title: string ≤ 54, required
 - rows: [{label, status: "pending" | "active" | "done", at, doneAt?}] up to 6
 - statusLabels: {pending, active, done} ≤ 14 chars each (optional, e.g. "Covered")
+- variant: one of the variants below, the panel's designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
 - density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
@@ -182,6 +183,7 @@ params:
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
 - motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
 events: enter, row-<i>-state, row-<i>-covered
+variants: panel (default), flat, outline, banner
 
 ### step-rail (editorial panel, keeps captions)
 Ordered stages on a rail that fills as each step lights up.
@@ -190,6 +192,7 @@ params:
 - title: string ≤ 54, required
 - steps: [{label, at}] 2–6, strictly increasing at
 - numbered: boolean (optional)
+- variant: one of the variants below, the panel's designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
 - density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
@@ -197,6 +200,7 @@ params:
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
 - motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
 events: enter, step-<i>-settle
+variants: panel (default), flat, outline, banner
 
 ### callout (editorial panel, keeps captions)
 A short explanation panel: a title over one body line, or a treated panel with icon, glow and highlighted segments.
@@ -205,6 +209,7 @@ params:
 - title: string ≤ 54, required
 - body: string ≤ 160 (plain)
 - treatment: {icon?: "terminal" | "branch" | "users" | "rocket" | "check" | "warning", monospace?, glow?, corners?, segments?: [{text, highlight?, underlineAt?}] (replace body), at?}
+- variant: one of the variants below, the panel's designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
 - density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
@@ -212,6 +217,7 @@ params:
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
 - motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
 events: enter, treatment-settle, underline-<i>-settle
+variants: panel (default), flat, outline, banner
 
 ### audience-grid (editorial panel, keeps captions)
 A grid of audience tiles that highlight in turn; illustrative, never a claim about real users.
@@ -247,6 +253,7 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - metric: {mode: "illustration" | "data", unit ≤ 18, format: "number" | "percent" | "currency", currency? (three-letter code, currency only), decimals?: 0–2, values: [{value, at}] 1–8 (≥ 0.65 s apart), source? (required for data)}
+- variant: one of the variants below, the panel's designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
 - density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
@@ -254,6 +261,7 @@ params:
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
 - motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
 events: enter, value-<i>-settle
+variants: panel (default), flat, outline, banner
 
 ### progress (editorial panel, keeps captions)
 A progress bar toward an explicit goal (not an elapsed-time clock).
