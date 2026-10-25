@@ -184,9 +184,11 @@ function castSceneView(model) {
   const back = svgRoot(W, H, c.back);
   const actors = c.actors.map((actor, i) => actorNode(model, actor, i));
   const front = svgRoot(W, H, c.front);
-  if (!c.media) return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [back, ...actors, front]), media: null, overlay: null};
   const r = c.screenRect;
-  const screen = mediaNode(id, r, c.media, {origin: {x: r.x + r.width / 2, y: r.y + r.height / 2}});
+  const screen = c.media ? mediaNode(id, r, c.media, {origin: {x: r.x + r.width / 2, y: r.y + r.height / 2}}) : null;
+  // An image screen stays inside the scene's one tree (both renderers nest it
+  // the same way); only a video is split out, for HyperFrames to hoist.
+  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front]), media: null, overlay: null};
   return {
     front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [back]),
     media: screen,
@@ -196,7 +198,7 @@ function castSceneView(model) {
 
 function castSceneTimeline(model, ops) {
   const ids = [model.id];
-  if (model.content.media) ids.push(`${model.id}-media`, `${model.id}-overlay`);
+  if (model.content.media?.kind === 'video') ids.push(`${model.id}-media`, `${model.id}-overlay`);
   rootFade(model, ops, ids);
   actorsOps(model, ops);
 }
