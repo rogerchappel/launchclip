@@ -28,6 +28,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 
 - **More languages:** voices, captions and on-screen text in multiple languages from one storyboard.
 - **Avatar presenters:** a generated presenter for founders who'd rather not be on camera (building on the existing HeyGen avatar support).
+- **Animated characters:** a built-in cast for explainers and story-led promos ("someone hits the problem, then your product fixes it"), drawn in code so a character looks the same in every shot. One rig, many people: each character is a mix of build, skin tone, hair, outfit and accessories, with a few dozen ready-made, coloured by your style pack and checked on a cast sheet. The planner directs them with named poses and expressions cued to the narration, in a handful of drawing styles and in sets that fit a product story (a desk and laptop, a phone, a screen showing your own app). It works with both renderers.
 - **Launch kits:** one run produces the launch video plus cut-downs for every platform (YouTube, Shorts, Reels, TikTok, X, LinkedIn, Product Hunt), thumbnails and captions files.
 - **Brand from your website:** point it at your landing page and it builds your style pack from your real colours, fonts and tone.
 - **Scheduled updates:** re-record the demo and refresh the video automatically when your product changes.
