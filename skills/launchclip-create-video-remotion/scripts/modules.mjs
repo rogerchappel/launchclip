@@ -21,6 +21,7 @@ import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { sceneAmbient } from './ambient.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
+import { layoutAt } from './footage-layout.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -426,7 +427,12 @@ function resolveModuleInner(scene, story, { track, end }) {
     // Footage checklist: with a measured presenter and no rect, the card sits
     // above their head when there is headroom, else over their chest, clear
     // of the face and the caption band (docs/SUBJECT_EFFECTS_RFC.md §6.2).
-    const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led' ? footageChecklistRect(model, subjectContext(story, start, { end: start + duration }), format) : null;
+    // In a footage layout's panel (kit/core/footage-layout.mjs) the card
+    // fits the panel's safe area instead.
+    const layout = story?.lane === 'footage-led' ? layoutAt(story, start) : null;
+    const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led'
+      ? (layout?.safe ? panelChecklistRect(model, layout.safe, format) : footageChecklistRect(model, subjectContext(story, start, { end: start + duration }), format))
+      : null;
     if (placement?.rect) model = resolveSpec({ ...spec, rect: placement.rect });
     if (placement) model.subjectPlacement = placement.where;
     // Footage checklist rows type in on their at word (RFC §6.2).
@@ -438,7 +444,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), lane: story?.lane ?? null, insert: scene.insert === true, grammar, ambient: sceneAmbient(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? layoutAt(story, start) : null, lane: story?.lane ?? null, insert: scene.insert === true, grammar, ambient: sceneAmbient(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
@@ -478,6 +484,24 @@ function footageChecklistRect(model, subject, format) {
   return fit(safeZone.y, head.y - gap, 'above-head')
     ?? fit(head.y + head.height + gap, Math.min(safeZone.y + safeZone.height, captionBand.y - gap), 'chest')
     ?? { where: 'none' };
+}
+
+// A footage-led checklist inside a layout panel: the card keeps its derived
+// layout, scaled to fit the panel's safe area (never below the legal text
+// scale) and centred in it. → {rect, where: "panel"} or {where: "none"}.
+function panelChecklistRect(model, safe, format) {
+  if (!model?.rect) return null;
+  const geometry = profileGeometry({ width: format.width, height: format.height });
+  const layout = model.density?.layout ?? { width: model.rect.width, height: model.rect.height };
+  const most = model.density?.scale ?? 1;
+  const bodyFloor = geometry.minBodyTextPx ?? geometry.minTextPx;
+  const least = Math.max(1,
+    model.minTextPx ? most * bodyFloor / model.minTextPx : 1,
+    model.minSecondaryTextPx ? most * geometry.minSecondaryTextPx / model.minSecondaryTextPx : 1);
+  const scale = Math.min(most, safe.width / layout.width, safe.height / layout.height);
+  if (!(scale >= least - 1e-6)) return { where: 'none' };
+  const width = round(layout.width * scale), height = round(layout.height * scale);
+  return { rect: { x: round(safe.x + (safe.width - width) / 2), y: round(safe.y + (safe.height - height) / 2), width, height }, where: 'panel' };
 }
 
 function finishModel(model, { module, scene }) {
