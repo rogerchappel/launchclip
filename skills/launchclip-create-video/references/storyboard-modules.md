@@ -143,6 +143,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
 | introduces the speaker or a guest by name and title [footage-led] | lower-third |
 | one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
+| tells a story with people ("meet Maya, a…", "imagine you're…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture [motion, voiceover-motion] | cast-scene |
+| gives the viewer's situation a face for one beat ("if you're a…", "your customer", "someone like you"): one animated character beside a card or on a panel | character-cameo |
 | a short note, tip or warning card [motion, voiceover-motion] | callout |
 
 ## Modules
