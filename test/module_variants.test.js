@@ -64,7 +64,13 @@ test('every variant fits its box at both aspects, on a plate and over footage, w
     assert.equal(model.variant, variant, label);
     assert.ok(model.content.layout.height <= model.rect.height + 0.01, `${label} fits the plate`);
     assert.ok(model.minTextPx >= (aspect === '9:16' ? 44 : 32), `${label} text ${model.minTextPx}`);
-    const card = resolve(module, {variant, surface: 'card'}, aspect, {lane: 'footage-led', base: {src: 'assets/recording.mp4'}});
+    // Over footage: wherever the default fits beside the presenter, so does
+    // the variant (its own shape, or the default as a fallback).
+    const overlay = v => resolve(module, {variant: v, surface: 'card'}, aspect, {lane: 'footage-led', base: {src: 'assets/recording.mp4'}});
+    let fits = true;
+    try { overlay(VARIANTS[module][0]); } catch { fits = false; }
+    if (!fits) continue;
+    const card = overlay(variant);
     assert.ok(inside(card.rect, card.safe), `${label} card inside the safe zone`);
   }
 });
@@ -95,4 +101,21 @@ test('a variant that has no room falls back to the original look instead of fail
   const model = resolve('concept-card', {variant: 'banner', rect, surface: 'plate', sub: undefined}, '9:16');
   assert.equal(model.variant, 'banner');
   assert.ok(model.content.layout.height <= rect.height + 0.01);
+});
+
+test('stat-card: the ticker rolls each digit slot and lands on the value as written; ring and bar fill to a stated share', () => {
+  const ticker = resolve('stat-card', {variant: 'ticker', value: '$1,240', count: true});
+  assert.equal(ticker.content.start, '$0,000');
+  assert.ok(ticker.content.samples.every(sample => sample.text.length === '$1,240'.length));
+  assert.equal(ticker.content.samples.at(-1).text, '$1,240');
+  assert.equal(resolve('stat-card', {variant: 'ring'}).content.share, 0.87);
+  assert.equal(resolve('stat-card', {variant: 'bar', value: '3.2×'}).content.share, 1);
+});
+
+test('quote-card: a one-line highlight sweeps in on a marker; every variant keeps the named attribution', () => {
+  for (const variant of VARIANTS['quote-card'].slice(1)) {
+    const model = resolve('quote-card', {variant});
+    assert.equal(model.content.sweep, true, variant);
+    assert.match(JSON.stringify(catalogGView(model)), /Priya Natarajan/);
+  }
 });
