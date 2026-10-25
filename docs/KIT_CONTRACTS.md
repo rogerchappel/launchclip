@@ -1793,6 +1793,112 @@ the story through `story.cast` (the style merge fills it).
 screen with a video and with an image, a cameo with a card) through
 `scripts/parity.mjs`.
 
+## World module (`kit/core/catalog-world.mjs`)
+
+Layered environments drawn in code ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)
+§3.5, phase 5), from the library in `kit/core/worlds/`. A world scene is a
+plate: it fills the frame on track 0, and characters, cards or captions go
+on higher tracks over it. Same view shape as the character modules
+(`{front}`); the HyperFrames emitter and Remotion component are catalogue
+E's `emitParts` and `PartsModule`.
+
+| Module | Params | Events | Notes |
+| --- | --- | --- | --- |
+| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none) | none | Fades in place like a set (shown on frame 0 when it starts the video). Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
+
+**story.world** `{kind, time?, props?, detail?}` is the video-wide world:
+every world scene without its own `kind`, `time` or `props` takes them from
+it. A style pack's `world` reaches the story through `applyStyle`.
+`story.mjs` checks the shape (import-free); `storyWorldErrors(world)`
+(`kit/core/worlds/index.mjs`) checks kinds, times and props, and a world
+scene fails to resolve on an unknown one.
+
+### The library (`kit/core/worlds/`)
+
+- `index.mjs`: `WORLDS`, `WORLD_KINDS`, `WORLD_GROUPS`, `WORLD_TIMES`;
+  `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?})` →
+  `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
+  props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
+  sheets; `storyWorldErrors`; `worldCatalogue()`.
+- 4 worlds in three groups. Inside: office, kitchen.
+  Street: city-street.
+  Outside: park. Each has `geo` (floor or
+  ground line, anchors, quiet area), `back`, `mid`, `front` and optional
+  `fx`; a world never draws text.
+- Layers: back (sky or wall), mid (the room or street), front (foreground
+  pieces at the frame edges, keeping the centre open), fx (glows, rays, the
+  grade and vignette). Each is a canvas-sized SVG in its own div, drawn 8% of
+  the width past both side edges (`OVERSCAN`) so a camera move never shows an
+  edge.
+- `palette.mjs`: `worldPalette(colors, time, group)` grades neutral
+  materials and the brand's primary and accent for the time (day neutral,
+  dusk warm and lower, night deep blue; inside worlds at night are lamp-lit
+  and grade milder). Emissive colours (lit windows, lamps, neon, screens,
+  sun, moon) are never graded. `timeLight(time)`.
+- **Light.** `worldLight(kind, time)` → `{dir: {x, y}, color, intensity}`:
+  `dir` is a unit vector in screen space (y down) from the light toward the
+  subject, matching where the world draws its sun or moon (day: high at the
+  upper left; dusk: low at the left; night: moon at the upper right). Worlds
+  may override it (the server room is cool, the alley neon pink at night).
+  The model carries it as `content.light`; character renderers use it for
+  shading and cast shadows.
+- `detail.mjs`: the drawing style picks the detail: stick and line →
+  simple (flat fills, ink outlines, pale fills, fewer small objects); flat,
+  outlined, paper and soft-shade → standard (gradients, shadows, glows, haze,
+  light pools); lifelike and cinematic → rich (shading, depth of field on
+  the back layer, volumetric rays, vignette; cinematic adds a colour grade).
+  Paper lifts each layer on a cut-paper shadow. Blur and shadows are CSS
+  filters on the layer divs.
+- `pen.mjs`: every shape goes through one pen, which applies the detail
+  (outlines, pale fills, gradients collapsing to flat colour) and collects
+  gradient defs per layer with scene-unique ids. Attribute names are ones
+  both renderers write the same way: no `gradientTransform`, patterns or SVG
+  filters.
+- `common.mjs`, `furniture.mjs`, `inside.mjs`, `street.mjs`,
+  `outside.mjs`: the shared pieces and the worlds.
+- `props.mjs`: 96 props (desk and table top, kitchen, floor and ground,
+  street, wall and sky). A prop is `{label, on, h, w, draw}`: `on` lists the
+  anchors it prefers (surface, counter, ground, floor, wall, sky), `h`/`w`
+  its size in metres, drawn at the anchor's px per metre. A placement is an
+  id or `{id, at?: left|centre|right|0..1, on?, scale?: 0.25..4, layer?,
+  flip?}`; without `at`, props take free slots from the frame edges inward,
+  keeping the centre band open. A world without the preferred anchor falls
+  back along the list, then to the ground.
+- `readable.mjs`: **text over a world.** Every world names a quiet area
+  (plain wall, sky, a board or a menu) and the colours under it.
+  `scrimFor(world, {text, bg, side})` lays the brand background over that
+  area at the opacity that brings the text colour to at least 4.5:1 against
+  every colour under it (plus a 0.08 margin, at least 0.18), as a soft CSS
+  gradient that is strongest over the area and clear beyond it. The model
+  carries it as `content.scrim` (with `on` when `params.scrim` asks) and
+  the quiet area as `content.quiet`; put text inside it.
+- `view.mjs`: the layer divs (`<scene>-back|mid|front|fx`).
+
+**Camera.** `params.camera` moves the back, mid and front layers at the
+world camera's depths (`camera-world.mjs` `PARALLAX`: back 0.3 = the
+background, front 1 = the plate, mid 0.65), with `sine.inOut` over the whole
+scene: a pan travels up to 90% of the overscan on the front layer; a push or
+pull scales the front by up to 7% and the back by 0.3 of that. The fx layer
+and the scrim stay put. In a world-camera story the plate's own placement
+moves on top, so the two compose.
+
+**Anchors and characters.** `content.anchors.ground` `{y, x0, x1, ppm}` is
+where people stand (ppm: pixels per metre; a person is about 1.7 m), so a
+cast placed over a world can stand on its floor. Street and outside worlds
+are seen from further back (0.62 of the inside scale).
+
+### Contact sheets and parity
+
+- `node scripts/world-sheet.mjs [--out qa/worlds] [--portrait] [--style …]
+  [--detail …] [--props …] [--scrim]` renders every world at day, dusk and
+  night (one PNG per still and `sheet*.png`); `--scrim` marks the quiet area
+  with its scrim and sample text.
+- `node scripts/prop-sheet.mjs [out.png]` renders every prop at simple,
+  standard and rich detail, by day and night.
+- `test/fixtures/parity/world-*.json`: landscape and portrait, the three
+  detail levels, pan, push, pull, drift and still, and a scrim, through
+  `scripts/parity.mjs`.
+
 ## Catalogue F (`kit/core/catalog-f.mjs`)
 
 The style-gated creative set around the presenter
