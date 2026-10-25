@@ -103,6 +103,25 @@ test('backdrop-swap moves the presenter, not the room, and fades its backdrop', 
   assert.throws(() => resolve('backdrop-swap', {backdrop: {src: '../x.png'}}), /project-local assets/);
 });
 
+test('backdrop-swap: the title has lifted away before the presenter glides back to full size', async () => {
+  const {BACKDROP_TITLE_CLEAR} = await import('../kit/core/catalog-e.mjs');
+  for (const params of [PARAMS['backdrop-swap'], {...PARAMS['backdrop-swap'], release: 1}, {title: 'Ship Mode', at: 2.15}]) {
+    const model = resolve('backdrop-swap', params);
+    const ops = catalogETimeline(model);
+    const c = model.content;
+    const title = (t) => frameState(ops, t).get('scene-title');
+    // Shown while the presenter is settled small, before the clear starts.
+    assert.ok(title(c.releaseAt - BACKDROP_TITLE_CLEAR - 0.01).opacity > 0.99, JSON.stringify(params));
+    // Gone (and lifted) on the first frame of the glide, and through it.
+    for (const t of [c.releaseAt, c.releaseAt + 0.1, model.end - 0.01]) {
+      assert.equal(title(t).opacity, 0, `t=${t}`);
+      assert.ok(title(t).y < 0, 'the title lifts away from the head');
+    }
+    const glide = model.subjectCamera.samples.filter((s) => s.t > c.releaseAt + 1e-6);
+    assert.ok(glide.some((s) => s.scale > c.scale + 0.01), 'the presenter grows back after the title has gone');
+  }
+});
+
 test('app-stage: the UI fills the top and the head covers its bottom edge', () => {
   const model = resolve('app-stage', PARAMS['app-stage']);
   const win = model.content.window;

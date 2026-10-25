@@ -415,6 +415,9 @@ function backdropSwapView(model) {
   return view;
 }
 
+// How long before the release glide the backdrop-swap title has cleared (s).
+export const BACKDROP_TITLE_CLEAR = 0.3;
+
 function backdropSwapTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content;
@@ -424,9 +427,13 @@ function backdropSwapTimeline(model, ops) {
     tw(ops, target, rt(c.releaseAt + c.release * 0.5), rt(c.release * 0.5), 'power1.in', {opacity: 1}, {opacity: 0});
   }
   if (c.title) {
+    // The title lifts and fades out before the release glide starts, so the
+    // presenter's head never grows over half-visible letters.
+    const lift = -24 * model.unit;
+    const enterAt = rt(c.moveAt + 0.3), outAt = rt(c.releaseAt - BACKDROP_TITLE_CLEAR);
     set(ops, `${id}-title`, start, {opacity: 0, y: 30 * model.unit});
-    tw(ops, `${id}-title`, rt(c.moveAt + 0.3), 0.5, 'power3.out', {opacity: 0, y: 30 * model.unit}, {opacity: 1, y: 0});
-    tw(ops, `${id}-title`, c.releaseAt, Math.min(0.25, c.release), 'power1.in', {opacity: 1, y: 0}, {opacity: 0, y: 0});
+    tw(ops, `${id}-title`, enterAt, rt(Math.max(1 / model.fps, Math.min(0.5, outAt - enterAt))), 'power3.out', {opacity: 0, y: 30 * model.unit}, {opacity: 1, y: 0});
+    tw(ops, `${id}-title`, outAt, BACKDROP_TITLE_CLEAR, 'power2.in', {opacity: 1, y: 0}, {opacity: 0, y: lift});
   }
 }
 
