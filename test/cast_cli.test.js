@@ -212,6 +212,20 @@ test("the cast gate fails a limb off the canvas or out of the safe zone, and a c
   assert.deepEqual(castPlacement(resolveStory(meant, { words: [] }), [meant.scenes[0], meant.scenes[1]].map((scene) => resolveModule(scene, meant))), []);
 });
 
+test("every starter character at rest passes the cast gate in every set and count, in both orientations", async () => {
+  const { STARTER_IDS } = await import("../kit/core/characters/cast.mjs");
+  const brand = example().brand;
+  const failures = [];
+  for (const [width, height] of [[1080, 1920], [1920, 1080]]) for (const set of ["desk-laptop", "phone", "meeting"]) for (const count of [1, 2, 3]) {
+    for (let i = 0; i < STARTER_IDS.length; i++) {
+      const ids = Array.from({ length: count }, (_, k) => STARTER_IDS[(i + k * 7) % STARTER_IDS.length]);
+      const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 4 }, brand, cast: { characters: ids.map((id) => ({ id })) }, scenes: [{ id: "a", module: "cast-scene", start: 0, end: 4, params: { set, cast: ids.map((id) => ({ id })) } }] };
+      failures.push(...castGate(resolveStory(story, { words: [] })).findings.map((f) => `${width}x${height} ${set}: ${f.detail}`));
+    }
+  }
+  assert.deepEqual(failures, [], "a set's default slots must keep a resting cast inside the safe zone");
+});
+
 test("cast show and sheet draw a styled story in its style pack's colours, as finish does", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-cast-style-"));
   try {

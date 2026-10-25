@@ -123,7 +123,7 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
 
   if (name === 'desk-laptop') {
     const scale = scaleFor(portrait ? 0.5 : 0.8);
-    const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.27 : 0.3), W * (portrait ? 0.73 : 0.7));
+    const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.31 : 0.3), W * (portrait ? 0.69 : 0.7));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
     if (portrait) back.push(...windowFrame(W * 0.18, H * 0.16, W * 0.3, H * 0.17, s, c), ...frameArt(W * 0.62, H * 0.19, W * 0.2, H * 0.1, s, c));
     else back.push(...windowFrame(W * 0.08, H * 0.12, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.76, H * 0.16, W * 0.12, H * 0.16, s, c), ...plant(W * 0.9, floor, s * 1.1, c));
@@ -147,7 +147,7 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
         : {x: r1(W * 0.36), y: r1(H * 0.06), width: r1(W * 0.28), height: r1(W * 0.28 * 9 / 16)};
       back.push(...screenFrame(screenRect, s, c, {stand: false}));
     } else back.push(...windowFrame(W * (portrait ? 0.3 : 0.38), H * (portrait ? 0.14 : 0.1), W * (portrait ? 0.4 : 0.24), H * (portrait ? 0.15 : 0.26), s, c));
-    const xs = spread(W * (portrait ? 0.24 : 0.28), W * (portrait ? 0.76 : 0.72));
+    const xs = spread(W * (portrait ? 0.29 : 0.28), W * (portrait ? 0.71 : 0.72));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
     const top = r1(floor - 250 * scale);
     front.push(path(`M${r1(W * 0.06)} ${r1(top)}L${r1(W * 0.94)} ${r1(top)}L${r1(W * 0.98)} ${r1(top + 60 * scale)}L${r1(W * 0.02)} ${r1(top + 60 * scale)}Z`, c.woodTop, {stroke: c.outline, width: OUT * s}));
