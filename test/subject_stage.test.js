@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { validateSubjectContours, validateSubjectInfo, validateSubjectProbe } from "../kit/core/subject.mjs";
-import { matteSize, parseRange, rangeDirName, runSubjectMatte, runSubjectProbe } from "../src/subject/stage.js";
+import { validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "../kit/core/subject.mjs";
+import { matteSize, parseRange, rangeDirName, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../src/subject/stage.js";
 import { inputSize, resizeAlpha } from "../src/subject/segment.js";
 import { modelStatus, subjectModel } from "../src/subject/models.js";
 
@@ -62,6 +62,23 @@ test("probe samples the clip, finds one person and caches the result", needsFfmp
   const again = await runSubjectProbe(clip, { cacheDir: path.join(dir, "cache"), segmenter });
   assert.equal(again.cached, true);
   assert.equal(segmenter.calls, 3, "the cached probe runs no inference");
+});
+
+test("track measures every frame at 10 fps and caches the result", needsFfmpeg, async (t) => {
+  const dir = await tempDir(t);
+  const clip = await presenterClip(dir);
+  const segmenter = brightnessSegmenter();
+  const first = await runSubjectTrack(clip, { cacheDir: path.join(dir, "cache"), segmenter });
+  assert.equal(first.cached, false);
+  assert.deepEqual(validateSubjectTrack(first.track).errors, []);
+  assert.equal(first.track.fps, 10);
+  assert.equal(first.track.frames.length, 30);
+  assert.deepEqual(first.track.frames.slice(0, 3).map((frame) => frame.t), [0, 0.1, 0.2]);
+  assert.ok(first.track.frames.every((frame) => frame.people === "one" && Math.abs(frame.head.x - 0.5) < 0.03));
+  assert.match(first.path, /[0-9a-f]{12}-mediapipe-selfie[/\\]track\.json$/);
+  const again = await runSubjectTrack(clip, { cacheDir: path.join(dir, "cache"), segmenter });
+  assert.equal(again.cached, true);
+  assert.equal(segmenter.calls, 30, "the cached track runs no inference");
 });
 
 test("matte writes an alpha WebM and one subject frame per source frame", needsFfmpeg, async (t) => {

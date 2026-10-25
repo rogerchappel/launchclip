@@ -1394,6 +1394,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip subject probe <video> [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json] # framing summary: people, head, headroom, usable
   ```
 
+- `subject track`: Track the presenter's head and body through the whole recording, so placement and layout-check know where the face is outside the matted ranges.
+
+  ```text
+  launchclip subject track <video> [--project <story-project>] [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json] # head and body boxes at 10 fps over the whole recording
+  ```
+
 - `subject matte`: Cut the person out of one source range: a cached alpha WebM and per-frame head and body boxes.
 
   ```text
