@@ -119,3 +119,50 @@ test('quote-card: a one-line highlight sweeps in on a marker; every variant keep
     assert.match(JSON.stringify(catalogGView(model)), /Priya Natarajan/);
   }
 });
+
+// Editorial modules (kit/core/editorial-core.mjs): variants restyle the shell
+// and its entrance over the geometry the core measured.
+import {EDITORIAL_VARIANTS, editorialVariantCss} from '../kit/core/editorial-core.mjs';
+import {EMITTERS as EDITORIAL_EMITTERS} from '../kit/hyperframes/editorial-ui-modules.mjs';
+
+const EDITORIAL = Object.keys(EDITORIAL_VARIANTS);
+
+test('editorial variants: listed, at least three each, the default first and unstyled', () => {
+  const listed = moduleVariants();
+  for (const kind of EDITORIAL) {
+    assert.ok(EDITORIAL_VARIANTS[kind].length >= 3, kind);
+    assert.deepEqual(listed[kind], [...EDITORIAL_VARIANTS[kind]]);
+    const model = resolve(kind, {});
+    assert.equal(model.variant, 'panel');
+    assert.equal(editorialVariantCss(model), '');
+    assert.equal(model.motion.supplied, false);
+  }
+});
+
+test('editorial variants keep the geometry, events and text; change the shell CSS and the entrance', () => {
+  for (const kind of EDITORIAL) for (const aspect of ['9:16', '16:9']) {
+    const base = resolve(kind, {}, aspect);
+    for (const variant of EDITORIAL_VARIANTS[kind].slice(1)) {
+      const model = resolve(kind, {variant}, aspect);
+      assert.deepEqual(model.rect, base.rect, `${kind}/${variant} rect`);
+      assert.deepEqual(model.content, base.content, `${kind}/${variant} content`);
+      assert.deepEqual(model.events, base.events, `${kind}/${variant} events`);
+      assert.equal(model.motion.enterDuration, base.motion.enterDuration);
+      assert.notDeepEqual(model.motion.enterFrom, base.motion.enterFrom, `${kind}/${variant} entrance`);
+      const css = EDITORIAL_EMITTERS[kind](model).css;
+      assert.ok(editorialVariantCss(model).length > 0 && css.includes(editorialVariantCss(model)), `${kind}/${variant} css`);
+      // Never a size: no width, height, padding, margin, font-size or border width.
+      assert.doesNotMatch(editorialVariantCss(model), /(?:^|[{;])(?:width|height|padding|margin|font-size|font|border-width|letter-spacing)\s*:/, `${kind}/${variant}`);
+    }
+  }
+});
+
+test('editorial variants: the style picks, the scene wins, unknown names fail', () => {
+  assert.equal(resolve('checklist', {}, '9:16', {variants: {checklist: 'banner'}}).variant, 'banner');
+  assert.equal(resolve('checklist', {variant: 'flat'}, '9:16', {variants: {checklist: 'banner'}}).variant, 'flat');
+  assert.throws(() => resolve('metric', {variant: 'neon'}), /variant must be one of panel, flat, outline, banner \(the metric variants\); got "neon"/);
+  assert.throws(() => resolve('callout', {}, '9:16', {variants: {callout: 'neon'}}), /style variants\.callout must be one of panel, flat, outline, banner/);
+  // A kind with no variants ignores the style's entries and refuses params.variant.
+  const window_ = {schema: 'launchclip.story.v1', lane: 'motion', format: FORMATS['9:16'], brand: BRAND, scenes: [], variants: {'progress': 'flat'}};
+  assert.throws(() => resolveModule({id: 's1', module: 'progress', start: 1, end: 5, params: {title: 'Upload', progress: {mode: 'illustration', unit: 'example percent', format: 'percent', values: [{value: 10, at: 0.4}, {value: 80, at: 1.2}]}, variant: 'flat'}}, window_), /progress has no designed variants/);
+});

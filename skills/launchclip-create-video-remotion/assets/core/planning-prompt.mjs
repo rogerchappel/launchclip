@@ -15,6 +15,7 @@ import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STO
 import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
 import { knownModules, catalogModules, isEditorialKind, moduleTiming, SUBJECT_DENSITY } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
+import { EDITORIAL_VARIANTS } from './editorial-core.mjs';
 import { stylePromptLines } from './style.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
 import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
@@ -269,10 +270,12 @@ export function moduleCatalogue() {
         params: [
           { name: 'title', text: 'string ≤ 54, required', tuning: false },
           ...Object.entries(spec?.params ?? {}).map(([name, text]) => ({ name, text, tuning: false })),
+          ...(EDITORIAL_VARIANTS[id] ? [{ name: 'variant', text: 'one of the variants below, the panel\'s designed look (optional; default: the style\'s variants[module], else the first); usually leave it to the style', tuning: false }] : []),
           ...['rect', 'density', 'accent', 'theme', 'presentation', 'motion'].map((name) => ({ name, text: name === 'rect' ? '{x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it' : name === 'density' ? '"fill" (an explicit rect\'s text grows to fill it; recommended with rect in 16:9) | "fixed"' : name === 'accent' ? '#rrggbb' : name === 'presentation' ? '"solid" | "glass"' : name === 'motion' ? '{enter, exit, distance, enterDuration, exitDuration, scale}' : '{surface, foreground, muted, border, accentText?}', tuning: true }))
         ],
         events: spec?.events ?? ['enter'],
-        hidesCaptions: false
+        hidesCaptions: false,
+        ...(EDITORIAL_VARIANTS[id] ? { variants: [...EDITORIAL_VARIANTS[id]] } : {})
       };
     }
     const definition = catalog[id];
