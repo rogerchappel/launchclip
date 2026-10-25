@@ -206,9 +206,13 @@ overlays, punch-ins and full-frame inserts:
     { "id": "stat", "module": "count-up", "insert": true, "start": 11, "end": 14.2,
       "in": { "type": "fade", "dur": 0.3 }, "params": { "value": 12, "suffix": " min" } }
   ],
-  "overlays": [{ "type": "captions", "style": "word-highlight" }] }
+  "overlays": [{ "type": "captions" }] }
 ```
 
+- **Captions.** Write `{"type": "captions"}` with no style: a footage-led
+  story that names no style pack gets the quiet sentence-case `quiet-accent`
+  preset, with one accent word per line. Name `word-highlight` only when the
+  brief wants loud captions; a style pack's `captions.lanes` sets its own.
 - **Base.** `base.edl` names the edit-recording `edit-plan.json`, and resolving
   the story turns its kept segments into `base.trim` (`[[in, out], …]` source
   ranges played back to back). Timeline time is edited time, so the
