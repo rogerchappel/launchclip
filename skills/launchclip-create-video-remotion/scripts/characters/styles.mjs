@@ -18,6 +18,7 @@ import {STYLE as line} from './style-line.mjs';
 import {STYLE as outlined} from './style-outlined.mjs';
 import {STYLE as paper} from './style-paper.mjs';
 import {STYLE as softShade} from './style-soft-shade.mjs';
+import {STYLE as stick} from './style-stick.mjs';
 
 // In order from the default to the newest; flat stays first.
 const STYLES = {
@@ -25,7 +26,8 @@ const STYLES = {
   line,
   outlined,
   paper,
-  'soft-shade': softShade
+  'soft-shade': softShade,
+  stick
 };
 
 export const DRAWING_STYLES = Object.freeze(Object.keys(STYLES));
