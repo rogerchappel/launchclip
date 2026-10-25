@@ -125,3 +125,12 @@ test("QA repair never re-expands a boundary into removed restart speech", () => 
   assert.equal(result.applied.filter((entry) => entry.kind === "expand-boundary").length, 0);
   assert.match(result.rejected[0].reason, /rejected filler or take audio/);
 });
+
+test("a restart that abuts the kept words is cut from the audio when pauses are preserved", () => {
+  // Contiguous timings, as recognisers give them: "so AI, AI does the lifting."
+  const words = [["so", 1, 1.1], ["AI,", 1.1, 1.4], ["AI", 1.5, 1.6], ["does", 1.6, 2.0], ["the", 2.0, 2.2], ["lifting.", 2.2, 2.7]].map(([word, start, end]) => ({ word, start, end }));
+  const plan = planRecordingEdit(words, { durationSeconds: 3, silenceDuration: null, semanticRestarts: [restart(1, 1, 2, 5)] });
+  assert.equal(plan.text, "so AI does the lifting.");
+  assert.equal(plan.kept_segments.some((range) => range.source_start_seconds < 1.4 && range.source_end_seconds > 1.1), false);
+  assert.deepEqual(plan.kept_segments.map((range) => [range.source_start_seconds, range.source_end_seconds]), [[0, 1.1], [1.4, 3]]);
+});
