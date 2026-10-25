@@ -101,7 +101,7 @@
     }
   },
   "cast": {
-    "drawing_style": "outlined",
+    "drawing_style": "flat",
     "colors": {
       "fill": "primary",
       "accent": "accent",

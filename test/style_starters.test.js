@@ -6,6 +6,7 @@ import test from "node:test";
 import { MODULES as CATALOG_F } from "../kit/core/catalog-f.mjs";
 import { knownModules } from "../kit/core/modules.mjs";
 import { stylePromptLines, validateStylePack } from "../kit/core/style.mjs";
+import { DRAWING_STYLES } from "../kit/core/characters/cues.mjs";
 
 const pack = (name) => JSON.parse(readFileSync(new URL(`../kit/styles/${name}.json`, import.meta.url), "utf8"));
 const STARTERS = ["bold-creator", "editorial-dark", "minimal-tech", "neon-explainer", "warm-documentary"];
@@ -19,6 +20,14 @@ test("every starter's preferences name known modules, none both preferred and av
     assert.deepEqual(errors, [], name);
     assert.deepEqual(warnings.filter((w) => w.startsWith("modules.")), [], name);
     assert.deepEqual(modules.prefer.filter((id) => modules.avoid.includes(id)), [], name);
+  }
+});
+
+test("every starter's cast names a drawing style the characters kit draws", () => {
+  // QA: bold-creator named "outlined" and warm-documentary "paper"; the kit draws only flat.
+  for (const name of STARTERS) {
+    const style = pack(name).cast?.drawing_style;
+    if (style !== undefined) assert.ok(DRAWING_STYLES.includes(style), `${name}: cast.drawing_style "${style}" is not one of ${DRAWING_STYLES.join(", ")}`);
   }
 });
 
