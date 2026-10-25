@@ -1,0 +1,172 @@
+// Style adherence (docs/VIDEO_QUALITY_RFC.md §9.5): `style check` and the
+// `finish` style gate. The two-stories test needs ffmpeg, like the other
+// media tests.
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import { applyStyle, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
+import { resolveStory } from "../kit/core/story.mjs";
+import { styleAdherence, styleProfile } from "../src/style_adherence.js";
+import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
+import { PATHS, runFinish } from "../src/finish.js";
+
+const ROOT = path.resolve(import.meta.dirname, "..");
+const MINIMAL = path.join(ROOT, "examples/story/minimal");
+const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
+
+const PACK = {
+  schema: "launchclip.style.v3",
+  name: "channel",
+  brand: { colors: { bg: "#102030", paper: "#f0f0f0", ink: "#102030", primary: "#ffcc00", accent: "#33ccff" } },
+  captions: { preset: "word-highlight", lanes: { "footage-led": { preset: "quiet-accent" } } },
+  brand_frame: STYLE_V3_DEFAULTS.brand_frame,
+  profile: { schema: "launchclip.cadence-profile.v1", id: "channel-references", format: "motion", duration_seconds: [5, 120], references: 1, provenance: { kind: "measured", sources: [{ id: "ref-01", rights: "own" }] }, measures: { shot_seconds: { p10: 1.5, p50: 3, p90: 6 }, visual_changes_per_min: { p10: 10, p50: 20, p90: 40 } } },
+  reference_stats: { palette: [{ hex: "#102030", weight: 0.8 }, { hex: "#ffcc00", weight: 0.1 }, { hex: "#f0f0f0", weight: 0.1 }], layout_mix: { full: 0.7, "split-right": 0.3 } }
+};
+
+const STORY = async (overrides = {}) => {
+  const story = JSON.parse(await readFile(path.join(MINIMAL, "storyboard.json"), "utf8"));
+  const words = JSON.parse(await readFile(path.join(MINIMAL, "NARRATION.json"), "utf8")).words;
+  return applyStyle(resolveStory({ ...story, style: "channel", overlays: [{ type: "captions" }], frame: { kicker: { label: "Channel" } }, ...overrides }, { words }), PACK).story;
+};
+
+const MEASURED = {
+  palette: [{ hex: "#112131", weight: 0.78 }, { hex: "#fecb02", weight: 0.12 }, { hex: "#efefef", weight: 0.1 }],
+  pacing: { duration_seconds: 60, shot_seconds: { median: 2.8 }, cut_rate_per_minute: 22 },
+  captions: { position: "bottom", case: "upper" },
+  layouts: { frames: ["full", "full", "split-right"], mix: { full: 0.66, "split-right": 0.34 }, changes: 1 }
+};
+
+const failing = (result) => result.checks.filter((entry) => !entry.ok).map((entry) => `${entry.severity}:${entry.check}`);
+
+test("a render that follows its style passes every check", async () => {
+  const result = styleAdherence({ story: await STORY(), pack: PACK, measured: MEASURED });
+  assert.equal(result.status, "passed", JSON.stringify(result.checks, null, 2));
+  assert.deepEqual(failing(result), []);
+  assert.deepEqual(result.checks.map((entry) => entry.check), ["palette", "captions", "caption case", "layout mix", "cadence: shot_seconds", "cadence: visual_changes_per_min", "brand frame"]);
+});
+
+test("each check fails the way it should", async () => {
+  const story = await STORY();
+  assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, palette: [{ hex: "#ff00ff", weight: 1 }] } })), ["error:palette"]);
+  assert.deepEqual(failing(styleAdherence({ story: await STORY({ overlays: [{ type: "captions", style: "glow" }] }), pack: PACK, measured: MEASURED })), ["error:captions"]);
+  assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, captions: { case: "as-is" } } })), ["warning:caption case"]);
+  assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, layouts: { ...MEASURED.layouts, mix: { "split-left": 1 } } } })), ["warning:layout mix"]);
+  const slow = styleAdherence({ story, pack: PACK, measured: { ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 12 }, cut_rate_per_minute: 5 } } });
+  assert.equal(slow.status, "failed");
+  assert.deepEqual(failing(slow), ["error:cadence: shot_seconds", "error:cadence: visual_changes_per_min"]);
+  assert.match(slow.checks.find((entry) => entry.check === "cadence: shot_seconds").detail, /shot_seconds 12 s is above the profile band \(1\.5 s–6 s.*channel-references/);
+  assert.deepEqual(failing(styleAdherence({ story: await STORY({ frame: { kicker: false, sections: false } }), pack: PACK, measured: MEASURED })), ["error:brand frame"]);
+  assert.deepEqual(failing(styleAdherence({ story: await STORY({ frame: false }), pack: PACK, measured: MEASURED })), ["warning:brand frame"]);
+});
+
+test("footage-led renders only need the brand primary to show; without a profile a grammar only warns", async () => {
+  const story = { lane: "footage-led", style: "channel", overlays: [{ type: "captions", preset: "quiet-accent" }], scenes: [], format: { width: 1080, height: 1920, duration: 10 }, resolved: { duration: 10 } };
+  const pack = { ...PACK, profile: undefined, reference_stats: undefined, brand_frame: { enabled: false }, motion: { grammar: "snappy" } };
+  const result = styleAdherence({ story, pack, measured: { palette: [{ hex: "#3a2a20", weight: 0.9 }, { hex: "#ffcd05", weight: 0.01 }], pacing: { shot_seconds: { median: 9 }, cut_rate_per_minute: 6 } } });
+  assert.equal(result.status, "passed", JSON.stringify(result.checks));
+  assert.deepEqual(failing(result), ["warning:cadence: median shot vs snappy grammar (s)"]);
+  assert.equal(result.checks.find((entry) => entry.check === "palette").ok, true);
+  assert.equal(result.checks.find((entry) => entry.check === "captions").expected, "quiet-accent", "the lane's preset");
+  assert.equal(await styleProfile(PACK), PACK.profile);
+  assert.equal(await styleProfile({ profile: "no-such-profile" }), null);
+  assert.equal((await styleProfile({ profile: "short-talking-head" })).id, "short-talking-head", "a shipped profile by id");
+});
+
+test("finish runs the style gate when the story names a style", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-style-gate-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    await mkdir(path.join(project, ".launchclip/styles/channel"), { recursive: true });
+    await writeFile(path.join(project, ".launchclip/styles/channel/style.json"), JSON.stringify(PACK));
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...story, style: "channel", overlays: [{ type: "captions" }], frame: { kicker: { label: "Channel" } } }));
+    const touch = async (file, content = "x") => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); };
+    const measured = [];
+    const adapters = {
+      env: {}, notice() {},
+      renderer: () => ({ async render(_project, out) { await touch(out, "video"); return { output: out }; } }),
+      async synthKit(outDir) { await touch(path.join(outDir, "AUDIO-KIT.json"), "{}"); return {}; },
+      async buildMix(options) { await touch(options.out); return { cues: [] }; },
+      async hasAudio() { return true; },
+      async master(_input, output, target) { await touch(output, "mastered"); return { target: { integrated_lufs: target.lufs }, output: {}, compliant: true }; },
+      async buildEvidence(dir) { await touch(path.join(dir, PATHS.evidence), JSON.stringify({ entries: [] })); return { sheets: [] }; },
+      async motion(_video, out) { await touch(out, "{}"); return { quality: { ok: true, findings: [] } }; },
+      async audio() { return { quality: { ok: true, findings: [] } }; },
+      async styleReference(video) { measured.push(video); return MEASURED; }
+    };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.gates.style.status, "passed", JSON.stringify(report.gates.style));
+    assert.equal(report.gates.style.report, "qa/style-check.json");
+    assert.equal(measured[0], path.join(project, "renders/draft.mp4"));
+    const written = JSON.parse(await readFile(path.join(project, "qa/style-check.json"), "utf8"));
+    assert.equal(written.style, "channel");
+    assert.ok(written.checks.some((entry) => entry.check === "brand frame" && entry.ok));
+
+    // A slow render drifts out of the band: the gate fails and finish asks for a repair.
+    adapters.styleReference = async () => ({ ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 14 }, cut_rate_per_minute: 4 } });
+    await writeFile(path.join(project, ".launchclip/styles/channel/style.json"), JSON.stringify({ ...PACK, description: "edited" }));
+    const slow = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(slow.gates.style.status, "failed");
+    assert.ok(slow.gates.style.findings.some((line) => /error: cadence: shot_seconds/.test(line)));
+    assert.equal(slow.status, "needs-repair");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+// Shots: [{seconds, bg, boxes: [[color, x, y, w, h]]}] → one H.264 file with hard cuts.
+function makeVideo(file, shots, { width = 360, height = 640 } = {}) {
+  const inputs = [];
+  const filters = [];
+  shots.forEach((shot, index) => {
+    inputs.push("-f", "lavfi", "-i", `color=c=${shot.bg}:s=${width}x${height}:r=30:d=${shot.seconds}`);
+    filters.push(`[${index}:v]${shot.boxes.map(([color, x, y, w, h]) => `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${color}:t=fill`).join(",")},format=yuv420p[v${index}]`);
+  });
+  filters.push(`${shots.map((_, index) => `[v${index}]`).join("")}concat=n=${shots.length}:v=1:a=0[out]`);
+  execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...inputs, "-filter_complex", filters.join(";"), "-map", "[out]", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", file]);
+}
+
+test("two stories in one style pass style check against each other (RFC §13 phase 6)", { skip: hasFfmpeg ? false : "ffmpeg is not installed", timeout: 180_000 }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-style-pair-"));
+  try {
+    const colors = ["0xffcc00", "0x33ccff"];
+    const episode = (file, offset) => makeVideo(file, Array.from({ length: 10 }, (_, i) => ({ seconds: [1.6, 2.4][i % 2], bg: "0x102030", boxes: [[colors[(i + offset) % 2], 40 + ((i + offset) % 3) * 60, 120 + (i % 4) * 90, 150, 110], ["0xf0f0f0", 60, 470, 240, 30]] })));
+    const projects = [];
+    for (const [name, offset] of [["a", 0], ["b", 1]]) {
+      const project = path.join(dir, name);
+      await cp(MINIMAL, project, { recursive: true });
+      await mkdir(path.join(project, "renders"), { recursive: true });
+      episode(path.join(project, "renders/final.mp4"), offset);
+      projects.push(project);
+    }
+    // Each episode drafts a style; each story names the other episode's style.
+    const styles = [];
+    for (const [i, project] of projects.entries()) {
+      const drafted = await createStyleFromReferences(`episode-${i}`, { "from-reference": path.join(project, "renders/final.mp4") }, { root: path.join(dir, "styles"), cwd: dir });
+      styles.push(path.join(drafted.path, "style.json"));
+    }
+    for (const [i, project] of projects.entries()) {
+      const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+      await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...story, style: styles[1 - i], overlays: [{ type: "captions" }], frame: { kicker: { label: "Episode" } } }));
+    }
+    for (const [i, project] of projects.entries()) {
+      const check = await checkStyleCommand(project, { against: styles[1 - i] });
+      assert.equal(check.status, "consistent", JSON.stringify(check.checks ?? check.story_error, null, 2));
+      assert.ok(check.checks, check.story_error);
+      for (const name of ["palette", "captions", "cadence: shot_seconds", "brand frame"]) assert.ok(check.checks.some((entry) => entry.check === name && entry.ok), name);
+    }
+    // A render in another palette and rhythm drifts.
+    makeVideo(path.join(projects[0], "renders/final.mp4"), [{ seconds: 9, bg: "0xf4e9d8", boxes: [["0x8a2be2", 40, 120, 280, 300]] }, { seconds: 9, bg: "0xf4e9d8", boxes: [["0x2e8b57", 40, 220, 280, 300]] }]);
+    const drift = await checkStyleCommand(projects[0], { against: styles[1] });
+    assert.equal(drift.status, "drift");
+    assert.ok(drift.checks.some((entry) => entry.check === "palette" && !entry.ok), JSON.stringify(drift, null, 1));
+    assert.ok(drift.checks.some((entry) => entry.check.startsWith("cadence") && !entry.ok));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

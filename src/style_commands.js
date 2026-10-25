@@ -4,6 +4,9 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { analyzeReference, compareToStyle, draftStyleFromReferences } from "./style_reference.js";
+import { styleAdherence, styleProfile } from "./style_adherence.js";
+import { readProjectStory } from "./story_loader.js";
+import { applyStyle } from "../kit/core/style.mjs";
 import { resolveStyleV2, writeStyleV2 } from "./style_store.js";
 
 const list = (value) => (value === undefined || value === true ? [] : Array.isArray(value) ? value : [value]).map(String);
@@ -55,7 +58,13 @@ export function projectRender(project, video) {
   throw new Error(`No render found in ${project}; pass --video <file> (looked for renders/final.mp4 and renders/draft.mp4)`);
 }
 
-/** launchclip style check <project> --against <name>: measured stats vs the pack's reference stats. */
+/**
+ * launchclip style check <project> --against <name>: measured stats vs the
+ * pack's reference stats, plus the adherence checks (src/style_adherence.js)
+ * when the project has a storyboard: palette, captions, layout mix, cadence
+ * in the style's band and the brand frame. `finish` runs the same checks as
+ * its style gate.
+ */
 export async function checkStyleCommand(projectPath, flags = {}, { root } = {}, adapters = {}) {
   const against = flags.against;
   if (!against || against === true) throw new Error("style check needs --against <style name|path>");
@@ -64,16 +73,24 @@ export async function checkStyleCommand(projectPath, flags = {}, { root } = {}, 
   const video = projectRender(project, flags.video);
   const measured = await analyzeReference(video, {}, adapters);
   const comparison = compareToStyle(measured, style.pack);
+  // The project's story, with this style merged where the story names none (or another).
+  let read = null, storyError = null;
+  try { read = await readProjectStory(project); }
+  catch (error) { storyError = error.message; }
+  const story = read ? (read.resolved.meta?.style?.name === style.name ? read.resolved : applyStyle({ ...read.resolved, meta: { ...read.resolved.meta, style: undefined } }, style.pack, { intro: false, outro: false }).story) : null;
+  const adherence = story ? styleAdherence({ story, pack: style.pack, measured, profile: await styleProfile(style.pack) }) : null;
   const result = {
     stage: "style",
     action: "check",
-    status: comparison.status,
+    status: adherence ? (adherence.status === "failed" ? "drift" : "consistent") : comparison.status,
     style: style.name,
     style_source: style.source,
     video,
     reference_stats: Boolean(style.pack.reference_stats),
     metrics: comparison.metrics,
-    measured: { palette: measured.palette.slice(0, 6), pacing: measured.pacing, energy: measured.energy, sound: measured.sound }
+    ...(adherence ? { checks: adherence.checks } : {}),
+    ...(storyError ? { story_error: storyError } : {}),
+    measured: { palette: measured.palette.slice(0, 6), pacing: measured.pacing, energy: measured.energy, sound: measured.sound, captions: measured.captions ? { position: measured.captions.position, case: measured.captions.case } : null, layouts: measured.layouts?.mix ?? null }
   };
   if (flags.out && flags.out !== true) {
     const out = path.resolve(String(flags.out));

@@ -84,15 +84,19 @@ approval round.
 A style pack is a channel's reusable identity. Every video of a series should
 name the same pack instead of improvising its look from scratch.
 
-### Storyboard videos (style pack v2)
+### Storyboard videos (style pack v3)
 
-A v2 pack is `.launchclip/styles/<name>/style.json`
-(`"schema": "launchclip.style.v2"`). It holds the palette (`brand.colors`:
-`bg`, `paper` = text on bg, `ink` = text on primary and cards, `primary`,
-`accent`) and bundled fonts (`brand.fonts`: display, body, meta), the motion
-grammar, camera and ambient level, the caption preset and its options, the SFX
-density and music hints, preferred and avoided modules with per-module param
-defaults, layout rules, and an optional intro, outro and loop.
+A v3 pack is `.launchclip/styles/<name>/style.json`
+(`"schema": "launchclip.style.v3"`; v2 packs still load). It holds the palette
+(`brand.colors`: `bg`, `paper` = text on bg, `ink` = text on primary and
+cards, `primary`, `accent`) and bundled fonts (`brand.fonts`: display, body,
+meta), the motion grammar, camera and ambient level, the caption preset and
+its options with per-lane defaults (`captions.lanes`), the SFX density and
+music hints, preferred and avoided modules with per-module param defaults,
+layout rules, an optional intro, outro and loop, and (v3) footage layouts per
+intent and section (`layouts`), vocabulary choices, a cadence `profile`, a
+`cast`, the `brand_frame` and the four `dials` (energy, density, playfulness,
+polish; 0-1, moving targets inside the profile band only).
 
 - Select it in `storyboard.json` with `"style": "<name>"` (or a path to a
   `style.json`). Names resolve in the project's `.launchclip/styles`, then
@@ -109,13 +113,22 @@ defaults, layout rules, and an optional intro, outro and loop.
 - Prefer the pack's `modules.prefer` and avoid `modules.avoid` when choosing
   modules. `launchclip story plan --style <name>` puts these rules, the caption
   preset and the grammar in the planner prompt.
+- The brand frame (kicker, section labels, progress line) is drawn by the
+  renderer around every scene: never author a kicker or brand label as a
+  scene. Name the kicker and sections with `"frame": {"kicker": {"label":
+  "Inside Ship Mode"}, "labels": [{"scene": "<id>", "label": "How it works"}]}`
+  (`"frame": false` turns it off). Modules get its safe area as
+  `model.frame.safe`.
+- Turn a dial for one video with `"style": {"name": "<name>", "dials":
+  {"energy": 0.3}}`.
 - Check the merged result with `launchclip story validate storyboard.json`; its
   `style.applied` list shows every value the pack filled.
 
 Captions come from presets shared by both renderers: `word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
 `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
-`split-color`, `lower-band`, `bubble`. Options (position, max words, case,
+`split-color`, `lower-band`, `bubble`, `quiet-accent` (the footage-led
+default when no style is named). Options (position, max words, case,
 emphasis words, font role, size, brand-role colours, stroke, shadow, entrance,
 exit, timing offset) go on the overlay or in the pack's `captions`.
 
@@ -134,6 +147,9 @@ bundled font families. It writes `style.json` and `reference-report.md`, with a
 confidence for every value. Read the report, fix low-confidence values by hand
 (fonts and accent colours are the usual ones), then render with the pack and run
 `launchclip style check <project> --against my-channel` to measure drift.
+`launchclip finish` runs the same check as its `style` gate whenever the
+storyboard names a style (palette, caption preset, cadence inside the style's
+profile band, brand frame; `qa/style-check.json`).
 Reference media and fonts are never copied into the pack.
 
 ## HyperFrames projects (v1 packs)
