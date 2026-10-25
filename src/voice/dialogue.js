@@ -2,9 +2,13 @@
 // §10.5). audio.narration.lines is [{speaker, text}]: `speaker` is a cast id
 // (that character's voice, story.cast.characters[].voice) or "narrator"
 // (audio.narration.voice). Each line is synthesised as its own take through
-// the narration module (so takes cache and level the same way), the takes
-// are joined with a short pause, and every word keeps its speaker, so
-// character scenes can open mouths on their own lines (`says: "auto"`).
+// the narration module (so takes cache and level the same way), each take is
+// trimmed to its speech (the engine's lead and trail silence would otherwise
+// add about half a second a line), the takes are joined with a pause of
+// `gap` seconds from the end of one line's speech to the start of the next
+// (audio.narration.gap, or a line's own gap), and every word keeps its
+// speaker, so character scenes can open mouths on their own lines
+// (`says: "auto"`).
 import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -12,7 +16,10 @@ import { promisify } from "node:util";
 import { NARRATION_DEFAULTS, narrationDocument, narrationRequest, synthesizeNarration } from "./narrate.js";
 
 const execFileAsync = promisify(execFile);
+/** The default pause between lines, last word to first word, in seconds. */
 export const DIALOGUE_GAP = 0.3;
+/** Silence kept around a line's words when its take is trimmed. */
+const EDGE = 0.06;
 
 function castVoices(story) {
   const characters = Array.isArray(story?.cast) ? story.cast : Array.isArray(story?.cast?.characters) ? story.cast.characters : [];
@@ -39,46 +46,101 @@ export function dialogueRequests(story, overrides = {}) {
   });
 }
 
+/**
+ * The pause after each line but the last: the line's own gap, else
+ * audio.narration.gap, else DIALOGUE_GAP.
+ */
+export function dialogueGaps(story) {
+  const narration = story?.audio?.narration ?? {};
+  const lines = Array.isArray(narration.lines) ? narration.lines : [];
+  const base = Number.isFinite(narration.gap) ? narration.gap : DIALOGUE_GAP;
+  return lines.slice(0, -1).map((line) => Number.isFinite(line?.gap) ? line.gap : base);
+}
+
 /** The plain narration text of a dialogue (for captions and checks). */
 export const dialogueText = (story) => (story?.audio?.narration?.lines ?? []).map((line) => String(line?.text ?? "").trim()).filter(Boolean).join(" ");
 
 /** The NARRATION.json document for a dialogue take: words keep their speaker, plus the per-line spans. */
 export function dialogueDocument(story, entries, take) {
-  return { ...narrationDocument({ ...entries[0].request, voice: null, text: dialogueText(story) }, take), lines: take.lines };
+  return { ...narrationDocument({ ...entries[0].request, voice: null, text: dialogueText(story) }, take), lines: take.lines, gaps: take.gaps };
 }
 
 /**
- * Synthesise every line and join them into outFile.
- * options: {outFile, cacheDir, voiceProvider, normalizeVoice, gap}
- * → {file, words: [{text, start, end, speaker}], duration, lines: [{speaker, voice, start, end, cached}]}
+ * Where each take goes in the joined dialogue: trimmed to its words (EDGE
+ * seconds of silence kept each side, less when the gap is shorter), then
+ * padded so gaps[i] seconds pass from line i's last word to line i+1's first.
+ * takes: [{speaker, request, take: {words, duration, cached, sound?: {start, end}}}]
+ * → {cuts: [{start, end, pad}], words: [{text, start, end, speaker}], lines, duration}
+ */
+export function dialogueLayout(takes, gaps) {
+  // A take's speech runs from its first word (or first sound, take.sound,
+  // when that is earlier) to its last word or last sound: engines time the
+  // last word's end early, and trimming there clips a final consonant.
+  const spans = takes.map(({ take }) => {
+    const first = Math.min(take.words.length ? take.words[0].start : 0, take.sound?.start ?? Infinity);
+    const last = Math.max(take.words.length ? take.words.at(-1).end : take.duration, take.sound?.end ?? -Infinity);
+    return { first, last, length: Math.max(take.duration, last) };
+  });
+  const tails = spans.map((span, i) => Math.min(EDGE, span.length - span.last, i < spans.length - 1 ? gaps[i] / 2 : EDGE));
+  const leads = spans.map((span, i) => Math.min(EDGE, span.first, i > 0 ? gaps[i - 1] - tails[i - 1] : EDGE));
+  const cuts = [];
+  const words = [];
+  const lines = [];
+  let offset = 0;
+  for (const [i, { speaker, request, take }] of takes.entries()) {
+    const start = round3(spans[i].first - leads[i]);
+    const end = round3(spans[i].last + tails[i]);
+    const pad = i < takes.length - 1 ? round3(Math.max(0, gaps[i] - tails[i] - leads[i + 1])) : 0;
+    cuts.push({ start, end, pad });
+    for (const word of take.words) words.push({ text: word.text, start: round3(offset + word.start - start), end: round3(offset + word.end - start), speaker });
+    lines.push({ speaker, voice: request.voice, text: request.text, start: round3(offset), end: round3(offset + end - start), cached: take.cached });
+    offset += end - start + pad;
+  }
+  return { cuts, words, lines, duration: lines.at(-1).end };
+}
+
+/**
+ * Synthesise every line and join the trimmed takes into outFile.
+ * options: {outFile, cacheDir, voiceProvider, normalizeVoice, gap (seconds, or one per gap: dialogueGaps)}
+ * → {file, words: [{text, start, end, speaker}], duration, lines: [{speaker, voice, text, start, end, cached}], gaps}
  */
 export async function synthesizeDialogue(entries, { outFile, cacheDir = null, voiceProvider, normalizeVoice, gap = DIALOGUE_GAP, ffmpeg = "ffmpeg" } = {}) {
   if (!entries.length) throw new Error("the dialogue has no lines");
+  const gaps = entries.slice(0, -1).map((_, i) => Math.max(0, Number(Array.isArray(gap) ? gap[i] ?? DIALOGUE_GAP : gap)));
   const work = `${outFile}.lines`;
   await mkdir(work, { recursive: true });
   const takes = [];
+  let layout;
   try {
     for (const [i, entry] of entries.entries()) {
       const take = await synthesizeNarration(entry.request, { outFile: path.join(work, `line-${i}.wav`), cacheDir, voiceProvider, normalizeVoice });
-      takes.push({ ...entry, take });
+      takes.push({ ...entry, take: { ...take, sound: await soundSpan(take.file, take.duration, ffmpeg) } });
     }
-    // Join: each take resampled to mono 24 kHz, then a pause between lines.
+    // Join: each take trimmed, resampled to mono 24 kHz, then padded to its gap.
+    layout = dialogueLayout(takes, gaps);
     const inputs = takes.flatMap(({ take }) => ["-i", take.file]);
-    const filters = takes.map((_, i) => `[${i}:a]aresample=24000,aformat=sample_fmts=s16:channel_layouts=mono${i < takes.length - 1 ? `,apad=pad_dur=${gap}` : ""}[a${i}]`);
+    const filters = layout.cuts.map((cut, i) => `[${i}:a]atrim=start=${cut.start}:end=${cut.end},asetpts=PTS-STARTPTS,aresample=24000,aformat=sample_fmts=s16:channel_layouts=mono${cut.pad > 0 ? `,apad=pad_dur=${cut.pad}` : ""}[a${i}]`);
     const graph = `${filters.join(";")};${takes.map((_, i) => `[a${i}]`).join("")}concat=n=${takes.length}:v=0:a=1[out]`;
     await execFileAsync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", ...inputs, "-filter_complex", graph, "-map", "[out]", outFile]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
-  const words = [];
-  const lines = [];
-  let offset = 0;
-  for (const { speaker, request, take } of takes) {
-    for (const word of take.words) words.push({ text: word.text, start: round3(word.start + offset), end: round3(word.end + offset), speaker });
-    lines.push({ speaker, voice: request.voice, text: request.text, start: round3(offset), end: round3(offset + take.duration), cached: take.cached });
-    offset += take.duration + gap;
+  return { file: outFile, words: layout.words, duration: layout.duration, lines: layout.lines, gaps, sampleRate: 24000, loudness: null, cached: takes.every(({ take }) => take.cached) };
+}
+
+/** Where a take's sound starts and ends (above -50 dB), from ffmpeg's silencedetect; null when it cannot tell. */
+async function soundSpan(file, duration, ffmpeg) {
+  try {
+    const { stderr } = await execFileAsync(ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-af", "silencedetect=noise=-50dB:duration=0.05", "-f", "null", "-"]);
+    const starts = [...stderr.matchAll(/silence_start: (-?[\d.]+)/g)].map((match) => Number(match[1]));
+    const ends = [...stderr.matchAll(/silence_end: ([\d.]+)/g)].map((match) => Number(match[1]));
+    const start = starts.length && starts[0] <= 0.001 ? ends[0] ?? 0 : 0;
+    // A trailing silence ends at the end of the file (or has no end).
+    const tail = starts.length && (ends.length < starts.length || ends.at(-1) >= duration - 0.02) ? starts.at(-1) : duration;
+    return start < tail ? { start: round3(start), end: round3(tail) } : null;
+  } catch {
+    return null;
   }
-  return { file: outFile, words, duration: round3(offset - gap), lines, sampleRate: 24000, loudness: null, cached: takes.every(({ take }) => take.cached) };
 }
 
 /** A plain-text report like the narration one, with one row per line and its speaker. */
