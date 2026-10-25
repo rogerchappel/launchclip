@@ -269,8 +269,10 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
  captions?: {preset, ...caption options,
              lanes?: {motion | voiceover-motion | footage-led: {preset, ...options}}},
- sound?: {sfx_library?: path, sfx_density?: low|normal|high,
-          music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?}},
+ sound?: {sfx_library?: path, sfx_density?: low|normal|high | 0-1,
+          palette?: <sound palette id>, ambience?: auto|none|<bed id>,
+          music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?,
+                   genre?, bpm?, key?, progression?: index}},
  modules?: {prefer?: [id], avoid?: [id], params?: {<module>: {param: default}}},
  layout?: {safe_profile?: shorts|landscape, title_case?: boolean},
  intro?: {module, params, duration}, outro?: {module, params, duration},
@@ -278,7 +280,8 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  reference_stats?: {palette, pacing, energy, sound},
  // v3 (docs/VIDEO_QUALITY_RFC.md §9):
  layouts?: {by_intent?: {<intent>: layout}, by_section?: {<section>: layout},
-            panel?: {treatment?: solid|glass|paper|outline|soft-shadow, radius?: 0-120 px}},
+            panel?: {treatment?: solid|glass|paper|outline|soft-shadow, radius?: 0-120 px,
+                     fill?: {kind: <background kind, not blobs>, params?}}},
  vocabulary?: {icon_tint?: role|hex, icon_stroke?: 1-3, icon_style?: outline|duotone,
                illustration?: boolean | flat|flat-shadow|line, prefer?: {<intent>: [module id]}},
  profile?: "<shipped profile id>" | <launchclip.cadence-profile.v1 profile>,
@@ -287,7 +290,7 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  // seeded styles (docs/SEEDED_STYLES_RFC.md §3.1):
  generated?: {seed: 8 hex, generator: "launchclip.style-seed.v1", tone?, at?: ISO date,
               constraints?, theme?, scheme?, pairing?, redraws?},
- background?: {kind: <slug>, params?: {...}},
+ background?: {kind: <slug>, params?: {fade?: none|center|top|bottom|left|right, ...}},
  variants?: {<module>: <variant>},
  world?: {kind: <world id>, time?: day|dusk|night},
  brand_frame?: false | {enabled?, logo?: path, color?: role|hex,
@@ -312,9 +315,14 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   `STYLE_BACKGROUND_KINDS`, a `variants` module the catalogue does not list
   (when `modules` is passed) and unknown `generated` keys are warnings, so the
   kits that draw them can grow first. `cast.members` entries are checked as
-  story cast entries (`storyCastErrors`). `applyStyle` does not merge
-  `background`, `variants`, `world` or `cast.members` into the story; the
-  kits read them from the pack.
+  story cast entries (`storyCastErrors`). `STYLE_BACKGROUND_KINDS` mirrors
+  `kit/core/backgrounds.mjs`; the sound palette and genre lists mirror
+  `kit/core/sound/options.mjs` (names outside them warn).
+- `applyStyle` fills `story.background`, `story.panel` (the pack's
+  `layouts.panel` whole, `fill` included; not the default panel an upgraded
+  v2 pack carries, so v2 packs render as before) and `story.world` when the
+  story has none, and `story.variants` per module (the story's entries win).
+  The renderers read those story fields; `cast.members` stay in the pack.
 - `brandFrameErrors(frame, where)` checks `brand_frame` and the story's
   `frame` (the same shape, plus `labels`).
 - `upgradeV2Pack(pack, {render})` → `{pack, notes}` fills the v3 fields from
@@ -412,9 +420,15 @@ saved pack is what renders, so a new version changes only rerolls.
   stroke-free caption presets.
 - The option lists (`SEED_PANEL_TREATMENTS`, `SEED_BACKGROUND_KINDS`,
   `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
-  `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`) hold what the
-  kits draw today; the background, variant, character and world kits widen
-  them. `cast.members` are 2–4 people drawn from the rig's options (never a
+  `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`,
+  `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) hold what the kits draw today.
+  Backgrounds are weighted towards subtle patterns and textures
+  (`SEED_BACKGROUND_KINDS` is `[kind, weight]`; flat is rare), each with a
+  `fade`, and most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
+  `PANEL_FILL_CHANCE`). `sound` holds a palette, a music genre, bpm inside the
+  tone's range, key and progression, ambience `auto` and the tone's SFX
+  density. The background, variant, character, world and sound kits widen
+  these lists. `cast.members` are 2–4 people drawn from the rig's options (never a
   starter id, which would pull in that starter's params).
 - The brand frame is off (a generated style has no brand name); its kicker
   position, sections and progress line are still drawn, for when it is

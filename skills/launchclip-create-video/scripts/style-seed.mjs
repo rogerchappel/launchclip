@@ -29,7 +29,7 @@ import { STARTER_IDS } from './characters/cast.mjs';
 import { HAIR_COLORS, SKIN_TONES } from './characters/palette.mjs';
 import { ACCESSORIES, BUILDS, HAIR_STYLES, HEIGHTS, TOPS } from './characters/rig.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
-import { STYLE_FRAME_POSITIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
+import { STYLE_FRAME_POSITIONS, STYLE_MUSIC_GENRES, STYLE_SCHEMA, STYLE_SOUND_PALETTES, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
 export const GENERATOR_VERSION = 'launchclip.style-seed.v1';
 export const SEED_PATTERN = /^[0-9a-f]{8}$/;
@@ -41,7 +41,19 @@ export const TONES = Object.freeze(['calm', 'serious', 'warm', 'energetic', 'pla
 export const THEMES = Object.freeze(['dark', 'light', 'tinted']);
 export const PALETTE_SCHEMES = Object.freeze(['complementary', 'split-complementary', 'analogous', 'triadic', 'monochrome', 'duotone']);
 export const SEED_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
-export const SEED_BACKGROUND_KINDS = Object.freeze(['flat', 'soft-blobs']);
+// Plain flat fills look poor, so subtle patterns and textures carry most of
+// the weight; flat and today's blobs stay possible. Kinds that need content
+// the seed does not have (logo-pattern, icon-pattern, motif) are left to art
+// direction. Each entry is [kind, weight].
+export const SEED_BACKGROUND_KINDS = Object.freeze([['texture', 3], ['grain-gradient', 3], ['dot-grid', 2], ['topographic', 2], ['halftone', 2], ['mesh', 2], ['gradient', 2], ['geometric', 1], ['stripes', 1], ['paper', 1], ['blobs', 1], ['flat', 1]].map(Object.freeze));
+// Fills inside cards and footage panels: quiet textures only.
+export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot-grid', 'halftone', 'topographic']);
+export const SEED_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
+export const PANEL_FILL_CHANCE = 0.6;
+export const SEED_SOUND_PALETTES = STYLE_SOUND_PALETTES;
+export const SEED_MUSIC_GENRES = STYLE_MUSIC_GENRES;
+export const SEED_MUSIC_KEYS = Object.freeze(['C', 'D', 'E', 'F', 'G', 'A', 'Bb', 'Eb', 'F#']);
+export const SEED_PROGRESSIONS = 4;
 export const SEED_ICON_STYLES = Object.freeze(['outline']);
 export const SEED_ILLUSTRATIONS = Object.freeze(['flat']);
 export const SEED_DRAWING_STYLES = DRAWING_STYLES;
@@ -413,6 +425,14 @@ function drawCast(s) {
 // ---------------------------------------------------------------------------
 // The pack
 
+/** One kind from [[kind, weight], ...]. */
+function weighted(s, entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let at = s.random() * total;
+  for (const [kind, weight] of entries) { at -= weight; if (at < 0) return kind; }
+  return entries.at(-1)[0];
+}
+
 const asObject = (value, key) => (value == null ? null : typeof value === 'string' ? { [key]: value } : value);
 
 /** Clean constraints: only CONSTRAINT_KEYS, strings trimmed, empty values dropped. Throws on a tone or theme it does not know. */
@@ -492,10 +512,17 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const panel = { treatment: panelFixed.treatment ?? treatment, radius: panelFixed.radius ?? radius };
   const surface = draw('background');
   const backgroundFixed = asObject(fixed.background, 'kind') ?? {};
-  const kind = backgroundFixed.kind ?? surface.pick(SEED_BACKGROUND_KINDS);
-  const background = { kind, params: backgroundFixed.params ?? (kind === 'soft-blobs' ? { density: round(surface.range(0.3, 0.8), 2), scale: round(surface.range(0.8, 1.4), 2) } : {}) };
+  const drawn = weighted(surface, SEED_BACKGROUND_KINDS);
+  const fade = surface.pick(SEED_FADES);
+  const kind = backgroundFixed.kind ?? drawn;
+  const background = { kind, params: backgroundFixed.params ?? (kind === 'blobs' ? {} : { fade }) };
+  const fillStream = draw('panel-fill');
+  const fillKind = fillStream.pick(SEED_PANEL_FILLS);
+  const fillFade = fillStream.pick(SEED_FADES);
+  if (panelFixed.fill === undefined && panel.treatment !== 'glass' && fillStream.chance(PANEL_FILL_CHANCE)) panel.fill = { kind: fillKind, params: { fade: fillFade } };
+  else if (panelFixed.fill) panel.fill = panelFixed.fill;
   let level = motion.pick(t.ambient);
-  if (kind === 'soft-blobs' && level === 'off') level = 'subtle';
+  if (kind === 'blobs' && level === 'off') level = 'subtle';
 
   const captionsStream = draw('captions');
   const presets = GRAMMAR_CAPTIONS[grammar].filter((name) => palette.dark || LIGHT_CAPTIONS.has(name));
@@ -539,9 +566,14 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     brand: { colors: palette.colors, fonts },
     motion: { grammar, transition_preference: preference },
     camera,
-    ambient: { level, background: kind === 'soft-blobs' },
+    ambient: { level, background: kind === 'blobs' },
     captions: { preset: caption, position: 'auto', lanes: { 'footage-led': { ...STYLE_V3_DEFAULTS.caption_lanes['footage-led'] } } },
-    sound: { sfx_density: t.sfx, music: { prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...t.bpm] } },
+    sound: {
+      palette: music.pick(SEED_SOUND_PALETTES),
+      music: { genre: music.pick(SEED_MUSIC_GENRES), bpm: Math.round(music.range(t.bpm[0], t.bpm[1])), key: music.pick(SEED_MUSIC_KEYS), progression: Math.floor(music.random() * SEED_PROGRESSIONS), prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...t.bpm] },
+      ambience: 'auto',
+      sfx_density: t.sfx
+    },
     layout: { title_case: pairing.case === 'title' },
     layouts: { by_intent: {}, by_section: {}, panel },
     background,
