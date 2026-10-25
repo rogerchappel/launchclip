@@ -65,3 +65,12 @@ test('the phrase table suggests compare and timeline for their intents', async (
   for (const [id, sentence] of Object.entries(lines)) for (const lane of ['motion', 'footage-led'])
     assert.ok(suggestModules(sentence, {lane})[0]?.modules.includes(id), `${id} in ${lane}`);
 });
+
+test('timeline: vertical steps share one pitch, and a stacked compare spreads in a panel', () => {
+  const rect = {x: 96, y: 132, width: 898, height: 689};
+  const tl = resolve('timeline', {direction: 'vertical', rect, steps: [{label: "Experiments we've done"}, {label: 'Working now'}, {label: 'Next'}]}, LANDSCAPE);
+  const gaps = tl.content.centres.slice(1).map((c, i) => c.y - tl.content.centres[i].y);
+  assert.ok(Math.max(...gaps) - Math.min(...gaps) < 0.05, `even spacing ${gaps}`);
+  const cmp = resolve('compare', {...COMPARE, rect: {...rect, width: 600}}, LANDSCAPE);
+  if (cmp.content.layout.layout === 'stacked') assert.ok(cmp.content.layout.height >= rect.height * 0.75, `compare fills ${cmp.content.layout.height}`);
+});

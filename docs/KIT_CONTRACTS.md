@@ -2038,8 +2038,15 @@ Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
   beside the presenter…; shorten it, or make the scene an insert") instead of
   covering the face.
 - Each module measures layout variants, largest first: plates try scales
-  1.5–0.68 and overlays try 1–0.68, then a compact variant with the icon or
-  object beside the text. Measured heights are conservative (catalogue B's
+  1.5–0.68, an explicit rect or a layout panel tries 2–0.68 (the type grows
+  until the content fills it, like the editorial `density: "fill"`) and
+  overlays try 1–0.68, then a compact variant with the icon or object beside
+  the text. Where the content is centred in a region it does not size (a
+  plate, a panel or a rect), an icon-row list, a stacked compare and a
+  vertical timeline spread their gaps into the room left over (to 90% of the
+  region, each gap capped). Vertical timeline steps share one pitch.
+- Titles over a list (icon-row, timeline) are paper, or primary when that has
+  more contrast, at least 4.5:1 on `bg`; never the muted grey. Measured heights are conservative (catalogue B's
   advance model). The view lays content out in flex columns and rows, so real
   text heights set the spacing identically in both renderers.
 - `model.placement` names the region and `model.surface` the surface. Key

@@ -9,7 +9,7 @@
 
 import {fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
-import {CARD_PARAMS, after, at, bob, cardTiming, column, createCardBase, flow, flowText, iconParam, iconTile, pick, pop, rise, row} from './catalog-g-base.mjs';
+import {CARD_PARAMS, after, at, bob, cardTiming, column, createCardBase, flow, flowText, iconParam, iconTile, pick, pop, rise, row, spread} from './catalog-g-base.mjs';
 import {ICON_STROKE, iconNode} from './icons.mjs';
 
 const TONES = ['primary', 'accent', 'paper'];
@@ -133,7 +133,8 @@ function resolveIconRow(params, ctx) {
     const rows = b.scales.map(k => () => asRow(width, k)), lists = b.scales.map(k => () => asList(width, k));
     const out = pick(layoutIn === 'row' ? rows : layoutIn === 'list' ? lists : [...rows, ...lists], maxHeight);
     if (!out && layoutIn === 'row') check.fail('params.layout', '"row" does not fit: the labels are too long for the width; use "list"');
-    return out;
+    // A list in a panel or rect spreads down it rather than bunching at the top.
+    return out?.mode === 'list' && b.fills ? spread(out, maxHeight, {gap: [n - 1, r2(out.rowH * 0.6)], titleGap: [out.title ? 1 : 0, u(64)]}) : out;
   };
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1400)});
   const first = b.timeOf('item-0', p.at, 'params.at', 0.6);
@@ -143,7 +144,7 @@ function resolveIconRow(params, ctx) {
     return {...item, time};
   });
   const L = box.layout;
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, title, items: placed, color: colors.primary, labelColor: theme.foreground, titleColor: theme.muted},
+  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, title, items: placed, color: colors.primary, labelColor: theme.foreground, titleColor: b.titleColor},
     {minTextPx: Math.min(L.labelSize, L.title?.size ?? Infinity)});
 }
 
@@ -152,7 +153,7 @@ function iconRowView(model) {
   const c = model.content, L = c.layout, B = c.box;
   const rowMode = L.mode === 'row';
   const label = {fontFamily: fonts.body, fontWeight: 600, fontSize: L.labelSize, lineHeight: '1.2', color: c.labelColor};
-  const title = c.title ? flowText(null, B.width, {marginBottom: L.titleGap, fontFamily: fonts.body, fontWeight: 600, fontSize: L.title.size, lineHeight: '1.15', color: c.titleColor, textAlign: rowMode ? 'center' : 'left'}, c.title) : null;
+  const title = c.title ? flowText(null, B.width, {marginBottom: L.titleGap, fontFamily: fonts.body, fontWeight: 700, fontSize: L.title.size, lineHeight: '1.15', color: c.titleColor, textAlign: rowMode ? 'center' : 'left'}, c.title) : null;
   const items = c.items.map(item => rowMode
     ? flow(`${id}-item-${item.index}`, L.cell, undefined, {...hidden, display: 'flex', flexDirection: 'column', alignItems: 'center', transformOrigin: '50% 30%'}, [
       iconTile(null, item.icon, L.tile, c.color, unit),

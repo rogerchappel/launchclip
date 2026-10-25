@@ -176,3 +176,17 @@ test('a brand frame narrows where a card may go', () => {
   assert.ok(model.frame?.safe, 'the story has a frame');
   assert.ok(inside(model.rect, model.frame.safe), 'the card stays inside the frame safe area');
 });
+
+test('in a panel or rect, a list fills the room and its title reads at 4.5:1', async () => {
+  const {contrastRatio} = await import('../kit/core/catalog-b-base.mjs');
+  const rect = {x: 96, y: 132, width: 898, height: 689};
+  const items = [{icon: 'code', label: 'Code templates'}, {icon: 'play-circle', label: 'Live builds'}, {icon: 'users', label: 'Direct help'}];
+  const model = resolve('icon-row', {title: 'You get', layout: 'list', items, rect}, {format: LANDSCAPE, aspect: '16:9'});
+  const L = model.content.layout;
+  assert.ok(L.height >= rect.height * 0.75, `fills ${L.height} of ${rect.height}`);
+  assert.ok(L.height <= rect.height, 'still fits');
+  assert.ok(L.gap <= L.rowH * 0.6 + 0.01, 'gaps stay capped');
+  assert.ok(model.minTextPx >= 44, 'legible');
+  assert.ok(contrastRatio(model.content.titleColor, brand.colors.bg) >= 4.5, 'title contrast');
+  assert.notEqual(model.content.titleColor, model.theme.muted);
+});
