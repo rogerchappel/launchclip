@@ -60,6 +60,7 @@ export function assessRecordingQa(plan, renderedTranscript, options = {}) {
   // The source was merged from two recognisers; disagreements on retained
   // speech are recorded for review. The rendered-output ASR still gates.
   for (const issue of consensusIssues(plan)) issues.push(issue);
+  for (const issue of tailContractionIssues(plan)) issues.push(issue);
   if (options.sourceTranscript) {
     const sourceWords = normalizeRecordingTranscript(options.sourceTranscript);
     for (const [issueIndex, issue] of issues.slice(0, transcriptIssueCount).entries()) {
@@ -179,6 +180,22 @@ export function recordingAcousticIssues(plan, acoustic) {
   return [...supplied, ...boundaries, ...swallowed];
 }
 
+// A guarded contraction is recorded, with its proof, on the edit timeline.
+function tailContractionIssues(plan) {
+  const contractions = plan.audio_analysis?.tail_contractions ?? [];
+  if (!Array.isArray(contractions)) throw new Error("Rejected-tail contractions require an array");
+  return contractions.map((entry) => {
+    const from = entry?.source_keep_boundary_seconds;
+    const to = entry?.contracted_to_seconds;
+    const word = entry?.chosen_word;
+    if (entry?.reason !== "rejected-speech-tail" || ![from, to, entry.quiet_start_seconds, word?.independent_start_seconds].every(Number.isFinite) || to <= from || to < entry.quiet_start_seconds - 1e-6 || word.independent_start_seconds < to - 1e-6 || typeof word.independent_model !== "string") throw new Error("Invalid rejected-tail contraction");
+    if (!(plan.removed_segments ?? []).some((cut) => cut.reason === "rejected-speech-tail" && Math.abs(cut.source_start_seconds - from) <= 1e-6 && Math.abs(cut.source_end_seconds - to) <= 1e-6)) throw new Error("Rejected-tail contraction is missing its removed range");
+    const index = (plan.kept_segments ?? []).findIndex((segment) => Math.abs(segment.source_start_seconds - to) <= 1e-6);
+    const at = index < 0 ? undefined : plan.kept_segments[index].start_seconds;
+    return { kind: "rejected-tail-contraction", ...(index < 0 ? {} : { segment_index: index, edge: "start" }), start_seconds: at ?? 0, end_seconds: at ?? 0, source_start_seconds: from, source_end_seconds: to,
+      explanation: `Removed ${(to - from).toFixed(2)}s of a rejected word's decaying tail before "${String(word.word).trim()}": the envelope falls from ${entry.cut_level_db} dB at the cut into quiet at ${entry.quiet_start_seconds.toFixed(2)}s, and ${word.independent_model} starts the word at ${word.independent_start_seconds.toFixed(2)}s.`, blocking: false, repairable: false };
+  });
+}
 function consensusIssues(plan) {
   const consensus = plan.transcript_consensus;
   if (consensus === undefined) return [];

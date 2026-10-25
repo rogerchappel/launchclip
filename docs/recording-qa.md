@@ -76,5 +76,32 @@ issues. A matching transcript or an otherwise empty semantic assessment cannot
 pass it. An active agent or explicitly selected local model must inspect the
 source and rendered boundary and independently align the chosen speech before
 providing an evidence-bound acoustic resolution. The review may identify natural
-delivery instead of a retake artifact. No automatic speech removal or boundary
-contraction is authorized by this flag.
+delivery instead of a retake artifact. The flag itself authorizes no speech
+removal or boundary contraction; the one automatic exception is the guarded
+contraction below, and a contracted keep is not flagged.
+
+## Guarded rejected-tail contraction
+
+A recogniser can end a rejected word too early and start the chosen word too
+early, so the keep opens on the rejected word's audible tail. Waveform
+refinement contracts such a keep only when all of these hold:
+
+- **The envelope proves a tail.** The 10 ms source levels (`tail_windows`, measured
+  with the consensus pass) show voice continuing across the cut at least 6 dB above
+  the boundary threshold, never louder than at the cut, never re-rising more than
+  12 dB over its decayed level (a 30 ms running maximum), and falling into at least
+  40 ms of measured quiet within 0.4 s.
+- **An independent alignment puts the chosen word after it.** The plan's first kept
+  word starts inside the tail, and another recogniser times the same word, before
+  the next kept word, starting at or after the tail's quiet.
+- **No retained word overlaps** the removed region.
+
+The keep then starts in that quiet, at most `silencePadding` before the chosen
+word, and the word takes the independent start (its own end is kept unless it
+ends before that start). The removed range is `rejected-speech-tail`, which a
+QA repair can never expand back into. `audio_analysis.tail_contractions` records
+the proof (cut level, quiet span, both word starts and the independent model),
+and QA lists each one as a nonblocking `rejected-tail-contraction` issue on the
+edit timeline. Without every proof the boundary stays as it was and the
+unconfirmed-boundary review above applies. A single-recogniser run has no
+independent alignment, so it never contracts.

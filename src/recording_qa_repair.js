@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { normalizeRecordingTranscript, REJECTED_SPEECH_REASONS } from "./recording_edit.js";
 const execute = promisify(execFile);
 const EPSILON = 1e-6;
-const PROTECTED_REASONS = new Set([...REJECTED_SPEECH_REASONS, "rejected-splice-handle"]);
+const PROTECTED_REASONS = new Set([...REJECTED_SPEECH_REASONS, "rejected-splice-handle", "rejected-speech-tail"]);
 
 /** Recover only the boundary of a retained word; unsupported edits fail closed. */
 export function repairRecordingPlan(plan, requests = [], options = {}) {

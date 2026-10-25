@@ -51,7 +51,58 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
     boundarySilence = parseAudioSilence(boundaryDetection.stderr, duration, { joinToleranceSeconds: 0 }).filter((interval) => interval.end_seconds - interval.start_seconds >= boundaryMinimum - 1e-6);
   }
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
-  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, boundary_silence_receipt: { threshold_db: boundaryThreshold, noise_floor_db: noiseFloor, rule: "max(-80,min(dialogue-threshold,noise-floor+6dB))", minimum_duration_seconds: boundaryMinimum, join_tolerance_seconds: 0, measurement: boundaryWindows ? "mono16k-float-rms-10ms" : "silencedetect-peak", windows: boundaryWindows }, waveform };
+  // 10ms levels after each rejected cut, measured once for consensus timing,
+  // are the evidence for a rejected word's decaying tail (see refinement).
+  const tailWindows = options.boundaryPlan && options.frameLevels ? rejectedTailWindows(options.boundaryPlan, duration, options.frameLevels) : null;
+  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, boundary_silence_receipt: { threshold_db: boundaryThreshold, noise_floor_db: noiseFloor, rule: "max(-80,min(dialogue-threshold,noise-floor+6dB))", minimum_duration_seconds: boundaryMinimum, join_tolerance_seconds: 0, measurement: boundaryWindows ? "mono16k-float-rms-10ms" : "silencedetect-peak", windows: boundaryWindows }, ...(tailWindows ? { tail_windows: tailWindows } : {}), waveform };
+}
+
+const TAIL = { step: 0.01, before: 0.05, after: 1, maximum: 0.4, quietFrames: 4, headroomDb: 6, riseDb: 12 };
+
+/** Bounded 10ms level windows that start just before each retake-facing keep. */
+export function rejectedTailWindows(plan, duration, levels) {
+  if (levels?.step_seconds !== TAIL.step || !Array.isArray(levels.levels_db) || levels.levels_db.some((level) => !Number.isFinite(level))) throw new Error("Rejected-tail windows require 10ms frame levels");
+  const windows = [];
+  for (const keep of plan.kept_segments ?? []) {
+    checkedRange(keep.source_start_seconds, keep.source_end_seconds, duration);
+    if (!(plan.removed_segments ?? []).some((cut) => REJECTED_SPEECH_REASONS.includes(cut.reason) && Math.abs(cut.source_end_seconds - keep.source_start_seconds) <= 1e-6)) continue;
+    const first = Math.max(0, Math.floor((keep.source_start_seconds - TAIL.before) / TAIL.step + 1e-6));
+    const last = Math.min(levels.levels_db.length, Math.ceil(Math.min(keep.source_end_seconds, keep.source_start_seconds + TAIL.after) / TAIL.step - 1e-6));
+    if (last - first >= 2) windows.push({ start_seconds: first * TAIL.step, step_seconds: TAIL.step, levels_db: levels.levels_db.slice(first, last) });
+  }
+  if (windows.length > 512) throw new Error("Rejected-tail windows exceed 512-window budget");
+  return windows;
+}
+
+/**
+ * Prove that a keep starting at a rejected cut opens on that word's decaying
+ * tail: voice continues across the cut, never rises above its level at the
+ * cut or re-onsets, and falls into measured quiet within 0.4s.
+ */
+export function provenRejectedTail(windows, cutEnd, thresholdDb) {
+  const window = (windows ?? []).find((entry) => entry.start_seconds <= cutEnd - TAIL.step + 1e-6 && entry.start_seconds + entry.levels_db.length * entry.step_seconds > cutEnd + TAIL.step);
+  if (!window || !Number.isFinite(thresholdDb)) return null;
+  const levels = window.levels_db;
+  const at = Math.round((cutEnd - window.start_seconds) / window.step_seconds);
+  if (at < 1 || at >= levels.length || levels[at - 1] <= thresholdDb || levels[at] < thresholdDb + TAIL.headroomDb) return null;
+  let quiet = -1;
+  for (let index = at; index + TAIL.quietFrames <= levels.length; index++) {
+    if (levels.slice(index, index + TAIL.quietFrames).every((level) => level <= thresholdDb)) { quiet = index; break; }
+  }
+  if (quiet <= at || (quiet - at) * window.step_seconds > TAIL.maximum + 1e-6) return null;
+  // A 30ms running maximum smooths frame jitter; a new onset rises far above
+  // the decayed level, and nothing in a tail is louder than the cut itself.
+  const peak = Math.max(levels[at - 1], levels[at]);
+  let floor = Infinity;
+  for (let index = at; index < quiet; index++) {
+    const smoothed = Math.max(...levels.slice(index, Math.min(quiet, index + 3)));
+    if (levels[index] > peak + 1 || smoothed > floor + TAIL.riseDb) return null;
+    floor = Math.min(floor, smoothed);
+  }
+  let end = quiet;
+  while (end < levels.length && levels[end] <= thresholdDb) end++;
+  const time = (index) => window.start_seconds + index * window.step_seconds;
+  return { tail_start_seconds: cutEnd, tail_end_seconds: time(quiet), quiet_start_seconds: time(quiet), quiet_end_seconds: time(end), cut_level_db: levels[at], threshold_db: thresholdDb };
 }
 
 export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoints = 6000 }) {
@@ -103,7 +154,7 @@ export function parseAudioSilence(output, durationSeconds, { joinToleranceSecond
 }
 
 /** Align silent ASR boundaries, then trim measured quiet outside voiced words. */
-export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08, trimEdges = true } = {}) {
+export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08, trimEdges = true, independentWords = [] } = {}) {
   const padding = nonnegative(silencePadding, "silencePadding");
   if (typeof trimEdges !== "boolean") throw new Error("trimEdges must be a boolean");
   const duration = positive(plan?.source_duration_seconds, "source duration");
@@ -170,6 +221,13 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const spliceProtection = [];
   const unconfirmedBoundaries = [];
   const ambiguousWordSpans = [];
+  const tailContractions = [];
+  if (!Array.isArray(independentWords)) throw new Error("independentWords must be an array");
+  const independent = independentWords.map((word) => {
+    checkedRange(word?.start, word?.end, duration);
+    if (!String(word.word ?? "").trim() || typeof word.model !== "string") throw new Error("Independent alignment words need text, timing and a model");
+    return word;
+  });
   for (const keep of keeps) {
     const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
     if (!spoken.length) continue; // Wordless ranges are removed separately below.
@@ -177,10 +235,22 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     // facing handle may therefore contain rejected speech even when not quiet.
     const touchesEarlierCut = rejectedCuts.some((cut) => Math.abs(cut.source_end_seconds - keep.start) <= 1e-6);
     const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
+    // Guarded contraction: the keep opens on the rejected word's measured
+    // decaying tail, the chosen word's timing starts inside it, and an
+    // independent recogniser puts that word after the tail's quiet. The
+    // keep then starts in that quiet and the word takes the independent start.
+    const contraction = touchesEarlierCut ? contractRejectedTail(keep, spoken, sourceWords, independent, analysis, padding) : null;
+    if (contraction) {
+      tailContractions.push(contraction);
+      spliceRanges.push({ start: contraction.source_keep_boundary_seconds, end: contraction.contracted_to_seconds, reason: "rejected-speech-tail" });
+      keep.start = contraction.contracted_to_seconds;
+      spoken[0].start = contraction.chosen_word.independent_start_seconds;
+      spoken[0].end = contraction.chosen_word.end_seconds;
+    }
     // A first-word timestamp can swallow the rejected take's short tail and a
     // long pause before the chosen word. Neither RMS nor matching ASR proves
     // which island belongs to that word, so retain speech and request review.
-    if (touchesEarlierCut) {
+    if (touchesEarlierCut && !contraction) {
       const first = spoken[0];
       const separator = measuredQuiet.find((quiet) => first.end - first.start >= 0.8
         && quiet.start > first.start && quiet.start - first.start <= 0.2 + 1e-6
@@ -192,7 +262,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
         reason: "retake-word-timestamp-spans-quiet"
       });
     }
-    if (touchesEarlierCut && spoken[0].start > keep.start) {
+    if (touchesEarlierCut && !contraction && spoken[0].start > keep.start) {
       const wordStart = spoken[0].start;
       const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, keep.start), end: Math.min(quiet.end, wordStart) })).filter((quiet) => quiet.end - quiet.start >= boundaryMinimum - 1e-6 && quiet.end > wordStart - 0.5).at(-1);
       if (!separator && analysis.boundary_silence_receipt) { unconfirmedBoundaries.push({ side: "start", source_word_boundary_seconds: wordStart, source_keep_boundary_seconds: keep.start, reason: "no-confirmed-quiet-separator" }); }
@@ -258,8 +328,31 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const removed_segments = [...plan.removed_segments.map((segment) => {
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
-  }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, ambiguous_word_spans: ambiguousWordSpans, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: range.reason ?? "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, ambiguous_word_spans: ambiguousWordSpans, tail_contractions: tailContractions, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+}
+
+function contractRejectedTail(keep, spoken, sourceWords, independent, analysis, padding) {
+  const first = spoken[0];
+  const tail = provenRejectedTail(analysis.tail_windows, keep.start, analysis.boundary_silence_receipt?.threshold_db);
+  if (!tail || first.start >= tail.quiet_start_seconds - 1e-6) return null;
+  // The independent alignment: the same word from another recogniser, after the tail.
+  const text = (value) => String(value).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const witness = independent
+    .filter((word) => text(word.word) === text(first.word) && word.start >= tail.quiet_start_seconds - 1e-6 && word.start - first.start <= 2 && word.start < (spoken[1]?.start ?? Infinity) && word.end <= keep.end + 1e-6)
+    .sort((a, b) => a.start - b.start)[0];
+  if (!witness) return null;
+  const end = first.end > witness.start ? first.end : witness.end;
+  const next = spoken[1];
+  if (next && next.start < end - 1e-6) return null;
+  // The keep starts in the measured quiet, a handle before the chosen word.
+  const quietEnd = Math.min(witness.start, tail.quiet_end_seconds);
+  const boundary = Math.max(tail.quiet_start_seconds, quietEnd - Math.min(padding, (quietEnd - tail.quiet_start_seconds) / 2));
+  if (boundary <= keep.start + 1e-6 || boundary > witness.start + 1e-6) return null;
+  // No retained word, other than the retimed chosen word, may overlap the removed region.
+  if (sourceWords.some((word) => word !== first && word.start < boundary - 1e-6 && word.end > keep.start + 1e-6)) return null;
+  return { reason: "rejected-speech-tail", source_keep_boundary_seconds: keep.start, contracted_to_seconds: boundary, ...tail,
+    chosen_word: { word: first.word, start_seconds: first.start, end_seconds: end, independent_start_seconds: witness.start, independent_end_seconds: witness.end, independent_model: witness.model } };
 }
 
 function recordingBoundaryWindows(plan, duration, silence, waveform, floor) {
