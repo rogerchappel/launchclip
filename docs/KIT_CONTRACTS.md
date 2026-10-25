@@ -1896,8 +1896,9 @@ Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
 | `panel` | `ctx.layout.safe` is set (a footage layout's graphics panel) | `plate` | That panel |
 | `rect` | `params.rect` | as above | That rect (at least 360 × 200 px, inside the safe zone) |
 
-- `ctx.frame.safe` (a brand frame's safe area), when present, narrows the
-  safe zone. `ctx.insert` is `scene.insert === true` (set by `resolveModule`).
+- `ctx.frame.safe` (the brand frame's safe area, `brandFrameSafe(story)`, which
+  `resolveModule` passes when the story has a `frame`) narrows the safe zone.
+  `ctx.insert` is `scene.insert === true` (also set by `resolveModule`).
 - `params.surface` (`card` | `plate`) overrides the default surface.
 - When nothing fits beside the presenter, resolution fails ("…do not fit
   beside the presenter…; shorten it, or make the scene an insert") instead of
@@ -1923,6 +1924,8 @@ Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
 | `stat-card` | number | `value` ≤ 12 with a digit (as said: `87%`, `3.2×`, `$1,400`), `label` ≤ 48, `source` ≤ 60 (required), `icon`, `count` (default: when the value starts with a number), `tone`, `at` | `count` (riser), `hit` (impact) | Counts 0.9 s (cubic out) by per-frame text sets, keeping the value's prefix, suffix, decimals and grouping, and lands on the value exactly as written; a pulse on the hit; `Source: …` under the label. In a short room the figure sits left of the label |
 | `quote-card` | quote, proof | `quote` ≤ 180, `author` ≤ 40 (required), `role` ≤ 48, `source` ≤ 60, `highlight` (an exact phrase of the quote), `at` | `quote` (whoosh), `author`, `highlight` (tick) | A quote-mark icon, the words, `— Author` in primary and `role · source`. The highlight is a copy of the quote over it, transparent except the phrase on a primary marker, faded in, so both renderers lay out both copies the same way |
 | `excerpt` | proof, product | `lines` 1–8 (strings or `{text ≤ 64, highlight}`, verbatim), `type` text/code, `title` ≤ 48, `source` ≤ 60 (required), `highlightAt`, `at` | `lines`, `highlight` (tick) | A window panel; lines slide in in turn; marked lines get a primary bar that sweeps out (scaleX) while the others dim to 45%. Code is monospace with whitespace kept, one line each |
+| `compare` | claim | `left` / `right` `{title ≤ 24, items: [≤ 40] 1–4, icon?}`, `mode` before-after/columns, `stagger` (0.16), `at` | `left`, `right` (whoosh) | Two panels side by side when the items fit two lines per column, else stacked. In before-after mode the left side is muted with crosses, an arrow pops, and the right panel has a primary edge and ticks; in columns mode both panels are neutral, with dots |
+| `timeline` | process | `steps` 2–6 `{label ≤ 28, detail? ≤ 40, icon?, at?}`, `title` ≤ 48, `direction` auto/vertical/horizontal, `stagger` (0.45), `at` | `step-<i>` (pop-soft) | Numbered or icon nodes pop on their steps; a primary line runs on to each node over the 0.35 s before it lands (scaleX or scaleY of a bar over the track). Vertical by default in 9:16 (box at most 760 px wide), across in 16:9 when the labels fit |
 
 **Honesty rules.** `stat-card` and `excerpt` refuse a missing source, or a source that is a placeholder (`source`, `TBD`, `n/a`, `example`, `illustrative`, …). `quote-card` refuses a generic attribution (`Anonymous`, `a customer`, `our users`, …) and a highlight that is not in the quote. `excerpt` refuses placeholder text (`lorem ipsum`, `TODO`) and shows lines exactly as supplied.
 

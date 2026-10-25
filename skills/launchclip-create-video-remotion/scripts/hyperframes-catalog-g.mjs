@@ -21,4 +21,6 @@ export const EMITTERS = {
   'stat-card': emitCatalogG,
   'quote-card': emitCatalogG,
   'excerpt': emitCatalogG,
+  'compare': emitCatalogG,
+  'timeline': emitCatalogG,
 };

@@ -158,3 +158,21 @@ test('the phrase table suggests each card for its intent', async () => {
   const {DIRECTION_INTENTS} = await import('../kit/core/direction.mjs');
   for (const row of PHRASE_MODULE_TABLE.filter(entry => entry.intents)) for (const intent of row.intents) assert.ok(DIRECTION_INTENTS.includes(intent), `${row.module}: ${intent}`);
 });
+
+test('in a footage layout section, a card places inside the layout panel', async () => {
+  const story = {schema: 'launchclip.story.v1', lane: 'footage-led', format: {width: 1920, height: 1080, fps: 30, duration: 6}, brand, base: {src: 'assets/recording.mp4'},
+    sections: [{id: 'a', start: 0, end: 6, layout: 'split-right'}], scenes: [{id: 'c', module: 'concept-card', track: 1, start: 0.5, end: 4, params: SAMPLES['concept-card']}]};
+  const {layoutAt} = await import('../kit/core/footage-layout.mjs');
+  const panel = layoutAt(story, 0.5).safe;
+  const model = resolveModule(story.scenes[0], story);
+  assert.equal(model.placement, 'panel');
+  assert.ok(inside(model.rect, panel), 'inside the panel');
+});
+
+test('a brand frame narrows where a card may go', () => {
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6}, brand, frame: {kicker: {label: 'Ledgerly'}, progress: true},
+    scenes: [{id: 'c', module: 'concept-card', start: 0.5, end: 4, params: SAMPLES['concept-card']}]};
+  const model = resolveModule(story.scenes[0], story);
+  assert.ok(model.frame?.safe, 'the story has a frame');
+  assert.ok(inside(model.rect, model.frame.safe), 'the card stays inside the frame safe area');
+});
