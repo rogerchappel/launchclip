@@ -37,7 +37,12 @@ export const SAMPLES = Object.freeze({
   'quote-card': {quote: 'We cut our launch video in an afternoon, and it looked like our brand.', author: 'Priya Natarajan', role: 'Head of Product, Fieldnote', highlight: 'in an afternoon'},
   'excerpt': {type: 'code', title: 'storyboard.json', source: 'examples/story/minimal', lines: ['"lane": "motion",', {text: '"style": "seed-7f3a91c2",', highlight: true}, '"scenes": [ … ]']},
   'compare': {left: {title: 'Before', items: ['Edit by hand', 'One format at a time']}, right: {title: 'After', items: ['One prompt', 'Every format at once']}},
-  'timeline': {title: 'Launch week', steps: [{label: 'Record', detail: 'Monday'}, {label: 'Edit', detail: 'Tuesday'}, {label: 'Ship', detail: 'Friday'}]}
+  'timeline': {title: 'Launch week', steps: [{label: 'Record', detail: 'Monday'}, {label: 'Edit', detail: 'Tuesday'}, {label: 'Ship', detail: 'Friday'}]},
+  // Editorial modules.
+  'checklist': {title: 'Release checklist', rows: [{label: 'Write the changelog', status: 'active', at: 0.4, doneAt: 1.4}, {label: 'Tag the release', status: 'done', at: 0.9}, {label: 'Announce it', status: 'pending', at: 1.2}]},
+  'step-rail': {title: 'From idea to clip', numbered: true, steps: [{label: 'Plan', at: 0.4}, {label: 'Record', at: 0.9}, {label: 'Edit', at: 1.4}, {label: 'Share', at: 1.9}]},
+  'metric': {title: 'Build time', metric: {mode: 'illustration', unit: 'example minutes', format: 'number', decimals: 0, values: [{value: 48, at: 0.4}, {value: 12, at: 1.2}]}},
+  'callout': {title: 'Ship it safely', treatment: {icon: 'warning', glow: true, at: 0.4, segments: [{text: 'Check '}, {text: 'before release', highlight: true, underlineAt: 1.2}, {text: ' and ship.'}]}}
 });
 
 function args(argv) {

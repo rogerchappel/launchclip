@@ -15,11 +15,12 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const at = process.argv.indexOf('--modules');
 const all = moduleVariants();
 const modules = at >= 0 ? process.argv[at + 1].split(',') : Object.keys(all);
-const prefix = module => (module in SAMPLES ? 'g' : 'e');
+// Catalogue G fixtures are g-<module>-<variant>; editorial ones <module>-<variant>.
+const name_ = (module, variant) => (['checklist', 'step-rail', 'metric', 'callout'].includes(module) ? `${module}-${variant}` : `g-${module}-${variant}`);
 for (const module of modules) {
   for (const [i, variant] of all[module].slice(1).entries()) {
     const portrait = i % 2 === 0;
-    const name = `${prefix(module)}-${module}-${variant}`;
+    const name = name_(module, variant);
     const story = {schema: 'launchclip.story.v1', title: `Variant parity: ${name}`, lane: 'motion',
       format: portrait ? {width: 1080, height: 1920, fps: 30, duration: 4, platform: 'youtube-shorts'} : {width: 1920, height: 1080, fps: 30, duration: 4, platform: 'youtube'},
       brand: BRAND, base: null, scenes: [{id: 'card', module, start: 0, end: 4, params: {...SAMPLES[module], variant}}]};
