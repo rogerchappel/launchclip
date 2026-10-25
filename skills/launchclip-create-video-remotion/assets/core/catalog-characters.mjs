@@ -22,7 +22,7 @@
 import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, svgRoot, tw, set} from './catalog-b-view.mjs';
 import {media, mediaNode} from './catalog-e.mjs';
-import {EXPRESSIONS, POSES} from './characters/rig.mjs';
+import {EXPRESSIONS, HELD_AIDS, POSES} from './characters/rig.mjs';
 import {drawCharacter, styleGeometry, styleHeight} from './characters/styles.mjs';
 import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
@@ -69,7 +69,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   const cues = raw.cues === undefined ? [] : check.arr(raw.cues, `${path}.cues`, 0, 24);
   const fitsSet = (value, where) => {
     if (value === 'walk' && seated) check.fail(where, `walk does not fit the seated set ${setName}`);
-    if (value === 'sit' && !seated) check.fail(where, `sit needs a seated set (desk-laptop or meeting)`);
+    if (value === 'sit' && !seated && member.params.mobility !== 'wheelchair') check.fail(where, `sit needs a seated set (desk-laptop or meeting)`);
   };
   fitsSet(pose, `${path}.pose`);
   cues.map((cue, i) => {
@@ -109,14 +109,14 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
     facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light};
 }
 
-// A held phone sits in the hand away from the facing side.
-const actorProps = actor => actor.holds === 'phone' ? {[actor.facing === 'left' ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
+// A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
+const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
 
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = sceneJoints(first.pose, {...actor, geometry: actor.geometry});
-  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light});
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing});
   return characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
 }
 
@@ -141,7 +141,7 @@ export function actorReach(actor) {
   for (const pose of new Set(actor.states.map(state => state.pose))) {
     const joints = sceneJoints(pose, {...actor, geometry: actor.geometry});
     for (const j of [joints, gesturePeak(joints)].filter(Boolean)) {
-      const b = drawingBounds(drawCharacter(actor.style, actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor), light: actor.light}));
+      const b = drawingBounds(drawCharacter(actor.style, actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor), light: actor.light, facing: actor.facing}));
       out.left = Math.min(out.left, actor.x + b.left * actor.scale);
       out.right = Math.max(out.right, actor.x + b.right * actor.scale);
       out.top = Math.min(out.top, actor.floor + b.top * actor.scale);

@@ -12,6 +12,9 @@ export {svgTransform} from './toon.mjs';
 const OUT = 7;
 const r1 = value => Math.round(value * 10) / 10;
 
+/** Shapes in a group moved to `at` and turned by `angle` degrees. */
+export const placed = (nodes, {at = [0, 0], angle = 0}) => el('g', null, null, nodes, {transform: `translate(${r1(at[0])} ${r1(at[1])})${angle ? ` rotate(${r1(angle)})` : ''}`});
+
 /**
  * The flat pen: fills in the named colour, outlines in the outline colour
  * (unless `outline: false`), limbs as outlined round-capped strokes.
@@ -24,10 +27,11 @@ export function flatPen(c) {
     shape: (d, fill, o = {}) => el('path', null, null, [], {d, fill: col(fill), stroke: o.outline === false ? 'none' : col(o.stroke ?? 'outline'), strokeWidth: o.width ?? OUT, strokeLinejoin: 'round', strokeLinecap: 'round', ...(o.opacity !== undefined ? {opacity: o.opacity} : {}), ...(o.rule ? {fillRule: o.rule} : {}), ...(o.fillOpacity !== undefined ? {fillOpacity: o.fillOpacity} : {})}),
     ellipse: (cx, cy, rx, ry, fill, o = {}) => el('ellipse', null, null, [], {cx: r1(cx), cy: r1(cy), rx: r1(rx), ry: r1(ry), fill: col(fill), stroke: o.outline === false ? 'none' : col(o.stroke ?? 'outline'), strokeWidth: o.width ?? OUT, ...(o.opacity !== undefined ? {opacity: o.opacity} : {}), ...(o.fillOpacity !== undefined ? {fillOpacity: o.fillOpacity} : {})}),
     line,
-    /** An outlined capsule from (0, from) to (0, length). */
-    limb: (length, width, fill, from = 0) => {
+    /** An outlined capsule from (0, from) to (0, length); `at` and `angle` place it. */
+    limb: (length, width, fill, from = 0, place = null) => {
       const d = `M0 ${r1(from)}L0 ${r1(length)}`;
-      return [line(d, 'outline', width + OUT * 2), line(d, fill, width)];
+      const nodes = [line(d, 'outline', width + OUT * 2), line(d, fill, width)];
+      return place ? [placed(nodes, place)] : nodes;
     },
     strand: (d, fill, width) => [line(d, 'outline', width + OUT * 2), line(d, fill, width)],
     ground: () => [el('ellipse', null, null, [], {cx: 0, cy: 4, rx: 150, ry: 18, fill: '#000000', stroke: 'none', strokeWidth: OUT, opacity: 0.16})]

@@ -30,6 +30,8 @@
 import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {expressionParts, rigGeometry} from './rig.mjs';
+import {GREY_HAIR} from './palette.mjs';
+import {NEW_LONG_SLEEVES, aidSide, backpackBack, bagStraps, covers, faceExtras, headwear, heldAid, longHem, neckwear, newGlasses, newHairBack, newHairFront, newTop, overLayer, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 
 const r1 = value => Math.round(value * 10) / 10;
 const group = (children, attrs) => el('g', null, null, children, attrs);
@@ -64,41 +66,56 @@ const LONG_SLEEVES = new Set(['shirt', 'hoodie', 'blazer', 'sweater']);
 function arm(ctx, side) {
   const {g, p, j, P} = ctx;
   const s = side === 'l' ? 'L' : 'R';
-  const long = LONG_SLEEVES.has(p.outfit.top);
+  const long = LONG_SLEEVES.has(p.outfit.top) || NEW_LONG_SLEEVES.has(p.outfit.top);
   const sleeve = 'top';
   const hand = g.hand;
   const mirror = side === 'r';
+  const robot = side === 'r' && p.mobility === 'prosthetic-arm';
+  const aid = aidSide(p, ctx.facing) === side ? caneLength(g) : 0;
   const finger = joint(ctx, `finger-${side}`, 0, g.foreArm + hand * 0.6, {}, P.within({mirror}, () => [
     ...P.limb(hand * 1.25, 15, 'skin')
   ]));
   const fingerWrap = ctx.static ? (j[`finger${s}`] ? finger : null) : el('g', `${ctx.id}-fingerwrap-${side}`, {opacity: j[`finger${s}`]}, [finger]);
-  const fore = joint(ctx, `fore-${side}`, 0, g.upperArm, {rotation: j[`fore${s}`]}, P.within({mirror}, () => [
+  const fore = joint(ctx, `fore-${side}`, 0, g.upperArm, {rotation: j[`fore${s}`]}, P.within({mirror}, () => (robot ? [
+    ...(fingerWrap ? [fingerWrap] : []),
+    ...prostheticForearm(ctx)
+  ] : [
     ...P.limb(g.foreArm, g.armW * 0.9, long ? sleeve : 'skin'),
     ...(long ? [P.line(`M${r1(-g.armW * 0.45)} ${r1(g.foreArm - 6)}L${r1(g.armW * 0.45)} ${r1(g.foreArm - 6)}`, 'topShade', 6)] : []),
+    ...wristWear(ctx, side),
     ...(fingerWrap ? [fingerWrap] : []),
-    P.ellipse(0, g.foreArm + hand * 0.35, hand, hand * 1.04, 'skin'),
-    ...(ctx.props?.[side] ? [group(ctx.props[side], {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : [])
-  ]));
+    P.ellipse(0, g.foreArm + hand * 0.35, hand, hand * 1.04, 'skin')
+  ]).concat(
+    aid ? [group(heldAid(ctx, aid, -g.foreArm * 0.5), {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : [],
+    ctx.props?.[side] ? [group(ctx.props[side], {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : []
+  )));
   const upper = P.within({mirror}, () => (long
     ? P.limb(g.upperArm, g.armW, sleeve)
-    : [...P.limb(g.upperArm, g.armW * 0.92, 'skin'), ...P.limb(g.upperArm * 0.5, g.armW + 8, sleeve, -4)]));
+    : p.outfit.top === 'tank' ? P.limb(g.upperArm, g.armW * 0.92, 'skin')
+      : [...P.limb(g.upperArm, g.armW * 0.92, 'skin'), ...P.limb(g.upperArm * 0.5, g.armW + 8, sleeve, -4)]));
   return joint(ctx, `arm-${side}`, side === 'l' ? -g.armX : g.armX, g.armY, {rotation: j[`arm${s}`], y: j.shoulderY}, [...upper, fore], {mirror});
 }
 
 function leg(ctx, side) {
   const {g, j, P} = ctx;
   const s = side === 'l' ? 'L' : 'R';
-  const skirt = ctx.p.outfit.bottom === 'skirt';
+  const bottom = ctx.p.outfit.bottom;
+  const skirt = bottom !== 'trousers';
   const legColor = 'bottom';
   const mirror = side === 'r';
+  const shorts = bottom === 'shorts';
+  const prosthetic = side === 'l' && ctx.p.mobility === 'prosthetic-leg';
   // Shoes point outward: the shoe is drawn mirrored inside the leg's frame.
   const shoe = P.within({mirror: !mirror}, () => P.shape(`M${r1(-g.legW * 0.55)} ${r1(g.shin - 6)}C${r1(-g.legW * 0.6)} ${r1(g.shin - 30)} ${r1(g.legW * 0.1)} ${r1(g.shin - 30)} ${r1(g.legW * 0.35)} ${r1(g.shin - 10)}C${r1(g.legW * 0.9)} ${r1(g.shin - 4)} ${r1(g.legW * 0.95)} ${r1(g.shin + g.foot)} ${r1(g.legW * 0.5)} ${r1(g.shin + g.foot)}L${r1(-g.legW * 0.5)} ${r1(g.shin + g.foot)}C${r1(-g.legW * 0.75)} ${r1(g.shin + g.foot)} ${r1(-g.legW * 0.75)} ${r1(g.shin + 4)} ${r1(-g.legW * 0.55)} ${r1(g.shin - 6)}Z`, 'shoes'));
   const shin = joint(ctx, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [
-    ...P.limb(g.shin - 10, g.legW * 0.9, legColor),
+    ...(prosthetic ? prostheticShin(ctx, legColor) : P.limb(g.shin - 10, g.legW * 0.9, shorts ? 'skin' : legColor)),
     ...(skirt ? [] : [P.line(`M${r1(-g.legW * 0.42)} ${r1(g.shin - 16)}L${r1(g.legW * 0.42)} ${r1(g.shin - 16)}`, 'bottomShade', 5)]),
     group([shoe], {transform: 'scale(-1 1)'})
   ]));
-  return joint(ctx, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY + 10, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, ...P.within({mirror}, () => P.limb(g.thigh, g.legW, legColor))], {mirror});
+  const thigh = P.within({mirror}, () => (shorts
+    ? [...P.limb(g.thigh, g.legW * 0.94, 'skin'), ...P.limb(g.thigh * 0.62, g.legW + 4, legColor, -6), P.line(`M${r1(-g.legW * 0.5)} ${r1(g.thigh * 0.62)}L${r1(g.legW * 0.5)} ${r1(g.thigh * 0.62)}`, 'bottomShade', 6)]
+    : P.limb(g.thigh, bottom === 'leggings' ? g.legW * 0.94 : g.legW, legColor)));
+  return joint(ctx, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY + 10, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, ...thigh], {mirror});
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +156,8 @@ function outfit(ctx) {
     parts.push(P.shape(`M${-neck - 8} ${-T}L${-neck - 22} ${-T + 46}L${-12} ${-T + 60}L0 ${-T * 0.42}Z`, 'topShade', {width: 5}));
     parts.push(P.shape(`M${neck + 8} ${-T}L${neck + 22} ${-T + 46}L12 ${-T + 60}L0 ${-T * 0.42}Z`, 'topShade', {width: 5}));
     parts.push(P.ellipse(0, -T * 0.32, 5, 5, 'topShade', {outline: false}));
-  }
+  } else parts.push(...newTop(ctx));
+  parts.push(...overLayer(ctx), ...neckwear(ctx), ...bagStraps(ctx));
   if (p.accessories.includes('lanyard')) {
     parts.push(P.line(`M${-neck + 2} ${-T + 4}L-6 ${-T + 112}M${neck - 2} ${-T + 4}L6 ${-T + 112}`, 'accent', 5));
     parts.push(P.shape(`M-20 ${-T + 110}L20 ${-T + 110}L20 ${-T + 160}L-20 ${-T + 160}Z`, '#f7f5f0', {width: 5}));
@@ -150,16 +168,17 @@ function outfit(ctx) {
 
 function skirt(ctx) {
   const {g, p, P} = ctx;
-  if (p.outfit.bottom !== 'skirt') return [];
+  if (p.outfit.bottom !== 'skirt' && p.outfit.bottom !== 'long-skirt') return [];
   const fill = p.outfit.top === 'dress' ? 'top' : 'bottom';
-  const y0 = g.hipY - 6, y1 = g.hipY + g.thigh * 0.82;
-  const w0 = g.hip + 4, w1 = g.hip + 34;
+  const long = p.outfit.bottom === 'long-skirt';
+  const y0 = g.hipY - 6, y1 = long ? r1(g.hipY + (g.thigh + g.shin) * 0.86) : g.hipY + g.thigh * 0.82;
+  const w0 = g.hip + 4, w1 = g.hip + (long ? 50 : 34);
   return [P.shape(`M${-w0} ${y0}L${w0} ${y0}L${w1} ${r1(y1 - 10)}Q${w1} ${r1(y1)} ${w1 - 12} ${r1(y1)}L${-w1 + 12} ${r1(y1)}Q${-w1} ${r1(y1)} ${-w1} ${r1(y1 - 10)}Z`, fill)];
 }
 
 function pelvis(ctx) {
   const {g, P} = ctx;
-  if (ctx.p.outfit.bottom === 'skirt') return [];
+  if (ctx.p.outfit.bottom === 'skirt' || ctx.p.outfit.bottom === 'long-skirt') return [];
   const y = g.hipY, H = g.hip;
   return [P.shape(`M${-H} ${y - 20}L${H} ${y - 20}L${H} ${y + 30}Q${H} ${y + 58} ${g.legX} ${y + 58}L${-g.legX} ${y + 58}Q${-H} ${y + 58} ${-H} ${y + 30}Z`, 'bottom')];
 }
@@ -214,7 +233,7 @@ function hairBack(ctx) {
     case 'ponytail': return [hairFill(ctx, `M${rx * 0.4} ${top + 10}C${rx + 60} ${top - 10} ${rx + 56} ${cy + 60} ${rx + 30} ${cy + 140}C${rx + 10} ${cy + 90} ${rx + 6} ${cy + 20} ${rx * 0.5} ${top + 30}Z`)];
     case 'bun': return [P.ellipse(0, top - 18, 42, 38, 'hair')];
     case 'headscarf': return [P.shape(`M${-rx - 22} ${cy - 20}C${-rx - 30} ${top - 46} ${rx + 30} ${top - 46} ${rx + 22} ${cy - 20}C${rx + 30} ${cy + 70} ${rx + 70} ${cy + 140} ${rx + 76} ${cy + 196}L${-rx - 76} ${cy + 196}C${-rx - 70} ${cy + 140} ${-rx - 30} ${cy + 70} ${-rx - 22} ${cy - 20}Z`, 'hair')];
-    default: return [];
+    default: return newHairBack(ctx) ?? [];
   }
 }
 
@@ -249,7 +268,7 @@ function hairFront(ctx) {
       const outer = `M${-rx - 20} ${cy}C${-rx - 26} ${top - 40} ${rx + 26} ${top - 40} ${rx + 20} ${cy}C${rx + 22} ${cy + 70} ${rx * 0.5} ${cy + ry + 36} 0 ${cy + ry + 40}C${-rx * 0.5} ${cy + ry + 36} ${-rx - 22} ${cy + 70} ${-rx - 20} ${cy}Z`;
       return [P.shape(`${outer}${face}`, 'hair', {rule: 'evenodd'}), P.line(`M${r1(-rx * 0.7)} ${r1(top - 6)}Q0 ${r1(top - 22)} ${r1(rx * 0.7)} ${r1(top - 6)}`, 'hairLight', 7)];
     }
-    default: return [];
+    default: return newHairFront(ctx) ?? [];
   }
 }
 
@@ -300,7 +319,7 @@ function face(ctx, name) {
   const {g, p, P} = ctx;
   const {cy} = g.head;
   const parts = expressionParts(name);
-  const browColor = p.hair.style === 'headscarf' ? 'browDark' : ['platinum', 'silver', 'grey'].includes(p.hair.color) ? 'hairShade' : 'mixBrow';
+  const browColor = p.hair.style === 'headscarf' ? 'browDark' : GREY_HAIR.includes(p.hair.color) ? 'hairShade' : 'mixBrow';
   const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + 10, {}, eyes(parts.eyes, P));
   const kids = [];
   if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
@@ -344,6 +363,7 @@ function glasses(ctx) {
       P.line(`M-9 ${cy - 8}Q0 ${cy - 13} 9 ${cy - 8}`, 'outline', 5)
     ];
   }
+  if (p.accessories.includes('sunglasses') || p.accessories.includes('cat-eye-glasses')) return newGlasses(ctx);
   if (p.accessories.includes('round-glasses')) {
     return [P.ellipse(-EYE_X, cy, 21, 20, '#ffffff', {width: 5.5, fillOpacity: 0.18}), P.ellipse(EYE_X, cy, 21, 20, '#ffffff', {width: 5.5, fillOpacity: 0.18}), P.line(`M-10 ${cy - 4}Q0 ${cy - 10} 10 ${cy - 4}`, 'outline', 5)];
   }
@@ -355,7 +375,7 @@ function glasses(ctx) {
 
 /** The character's colours plus the few the toon face derives. */
 export function toonColors(colors) {
-  return {...colors, mixBrow: colors.hairShade, browDark: '#33241c', stubble: mixColor(colors.hair, colors.skinShade, 0.35)};
+  return {...colors, mixBrow: colors.hairShade, browDark: '#33241c', stubble: mixColor(colors.hair, colors.skinShade, 0.35), accentLight: mixColor('#ffffff', colors.accent, 0.25)};
 }
 
 /**
@@ -373,29 +393,33 @@ export function toonColors(colors) {
  *   makePen     (colors, {id}) → pen
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null}, makePen) {
+export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null}, makePen) {
   const g = rigGeometry(params);
   const c = toonColors(colors);
-  const P = makePen(c, {id});
-  const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P};
+  const P = makePen(c, {id, light});
+  const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing};
   const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
   const headKids = [
     ...ears(ctx),
     P.shape(headShape(g), 'skin'),
     ...facial(ctx),
+    ...faceExtras(ctx),
     ...faceNodes,
     ...glasses(ctx),
-    ...hairFront(ctx)
+    ...(covers(params) ? [] : hairFront(ctx)),
+    ...headwear(ctx)
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, hairBack(ctx));
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : hairBack(ctx));
   const neckTop = g.neckY;
   const torsoKids = [
     joint(ctx, 'hb', 0, neckTop, tilt, [backIdle]),
     P.shape(`M-19 ${neckTop - 6}L19 ${neckTop - 6}L19 ${-g.torso + 14}L-19 ${-g.torso + 14}Z`, 'skin'),
     P.line(`M-17 ${-g.torso + 4}Q0 ${-g.torso + 12} 17 ${-g.torso + 4}`, 'skinShade', 8),
+    ...backpackBack(ctx),
     P.shape(torsoPath(g), 'top'),
+    ...longHem(ctx),
     ...outfit(ctx),
     joint(ctx, 'head', 0, neckTop, tilt, [headIdle]),
     arm(ctx, 'l'),
@@ -405,12 +429,24 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const torso = joint(ctx, 'torso', 0, g.hipY, {rotation: joints.lean, scaleY: joints.squash}, [breath]);
   const body = joint(ctx, 'body', 0, 0, {y: joints.bodyY}, [leg(ctx, 'l'), leg(ctx, 'r'), ...pelvis(ctx), ...skirt(ctx), torso]);
   const defs = P.defs ? P.defs() : [];
-  return group([...defs, ...P.ground(), body]);
+  const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
+  return group([...defs, ...P.ground(), ...chair, body]);
+}
+
+/**
+ * A held cane's length from the hand to the floor, with the arm at its rest
+ * angle (acting.mjs keeps the aid's arm there).
+ */
+export function caneLength(g) {
+  const a = 10 * Math.PI / 180;
+  const handY = g.hipY + g.armY + g.upperArm * Math.cos(8 * Math.PI / 180) + (g.foreArm + g.hand * 0.35) * Math.cos(a);
+  return Math.max(120, -handY / Math.cos(a));
 }
 
 /** Height of the drawn character above the feet, in rig units (with hair). */
 export function toonHeight(params) {
   const g = rigGeometry(params);
-  const extra = {afro: 70, bun: 70, curly: 24}[params.hair.style] ?? 14;
-  return Math.round(g.height + extra);
+  const extra = {afro: 70, bun: 70, curly: 24, mohawk: 74, spiky: 44, quiff: 52, topknot: 38, 'space-buns': 36}[params.hair.style] ?? 14;
+  const hat = {'chef-hat': 150, 'grad-cap': 30, 'beanie': 34, 'bike-helmet': 30, 'hard-hat': 26, 'turban': 40, 'headphones': 24}[params.headwear] ?? 0;
+  return Math.round(g.height + Math.max(extra, hat));
 }
