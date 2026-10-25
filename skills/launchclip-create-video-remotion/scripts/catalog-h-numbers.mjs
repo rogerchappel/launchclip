@@ -60,7 +60,7 @@ function startEvent(b, p, name, fallback = 0.5, cue = 'riser-short', span = 1) {
 const ODOMETER_VARIANTS = Object.freeze(['plain', 'tiles', 'mechanical']);
 
 function odometerResolve(params, ctx) {
-  const b = createHBase('odometer', params, ctx, {allowed: ['value', 'from', 'format', 'label', 'sub', 'at', 'duration', 'tone'], required: ['value'], variants: ODOMETER_VARIANTS});
+  const b = createHBase('odometer', params, ctx, {allowed: ['value', 'from', 'format', 'label', 'sub', 'at', 'span', 'tone'], required: ['value'], variants: ODOMETER_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
   const value = check.num(p.value, 'params.value', 0, 1e15);
@@ -86,7 +86,7 @@ function odometerResolve(params, ctx) {
   const h = r2(size * 1.18);
   const total = widthFor(size);
   const y = r2((rect.height - h - caption.height) / 2);
-  const duration = p.duration === undefined ? 1.6 : check.num(p.duration, 'params.duration', 0.4, 4);
+  const duration = p.span === undefined ? 1.6 : check.num(p.span, 'params.span', 0.4, 4);
   const t0 = startEvent(b, p, 'count', 0.5, 'riser-short', duration);
   let x = (W - total) / 2, k = 0;
   const digitCount = finalDigits.length;
@@ -148,7 +148,7 @@ export const odometer = {
   id: 'odometer',
   describe: 'A rolling odometer: every digit spins on its own reel and the figure lands, lower places turning faster; plain, tiles or mechanical counter.',
   params: {value: 'number ≥ 0, required', from: 'start value (default 0; digits zero-pad)', format: FORMAT_PARAM, label: 'string ≤ 60 (optional)', sub: 'string ≤ 70, e.g. a source (optional)',
-    duration: 'seconds 0.4–4 (default 1.6)', tone: `digit colour (${tone}; default paper)`, at: `roll start: ${at}`, variant: VARIANT_PARAM, rect},
+    span: 'seconds 0.4–4 (default 1.6)', tone: `digit colour (${tone}; default paper)`, at: `roll start: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['count', 'landed'], timing: TIMING, variants: ODOMETER_VARIANTS,
   resolve: odometerResolve, view: odometerView, timeline: odometerTimeline
 };
@@ -360,7 +360,7 @@ export const tickerTape = {
 const SLOT_VARIANTS = Object.freeze(['window', 'inline', 'stack']);
 
 function slotResolve(params, ctx) {
-  const b = createHBase('slot-roll', params, ctx, {allowed: ['items', 'final', 'prefix', 'suffix', 'at', 'spins', 'duration', 'tone'], required: ['items'], variants: SLOT_VARIANTS});
+  const b = createHBase('slot-roll', params, ctx, {allowed: ['items', 'final', 'prefix', 'suffix', 'at', 'spins', 'span', 'tone'], required: ['items'], variants: SLOT_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
   check.arr(p.items, 'params.items', 2, 10);
@@ -373,7 +373,7 @@ function slotResolve(params, ctx) {
   const prefix = p.prefix === undefined ? null : check.str(p.prefix, 'params.prefix', 36);
   const suffix = p.suffix === undefined ? null : check.str(p.suffix, 'params.suffix', 36);
   const spins = p.spins === undefined ? 2 : check.int(p.spins, 'params.spins', 1, 5);
-  const duration = p.duration === undefined ? 1.5 : check.num(p.duration, 'params.duration', 0.5, 4);
+  const duration = p.span === undefined ? 1.5 : check.num(p.span, 'params.span', 0.5, 4);
   const color = toneColor(b, p.tone, 'params.tone');
   const W = rect.width;
   const inline = b.variant === 'inline';
@@ -443,7 +443,7 @@ export const slotRoll = {
   id: 'slot-roll',
   describe: 'A slot-machine reel of words spins (motion-blurred) and lands on the final one; a boxed window, inline in a sentence ("Built for ___"), or a stack showing its neighbours.',
   params: {items: '[string ≤ 18] 2–10, the words on the reel', final: 'the word it lands on (an item or index; default the last)', prefix: 'string ≤ 36 before the reel (optional)', suffix: 'string ≤ 36 after it (optional)',
-    spins: 'full turns before landing 1–5 (default 2)', duration: 'seconds 0.5–4 (default 1.5)', tone: `reel text colour (${tone})`, at: `spin start: ${at}`, variant: VARIANT_PARAM, rect},
+    spins: 'full turns before landing 1–5 (default 2)', span: 'seconds 0.5–4 (default 1.5)', tone: `reel text colour (${tone})`, at: `spin start: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['spin', 'land'], timing: TIMING, variants: SLOT_VARIANTS,
   resolve: slotResolve, view: slotView, timeline: slotTimeline
 };
@@ -554,7 +554,7 @@ function fillResolve(params, ctx) {
   const value = check.num(p.value, 'params.value', 0, max);
   const fmt = numberFormat(check, p.format ?? (p.max === undefined ? {style: 'percent'} : undefined), 'params.format', {decimals: decimalsOf(value)});
   const color = toneColor(b, p.tone, 'params.tone');
-  const duration = p.duration === undefined ? 1.6 : check.num(p.duration, 'params.duration', 0.4, 4);
+  const duration = p.span === undefined ? 1.6 : check.num(p.span, 'params.span', 0.4, 4);
   const W = rect.width;
   const caption = captionBlock(b, p, W);
   const frac = value / max;
@@ -637,7 +637,7 @@ export const percentFill = {
   id: 'percent-fill',
   describe: 'A shape fills to a share while the figure counts: a round flask of rising liquid with a sliding wave, a battery, or a thick bar.',
   params: {value: 'number, required (0..max)', max: 'number (default 100: the value is a percent)', format: FORMAT_PARAM, label: 'string ≤ 60 (optional)', sub: 'string ≤ 70 (optional)',
-    duration: 'seconds 0.4–4 (default 1.6)', tone: `fill colour (${tone})`, at: `fill start: ${at}`, variant: VARIANT_PARAM, rect},
+    span: 'seconds 0.4–4 (default 1.6)', tone: `fill colour (${tone})`, at: `fill start: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['fill'], timing: TIMING, variants: FILL_VARIANTS,
   resolve: fillResolve, view: fillView, timeline: fillTimeline
 };

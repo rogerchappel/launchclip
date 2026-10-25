@@ -1066,7 +1066,7 @@ params:
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
 - label: string ≤ 60 (optional)
 - sub: string ≤ 70, e.g. a source (optional)
-- duration: seconds 0.4–4 (default 1.6)
+- span: seconds 0.4–4 (default 1.6)
 - tone: digit colour (primary | accent | paper | #rrggbb; default paper)
 - at: roll start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
@@ -1106,7 +1106,7 @@ params:
 - prefix: string ≤ 36 before the reel (optional)
 - suffix: string ≤ 36 after it (optional)
 - spins: full turns before landing 1–5 (default 2)
-- duration: seconds 0.5–4 (default 1.5)
+- span: seconds 0.5–4 (default 1.5)
 - tone: reel text colour (primary | accent | paper | #rrggbb)
 - at: spin start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
@@ -1136,7 +1136,7 @@ params:
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
 - label: string ≤ 60 (optional)
 - sub: string ≤ 70 (optional)
-- duration: seconds 0.4–4 (default 1.6)
+- span: seconds 0.4–4 (default 1.6)
 - tone: fill colour (primary | accent | paper | #rrggbb)
 - at: fill start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
