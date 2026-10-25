@@ -1,4 +1,4 @@
-// Street worlds: city street. A side-on street: sky and a distant skyline at the back, facades
+// Street worlds: city street, shopfronts and crossing. A side-on street: sky and a distant skyline at the back, facades
 // along the pavement in the middle, the road and kerb-side furniture in
 // front. Night lights the windows, shop glass, street lamps and neon; dusk
 // rakes warm light across the facades.
@@ -208,6 +208,118 @@ const cityStreet = {
   }
 };
 
+const shopfronts = {
+  group: 'street', label: 'Shopfronts',
+  describe: 'a row of shopfronts up close: striped awnings, glowing windows, sign boards and neon shapes, with a sandwich board and planters',
+  geo(k) {
+    const g = street(k, {base: 0.76});
+    g.quiet = quietTop(k, k.portrait ? 0.14 : 0.16, [mixColor(k.pal.brick, k.pal.g('#c9b79c'), 0.5), k.pal.g('#c9b79c')]);
+    return g;
+  },
+  back(k, g) {
+    const {pal} = k;
+    const {x0, w} = span(k);
+    return [k.p.rect(x0, -2, w, g.baseY, pal.g('#b9a993'), {stroke: false})];
+  },
+  mid(k, g) {
+    const {W, H, u, pal} = k;
+    const {x0, x1} = span(k);
+    const colors = facadeColors(k);
+    const out = [];
+    const sw = (k.portrait ? 0.56 : 0.36) * W;
+    let x = x0, i = 0;
+    while (x < x1) {
+      out.push(facade(k, x, sw, g.baseY, H * 1.2, {color: colors[(i * 2 + 1) % colors.length], ground: 'shop', awning: [pal.primary, pal.accent, pal.primaryShade][i % 3], sign: i % 2 ? 'neon' : 'board', floors: 1}));
+      x += sw; i++;
+    }
+    out.push(pavementRoad(k, g));
+    return out;
+  },
+  front(k, g) {
+    const {W, u, p, pal} = k;
+    const out = [];
+    // Sandwich board and planters.
+    const bx = W * (k.portrait ? 0.78 : 0.62), by = g.groundY + 20 * u;
+    out.push(p.shadow(bx, by, 60 * u, 8 * u));
+    out.push(p.poly([[bx - 50 * u, by], [bx - 26 * u, by - 150 * u], [bx + 26 * u, by - 150 * u], [bx + 50 * u, by]], pal.ink, {}));
+    out.push(p.poly([[bx - 40 * u, by - 14 * u], [bx - 22 * u, by - 138 * u], [bx + 22 * u, by - 138 * u], [bx + 40 * u, by - 14 * u]], menuBoard(k), {}));
+    for (let i = 0; i < 3; i++) out.push(p.line(bx - 20 * u, by - (110 - i * 30) * u, bx + 18 * u, by - (110 - i * 30) * u, '#f4f0e6', 3, {opacity: 0.7}));
+    for (const fx of k.portrait ? [0.12] : [0.1, 0.9]) {
+      const px = W * fx;
+      out.push(p.rect(px - 70 * u, g.groundY - 60 * u, 140 * u, 70 * u, pal.woodShade, {rx: 4 * u}));
+      out.push(tree(k, px, g.groundY - 56 * u, 150 * u, {kind: 'bush'}));
+    }
+    out.push(lampPost(k, W * (k.portrait ? 0.4 : 0.38), g.kerbY + 4 * u, 3.6 * (k.ppm * STREET_SCALE)));
+    return out;
+  }
+};
+
+const menuBoard = k => k.pal.g('#2a2e33');
+
+const crossing = {
+  group: 'street', label: 'Crossing',
+  describe: 'a pedestrian crossing: zebra stripes across the road, a traffic light, a crossing signal, buildings behind and cars waiting',
+  geo(k) {
+    const g = street(k, {base: 0.64});
+    g.quiet = quietTop(k, k.portrait ? 0.14 : 0.2, [k.pal.skyTop, k.pal.skyMid]);
+    return g;
+  },
+  back(k, g) {
+    const {pal, u} = k;
+    return [
+      sky(k, g.baseY - 160 * u, {}),
+      skyline(k, g.baseY - 40 * u, {minH: k.H * 0.16, maxH: k.H * 0.36, color: pal.farther, windows: 0.4}),
+      haze(k, g.baseY - k.H * 0.4, g.baseY, {alpha: 0.7})
+    ];
+  },
+  mid(k, g) {
+    const {u, H, pal} = k;
+    const {x0, x1} = span(k);
+    const colors = facadeColors(k);
+    const out = [];
+    let x = x0, i = 0;
+    while (x < x1) {
+      const w = 300 * u * (0.9 + 0.4 * ((i * 41) % 10) / 10);
+      out.push(facade(k, x, w, g.baseY, H * 0.3 + ((i * 29) % 5) * 30 * u, {color: colors[(i + 2) % colors.length], ground: i % 2 ? 'shop' : 'lobby', awning: i % 4 === 1 ? pal.primary : pal.accent, sign: null, glass: i % 3 === 0}));
+      x += w; i++;
+    }
+    out.push(pavementRoad(k, g, {crossing: true}));
+    return out;
+  },
+  front(k, g) {
+    const {W, H, u, p, pal} = k;
+    const out = [];
+    // Zebra stripes: wide bars across the road, in perspective.
+    const top = g.kerbY + 20 * u, bottom = H;
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const cx = W * 0.5 + (i - (n - 1) / 2) * 110 * u;
+      const spread = 1.7;
+      out.push(p.poly([[cx - 34 * u, top], [cx + 34 * u, top], [W * 0.5 + (cx + 34 * u - W * 0.5) * spread, bottom], [W * 0.5 + (cx - 34 * u - W * 0.5) * spread, bottom]], pal.line, {opacity: 0.95}));
+    }
+    // Traffic light and crossing signal.
+    const tx = W * (k.portrait ? 0.86 : 0.8), ty = g.kerbY - 3.4 * (k.ppm * STREET_SCALE);
+    out.push(p.rect(tx - 7 * u, ty, 14 * u, g.kerbY - ty, pal.ink, {}));
+    out.push(p.rect(tx - 34 * u, ty - 20 * u, 68 * u, 190 * u, pal.ink, {rx: 12 * u}));
+    const lights = [['#ff4a3c', false], ['#ffc23c', false], ['#3cf07c', true]];
+    lights.forEach(([c, on], i) => {
+      const ly = ty + 18 * u + i * 56 * u;
+      if (on) out.push(p.glow(tx, ly, 90 * u, c, k.time === 'day' ? 0.25 : 0.55));
+      out.push(p.circle(tx, ly, 20 * u, on ? c : mixColor('#000000', c, 0.65), {glow: on}));
+    });
+    const sx = W * (k.portrait ? 0.14 : 0.2), sy = g.kerbY - 2.4 * (k.ppm * STREET_SCALE);
+    out.push(p.rect(sx - 6 * u, sy, 12 * u, g.kerbY - sy, pal.ink, {}));
+    out.push(p.rect(sx - 30 * u, sy - 10 * u, 60 * u, 80 * u, pal.ink, {rx: 8 * u}));
+    out.push(p.glow(sx, sy + 30 * u, 60 * u, '#ffffff', k.time === 'day' ? 0.15 : 0.4));
+    // A walking figure glyph in the signal (simple strokes).
+    out.push(p.circle(sx, sy + 10 * u, 6 * u, '#e9fff1', {glow: true}));
+    out.push(p.stroke(`M${f(sx)} ${f(sy + 18 * u)}L${f(sx - 2 * u)} ${f(sy + 40 * u)}M${f(sx - 2 * u)} ${f(sy + 40 * u)}L${f(sx - 12 * u)} ${f(sy + 58 * u)}M${f(sx - 2 * u)} ${f(sy + 40 * u)}L${f(sx + 10 * u)} ${f(sy + 58 * u)}M${f(sx - 12 * u)} ${f(sy + 30 * u)}L${f(sx + 12 * u)} ${f(sy + 26 * u)}`, '#e9fff1', 4, {glow: true}));
+    if (!k.portrait) out.push(car(k, -k.ov * 0.5, g.anchors.road.y, 3.6 * (k.ppm * STREET_SCALE) * 1.1, {color: pal.primary, facing: 1}));
+    out.push(car(k, W * (k.portrait ? 0.7 : 0.86), g.anchors.road.y + 10 * u, 3.6 * (k.ppm * STREET_SCALE) * 1.1, {color: pal.g('#d8dde4'), facing: -1}));
+    return out;
+  }
+};
+
 export const STREET = {
-  'city-street': cityStreet
+  'city-street': cityStreet, shopfronts, crossing
 };

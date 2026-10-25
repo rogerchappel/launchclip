@@ -1820,8 +1820,8 @@ scene fails to resolve on an unknown one.
   `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
   sheets; `storyWorldErrors`; `worldCatalogue()`.
-- 12 worlds in three groups. Inside: office, home-desk, kitchen, living-room, classroom, cafe, workshop, server-room, studio, gym.
-  Street: city-street.
+- 14 worlds in three groups. Inside: office, home-desk, kitchen, living-room, classroom, cafe, workshop, server-room, studio, gym.
+  Street: city-street, shopfronts, crossing.
   Outside: park. Each has `geo` (floor or
   ground line, anchors, quiet area), `back`, `mid`, `front` and optional
   `fx`; a world never draws text.

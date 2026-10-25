@@ -27,7 +27,7 @@ const count = nodes => nodes.reduce((n, node) => n + 1 + (node.children ? count(
 // The RFC library (docs/SEEDED_STYLES_RFC.md §3.5). Each world PR adds its group.
 const LIBRARY = {
   inside: ['office', 'home-desk', 'kitchen', 'living-room', 'classroom', 'cafe', 'workshop', 'server-room', 'studio', 'gym'],
-  street: ['city-street'],
+  street: ['city-street', 'shopfronts', 'crossing'],
   outside: ['park']
 };
 
