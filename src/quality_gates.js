@@ -21,11 +21,10 @@ import { storyBase } from "../kit/core/story.mjs";
 import { faceIntervalsFromProbe } from "./cadence_measures.js";
 import { profileForStory } from "./profile_store.js";
 import { directionFileFor } from "./story_cli.js";
+import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
 
 // The measures the coverage gate fails on; the rest of the band is reported.
 export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds"]);
-// Where a whole-video face track lands (`launchclip subject track`, RFC §7.2).
-export const FACE_TRACK_FILES = Object.freeze(["assets/subject/track.json", ".launchclip/subject/track.json"]);
 export const PROTOTYPE_WINDOW = Object.freeze({ min: 20, max: 30 });
 
 /** The direction map beside the project's storyboard, or null. */
@@ -137,22 +136,22 @@ export async function faceGate({ project, resolved, layout, profile }) {
 
 /**
  * Face-visible intervals on the edited timeline. → {source, intervals | null, note?}
- * A track is {samples | frames: [{t, head}]} in source seconds; the probe
- * cache is .launchclip/subject/<entry>/probe.json.
+ * The whole-video track (`launchclip subject track --project`, filed as
+ * assets/subject/track.json for this base) wins; else the presenter probe
+ * cached in .launchclip/subject/<entry>/probe.json; else none.
  */
 export async function readFaceData(project, resolved) {
-  for (const rel of FACE_TRACK_FILES) {
-    const file = path.join(project, rel);
-    if (!existsSync(file)) continue;
-    try {
-      const track = JSON.parse(await readFile(file, "utf8"));
-      const samples = track.samples ?? track.frames ?? [];
-      const intervals = faceIntervalsFromProbe({ samples: samples.map((sample) => ({ t: Number(sample.t ?? sample.at), head: sample.head ?? null })), source: track.source });
-      return { source: rel, intervals: toTimeline(intervals, resolved) };
-    } catch { /* an unreadable track falls through to the probe */ }
+  let track = null;
+  try { track = await readStoryTrack(project, resolved); }
+  catch { track = null; /* an invalid track falls through to the probe; layout-check reports it */ }
+  if (track?.frames?.length) {
+    const step = 1 / (Number(track.fps) > 0 ? Number(track.fps) : 10);
+    const samples = track.frames.map((frame) => ({ t: frame.t, head: frame.head }));
+    const last = samples.at(-1).t + step;
+    return { source: TRACK_FILE, intervals: toTimeline(faceIntervalsFromProbe({ samples, source: { duration: last } }), resolved) };
   }
   const probe = await newestProbe(project);
-  if (probe) return { source: probe.rel, intervals: toTimeline(faceIntervalsFromProbe(probe.probe), resolved), note: "face time from the presenter probe (about one frame a second); a whole-video track (launchclip subject track) is finer" };
+  if (probe) return { source: probe.rel, intervals: toTimeline(faceIntervalsFromProbe(probe.probe), resolved), note: "face time from the presenter probe (about one frame a second); a whole-video track (launchclip subject track --project) is finer" };
   return { source: "storyboard", intervals: null, note: "no face data: the face is taken to be visible wherever the base shows" };
 }
 

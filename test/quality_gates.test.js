@@ -22,6 +22,17 @@ const resolved = async () => (await runStoryCommand("resolve", `${FOOTAGE}storyb
 const words = async () => JSON.parse(await readFile(`${FOOTAGE}NARRATION.json`, "utf8")).words;
 const map = async () => JSON.parse(await readFile(`${FOOTAGE}DIRECTION.json`, "utf8"));
 
+// A launchclip.subject-track.v1 file for the footage base: head visible at the given seconds.
+function track(frames) {
+  const box = { x: 0.4, y: 0.2, w: 0.2, h: 0.2 };
+  return JSON.stringify({
+    schema: "launchclip.subject-track.v1", base: "assets/recording.mp4", model: "mediapipe-selfie", fps: 10,
+    source: { sha256: "0".repeat(64), width: 1080, height: 1920, fps: 30, duration: 22 },
+    people: "one", framing: "medium", usable: true, reasons: [], head: box, body: null, coverage: 0.3, stability: 0.9, headroom: 0.2,
+    frames: frames.map(([t, head]) => ({ t, coverage: head ? 0.3 : 0, people: head ? "one" : "none", head: head ? box : null, body: null }))
+  });
+}
+
 // The same footage with nothing but punch-ins, every line held on the face.
 async function sparse() {
   const story = await resolved();
@@ -77,8 +88,10 @@ test("face data: a whole-video track or the probe maps through base.trim onto th
   assert.equal(probe.source, path.join(".launchclip", "subject", "abc", "probe.json"));
   assert.deepEqual(probe.intervals, [{ start: 0, end: 9 }, { start: 14, end: 20 }]);
   await mkdir(path.join(dir, "assets/subject"), { recursive: true });
-  await writeFile(path.join(dir, "assets/subject/track.json"), JSON.stringify({ source: { duration: 22 }, samples: [{ t: 0, head: { x: 1 } }, { t: 22, head: null }] }));
-  assert.equal((await readFaceData(dir, story)).source, "assets/subject/track.json", "a track wins over the probe");
+  await writeFile(path.join(dir, "assets/subject/track.json"), track([[0, true], [21.9, false]]));
+  const tracked = await readFaceData(dir, story);
+  assert.equal(tracked.source, "assets/subject/track.json", "a track wins over the probe");
+  assert.deepEqual(tracked.intervals, [{ start: 0, end: 19.9 }], "source 0–21.9 s through the trim");
 });
 
 test("the face gate fails on layout-check's face rule and on face time outside the band", async (t) => {
@@ -92,7 +105,7 @@ test("the face gate fails on layout-check's face rule and on face time outside t
   assert.equal(covered.status, "failed");
   assert.match(covered.errors[0], /builder @3s/);
   await mkdir(path.join(dir, "assets/subject"), { recursive: true });
-  await writeFile(path.join(dir, "assets/subject/track.json"), JSON.stringify({ source: { duration: 22 }, samples: [{ t: 0, head: null }, { t: 21, head: { x: 1 } }] }));
+  await writeFile(path.join(dir, "assets/subject/track.json"), track([[0, false], [21, true]]));
   const away = await faceGate({ project: dir, resolved: story, layout: { findings: [] }, profile: profile("short-talking-head") });
   assert.equal(away.status, "failed");
   assert.match(away.errors.join("\n"), /face_time .* below the profile band/);
