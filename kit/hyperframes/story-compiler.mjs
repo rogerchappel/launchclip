@@ -25,7 +25,8 @@ import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from
 import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
 import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
-import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from '../core/ambient.mjs';
+import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
+import { backgroundPlan, layerCss, layerTweens, sceneBackground } from '../core/backgrounds.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
@@ -138,9 +139,18 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // Ambient motion (kit/core/ambient.mjs): the background field inside every
   // track-0 plate and the hold drift wrapper around each scene's content. A
   // sceneFilter compile is a module review and, like ModuleReview, has none.
-  const field = isolate ? null : ambientField(story);
+  // A story.background kind other than blobs (kit/core/backgrounds.mjs)
+  // replaces the field with its layers, in the same places.
+  const backdrop = isolate ? null : backgroundPlan(story);
+  const field = isolate || backdrop ? null : ambientField(story);
   const geometry = profileGeometry({ width: W, height: H });
+  const backdropLayer = (key, from, to) => {
+    const html = backdrop.layers.map((layer) => `<div id="lc-bg-${key}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layer.svg ?? ''}</div>`).join('');
+    const lines = backdrop.layers.flatMap((layer) => layerTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-bg-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true">${html}</div>`, motion: lines };
+  };
   const fieldLayer = (key, from, to) => {
+    if (backdrop) return backdropLayer(key, from, to);
     if (!field) return { html: '', motion: [] };
     const html = field.blobs.map((blob) => {
       const state = blobStateAt(blob, from);
@@ -183,6 +193,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const cameraMotion = plan ? cameraGsapLines(plan) : [];
   const worldField = plan?.background ? worldFieldLayer(backgroundFieldTiles(plan, field)) : { html: '', motion: [] };
   cameraMotion.push(...worldField.motion);
+  // World mode with a background kind: the background stays fixed to the
+  // screen under the camera (in #lc-bg), in place of the depth layer's glows.
+  const worldBackdrop = plan?.mode === 'world' && backdrop ? backdropLayer('world', 0, D) : null;
+  if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
   const build = (entry, { idSuffix = '', track, clone = false } = {}) => {
@@ -246,7 +260,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
     // Ambient field: inside every plate, except in world mode, where the one
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
-    const ambient = entry.plate && !worldMode && sceneAmbient(story, entry.scene).background ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
+    const ambient = entry.plate && !worldMode && sceneBackground(story, entry.scene) ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
@@ -293,7 +307,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // The clone holds the scene's first state, where its drift is identity;
     // the field keeps moving with absolute time (in world mode it is the
     // camera's depth layer instead).
-    const ambient = plan?.mode !== 'world' && sceneAmbient(story, entry.scene).background ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
+    const ambient = plan?.mode !== 'world' && sceneBackground(story, entry.scene) ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
     (plan ? world : markup).push(`<div id="${outer}" class="lc-scene lc-plate lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
     motion.push(...ambient.motion);
     if (media.elements.length) warnings.push(`${loop.sceneId}: root media is not repeated in the loop ending`);
@@ -445,10 +459,10 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
 </head>
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
-    <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1"></div>
+    <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}</div>
     ${baseMarkup.join('\n    ')}
     ${audio}
-    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html) : ''}
+    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop) : ''}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}
     ${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
@@ -529,7 +543,7 @@ export function windowComposition(html, [start, end]) {
 // blurred move runs), then drift, zoom (about the canvas centre) and pan.
 const CAMERA_SELECTORS = Object.freeze({ pan: '#lc-cam-pan', zoom: '#lc-cam-zoom', drift: '#lc-cam-drift', background: '#lc-world-bg' });
 
-function cameraMarkup(plan, brand, plates, field = '') {
+function cameraMarkup(plan, brand, plates, field = '', glowing = true) {
   const parts = [];
   if (plan.background) {
     // The depth layer (world mode): ambient motion's background field tiled
@@ -538,7 +552,7 @@ function cameraMarkup(plan, brand, plates, field = '') {
     // with parallax and 1× without, instead of once inside every plate).
     // Never both: stacked translucent gradients dither differently in the two
     // renderers (16:9 parity fell to 0.963 with glows under the field).
-    const glows = field ? [] : backgroundLayer(plan, brand).glows;
+    const glows = field || !glowing ? [] : backgroundLayer(plan, brand).glows;
     parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}${field}</div>`);
   }
   const defs = plan.blurSamples.length ? '<svg class="lc-cam-defs" width="0" height="0" aria-hidden="true"><defs><filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur id="lc-cam-blur-k" in="SourceGraphic" stdDeviation="0 0"></feGaussianBlur></filter></defs></svg>' : '';
