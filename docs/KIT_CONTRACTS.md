@@ -730,8 +730,10 @@ evaluates the same functions per frame.
    and the outgoing transition. The push is about the centre of
    `model.layout.rect`. Its amplitude is `scaleRate`/`shiftRate` per second of
    window, capped at `scaleMax`/`shiftMax`, then clamped by `driftBounds`: the
-   profile safe zone, shortened so that a rect clear of the caption band stays
-   clear of it while captions are on. A rect with too little room for half the
+   profile safe zone (narrowed to the brand frame's safe area,
+   `model.frame.safe`, when the rect sits inside it, so a card placed on the
+   frame's edge never drifts into the kicker), shortened so that a rect clear
+   of the caption band stays clear of it while captions are on. A rect with too little room for half the
    wanted push pulls back instead (`scale < 1`, which only shrinks it), never
    shrinking key text below the profile minimum (`model.minTextPx`). Vertical
    travel goes toward the side with more room. `driftEligible` skips
