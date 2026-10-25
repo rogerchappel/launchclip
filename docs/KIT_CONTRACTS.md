@@ -1537,6 +1537,17 @@ A style can define named segment templates, so a series looks like a series: a "
   - **The modules.** It warns when none of the segment's modules play in the chapter. The result's `segments` lists `{chapter, segment, card, layout, modules}`.
   - **Idempotence.** It drops its own `segment-*` and `reset-*` sections before planning again.
 
+### Rendering by chapter (`finish --chapter <id>`)
+
+`finish --chapter <id>` builds on the scene-level re-render (`--scene`):
+
+- **Checks.** `iterationOptions` checks the id against `story.chapters`. Without chapters it says to run `story long-form`. It can't be combined with `--scene`, `--preview-scene`, `--prototype` or `--candidate`.
+- **Render.** After resolving, `chapterWindow(resolved, id)` gives `{id, title, start, end, frames: [a, b)}`. `renderWithSegments({range})` forces every segment that overlaps that frame range, with or without scenes, and reuses the rest from the cache.
+- **Master.** The master is stitched from all the segments as usual (join, delivery encode, soundtrack mux, the same frame-count checks), so the whole video stays deliverable. Render, master, evidence and gates are forced, as with `--scene`.
+- **The chapter alone.** The master stage also cuts the chapter from the stitched master to `renders/chapters/<id>.mp4` (adapter `cutChapter`, an accurate re-encode).
+- **Report.** `chapter: {id, title, start, end, output, segments: {forced, reused, total}}`.
+- **HyperFrames** renders whole videos, so `--chapter` re-renders the whole video there, with a warning.
+
 ### Exports
 
 - **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).
