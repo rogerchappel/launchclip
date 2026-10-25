@@ -1548,6 +1548,27 @@ A style can define named segment templates, so a series looks like a series: a "
 - **Report.** `chapter: {id, title, start, end, output, segments: {forced, reused, total}}`.
 - **HyperFrames** renders whole videos, so `--chapter` re-renders the whole video there, with a warning.
 
+### Cut-downs (`kit/core/cutdown.mjs`, `launchclip cutdown`)
+
+`launchclip cutdown <project> --to shorts [--section <id>] [--max 58] [--out dir] [--model provider:model] [--force]` writes a new 9:16 project. It re-plans one section of a footage-led long video against the Shorts profile (`short-talking-head`) instead of cropping it.
+
+- **The window.** `chooseCutWindow(map, words, {section, max, min})` picks consecutive map lines in one section (a map section id or its chapter id; every section without `--section`) between `min` (15 s) and `max` (58 s). It scores 2 for opening on a hook, problem, number, claim, turn, quote or proof line, plus the share of visual lines, plus length. The window is padded (0.15 s before, 0.35 s after, never into a neighbouring word) and snapped to frames.
+- **What is reused:**
+  - **The base edit.** `cutTrim(resolved, start, end)` maps the window through the long form's kept source ranges (its `base.trim` or `base.edl`), and the result becomes the Short's `base.trim`. `fit`, `focus`, `volume` and `subject` carry over, with explicit mattes kept when they overlap.
+  - **Mattes and the face track.** These are in source time, so they apply unchanged: `assets/` holds hard links to the long form's assets except `audio/` and `captions/`, which finish makes again. They are hard links, not symlinks, because Remotion copies the public folder into its bundle. A link that fails (another volume) becomes a copy.
+  - **Scenes.** A scene comes along when at least 2 s and 60% of it is inside the window, moved to the Short's clock. `mapTime` maps its word anchors: an anchor that lands on the same word stays, a later occurrence is re-counted (`word:<text>#n`), and only an anchor no word reaches becomes seconds. Hits outside the scene drop.
+  - **Narration.** `cutWords` writes `NARRATION.json` from 0.
+- **What is re-planned:**
+  - split layouts become `stacked`; a layout within 1 s of an edge holds to it;
+  - the promise, the section cards, the chapters and the progress line stay behind;
+  - a scene whose module refuses the 9:16 canvas or its new length is left out with a warning;
+  - word captions are added when the long form had none.
+- **Hook and loop.** A `hook` concept card (track 1, 0 to 2–3 s) carries the first line's key words (`keyWords`) and the line as its sub-line. If the head leaves no room, the card drops the sub-line, then becomes an insert. `ending.loop_to` is `hook`. The map's first line is the `hook` intent.
+- **Density.** Concept cards (`dress-n`) fill the longest undressed run past the profile's `longest_undressed_seconds` p50, and keep filling while coverage is under its p10.
+- **The map.** `draftDirectionMap` over the Short, keeping the long form's intents for the same lines, with the profile `short-talking-head`.
+- **`--model`.** `planStoryboard` re-plans the section's words with the planner against the same profile (paid). The cut keeps the base edit, and the loop returns to the first scene.
+- **Output.** `storyboard.json`, `DIRECTION.json`, `NARRATION.json` and `CUTDOWN.json` (`launchclip.cutdown.v1`). The receipt holds `{source, to, section, window, duration, trim, planner, hook, loop_to, carried, added, profile: {id, status, measures, errors}, warnings}`. The command checks the Short with `checkStoryboard` and the coverage gate, and its status is `ready` when the Short passes the profile. Then run `launchclip finish` on the Short.
+
 ### Exports
 
 - **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).

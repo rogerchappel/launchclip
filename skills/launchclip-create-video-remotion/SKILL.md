@@ -135,6 +135,10 @@ Read a reference when its step comes up, not all at once.
 - [references/profiles.md](references/profiles.md): the cadence profiles
   (coverage, face time, pacing and motion bands per format) that the map and
   the gates measure against.
+- [references/long-form.md](references/long-form.md): videos of five minutes
+  or more: chapters and section cards (`launchclip story long-form`),
+  attention resets, recurring segment formats, re-rendering one chapter
+  (`finish --chapter`) and cutting Shorts from a section (`launchclip cutdown`).
 - [references/subject-effects.md](references/subject-effects.md): effects that
   use the presenter cut out of a recording (a word behind their head, a dolly
   zoom): probing and matting the recording, the behind layer and its rules.

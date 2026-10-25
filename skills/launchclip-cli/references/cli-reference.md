@@ -1475,6 +1475,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
   ```
 
+- `cutdown`: Cut a Short from one section of a long video: a new 9:16 project (default <project>/cutdowns/<section>-shorts) that re-plans the section against the Shorts profile instead of cropping. It reuses the base edit, mattes and face track, maps word anchors into the section, opens on a hook card and loops back to it. Deterministic and free; --model re-plans with the planner (paid). Then run launchclip finish on it.
+
+  ```text
+  launchclip cutdown <project> --to shorts [--section <id>] [--max 58] [--out <dir>] [--model provider:model] [--force]
+  ```
+
 - `export`: Export an editable timeline for Final Cut Pro, Premiere Pro or Resolve.
 
   ```text
