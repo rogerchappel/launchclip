@@ -76,7 +76,7 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   try { picked = profileForStory(resolved ?? story, { direction: map, style }); profileDoc = picked.profile; }
   catch (error) { errors.push(`direction: ${error.message}`); }
   // Narrative lines' cast and set cues: the character kit's check (kit/core/characters/cues.mjs).
-  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null, validateCast: validateCastCues });
+  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null, validateCast: validateCastCues, ...(style?.segments ? { segments: style.segments } : {}) });
   errors.push(...check.errors.map((entry) => `direction: ${entry}`));
   warnings.push(...check.warnings.map((entry) => `direction: ${entry}`));
   if (!words) warnings.push("direction: no narration words, so the map's lines were not checked against them");
@@ -85,7 +85,12 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   if (check.ok && resolved && words?.length) {
     measures = directionMeasures(map, resolved, { words });
     if (profileDoc) bands = compareMeasures(measures, profileDoc);
-    for (const band of bands) if (band.status !== "inside") warnings.push(`cadence: ${band.detail} (profile ${profileDoc.id})`);
+    // The attention-reset ceiling is structural (long form): an error, fixed by launchclip story long-form.
+    for (const band of bands) {
+      if (band.status === "inside") continue;
+      if (band.measure === "longest_without_reset_seconds") errors.push(`cadence: ${band.detail} (profile ${profileDoc.id}); change the layout, make a line an insert or add a section card in the longest run (launchclip story long-form places them)`);
+      else warnings.push(`cadence: ${band.detail} (profile ${profileDoc.id})`);
+    }
     for (const line of measures.missed) warnings.push(`direction: words [${line.words.join(", ")}] (${line.intent}) call for a visual but play on the ${line.treatment === "face" ? "presenter" : "camera"} alone: a missed opportunity unless the why says otherwise`);
   }
   return {
@@ -107,8 +112,9 @@ export async function checkStoryDirection({ story, resolved = null, words = null
 // launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
 export async function runStoryCommand(action, storyPath, flags = {}, adapters = {}) {
-  if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile or plan`);
+  if (!new Set(["validate", "resolve", "compile", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile, plan or long-form`);
   if (action === "compile") return compileStoryCommand(storyPath, flags);
+  if (action === "long-form") return (await import("./long_form.js")).runLongFormCommand(storyPath, flags);
   if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
   const styled = await applyProjectStyle(await readJson(file, "story.json"), { projectDir: path.dirname(file) });

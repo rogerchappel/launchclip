@@ -287,7 +287,9 @@ A style pack is `.launchclip/styles/<name>/style.json`:
                 sections?: boolean | {position?, color?},
                 progress?: boolean | {position?: top|bottom, color?, thickness?: 2-16 px},
                 show?: always|scenes},
- dials?: {energy?, density?, playfulness?, polish?: 0-1}}
+ dials?: {energy?, density?, playfulness?, polish?: 0-1},
+ segments?: [{id, title: ≤48, kicker?: ≤28, layout?: full|split-left|split-right|framed|stacked,
+              modules?: [id], icon?: name, match?: [phrase]}]}   // ≤12; see "Long form"
 ```
 
 - Layout names are `full`, `split-left`, `split-right`, `framed`, `stacked`,
@@ -1456,6 +1458,96 @@ to a stretch of the recording, not to one scene.
 There are two examples, `examples/story/layouts-wide` (16:9: full, split-left, framed with the room dimmed, split-right on a paper panel) and `examples/story/layouts-tall` (9:16: full, stacked, framed with the room replaced, insert, back to full). Each has a synthetic presenter, an exact matte and a track: `node scripts/make-subject-example.mjs --out <dir> [--aspect 16:9] --duration 10 --track`.
 
 `test/fixtures/parity-footage/s-layout-wide.json` and `s-layout-tall.json` hold both renderers to SSIM ≥ 0.97 at frame-exact times, mid-shift and settled (0.994 minimum when added).
+
+## Long form (`kit/core/long-form.mjs`)
+
+Long videos (5–30 minutes, the `youtube-long-form` profile) get structure before density (docs/VIDEO_QUALITY_RFC.md §10.2).
+
+### Chapters
+
+The chapter contract is one top-level story field, `chapters`, in `kit/core/story.mjs` (import-free):
+
+```json
+"chapters": [
+  { "id": "c1", "title": "The problem", "start": 0 },
+  { "id": "c2", "title": "Tool of the week", "start": "word:tool", "segment": "tool-of-the-week" }
+]
+```
+
+- `validateChapters` (called by `validateStory`) checks the following:
+  - ids are unique short ids, and titles are 1–60 characters;
+  - starts are seconds or anchors, in order, the first at 0;
+  - `segment` names a segment format (see below).
+- It warns when YouTube would ignore the list: fewer than three chapters, or one shorter than 10 s (`CHAPTER_MIN_COUNT`, `CHAPTER_MIN_SECONDS`).
+- `resolveStory` resolves chapter starts like scene times. `storyChapters(story)` → `[{index, id, title, start, end, segment}]`; each chapter runs to the next one's start, and the last to the end.
+
+Chapters come from the direction map: `chaptersFromMap(map, words, {duration})` makes one per section, starting at its first word (or its `start`). The first chapter starts at 0. A section shorter than 10 s joins the chapter after it. A section without a `title` is "Part n", so the planner and the skills give every section a short title.
+
+### The structure pass
+
+`structureLongForm(story, {words, map})` → `{story, map, chapters, added, changed, warnings}` works on copies and is deterministic:
+
+- **Chapters.** It sets `story.chapters` from the map unless the story has them.
+- **Section cards.** At each chapter start after the first, it adds a `section-card` (`chapter-<id>`): kicker "Chapter n", the number and the chapter title, held 2.6 s. It's an insert in the footage-led lane.
+- **The opening promise.** After the hook line, it adds an `icon-row` (`promise`, track 1 in the footage-led lane) titled "In this video". It lists the next two to five chapters, with an icon per chapter from its title. If the line after the hook is taken, the promise moves to the next line start with room, up to 45 s in.
+- **The progress line.** It sets `frame.progress: {ticks: true}`. The brand frame draws a tick at each chapter start (`lc-frame-tick-NN`, both renderers), and the frame's section labels fall back to the chapter titles. `frame: false` keeps no frame.
+- **Room.** Anything on the new scene's track and every graphic is in its way.
+  - A scene that starts inside the card's window starts after it. A scene running across the window's start ends before it. Either move happens only when the scene keeps at least 1 s and still overlaps every map line that names it.
+  - Otherwise the card shortens, or starts up to 4 s late. A card with less than 1.4 s of room is skipped with a warning.
+  - Moved scenes are listed in `changed`.
+- **The map.** It gains section titles. A face or camera line under a new scene becomes an insert or dress line naming it.
+- **Idempotence.** Running it again drops what it added last time first.
+
+Where it runs:
+
+- `planStoryboard` runs it on a passing plan when the story is long form (`isLongForm`: the long-form profile, or 300 s and up; `longForm: false` turns it off). It keeps the result only when the structured storyboard passes the same checks, and reports it as `long_form: {chapters, added, changed, warnings}`.
+- `launchclip story long-form <project> [--dry-run]` runs it on a project's storyboard.json and DIRECTION.json; the skills call it after writing both.
+- The direction prompt carries `longFormLines()` for long stories, and `references/direction-map.md` carries them too.
+
+### Attention resets
+
+A long video needs a change of picture at a steady interval: a layout change, an insert or a section card (RFC §10.2). These are planned, not random.
+
+- **The measure.** `longest_without_reset_seconds` (check `max`) is the longest run between resets. `youtube-long-form` seeds it at p50 60 s (the planning target) and p90 120 s (the ceiling).
+  - `storyboardMeasures` reports it with `reset_times` and `intervals.unreset`. `resetTimes(story, scenes, {sections, inserts, duration})` counts each insert start, each `section-card` start (`RESET_MODULES`), and each layout change. Layout changes come from the story's footage `sections` and from the direction map's section layouts.
+- **Planning.** In the footage-led lane, the structure pass runs `planResets` after the cards and the promise. It reads the target and ceiling from the profile (`resetBand`, default 60/120 s). It splits every run longer than the target into equal parts and resets each split point:
+  - first, it makes the nearest overlay card an insert. The card must be within a third of the target, an insert-ready catalogue G card (`INSERT_READY_MODULES`), 1.5–10 s long, with nothing else on screen. The card loses its track, gains `insert: true` and a 0.25 s fade, and its map line becomes an insert line;
+  - else it adds a footage section `reset-n` (split-right, or stacked in portrait) for up to 20 s, where no section or insert is;
+  - else it warns.
+  The result is `resets: {target, ceiling, times, longest, promoted, sections}`.
+- **Checks.** The coverage gate fails a run past the ceiling (`COVERAGE_GATE_MEASURES`) and adds a `sparseness` finding per run. `story validate` reports it as an error, unlike the other bands, because the fix is structural: `launchclip story long-form` places the resets.
+
+### Recurring segment formats
+
+A style can define named segment templates, so a series looks like a series: a "tool of the week" opens the same way and holds the same layout every episode (RFC §10.2).
+
+```json
+"segments": [
+  { "id": "tool-of-the-week", "title": "Tool of the week", "kicker": "Every Friday", "layout": "split-right",
+    "modules": ["object-card", "concept-card"], "icon": "wrench", "match": ["tool of the week", "this week's tool"] }
+]
+```
+
+- **The style.** `segmentErrors` (in `validateStylePack`) checks the shape: at most 12 segments, unique slug ids, a title, an optional kicker and icon, a footage layout other than `insert`, module ids (checked when the module list is passed), and match phrases.
+- **The planner.** `stylePromptLines` and the direction prompt (`segments`) list the segments. The model marks a section that is one with `"segment": "<id>"`. `validateDirection` allows `segment` on a section, and with `segments` (the style's) it errors on an unknown id. `story validate` passes the style's segments (`applyProjectStyle` now returns them on `style.segments`).
+- **The structure pass** (`options.segments`) reuses them:
+  - **Matching.** A map section or chapter without a segment gets one when its title contains the segment's title or a `match` phrase, ignoring case (`matchSegment`). The chapter carries `segment`.
+  - **The card.** The chapter's section card takes the segment's kicker (else its title, when the chapter's title differs) and its icon instead of the chapter number.
+  - **The layout.** The chapter holds the segment's layout as a `segment-<chapter>` footage section, and its map section's layout matches. A chapter that already has a section, or `stacked` in landscape, keeps its layout with a warning.
+  - **The modules.** It warns when none of the segment's modules play in the chapter. The result's `segments` lists `{chapter, segment, card, layout, modules}`.
+  - **Idempotence.** It drops its own `segment-*` and `reset-*` sections before planning again.
+
+### Exports
+
+- **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).
+  - It muxes the chapters into the delivery MP4 by stream copy (`ffmetadataChapters`, adapter `muxChapters`). The MP4 muxer adds a QuickTime chapter track beside the picture and sound.
+  - The report carries `chapters: {file, list, youtube: "ok" | "ignored", problems}`, and `youtubeChapterProblems` warns when YouTube would ignore the list.
+  - Prototypes, candidates and previews carry no chapters. The master's input hash includes the chapters only when there are some, so other projects' caches stay valid.
+- **NLE exports.** Chapters are timeline markers of kind `chapter`, first at their frame:
+  - FCPXML writes `<chapter-marker>`;
+  - xmeml writes a `<marker>` named after the chapter;
+  - the EDL writes a GREEN `* LOC:`;
+  - OTIO writes a GREEN `Marker.2` with `metadata.launchclip.chapter`.
 
 ## Catalogue E (`kit/core/catalog-e.mjs`)
 

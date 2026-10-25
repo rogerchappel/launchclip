@@ -45,7 +45,7 @@ const EPS = 1e-6;
 // motion, camera, ambient, layout: style-driven settings, carried through as data;
 // frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape);
 // cast: the story's characters (kit/core/characters/cues.mjs validates it).
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast"]);
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -481,6 +481,7 @@ export function validateStory(story, { modules } = {}) {
   if (usesWords && !(isObject(audio) && audio.words) && !narrated) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
   // Footage layouts (kit/core/footage-layout.mjs).
   validateSections(story, { err, warn });
+  validateChapters(story, { err, warn });
 
   return { ok: errors.length === 0, errors, warnings };
 }
@@ -590,6 +591,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (!isObject(section)) return;
     if (section.start !== undefined) section.start = resolve(section.start, `sections[${index}].start`);
     if (section.end !== undefined) section.end = resolve(section.end, `sections[${index}].end`);
+  });
+  if (Array.isArray(copy.chapters)) copy.chapters.forEach((chapter, index) => {
+    if (isObject(chapter) && chapter.start !== undefined) chapter.start = resolve(chapter.start, `chapters[${index}].start`);
   });
   copy.scenes = scenes
     .map((scene, index) => ({ scene, index }))
@@ -1127,4 +1131,65 @@ export function layoutSpans(story) {
     boundaries.push({ boundary_id: span.id ? `${span.id}-layout` : `${from.id}-layout-out`, sequence_id: null, kind: "ordinary", type: "layout-shift", start_seconds: round6(span.start), duration_seconds: round6(frames / fps), from_id: from.id ?? null, to_id: span.id ?? null });
   });
   return { sections, spans, boundaries };
+}
+
+// ---------------------------------------------------------------------------
+// Chapters (long form, docs/VIDEO_QUALITY_RFC.md §10.2; the structure pass
+// and the exports live in kit/core/long-form.mjs)
+//
+// story.chapters: [{id, title, start, segment?}] in order, the first at 0.
+// Each chapter runs to the next one's start (the last to the end). YouTube
+// reads a chapter list only when it starts at 0:00, has at least three
+// chapters and none is shorter than ten seconds, so those are warnings.
+
+export const CHAPTER_MIN_SECONDS = 10;
+export const CHAPTER_MIN_COUNT = 3;
+const CHAPTER_KEYS = new Set(["id", "title", "start", "segment"]);
+const CHAPTER_ID = /^[a-z0-9][a-z0-9-]{0,47}$/i;
+
+/** Check story.chapters (validateStory calls this). Starts may be unresolved anchors. */
+export function validateChapters(story, { err, warn = () => {} } = {}) {
+  const chapters = story?.chapters;
+  if (chapters === undefined) return;
+  if (!Array.isArray(chapters) || !chapters.length) { err("chapters must be a non-empty list of {id, title, start}"); return; }
+  const ids = new Set();
+  const duration = typeof story?.format?.duration === "number" ? story.format.duration : null;
+  let previous = null;
+  chapters.forEach((chapter, index) => {
+    const path = `chapters[${index}]`;
+    if (!isObject(chapter)) { err(`${path} must be {id, title, start}`); return; }
+    for (const key of Object.keys(chapter)) if (!CHAPTER_KEYS.has(key)) err(`${path}.${key} is not supported (allowed: ${[...CHAPTER_KEYS].join(", ")})`);
+    if (typeof chapter.id !== "string" || !CHAPTER_ID.test(chapter.id)) err(`${path}.id must be a short id (letters, digits, hyphens)`);
+    else if (ids.has(chapter.id)) err(`${path}.id "${chapter.id}" is used twice`);
+    else ids.add(chapter.id);
+    if (!nonEmpty(chapter.title) || chapter.title.trim().length > 60) err(`${path}.title must be 1-60 characters`);
+    if (chapter.segment !== undefined && !nonEmpty(chapter.segment)) err(`${path}.segment must name one of the style's segment formats`);
+    if (chapter.start === undefined) { err(`${path}.start is required (seconds or an anchor)`); return; }
+    if (typeof chapter.start === "number") {
+      if (!(Number.isFinite(chapter.start) && chapter.start >= 0)) { err(`${path}.start must be non-negative seconds`); return; }
+      if (index === 0 && chapter.start > EPS) err(`${path}.start must be 0: the first chapter starts the video (YouTube reads chapters from 0:00)`);
+      if (duration !== null && chapter.start >= duration - EPS) err(`${path}.start (${ms(chapter.start)}s) is not before the end of the video (${duration}s)`);
+      if (previous !== null) {
+        if (chapter.start <= previous + EPS) err(`${path}.start must be after the chapter before it`);
+        else if (chapter.start - previous < CHAPTER_MIN_SECONDS - EPS) warn(`chapters[${index - 1}] runs ${ms(chapter.start - previous)}s; YouTube ignores a chapter list with a chapter under ${CHAPTER_MIN_SECONDS}s`);
+      }
+      previous = chapter.start;
+    } else if (!isAnchor(chapter.start)) err(`${path}.start must be seconds or an anchor`);
+    else previous = null;
+  });
+  if (chapters.length < CHAPTER_MIN_COUNT) warn(`${chapters.length} chapter${chapters.length === 1 ? "" : "s"}: YouTube shows chapters only with at least ${CHAPTER_MIN_COUNT}`);
+  const last = chapters.at(-1);
+  if (duration !== null && typeof last?.start === "number" && duration - last.start < CHAPTER_MIN_SECONDS - EPS && chapters.length > 1) warn(`the last chapter runs ${ms(duration - last.start)}s; YouTube ignores a chapter list with a chapter under ${CHAPTER_MIN_SECONDS}s`);
+}
+
+/** Resolved chapters, sorted: [{index, id, title, start, end, segment}] (numeric starts only). */
+export function storyChapters(story) {
+  const list = Array.isArray(story?.chapters) ? story.chapters : [];
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const sorted = list
+    .filter((chapter) => isObject(chapter) && typeof chapter.start === "number" && Number.isFinite(chapter.start) && nonEmpty(chapter.title))
+    .map((chapter) => ({ id: chapter.id, title: chapter.title.trim(), start: round6(Math.max(0, chapter.start)), segment: nonEmpty(chapter.segment) ? chapter.segment : null }))
+    .filter((chapter) => !(duration > 0) || chapter.start < duration)
+    .sort((a, b) => a.start - b.start);
+  return sorted.map((chapter, index) => ({ index, ...chapter, end: round6(index + 1 < sorted.length ? sorted[index + 1].start : duration) }));
 }

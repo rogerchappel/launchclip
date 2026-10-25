@@ -20,6 +20,7 @@
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "../kit/core/direction.mjs";
+import { isLongForm, structureLongForm } from "../kit/core/long-form.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
@@ -94,7 +95,7 @@ export async function planStoryboard(options = {}) {
   let directionSource = direction ? "given" : null;
   let directionPlan = { attempts: [], warnings: [] };
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, now });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
   }
@@ -178,6 +179,27 @@ export async function planStoryboard(options = {}) {
     }
   }
 
+  // Long form (RFC §10.2): chapters from the map's sections, an opening
+  // promise, section cards and the progress line, placed deterministically
+  // on the passing plan; kept only when the structured story passes too.
+  let longForm = null;
+  if (last?.ok && last.storyboard && (options.longForm ?? isLongForm(last.storyboard, profile)) && options.longForm !== false) {
+    try {
+      const structured = structureLongForm(last.storyboard, { words: wordList, map: direction, profile, segments: style?.segments });
+      const checked = checkStoryboard(structured.story, { words: wordList, beats, tier, style, direction: structured.map, profile, bandErrors: false });
+      longForm = { chapters: structured.chapters, added: structured.added, changed: structured.changed, resets: structured.resets, segments: structured.segments, warnings: structured.warnings };
+      if (checked.ok) {
+        last = { ...checked, warnings: [...last.warnings, ...structured.warnings.map((entry) => `long form: ${entry}`), ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
+        if (direction) direction = structured.map;
+      } else {
+        longForm.rejected = checked.errors.slice(0, 12);
+        last.warnings = [...last.warnings, `long form: the chapter structure failed the checks and was left out (${checked.errors.slice(0, 3).join("; ")}); run launchclip story long-form after fixing them`];
+      }
+    } catch (error) {
+      last.warnings = [...last.warnings, `long form: ${message(error)}`];
+    }
+  }
+
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
     input_tokens: sum.input_tokens + entry.usage.input_tokens,
@@ -205,6 +227,7 @@ export async function planStoryboard(options = {}) {
     direction_attempts: directionPlan.attempts,
     profile: profile?.id ?? null,
     cadence: last?.cadence ?? null,
+    long_form: longForm,
     usage: totals,
     cost: {
       estimated_usd: Math.round(priced.reduce((sum, entry) => sum + entry.cost_usd, 0) * 1e8) / 1e8,
@@ -252,7 +275,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   // against the cadence profile (RFC §6.2).
   let cadence = null;
   if (second.ok && direction) {
-    const map = validateDirection(direction, { words, story: resolved });
+    const map = validateDirection(direction, { words, story: resolved, ...(Array.isArray(style?.segments) ? { segments: style.segments } : {}) });
     errors.push(...map.errors.map((entry) => `direction: ${entry}`));
     warnings.push(...map.warnings.map((entry) => `direction: ${entry}`));
     if (map.ok && profile && words.length) {
@@ -379,8 +402,8 @@ export function pinInputs(story, fixed) {
  * for shape only; the storyboard pass checks them against real scenes.
  * → {map | null, attempts, warnings}
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, now = () => Date.now() }) {
-  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject });
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now() }) {
+  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments });
   const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, ""].join("\n");
   const attempts = [];
   const warnings = [];
@@ -404,7 +427,7 @@ export async function planDirection({ client, model = null, brief, fixed, profil
     if (extracted.ok) {
       const map = extracted.map;
       if (profile && !map.profile) map.profile = profile.id;
-      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true });
+      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(Array.isArray(segments) ? { segments } : {}) });
       errors = check.errors;
     }
     attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });

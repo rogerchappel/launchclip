@@ -329,6 +329,41 @@ test("runFinish respects supplied voice and mix, quality and --out", async () =>
   }
 });
 
+test("finish writes the chapters: renders/chapters.txt, the MP4 metadata and the report", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-chapters-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.chapters = [{ id: "open", title: "Open", start: 0 }, { id: "fix", title: "The fix", start: 3 }];
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    const adapters = fakeAdapters();
+    const muxed = [];
+    adapters.muxChapters = async (input, metadata, output) => {
+      muxed.push(await readFile(metadata, "utf8"));
+      await writeFile(output, `${await readFile(input, "utf8")} +chapters`);
+    };
+    const report = await runFinish(project, {}, adapters);
+    assert.equal(await readFile(path.join(project, PATHS.chapters), "utf8"), "0:00 Open\n0:03 The fix\n");
+    assert.equal(muxed.length, 1);
+    assert.match(muxed[0], /START=3000\nEND=6000\ntitle=The fix/);
+    assert.match(await readFile(report.final, "utf8"), /\+chapters$/);
+    assert.deepEqual(report.chapters.list.map((chapter) => [chapter.id, chapter.start, chapter.end]), [["open", 0, 3], ["fix", 3, 6]]);
+    assert.equal(report.chapters.youtube, "ignored");
+    assert.ok(report.warnings.some((warning) => /chapters: YouTube would not show them/.test(warning)));
+    assert.match(formatFinishSummary(report), /chapters: 2 in renders\/chapters\.txt and the MP4/);
+    // An unchanged rerun keeps the master and its chapters.
+    const again = await runFinish(project, {}, adapters);
+    assert.equal(again.stages.find((stage) => stage.name === "master").status, "cached");
+    assert.equal(muxed.length, 1);
+    assert.equal(again.chapters.list.length, 2);
+    // --prototype carries no chapters.
+    const prototype = await runFinish(project, { prototype: true }, adapters);
+    assert.equal(prototype.chapters, undefined);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("runFinish compiles HyperFrames projects before rendering them", async () => {
   const project = await narratedProject();
   try {

@@ -1394,6 +1394,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
   ```
 
+- `story long-form`: Give a long video its structure: chapters from DIRECTION.json's sections, an opening promise, a section card at each chapter start and a progress line with chapter ticks. Rewrites storyboard.json and DIRECTION.json; safe to run again.
+
+  ```text
+  launchclip story long-form <project> [--narration NARRATION.json] [--dry-run]
+  ```
+
 - `story plan`: Plan DIRECTION.json and then storyboard.json from a brief with a model: the direction map first (one call), then the storyboard against it and the cadence profile; the repair loop repairs both.
 
   ```text

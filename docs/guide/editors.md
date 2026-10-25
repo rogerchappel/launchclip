@@ -13,6 +13,6 @@ The timeline arrives on separate tracks:
 - each animated scene as its own transparent clip;
 - voice, music, every sound effect and the typing track on separate audio tracks;
 - captions as a subtitle track;
-- markers at each scene and key moment.
+- markers at each scene and key moment, and chapter markers for a [long video's chapters](long-form.md).
 
 Everything lands in `exports/<name>/`, with the media alongside. It handles exact frame rates, including 29.97 drop-frame.

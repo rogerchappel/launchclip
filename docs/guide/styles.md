@@ -88,6 +88,8 @@ launchclip style upgrade my-channel
 - **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.
 
+- **Recurring segments (`segments`):** named formats a series repeats, like a "tool of the week" with its own kicker, icon, layout and favourite graphics. Every episode's chapter of that name opens and looks the same way; see [long videos](long-form.md#recurring-segments).
+
 ## Turn the dials
 
 Every style has four dials, each from 0 to 1:
