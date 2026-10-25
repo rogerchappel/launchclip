@@ -1,14 +1,17 @@
 // The subject stage (docs/SUBJECT_EFFECTS_RFC.md §4): a cheap probe of the
-// whole recording before planning, and a full matte for one source range.
+// whole recording before planning, a head and body track of the whole
+// recording at TRACK_FPS (docs/VIDEO_QUALITY_RFC.md §7.2), and a full matte
+// for one source range.
 //
 // Cache layout, keyed by the source's sha256 and the model:
 //   <cache>/<sha256-12>-<model>/probe.json
+//   <cache>/<sha256-12>-<model>/track.json
 //   <cache>/<sha256-12>-<model>/ranges/<in>-<out>/{matte.webm, plate.jpg, contours.json, subject.json}
 // <cache> defaults to .launchclip/subject in the working directory.
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CONTOURS_SCHEMA, SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectProbe } from "../../kit/core/subject.mjs";
+import { CONTOURS_SCHEMA, SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "../../kit/core/subject.mjs";
 import { probeMedia } from "../media_trim.js";
 import { openMatteWriter, readFrames, withAlpha, writeImage } from "./frames.js";
 import { createPlateAccumulator } from "./plate.js";
@@ -80,6 +83,42 @@ export async function runSubjectProbe(src, options = {}) {
   const probe = { schema: SUBJECT_PROBE_SCHEMA, source, model: modelId, ...summarizeSamples(samples), samples };
   await writeChecked(file, probe, validateSubjectProbe);
   return { probe, path: file, cached: false };
+}
+
+/**
+ * Track the presenter over the whole recording: a head and body box per
+ * frame at TRACK_FPS (or the source rate when lower), measured the way the
+ * probe measures, with the probe's model. → {track, path, cached}
+ * options: as runSubjectProbe, plus onFrame(count).
+ */
+export async function runSubjectTrack(src, options = {}) {
+  const modelId = options.model ?? DEFAULT_PROBE_MODEL;
+  subjectPipeline(modelId);
+  const source = options.source ?? await describeSource(src);
+  const entry = subjectCacheEntry(source, modelId, options.cacheDir ?? defaultCacheDir());
+  const file = path.join(entry, "track.json");
+  if (!options.force) {
+    const cached = await readValid(file, validateSubjectTrack);
+    if (cached) return { track: cached, path: file, cached: true };
+  }
+  const rate = Math.min(TRACK_FPS, source.fps);
+  const size = evenSize(PROBE_WIDTH, source);
+  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
+  const frames = [];
+  try {
+    let index = 0;
+    for await (const frame of readFrames(src, { start: 0, duration: source.duration, fps: rate, ...size, ffmpeg: options.ffmpeg })) {
+      const alpha = await segmenter.segment(frame, size.width, size.height);
+      frames.push({ t: round(index / rate, 3), ...maskStats(alpha, size.width, size.height) });
+      index += 1;
+      options.onFrame?.(index);
+    }
+  } finally {
+    if (!options.segmenter) await segmenter.release();
+  }
+  const track = { schema: TRACK_SCHEMA, source, model: modelId, fps: round(rate, 3), ...summarizeSamples(frames), frames };
+  await writeChecked(file, track, validateSubjectTrack);
+  return { track, path: file, cached: false };
 }
 
 /**

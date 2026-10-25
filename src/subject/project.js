@@ -7,14 +7,20 @@
 //    mattes: [{base: "assets/recording.mp4", src, in, out, info, plate?, contours?}]}
 // Every reader of a story (readProjectStory, story commands, layout-check,
 // finish) passes the entries for its base to resolveStory as `subject`.
+//
+// `launchclip subject track <video> --project <dir>` files the whole-video
+// head track as assets/subject/track.json (launchclip.subject-track.v1 with
+// `base` set); readStoryTrack gives resolveStory its frames as `track`.
 
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { subjectMode } from "../../kit/core/story.mjs";
+import { validateSubjectTrack } from "../../kit/core/subject.mjs";
 import { rangeDirName } from "./stage.js";
 
 export const MATTES_SCHEMA = "launchclip.subject-mattes.v1";
 export const MATTES_MANIFEST = "assets/subject/mattes.json";
+export const TRACK_FILE = "assets/subject/track.json";
 const OUTLINE_STEP = 3;
 
 /**
@@ -51,14 +57,50 @@ export async function readStorySubject(project, story) {
 }
 
 /**
+ * The head track resolveStory needs for this story's base (its `track`
+ * option): {source: {width, height}, fps, frames: [{t, head, body}]}, read
+ * from assets/subject/track.json when it was filed for this base. Null for
+ * base.subject "off", another base, or no track.
+ */
+export async function readStoryTrack(project, story) {
+  const base = story?.base;
+  if (base === undefined || base === null || subjectMode(base) === "off") return null;
+  const src = typeof base === "string" ? base : base.src ?? base.source;
+  let track;
+  try { track = JSON.parse(await readFile(path.join(path.resolve(project), TRACK_FILE), "utf8")); }
+  catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw new Error(`${TRACK_FILE} is not valid JSON: ${error.message}`);
+  }
+  const { ok, errors } = validateSubjectTrack(track);
+  if (!ok) throw new Error(`${TRACK_FILE} is invalid: ${errors.slice(0, 3).join("; ")}`);
+  if (track.base !== src) return null;
+  return { source: { width: track.source.width, height: track.source.height }, fps: track.fps, frames: track.frames.map(({ t, head, body }) => ({ t, head, body })) };
+}
+
+/** File a track result (runSubjectTrack) in the project for `video`. → {base, src} */
+export async function fileProjectTrack(project, video, track) {
+  const root = path.resolve(project);
+  const base = projectAsset(root, video);
+  await mkdir(path.join(root, "assets/subject"), { recursive: true });
+  await writeFile(path.join(root, TRACK_FILE), `${JSON.stringify({ ...track, base })}\n`);
+  return { base, src: TRACK_FILE };
+}
+
+function projectAsset(root, video) {
+  const base = path.relative(root, path.resolve(video)).split(path.sep).join("/");
+  if (base.startsWith("..") || !base.startsWith("assets/")) throw new Error(`--project needs the video inside ${root}/assets (the story's base.src); got ${video}`);
+  return base;
+}
+
+/**
  * File a matte result (runSubjectMatte) in the project for `video`, which
  * must be a file under the project's assets/. Replaces any filed matte for
  * the same base that overlaps its range. → the manifest entry.
  */
 export async function fileProjectMatte(project, video, result) {
   const root = path.resolve(project);
-  const base = path.relative(root, path.resolve(video)).split(path.sep).join("/");
-  if (base.startsWith("..") || !base.startsWith("assets/")) throw new Error(`--project needs the video inside ${root}/assets (the story's base.src); got ${video}`);
+  const base = projectAsset(root, video);
   const name = rangeDirName(result.info.range);
   const src = `assets/subject/${name}.webm`;
   const info = `assets/subject/${name}.json`;

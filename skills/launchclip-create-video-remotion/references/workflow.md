@@ -363,6 +363,8 @@ before writing the storyboard:
   --json` and record `usable` (with `reasons` when false), `framing` and
   `headroom` in `SOURCE.md`. Plan subject effects only when it is usable, and
   skip the ones that need headroom on a close-up (see `subject-effects.md`).
+  Run `launchclip subject track <video> --project .` too, so placement and
+  layout-check know where the face is through the whole take.
   When the `launchclip` CLI is not installed, there are no subject effects;
   carry on with the rest of the library.
 - Record the measured cut rate, hold pattern, first meaningful motion, and the

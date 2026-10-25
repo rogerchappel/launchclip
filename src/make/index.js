@@ -28,8 +28,8 @@ import { needsResize, targetWords, writeScript } from "./script.js";
 import { runHeadlessCritic } from "./critic.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
-import { fileProjectMatte } from "../subject/project.js";
-import { describeSource, runSubjectMatte, runSubjectProbe } from "../subject/stage.js";
+import { fileProjectMatte, fileProjectTrack } from "../subject/project.js";
+import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
@@ -306,12 +306,31 @@ async function probeFootageSubject(ctx) {
     const summary = { usable: result.usable, reasons: result.reasons, framing: result.framing, headroom: result.headroom, head: result.head, people: result.people };
     report.subject = { status: result.usable ? "usable" : "unusable", ...summary, cached: Boolean(cached), mattes: [] };
     if (!result.usable) report.notices.push(`subject: no subject effects (${result.reasons.join("; ")})`);
+    if (result.people !== "none") await trackFootageSubject(ctx, src);
     return { src: ctx.base.src, probe: summary };
   } catch (error) {
     const reason = String(error?.message ?? error).split("\n")[0];
     report.subject = { status: "unavailable", reason };
     report.warnings.push(`presenter probe skipped (${reason}); planning without subject effects. Run launchclip doctor`);
     return null;
+  }
+}
+
+// The whole-video head track (docs/VIDEO_QUALITY_RFC.md §7.2), filed as
+// assets/subject/track.json so placement and layout-check's face rule know
+// where the head is outside the matted ranges. Cached like the probe; a
+// failure only costs the track.
+async function trackFootageSubject(ctx, src) {
+  const { project, report, adapters } = ctx;
+  try {
+    const track = adapters.subject?.track ?? runSubjectTrack;
+    const { track: result, cached } = await track(src, { cacheDir: path.join(project, ".launchclip", "subject"), log: ctx.say });
+    const filed = await fileProjectTrack(project, src, result);
+    report.subject.track = { src: filed.src, frames: result.frames.length, fps: result.fps, cached: Boolean(cached) };
+  } catch (error) {
+    const reason = String(error?.message ?? error).split("\n")[0];
+    report.subject.track = { status: "unavailable", reason };
+    report.warnings.push(`presenter track skipped (${reason}); the face rule only sees the matted ranges`);
   }
 }
 

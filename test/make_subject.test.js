@@ -60,6 +60,11 @@ function subjectAdapters({ usable = true, calls }) {
       calls.push({ probe: file });
       return { probe: { usable, reasons: usable ? [] : ["more than one person is in frame"], framing: "medium", headroom: 0.22, head, people: usable ? "one" : "several" }, cached: false };
     },
+    track: async (file) => {
+      calls.push({ track: file });
+      const frames = [0, 0.1, 0.2].map((t) => ({ t, coverage: 0.3, people: "one", head, body: { x: 0.5, y: 0.65, w: 0.6, h: 0.7 } }));
+      return { track: { schema: "launchclip.subject-track.v1", source: { sha256: "a".repeat(64), width: 1080, height: 1920, fps: 30, duration: 6.6 }, model: "mediapipe-selfie", fps: 10, people: "one", framing: "medium", usable: true, reasons: [], head, body: frames[0].body, headroom: 0.225, coverage: 0.3, stability: 1, frames }, cached: false };
+    },
     matte: async (_file, range, options) => {
       calls.push({ matte: range });
       const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-fake-matte-"));
@@ -93,6 +98,10 @@ test("make probes the presenter, plans with it and mattes the masthead's range",
   const { resolved } = await readProjectStory(out);
   assert.equal(resolved.base.subject.mattes[0].src, "assets/subject/0.000-3.200.webm");
   assert.equal(resolved.base.subject.mattes[0].summary.framing, "medium");
+  // The whole-video track runs after the probe and is filed for the base.
+  assert.equal(calls.filter((call) => call.track).length, 1);
+  assert.deepEqual(report.subject.track, { src: "assets/subject/track.json", frames: 3, fps: 10, cached: false });
+  assert.equal(resolved.resolved.subjectTrack.frames.length, 3);
 });
 
 test("an unusable probe plans without subject modules and mattes nothing", async (t) => {

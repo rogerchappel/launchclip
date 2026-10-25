@@ -2,7 +2,10 @@
 // pure mask analysis both are built from. Plain ESM, no imports.
 //
 // The probe (launchclip.subject-probe.v1) samples about one frame per second
-// so the planner knows the framing before it plans. A range
+// so the planner knows the framing before it plans. The track
+// (launchclip.subject-track.v1) is the same analysis at TRACK_FPS over the
+// whole recording, so placement and the face rule know where the head is
+// outside the matted ranges (docs/VIDEO_QUALITY_RFC.md §7.2). A range
 // (launchclip.subject.v1) describes every frame of one matted source range.
 // Boxes are {x, y, w, h} in canvas fractions with (x, y) the box centre; times
 // are source seconds, so a base trim maps onto them exactly as it maps onto
@@ -13,6 +16,9 @@
 export const SUBJECT_PROBE_SCHEMA = "launchclip.subject-probe.v1";
 export const SUBJECT_SCHEMA = "launchclip.subject.v1";
 export const CONTOURS_SCHEMA = "launchclip.subject-contours.v1";
+export const TRACK_SCHEMA = "launchclip.subject-track.v1";
+// The track samples this many frames a second.
+export const TRACK_FPS = 10;
 
 export const PEOPLE = Object.freeze(["none", "one", "several"]);
 export const FRAMINGS = Object.freeze(["close-up", "medium", "wide"]);
@@ -199,6 +205,57 @@ export function validateSubjectProbe(probe) {
   if (!Array.isArray(probe.samples)) errors.push("samples must be a list");
   else probe.samples.forEach((sample, index) => sampleErrors(sample, `samples[${index}]`, errors));
   return { ok: errors.length === 0, errors };
+}
+
+/** → {ok, errors: string[]} for a track file (track.json). */
+export function validateSubjectTrack(track) {
+  const errors = [];
+  if (!isObject(track)) return { ok: false, errors: ["track must be an object"] };
+  if (track.schema !== TRACK_SCHEMA) errors.push(`schema must be "${TRACK_SCHEMA}"`);
+  sourceErrors(track.source, "source", errors);
+  if (!nonEmpty(track.model)) errors.push("model must be a model id");
+  if (!finite(track.fps) || track.fps <= 0) errors.push("fps must be a positive number");
+  if (track.base !== undefined && !nonEmpty(track.base)) errors.push("base must be the recording's project path");
+  summaryErrors(track, "", errors);
+  if (!Array.isArray(track.frames)) errors.push("frames must be a list");
+  else {
+    let previous = -Infinity;
+    track.frames.forEach((frame, index) => {
+      sampleErrors(frame, `frames[${index}]`, errors);
+      if (finite(frame?.t) && frame.t <= previous) errors.push(`frames[${index}].t must increase`);
+      if (finite(frame?.t)) previous = frame.t;
+    });
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Where the presenter sits over a set of track (or range) frames: the extent
+ * of their boxes, each edge at the 10th or 90th percentile so one stray
+ * frame does not widen it. A placement clear of this extent stays clear of
+ * the head almost all the time. frames: [{head, body}] (null boxes skipped).
+ * → {head, body, framing, headroom} fractions, or null with no person.
+ */
+export function boxExtent(frames) {
+  const heads = (frames ?? []).map((frame) => frame?.head).filter(Boolean);
+  if (!heads.length) return null;
+  const head = spanBox(heads);
+  const body = spanBox((frames ?? []).map((frame) => frame?.body).filter(Boolean));
+  const framing = classifyFraming(medianBox(heads));
+  return { head, body, framing, headroom: round(Math.max(0, head.y - head.h / 2)) };
+}
+
+function spanBox(boxes) {
+  if (!boxes.length) return null;
+  const pick = (values, q) => {
+    const list = [...values].sort((a, b) => a - b);
+    return list[Math.min(list.length - 1, Math.max(0, Math.round((list.length - 1) * q)))];
+  };
+  const left = pick(boxes.map((b) => b.x - b.w / 2), 0.1);
+  const right = pick(boxes.map((b) => b.x + b.w / 2), 0.9);
+  const top = pick(boxes.map((b) => b.y - b.h / 2), 0.1);
+  const bottom = pick(boxes.map((b) => b.y + b.h / 2), 0.9);
+  return box(Math.max(0, left), Math.max(0, top), Math.min(1, right), Math.min(1, bottom));
 }
 
 /** → {ok, errors: string[]} for a range file (subject.json). */

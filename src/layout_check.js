@@ -1,5 +1,5 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
-import { readStorySubject } from "./subject/project.js";
+import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { catalogModules, rectFitHint, resolveModule, subjectDensityFindings } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
@@ -39,7 +39,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   // options.beats: a grid the caller already holds (finish, before BEATS.json is written).
   const beats = options.beats ?? await readOptionalJson(path.join(project, "BEATS.json"));
-  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story), subject: await readStorySubject(project, story) });
+  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story), subject: await readStorySubject(project, story), track: await readStoryTrack(project, story) });
   const catalogue = catalogModules();
 
   const profile = options.profile == null ? null : String(options.profile);
@@ -227,16 +227,19 @@ export function cameraSweepFindings(resolved, elements, words = [], band = null)
 }
 
 // The presenter on the canvas for the subject rules: each matte's
-// subject.json (base.subject.mattes[].info), mapped through the base's trims,
-// fit and focus, then moved by the subject's camera: the base cameras
-// (punch-ins, pans, framed windows), or a module's own subjectCamera while it
-// runs. → {at(t) → {head, body} | null, models: Map(scene id → model)}, or
-// null without mattes. Ranges without info are skipped with a warning.
+// subject.json (base.subject.mattes[].info), and the whole-video track
+// (resolved.subjectTrack) where no matte covers the time, mapped through the
+// base's trims, fit and focus, then moved by the subject's camera: the base
+// cameras (punch-ins, pans, framed windows), or a module's own subjectCamera
+// while it runs. → {at(t) → {head, body} | null, models: Map(scene id →
+// model)}, or null without mattes or a track. Ranges without info are
+// skipped with a warning.
 async function subjectView(projectDir, resolved, warnings = []) {
   const base = storyBase(resolved);
-  if (!base || base.subject.mode !== "mattes") return null;
+  const tracked = Boolean(resolved.resolved?.subjectTrack) && base?.subject.mode !== "off";
+  if (!base || (base.subject.mode !== "mattes" && !tracked)) return null;
   const infos = [];
-  for (const matte of base.subject.mattes) {
+  for (const matte of base.subject.mode === "mattes" ? base.subject.mattes : []) {
     if (!matte.info) {
       warnings.push(`${matte.src} has no info (its subject.json); the subject checks skip its range`);
       infos.push(null);
@@ -262,8 +265,8 @@ async function subjectView(projectDir, resolved, warnings = []) {
   return { at, models };
 }
 
-// The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes,
-// a front-layer element may not cover the presenter's head for more than
+// The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes
+// or a whole-video track, a front-layer element may not cover the presenter's head for more than
 // 0.3 s. Behind-layer scenes, captions, decor (punch-in) and modules that set
 // model.framesFace are exempt.
 export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {

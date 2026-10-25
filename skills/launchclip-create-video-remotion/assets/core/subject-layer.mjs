@@ -28,7 +28,7 @@
 import { CAMERA_IDENTITY, cameraSampleProps } from "./catalog-c.mjs";
 import { frameState, sampleTime } from "./catalog-b-view.mjs";
 import { storyBase } from "./story.mjs";
-import { subjectAt, subjectCoverShare } from "./subject.mjs";
+import { boxExtent, subjectAt, subjectCoverShare } from "./subject.mjs";
 
 export { subjectCoverShare };
 
@@ -219,34 +219,72 @@ export function subjectModelErrors(model) {
 /**
  * What a module knows about the presenter at timeline t (resolveModule's
  * ctx.subject), or null when the story has no base or the subject is off.
- * → {available, framing, head, body, headroom, plate, placement}
+ * → {available, framing, head, body, headroom, plate, placement, source}
  *   available  a matte covers t (the subject layer can be mounted)
- *   head, body canvas rects (px) from the covering matte's summary, else null
+ *   head, body canvas rects (px): the covering matte's summary, else where
+ *              the whole-video track (resolved.subjectTrack) puts the
+ *              presenter over [t, end]: the extent of each frame's boxes,
+ *              so a placement clear of it stays clear of the head; else null
  *   plate      {src, fit, focus}: the range's room plate, drawn like the base
- *   placement  "measured" with a summary head, else "default"
+ *   placement  "measured" with a measured head (matte or track), else "default"
+ *   source     "matte", "track" or null: where head and body came from
  *   outlineAt  (t) => the traced silhouette at timeline t: canvas points
  *              [[x, y] px | null] (null where it meets the frame edge), or
  *              null without an outline. It ignores camera moves.
+ * options.end: the end of the window the module runs over (default t).
  */
-export function subjectContext(story, t) {
+export function subjectContext(story, t, { end = t } = {}) {
   const base = storyBase(story);
   if (!base || base.subject.mode === "off") return null;
   const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
   const source = sourceTimeAt(base, t);
   const matte = source === null ? null : base.subject.mattes.find((entry) => source >= entry.in - EPS && source <= entry.out + EPS) ?? null;
   const summary = matte?.summary;
-  const toCanvas = (box) => (box && summary?.source ? sourceBoxToCanvas(box, base, summary.source, canvas) : null);
-  const head = toCanvas(summary?.head);
+  const fromMatte = summary?.source ? { size: summary.source, ...summary, from: "matte" } : null;
+  const track = fromMatte?.head ? null : trackExtent(story, base, t, end);
+  const measured = track ? { ...track, from: "track" } : fromMatte;
+  const toCanvas = (box) => (box && measured ? sourceBoxToCanvas(box, base, measured.size, canvas) : null);
+  const head = toCanvas(measured?.head);
   return {
     available: Boolean(matte),
-    framing: summary?.framing ?? null,
+    framing: measured?.framing ?? null,
     head,
-    body: toCanvas(summary?.body),
-    headroom: summary?.headroom ?? null,
+    body: toCanvas(measured?.body),
+    headroom: measured?.headroom ?? null,
     plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus } } : null,
     placement: head ? "measured" : "default",
+    source: head ? measured.from : null,
     outlineAt: (at) => subjectOutlineAt(story, at)
   };
+}
+
+/**
+ * The track frame shown at timeline t: {head, body} source fractions, or
+ * null between segments, without a track, or with no frame within one track
+ * step of the source time.
+ */
+export function trackFrameAt(story, t, base = storyBase(story)) {
+  const track = story?.resolved?.subjectTrack;
+  if (!base || !Array.isArray(track?.frames) || !track.frames.length) return null;
+  const source = sourceTimeAt(base, t);
+  if (source === null) return null;
+  const frame = subjectAt(track, source);
+  return frame && Math.abs(frame.t - source) <= 1 / Number(track.fps || 10) + EPS ? frame : null;
+}
+
+// The presenter's extent over timeline [from, to] from the track, sampled at
+// the track's rate: {size, head, body, framing, headroom} or null.
+function trackExtent(story, base, from, to) {
+  const track = story?.resolved?.subjectTrack;
+  if (!track?.source) return null;
+  const step = 1 / Number(track.fps || 10);
+  const frames = [];
+  for (let at = from; at <= Math.max(from, to) + EPS; at += step) {
+    const frame = trackFrameAt(story, Math.min(at, Math.max(from, to - EPS)), base);
+    if (frame) frames.push(frame);
+  }
+  const extent = boxExtent(frames);
+  return extent ? { size: track.source, ...extent } : null;
 }
 
 /** The covering matte's nearest outline frame at timeline t, on the canvas. */
@@ -304,19 +342,23 @@ export function headLocator(story, infos) {
 
 /**
  * → (t) => {head, body} canvas rects (either may be null) at timeline t, or
- * null where no matte covers it. Same mapping as headLocator.
+ * null where neither a matte nor the whole-video track
+ * (resolved.subjectTrack) covers it. Same mapping as headLocator: a
+ * matte's own frames win, the track fills the rest.
  */
 export function subjectLocator(story, infos) {
   const base = storyBase(story);
   if (!base) return () => null;
   const canvas = { width: Number(story.format.width), height: Number(story.format.height) };
+  const track = base.subject.mode === "off" ? null : story?.resolved?.subjectTrack ?? null;
   return (t) => {
     const source = sourceTimeAt(base, t);
     if (source === null) return null;
     const info = (infos ?? []).find((entry) => entry && source >= entry.range.in - EPS && source <= entry.range.out + EPS);
-    const frame = info ? subjectAt(info, source) : null;
+    const frame = info ? subjectAt(info, source) : track ? trackFrameAt(story, t, base) : null;
     if (!frame) return null;
-    const map = (box) => (box ? sourceBoxToCanvas(box, base, info.source, canvas) : null);
+    const size = info ? info.source : track.source;
+    const map = (box) => (box ? sourceBoxToCanvas(box, base, size, canvas) : null);
     return { head: map(frame.head), body: map(frame.body) };
   };
 }

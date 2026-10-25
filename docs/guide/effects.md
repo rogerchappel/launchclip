@@ -74,4 +74,4 @@ It finds the words "meet" and "every" in your clip (transcribed locally), cuts y
 launchclip subject probe my-recording.mp4
 ```
 
-It tells you whether you can be cut out and how you're framed. To cut out one stretch and look at it, run `launchclip subject matte my-recording.mp4 --range 4-10`.
+It tells you whether you can be cut out and how you're framed. `launchclip subject track my-recording.mp4` follows your head through the whole recording, so graphics keep off your face. To cut out one stretch and look at it, run `launchclip subject matte my-recording.mp4 --range 4-10`.

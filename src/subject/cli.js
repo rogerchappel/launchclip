@@ -1,11 +1,11 @@
-// launchclip subject setup | probe <media> | matte <media> --range <in>-<out>
+// launchclip subject setup | probe <media> | track <media> | matte <media> --range <in>-<out>
 
 import path from "node:path";
 import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, ensurePipeline, subjectModel, subjectPipeline } from "./models.js";
-import { fileProjectMatte } from "./project.js";
-import { parseRange, runSubjectMatte, runSubjectProbe } from "./stage.js";
+import { fileProjectMatte, fileProjectTrack } from "./project.js";
+import { parseRange, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "./stage.js";
 
-export const SUBJECT_ACTIONS = Object.freeze(["setup", "probe", "matte"]);
+export const SUBJECT_ACTIONS = Object.freeze(["setup", "probe", "track", "matte"]);
 
 export function parseSubjectInvocation(action, rest) {
   if (!action) throw new Error(`Missing subject action; use ${SUBJECT_ACTIONS.join(", ")}`);
@@ -18,7 +18,7 @@ export function parseSubjectInvocation(action, rest) {
 
 /** → a JSON-ready report; `log` gets progress lines (stderr). */
 export async function runSubjectCommand(action, media, flags = {}, { log = () => {}, fetchImpl } = {}) {
-  const model = String(flags.model ?? (action === "probe" ? DEFAULT_PROBE_MODEL : DEFAULT_SUBJECT_MODEL));
+  const model = String(flags.model ?? (action === "probe" || action === "track" ? DEFAULT_PROBE_MODEL : DEFAULT_SUBJECT_MODEL));
   const pipeline = subjectPipeline(model);
   const common = {
     model,
@@ -41,6 +41,13 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
     const { samples, ...summary } = probe;
     return { stage: "subject", action, media: src, path: file, cached, samples: samples.length, ...summary };
   }
+  if (action === "track") {
+    let seen = 0;
+    const { track, path: file, cached } = await runSubjectTrack(src, { ...common, onFrame: (count) => { if (count - seen >= 100) { seen = count; log(`tracked ${count} frames`); } } });
+    const filed = flags.project ? await fileProjectTrack(String(flags.project), src, track) : null;
+    const { frames, ...summary } = track;
+    return { stage: "subject", action, media: src, path: file, cached, frames: frames.length, ...(filed ? { filed } : {}), ...summary };
+  }
   const range = parseRange(flags.range);
   let last = 0;
   const { info, dir, matte, plate, contours, subject, cached, seconds } = await runSubjectMatte(src, range, {
@@ -60,13 +67,14 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
 export function formatSubjectReport(report) {
   if (report.action === "setup") return `${report.model} is installed:\n${report.models.map((model) => `  ${model.id} (${model.licence}) ${model.path}`).join("\n")}\n`;
   const lines = [];
-  const where = report.action === "probe" ? report.path : report.subject;
-  lines.push(`${report.action === "probe" ? "Probe" : "Matte"} ${report.cached ? "(cached) " : ""}for ${report.media}`);
+  const where = report.action === "matte" ? report.subject : report.path;
+  lines.push(`${{ probe: "Probe", track: "Track", matte: "Matte" }[report.action]} ${report.cached ? "(cached) " : ""}for ${report.media}`);
   lines.push(`  people: ${report.people}   framing: ${report.framing ?? "—"}   coverage: ${pct(report.coverage)}   stability: ${report.stability}`);
   if (report.head) lines.push(`  head: x ${report.head.x}, y ${report.head.y}, ${report.head.w}×${report.head.h}   headroom: ${pct(report.headroom)}`);
   lines.push(report.usable ? "  usable: yes" : `  usable: no — ${report.reasons.join("; ")}`);
   if (report.action === "matte") lines.push(`  ${report.frames} frames${report.cached ? "" : ` in ${report.seconds} s`} → ${report.matte}`);
-  if (report.filed) lines.push(`  filed for ${report.filed.base} as ${report.filed.src} (base.subject "auto" picks it up)`);
+  if (report.action === "track") lines.push(`  ${report.frames} frames at ${report.fps} fps`);
+  if (report.filed) lines.push(`  filed for ${report.filed.base} as ${report.filed.src} (${report.action === "track" ? "placement and layout-check read it outside the mattes" : 'base.subject "auto" picks it up'})`);
   lines.push(`  ${where}`);
   return `${lines.join("\n")}\n`;
 }

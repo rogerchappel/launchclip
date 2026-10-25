@@ -1042,12 +1042,43 @@ frames mid-typing to SSIM ≥ 0.97.
 
 ### What modules know (`subjectContext`)
 
-`resolveModule` passes `ctx.subject = subjectContext(story, scene.start)`:
-`{available, framing, head, body, headroom, plate, placement}`. `head` and
+`resolveModule` passes `ctx.subject = subjectContext(story, scene.start, {end: scene.end})`:
+`{available, framing, head, body, headroom, plate, placement, source}`. `head` and
 `body` are canvas rects mapped from the covering matte's `summary` (filled by
 `resolveStory(story, {subject})` from each matte's `info`; the loader's
-`readStorySubject` reads them); `plate` is `{src, fit, focus}`; `placement` is
-`"measured"` with a summary head, else `"default"`.
+`readStorySubject` reads them). Where no matte with a head covers the scene's
+start, they come from the whole-video track over the scene's window (below);
+`source` says which (`"matte"`, `"track"` or null). `available` stays true
+only under a matte. `plate` is `{src, fit, focus}`; `placement` is
+`"measured"` with a measured head (matte or track), else `"default"`.
+
+### Whole-video track (`launchclip subject track`)
+
+The probe samples about a frame a second; mattes exist only where an effect
+needs depth. The track measures the presenter's head and body on every frame
+at `TRACK_FPS` (10) over the whole recording, with the probe's model
+(mediapipe-selfie) and the probe's measurements (`maskStats`).
+
+- `runSubjectTrack(src, options)` (`src/subject/stage.js`) writes
+  `launchclip.subject-track.v1` (`validateSubjectTrack`): `{schema, source,
+  model, fps, base?, …summary, frames: [{t, coverage, people, head, body}]}`,
+  cached as `<cache>/<sha256-12>-<model>/track.json` beside `probe.json`.
+- `launchclip subject track <video> --project <dir>` files it as
+  `assets/subject/track.json` with `base` set to the video's project path.
+  `launchclip make` runs it after the probe for footage-led stories (one
+  person or more in frame); a failure is a warning and costs only the track.
+- `readStoryTrack(project, story)` (`src/subject/project.js`) returns
+  `{source: {width, height}, fps, frames: [{t, head, body}]}` when the file
+  was filed for the story's base, else null (also for `base.subject: "off"`).
+  Every story reader passes it to `resolveStory(story, {track})`, which keeps
+  it as `resolved.subjectTrack`.
+- `subjectContext` takes the presenter's extent over the scene window from
+  it (`boxExtent`: each box edge at the 10th or 90th percentile over the
+  window's frames), so footage placement (the checklist, `headRect`) keeps
+  clear of the head however they move. `trackFrameAt(story, t)` is the frame
+  shown at t (within one track step), through the base's trims.
+- `subjectLocator` (so `headLocator`, the face rule and behind-text) uses a
+  matte's own frames where one covers t and the track everywhere else.
 
 ### Room plate
 
@@ -1147,8 +1178,10 @@ text behind the head. Bottom to top:
 
 ### Face rule (`checkSubjectFace`, `src/layout_check.js`)
 
-With `{mattes}` that carry `info`, `headLocator(story, infos)` maps each
-frame's head box through the base's trims, fit and focus onto the canvas. A
+With `{mattes}` that carry `info`, or a whole-video track,
+`headLocator(story, infos)` maps each frame's head box through the base's
+trims, fit and focus onto the canvas (the matte's frames where one covers t,
+the track's elsewhere). A
 front-layer element covering at least 25% of the head for more than 0.3 s is
 a `subject-face` error. Behind scenes, captions, decor (punch-in) and
 `framesFace` modules are exempt.
