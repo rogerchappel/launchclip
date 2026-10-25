@@ -414,6 +414,15 @@ export function driftPlan({ rect, level, start, end, canvas, bounds = null, minT
   };
 }
 
+// The safe zone narrowed to the frame's safe area, when the rect sits inside it.
+function withinFrame(zone, frame, rect) {
+  if (!validRect(frame) || !zone) return zone;
+  const inside = rect.x >= frame.x - EPS && rect.y >= frame.y - EPS && rect.x + rect.width <= frame.x + frame.width + EPS && rect.y + rect.height <= frame.y + frame.height + EPS;
+  if (!inside) return zone;
+  const x = Math.max(zone.x, frame.x), y = Math.max(zone.y, frame.y);
+  return { x, y, width: Math.min(zone.x + zone.width, frame.x + frame.width) - x, height: Math.min(zone.y + zone.height, frame.y + frame.height) - y };
+}
+
 /**
  * Drift for a scene and its resolved model, or null. window = {start, end}
  * (the scene's render window, kit/core/transitions.mjs sceneWindows);
@@ -428,7 +437,11 @@ export function sceneDrift(story, scene, model, { window, geometry } = {}) {
   const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
   const role = model.layout?.role ?? 'text';
   const keyed = role === 'text' || role === 'hero';
-  const bounds = geometry ? (keyed ? driftBounds(rect, { safeZone: geometry.safeZone, captionBand: geometry.captionBand, captions }) : null) : null;
+  // A module placed inside the brand frame's safe area (model.frame.safe,
+  // kit/core/brand-frame.mjs) drifts inside it too, so it never edges into
+  // the kicker or a section label.
+  const safeZone = geometry && keyed ? withinFrame(geometry.safeZone, model.frame?.safe, rect) : null;
+  const bounds = geometry ? (keyed ? driftBounds(rect, { safeZone, captionBand: geometry.captionBand, captions }) : null) : null;
   const start = Number(window?.start ?? scene.start), end = Number(window?.end ?? scene.end);
   return driftPlan({ rect, level: sceneAmbient(story, scene).level, start, end, canvas, bounds, minTextPx: Number.isFinite(model.minTextPx) ? model.minTextPx : null, minTextLimit: (model.textRole === 'body' ? geometry?.minBodyTextPx ?? geometry?.minTextPx : geometry?.minTextPx) ?? null });
 }

@@ -202,3 +202,18 @@ test("a world camera drives the field container at a parallax depth", async () =
   assert.deepEqual(parallaxState(null), { x: 0, y: 0, scale: 1 });
   assert.deepEqual(parallaxStyle({ x: 10, y: 0, scale: 1 }), { transformOrigin: "50% 50%", transform: "translate(3px, 0px) scale(1)" });
 });
+
+test("sceneDrift keeps a rect inside the brand frame's safe area when it starts there", () => {
+  const s = story();
+  // A card flush with the bottom of a top kicker band: the frame's safe area starts at its top edge.
+  const z = geometry.safeZone;
+  const rect = { x: z.x + 20, y: z.y + 80, width: z.width - 40, height: z.height - 100 };
+  const frame = { safe: { x: z.x, y: rect.y, width: z.width, height: z.height - 80 } };
+  const plain = sceneDrift(s, s.scenes[0], { layout: { rect, role: "text" }, minTextPx: 60 }, { window: { start: 0, end: 4 }, geometry });
+  assert.ok(driftExtent(rect, plain).y < frame.safe.y, "without the frame it drifts up past the edge");
+  const framed = sceneDrift(s, s.scenes[0], { layout: { rect, role: "text" }, minTextPx: 60, frame }, { window: { start: 0, end: 4 }, geometry });
+  assert.ok(inside(frame.safe, driftExtent(rect, framed)), "with it, the drift stays inside the frame's safe area");
+  // A rect already outside the frame's safe area keeps the profile clamp.
+  const outside = sceneDrift(s, s.scenes[0], { layout: { rect: { ...rect, y: rect.y - 40 }, role: "text" }, minTextPx: 60, frame }, { window: { start: 0, end: 4 }, geometry });
+  assert.deepEqual(outside, sceneDrift(s, s.scenes[0], { layout: { rect: { ...rect, y: rect.y - 40 }, role: "text" }, minTextPx: 60 }, { window: { start: 0, end: 4 }, geometry }));
+});
