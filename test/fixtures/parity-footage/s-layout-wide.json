@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/layouts-wide",
+  "mode": "story",
+  "times": [1.0, 2.1, 2.2333333, 3.5, 5.1666667, 5.4, 6.5, 7.6333333, 9.0],
+  "threshold": { "ssim": 0.97 }
+}

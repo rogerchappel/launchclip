@@ -46,6 +46,9 @@ import { profileGeometry } from "../core/layout-check.mjs";
 import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectFilterAt, subjectSegments, subjectWindows } from "../core/subject-layer.mjs";
 // @ts-ignore plain ESM from kit/core
 import { propsToStyle } from "../core/catalog-b-view.mjs";
+// @ts-ignore plain ESM from kit/core
+import { layoutPlan, withLayoutCameras } from "../core/footage-layout.mjs";
+import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
@@ -267,18 +270,28 @@ function subjectLayerStyle(ops: any[], styles: any[], t: number): React.CSSPrope
   return style;
 }
 
-/** Subject layer inputs for resolved layers: {needed, depth(layer), clips, ops, rooms}. */
-function subjectPlan(story: any, base: any, layers: any[]) {
-  const needed = Boolean(base) && layers.some((layer: any) => needsSubject(layer.entry.scene, layer.model));
+/**
+ * Subject layer inputs for resolved layers: {needed, depth(layer), clips, ops, rooms}.
+ * layout: the footage layout plan (kit/core/footage-layout.mjs), whose
+ * sections reframe the presenter and may treat the room.
+ */
+function subjectPlan(story: any, base: any, layers: any[], layout: any = null) {
+  const rooms = layout?.rooms ?? [];
+  const needed = Boolean(base) && (rooms.length > 0 || layers.some((layer: any) => needsSubject(layer.entry.scene, layer.model)));
   if (!needed) return { needed, depth: () => "front", clips: [], ops: [], rooms: [], styles: [] };
   const models = layers.map((layer: any) => layer.model);
-  const clips = subjectSegments(story, subjectWindows(layers.map((layer: any) => ({ scene: layer.entry.scene, model: layer.model, start: layer.entry.start, end: layer.entry.renderEnd }))));
+  const fps = Number(story.resolved?.fps ?? story.format?.fps ?? 30);
+  const cameraModels = withLayoutCameras(models, layout, { fps, duration: Number(story.resolved?.duration ?? story.format?.duration) });
+  const clips = subjectSegments(story, subjectWindows([
+    ...layers.map((layer: any) => ({ scene: layer.entry.scene, model: layer.model, start: layer.entry.start, end: layer.entry.renderEnd })),
+    ...rooms.map((room: any) => ({ scene: { id: room.sceneId }, model: room, start: room.start, end: room.end }))
+  ]));
   return {
     needed,
     depth: (layer: any) => sceneLayerOf(layer.entry.scene, layer.model).layer as string,
     clips,
-    ops: clips.length ? subjectCameraOps(models, { subjectFilterAt: (t: number) => subjectFilterAt(models, t) }) : [],
-    rooms: models.filter((model: any) => model?.room),
+    ops: clips.length ? subjectCameraOps(cameraModels, { subjectFilterAt: (t: number) => subjectFilterAt(models, t) }) : [],
+    rooms: [...models.filter((model: any) => model?.room), ...rooms],
     styles: models.filter((model: any) => model?.subjectStyle)
   };
 }
@@ -302,10 +315,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     ...layers.filter((layer: any) => layer.model?.hidesCaptions).map((layer: any) => [layer.entry.start, layer.entry.renderEnd] as [number, number])
   ];
   const base = React.useMemo(() => storyBase(story), [story]);
+  // Footage layouts: the sections' frame and the reframing base camera.
+  const layout = React.useMemo(() => (base ? layoutPlan(story) : null), [story, base]);
   const cameraOps = React.useMemo(() => {
     const models = layers.map((layer: any) => layer.model);
-    return baseCameraOps(models, { roomFilterAt: (t: number) => roomStateAt(models, t).filter });
-  }, [layers]);
+    const rooms = [...models, ...(layout?.rooms ?? [])];
+    const cameraModels = withLayoutCameras(models, layout, { fps, duration: Number(story.resolved?.duration ?? story.format?.duration) });
+    return baseCameraOps(cameraModels, { roomFilterAt: (t: number) => roomStateAt(rooms, t).filter });
+  }, [layers, layout, fps, story]);
   // Footage-led: the recording carries the voice; audio.mix is the bed.
   const audio = base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;
@@ -317,7 +334,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
-  const subject = React.useMemo(() => subjectPlan(story, base, layers), [story, base, layers]);
+  const subject = React.useMemo(() => subjectPlan(story, base, layers, layout), [story, base, layers, layout]);
   if (plan) {
     const world = plan.mode === "world";
     // World mode: one ambient field, in the camera's parallax depth layer.
@@ -363,6 +380,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} styles={subject.styles} /> : null}
+      {layout ? <LayoutFrame plan={layout} /> : null}
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>

@@ -72,6 +72,23 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 
+## Footage layouts (sections)
+
+A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section's scenes in its panel.
+
+| Layout | Presenter | Use it when the section… |
+| --- | --- | --- |
+| `full` | full frame, overlays only (no section needed) | the face carries the line: personal beats, the hook, the turn |
+| `split-left` | reframed onto the left side | a list, steps, a comparison or a product shot held beside them for a stretch |
+| `split-right` | reframed onto the right side | the same, mirrored; alternate sides between sections |
+| `framed` | inset in a rounded frame (`side` left/right in 16:9, top/bottom in 9:16) | proof, numbers or a quote that needs most of the canvas while they keep talking |
+| `stacked` | the bottom (or top, `side`) half, 9:16 only | a Short's explainer stretch: graphics on top, the presenter under them |
+| `insert` | hidden; the voice continues | a full-canvas visual over the voice (a demo, a chart), as an insert without cutting away from the section |
+
+- The panel is a brand colour (`panel`: bg (default), primary, accent, paper, ink or #rrggbb). `room`: "dim" or "replace" darkens or removes the recording behind the cut-out presenter (needs a matte over the section; `make` mattes it).
+- Changing layout is a `layout-shift` transition (0.5 s; `transition: {type: "layout-shift" | "cut", dur?}`). Hold a layout for a whole section (about 4 s or more); do not flip layouts line by line.
+- In a section with a panel, a checklist without `rect` fits the panel's safe area; give other modules a `rect` inside the panel, clear of the presenter's side.
+
 ## Phrase → module
 
 | The script… | Module |

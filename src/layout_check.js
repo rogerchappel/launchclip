@@ -13,6 +13,7 @@ import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "../kit/core/subject-layer.mjs";
+import { layoutPlan, layoutStateAt, withLayoutCameras } from "../kit/core/footage-layout.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -255,10 +256,14 @@ async function subjectView(projectDir, resolved, warnings = []) {
   for (const scene of resolved.scenes) {
     try { models.set(scene.id, resolveModule(scene, resolved)); } catch { /* reported as module-spec */ }
   }
-  const ops = subjectCameraOps([...models.values()]);
+  // Footage layout sections reframe the presenter (or hide them, insert).
+  const layout = layoutPlan(resolved);
+  const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+  const ops = subjectCameraOps(withLayoutCameras([...models.values()], layout, { fps, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) }));
   const located = subjectLocator(resolved, infos);
   const canvas = { width: Number(resolved.format?.width), height: Number(resolved.format?.height) };
   const at = (t) => {
+    if (layout && layoutStateAt(layout, t).hidden) return null;
     const boxes = located(t);
     const cam = boxes && ops.length ? subjectCameraAt(ops, t) : null;
     if (!boxes || !cam) return boxes;

@@ -39,6 +39,7 @@ import { EMITTERS as CATALOG_F_EMITTERS } from './hyperframes-catalog-f.mjs';
 import { EMITTERS as CATALOG_G_EMITTERS } from './hyperframes-catalog-g.mjs';
 import { cameraOverlaps } from './catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from './subject-layer.mjs';
+import { LAYOUT_FRAME, layoutFrameStyle, layoutPlan, withLayoutCameras } from './footage-layout.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -96,13 +97,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (base && sourceDir && !existsSync(path.join(sourceDir, base.src))) warnings.push(`base recording ${base.src} was not found in ${sourceDir}`);
   if (base && story.base?.edl && !story.base?.trim) warnings.push(`base.edl ${story.base.edl} was not resolved into base.trim (pass the edit plan to resolveStory as {edl}); the base plays untrimmed`);
 
+  // Footage layouts (kit/core/footage-layout.mjs): the story's sections, or
+  // null without any (a module review has none).
+  const layout = base && !isolate ? layoutPlan(story) : null;
+  if (layout) warnings.push(...layout.warnings);
+
   // Subject layer (kit/core/subject-layer.mjs): mounted only when a scene
-  // sits behind the cut-out presenter, moves it or treats the room, so other
-  // stories compile byte for byte as before.
-  const subjectNeeded = Boolean(base) && layers.some((entry) => {
+  // sits behind the cut-out presenter, moves it or treats the room (or a
+  // layout section treats the room), so other stories compile byte for byte
+  // as before.
+  const subjectNeeded = Boolean(base) && (Boolean(layout?.rooms.length) || layers.some((entry) => {
     try { return needsSubject(entry.scene, resolveModule(entry.scene, story, { end: entry.renderEnd })); }
     catch { return entry.scene.layer === 'behind' || entry.scene.layer === 'split'; }
-  });
+  }));
 
   // Tracks: 0 audio, 1 background, then (footage-led) 2 base video, 3 base
   // audio and (with a subject) 4 the subject mattes; each scene takes a pair
@@ -315,15 +322,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // Subject: the matte clips over the base, under every front scene, moved
     // with the base cameras unless a subjectCamera runs; room treatments
     // (hide, dim, blur) touch the base videos only.
+    // Layout sections reframe the presenter through the base camera (composed
+    // with any punch-in) and treat the room like a scene's room.
+    const cameraModels = withLayoutCameras(models, layout, { fps: format.fps, duration: D });
+    const roomModels = [...cameraModels, ...(layout?.rooms ?? [])];
     if (subjectNeeded) {
-      const entries = layers.map((entry, index) => ({ scene: entry.scene, model: models[index], start: entry.start, end: entry.renderEnd }));
+      const entries = [...layers.map((entry, index) => ({ scene: entry.scene, model: models[index], start: entry.start, end: entry.renderEnd })), ...(layout?.rooms ?? []).map((room) => ({ scene: { id: room.sceneId }, model: room, start: room.start, end: room.end }))];
       const clips = subjectSegments(story, subjectWindows(entries));
       if (!clips.length) warnings.push(`${entries.filter((entry) => needsSubject(entry.scene, entry.model)).map((entry) => entry.scene.id).join(', ')}: these scenes need the cut-out subject, but base.subject has no matte for their time (run: launchclip subject matte <recording> --range <in>-<out> --project <dir>)`);
       for (const clip of clips) {
         baseMarkup.push(`<video id="lc-subject-${clip.index}" class="clip lc-subject-media" src="${attr(clip.src)}" data-start="${num(clip.start)}" data-duration="${num(clip.duration)}" data-media-start="${num(clip.mediaStart)}" data-track-index="${SUBJECT_TRACK}" data-launchclip-subject-segment="${clip.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:${subjectZ}"></video>`);
         if (sourceDir && !existsSync(path.join(sourceDir, clip.src))) warnings.push(`subject matte ${clip.src} was not found in ${sourceDir}`);
       }
-      const subjectOps = subjectCameraOps(models, { subjectFilterAt: (t) => subjectFilterAt(models, t) });
+      const subjectOps = subjectCameraOps(cameraModels, { subjectFilterAt: (t) => subjectFilterAt(models, t) });
       if (clips.length && subjectOps.length) {
         motion.push('// subject camera (follows the base cameras; subjectCamera takes over while it runs)');
         motion.push(...opsToGsap(subjectOps).map((line) => line.replace(JSON.stringify(`#${SUBJECT_CAMERA}`), JSON.stringify('.lc-subject-media'))));
@@ -333,18 +344,30 @@ export async function compileStoryToHyperFrames(story, options = {}) {
         motion.push('// subject style (sticker outline, shadow)');
         motion.push(...styles.map((change) => `tl.set('.lc-subject-media', ${js({ filter: change.filter })}, ${num(change.time)});`));
       }
-      const room = roomChanges(models);
+      const room = roomChanges(roomModels);
       if (room.length) {
         motion.push('// room treatment (base videos only)');
         motion.push(...room.map((change) => `tl.set('.lc-base-media', ${js(change.state)}, ${num(change.time)});`));
       }
     }
-    const camera = cameraGsap(models, '.lc-base-media', { roomFilterAt: (t) => roomStateAt(models, t).filter });
+    const camera = cameraGsap(cameraModels, '.lc-base-media', { roomFilterAt: (t) => roomStateAt(roomModels, t).filter });
     if (camera.length) {
-      motion.push(`// base camera (${models.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
+      motion.push(`// base camera (${cameraModels.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
       motion.push(...camera);
     }
     for (const [a, b] of cameraOverlaps(models)) warnings.push(`${b}: its camera overlaps ${a}; the later punch-in wins while both run`);
+    // The layout frame: one box at the presenter's window whose box-shadow
+    // paints the panel, above the subject and under every front scene; its
+    // props change on the frames layoutOps lists. Each layout-shift is a
+    // declared boundary for evidence.
+    if (layout) {
+      const frameStyle = (state) => layoutFrameStyle(state, layout.canvas);
+      const first = frameStyle(layout.ops[0].state);
+      baseMarkup.push(`<div id="${LAYOUT_FRAME}" class="lc-layout-frame" aria-hidden="true" style="position:absolute;left:${first.left}px;top:${first.top}px;width:${first.width}px;height:${first.height}px;border-radius:${first.borderRadius}px;box-shadow:${first.boxShadow};pointer-events:none;z-index:${subjectNeeded ? subjectZ + 5 : 5}"></div>`);
+      for (const entry of layout.boundaries) baseMarkup.push(`<div class="lc-layout-boundary" aria-hidden="true" data-launchclip-transition-type="layout-shift"${boundaryAttrs(entry)} style="display:none"></div>`);
+      motion.push(`// footage layout (${layout.sections.map((section) => `${section.id} ${section.layout}`).join(', ')})`);
+      motion.push(...layout.ops.map((op) => `tl.set(${js(`#${LAYOUT_FRAME}`)}, ${js(frameStyle(op.state))}, ${num(op.time)});`));
+    }
   } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');
   if (!base && models.some((model) => model.room || model.subjectCamera)) warnings.push('a scene moves the subject or treats the room, but the story has no base recording; it has no effect');
 
