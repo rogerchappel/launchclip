@@ -28,7 +28,7 @@ const count = nodes => nodes.reduce((n, node) => n + 1 + (node.children ? count(
 const LIBRARY = {
   inside: ['office', 'home-desk', 'kitchen', 'living-room', 'classroom', 'cafe', 'workshop', 'server-room', 'studio', 'gym'],
   street: ['city-street', 'shopfronts', 'crossing', 'alley', 'rooftop', 'skyline'],
-  outside: ['park']
+  outside: ['park', 'beach', 'mountains', 'forest']
 };
 
 test('the library: the RFC worlds in their groups, three times each, 60+ props', () => {
