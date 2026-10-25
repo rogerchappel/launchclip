@@ -9,7 +9,7 @@ import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
-import { dialogueDocument, dialogueRequests, formatDialogueReport, synthesizeDialogue } from "./voice/dialogue.js";
+import { dialogueDocument, dialogueGaps, dialogueRequests, formatDialogueReport, synthesizeDialogue } from "./voice/dialogue.js";
 import { formatNarrationReport, narrationDocument, narrationRequest, narrationSentences, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { normalizeLoudness } from "./voice/supplied.js";
 
@@ -87,7 +87,7 @@ export async function runVoiceCommand(projectPath, options = {}, adapters = {}) 
 // narrator and any character without a voice of its own).
 async function voiceDialogue(story, { provider, voice, speed }, synthesis, { narrationFile, voiceFile }) {
   const entries = dialogueRequests(story, { provider, voice, speed });
-  const take = await synthesizeDialogue(entries, synthesis);
+  const take = await synthesizeDialogue(entries, { ...synthesis, gap: dialogueGaps(story) });
   await mkdir(path.dirname(narrationFile), { recursive: true });
   await writeFile(narrationFile, `${JSON.stringify(dialogueDocument(story, entries, take), null, 2)}\n`);
   const first = entries[0].request;

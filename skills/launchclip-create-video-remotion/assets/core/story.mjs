@@ -230,8 +230,12 @@ export function validateStory(story, { modules } = {}) {
           else narration.lines.forEach((line, i) => {
             if (!isObject(line) || !nonEmpty(line.text)) err(`audio.narration.lines[${i}] must be {speaker, text} with non-empty text`);
             else if (line.speaker !== undefined && !(typeof line.speaker === "string" && /^[a-z][a-z0-9-]{0,23}$/.test(line.speaker))) err(`audio.narration.lines[${i}].speaker must be a cast id or "narrator"`);
+            if (isObject(line) && line.gap !== undefined && !(typeof line.gap === "number" && line.gap >= 0 && line.gap <= 3)) err(`audio.narration.lines[${i}].gap must be a number of seconds between 0 and 3 (the pause after this line)`);
           });
         }
+        // The pause between dialogue lines, last word to first word (default 0.3 s).
+        if (narration.gap !== undefined && !(typeof narration.gap === "number" && narration.gap >= 0 && narration.gap <= 3)) err("audio.narration.gap must be a number of seconds between 0 and 3");
+        else if (narration.gap !== undefined && narration.lines === undefined) warn("audio.narration.gap only applies to dialogue (audio.narration.lines)");
         if (narration.lines !== undefined && narration.text === undefined) { /* dialogue only */ }
         else if (typeof narration.text !== "string" || !narration.text.trim()) err("audio.narration.text must be a non-empty string");
         else if (narration.text.length > 4000) err(`audio.narration.text must be at most 4000 characters; got ${narration.text.length}`);

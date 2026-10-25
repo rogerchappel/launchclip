@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { castGate, castList, castShow, castSheetHtml, castUsage, runCastCommand } from "../src/cast.js";
-import { dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice/dialogue.js";
+import { DIALOGUE_GAP, dialogueGaps, dialogueLayout, dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice/dialogue.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
 import { USAGE } from "../src/cli_usage.js";
@@ -85,6 +85,35 @@ test("dialogue: each line goes to its speaker's voice", () => {
   assert.equal(dialogueRequests(story, { provider: "test" })[2].request.voice, "bf_emma", "only Kokoro takes a character's Kokoro voice; others keep the narration voice");
 });
 
+test("dialogue gaps: audio.narration.gap, a line's own gap, and takes trimmed to their words", () => {
+  const story = example();
+  assert.equal(DIALOGUE_GAP, 0.3);
+  assert.deepEqual(dialogueGaps(story), [0.3, 0.3, 0.3, 0.3, 0.3]);
+  const lines = story.audio.narration.lines.map((line, i) => i === 1 ? { ...line, gap: 0.8 } : line);
+  assert.deepEqual(dialogueGaps({ ...story, audio: { narration: { ...story.audio.narration, gap: 0.2, lines } } }), [0.2, 0.8, 0.2, 0.2, 0.2]);
+  // Two takes with the engine's lead and trail silence (0.2 s and 0.25 s).
+  const take = (text, duration) => ({ take: { words: [{ text, start: 0.2, end: duration - 0.25 }], duration, cached: true }, speaker: "maya", request: { voice: "af_heart", text } });
+  const layout = dialogueLayout([take("One.", 1), take("Two.", 1.5)], [0.3]);
+  assert.deepEqual(layout.cuts, [{ start: 0.14, end: 0.81, pad: 0.18 }, { start: 0.14, end: 1.31, pad: 0 }]);
+  assert.deepEqual(layout.words.map((word) => [word.start, word.end]), [[0.06, 0.61], [0.91, 1.96]]);
+  assert.equal(layout.duration, 2.02);
+  // Sound past the last word's timed end (a final consonant) is kept.
+  const late = take("Rewind.", 1);
+  late.take.sound = { start: 0.2, end: 1 };
+  assert.deepEqual(dialogueLayout([late, take("Two.", 1.5)], [0.3]).cuts[0], { start: 0.14, end: 1, pad: 0.24 });
+  // A gap shorter than the kept edges shrinks them; zero abuts the words.
+  const tight = dialogueLayout([take("One.", 1), take("Two.", 1.5)], [0]);
+  assert.equal(tight.words[1].start, tight.words[0].end);
+  assert.ok(tight.cuts.every((cut) => cut.pad >= 0));
+});
+
+test("story validation checks the dialogue gap", () => {
+  const base = { schema: "launchclip.story.v1", lane: "voiceover-motion", format: { width: 1920, height: 1080, fps: 30, duration: 4 }, brand: example().brand, scenes: [{ id: "s1", module: "cast-scene", start: 0, end: 4, params: { set: "phone", cast: [{ id: "maya" }] } }] };
+  assert.deepEqual(validateStory({ ...base, audio: { narration: { gap: 0.25, lines: [{ speaker: "maya", text: "Hi.", gap: 1 }, { speaker: "maya", text: "Bye." }] } } }).errors, []);
+  const bad = validateStory({ ...base, audio: { narration: { gap: -1, lines: [{ speaker: "maya", text: "Hi.", gap: "long" }] } } });
+  assert.match(bad.errors.join("\n"), /lines\[0\]\.gap must be[\s\S]*audio\.narration\.gap must be/);
+});
+
 // Joining the lines into one take runs ffmpeg, which the CI test jobs lack.
 test("dialogue: the lines join into one take with each word's speaker", async (t) => {
   try { await execFileAsync("ffmpeg", ["-version"]); } catch { t.skip("ffmpeg is unavailable"); return; }
@@ -95,7 +124,14 @@ test("dialogue: the lines join into one take with each word's speaker", async (t
     const take = await synthesizeDialogue(dialogueRequests(story, { provider: "test" }).slice(2, 4), { outFile: path.join(dir, "voice.wav"), voiceProvider: () => provider });
     assert.ok(existsSync(path.join(dir, "voice.wav")));
     assert.deepEqual(take.lines.map((line) => line.speaker), ["maya", "theo"]);
-    assert.ok(take.lines[1].start >= take.lines[0].end + 0.29, "a pause between lines");
+    const mayaLast = take.words.filter((word) => word.speaker === "maya").at(-1);
+    const theoFirst = take.words.find((word) => word.speaker === "theo");
+    assert.ok(Math.abs(theoFirst.start - mayaLast.end - 0.3) < 0.002, "a 0.3 s pause from one line's last word to the next line's first");
+    assert.ok(take.lines[1].start >= take.lines[0].end);
+    const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path.join(dir, "voice.wav")]);
+    assert.ok(Math.abs(Number(stdout) - take.duration) < 0.02, "the joined file is as long as the timeline says");
+    const tight = await synthesizeDialogue(dialogueRequests(story, { provider: "test" }).slice(2, 4), { outFile: path.join(dir, "tight.wav"), voiceProvider: () => provider, gap: [0] });
+    assert.ok(tight.duration < take.duration - 0.25);
     assert.equal(take.words[0].speaker, "maya");
     assert.equal(take.words.at(-1).speaker, "theo");
     assert.ok(take.words.every((word, i) => i === 0 || word.start >= take.words[i - 1].start));

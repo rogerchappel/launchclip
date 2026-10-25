@@ -1706,8 +1706,11 @@ the story through `story.cast` (the style merge fills it).
 - `audio.narration.lines: [{speaker, text}]` (`src/voice/dialogue.js`): each
   line is synthesised in its speaker's cast voice (`story.cast.characters[].voice`,
   a local Kokoro voice id) or, for `"narrator"`, in `audio.narration.voice`;
-  the takes are joined with a 0.3 s pause and every word keeps its `speaker`
-  in NARRATION.json. A cast entry's `says: "auto"` resolves to that
+  each take is trimmed to its speech (its words, or its sound above -50 dB
+  when that runs longer; 0.06 s kept each side) and the takes are joined with
+  `audio.narration.gap` seconds (default 0.3, a line's own `gap` wins) from
+  the end of one line's speech to the start of the next; every word keeps
+  its `speaker` in NARRATION.json, with `lines` and `gaps`. A cast entry's `says: "auto"` resolves to that
   character's own words in the scene. `launchclip voice <project>` voices a
   dialogue story the same way (the same cached per-line takes `finish`
   uses), writes NARRATION.json with `lines` and each word's `speaker`, and
