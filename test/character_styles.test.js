@@ -79,3 +79,14 @@ test('light: a world\'s vector dir (light toward subject, y down) becomes degree
   assert.equal(normalizeLight({dir: {x: -1, y: 0}}).dir, 0, 'light from the right');
   assert.deepEqual(lightErrors({dir: {x: 0, y: 0}}).length, 1);
 });
+
+test('cast-styles: a sheet for every style builds from the same cast', async () => {
+  const {sheetCast, styleSheetHtml} = await import('../scripts/cast-styles.mjs');
+  const cast = sheetCast({seed: 'abc', set: 'family'});
+  assert.equal(cast.length, 8);
+  for (const style of DRAWING_STYLES) {
+    const html = styleSheetHtml(style, cast, {sets: ['phone', 'video-call']});
+    assert.match(html, new RegExp(`Drawing style: ${style}`));
+    assert.ok(!/undefined|NaN/.test(html), `${style} sheet draws cleanly`);
+  }
+});
