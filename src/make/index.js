@@ -20,6 +20,7 @@ import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { directionJson } from "../../kit/core/direction.mjs";
 import { profileForStory } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
+import { generateProjectStyle, projectSeedStyle, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
 import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
 import { MUSIC_FLAG_VALUES } from "../music/index.js";
@@ -67,7 +68,7 @@ export function slugify(prompt) {
 }
 
 /**
- * options: {assets, aspect, duration, style, model, voice, music, renderer,
+ * options: {assets, aspect, duration, style, seed, model, voice, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
  *   subject (false: no presenter probe or subject effects)}
@@ -87,6 +88,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
   const voiceProvider = String(options.voice ?? "kokoro").toLowerCase();
   if (!["kokoro", "elevenlabs", "test"].includes(voiceProvider)) throw new Error(`--voice must be kokoro or elevenlabs; got ${options.voice}`);
+  if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   const renderer = String(options.renderer ?? "remotion").toLowerCase();
   if (!RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
@@ -104,7 +106,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     prompt: text,
     project,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto" },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto" },
     model: null,
     routing: null,
     stages: {},
@@ -512,6 +514,7 @@ export function finalizeStory(storyboard, ctx) {
     if (!story.motion?.grammar && typeof story.grammar === "string") story.motion = { ...(story.motion ?? {}), grammar: story.grammar };
     delete story.grammar;
   }
+  if (ctx.generatedStyle) adoptStyleLook(story, ctx.generatedStyle);
   story.meta = { ...(story.meta ?? {}), made_by: "launchclip make", prompt: ctx.text };
   return story;
 }
@@ -659,7 +662,7 @@ async function loadStyle(ctx) {
   let request = options.style && options.style !== true ? String(options.style) : null;
   let fromAssets = false;
   if (!request && routing.style) { request = path.join(project, "assets", routing.style.path); fromAssets = true; }
-  if (!request) return null;
+  if (!request) return seededStyle(ctx);
   const looksLikePath = request.includes("/") || request.endsWith(".json") || request.startsWith(".");
   const loaded = await resolveStyleV2(looksLikePath ? path.resolve(ctx.options.cwd ?? process.cwd(), request) : request, { projectDir: project });
   // finish resolves the style by name, so a pack loaded by path is copied
@@ -672,6 +675,27 @@ async function loadStyle(ctx) {
   report.style = { name: loaded.name, source: fromAssets ? "assets" : loaded.source };
   report.warnings.push(...(loaded.warnings ?? []));
   return loaded;
+}
+
+// No style and no brand (no brand.json, no logo) and no --seed... or a --seed:
+// a seeded style (docs/SEEDED_STYLES_RFC.md §4). A project that already has
+// one reuses it, so reruns and edits keep the look; --seed picks a look.
+async function seededStyle(ctx) {
+  const { options, routing, project, report, state } = ctx;
+  const seed = options.seed == null ? null : String(options.seed);
+  if (seed == null && (routing.brand || routing.logos?.length)) return null;
+  let style = null;
+  if (seed == null) style = await projectSeedStyle(project, { name: state.style?.generated ?? null });
+  if (style) ctx.say(style.line);
+  else {
+    const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone: promptTone(ctx.text), clock: ctx.adapters.clock });
+    ctx.say(made.line);
+    style = { name: made.name, pack: made.pack, file: made.file, source: "generated", warnings: [], summary: made.summary };
+  }
+  state.style = { generated: style.name };
+  report.style = { name: style.name, source: "generated", seed: style.pack.generated.seed, summary: style.summary };
+  ctx.generatedStyle = style.pack;
+  return style;
 }
 
 async function loadBrand(ctx) {

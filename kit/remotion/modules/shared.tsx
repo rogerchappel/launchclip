@@ -13,7 +13,7 @@ import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core shared with HyperFrames
 import {tween} from '../../core/motion.mjs';
 // @ts-ignore plain ESM core shared with HyperFrames
-import {EDITORIAL_STYLE, EDITORIAL_SYMBOLS} from '../../core/editorial-core.mjs';
+import {EDITORIAL_STYLE, EDITORIAL_SYMBOLS, editorialVariantCss} from '../../core/editorial-core.mjs';
 
 export type Model = any;
 export type ModuleProps = {model: Model};
@@ -168,7 +168,7 @@ export const ModuleShell: React.FC<{model: Model; t: number; css?: string; child
   if (model.motion.supplied) style.transformOrigin = model.motion.transformOrigin;
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>
-      <style>{baseCss(model) + css + themeCss(model)}</style>
+      <style>{baseCss(model) + css + themeCss(model) + editorialVariantCss(model)}</style>
       <section id={model.id} style={style}><Density model={model}>{children}</Density></section>
     </AbsoluteFill>
   );

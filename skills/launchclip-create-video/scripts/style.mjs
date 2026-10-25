@@ -202,15 +202,21 @@ export function checkPackContrast(pack) {
 // Common families → the nearest bundled family by role and shape. LaunchClip
 // never downloads or copies a reference's fonts; it suggests a registry family.
 const NEAREST_FONT = [
-  [/bebas|oswald|anton|impact|league gothic|teko|barlow condensed|fjalla|condensed|compressed/i, 'Anton'],
+  [/league gothic|teko|barlow condensed|fjalla|condensed|compressed/i, 'Oswald'],
+  [/bebas|impact/i, 'Bebas Neue'],
+  [/oswald|anton/i, 'Anton'],
   [/archivo black|montserrat black|poppins black|black|heavy|ultra/i, 'Archivo Black'],
   [/unbounded|druk wide|wide|extended|clash|monument/i, 'Unbounded'],
   [/syne|grotesk display|editorial new/i, 'Syne'],
-  [/bricolage|cooper|recoleta|playful|rounded|nunito|quicksand/i, 'Bricolage Grotesque'],
-  [/space grotesk|dm sans|manrope|satoshi|general sans|outfit|sora|grotesk|geist(?! mono)/i, 'Space Grotesk'],
-  [/inter|helvetica|arial|roboto|sf pro|san francisco|open sans|lato|source sans|noto sans|ibm plex sans|segoe|poppins|montserrat|work sans|sans/i, 'Inter'],
-  [/mono|code|courier|consol|menlo|fira|jetbrains|plex mono|space mono|geist mono/i, 'JetBrains Mono'],
-  [/instrument serif|playfair|didot|bodoni|georgia|garamond|times|caslon|serif display|dm serif|libre baskerville|baskerville|lora|merriweather|serif/i, 'Instrument Serif']
+  [/cooper|recoleta|fraunces|soft serif/i, 'Fraunces'],
+  [/bricolage|playful|rounded|nunito|quicksand/i, 'Bricolage Grotesque'],
+  [/poppins|outfit|futura|avenir|geometric|urbanist|lexend/i, 'Outfit'],
+  [/space grotesk|satoshi|general sans|grotesk|geist(?! mono)/i, 'Space Grotesk'],
+  [/manrope|sora|plus jakarta|dm sans/i, 'DM Sans'],
+  [/inter|helvetica|arial|roboto|sf pro|san francisco|open sans|lato|source sans|noto sans|ibm plex sans|segoe|montserrat|work sans|sans/i, 'Inter'],
+  [/fira|mono|code|courier|consol|menlo|jetbrains|plex mono|space mono|geist mono/i, 'JetBrains Mono'],
+  [/playfair|didot|bodoni|dm serif|abril|vogue/i, 'Playfair Display'],
+  [/instrument serif|georgia|garamond|times|caslon|serif display|libre baskerville|baskerville|lora|merriweather|serif/i, 'Instrument Serif']
 ];
 
 /** The nearest bundled family for any font name (or the role default when nothing matches). */
