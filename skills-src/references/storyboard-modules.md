@@ -1336,9 +1336,9 @@ params:
 events: point
 
 ### cast-scene (keeps captions)
-One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
+One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
-- set: desk-laptop | phone | meeting | screen
+- set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
