@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens } from "../kit/core/captions.mjs";
+import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens, joinAttachedWords } from "../kit/core/captions.mjs";
 import { CAPTION_POSITION_TOP, captionBandAt } from "../kit/core/layout-check.mjs";
 import { resolveStory, STORY_CAPTION_PRESETS, validateStory } from "../kit/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
@@ -162,4 +162,18 @@ test("caption parity: every preset, HyperFrames vs Remotion stills at word bound
   const { captionFixtures, runCaptionParitySuite } = await import("../scripts/parity-captions.mjs");
   const reports = await runCaptionParitySuite(await captionFixtures());
   for (const report of reports) for (const sample of report.samples) assert.ok(sample.pass, `${report.preset} ${sample.name}: ssim ${sample.ssim} < ${report.threshold.ssim} (see ${report.outDir}/${sample.sideBySide})`);
+});
+
+test("split transcript tokens join back into one caption word; word timings stay as they are", () => {
+  const words = [["own", 84.81, 85.05], ["hands", 85.05, 85.31], ["-free", 85.31, 85.55], ["AI", 85.55, 85.91], ["agent", 85.91, 86.33], [",", 86.33, 86.33], ["it", 86.4, 86.5], ["'s", 86.5, 86.6], ["well-", 86.7, 86.8], ["known", 86.8, 87]].map(([text, start, end]) => ({ text, start, end }));
+  const before = JSON.stringify(words);
+  assert.deepEqual(joinAttachedWords(words).map((word) => [word.text, word.start, word.end]), [["own", 84.81, 85.05], ["hands-free", 85.05, 85.55], ["AI", 85.55, 85.91], ["agent,", 85.91, 86.33], ["it's", 86.4, 86.6], ["well-known", 86.7, 87]]);
+  assert.equal(JSON.stringify(words), before, "the transcript words are not touched");
+  // chunkWords joins before it counts words and characters.
+  assert.deepEqual(chunkWords(words, { maxWords: 6, maxChars: 32 }).map((chunk) => chunk.words.map((word) => word.text).join(" ")), ["own hands-free AI agent,", "it's well-known"]);
+  // A captions.json written before the fix still renders "hands-free".
+  const plan = captionPlan([{ id: "cap-001", start: 84.81, end: 86, words: words.slice(0, 5) }], { type: "captions", preset: "word-highlight" }, { format: { width: 1080, height: 1920 } });
+  assert.deepEqual(plan.nodes[0].children.map((span) => span.text), ["own", "hands-free", "AI", "agent"]);
+  // A spaced dash stays its own word.
+  assert.deepEqual(joinAttachedWords([{ text: "this", start: 0, end: 0.2 }, { text: "-", start: 0.3, end: 0.4 }, { text: "that", start: 0.5, end: 0.7 }]).map((word) => word.text), ["this", "-", "that"]);
 });
