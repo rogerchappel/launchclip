@@ -1666,8 +1666,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
-| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 
 ### The kit (`kit/core/characters/`)
 
@@ -1685,9 +1685,22 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   colour mapping.
 - `cast.mjs`: the starter cast (24 characters). Ids are stable and never
   change once shipped.
-- `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline).
-  A drawing style is a function of (params, colours, joints, expressions);
-  another style can be added beside it without touching the rig.
+- `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and
+  `drawCharacter(style, params, colours, options)`, `styleHeight`,
+  `styleGeometry`. Every style draws the same rig, poses, expressions and
+  part ids, so any cast works in any style and acting.mjs animates them all.
+- `toon.mjs`: the toon body shared by the cartoon styles: one builder lays
+  out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
+  `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
+  is drawn.
+- `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline):
+  the toon body with the flat pen. `test/character_styles.test.js` pins its
+  output, so flat casts look the same in existing videos.
+- `light.mjs`: the key light `{dir, color, intensity}` (`dir` in degrees the
+  light comes from: 0 right, 90 above, 180 left; default 125, a soft warm key
+  high on the left). Shaded styles follow it. `cast-scene` and
+  `character-cameo` take `params.light`, else the story's or world's
+  `ctx.light`; each actor carries the resolved light as `actors[i].light`.
 - `view.mjs`: GSAP animates SVG transforms through the transform attribute
   with its own origin rules, so every joint is a zero-size HTML div (an outer
   div places the pivot, an inner div with the joint's id carries the CSS

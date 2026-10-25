@@ -841,6 +841,7 @@ params:
 - set: desk-laptop | phone | meeting | screen
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
+- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
@@ -856,6 +857,7 @@ params:
 - card: {kicker?, title ≤ 64, body? ≤ 140}
 - panel: boolean (default: true without a card)
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
+- light: {dir?, color?, intensity?} the key light (as cast-scene)
 events: <character>-cue-<i>
 
 ## Timing rules
