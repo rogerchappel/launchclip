@@ -42,9 +42,21 @@ function run(command, args) {
   });
 }
 
+// Whether this ffmpeg build has drawtext (labels are skipped without it; the
+// stills keep their names on disk).
+function hasDrawtext() {
+  return new Promise(resolve => {
+    const child = spawn('ffmpeg', ['-hide_banner', '-filters'], {stdio: ['ignore', 'pipe', 'ignore']});
+    let out = '';
+    child.stdout.on('data', chunk => { out += chunk; });
+    child.on('error', () => resolve(false));
+    child.on('close', () => resolve(/\sdrawtext\s/.test(out)));
+  });
+}
+
 // Stills tiled `columns` across, each scaled to `width`, labelled when a font exists.
 async function tile(cells, columns, width, file) {
-  const font = FONTS.find(entry => existsSync(entry));
+  const font = (await hasDrawtext()) ? FONTS.find(entry => existsSync(entry)) : null;
   const filters = cells.map((cell, i) => {
     const label = font ? `,drawbox=x=0:y=ih-44:w=iw:h=44:color=black@0.6:t=fill,drawtext=fontfile=${font}:text='${cell.label}':x=12:y=h-32:fontsize=22:fontcolor=white` : '';
     return `[${i}:v]scale=${width}:-2${label}[c${i}]`;
