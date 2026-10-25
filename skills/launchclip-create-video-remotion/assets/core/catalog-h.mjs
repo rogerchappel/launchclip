@@ -12,6 +12,7 @@
 //             catalog-h-paper.mjs (polaroid, sticker, torn-paper, tape-note,
 //             badge, ribbon) and catalog-h-callouts.mjs (speech-bubble,
 //             tooltip, callout-arrow)
+//   titles    catalog-h-text.mjs (motion-title: the 24 named text effects)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -26,9 +27,10 @@ import {NUMBERS} from './catalog-h-numbers.mjs';
 import {FRAMES} from './catalog-h-frames.mjs';
 import {PAPER} from './catalog-h-paper.mjs';
 import {CALLOUTS} from './catalog-h-callouts.mjs';
+import {TEXT} from './catalog-h-text.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
