@@ -49,28 +49,38 @@ export function realPen(c, {id, light, cinematic = false}) {
     const raw = S.lightDir();
     const dir = form === 'cyl' ? norm({x: raw.x >= 0 ? 1 : -1, y: raw.y * 0.25}) : norm({x: raw.x, y: raw.y * 0.85});
     const key = `g${form}${base}${dir.x.toFixed(2)}${dir.y.toFixed(2)}`;
-    const warm = mix(lightColor, base, 0.12);
+    const warm = mix(lightColor, base, cinematic ? 0.2 : 0.12);
+    // Cinematic light: warmer highlights, cooler and deeper shadows.
+    const shadowInk = cinematic ? '#141a2c' : '#1c1820';
     const id2 = S.def(key, defId => linearGradient(defId, dir, [
-      [0, lighten(warm, 0.2 * k)],
+      [0, lighten(warm, (cinematic ? 0.26 : 0.2) * k)],
       [0.2, lighten(warm, 0.07 * k)],
       [0.52, base],
-      [0.82, darken(base, 0.24 * k)],
-      [1, darken(base, 0.13 * k)]
+      [0.82, darken(base, (cinematic ? 0.34 : 0.24) * k, shadowInk)],
+      [1, darken(base, (cinematic ? 0.2 : 0.13) * k, shadowInk)]
     ]));
     return `url(#${id2})`;
   };
   const edge = hex => (isHex(hex) ? darken(fall(hex), 0.5) : '#2a2228');
 
-  /** A rim of light on the lit edge of a piece (cinematic only). */
-  const rim = (d, rule, width = 7) => {
+  /**
+   * A rim of light on the lit edge of a piece (cinematic only): a soft wide
+   * band and a bright thin line, both the piece's outline shifted away from
+   * the light and clipped to the piece, so they hug the lit edge.
+   */
+  const rim = (d, rule, width = 4) => {
     if (!cinematic) return [];
     const dir = S.lightDir();
     const clip = S.uid('rc');
     const box = pathBox(d);
     const size = Math.min(box.x1 - box.x0, box.y1 - box.y0);
-    const w = Math.max(2, Math.min(width, size * 0.16));
+    const w = Math.max(1.2, Math.min(width, size * 0.09));
+    const strength = light?.intensity ?? 0.55;
+    const tone = mix('#ffffff', lightColor, 0.25);
+    const shifted = (k, sw, op) => pathNode(d, {fill: 'none', stroke: tone, strokeWidth: r1(sw), strokeOpacity: r3(op), transform: `translate(${r1(-dir.x * k)} ${r1(-dir.y * k)})`, ...(rule ? {fillRule: rule} : {})});
     return [el('clipPath', clip, null, [pathNode(d, rule ? {clipRule: rule} : {})]), group([
-      pathNode(d, {fill: 'none', stroke: lighten(lightColor, 0.35), strokeWidth: r1(w * 2), strokeOpacity: r3(0.35 + 0.5 * (light?.intensity ?? 0.55)), transform: `translate(${r1(-dir.x * w)} ${r1(-dir.y * w)})`, ...(rule ? {fillRule: rule} : {})})
+      shifted(w * 1.6, w * 3.2, 0.1 + 0.18 * strength),
+      shifted(w * 0.7, w * 1.2, 0.18 + 0.42 * strength)
     ], {clipPath: `url(#${clip})`})];
   };
 
@@ -145,7 +155,7 @@ export function realPen(c, {id, light, cinematic = false}) {
       }
       if (o.fillOpacity !== undefined) return pathNode(d, {fill: '#ffffff', fillOpacity: 0.15, stroke: '#25212a', strokeWidth: (o.width ?? 7) * 0.8, ...(o.rule ? {fillRule: o.rule} : {})});
       if (o.outline === false || !isHex(hex)) return pathNode(d, {fill: fall(hex), stroke: 'none', ...(o.opacity !== undefined ? {opacity: o.opacity} : {}), ...(o.rule ? {fillRule: o.rule} : {})});
-      const nodes = [piece(d, hex, {rule: o.rule, width: 3})];
+      const nodes = [piece(d, hex, {rule: o.rule, width: 3, rim: isHair})];
       if (isHair) nodes.push(...strands(d, hex, o.rule, d.length.toString(36)));
       return nodes.length === 1 ? nodes[0] : group(nodes);
     },
@@ -153,7 +163,7 @@ export function realPen(c, {id, light, cinematic = false}) {
       const {hex, isHair} = toonFill(fill);
       if (o.outline === false || Math.min(rx, ry) < 8 || !isHex(hex)) return el('ellipse', null, null, [], {cx: r1(cx), cy: r1(cy), rx: r1(rx), ry: r1(ry), fill: fall(hex), ...(o.opacity !== undefined ? {opacity: o.opacity} : {}), ...(o.fillOpacity !== undefined ? {fillOpacity: o.fillOpacity, stroke: '#25212a', strokeWidth: 4} : {})});
       const d = ellipsePath(cx, cy, rx, ry);
-      const nodes = [piece(d, hex, {width: 3})];
+      const nodes = [piece(d, hex, {width: 3, rim: isHair})];
       if (isHair) nodes.push(...strands(d, hex, null, `e${r1(cx)}${r1(cy)}`));
       return nodes.length === 1 ? nodes[0] : group(nodes);
     },
@@ -164,7 +174,7 @@ export function realPen(c, {id, light, cinematic = false}) {
     },
     limb(length, width, fill, from = 0, place = null) {
       const hex = col(fill);
-      const nodes = [piece(capsulePath(from, length, width), hex, {form: 'cyl', width: 3})];
+      const nodes = [piece(capsulePath(from, length, width), hex, {form: 'cyl', width: 3, rim: fill === 'hair'})];
       if (fill === 'hair') nodes.push(...strands(capsulePath(from, length, width), hex, null, `l${length}${width}`));
       return place ? [placedGroup(nodes, place)] : nodes;
     },
