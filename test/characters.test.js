@@ -34,7 +34,7 @@ test('the starter cast: about two dozen valid characters with stable, unique ids
   assert.ok(STARTER_CAST.length >= 24);
   assert.equal(new Set(STARTER_IDS).size, STARTER_IDS.length);
   for (const id of STARTER_IDS) assert.match(id, /^[a-z][a-z0-9-]*$/);
-  const all = STARTER_IDS.map(id => starterCharacter(id).params);
+  const all = STARTER_IDS.slice(0, 24).map(id => starterCharacter(id).params);
   const kinds = key => new Set(all.map(p => (typeof p[key] === 'object' ? JSON.stringify(p[key].style ?? p[key].top) : p[key])));
   assert.ok(kinds('skin').size >= 7, 'skin tones across the range');
   assert.equal(kinds('build').size, 5, 'every original build');

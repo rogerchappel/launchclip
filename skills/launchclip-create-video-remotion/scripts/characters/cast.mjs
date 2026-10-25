@@ -3,9 +3,10 @@
 // same person dresses in each brand's colours. Ids never change once
 // shipped: stories and style packs refer to characters by id.
 //
-// The mix is deliberate: a range of skin tones, builds, heights, ages, hair
-// textures and dress, with glasses, hearing aids, headscarves and beards
-// across it. Characters are illustrative people, not depictions of anyone.
+// The mix is deliberate: a range of skin tones (white people among them),
+// builds, heights, ages (children and a teen too), hair textures and dress,
+// with glasses, hearing aids, headscarves and beards across it.
+// Characters are illustrative people, not depictions of anyone.
 //
 // Imports only sibling kit/core files.
 
@@ -38,7 +39,13 @@ export const STARTER_CAST = Object.freeze([
   C('hana', 'Hana', 'nurse; bob, sweater', {build: 'average', height: 'short', skin: 'light', hair: {style: 'bob', color: 'black'}, outfit: {top: 'sweater'}, accessories: ['hearing-aid'], colors: {top: 'sky', bottom: 'navy', shoes: 'white', accent: 'accent'}}, 'af_aoede'),
   C('ade', 'Ade', 'accountant; buzz cut, shirt', {build: 'round', skin: 'ebony', hair: {style: 'buzz', color: 'grey'}, outfit: {top: 'shirt'}, accessories: ['round-glasses', 'stubble'], colors: {top: 'white', bottom: 'charcoal', shoes: 'black'}}, 'bm_daniel'),
   C('zara', 'Zara', 'creator; wavy hair, tee', {build: 'slim', skin: 'deep', hair: {style: 'wavy', color: 'black'}, outfit: {top: 'tee'}, accessories: ['earrings'], colors: {top: 'primary', bottom: 'black', shoes: 'white', accent: 'mustard'}}, 'af_nicole'),
-  C('noor', 'Noor', 'engineer; headscarf, hoodie', {build: 'slim', height: 'tall', skin: 'medium', hair: {style: 'headscarf', color: 'plum'}, outfit: {top: 'hoodie'}, accessories: ['glasses'], colors: {top: 'slate', bottom: 'charcoal', shoes: 'white', accent: 'accent'}}, 'af_alloy')
+  C('noor', 'Noor', 'engineer; headscarf, hoodie', {build: 'slim', height: 'tall', skin: 'medium', hair: {style: 'headscarf', color: 'plum'}, outfit: {top: 'hoodie'}, accessories: ['glasses'], colors: {top: 'slate', bottom: 'charcoal', shoes: 'white', accent: 'accent'}}, 'af_alloy'),
+  C('oliver', 'Oliver', 'designer; fair, quiff, stubble, jacket', {build: 'athletic', height: 'tall', skin: 'fair', hair: {style: 'quiff', color: 'blonde'}, outfit: {top: 'jacket'}, accessories: ['stubble'], colors: {top: 'navy', bottom: 'denim', shoes: 'tan', accent: 'white'}}, 'bm_lewis'),
+  C('hannah', 'Hannah', 'teacher; rosy skin, ponytail, cardigan', {build: 'curvy', skin: 'rosy', hair: {style: 'ponytail', color: 'strawberry'}, outfit: {top: 'cardigan'}, accessories: ['freckles', 'earrings'], colors: {top: 'sage', bottom: 'charcoal', shoes: 'brick', accent: 'cream'}}, 'bf_lily'),
+  C('ben', 'Ben', 'child; light skin, short brown hair, tee', {build: 'average', age: 'child', skin: 'light', hair: {style: 'short', color: 'chestnut'}, outfit: {top: 'tee', bottom: 'shorts'}, colors: {top: 'primary', bottom: 'denim', shoes: 'white'}}, 'am_puck'),
+  C('lily', 'Lily', 'child; fair skin, pigtails, dress', {build: 'slim', age: 'child', skin: 'porcelain', hair: {style: 'pigtails', color: 'blonde'}, outfit: {top: 'dress'}, colors: {top: 'coral', bottom: 'white', shoes: 'navy', accent: 'accent'}}, 'af_sky'),
+  C('kofi', 'Kofi', 'child; deep skin, twists, hoodie', {build: 'round', age: 'child', skin: 'deep', hair: {style: 'twists', color: 'black'}, outfit: {top: 'hoodie'}, accessories: ['backpack'], colors: {top: 'mustard', bottom: 'charcoal', shoes: 'white', accent: 'accent'}}, 'am_echo'),
+  C('max', 'Max', 'student; teen, undercut, headphones, hoodie', {build: 'slim', age: 'teen', skin: 'ivory', hair: {style: 'undercut', color: 'brown'}, outfit: {top: 'hoodie'}, headwear: 'headphones', colors: {top: 'charcoal', bottom: 'black', shoes: 'white', accent: 'primary'}}, 'am_liam')
 ]);
 
 const BY_ID = new Map(STARTER_CAST.map(entry => [entry.id, entry]));

@@ -19,7 +19,8 @@ const FLAT_SNAPSHOT = '0bf60bd3effcc7b0';
 
 test('flat draws exactly as it did before the drawing styles', () => {
   const trees = [];
-  for (const entry of STARTER_CAST) {
+  // The 24 characters that shipped with flat.
+  for (const entry of STARTER_CAST.slice(0, 24)) {
     const {params} = starterCharacter(entry.id);
     const {colors} = characterLook(params, {});
     const geometry = rigGeometry(params);
