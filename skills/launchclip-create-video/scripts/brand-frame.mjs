@@ -18,6 +18,7 @@
 // Canonical copy: kit/core/brand-frame.mjs.
 
 import { profileGeometry } from './layout-check.mjs';
+import { storyChapters } from './story.mjs';
 import { brandFontStacks } from './fonts.mjs';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -63,12 +64,16 @@ export function storyFrame(story) {
   };
 }
 
-/** Section labels on the timeline: [{start, end, label}], sorted, from frame.labels (seconds or a scene's start). */
+/**
+ * Section labels on the timeline: [{start, end, label}], sorted, from
+ * frame.labels (seconds or a scene's start), else the story's chapters.
+ */
 export function frameLabels(story, frame = storyFrame(story)) {
   if (!frame?.sections) return [];
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
   const scenes = new Map((story?.scenes ?? []).map((scene) => [scene?.id, scene]));
-  const starts = frame.labels.map((entry) => {
+  const entries = frame.labels.length ? frame.labels : storyChapters(story).map((chapter) => ({ start: chapter.start, label: chapter.title.slice(0, 40) }));
+  const starts = entries.map((entry) => {
     const start = typeof entry.start === 'number' ? entry.start : Number(scenes.get(entry.scene)?.start);
     return Number.isFinite(start) && start >= 0 && start < duration && nonEmpty(entry.label) ? { start, label: entry.label.trim() } : null;
   }).filter(Boolean).sort((a, b) => a.start - b.start);
@@ -108,7 +113,10 @@ export function brandFrameLayout(story, format = story?.format) {
     else bottom = Math.min(bottom, region.rect.y);
   }
   const thickness = (isObject(frame.progress) && typeof frame.progress.thickness === 'number' ? frame.progress.thickness : M.progress) * k;
-  const progress = frame.progress ? { position: frame.progress.position === 'top' ? 'top' : 'bottom', thickness: r2(thickness) } : null;
+  // Chapter ticks: a mark on the progress line at each chapter start after the first.
+  const duration = Number(story?.resolved?.duration ?? format?.duration) || 0;
+  const ticks = frame.progress && frame.progress.ticks !== false && duration > 0 ? storyChapters(story).slice(1).map((chapter) => r4(chapter.start / duration)) : [];
+  const progress = frame.progress ? { position: frame.progress.position === 'top' ? 'top' : 'bottom', thickness: r2(thickness), ticks } : null;
   if (progress) {
     const edge = progress.position === 'top' ? thickness : canvas.height - thickness;
     if (progress.position === 'top') top = Math.max(top, edge);
@@ -218,7 +226,12 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     const duration = Number(story?.resolved?.duration ?? format?.duration) || 1;
     css.push(`.lc-frame-progress { position: absolute; left: 0; right: 0; ${progress.position}: 0; height: ${px(progress.thickness)}; background: ${ink}33; }`);
     css.push(`.lc-frame-progress-fill { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: ${fill}; transform-origin: 0% 50%; transform: scaleX(0); }`);
-    root.children.push({ tag: 'div', id: 'lc-frame-progress', cls: 'lc-frame-progress', children: [{ tag: 'div', id: 'lc-frame-progress-fill', cls: 'lc-frame-progress-fill' }] });
+    const ticks = progress.ticks.map((at, i) => ({ tag: 'div', id: `lc-frame-tick-${String(i + 1).padStart(2, '0')}`, cls: 'lc-frame-tick', style: `left: ${r2(at * 100)}%;` }));
+    if (ticks.length) {
+      css.push(`.lc-frame-tick { position: absolute; top: ${px(-progress.thickness)}; width: ${px(Math.max(2, progress.thickness * 0.6))}; height: ${px(progress.thickness * 3)}; margin-left: ${px(-Math.max(2, progress.thickness * 0.6) / 2)}; background: ${ink}; border-radius: ${px(progress.thickness)}; opacity: 0.85; }`);
+      for (const tick of ticks) css.push(`#${tick.id} { ${tick.style} }`);
+    }
+    root.children.push({ tag: 'div', id: 'lc-frame-progress', cls: 'lc-frame-progress', children: [{ tag: 'div', id: 'lc-frame-progress-fill', cls: 'lc-frame-progress-fill' }, ...ticks.map(({ style, ...node }) => node)] });
     tw('lc-frame-progress-fill', 0, duration, 'none', { scaleX: 1 }, { scaleX: 0 }, true);
   }
 

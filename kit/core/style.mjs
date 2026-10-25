@@ -361,7 +361,8 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
   };
   part('kicker', ['label', 'underline', 'position', 'color', 'logo']);
   part('sections', ['position', 'color']);
-  part('progress', ['position', 'color', 'thickness']);
+  part('progress', ['position', 'color', 'thickness', 'ticks']);
+  if (isObject(frame.progress) && frame.progress.ticks !== undefined && typeof frame.progress.ticks !== 'boolean') errors.push(`${where}.progress.ticks must be true or false (a mark at each chapter start)`);
   if (isObject(frame.kicker)) {
     if (frame.kicker.label !== undefined && !(nonEmpty(frame.kicker.label) && frame.kicker.label.length <= 40)) errors.push(`${where}.kicker.label must be 1-40 characters`);
     if (frame.kicker.underline !== undefined && typeof frame.kicker.underline !== 'boolean') errors.push(`${where}.kicker.underline must be true or false`);
