@@ -2069,6 +2069,12 @@ renderer-neutral op list (`catalogGTimeline`), the root enter and exit, `at`
 measured from the scene start, and hits that time events of the same name.
 Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
 
+A card never shows as an empty box. Beats may fall from the scene start
+(`timing.leadIn` is 0), and with no `at` the first beat lands within the
+first few frames (0.05–0.25 s, per module). When the first beat comes later
+(an explicit `at` or a hit), the root enter starts 0.15 s before it, so the
+panel and its first content land together.
+
 ### Placement (`createCardBase`)
 
 | Where | When | Surface (default) | Box |

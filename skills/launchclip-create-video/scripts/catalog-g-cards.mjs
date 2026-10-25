@@ -48,8 +48,8 @@ function resolveConcept(params, ctx) {
   const measure = (width, maxHeight) => pick([...b.scales.map(k => () => stack(width, k)), ...(glyph ? [1, 0.82].map(k => () => inline(width, k)) : [])], maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1100)});
   const L = box.layout;
-  const t0 = b.timeOf('word', p.at, 'params.at', 0.55);
-  const iconAt = glyph ? rt(Math.max(b.motion.enterEnd - 0.2, t0 - 0.15)) : null;
+  const t0 = b.timeOf('word', p.at, 'params.at', 0.05);
+  const iconAt = glyph ? rt(Math.max(b.start, t0 - 0.15)) : null;
   const subAt = sub ? after(b, t0, 0.35) : null;
   if (glyph) b.events.push({id: `${b.id}-icon`, name: 'icon', time: iconAt, endTime: rt(iconAt + 0.5), role: 'emphasis', cue: 'pop-soft'});
   b.events.push({id: `${b.id}-word`, name: 'word', time: t0, endTime: rt(t0 + 0.45), role: 'title', cue: 'whoosh'});
@@ -88,7 +88,7 @@ export const conceptCard = {
   describe: 'A big word or short phrase (≤ 3 words) with an icon from the icon set and a sub-line, on a brand card beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").',
   params: {text: 'word or phrase ≤ 28, ≤ 3 words', icon: 'icon name from kit/core/icons.mjs (optional)', sub: 'sub-line ≤ 64 (optional)', tone: 'word colour: paper (default) | primary | accent', at: 'word time', ...CARD_PARAMS},
   events: ['icon', 'word', 'sub'],
-  timing: cardTiming(['the icon pops 0.15 s before the word; the sub-line follows it by 0.35 s']),
+  timing: cardTiming(['with no at, the word lands at 0.05 s; the icon pops up to 0.15 s before it and the sub-line follows it by 0.35 s']),
   mood: ['editorial', 'launch', 'bold'],
   resolve: resolveConcept, view: conceptView, timeline: conceptTimeline
 };
@@ -137,7 +137,7 @@ function resolveIconRow(params, ctx) {
     return out?.mode === 'list' && b.fills ? spread(out, maxHeight, {gap: [n - 1, r2(out.rowH * 0.6)], titleGap: [out.title ? 1 : 0, u(64)]}) : out;
   };
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1400)});
-  const first = b.timeOf('item-0', p.at, 'params.at', 0.6);
+  const first = b.timeOf('item-0', p.at, 'params.at', 0.05);
   const placed = items.map(item => {
     const time = item.at === undefined ? b.timeOf(`item-${item.index}`, undefined, `params.items[${item.index}].at`, first - start + item.index * stagger) : b.timeOf(`item-${item.index}`, item.at, `params.items[${item.index}].at`, 0);
     b.events.push({id: `${id}-item-${item.index}`, name: `item-${item.index}`, time, endTime: rt(time + 0.5), role: 'emphasis', cue: 'pop'});
@@ -176,7 +176,7 @@ export const iconRow = {
   describe: 'Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.',
   params: {items: '[{icon: icon name, label ≤ 24, at?}] 2–5', title: 'string ≤ 48 (optional)', layout: 'auto (default) | row | list', stagger: 'seconds between pops (default 0.18)', at: 'first pop time', ...CARD_PARAMS},
   events: ['item-<i>'],
-  timing: cardTiming(['items pop in order; with no at, the first pops at 0.6 s and the rest follow by stagger (default 0.18 s)']),
+  timing: cardTiming(['items pop in order; with no at, the first pops at 0.05 s and the rest follow by stagger (default 0.18 s)']),
   mood: ['editorial', 'launch', 'playful'],
   resolve: resolveIconRow, view: iconRowView, timeline: iconRowTimeline
 };
@@ -204,8 +204,8 @@ function resolveSection(params, ctx) {
   };
   const measure = (width, maxHeight) => pick(b.scales.map(k => () => variant(width, k)), maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1300)});
-  const t0 = b.timeOf('title', p.at, 'params.at', 0.6);
-  const kickAt = rt(Math.max(b.motion.enterEnd - 0.15, t0 - 0.25));
+  const t0 = b.timeOf('title', p.at, 'params.at', 0.25);
+  const kickAt = rt(Math.max(b.start, t0 - 0.25));
   b.events.push({id: `${b.id}-kicker`, name: 'kicker', time: kickAt, endTime: rt(kickAt + 0.45), role: 'detail'});
   b.events.push({id: `${b.id}-title`, name: 'title', time: t0, endTime: rt(t0 + 0.5), role: 'title', cue: 'whoosh'});
   const L = box.layout;
@@ -241,7 +241,7 @@ export const sectionCard = {
   describe: 'A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.',
   params: {title: 'section title ≤ 48', kicker: 'string ≤ 28 (optional, uppercased)', number: 'chapter number 1–99 (optional)', icon: 'icon name (optional; not with number)', at: 'title time', ...CARD_PARAMS},
   events: ['kicker', 'title'],
-  timing: cardTiming(['the kicker and rule land 0.25 s before the title']),
+  timing: cardTiming(['the kicker and rule land up to 0.25 s before the title (with no at, at 0.25 s)']),
   mood: ['editorial', 'launch', 'cinematic'],
   resolve: resolveSection, view: sectionView, timeline: sectionTimeline
 };
@@ -316,7 +316,7 @@ function resolveObject(params, ctx) {
   };
   const measure = (width, maxHeight) => pick([...b.scales.map(k => () => stack(width, k)), () => inline(width, maxHeight)], maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1200)});
-  const t0 = b.timeOf('object', p.at, 'params.at', 0.55);
+  const t0 = b.timeOf('object', p.at, 'params.at', 0.05);
   const object = OBJECTS[name];
   const accents = object.accents.map((accent, i) => ({...accent, index: i, time: after(b, t0, 0.35 + i * 0.12)}));
   const captionAt = after(b, t0, 0.25);
@@ -369,7 +369,7 @@ export const objectCard = {
   describe: `A simple illustrated object built from the icon set and brand shapes (${Object.keys(OBJECTS).join(', ')}), with a caption and an optional label. For naming a product, a deliverable or an idea as a thing ("it ships in a box", "your calendar, handled").`,
   params: {object: Object.keys(OBJECTS).join(' | '), caption: 'string ≤ 48', label: 'string ≤ 24 (optional, uppercased)', at: 'object time', ...CARD_PARAMS},
   events: ['object', 'caption'],
-  timing: cardTiming(['the caption follows the object by 0.25 s; accents pop from 0.35 s after it']),
+  timing: cardTiming(['with no at, the object pops at 0.05 s; the caption follows it by 0.25 s and accents pop from 0.35 s after it']),
   mood: ['playful', 'launch', 'editorial'],
   resolve: resolveObject, view: objectView, timeline: objectTimeline
 };

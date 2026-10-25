@@ -79,7 +79,7 @@ function resolveStat(params, ctx) {
   const measure = (width, maxHeight) => pick([...[...b.scales, 0.55].map(k => () => variant(width, k)), ...[1, 0.8].map(k => () => inline(width, k))], maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1100)});
   const L = box.layout;
-  const t0 = b.timeOf('count', p.at, 'params.at', 0.55);
+  const t0 = b.timeOf('count', p.at, 'params.at', 0.1);
   const countFor = count ? 0.9 : 0;
   const hitAt = after(b, t0, countFor);
   const samples = [];
@@ -120,7 +120,7 @@ function statView(model) {
 function statTimeline(model, ops) {
   const {id} = model;
   const c = model.content;
-  if (c.icon) pop(ops, model, `${id}-icon`, rt(Math.max(model.motion.enterEnd - 0.2, c.t0 - 0.15)));
+  if (c.icon) pop(ops, model, `${id}-icon`, rt(Math.max(model.start, c.t0 - 0.15)));
   rise(ops, model, `${id}-value`, rt(Math.max(model.start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
   for (const s of c.samples) set(ops, `${id}-value`, sampleTime(s.t), {text: s.text});
   // The hit: a short pulse when the count lands.
@@ -167,7 +167,7 @@ function resolveQuote(params, ctx) {
   const measure = (width, maxHeight) => pick([...b.scales, 0.6].map(k => () => variant(width, k)), maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1300)});
   const L = box.layout;
-  const t0 = b.timeOf('quote', p.at, 'params.at', 0.55);
+  const t0 = b.timeOf('quote', p.at, 'params.at', 0.15);
   const authorAt = after(b, t0, 0.45);
   b.events.push({id: `${b.id}-quote`, name: 'quote', time: t0, endTime: rt(t0 + 0.5), role: 'title', cue: 'whoosh'});
   b.events.push({id: `${b.id}-author`, name: 'author', time: authorAt, endTime: rt(authorAt + 0.45), role: 'detail'});
@@ -208,7 +208,7 @@ function quoteView(model) {
 function quoteTimeline(model, ops) {
   const {id} = model;
   const c = model.content;
-  pop(ops, model, `${id}-mark`, rt(Math.max(model.motion.enterEnd - 0.2, c.t0 - 0.15)), {scale: 0.5});
+  pop(ops, model, `${id}-mark`, rt(Math.max(model.start, c.t0 - 0.15)), {scale: 0.5});
   rise(ops, model, `${id}-quote`, c.t0, {distance: 24, duration: 0.5});
   rise(ops, model, `${id}-author`, c.authorAt, {distance: 14});
   if (c.meta) rise(ops, model, `${id}-meta`, c.authorAt, {distance: 10});
@@ -267,7 +267,7 @@ function resolveExcerpt(params, ctx) {
   const measure = (width, maxHeight) => pick([...b.scales.filter(k => k <= 1.25), 0.6].map(k => () => variant(width, k)), maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1640)});
   const L = box.layout;
-  const t0 = b.timeOf('lines', p.at, 'params.at', 0.5);
+  const t0 = b.timeOf('lines', p.at, 'params.at', 0.05);
   const step = Math.min(0.12, 0.6 / lines.length);
   const shown = lines.map((line, i) => ({...line, time: rt(t0 + i * step)}));
   const marked = lines.some(line => line.highlight);
