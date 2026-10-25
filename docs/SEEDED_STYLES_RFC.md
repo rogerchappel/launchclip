@@ -142,7 +142,7 @@ code (SVG and CSS, deterministic, no network):
 | Sets | 4 | 12+ | adds kitchen counter, sofa, podium, stage, car, park bench, video call, standing desk |
 | Character sets (new) | one starter cast | 10+ themed sets, each a generator rather than a fixed list: office team, startup founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd | a set fixes the wardrobe and props; the seed varies the people |
 | Characters | 1 style, ~24 members | a range of drawing styles from simple to rich: stick figure, line, flat (today), outlined, paper cut-out, soft-shade, lifelike (realistic proportions, layered shading, detailed hair and hands) and cinematic (lifelike plus rim light, depth of field, cast shadows matched to the world's light); rig options with enough range for thousands of distinct casts (builds, heights, skin tones, hair, facial hair, glasses, headwear, outfits, accessories, mobility aids) | casts are generated from the options, not picked from a fixed list; consistency gate per style |
-| Backgrounds | 6 kinds | 12+: plus dot grid, mesh, stripes, topographic lines, halftone, light rays | |
+| Backgrounds | 6 kinds | 17+: plus dot grid, mesh, stripes, topographic lines, halftone, light rays, and subtle patterns: repeating icon tiles, seeded icon scatter, a tiled brand mark, line motifs (plus, chevron, wave, hatch) and textures (noise, paper, canvas, linen). Panels can take any background as a clipped `fill`, so a split-layout panel is never a flat block | |
 | Frames and layouts | split, full, panels | plus device frames (browser, phone, laptop), polaroid, sticker, torn paper, TV and window frames | |
 | Fonts | 11 | 25+ OFL families in curated pairings | |
 
