@@ -9,6 +9,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CONSTRAINT_KEYS, generateStyle, normalizeSeed, seedSummaryLine, styleSummary, toneFromText } from "../kit/core/style-seed.mjs";
 import { packCaptionsFor, validateStylePack } from "../kit/core/style.mjs";
+import { suggestWorld } from "../kit/core/worlds/index.mjs";
 import { homeStyleRoot, loadStyleV2 } from "./style_store.js";
 
 const STORY_FILE = "storyboard.json";
@@ -69,6 +70,18 @@ export function constraintFlags(flags = {}) {
 /** Tone for a prompt: an explicit tone wins, else the tone words in the text. */
 export function promptTone(text, tone = null) {
   return tone ?? toneFromText(text);
+}
+
+/**
+ * The constraints a prompt implies on top of the given ones: when the prompt
+ * names a topic the worlds kit knows (suggestWorld matched a word), its
+ * fitting worlds become the world constraint the seed picks within; with no
+ * topic the seed keeps to its topic-neutral worlds.
+ */
+export function promptConstraints(text, constraints = {}) {
+  if (constraints.world !== undefined) return constraints;
+  const fit = suggestWorld(String(text ?? ""));
+  return fit?.matched?.length && fit.worlds?.length ? { ...constraints, world: [...fit.worlds] } : constraints;
 }
 
 /**

@@ -14,7 +14,7 @@ import { readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { resolveStyleV2 } from "./style_store.js";
-import { constraintFlags, generateProjectStyle, projectSeedStyle, promptTone, adoptStyleLook } from "./style_seed_store.js";
+import { constraintFlags, generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "./style_seed_store.js";
 import { DIRECTION_FILE, DIRECTION_LANES, directionJson, directionMeasures, validateDirection } from "../kit/core/direction.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { profileForStory } from "./profile_store.js";
@@ -267,7 +267,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   let generated = null;
   if (!style && (flags.seed || !flags.brand)) {
     const existing = flags.seed ? null : await projectSeedStyle(outDir, { storyFile: out });
-    generated = existing ?? await generateProjectStyle(outDir, { seed: flags.seed && flags.seed !== true ? String(flags.seed) : undefined, tone: promptTone(brief, flags.tone && flags.tone !== true ? String(flags.tone) : null), constraints: constraintFlags(flags), ...(adapters.clock ? { clock: adapters.clock } : {}) });
+    generated = existing ?? await generateProjectStyle(outDir, { seed: flags.seed && flags.seed !== true ? String(flags.seed) : undefined, tone: promptTone(brief, flags.tone && flags.tone !== true ? String(flags.tone) : null), constraints: promptConstraints(brief, constraintFlags(flags)), ...(adapters.clock ? { clock: adapters.clock } : {}) });
     style = { name: generated.name, pack: generated.pack, file: generated.file, source: existing ? "project" : "generated", warnings: [] };
     (adapters.notice ?? ((line) => process.stderr.write(`${line}\n`)))(generated.line);
   }

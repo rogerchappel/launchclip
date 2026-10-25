@@ -20,7 +20,7 @@ import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { directionJson } from "../../kit/core/direction.mjs";
 import { profileForStory } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
-import { generateProjectStyle, projectSeedStyle, promptTone, adoptStyleLook } from "../style_seed_store.js";
+import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
 import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
 import { MUSIC_FLAG_VALUES } from "../music/index.js";
@@ -688,7 +688,7 @@ async function seededStyle(ctx) {
   if (seed == null) style = await projectSeedStyle(project, { name: state.style?.generated ?? null });
   if (style) ctx.say(style.line);
   else {
-    const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone: promptTone(ctx.text), clock: ctx.adapters.clock });
+    const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone: promptTone(ctx.text), constraints: promptConstraints(ctx.text), clock: ctx.adapters.clock });
     ctx.say(made.line);
     style = { name: made.name, pack: made.pack, file: made.file, source: "generated", warnings: [], summary: made.summary };
   }

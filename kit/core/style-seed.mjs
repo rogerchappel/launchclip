@@ -27,10 +27,12 @@ import { CAPTION_PRESETS } from './captions.mjs';
 import { DRAWING_STYLES } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, generateCast } from './characters/generate.mjs';
 import { moduleVariants } from './modules.mjs';
-import { GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
+import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
+import { BACKGROUND_MOTIFS } from './backgrounds.mjs';
+import { PANEL_TREATMENTS } from './panels.mjs';
 import { WORLD_KINDS } from './worlds/index.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
-import { STYLE_FRAME_POSITIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
+import { STYLE_FRAME_POSITIONS, STYLE_ICON_STYLES, STYLE_ILLUSTRATIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
 export const GENERATOR_VERSION = 'launchclip.style-seed.v1';
 export const SEED_PATTERN = /^[0-9a-f]{8}$/;
@@ -41,12 +43,12 @@ export const SEED_PATTERN = /^[0-9a-f]{8}$/;
 export const TONES = Object.freeze(['calm', 'serious', 'warm', 'energetic', 'playful', 'premium', 'technical']);
 export const THEMES = Object.freeze(['dark', 'light', 'tinted']);
 export const PALETTE_SCHEMES = Object.freeze(['complementary', 'split-complementary', 'analogous', 'triadic', 'monochrome', 'duotone']);
-export const SEED_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
+export const SEED_PANEL_TREATMENTS = PANEL_TREATMENTS;
 // Plain flat fills look poor, so subtle patterns and textures carry most of
-// the weight; flat and today's blobs stay possible. Kinds that need content
-// the seed does not have (logo-pattern, icon-pattern, motif) are left to art
-// direction. Each entry is [kind, weight].
-export const SEED_BACKGROUND_KINDS = Object.freeze([['texture', 3], ['grain-gradient', 3], ['dot-grid', 2], ['topographic', 2], ['halftone', 2], ['mesh', 2], ['gradient', 2], ['geometric', 1], ['stripes', 1], ['paper', 1], ['blobs', 1], ['flat', 1]].map(Object.freeze));
+// the weight; flat and the blobs field stay possible. Every kit kind is drawn
+// except logo-pattern, which needs a brand logo a seeded style does not have.
+// Each entry is [kind, weight].
+export const SEED_BACKGROUND_KINDS = Object.freeze([['texture', 3], ['grain-gradient', 3], ['dot-grid', 2], ['topographic', 2], ['halftone', 2], ['mesh', 2], ['gradient', 2], ['geometric', 1], ['stripes', 1], ['paper', 1], ['light-rays', 1], ['icon-pattern', 1], ['icon-scatter', 1], ['motif', 1], ['blobs', 1], ['flat', 1]].map(Object.freeze));
 // Fills inside cards and footage panels: quiet textures only.
 export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot-grid', 'halftone', 'topographic']);
 // Per-kind param subranges that read well (from the backgrounds kit; every
@@ -66,7 +68,7 @@ export const SEED_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.2, 0.5] },
   paper: { grain: [0.3, 0.7], intensity: [0.2, 0.6] }
 });
-const COLOR_KINDS = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays']);
+const COLOR_KINDS = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif']);
 export const SEED_TEXTURES = Object.freeze(['noise', 'fibre', 'canvas', 'linen']);
 const CALM_PARAMS = new Set(['intensity', 'amount']);
 
@@ -79,8 +81,10 @@ function drawBackgroundParams(s, kind, { fill = false } = {}) {
   }
   const color = s.pick(['primary', 'accent', 'paper']);
   const texture = s.pick(SEED_TEXTURES);
+  const shape = s.pick(BACKGROUND_MOTIFS);
   if (COLOR_KINDS.has(kind)) params.color = color;
   if (kind === 'texture') params.type = texture;
+  if (kind === 'motif') params.shape = shape;
   return params;
 }
 
@@ -90,14 +94,18 @@ export const PANEL_FILL_CHANCE = 0.6;
 // (TONE_SOUND); the genre sets the bpm range, keys and progressions.
 export const SEED_SOUND_PALETTES = SOUND_PALETTES;
 export const SEED_MUSIC_GENRES = MUSIC_GENRES;
-export const SEED_ICON_STYLES = Object.freeze(['outline']);
-export const SEED_ILLUSTRATIONS = Object.freeze(['flat']);
+export const SEED_ICON_STYLES = STYLE_ICON_STYLES;
+export const SEED_ILLUSTRATIONS = STYLE_ILLUSTRATIONS;
+// Ambience under the music: "auto" (the world's own bed, kit/core/sound
+// ambienceForWorld) most of the time, else none or any bed. [value, weight].
+export const SEED_AMBIENCE = Object.freeze([['auto', 6], ['none', 1], ...AMBIENCE_BEDS.map((bed) => [bed, 1])].map(Object.freeze));
 export const SEED_DRAWING_STYLES = DRAWING_STYLES;
-// The characters kit's sets (kit/core/characters/generate.mjs) that suit any
-// prompt; themed ones (family, kids, seniors, chefs, medical, athletes) come
-// from art direction (constraint character_set, any CHARACTER_SET_NAMES).
-// generateCast builds the people from the seed.
-export const SEED_CHARACTER_SETS = Object.freeze(['office-team', 'startup-founders', 'students', 'creators', 'city-crowd'].filter((name) => CHARACTER_SET_NAMES.includes(name)));
+// Every set in the characters kit (kit/core/characters/generate.mjs), the
+// everyday ones twice as often as the themed ones (family, kids, seniors,
+// chefs, medical, athletes, ...); art direction pins one with character_set.
+// generateCast builds the people from the seed. [set, weight].
+export const NEUTRAL_CHARACTER_SETS = Object.freeze(['office-team', 'startup-founders', 'students', 'creators', 'city-crowd']);
+export const SEED_CHARACTER_SETS = Object.freeze(CHARACTER_SET_NAMES.map((name) => Object.freeze([name, NEUTRAL_CHARACTER_SETS.includes(name) ? 2 : 1])));
 // Topic-neutral worlds (from the worlds kit) the seed may draw for any prompt;
 // topical ones (kitchen, gym, server-room, ...) are left to art direction.
 // Props stay empty: a world dresses itself, and props are for direction.
@@ -448,12 +456,18 @@ export function nearestStarter(pack) {
 // ---------------------------------------------------------------------------
 // The pack
 
-/** One kind from [[kind, weight], ...]. */
-function weighted(s, entries) {
-  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-  let at = s.random() * total;
-  for (const [kind, weight] of entries) { at -= weight; if (at < 0) return kind; }
-  return entries.at(-1)[0];
+// Categorical choices step through their options: the option index is
+// (seed × a prime + an offset) mod the option count, the prime and offset
+// picked by the dimension's name. Every run of n consecutive seeds therefore
+// visits all n options of a dimension (weights repeat an option), different
+// dimensions step at different rates, and random seeds stay uniform.
+const STEP_PRIMES = [101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179];
+
+/** One option of `entries` ([value] or [[value, integer weight]]) for this seed and dimension. */
+function spread(hex, name, entries) {
+  const list = entries.flatMap((entry) => (Array.isArray(entry) ? Array(entry[1]).fill(entry[0]) : [entry]));
+  const h = hash32(name);
+  return list[(parseInt(hex, 16) * STEP_PRIMES[h % STEP_PRIMES.length] + h) % list.length];
 }
 
 const asObject = (value, key) => (value == null ? null : typeof value === 'string' ? { [key]: value } : value);
@@ -514,19 +528,22 @@ export function generateStyle({ seed, tone = null, constraints = {}, at } = {}) 
 
 function buildPack(hex, toneName, t, fixed, attempt) {
   const draw = (name) => stream(hex, attempt ? `${name}#${attempt}` : name);
-  const theme = fixed.theme ?? draw('theme').pick(t.themes);
-  const scheme = draw('scheme').pick(PALETTE_SCHEMES);
+  // Categorical choices are fixed per seed (a redraw only redraws the palette,
+  // which is half the starter distance), so consecutive seeds keep stepping
+  // through every option.
+  const choose = (name, entries) => spread(hex, name, entries);
+  const theme = fixed.theme ?? choose('theme', t.themes);
+  const scheme = choose('scheme', PALETTE_SCHEMES);
   let palette = null;
   const paletteStream = draw('palette');
   for (let i = 0; i < 12 && !palette; i += 1) palette = drawPalette(paletteStream, { theme, scheme, tone: toneName });
   if (!palette) return null;
 
-  const type = draw('type');
   const pairings = toneName ? FONT_PAIRINGS.filter((entry) => entry.tones.includes(toneName)) : FONT_PAIRINGS;
-  const pairing = type.pick(pairings);
+  const pairing = choose('type', pairings);
 
   const motion = draw('motion');
-  const grammar = motion.pick(t.grammars);
+  const grammar = choose('grammar', t.grammars);
   const transitions = [...GRAMMAR_TRANSITIONS[grammar]];
   const preference = [];
   while (preference.length < 2 + Math.floor(motion.random() * 2) && transitions.length) preference.push(transitions.splice(Math.floor(motion.random() * transitions.length), 1)[0]);
@@ -534,48 +551,44 @@ function buildPack(hex, toneName, t, fixed, attempt) {
 
   const panelStream = draw('panel');
   const panelFixed = asObject(fixed.panel, 'treatment') ?? {};
-  const treatment = panelStream.pick(SEED_PANEL_TREATMENTS);
+  const treatment = choose('panel', SEED_PANEL_TREATMENTS);
   const radius = 2 * Math.round(panelStream.range(0, 16));
   const panel = { treatment: panelFixed.treatment ?? treatment, radius: panelFixed.radius ?? radius };
-  const surface = draw('background');
   const backgroundFixed = asObject(fixed.background, 'kind') ?? {};
-  const drawn = weighted(surface, SEED_BACKGROUND_KINDS);
-  const fade = surface.pick(SEED_FADES);
+  const drawn = choose('background', SEED_BACKGROUND_KINDS);
+  const fade = choose('fade', SEED_FADES);
   const kind = backgroundFixed.kind ?? drawn;
   const drawnParams = drawBackgroundParams(draw('background-params'), kind);
   const background = { kind, params: backgroundFixed.params ?? (kind === 'blobs' ? {} : { ...drawnParams, fade }) };
   const fillStream = draw('panel-fill');
-  const fillKind = fillStream.pick(SEED_PANEL_FILLS);
-  const fillFade = fillStream.pick(SEED_FADES);
+  const fillKind = choose('panel-fill', SEED_PANEL_FILLS);
+  const fillFade = choose('panel-fill-fade', SEED_FADES);
   const fillParams = drawBackgroundParams(fillStream, fillKind, { fill: true });
   if (panelFixed.fill === undefined && panel.treatment !== 'glass' && fillStream.chance(PANEL_FILL_CHANCE)) panel.fill = { kind: fillKind, params: { ...fillParams, fade: fillFade } };
   else if (panelFixed.fill) panel.fill = panelFixed.fill;
-  let level = motion.pick(t.ambient);
+  let level = choose('ambient', t.ambient);
   if (kind === 'blobs' && level === 'off') level = 'subtle';
 
-  const captionsStream = draw('captions');
   const presets = GRAMMAR_CAPTIONS[grammar].filter((name) => palette.dark || LIGHT_CAPTIONS.has(name));
-  const caption = captionsStream.pick(presets.length ? presets : ['minimal-line']);
+  const caption = choose('captions', presets.length ? presets : ['minimal-line']);
 
   const vocab = draw('vocabulary');
-  const vocabulary = { icon_tint: vocab.pick(['primary', 'accent']), icon_stroke: 1.25 + 0.25 * Math.floor(vocab.random() * 6), icon_style: vocab.pick(SEED_ICON_STYLES), illustration: vocab.pick(SEED_ILLUSTRATIONS), prefer: {} };
-  const variantsStream = draw('variants');
-  const variants = Object.fromEntries(Object.entries(SEED_MODULE_VARIANTS).map(([id, list]) => [id, variantsStream.pick(list)]));
+  const vocabulary = { icon_tint: vocab.pick(['primary', 'accent']), icon_stroke: 1.25 + 0.25 * Math.floor(vocab.random() * 6), icon_style: choose('icon-style', SEED_ICON_STYLES), illustration: choose('illustration', SEED_ILLUSTRATIONS), prefer: {} };
+  const variants = Object.fromEntries(Object.entries(SEED_MODULE_VARIANTS).map(([id, list]) => [id, choose(`variant:${id}`, list)]));
 
   const cast = {
-    drawing_style: fixed.drawing_style ?? draw('drawing-style').pick(SEED_DRAWING_STYLES),
-    set: fixed.character_set ?? draw('character-set').pick(SEED_CHARACTER_SETS),
+    drawing_style: fixed.drawing_style ?? choose('drawing-style', SEED_DRAWING_STYLES),
+    set: fixed.character_set ?? choose('character-set', SEED_CHARACTER_SETS),
     colors: { fill: 'primary', accent: 'accent', line: palette.dark ? 'paper' : 'ink' },
     members: []
   };
   const castStream = draw('cast');
   cast.members = generateCast({ seed: `${hex}${attempt ? `#${attempt}` : ''}`, set: cast.set, count: 2 + Math.floor(castStream.random() * 3), palette: palette.colors });
-  const worldStream = draw('world');
   // A list (suggestWorld's fitting worlds) is a constraint the seed picks within.
-  const worldPick = Array.isArray(fixed.world) ? worldStream.pick(fixed.world) : null;
+  const worldPick = Array.isArray(fixed.world) ? choose('world', fixed.world) : null;
   const worldFixed = worldPick ? { kind: worldPick } : asObject(fixed.world, 'kind');
-  const worldKind = SEED_WORLDS.length ? worldStream.pick(SEED_WORLDS) : null;
-  const worldTime = weighted(worldStream, NIGHT_TONES.has(toneName) ? STYLE_WORLD_TIMES.map((time) => [time, 1]) : SEED_WORLD_TIMES);
+  const worldKind = SEED_WORLDS.length ? choose('world', SEED_WORLDS) : null;
+  const worldTime = choose('world-time', NIGHT_TONES.has(toneName) ? STYLE_WORLD_TIMES.map((time) => [time, 1]) : SEED_WORLD_TIMES);
   const world = worldFixed ? { kind: worldFixed.kind, time: worldFixed.time ?? worldTime } : worldKind ? { kind: worldKind, time: worldTime } : undefined;
 
   const frame = draw('frame');
@@ -592,8 +605,8 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const dials = Object.fromEntries(Object.entries(t.dials).map(([key, centre]) => [key, round(Math.max(0.05, Math.min(0.95, centre + dialStream.range(-0.12, 0.12))), 2)]));
   const music = draw('sound');
   const fits = TONE_SOUND[toneName] ?? { palettes: SEED_SOUND_PALETTES, genres: SEED_MUSIC_GENRES };
-  const soundPalette = music.pick(fits.palettes);
-  const genre = music.pick(fits.genres);
+  const soundPalette = choose('sound-palette', fits.palettes);
+  const genre = choose('genre', fits.genres);
   const spec = GENRE_SPECS[genre];
 
   const fonts = { display: pairing.display, body: pairing.body, meta: pairing.meta };
@@ -608,7 +621,7 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     sound: {
       palette: soundPalette,
       music: { genre, bpm: Math.round(music.range(spec.bpm[0], spec.bpm[1])), key: music.pick(spec.keys), progression: Math.floor(music.random() * spec.progressions), prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...spec.bpm] },
-      ambience: 'auto',
+      ambience: choose('ambience', SEED_AMBIENCE),
       sfx_density: t.sfx
     },
     layout: { title_case: pairing.case === 'title' },

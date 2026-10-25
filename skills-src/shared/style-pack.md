@@ -61,9 +61,10 @@ a seed vary the look inside it (docs/SEEDED_STYLES_RFC.md):
    serious and dark. Leave out what does not matter, so the seed has room.
    For `world`, prefer the fitting worlds over one: the worlds kit's
    `suggestWorld(prompt).worlds` (`scripts/worlds/index.mjs`) lists them, and
-   the seed picks among them. `character_set` names a themed cast (chefs,
-   medical, kids, ...) only when the story is about those people; otherwise
-   the seed picks an everyday one.
+   the seed picks among them (`launchclip make` and `story plan` do this
+   themselves). Name `character_set` when the story is about particular
+   people (chefs, medical, kids, ...) or must not show them; otherwise the
+   seed picks one, everyday sets twice as often as themed ones.
 2. Generate the pack into the project from those constraints (the seed is
    random unless the user gives one):
 
