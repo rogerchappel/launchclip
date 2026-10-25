@@ -210,7 +210,10 @@ export const CAPTION_PRESETS = Object.freeze({
   'outline-heavy': preset({ description: 'Creator style: thick black outline, hard shadow, snap-in lines.', size: 84, stroke: 18, strokeColor: '#000000', shadow: '0 8px 0 #000000', word: 'highlight-big', emphasis: true, entrance: 'scale', exit: 'shrink', gap: 0.3 }),
   'split-color': preset({ description: 'Keywords in the accent colour; they pop when spoken.', word: 'emphasis', weight: 800, size: 70, case: 'title', stroke: 8, emphasis: true, entrance: 'slide-up', exit: 'fade', maxWords: 4, maxChars: 22, gap: 0.3 }),
   'lower-band': preset({ description: 'A broadcast band slides in; sentence-case text sits on it.', layout: 'band', font: 'body', weight: 700, size: 50, lineHeight: 1.1, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 6, maxChars: 30, entrance: 'slide-left', exit: 'fade', colors: { idle: 'ink' } }),
-  bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } })
+  bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
+  // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
+  // sit under a talking head all the way through.
+  'quiet-accent': preset({ description: 'Quiet sentence-case lines; one accent word per line in the accent colour.', font: 'body', weight: 600, size: 52, lineHeight: 1.16, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: SHADOW_SOFT, word: 'none', emphasis: true, accents: 1, maxWords: 6, maxChars: 32, entrance: 'fade', exit: 'fade' })
 });
 
 export const CAPTION_PRESET_NAMES = Object.freeze(Object.keys(CAPTION_PRESETS));
@@ -231,11 +234,23 @@ export function captionsOverlayOf(story) {
   return (Array.isArray(story?.overlays) ? story.overlays : []).find((entry) => entry?.type === 'captions' && entry.style !== 'none' && entry.preset !== 'none') ?? null;
 }
 
-/** Preset name of a captions overlay: preset, else style (legacy names mapped), else word-highlight. */
-export function captionPresetName(overlay) {
-  const value = overlay?.preset ?? overlay?.style ?? 'word-highlight';
+/**
+ * The preset a captions overlay that names none gets: quiet-accent in a
+ * footage-led story that names no style pack (a pack's own caption defaults
+ * apply through applyStyle instead), word-highlight everywhere else.
+ */
+export function captionDefaultPreset(story) {
+  const style = story?.style;
+  const named = (typeof style === 'string' && style.trim()) || (style && typeof style === 'object' && typeof style.name === 'string' && style.name.trim());
+  return story?.lane === 'footage-led' && !named ? 'quiet-accent' : 'word-highlight';
+}
+
+/** Preset name of a captions overlay: preset, else style (legacy names mapped), else the story's default (captionDefaultPreset). */
+export function captionPresetName(overlay, story) {
+  const fallback = captionDefaultPreset(story);
+  const value = overlay?.preset ?? overlay?.style ?? fallback;
   if (Object.hasOwn(CAPTION_LEGACY_STYLES, value)) return CAPTION_LEGACY_STYLES[value];
-  return Object.hasOwn(CAPTION_PRESETS, value) ? value : 'word-highlight';
+  return Object.hasOwn(CAPTION_PRESETS, value) ? value : fallback;
 }
 
 /** Band top (fraction of the canvas height) for a caption position. */
@@ -272,9 +287,22 @@ export function captionEmphasis(story, overlay = captionsOverlayOf(story)) {
 
 const isEmphasis = (set, text) => set.has(normToken(text)) || /\d/.test(text);
 
+/**
+ * Indexes of a chunk's accent words for a preset with an accent limit: its
+ * emphasis words in order, else its longest word of six letters or more,
+ * at most `limit` of them.
+ */
+function accentWords(words, emphasis, limit) {
+  const marked = words.map((word, i) => (isEmphasis(emphasis, word.text) ? i : -1)).filter((i) => i >= 0);
+  if (marked.length) return new Set(marked.slice(0, limit));
+  let best = -1, length = 5;
+  words.forEach((word, i) => { const n = normToken(word.text).length; if (n > length) { best = i; length = n; } });
+  return new Set(best >= 0 ? [best] : []);
+}
+
 /** Resolved options of a captions overlay: preset defaults overridden by the overlay's options. */
-export function captionOptions(overlay = {}, { brand, format, fonts } = {}) {
-  const name = captionPresetName(overlay) ?? 'word-highlight';
+export function captionOptions(overlay = {}, { brand, format, fonts, story } = {}) {
+  const name = captionPresetName(overlay, story) ?? 'word-highlight';
   const p = CAPTION_PRESETS[name];
   const brandColors = brand?.colors ?? {};
   const own = overlay?.colors && typeof overlay.colors === 'object' ? overlay.colors : {};
@@ -306,6 +334,7 @@ export function captionOptions(overlay = {}, { brand, format, fonts } = {}) {
     word: p.word,
     plate: p.plate,
     emphasis: overlay?.emphasis === false || overlay?.emphasis === 'none' ? false : p.emphasis || Array.isArray(overlay?.emphasis),
+    accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
     exit: Object.hasOwn(CAPTION_EXITS, overlay?.exit) ? overlay.exit : p.exit,
     offset: Number.isFinite(Number(overlay?.offset)) ? Math.max(-0.5, Math.min(0.5, Number(overlay.offset))) : 0,
@@ -367,13 +396,14 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
   }
 
   for (const chunk of list) {
+    const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
     const line = { tag: 'div', id: chunk.id, cls: o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap', children: [] };
     nodes.push(line);
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
     tw(chunk.id, chunk.start, entrance.dur, entrance.ease, inTo, { ...entrance.from }, true);
     chunk.words.forEach((word, i) => {
       const id = `${chunk.id}-w${i}`;
-      const em = o.emphasis && isEmphasis(emphasis, word.text);
+      const em = o.emphasis && (accented ? accented.has(i) : isEmphasis(emphasis, word.text));
       const start = word.start + o.offset, end = word.end + o.offset;
       const onAt = Math.max(0, start - 0.03);
       const offAt = Math.max(end, start + 0.08);

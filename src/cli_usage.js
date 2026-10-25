@@ -116,7 +116,7 @@ export const SUMMARIES = Object.freeze({
   "style save": "Save a style pack from a video or style directory.",
   "style list": "List project and built-in style packs.",
   "style show": "Show a style pack (upgraded in memory when it is v1).",
-  "style upgrade": "Upgrade a v1 style pack to v2 on disk.",
+  "style upgrade": "Upgrade a v1 or v2 style pack to v3 on disk.",
   "style check": "Check a rendered project against a style pack.",
   profile: "List, show or measure cadence profiles: what a strong video of one format measures like (coverage, face time, pacing, motion), as ranges the planner plans to and the gates check.",
   "profile list": "List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).",

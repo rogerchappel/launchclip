@@ -67,8 +67,8 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 
 ## Captions
 
-- Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice.
-- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble. With a style pack, write {"type": "captions"} and let the pack choose the preset.
+- Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice, except in the footage-led lane. In the footage-led lane write {"type": "captions"} with no style or preset: the default is the quiet sentence-case quiet-accent preset with one accent word per line; name word-highlight only when the brief asks for loud captions.
+- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble, quiet-accent. With a style pack, write {"type": "captions"} and let the pack choose the preset.
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 

@@ -1,5 +1,5 @@
 {
-  "schema": "launchclip.style.v2",
+  "schema": "launchclip.style.v3",
   "name": "warm-documentary",
   "description": "Archival documentary feel: warm umber canvas, cream serif type, a broadcast lower band for captions, slow pushes and restrained sound.",
   "brand": {
@@ -27,7 +27,12 @@
   },
   "captions": {
     "preset": "lower-band",
-    "position": "auto"
+    "position": "auto",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
   },
   "sound": {
     "sfx_density": "low",
@@ -77,5 +82,57 @@
   },
   "layout": {
     "title_case": false
+  },
+  "layouts": {
+    "by_intent": {
+      "quote": "framed",
+      "proof": "framed"
+    },
+    "by_section": {
+      "hook": "full",
+      "story": "full"
+    },
+    "panel": {
+      "treatment": "paper",
+      "radius": 6
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "accent",
+    "illustration": false,
+    "prefer": {
+      "quote": [
+        "excerpt-window"
+      ],
+      "proof": [
+        "archive-card",
+        "date-card"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "paper",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "ink"
+    }
+  },
+  "brand_frame": {
+    "enabled": true,
+    "kicker": {
+      "underline": true,
+      "position": "top-left",
+      "logo": true
+    },
+    "sections": true,
+    "progress": false,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.25,
+    "density": 0.4,
+    "playfulness": 0.15,
+    "polish": 0.7
   }
 }

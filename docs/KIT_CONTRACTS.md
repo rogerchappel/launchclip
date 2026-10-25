@@ -258,32 +258,63 @@ The project file is named **`storyboard.json`**. `story.json` would collide
 with the `STORY.json` creative receipt on case-insensitive filesystems. The
 schema id stays `launchclip.story.v1`.
 
-## Style pack v2 (`kit/core/style.mjs`, `src/style_store.js`, `src/story_style.js`)
+## Style pack v3 (`kit/core/style.mjs`, `src/style_store.js`, `src/story_style.js`)
 
 A style pack is `.launchclip/styles/<name>/style.json`:
 
 ```
-{schema: "launchclip.style.v2", name, description?,
+{schema: "launchclip.style.v3", name, description?,
  brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}},
  motion?: {grammar: name | {base, ...overrides}, ...},   // pass-through data
  camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
- captions?: {preset, ...caption options},
+ captions?: {preset, ...caption options,
+             lanes?: {motion | voiceover-motion | footage-led: {preset, ...options}}},
  sound?: {sfx_library?: path, sfx_density?: low|normal|high,
           music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?}},
  modules?: {prefer?: [id], avoid?: [id], params?: {<module>: {param: default}}},
  layout?: {safe_profile?: shorts|landscape, title_case?: boolean},
  intro?: {module, params, duration}, outro?: {module, params, duration},
  loop?: boolean, references?: [{name, sha256, kind, width, height, duration_seconds}],
- reference_stats?: {palette, pacing, energy, sound}}
+ reference_stats?: {palette, pacing, energy, sound},
+ // v3 (docs/VIDEO_QUALITY_RFC.md §9):
+ layouts?: {by_intent?: {<intent>: layout}, by_section?: {<section>: layout},
+            panel?: {treatment?: solid|glass|paper, radius?: 0-120 px}},
+ vocabulary?: {icon_tint?: role|hex, illustration?: boolean, prefer?: {<intent>: [module id]}},
+ profile?: "<shipped profile id>" | <launchclip.cadence-profile.v1 profile>,
+ cast?: {drawing_style?, colors?: {<rig slot>: role|hex}, characters?: [id]},
+ brand_frame?: false | {enabled?, logo?: path, color?: role|hex,
+                kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?},
+                sections?: boolean | {position?, color?},
+                progress?: boolean | {position?: top|bottom, color?, thickness?: 2-16 px},
+                show?: always|scenes},
+ dials?: {energy?, density?, playfulness?, polish?: 0-1}}
 ```
+
+- Layout names are `full`, `split-left`, `split-right`, `framed`, `stacked`,
+  `insert` (RFC §7.1); another name is a warning, not an error, so the layouts
+  work can add one. Intent and section keys are not checked here (the direction
+  map owns intents).
+- `profile` is a shipped profile id (resolved by `src/profile_store.js`), or
+  an inline profile that must pass `kit/core/profiles.mjs` `validateProfile`
+  (`cadenceProfileErrors`). `cast` is shape-checked only (the characters kit
+  fills it).
+- `brandFrameErrors(frame, where)` checks `brand_frame` and the story's
+  `frame` (the same shape, plus `labels`).
+- `upgradeV2Pack(pack, {render})` → `{pack, notes}` fills the v3 fields from
+  `STYLE_V3_DEFAULTS`. `render: "same"` (how a v2 pack loads) turns the brand
+  frame off and adds no lane caption defaults, so a v2 pack renders exactly as
+  before; the default (`launchclip style upgrade`) turns the frame on and,
+  when the pack names no caption preset, adds `captions.lanes["footage-led"] =
+  {preset: "quiet-accent"}`.
 
 - `validateStylePack(pack, {modules})` → `{ok, errors, warnings}`.
 - `applyStyle(story, pack, {intro?, outro?})` → `{story, applied, warnings}`.
   Explicit story values always win. Brand colours and fonts fill per role;
   `motion`, `camera`, `ambient` and `layout` fill per key and are carried
   through as data (renderers that do not read them ignore them); the captions
-  overlay gets the pack's preset only when it names neither `preset` nor
-  `style`, and its other options per key (a story with no `overlays` at all
+  overlay gets the pack's preset (with `captions.lanes[story.lane]` on top,
+  `packCaptionsFor`) only when it names neither `preset` nor `style`, and its
+  other options per key (a story with no `overlays` at all
   gets one captions overlay); `sound` lands on `audio.sfx_density`,
   `audio.sfx_library` and `audio.music_hints` (finish filters cues by density
   and bounds the bed tempo by `bpm_range`); `modules.params` fill each scene of
@@ -293,8 +324,9 @@ the pack's (story.mjs `ending.final` then decides how a non-looping story's last
 scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intro
   and outro scenes are added only when requested (`"style": {name, intro,
   outro}`), and an intro is skipped on stories with a timed voice, mix, base or
-  anchors. The merged story carries `meta.style = {name, applied}`, which makes
-  the merge idempotent.
+  anchors; `brand_frame` (unless off) fills the story's `frame` per key (a
+  story with `"frame": false` keeps none). The merged story carries
+  `meta.style = {name, applied}`, which makes the merge idempotent.
 - A storyboard names its pack with top-level `"style"` (a name, a path to a
   `style.json` or pack directory, or `{name, intro?, outro?}`). Names resolve in
   `<project>/.launchclip/styles`, then `~/.launchclip/styles`
@@ -302,10 +334,14 @@ scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intr
   starters). `applyProjectStyle(story, {projectDir})` runs before validation in
   `readProjectStory` (renderer adapters, cinematic checks, eval), `story
   validate|resolve|compile`, `layout-check` and `finish`.
-- v1 packs (`launchclip.style-pack.v1`: `frame.md`, caption skin, audio notes)
-  load as v2 in memory with a warning; `launchclip style upgrade <name>` writes
-  the v2 `style.json` and keeps the v1 manifest as `style.v1.json`.
-- `stylePromptLines(pack)` is the planner section (`planningPrompt({style})`).
+- v2 packs (`launchclip.style.v2`) load as v3 in memory (`render: "same"`)
+  with a warning; `launchclip style upgrade <name>` writes v3 and keeps the v2
+  file as `style.v2.json`. v1 packs (`launchclip.style-pack.v1`: `frame.md`,
+  caption skin, audio notes) load as v3 in memory with a warning; `style
+  upgrade` writes v3 and keeps the v1 manifest as `style.v1.json`.
+- `stylePromptLines(pack, {lane})` is the planner section
+  (`planningPrompt({style})`): preferences, the lane's caption preset, footage
+  layouts, panels, modules by intent, the cast and the brand frame.
 - Starters: `editorial-dark`, `bold-creator`, `minimal-tech`,
   `warm-documentary`, `neon-explainer`; each validates, passes the contrast
   check (`checkPackContrast`: paper/bg 4.5:1, primary and accent/bg 3:1,
@@ -332,8 +368,14 @@ The captions overlay is `{type: "captions", preset | style, src?, hide?,
 position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
 colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; legacy `style:
 "word-highlight" | "line" | "none"` still works (`line` → `minimal-line`,
-`style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 14
-presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names.
+`style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 15
+presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names. An overlay
+that names neither gets `captionDefaultPreset(story)`: `quiet-accent` in a
+footage-led story that names no style pack, `word-highlight` everywhere else
+(a pack's caption defaults arrive through `applyStyle`). `quiet-accent` is
+sentence case in the body face with no stroke, and colours at most one accent
+word per line (`accents: 1`): the line's first emphasis word, else its longest
+word of six letters or more.
 
 `captionPlan(chunks, overlay, {brand, format, story, hide, fonts?})` →
 `{preset, options, css, nodes, tweens}`. `nodes` is a DOM tree (div/span with

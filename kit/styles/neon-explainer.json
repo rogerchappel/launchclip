@@ -1,5 +1,5 @@
 {
-  "schema": "launchclip.style.v2",
+  "schema": "launchclip.style.v3",
   "name": "neon-explainer",
   "description": "Playful science explainers: deep violet night, cyan and magenta neon, a rounded grotesque display face, glowing captions and lively motion.",
   "brand": {
@@ -28,7 +28,12 @@
   },
   "captions": {
     "preset": "glow",
-    "position": "auto"
+    "position": "auto",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
   },
   "sound": {
     "sfx_density": "normal",
@@ -64,6 +69,61 @@
   },
   "layout": {
     "title_case": false
+  },
+  "layouts": {
+    "by_intent": {
+      "list": "split-left",
+      "concept": "insert"
+    },
+    "by_section": {
+      "hook": "full"
+    },
+    "panel": {
+      "treatment": "glass",
+      "radius": 36
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "accent",
+    "illustration": true,
+    "prefer": {
+      "claim": [
+        "kinetic-words",
+        "glass-word"
+      ],
+      "list": [
+        "checklist"
+      ],
+      "concept": [
+        "function-chart",
+        "equation-lockup"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "outlined",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
+  "brand_frame": {
+    "enabled": true,
+    "kicker": {
+      "underline": true,
+      "position": "top-left",
+      "logo": true
+    },
+    "sections": true,
+    "progress": true,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.7,
+    "density": 0.6,
+    "playfulness": 0.8,
+    "polish": 0.6
   },
   "loop": true
 }

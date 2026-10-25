@@ -1,5 +1,5 @@
 {
-  "schema": "launchclip.style.v2",
+  "schema": "launchclip.style.v3",
   "name": "minimal-tech",
   "description": "Light, precise product explainers: off-white canvas, electric blue, grotesk type, glass panels, underline captions and smooth motion.",
   "brand": {
@@ -29,7 +29,12 @@
   "captions": {
     "preset": "underline-sweep",
     "position": "auto",
-    "shadow": false
+    "shadow": false,
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
   },
   "sound": {
     "sfx_density": "normal",
@@ -80,5 +85,62 @@
   },
   "layout": {
     "title_case": true
+  },
+  "layouts": {
+    "by_intent": {
+      "list": "split-right",
+      "process": "split-right",
+      "product": "framed"
+    },
+    "by_section": {
+      "hook": "full"
+    },
+    "panel": {
+      "treatment": "glass",
+      "radius": 28
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "primary",
+    "illustration": true,
+    "prefer": {
+      "process": [
+        "process-steps",
+        "step-rail"
+      ],
+      "product": [
+        "code-snippet",
+        "excerpt-window"
+      ],
+      "number": [
+        "metric",
+        "trend-chart"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "flat",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
+  "brand_frame": {
+    "enabled": true,
+    "kicker": {
+      "underline": true,
+      "position": "top-left",
+      "logo": true
+    },
+    "sections": true,
+    "progress": true,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.5,
+    "density": 0.55,
+    "playfulness": 0.3,
+    "polish": 0.75
   }
 }
