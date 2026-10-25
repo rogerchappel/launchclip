@@ -3,8 +3,8 @@
 //
 // Story cast (story.cast):
 //   {style?: "flat", colors?: {primary?, accent?, paper?, ink?, bg?},
-//    characters: [{id, from?, name?, voice?, build?, height?, skin?, hair?,
-//                  outfit?, accessories?, colors?}]}
+//    characters: [{id, from?, name?, voice?, build?, height?, age?, skin?, hair?,
+//                  outfit?, accessories?, headwear?, mobility?, colors?}]}
 // An entry whose id (or `from`) names a starter character starts from its
 // params; the fields given override them. Any other id needs full params
 // (skin and hair at least). `colors` maps brand roles for the whole cast, so
@@ -24,15 +24,16 @@ import {EXPRESSIONS, HAIR_STYLES, POSES, normalizeRigParams, rigFingerprint} fro
 import {STARTER_IDS, characterLook, starterCharacter} from './cast.mjs';
 import {BRAND_ROLES, isColorName} from './palette.mjs';
 import {SEATED_SETS, SETS} from './sets.mjs';
+import {DRAWING_STYLES} from './styles.mjs';
 
-export const DRAWING_STYLES = Object.freeze(['flat']);
+export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
   'af_alloy', 'af_aoede', 'af_bella', 'af_heart', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky',
   'am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael', 'am_onyx', 'am_puck', 'am_santa',
   'bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily', 'bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis'
 ]);
 const ID = /^[a-z][a-z0-9-]{0,23}$/;
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'build', 'height', 'skin', 'hair', 'outfit', 'accessories', 'colors', 'position'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -89,6 +90,9 @@ function castParams(entry, path) {
     hair: {...(base?.hair ?? {}), ...(entry.hair ?? {})},
     outfit: {...(base?.outfit ?? {}), ...(entry.outfit ?? {})},
     accessories: entry.accessories ?? base?.accessories ?? [],
+    ...((entry.age ?? base?.age) ? {age: entry.age ?? base.age} : {}),
+    ...((entry.headwear ?? base?.headwear) ? {headwear: entry.headwear ?? base.headwear} : {}),
+    ...((entry.mobility ?? base?.mobility) ? {mobility: entry.mobility ?? base.mobility} : {}),
     colors: {...(base ? {top: base.colors.top, bottom: base.colors.bottom, shoes: base.colors.shoes, accent: base.colors.accent} : {}), ...(entry.colors ?? {})}
   };
   // A new hair style keeps the starter's colour unless one is given.

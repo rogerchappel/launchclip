@@ -90,12 +90,21 @@ cd <project>/..
 test -f package.json || npm init -y >/dev/null
 npm install --save-exact remotion@4.0.536 @remotion/cli@4.0.536 \
   @remotion/transitions@4.0.536 react@19.3.1 react-dom@19.3.1 \
-  @fontsource/anton@5.3.0 @fontsource/archivo-black@5.3.0 \
-  @fontsource/instrument-serif@5.3.0 @fontsource/stix-two-math@5.3.0 \
-  @fontsource-variable/bricolage-grotesque@5.3.0 @fontsource-variable/inter@5.3.0 \
-  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/space-grotesk@5.3.0 \
+  @fontsource-variable/big-shoulders-display@5.3.0 \
+  @fontsource-variable/bricolage-grotesque@5.3.0 \
+  @fontsource-variable/dm-sans@5.3.0 @fontsource-variable/fira-code@5.3.0 \
+  @fontsource-variable/fraunces@5.3.0 @fontsource-variable/inter@5.3.0 \
+  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/lexend@5.3.0 \
+  @fontsource-variable/manrope@5.3.0 @fontsource-variable/oswald@5.3.0 \
+  @fontsource-variable/outfit@5.3.0 \
+  @fontsource-variable/playfair-display@5.3.0 \
+  @fontsource-variable/plus-jakarta-sans@5.3.0 @fontsource-variable/sora@5.3.0 \
+  @fontsource-variable/space-grotesk@5.3.0 \
   @fontsource-variable/stix-two-text@5.3.0 @fontsource-variable/syne@5.3.0 \
-  @fontsource-variable/unbounded@5.3.0
+  @fontsource-variable/unbounded@5.3.0 @fontsource/anton@5.3.0 \
+  @fontsource/archivo-black@5.3.0 @fontsource/bebas-neue@5.3.0 \
+  @fontsource/dm-serif-display@5.3.0 @fontsource/instrument-serif@5.3.0 \
+  @fontsource/stix-two-math@5.3.0 @fontsource/young-serif@5.3.0
 ```
 
 The default output, `.launchclip/agent-<slug>`, therefore installs into
@@ -380,10 +389,12 @@ Every `delayRender()` must reach `continueRender()` or `cancelRender()`.
 ### Fonts
 
 `kit/core/fonts.mjs` is the font registry both renderers share: Anton, Archivo
-Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space
-Grotesk, STIX Two Math, STIX Two Text, Syne and Unbounded, each from a pinned
-`@fontsource` package (OFL-1.1, latin subset). Every composition calls
-`ensureFonts(brand)` from `kit/remotion/fonts.ts`, which:
+Black, Bebas Neue, Big Shoulders Display, Bricolage Grotesque, DM Sans, DM
+Serif Display, Fira Code, Fraunces, Instrument Serif, Inter, JetBrains Mono,
+Lexend, Manrope, Oswald, Outfit, Playfair Display, Plus Jakarta Sans, Sora,
+Space Grotesk, STIX Two Math, STIX Two Text, Syne, Unbounded and Young Serif,
+each from a pinned `@fontsource` package (OFL-1.1, latin subset). Every
+composition calls `ensureFonts(brand)` from `kit/remotion/fonts.ts`, which:
 
 - loads every role default (display Anton, body Inter, meta JetBrains Mono,
   maths STIX Two Text, quote serif Instrument Serif), STIX Two Math as the

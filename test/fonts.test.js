@@ -29,6 +29,17 @@ test("every registered face is a pinned dependency file on disk", () => {
   assert.equal(allFontFaces().length, Object.values(FONT_REGISTRY).reduce((sum, item) => sum + item.faces.length, 0));
 });
 
+// Seeded styles (docs/SEEDED_STYLES_RFC.md §3.5) want 25+ families in curated
+// pairings; every registered file ships in the npm package and the Remotion
+// bundle, so the faces together stay inside a size budget.
+const FONT_BYTES_BUDGET = 1_500_000;
+
+test("the registry holds 25 families inside the font size budget", () => {
+  assert.ok(Object.keys(FONT_REGISTRY).length >= 25);
+  const bytes = allFontFaces().reduce((sum, face) => sum + statSync(require.resolve(face.module)).size, 0);
+  assert.ok(bytes <= FONT_BYTES_BUDGET, `bundled faces weigh ${bytes} bytes, over the ${FONT_BYTES_BUDGET} budget`);
+});
+
 test("the RFC families, the maths serif and the editorial defaults are registered", () => {
   for (const family of ["Anton", "Space Grotesk", "JetBrains Mono", "Unbounded", "Inter", "Syne", "Bricolage Grotesque", "Archivo Black", "Instrument Serif", "STIX Two Text", "STIX Two Math"]) {
     assert.ok(FONT_REGISTRY[family], family);
