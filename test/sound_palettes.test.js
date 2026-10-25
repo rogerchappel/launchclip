@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SFX_FAMILY_NAMES, SOUND_PALETTES, TONE_SOUND, ambienceForWorld, densityValue, normalizeKey, soundProblems } from "../kit/core/sound/options.mjs";
 import { FAMILY_BUILDERS, familySpec } from "../kit/core/sound/families.mjs";
 import { palette, paletteChain } from "../kit/core/sound/palettes.mjs";
@@ -13,6 +15,9 @@ import { SFX_VARIANTS, kitVariants, roleEnvelope } from "../skills/launchclip-cr
 import { mixGraph } from "../skills/launchclip-create-video/scripts/build-mix.mjs";
 import { applyDensity, densityTyping } from "../src/sfx/library.js";
 import { CUE_LEVELS, PATHS, bindCues, defaultCueFor, kitArgs, runFinish, soundSettings } from "../src/finish.js";
+import { mediaSkip } from "./helpers/media.js";
+
+const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MINIMAL = path.join(ROOT, "examples/story/minimal");
@@ -246,6 +251,37 @@ test("finish reads the sound block: palette kit, genre bed, ambience from the wo
     // Run again: nothing changed, so the sound stage and the kit are reused.
     await runFinish(dir, { renderer: "remotion" }, fake);
     assert.equal(fake.calls.kits.length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("rendered: a palette slice, a genre bed and an ambience loop pass the listen checks", { skip: mediaSkip(), timeout: 600_000 }, async () => {
+  const { analyseFile, decodePcm, effectProblems } = await import("../scripts/sound-analysis.mjs");
+  const { synthAmbience, synthGenreBed } = await import("../skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+  const { analyzeBeatsFile } = await import("../src/music/beats.js");
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-sound-media-"));
+  try {
+    const kit = path.join(ROOT, "skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+    await execFileAsync(process.execPath, [kit, path.join(dir, "kit"), "--palette", "retro-8bit", "--seed", "t1", "--only", "whoosh,ding,glitch,keystroke,success"], { maxBuffer: 1 << 26 });
+    const manifest = JSON.parse(await readFile(path.join(dir, "kit/AUDIO-KIT.json"), "utf8"));
+    assert.equal(manifest.palette, "retro-8bit");
+    for (const cue of manifest.sfx) {
+      const stats = await analyseFile(cue.file);
+      assert.deepEqual(effectProblems(stats, { family: cue.family }), [], `${cue.name}: ${JSON.stringify(stats)}`);
+    }
+    const bed = await synthGenreBed(path.join(dir, "bed"), { seconds: 14, genre: "lo-fi", bpm: 84, key: "D", progression: 1, kickFrom: 3, kickTo: 12, seed: "t1" });
+    const grid = await analyzeBeatsFile(bed.file, { bpmHint: 84 });
+    assert.ok(Math.abs(grid.bpm - 84) <= 1, `analysed ${grid.bpm} BPM`);
+    const eighth = bed.beat_seconds / 2;
+    for (const t of grid.beats.filter((time) => time > 3.5 && time < 11.5)) assert.ok(Math.min(t % eighth, eighth - (t % eighth)) < 0.025, `beat at ${t} is off the grid`);
+    assert.equal((await analyseFile(bed.file)).clipped, 0);
+    const loop = await synthAmbience("rain", path.join(dir, "ambience"), { seed: "t1" });
+    const { left } = await decodePcm(loop.file);
+    let typical = 0;
+    for (let i = 1; i < left.length; i++) typical += Math.abs(left[i] - left[i - 1]);
+    typical /= left.length - 1;
+    assert.ok(Math.abs(left[0] - left.at(-1)) < typical * 4 + 0.002, "the loop has no step at its seam");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
