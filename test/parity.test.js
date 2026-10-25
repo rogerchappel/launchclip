@@ -7,6 +7,7 @@ import {existsSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DEFAULT_ENTRY, runParity, runStoryParity} from '../scripts/parity.mjs';
+import {backgroundFixtures, runBackgroundParity} from '../scripts/parity-backgrounds.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const DIR = path.join(ROOT, 'test', 'fixtures', 'parity');
@@ -35,5 +36,15 @@ for (const {id, times} of STORY_PARITY) {
   test(`parity: story ${id} (ambient)`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render story parity', timeout: 600_000}, async () => {
     const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, out: path.join(ROOT, 'qa', 'parity', `story-${id}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `story ${id} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
+  });
+}
+
+// Background kinds and panel treatments (kit/core/backgrounds.mjs,
+// kit/core/panels.mjs): one story fixture each, with the panels on a light
+// and a dark palette (test/fixtures/parity-backgrounds/).
+for (const fixture of await backgroundFixtures()) {
+  test(`parity: background ${fixture.name}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render background parity', timeout: 600_000}, async () => {
+    const report = await runBackgroundParity(fixture);
+    for (const sample of report.samples) assert.ok(sample.pass, `${fixture.name} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
   });
 }
