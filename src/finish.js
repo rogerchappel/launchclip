@@ -420,6 +420,9 @@ export function defaultAdapters() {
       const { masterLoudness } = await import(SCRIPT.master);
       return masterLoudness(input, output, target);
     },
+    async cutChapter(input, output, { start, end }) {
+      await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(start), "-to", String(end), "-i", input, "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output], { maxBuffer: 1 << 24 });
+    },
     async muxChapters(input, metadata, output) {
       await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", input, "-f", "ffmetadata", "-i", metadata, "-map", "0", "-map_metadata", "1", "-map_chapters", "1", "-c", "copy", "-movflags", "+faststart", output], { maxBuffer: 1 << 24 });
     },
@@ -450,7 +453,10 @@ export function defaultAdapters() {
  *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
  *     master, evidence and gates, with before/after stills (--scene);
  *   previewScene: render only that scene to renders/scene-<id>.mp4 and stop
- *     (--preview-scene)}
+ *     (--preview-scene),
+ *   chapter: a chapter id: its render segments re-render (the rest are
+ *     reused), the master is stitched from all of them, and the chapter is
+ *     also written alone to renders/chapters/<id>.mp4 (--chapter)}
  * adapters: any of defaultAdapters() to replace.
  * Returns the finish.json report; it never throws for a stage failure (the
  * report's status is "failed"), only for an unreadable project.
@@ -489,7 +495,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   // --prototype: render only the opening 20–30 s (RFC §11.1), to its own file.
   const prototype = Boolean(options.prototype);
   if (prototype && candidate) throw new Error("use --prototype or --candidate, not both");
-  if (prototype && (iterationOptions(story, options).scenes.length || options.previewScene)) throw new Error("--prototype renders the opening; drop --scene and --preview-scene");
+  if (prototype && (iterationOptions(story, options).scenes.length || options.previewScene || iteration.chapter)) throw new Error("--prototype renders the opening; drop --scene, --preview-scene and --chapter");
+  if (candidate && iteration.chapter) throw new Error("use --candidate or --chapter, not both");
   const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : prototype ? `renders/prototype${quality === "high" ? "-high" : ""}.mp4` : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
@@ -498,7 +505,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     copy: buildFinishCopy(story),
     adapters,
     options: { ...options, quality, ...iteration },
-    forceStages: new Set([...(iteration.scenes.length ? ["render", "master", "evidence", "gates"] : []), ...(options.musicRegenerate ? ["sound"] : [])]),
+    forceStages: new Set([...(iteration.scenes.length || iteration.chapter ? ["render", "master", "evidence", "gates"] : []), ...(options.musicRegenerate ? ["sound"] : [])]),
     halt: null,
     preview: null,
     rendererName,
@@ -927,8 +934,12 @@ const STAGES = [
       const scenes = ctx.options.scenes;
       const stillsDir = path.join(ctx.project, PATHS.sceneStills);
       const before = scenes.length && existsSync(ctx.raw) ? await sceneStills(ctx.resolved, ctx.raw, scenes, stillsDir, { suffix: "before", tools }).catch(() => []) : [];
-      const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes });
+      // --chapter: every segment inside the chapter re-renders; the rest come from the cache and the master is stitched from all of them.
+      if (ctx.options.chapter) ctx.chapter = chapterWindow(ctx.resolved, ctx.options.chapter);
+      const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: ctx.chapter?.frames ?? null });
       if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
+      if (ctx.chapter && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --chapter ${ctx.chapter.id} re-rendered the whole ${ctx.rendererName} video`);
+      if (ctx.chapter) ctx.chapter.segments = segments ? { forced: segments.forced, reused: segments.reused, total: segments.segments } : null;
       const details = { renderer: ctx.rendererName, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
       if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
       return details;
@@ -944,7 +955,14 @@ const STAGES = [
       await mkdir(path.dirname(ctx.out), { recursive: true });
       const details = await masterDelivery(ctx);
       const chapters = await writeChapters(ctx);
-      return chapters ? { ...details, chapters } : details;
+      // --chapter also writes that chapter on its own, cut from the stitched master.
+      if (ctx.chapter) {
+        const output = path.join(ctx.project, chapterPath(ctx.chapter.id));
+        await mkdir(path.dirname(output), { recursive: true });
+        await ctx.adapters.cutChapter(ctx.out, output, { start: ctx.chapter.start, end: ctx.chapter.end });
+        ctx.chapter.output = chapterPath(ctx.chapter.id);
+      }
+      return { ...details, ...(chapters ? { chapters } : {}), ...(ctx.chapter?.output ? { chapter: ctx.chapter } : {}) };
     },
     restore(ctx, details) {
       ctx.chapters = details.chapters ?? null;
@@ -1058,18 +1076,39 @@ function applyPrototype(ctx) {
   ctx.prototype = { requested: true, cut: cut.cut, duration: cut.duration };
 }
 
-/** --scene / --preview-scene → {scenes: [ids], previewScene: id|null}, checked against the story. */
+/** --scene / --preview-scene / --chapter → {scenes: [ids], previewScene: id|null, chapter: id|null}, checked against the story. */
 export function iterationOptions(story, options = {}) {
   const list = (value) => (Array.isArray(value) ? value : value == null || value === false ? [] : [value]).flatMap((item) => String(item).split(",")).map((item) => item.trim()).filter(Boolean);
   const scenes = [...new Set(list(options.scenes ?? options.scene))];
   const preview = list(options.previewScene);
+  const chapter = list(options.chapter);
   if (preview.length > 1) throw new Error(`--preview-scene takes one scene id; got ${preview.join(", ")}`);
   if (preview.length && scenes.length) throw new Error("use --scene or --preview-scene, not both");
+  if (chapter.length > 1) throw new Error(`--chapter takes one chapter id; got ${chapter.join(", ")}`);
+  if (chapter.length && (scenes.length || preview.length)) throw new Error("--chapter re-renders a whole chapter; drop --scene and --preview-scene");
   const ids = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene) => scene?.id);
   for (const id of [...scenes, ...preview]) {
     if (!ids.includes(id)) throw new Error(`unknown scene "${id}"; storyboard.json has ${ids.join(", ")}`);
   }
-  return { scenes, previewScene: preview[0] ?? null };
+  if (chapter.length) {
+    const chapters = (Array.isArray(story?.chapters) ? story.chapters : []).map((entry) => entry?.id);
+    if (!chapters.length) throw new Error("--chapter needs chapters in storyboard.json; run launchclip story long-form first");
+    if (!chapters.includes(chapter[0])) throw new Error(`unknown chapter "${chapter[0]}"; storyboard.json has ${chapters.join(", ")}`);
+  }
+  return { scenes, previewScene: preview[0] ?? null, chapter: chapter[0] ?? null };
+}
+
+/** The chapter --chapter names, in the resolved story, with its frame range. → {id, title, start, end, frames: [a, b)} */
+export function chapterWindow(resolved, id) {
+  const chapter = storyChapters(resolved).find((entry) => entry.id === id);
+  if (!chapter) throw new Error(`chapter "${id}" is not in the resolved story`);
+  const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+  return { id: chapter.id, title: chapter.title, start: chapter.start, end: chapter.end, frames: [Math.round(chapter.start * fps), Math.round(chapter.end * fps)] };
+}
+
+/** Where --chapter writes the chapter on its own. */
+export function chapterPath(id) {
+  return `renders/chapters/${id}.mp4`;
 }
 
 export function previewPath(sceneId) {
@@ -1079,8 +1118,8 @@ export function previewPath(sceneId) {
 // Remotion renders through the segment cache; HyperFrames renders whole
 // videos, cached by hash; an adapter without renderSegments (a custom or
 // injected Remotion adapter) renders the whole story directly.
-async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null }) {
-  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
+async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
+  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
   if (ctx.rendererName === "hyperframes") {
     return renderWithSegments({
       ...common,
@@ -1259,6 +1298,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     ...(ctx.chapters ? { chapters: ctx.chapters } : {}),
+    ...(ctx.chapter ? { chapter: { id: ctx.chapter.id, title: ctx.chapter.title, start: ctx.chapter.start, end: ctx.chapter.end, output: ctx.chapter.output ?? null, segments: ctx.chapter.segments ?? null } } : {}),
     seconds,
     stages,
     gates,
@@ -1271,7 +1311,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
 /** "10 segments: 8 reused, 2 rendered (~11.3s saved)" */
 export function segmentSummary(segments) {
   if (segments.mode === "whole") return `whole-video cache (${segments.renderer} has no frame range): ${segments.reused ? `reused${segments.seconds_saved ? ` (~${segments.seconds_saved}s saved)` : ""}` : "rendered"}`;
-  const forced = segments.forced ? `, ${segments.forced} forced by --scene` : "";
+  const forced = segments.forced ? `, ${segments.forced} forced by --scene or --chapter` : "";
   return `${segments.segments} segments: ${segments.reused} reused, ${segments.rendered} rendered${forced}${segments.reused ? ` (~${segments.seconds_saved}s saved)` : ""}`;
 }
 
@@ -1285,6 +1325,7 @@ export function formatFinishSummary(report) {
     if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
   if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  if (report.chapter) lines.push(`chapter ${report.chapter.id} (${report.chapter.title}, ${report.chapter.start}–${report.chapter.end} s): ${report.chapter.segments ? `${report.chapter.segments.forced} of ${report.chapter.segments.total} segments re-rendered, ` : ""}master stitched${report.chapter.output ? `, ${report.chapter.output}` : ""}`);
   if (report.chapters) lines.push(`chapters: ${report.chapters.list.length} in ${report.chapters.file} and the MP4${report.chapters.problems.length ? ` (YouTube would not show them: ${report.chapters.problems.join("; ")})` : ""}`);
   if (report.candidate?.receipt) lines.push(`candidate ${report.candidate.id} (${report.candidate.comparison}): ${report.candidate.artifacts.join(", ")} -> ${report.candidate.receipt}`);
   for (const still of report.scene_stills ?? []) lines.push(`scene ${still.scene} @${still.seconds}s: ${still.compare ?? still.after}${still.compare ? " (before | after)" : ""}`);

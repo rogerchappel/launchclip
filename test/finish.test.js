@@ -541,6 +541,43 @@ function musicAdapters(base = fakeAdapters(), { env = { ELEVENLABS_API_KEY: "sk_
   return { adapters: base, notices, music };
 }
 
+test("--chapter re-renders that chapter's segments, stitches the master and writes the chapter alone", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-chapter-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.chapters = [{ id: "open", title: "Open", start: 0 }, { id: "fix", title: "The fix", start: 3 }];
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    const adapters = segmentAdapters();
+    adapters.muxChapters = async (input, metadata, output) => { await writeFile(output, await readFile(input, "utf8")); };
+    const cuts = [];
+    adapters.cutChapter = async (input, output, window) => { cuts.push(window); await writeFile(output, `cut ${window.start}-${window.end}`); };
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(first.stages.find((stage) => stage.name === "render").details.segments.rendered, 4);
+    assert.equal(first.chapter, undefined);
+
+    const report = await runFinish(project, { renderer: "remotion", chapter: "fix" }, adapters);
+    const segments = report.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([segments.reused, segments.forced], [1, 3], "the segments from 3 s on re-render; the opening is reused");
+    assert.deepEqual(adapters.segmentCalls.at(-1), [[90, 102], [102, 179], [179, 180]]);
+    assert.deepEqual(report.stages.slice(4).map((stage) => stage.reason), ["forced", "forced", "forced", "forced"]);
+    assert.deepEqual(cuts, [{ start: 3, end: 6 }]);
+    assert.deepEqual(report.chapter, { id: "fix", title: "The fix", start: 3, end: 6, output: "renders/chapters/fix.mp4", segments: { forced: 3, reused: 1, total: 4 } });
+    assert.equal(await readFile(path.join(project, "renders/chapters/fix.mp4"), "utf8"), "cut 3-6");
+    assert.ok(report.final, "the whole master is still delivered");
+    assert.match(formatFinishSummary(report), /chapter fix \(The fix, 3–6 s\): 3 of 4 segments re-rendered, master stitched, renders\/chapters\/fix\.mp4/);
+
+    await assert.rejects(runFinish(project, { chapter: "nope" }, adapters), /unknown chapter "nope"; storyboard\.json has open, fix/);
+    await assert.rejects(runFinish(project, { chapter: "fix", scenes: "s1" }, adapters), /--chapter re-renders a whole chapter; drop --scene/);
+    await assert.rejects(runFinish(project, { chapter: "fix", prototype: true }, adapters), /--prototype renders the opening; drop --scene, --preview-scene and --chapter/);
+    delete story.chapters;
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await assert.rejects(runFinish(project, { chapter: "fix" }, adapters), /--chapter needs chapters in storyboard\.json; run launchclip story long-form first/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("finish defaults to ElevenLabs music with a key, aligns it to the narration and caches it", async () => {
   const project = await narratedProject();
   try {

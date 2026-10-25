@@ -41,6 +41,16 @@ A series looks like a series when its regular segments look the same every episo
 
 Any chapter titled like the segment ("Tool of the week", "This week's tool: Raycast") becomes that segment. It opens on a card with the segment's kicker and icon, keeps you on one side of the frame with a branded panel beside you, and the planner prefers the segment's graphics. You can also name the segment in the direction map yourself: `"segment": "tool-of-the-week"`.
 
+## Fix one chapter
+
+When one chapter needs a change, re-render only that chapter:
+
+```bash
+launchclip finish ./my-video --chapter c3
+```
+
+Every other chapter comes from the render cache, the full video is put back together with your fix in it, and the chapter is also saved on its own as `renders/chapters/c3.mp4`. Chapter ids are in `storyboard.json` under `chapters`.
+
 ## What you get
 
 `launchclip finish` puts the chapters in three places:

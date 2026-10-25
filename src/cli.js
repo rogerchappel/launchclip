@@ -141,6 +141,7 @@ export async function runCli(argv, io = {}) {
         musicRegenerate: Boolean(flags["music-regenerate"]),
         scenes: flags.scene,
         previewScene: flags["preview-scene"],
+        chapter: flags.chapter,
         sfxLibrary: flags["sfx-library"],
         sfxDensity: flags["sfx-density"],
         candidate: flags.candidate,
