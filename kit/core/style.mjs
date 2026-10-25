@@ -30,7 +30,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -441,6 +441,7 @@ function validateV3Fields(pack, { err, warn, modules }) {
     for (const message of brandFrameErrors(pack.brand_frame)) err(message);
     if (isObject(pack.brand_frame) && pack.brand_frame.labels !== undefined) warn('brand_frame.labels belong to a story (story.frame.labels); a style\'s labels are ignored');
   }
+  if (pack.segments !== undefined) for (const message of segmentErrors(pack.segments, { modules })) err(message);
   if (pack.dials !== undefined) {
     if (!isObject(pack.dials)) err(`dials must be {${STYLE_DIALS.join(', ')}}, each 0-1`);
     else for (const [key, value] of Object.entries(pack.dials)) {
@@ -448,6 +449,38 @@ function validateV3Fields(pack, { err, warn, modules }) {
       else if (!isUnit(value)) err(`dials.${key} must be a number from 0 to 1`);
     }
   }
+}
+
+// Recurring segment formats (long form, RFC §10.2): named chapter templates a
+// series reuses, so it looks like a series. kit/core/long-form.mjs applies them.
+const SEGMENT_KEYS = new Set(['id', 'title', 'kicker', 'layout', 'modules', 'icon', 'match']);
+export const STYLE_SEGMENT_MAX = 12;
+
+/** The shape of style.segments: [{id, title, kicker?, layout?, modules?, icon?, match?}]. → error messages */
+export function segmentErrors(segments, { modules = null, where = 'segments' } = {}) {
+  if (!Array.isArray(segments)) return [`${where} must be a list of {id, title, kicker?, layout?, modules?, icon?, match?}`];
+  const errors = [];
+  if (segments.length > STYLE_SEGMENT_MAX) errors.push(`${where} holds at most ${STYLE_SEGMENT_MAX} segment formats`);
+  const known = modules ? new Set(modules instanceof Set ? modules : modules) : null;
+  const ids = new Set();
+  segments.forEach((segment, i) => {
+    const at = `${where}[${i}]`;
+    if (!isObject(segment)) { errors.push(`${at} must be an object`); return; }
+    for (const key of Object.keys(segment)) if (!SEGMENT_KEYS.has(key)) errors.push(`${at}.${key} is not supported (${[...SEGMENT_KEYS].join(', ')})`);
+    if (!(nonEmpty(segment.id) && /^[a-z0-9][a-z0-9-]{0,47}$/.test(segment.id))) errors.push(`${at}.id must be a lowercase slug (a-z, 0-9, -)`);
+    else if (ids.has(segment.id)) errors.push(`${at}.id "${segment.id}" is used twice`);
+    else ids.add(segment.id);
+    if (!(nonEmpty(segment.title) && segment.title.length <= 48)) errors.push(`${at}.title must be 1-48 characters`);
+    if (segment.kicker !== undefined && !(nonEmpty(segment.kicker) && segment.kicker.length <= 28)) errors.push(`${at}.kicker must be 1-28 characters`);
+    if (segment.layout !== undefined && !(STYLE_LAYOUTS.includes(segment.layout) && segment.layout !== 'insert')) errors.push(`${at}.layout must be one of ${STYLE_LAYOUTS.filter((layout) => layout !== 'insert').join(', ')}`);
+    if (segment.icon !== undefined && !(nonEmpty(segment.icon) && NAME.test(segment.icon))) errors.push(`${at}.icon must be an icon name (launchclip module show icon-row lists them)`);
+    if (segment.modules !== undefined) {
+      if (!(Array.isArray(segment.modules) && segment.modules.length && segment.modules.every(nonEmpty))) errors.push(`${at}.modules must be a non-empty list of module ids`);
+      else if (known) for (const id of segment.modules) if (!known.has(id)) errors.push(`${at}.modules: "${id}" is not a module`);
+    }
+    if (segment.match !== undefined && !(Array.isArray(segment.match) && segment.match.every((phrase) => nonEmpty(phrase) && phrase.length <= 60))) errors.push(`${at}.match must be a list of phrases (1-60 characters) that name the segment in a section title`);
+  });
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -821,6 +854,10 @@ export function stylePromptLines(pack, { lane, story } = {}) {
   const vocabulary = pack.vocabulary;
   if (Object.keys(vocabulary?.prefer ?? {}).length) lines.push(`Preferred modules by intent: ${Object.entries(vocabulary.prefer).map(([intent, ids]) => `${intent} → ${ids.join(' or ')}`).join('; ')}.`);
   if (vocabulary?.illustration === false) lines.push('No illustrated objects: use icons, type and real media only.');
+  if (Array.isArray(pack.segments) && pack.segments.length) {
+    lines.push('Recurring segments (reuse them, so a series looks like a series): when a section of the direction map is one of these, give it "segment": "<id>" and its title; its chapter opens on the segment\'s card, holds its layout and prefers its modules.');
+    for (const segment of pack.segments) lines.push(`- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}${segment.match?.length ? ` (a section titled like ${segment.match.map((phrase) => `"${phrase}"`).join(' or ')})` : ''}.`);
+  }
   if (pack.cast?.characters?.length) lines.push(`Default cast: ${pack.cast.characters.join(', ')}${pack.cast.drawing_style ? ` (${pack.cast.drawing_style})` : ''}; reuse them rather than inventing characters.`);
   if (isObject(pack.dials)) {
     const dials = styleDials(pack, story);

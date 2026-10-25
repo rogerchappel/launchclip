@@ -24,6 +24,6 @@ export async function applyProjectStyle(story, { projectDir = process.cwd(), hom
   const merged = applyStyle(story, loaded.pack, { intro: request.intro, outro: request.outro });
   return {
     story: merged.story,
-    style: { name: loaded.name, source: loaded.source, file: loaded.file, applied: merged.applied, warnings: [...loaded.warnings, ...merged.warnings] }
+    style: { name: loaded.name, source: loaded.source, file: loaded.file, applied: merged.applied, warnings: [...loaded.warnings, ...merged.warnings], ...(Array.isArray(loaded.pack?.segments) ? { segments: loaded.pack.segments } : {}) }
   };
 }

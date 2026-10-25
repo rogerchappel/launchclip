@@ -110,6 +110,7 @@ export function intentHints(words) {
  *   deferScenes: true while the storyboard is not planned yet (the planner's
  *     first pass): scene names are checked for shape only;
  *   lane: the story lane, when there is no story;
+ *   segments: the style's segment formats; a section's `segment` must name one;
  *   cast: the story's cast; validateCast(line, cast) → string[] | {errors,
  *     warnings}: the character kit's cue check (kit/core/characters/), called
  *     for each line with `cast` or `set` cues. Without it, cues pass through.
@@ -136,7 +137,11 @@ export function validateDirection(map, options = {}) {
   map.sections.forEach((section, s) => {
     const where = `sections[${s}]${section?.id ? ` (${section.id})` : ''}`;
     if (!isObject(section)) { err(`${where} must be an object`); return; }
-    for (const key of Object.keys(section)) if (!['id', 'title', 'start', 'end', 'layout', 'beat', 'lines', 'why', 'set'].includes(key)) err(`${where} has unknown field "${key}"`);
+    for (const key of Object.keys(section)) if (!['id', 'title', 'start', 'end', 'layout', 'beat', 'lines', 'why', 'set', 'segment'].includes(key)) err(`${where} has unknown field "${key}"`);
+    if (section.segment !== undefined) {
+      if (!nonEmpty(section.segment)) err(`${where}.segment must name one of the style's segment formats`);
+      else if (Array.isArray(options.segments) && !options.segments.some((entry) => entry?.id === section.segment)) err(`${where}.segment "${section.segment}" is not one of the style's segment formats (${options.segments.map((entry) => entry?.id).join(', ') || 'none'})`);
+    }
     if (!nonEmpty(section.id)) err(`${where}.id is required`);
     else if (sectionIds.has(section.id)) err(`${where}.id "${section.id}" is used twice`);
     else sectionIds.add(section.id);

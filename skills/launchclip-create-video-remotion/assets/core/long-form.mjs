@@ -19,6 +19,7 @@
 import { CHAPTER_MIN_COUNT, CHAPTER_MIN_SECONDS, resolveStory, storyBase, storyChapters } from './story.mjs';
 import { isGraphicScene, resetGaps, resetTimes } from './cadence.mjs';
 import { narrationWords, segmentLines } from './direction.mjs';
+import { isIcon } from './icons.mjs';
 
 // A story this long (or planned to the long-form profile) gets the pass.
 export const LONG_FORM_SECONDS = 300;
@@ -119,16 +120,22 @@ function slug(value) {
  * card; a card with no room is skipped with a warning. Running it again
  * replaces what it added. The map gains section titles and names the new
  * scenes on the lines they cover.
+ *   - recurring segment formats (options.segments, the style's): a section
+ *     or chapter titled like a segment is that segment; its card takes the
+ *     segment's kicker and icon, and its chapter holds the segment's layout
+ *     (a `segment-<chapter>` footage section);
  *   - attention resets (footage-led): wherever a run with no layout change,
  *     insert or section card is longer than the reset target, an overlay
  *     card near the target time becomes an insert, else a `reset-n` footage
  *     section switches the layout for up to 20 s.
  * options: {words, map, profile (its longest_without_reset_seconds sets the
  *   reset target, p50, and ceiling, p90), promise: true, cards: true,
- *   resets: true, frame: true, cardSeconds, kicker(chapter, n), icon(chapter)}
+ *   segments (style.segments), resets: true, frame: true, cardSeconds,
+ *   kicker(chapter, n), icon(chapter)}
  * → {story, map, chapters, added: [{id, module, start, end, kind}],
  *    changed: [{id, start, end, was}], resets: {target, ceiling, times,
- *    longest, promoted: [ids], sections: [ids]}, warnings}
+ *    longest, promoted: [ids], sections: [ids]}, segments: [{chapter,
+ *    segment, card, layout, modules}], warnings}
  */
 export function structureLongForm(story, options = {}) {
   const { words = [], map = null } = options;
@@ -149,6 +156,18 @@ export function structureLongForm(story, options = {}) {
   if (mapOut) for (const section of mapOut.sections ?? []) for (const line of section.lines ?? []) {
     if (Array.isArray(line.scenes)) line.scenes = line.scenes.filter((id) => id !== PROMISE_ID && !String(id).startsWith('chapter-'));
   }
+  if (Array.isArray(out.sections)) {
+    out.sections = out.sections.filter((section) => !/^(segment|reset)-/.test(String(section?.id)));
+    if (!out.sections.length) delete out.sections;
+  }
+
+  // Recurring segment formats: a map section named like a style segment is that segment.
+  const segments = (Array.isArray(options.segments) ? options.segments : []).filter((segment) => isObject(segment) && nonEmpty(segment.id));
+  if (mapOut) for (const section of mapOut.sections ?? []) {
+    if (nonEmpty(section.segment)) continue;
+    const hit = matchSegment(section.title, segments);
+    if (hit) section.segment = hit.id;
+  }
 
   if (!Array.isArray(out.chapters) || !out.chapters.length) {
     const chapters = chaptersFromMap(mapOut, list, { duration });
@@ -159,7 +178,13 @@ export function structureLongForm(story, options = {}) {
     for (const section of mapOut.sections ?? []) {
       const chapter = out.chapters.find((entry) => entry.id === slug(section.id));
       if (chapter && !nonEmpty(section.title)) section.title = chapter.title;
+      if (chapter && nonEmpty(section.segment) && !nonEmpty(chapter.segment)) chapter.segment = section.segment;
     }
+  }
+  if (Array.isArray(out.chapters)) for (const chapter of out.chapters) {
+    if (!isObject(chapter) || nonEmpty(chapter.segment)) continue;
+    const hit = matchSegment(chapter.title, segments);
+    if (hit) chapter.segment = hit.id;
   }
 
   const resolved = resolveStory(out, { words: list });
@@ -222,8 +247,10 @@ export function structureLongForm(story, options = {}) {
       const n = chapter.index + 1;
       const slot = place(chapter.start, options.cardSeconds ?? SECTION_CARD_SECONDS, SECTION_CARD_MIN_SECONDS, { label: `section card for chapter "${chapter.id}"`, late: CARD_LATE_SECONDS });
       if (!slot) return;
-      const kicker = typeof options.kicker === 'function' ? options.kicker(chapter, n) : null;
-      const params = { title: fit(chapter.title, 48), kicker: fit(kicker ?? `Chapter ${n}`, 28), ...(options.icon?.(chapter) ? { icon: options.icon(chapter) } : { number: n }) };
+      const segment = segments.find((entry) => entry.id === chapter.segment) ?? null;
+      const kicker = typeof options.kicker === 'function' ? options.kicker(chapter, n) : segment ? segment.kicker ?? (segment.title !== chapter.title ? segment.title : null) : null;
+      const icon = options.icon?.(chapter) ?? (segment?.icon && isIcon(segment.icon) ? segment.icon : null);
+      const params = { title: fit(chapter.title, 48), kicker: fit(kicker ?? `Chapter ${n}`, 28), ...(icon ? { icon } : { number: n }) };
       add({ id: sectionCardId(chapter.id), module: 'section-card', start: slot.start, end: slot.end, ...(footage ? { insert: true } : {}), in: { type: 'fade', dur: 0.25 }, params }, 'section-card');
     });
   }
@@ -251,6 +278,8 @@ export function structureLongForm(story, options = {}) {
     }
   }
 
+  const segmentPlan = segments.length ? applySegments({ out, chapters, segments, scenes, mapOut, footage, warnings }) : [];
+
   const resets = options.resets !== false && footage ? planResets({ out, scenes, raw, mapOut, lines, duration, profile: options.profile, warnings }) : null;
 
   if (options.frame !== false && chapters.length > 1) {
@@ -264,7 +293,48 @@ export function structureLongForm(story, options = {}) {
   }
 
   out.scenes.sort((a, b) => (Number(a.start) - Number(b.start)) || 0);
-  return { story: out, map: mapOut, chapters: storyChapters(resolveStory(out, { words: list })), added, changed, resets, warnings };
+  return { story: out, map: mapOut, chapters: storyChapters(resolveStory(out, { words: list })), added, changed, resets, segments: segmentPlan, warnings };
+}
+
+/** The style segment a title names: its title, or one of its `match` phrases, ignoring case. */
+export function matchSegment(title, segments = []) {
+  const text = String(title ?? '').toLowerCase();
+  if (!text.trim()) return null;
+  return segments.find((segment) => [segment.title, ...(Array.isArray(segment.match) ? segment.match : [])].some((phrase) => nonEmpty(phrase) && text.includes(phrase.toLowerCase()))) ?? null;
+}
+
+// Segment chapters hold the segment's layout (a `segment-<chapter>` footage
+// section over the chapter) and should show its preferred modules.
+function applySegments({ out, chapters, segments, scenes, mapOut, footage, warnings }) {
+  const plan = [];
+  const portrait = Number(out.format?.height) > Number(out.format?.width);
+  for (const chapter of chapters) {
+    const segment = segments.find((entry) => entry.id === chapter.segment);
+    if (!segment) {
+      if (chapter.segment) warnings.push(`chapter "${chapter.id}" names segment "${chapter.segment}", which the style does not define`);
+      continue;
+    }
+    const entry = { chapter: chapter.id, segment: segment.id, card: chapter.index > 0 ? sectionCardId(chapter.id) : null, layout: null };
+    if (segment.layout && segment.layout !== 'full' && footage) {
+      const sections = Array.isArray(out.sections) ? out.sections : [];
+      const clash = sections.some((section) => Number(section.start) < chapter.end && Number(section.end) > chapter.start);
+      if (segment.layout === 'stacked' && !portrait) warnings.push(`segment "${segment.id}": stacked is a 9:16 layout; chapter "${chapter.id}" keeps its layout`);
+      else if (clash) warnings.push(`segment "${segment.id}": chapter "${chapter.id}" already has a footage section, so it keeps that layout`);
+      else {
+        out.sections = [...sections, { id: `segment-${chapter.id}`, start: chapter.start, end: chapter.end, layout: segment.layout }].sort((a, b) => Number(a.start) - Number(b.start));
+        entry.layout = segment.layout;
+        const section = mapOut?.sections?.find((item) => slug(item.id) === chapter.id);
+        if (section) section.layout = segment.layout;
+      }
+    }
+    if (Array.isArray(segment.modules) && segment.modules.length) {
+      const own = scenes.filter((scene) => scene.start >= chapter.start && scene.start < chapter.end);
+      entry.modules = [...new Set(own.map((scene) => scene.module).filter((module) => segment.modules.includes(module)))];
+      if (!entry.modules.length) warnings.push(`segment "${segment.id}": chapter "${chapter.id}" uses none of its modules (${segment.modules.join(', ')}); plan at least one so the segment looks like itself`);
+    }
+    plan.push(entry);
+  }
+  return plan;
 }
 
 /** The reset target and ceiling for a profile: {p50, p90}. */
