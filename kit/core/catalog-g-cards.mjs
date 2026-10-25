@@ -751,15 +751,23 @@ function shapeNode(shape, colors) {
   throw new Error(`unknown object shape ${shape.shape}`);
 }
 
+// Variants: stage (the illustration over its caption, the original),
+// polaroid (the illustration in a dark photo on a paper print that drops in
+// tilted, the caption on its strip), split (a panel that wipes open, the
+// illustration left and the caption large beside it) and spotlight (a glow
+// that opens behind an illustration that drops in, a label pill and a big
+// caption).
+export const OBJECT_VARIANTS = Object.freeze(['stage', 'polaroid', 'split', 'spotlight']);
+
 function resolveObject(params, ctx) {
-  const b = createCardBase('object-card', params, ctx, {allowed: ['object', 'caption', 'label', 'at'], required: ['object', 'caption']});
+  const b = createCardBase('object-card', params, ctx, {allowed: ['object', 'caption', 'label', 'at'], required: ['object', 'caption'], variants: OBJECT_VARIANTS});
   const {check, u, portrait, colors, theme} = b;
   const p = b.params;
   const name = check.oneOf(p.object, 'params.object', Object.keys(OBJECTS));
   const caption = check.str(p.caption, 'params.caption', 48);
   const label = p.label === undefined ? null : check.str(p.label, 'params.label', 24).toUpperCase();
   const labelColor = b.resolveColor('primary', 'label colour (brand.colors.primary)', 'primary');
-  const fitCaption = (w, k) => fitText(check, 'params.caption', caption, {family: 'body', width: w, preferred: u(56 * Math.max(1, k * 0.9)), min: b.min.key, maxLines: 2});
+  const fitCaption = (w, k, family = 'body', preferred = 56, maxLines = 2) => fitText(check, 'params.caption', caption, {family, width: w, preferred: Math.max(b.min.key, u(preferred * Math.max(1, k * 0.9))), min: b.min.key, maxLines});
   const fitLabel = (w, k) => (label ? fitText(check, 'params.label', label, {family: 'meta', width: w, preferred: u(32 * Math.max(1, k * 0.9)), min: b.min.meta, maxLines: 1}) : null);
   const textHeight = (cap, lab, labelGap) => r2(cap.lines * cap.size * 1.2 + (lab ? lab.size * 1.3 + labelGap : 0));
   const stack = (width, k) => {
@@ -773,8 +781,33 @@ function resolveObject(params, ctx) {
     const cap = fitCaption(textW, 1), lab = fitLabel(textW, 1);
     return {mode: 'inline', stage, caption: cap, label: lab, labelGap, gap, textW, height: r2(Math.max(stage, textHeight(cap, lab, labelGap)))};
   };
-  const measure = (width, maxHeight) => pick([...b.scales.map(k => () => stack(width, k)), () => inline(width, maxHeight)], maxHeight);
-  const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1200)});
+  // polaroid: a paper print, the photo square on top, the caption strip under it.
+  const polaroid = (width, k) => {
+    const cardW = r2(Math.min(width * 0.86, u((portrait ? 600 : 560) * k))), pad = r2(cardW * 0.07), photo = r2(cardW - pad * 2);
+    const cap = fitCaption(photo, k, 'body', 50), lab = fitLabel(photo, k), labelGap = u(8);
+    const stripH = r2(pad * 1.2 + textHeight(cap, lab, labelGap) + pad * 0.6);
+    // Room for the 3° tilt: the turned print's corners stay inside the box.
+    const cardH = r2(pad + photo + stripH), tilt = Math.sin(3 * Math.PI / 180);
+    return {mode: 'polaroid', cardW, cardH, pad, photo, stage: r2(photo * 0.86), caption: cap, label: lab, labelGap, textW: photo, height: r2(cardH + cardW * tilt * 2), stripH};
+  };
+  // split: a panel, the illustration left, the label and a large caption right.
+  const split = (width, k) => {
+    const pad = u(40 * k), stage = r2(Math.min(u((portrait ? 300 : 380) * k), width * 0.42)), gap = u(36 * k), textW = r2(width - pad * 2 - stage - gap);
+    if (textW < u(280)) return null;
+    const cap = fitCaption(textW, k, 'display', portrait ? 76 : 84, 3), lab = fitLabel(textW, k), labelGap = u(16 * k);
+    return {mode: 'split', pad, stage, gap, textW, caption: cap, label: lab, labelGap, height: r2(pad * 2 + Math.max(stage, r2(cap.lines * cap.size * 1.06 + (lab ? lab.size * 1.3 + labelGap : 0))))};
+  };
+  // spotlight: a glow, the illustration, a label pill and the caption.
+  const spotlight = (width, k) => {
+    const stage = r2(Math.min(u((portrait ? 440 : 400) * k), width * 0.8)), glow = r2(stage * 1.5);
+    const cap = fitCaption(width, k, 'display', portrait ? 84 : 80, 2), lab = fitLabel(r2(width * 0.8), k);
+    const pillH = lab ? r2(lab.size * 1.3 + u(20)) : 0, pillGap = u(22 * k), capGap = u(18 * k);
+    return {mode: 'spotlight', stage, glow, caption: cap, label: lab, pillH, pillGap, capGap, textW: width,
+      height: r2(stage + (lab ? pillGap + pillH : 0) + capGap + cap.lines * cap.size * 1.06)};
+  };
+  const shaped = {polaroid, split, spotlight}[b.variant];
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...b.scales.map(k => () => stack(width, k)), () => inline(width, maxHeight)], maxHeight);
+  const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'split' ? 1400 : 1200)});
   const t0 = b.timeOf('object', p.at, 'params.at', 0.05);
   const object = OBJECTS[name];
   const accents = object.accents.map((accent, i) => ({...accent, index: i, time: after(b, t0, 0.35 + i * 0.12)}));
@@ -782,17 +815,28 @@ function resolveObject(params, ctx) {
   b.events.push({id: `${b.id}-object`, name: 'object', time: t0, endTime: rt(t0 + 0.55), role: 'emphasis', cue: 'pop'});
   b.events.push({id: `${b.id}-caption`, name: 'caption', time: captionAt, endTime: rt(captionAt + 0.45), role: 'title'});
   const L = box.layout;
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, object: name, shapes: object.shapes, hero: object.hero, accents, caption, label,
-    colors: {primary: colors.primary, accent: colors.accent, paper: colors.paper}, captionColor: theme.foreground, labelColor, t0, captionAt}, {minTextPx: L.caption.size});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, object: name, shapes: object.shapes, hero: object.hero, accents, caption, label,
+    colors: {primary: colors.primary, accent: colors.accent, paper: colors.paper}, captionColor: theme.foreground, labelColor, t0, captionAt};
+  if (L.mode === 'polaroid') {
+    // The print is paper; its strip text is whichever of ink and bg reads on it.
+    const print = solidFill(b, 'paper', 4.5);
+    Object.assign(content, {print: print.fill, printInk: print.ink, photoFill: theme.bg, captionColor: print.ink, labelColor: print.ink});
+  }
+  if (L.mode === 'split') Object.assign(content, {panel: theme.panel, border: theme.border});
+  if (L.mode === 'spotlight') {
+    const pill = solidFill(b, 'primary', 4.5);
+    Object.assign(content, {glowColor: colors.primary, pillFill: pill.fill, pillInk: pill.ink});
+  }
+  return b.finish(content, {minTextPx: L.caption.size});
 }
 
 /** The illustration: brand shapes, the hero icon and its accents, in a box of `size` px. */
-function objectStage(model, size) {
+function objectStage(model, size, style = {}) {
   const {id} = model;
   const c = model.content;
   const k = size / STAGE;
-  const box = (key, item, style, kids) => el('div', key, abs(r2(item.x * k), r2(item.y * k), r2(item.size * k), r2(item.size * k), {...hidden, transformOrigin: '50% 50%', ...style}), kids);
-  return flow(null, size, size, {}, [
+  const box = (key, item, extra, kids) => el('div', key, abs(r2(item.x * k), r2(item.y * k), r2(item.size * k), r2(item.size * k), {...hidden, transformOrigin: '50% 50%', ...extra}), kids);
+  return flow(null, size, size, style, [
     el('div', `${id}-stage`, abs(0, 0, size, size, {...hidden, transformOrigin: '50% 50%'}), [
       el('svg', null, abs(0, 0, size, size, {overflow: 'visible'}), c.shapes.map(shape => shapeNode(shape, c.colors)), {width: size, height: size, viewBox: `0 0 ${STAGE} ${STAGE}`, fill: 'none'})
     ]),
@@ -804,6 +848,7 @@ function objectStage(model, size) {
 function objectView(model) {
   const {id, fonts} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (OBJECT_VIEWS[L.mode]) return OBJECT_VIEWS[L.mode](model);
   const stacked = L.mode === 'stack';
   const align = stacked ? 'center' : 'left';
   const text = flow(`${id}-text`, L.textW, undefined, {...hidden, display: 'flex', flexDirection: 'column', gap: L.labelGap, ...(stacked ? {marginTop: L.gap} : {})}, [
@@ -813,13 +858,88 @@ function objectView(model) {
   return [stacked ? column(B.x, B.y, B.width, L.height, [objectStage(model, L.stage), text]) : row(B.x, B.y, B.width, L.height, [objectStage(model, L.stage), text], {gap: L.gap})];
 }
 
+const OBJECT_VIEWS = {
+  polaroid(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const inset = r2((L.photo - L.stage) / 2);
+    const print = el('div', `${id}-print`, abs(r2((B.width - L.cardW) / 2), r2((L.height - L.cardH) / 2), L.cardW, L.cardH, {...hidden, boxSizing: 'border-box', padding: L.pad, borderRadius: r2(10 * unit), background: c.print,
+      boxShadow: `0 ${r2(22 * unit)}px ${r2(50 * unit)}px #00000080`, transformOrigin: '50% 50%'}), [
+      flow(null, L.photo, L.photo, {borderRadius: r2(4 * unit), background: c.photoFill}, [objectStage(model, L.stage, {position: 'absolute', left: inset, top: inset})]),
+      flow(`${id}-text`, L.photo, r2(L.stripH - L.pad), {...hidden, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: L.labelGap}, [
+        c.label ? flowText(null, L.photo, {fontFamily: fonts.meta, fontSize: L.label.size, lineHeight: '1.3', letterSpacing: '0.14em', color: c.labelColor}, c.label) : null,
+        flowText(null, L.photo, {fontFamily: fonts.body, fontWeight: 600, fontSize: L.caption.size, lineHeight: '1.2', color: c.captionColor}, c.caption)
+      ].filter(Boolean))
+    ]);
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [print])];
+  },
+  split(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const panel = el('div', `${id}-panel`, abs(0, 0, B.width, L.height, {boxSizing: 'border-box', borderRadius: r2(32 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`, transformOrigin: '0% 50%', transform: 'scale(0, 1)'}));
+    const inner = el('div', null, abs(L.pad, L.pad, r2(B.width - L.pad * 2), r2(L.height - L.pad * 2), {display: 'flex', alignItems: 'center', gap: L.gap}), [
+      objectStage(model, L.stage),
+      flow(`${id}-text`, L.textW, undefined, {...hidden, display: 'flex', flexDirection: 'column', gap: L.labelGap}, [
+        c.label ? flowText(null, L.textW, {fontFamily: fonts.meta, fontSize: L.label.size, lineHeight: '1.3', letterSpacing: '0.14em', color: c.labelColor}, c.label) : null,
+        flowText(null, L.textW, {fontFamily: fonts.display, fontSize: L.caption.size, lineHeight: '1.06', color: c.captionColor}, c.caption)
+      ].filter(Boolean))
+    ]);
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [panel, inner])];
+  },
+  spotlight(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const glowX = r2((B.width - L.glow) / 2), glowY = r2((L.stage - L.glow) / 2);
+    const glow = el('div', `${id}-glow`, abs(glowX, glowY, L.glow, L.glow, {borderRadius: '50%', background: `radial-gradient(circle, ${c.glowColor}59 0%, ${c.glowColor}1f 42%, ${c.glowColor}00 70%)`, transformOrigin: '50% 50%'}));
+    const body = column(0, 0, B.width, L.height, [
+      objectStage(model, L.stage),
+      c.label ? flow(`${id}-pill`, undefined, L.pillH, {...hidden, boxSizing: 'border-box', marginTop: L.pillGap, padding: `0 ${r2(22 * unit)}px`, display: 'flex', alignItems: 'center', borderRadius: r2(L.pillH / 2), background: c.pillFill, transformOrigin: '50% 50%'}, [
+        el('div', null, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: L.label.size, lineHeight: '1.3', letterSpacing: '0.14em', color: c.pillInk}, [c.label])
+      ]) : null,
+      flowText(`${id}-text`, B.width, {...hidden, marginTop: L.capGap, fontFamily: fonts.display, fontSize: L.caption.size, lineHeight: '1.06', color: c.captionColor, textAlign: 'center'}, c.caption)
+    ].filter(Boolean));
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [glow, body])];
+  }
+};
+
 function objectTimeline(model, ops) {
-  const {id} = model;
-  const c = model.content;
-  pop(ops, model, `${id}-stage`, c.t0, {scale: 0.7});
-  pop(ops, model, `${id}-hero`, rt(c.t0 + 0.1), {scale: 0.5, duration: 0.6});
-  bob(ops, `${id}-hero`, rt(c.t0 + 0.7), model.motion.exitStart, r2(6 * model.unit));
-  for (const accent of c.accents) pop(ops, model, `${id}-accent-${accent.index}`, accent.time, {scale: 0.3});
+  const {id, start, unit} = model;
+  const c = model.content, mode = c.layout.mode;
+  const illustration = (stageAt, heroAt) => {
+    pop(ops, model, `${id}-stage`, stageAt, {scale: 0.7});
+    pop(ops, model, `${id}-hero`, heroAt, {scale: 0.5, duration: 0.6});
+    bob(ops, `${id}-hero`, rt(heroAt + 0.6), model.motion.exitStart, r2(6 * unit));
+    for (const accent of c.accents) pop(ops, model, `${id}-accent-${accent.index}`, accent.time, {scale: 0.3});
+  };
+  if (mode === 'polaroid') {
+    // The print drops in turning, and settles a little askew.
+    set(ops, `${id}-print`, start, {opacity: 0, x: 0, y: r2(-90 * unit), rotation: -14});
+    tw(ops, `${id}-print`, c.t0, 0.7, 'back.out(1.3)', {opacity: 0, y: r2(-90 * unit), rotation: -14}, {opacity: 1, y: 0, rotation: -3});
+    illustration(rt(c.t0 + 0.2), rt(c.t0 + 0.3));
+    rise(ops, model, `${id}-text`, c.captionAt, {distance: 12});
+    return;
+  }
+  if (mode === 'split') {
+    set(ops, `${id}-panel`, start, {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-panel`, rt(Math.max(start, c.t0 - 0.1)), 0.55, 'power3.inOut', {scaleX: 0}, {scaleX: 1});
+    illustration(rt(c.t0 + 0.15), rt(c.t0 + 0.25));
+    set(ops, `${id}-text`, start, {opacity: 0, x: r2(40 * unit), y: 0});
+    tw(ops, `${id}-text`, rt(c.captionAt + 0.1), 0.5, 'power3.out', {opacity: 0, x: r2(40 * unit)}, {opacity: 1, x: 0});
+    return;
+  }
+  if (mode === 'spotlight') {
+    set(ops, `${id}-glow`, start, {opacity: 0, scaleX: 0.3, scaleY: 0.3});
+    tw(ops, `${id}-glow`, rt(Math.max(start, c.t0 - 0.05)), 0.8, 'power2.out', {opacity: 0, scaleX: 0.3, scaleY: 0.3}, {opacity: 1, scaleX: 1, scaleY: 1});
+    set(ops, `${id}-stage`, start, {opacity: 0, x: 0, y: r2(-120 * unit), scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-stage`, c.t0, 0.7, 'bounce.out', {opacity: 0, y: r2(-120 * unit)}, {opacity: 1, y: 0});
+    pop(ops, model, `${id}-hero`, rt(c.t0 + 0.2), {scale: 0.5, duration: 0.6});
+    bob(ops, `${id}-hero`, rt(c.t0 + 0.8), model.motion.exitStart, r2(6 * unit));
+    for (const accent of c.accents) pop(ops, model, `${id}-accent-${accent.index}`, accent.time, {scale: 0.3});
+    if (c.label) pop(ops, model, `${id}-pill`, rt(c.captionAt - 0.05), {scale: 0.5});
+    rise(ops, model, `${id}-text`, c.captionAt, {distance: 24, duration: 0.5});
+    return;
+  }
+  illustration(c.t0, rt(c.t0 + 0.1));
   rise(ops, model, `${id}-text`, c.captionAt);
 }
 
@@ -830,5 +950,6 @@ export const objectCard = {
   events: ['object', 'caption'],
   timing: cardTiming(['with no at, the object pops at 0.05 s; the caption follows it by 0.25 s and accents pop from 0.35 s after it']),
   mood: ['playful', 'launch', 'editorial'],
+  variants: OBJECT_VARIANTS,
   resolve: resolveObject, view: objectView, timeline: objectTimeline
 };
