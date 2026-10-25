@@ -2012,7 +2012,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
   is drawn.
-- The eight drawing styles (`DRAWING_STYLES`, in this order):
+- The nine drawing styles (`DRAWING_STYLES`, in this order):
   | Style | File | Look |
   |---|---|---|
   | `flat` | `style-flat.mjs` | flat fills and a dark outline (the default) |
@@ -2021,6 +2021,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `paper` | `style-paper.mjs` | cut paper: hand-cut edges, offset shadows, a fine grain, no outlines |
   | `soft-shade` | `style-soft-shade.mjs` | gradients from the lit side to the shade, no hard outline |
   | `stick` | `style-stick.mjs` | a stick figure: coloured lines, a round head with the character's own hair and face |
+  | `stick-classic` | `style-stick.mjs` | the classic black-and-white stick figure: one ink line per limb, a white head, hair and face in line art |
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
 

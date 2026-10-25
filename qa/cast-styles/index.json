@@ -18,36 +18,8 @@
   ],
   "sheets": [
     {
-      "style": "flat",
-      "png": "qa/cast-styles/flat.png"
-    },
-    {
-      "style": "line",
-      "png": "qa/cast-styles/line.png"
-    },
-    {
-      "style": "outlined",
-      "png": "qa/cast-styles/outlined.png"
-    },
-    {
-      "style": "paper",
-      "png": "qa/cast-styles/paper.png"
-    },
-    {
-      "style": "soft-shade",
-      "png": "qa/cast-styles/soft-shade.png"
-    },
-    {
-      "style": "stick",
-      "png": "qa/cast-styles/stick.png"
-    },
-    {
-      "style": "lifelike",
-      "png": "qa/cast-styles/lifelike.png"
-    },
-    {
-      "style": "cinematic",
-      "png": "qa/cast-styles/cinematic.png"
+      "style": "stick-classic",
+      "png": "qa/cast-styles/stick-classic.png"
     }
   ]
 }
