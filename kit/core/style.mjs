@@ -456,7 +456,7 @@ function validateV3Fields(pack, { err, warn, modules }) {
 export function storyStyleRequest(story) {
   const value = story?.style;
   if (typeof value === 'string' && value.trim()) return { name: value.trim(), intro: false, outro: false, loop: null };
-  if (isObject(value) && nonEmpty(value.name)) return { name: value.name.trim(), intro: value.intro === true, outro: value.outro === true, loop: typeof value.loop === 'boolean' ? value.loop : null };
+  if (isObject(value) && nonEmpty(value.name)) return { name: value.name.trim(), intro: value.intro === true, outro: value.outro === true, loop: typeof value.loop === 'boolean' ? value.loop : null, ...(isObject(value.dials) ? { dials: { ...value.dials } } : {}) };
   return null;
 }
 
@@ -527,6 +527,12 @@ export function applyStyle(story, pack, options = {}) {
     if (!isObject(pack[key])) continue;
     if (out[key] === undefined) { out[key] = clone(pack[key]); applied.push(key); }
     else if (isObject(out[key])) fill(out[key], pack[key], key);
+  }
+
+  // Polish dial (v3): the ambient level when neither the pack nor the story sets one.
+  if (isObject(pack.dials) && pack.ambient?.level === undefined && out.ambient?.level === undefined && out.ambient !== null) {
+    out.ambient = { ...(isObject(out.ambient) ? out.ambient : {}), level: dialChoices(styleDials(pack, story)).ambient };
+    applied.push('ambient.level (polish dial)');
   }
 
   // Captions: the pack's preset and options, with its defaults for the
@@ -641,9 +647,9 @@ export const STYLE_V3_DEFAULTS = Object.freeze({
  * A v3 pack from a v2 pack. The v3 fields the pack lacks are filled from
  * STYLE_V3_DEFAULTS; the pack's own values are kept. With render: "same" (how
  * a v2 pack is upgraded on load) the brand frame is off and no lane caption
- * default is added, so a v2 pack renders exactly as before; the written
- * upgrade (launchclip style upgrade) turns both on. A v3 pack is returned as
- * it is. → {pack, notes: []}
+ * default and no dials are added, so a v2 pack renders exactly as before;
+ * the written upgrade (launchclip style upgrade) adds all three. A v3 pack
+ * is returned as it is. → {pack, notes: []}
  */
 export function upgradeV2Pack(pack, { render = 'new' } = {}) {
   if (!isObject(pack)) throw new Error('style pack must be a JSON object');
@@ -655,7 +661,7 @@ export function upgradeV2Pack(pack, { render = 'new' } = {}) {
   const fill = (key, value, note) => { if (out[key] === undefined) { out[key] = clone(value); notes.push(note); } };
   fill('layouts', STYLE_V3_DEFAULTS.layouts, 'layouts: no layout preferences; solid panels with a 24 px radius');
   fill('vocabulary', STYLE_V3_DEFAULTS.vocabulary, 'vocabulary: icons tinted primary, illustration on');
-  fill('dials', STYLE_V3_DEFAULTS.dials, 'dials: all at 0.5 (the middle of the profile band)');
+  if (!same) fill('dials', STYLE_V3_DEFAULTS.dials, 'dials: all at 0.5 (the middle of the profile band)');
   if (same) fill('brand_frame', { enabled: false }, 'brand_frame: off (a v2 pack loaded as v3 renders as before; run launchclip style upgrade to turn it on)');
   else fill('brand_frame', STYLE_V3_DEFAULTS.brand_frame, 'brand_frame: kicker with underline top left, section labels on, no progress line');
   if (!same && out.captions?.preset === undefined && out.captions?.lanes === undefined) {
@@ -663,6 +669,76 @@ export function upgradeV2Pack(pack, { render = 'new' } = {}) {
     notes.push('captions.lanes: footage-led stories use the quiet-accent preset');
   }
   return { pack: out, notes };
+}
+
+// ---------------------------------------------------------------------------
+// Dials (RFC §9.3)
+
+// Which dial moves each cadence measure, and which way: +1 raises the target
+// as the dial rises, -1 lowers it. Measures no dial names hold their p50.
+export const DIAL_MEASURES = Object.freeze({
+  shot_seconds: Object.freeze(['energy', -1]),
+  visual_changes_per_min: Object.freeze(['energy', 1]),
+  layout_changes_per_min: Object.freeze(['energy', 1]),
+  flow_velocity_p90: Object.freeze(['energy', 1]),
+  text_hold_seconds: Object.freeze(['energy', -1]),
+  first_visual_seconds: Object.freeze(['energy', -1]),
+  coverage: Object.freeze(['density', 1]),
+  longest_undressed_seconds: Object.freeze(['density', -1]),
+  caption_words_on_screen: Object.freeze(['density', 1]),
+  face_time: Object.freeze(['density', -1])
+});
+
+const clamp01 = (value) => (typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5);
+
+/**
+ * The dials in force: STYLE_V3_DEFAULTS.dials, then the pack's, then the
+ * story's (`"style": {"name", "dials": {...}}`), each clamped to 0–1.
+ */
+export function styleDials(pack, story) {
+  const own = isObject(story?.style) && isObject(story.style.dials) ? story.style.dials : {};
+  const merged = { ...STYLE_V3_DEFAULTS.dials, ...(isObject(pack?.dials) ? pack.dials : {}), ...own };
+  return Object.fromEntries(STYLE_DIALS.map((key) => [key, clamp01(merged[key])]));
+}
+
+/**
+ * Cadence targets for a measured profile under the dials. Each measure's band
+ * runs from its lowest to its highest given percentile (p10..p90, or p50..p90
+ * when p10 is absent); the target moves piecewise-linearly through p50 (the
+ * target at dial 0.5) and stays inside the band whatever the dial, which
+ * keeps customisation inside what the reference set shows works.
+ * → {<measure>: {target, band: [lo, hi], dial: name | null}}
+ */
+export function dialTargets(profile, dials = {}) {
+  const measures = isObject(profile?.measures) ? profile.measures : {};
+  const out = {};
+  for (const [name, range] of Object.entries(measures)) {
+    const points = ['p10', 'p50', 'p90'].map((key) => range?.[key]).filter((value) => typeof value === 'number' && Number.isFinite(value));
+    if (!points.length) continue;
+    const lo = Math.min(...points), hi = Math.max(...points);
+    const mid = typeof range.p50 === 'number' ? range.p50 : (lo + hi) / 2;
+    const [dial, direction] = DIAL_MEASURES[name] ?? [null, 0];
+    let target = mid;
+    if (dial) {
+      const t = direction > 0 ? clamp01(dials[dial]) : 1 - clamp01(dials[dial]);
+      target = t <= 0.5 ? lo + (mid - lo) * (t / 0.5) : mid + (hi - mid) * ((t - 0.5) / 0.5);
+    }
+    out[name] = { target: Math.round(Math.max(lo, Math.min(hi, target)) * 1000) / 1000, band: [lo, hi], dial };
+  }
+  return out;
+}
+
+/**
+ * What the dials choose outside the cadence band: playfulness picks the
+ * mood of the vocabulary and polish the ambient motion level. Each choice is
+ * a suggestion the pack's own explicit fields override.
+ */
+export function dialChoices(dials = {}) {
+  const playfulness = clamp01(dials.playfulness), polish = clamp01(dials.polish);
+  return {
+    mood: playfulness >= 0.67 ? 'playful' : playfulness <= 0.33 ? 'serious' : 'balanced',
+    ambient: polish >= 0.75 ? 'standard' : polish >= 0.4 ? 'subtle' : 'off'
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -724,7 +800,7 @@ export function upgradeV1Pack({ name, specification = '', audio = '', captionSki
 }
 
 /** Planner prompt lines for a style pack (preferences, avoid list, caption preset, v3 layouts, vocabulary, frame and cast). */
-export function stylePromptLines(pack, { lane } = {}) {
+export function stylePromptLines(pack, { lane, story } = {}) {
   if (!isObject(pack)) return [];
   const lines = [`style pack: ${pack.name}${pack.description ? ` — ${pack.description}` : ''}`];
   lines.push('Set "style": "' + pack.name + '" at the top level. The pack fills brand, captions, motion, camera, ambient and sound; do not restate them unless the brief demands an exception.');
@@ -740,6 +816,15 @@ export function stylePromptLines(pack, { lane } = {}) {
   if (Object.keys(vocabulary?.prefer ?? {}).length) lines.push(`Preferred modules by intent: ${Object.entries(vocabulary.prefer).map(([intent, ids]) => `${intent} → ${ids.join(' or ')}`).join('; ')}.`);
   if (vocabulary?.illustration === false) lines.push('No illustrated objects: use icons, type and real media only.');
   if (pack.cast?.characters?.length) lines.push(`Default cast: ${pack.cast.characters.join(', ')}${pack.cast.drawing_style ? ` (${pack.cast.drawing_style})` : ''}; reuse them rather than inventing characters.`);
+  if (isObject(pack.dials)) {
+    const dials = styleDials(pack, story);
+    const choices = dialChoices(dials);
+    lines.push(`Dials: ${STYLE_DIALS.map((key) => `${key} ${dials[key]}`).join(', ')} (0-1; they move the targets inside the profile band, never outside it). Vocabulary mood: ${choices.mood}.`);
+    if (isObject(pack.profile)) {
+      const targets = Object.entries(dialTargets(pack.profile, dials)).map(([name, entry]) => `${name} ${entry.target} (band ${entry.band[0]}-${entry.band[1]})`);
+      if (targets.length) lines.push(`Cadence targets from the style's measured profile: ${targets.join('; ')}.`);
+    } else if (typeof pack.profile === 'string') lines.push(`Cadence profile: ${pack.profile}.`);
+  }
   if (isObject(pack.brand_frame) && pack.brand_frame.enabled !== false) lines.push('The pack draws a brand frame (kicker, section labels, progress line) around every scene: do not author kickers or brand labels as scenes. Name sections with "frame": {"labels": [{"scene": "<id>", "label": "<2-4 words>"}]}.');
   const grammar = typeof pack.motion?.grammar === 'string' ? pack.motion.grammar : pack.motion?.grammar?.base;
   if (grammar) lines.push(`Motion grammar: ${grammar}${grammar === 'snappy' ? ' (short scenes, fast push/whip transitions)' : grammar === 'smooth' || grammar === 'documentary' || grammar === 'cinematic' ? ' (longer holds, fades and slow pushes)' : ''}.`);

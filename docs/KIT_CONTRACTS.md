@@ -339,6 +339,18 @@ scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intr
   file as `style.v2.json`. v1 packs (`launchclip.style-pack.v1`: `frame.md`,
   caption skin, audio notes) load as v3 in memory with a warning; `style
   upgrade` writes v3 and keeps the v1 manifest as `style.v1.json`.
+- Dials (RFC §9.3): `styleDials(pack, story)` → the four dials, 0.5 by
+  default, then the pack's `dials`, then the story's `"style": {name, dials}`,
+  each clamped to 0–1. `dialTargets(profile, dials)` → `{<measure>: {target,
+  band: [lo, hi], dial}}`: the band is the measure's lowest to highest given
+  percentile, the target runs piecewise-linearly through p50 (dial 0.5) and is
+  clamped into the band, so no dial value can leave it
+  (`test/style_v3.test.js` pins this). `energy` moves shot length, visual and
+  layout changes, flow velocity, text hold and first visual; `density` moves
+  coverage, the longest undressed run, caption words and face time
+  (`DIAL_MEASURES`). `dialChoices(dials)` → `{mood, ambient}`: playfulness
+  picks the vocabulary mood, polish the ambient level, which `applyStyle`
+  fills only when neither the pack nor the story sets `ambient.level`.
 - `stylePromptLines(pack, {lane})` is the planner section
   (`planningPrompt({style})`): preferences, the lane's caption preset, footage
   layouts, panels, modules by intent, the cast and the brand frame.

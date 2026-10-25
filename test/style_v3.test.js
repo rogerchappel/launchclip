@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { applyStyle, brandFrameErrors, cadenceProfileErrors, packCaptionsFor, STYLE_SCHEMA, STYLE_V2_SCHEMA, STYLE_V3_DEFAULTS, upgradeV2Pack, validateStylePack } from "../kit/core/style.mjs";
+import { applyStyle, brandFrameErrors, cadenceProfileErrors, dialChoices, dialTargets, packCaptionsFor, STYLE_SCHEMA, STYLE_V2_SCHEMA, STYLE_V3_DEFAULTS, styleDials, stylePromptLines, upgradeV2Pack, validateStylePack } from "../kit/core/style.mjs";
 import { captionDefaultPreset, captionPlan, captionPresetName, chunkWords } from "../kit/core/captions.mjs";
 import { validateStory } from "../kit/core/story.mjs";
 import { planningPrompt } from "../kit/core/planning-prompt.mjs";
@@ -168,4 +168,55 @@ test("quiet-accent: sentence case, no stroke, at most one accent word per line",
   const accents = lines.flatMap((line) => line.children.filter((span) => span.cls.includes("lc-cap-em")).map((span) => span.text));
   assert.ok(accents.includes("12"), "a number is the accent of its line");
   assert.ok(accents.includes("anything") || accents.includes("noticed"), "a line with no emphasis word accents its longest word");
+});
+
+test("dials move cadence targets inside the profile band and never out of it", () => {
+  const profile = {
+    measures: {
+      shot_seconds: { p10: 1.6, p50: 3.8, p90: 9.5 },
+      visual_changes_per_min: { p10: 9, p50: 16, p90: 26 },
+      coverage: { p10: 0.45, p50: 0.68, p90: 0.86 },
+      face_time: { p10: 0.55, p50: 0.72, p90: 0.9 },
+      longest_undressed_seconds: { p50: 6, p90: 11 },
+      first_visual_seconds: { p50: 0.4, p90: 1.2 },
+      caption_words_on_screen: { p50: 3, p90: 6 },
+      unknown_measure: { p10: 1, p50: 2, p90: 3 }
+    }
+  };
+  // Pinned: every dial value, in and out of 0–1 (clamped), keeps every target inside its band.
+  const values = [-5, -0.01, 0, 0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.01, 7, Number.NaN, "high", null];
+  for (const energy of values) for (const density of values) {
+    for (const [name, entry] of Object.entries(dialTargets(profile, { energy, density, playfulness: energy, polish: density }))) {
+      const range = profile.measures[name];
+      const lo = range.p10 ?? range.p50, hi = range.p90;
+      assert.deepEqual(entry.band, [lo, hi], name);
+      assert.ok(entry.target >= lo && entry.target <= hi, `${name} ${entry.target} outside [${lo}, ${hi}] at energy ${energy}, density ${density}`);
+    }
+  }
+  const at = (dials) => dialTargets(profile, dials);
+  assert.equal(at({ energy: 0.5, density: 0.5 }).shot_seconds.target, 3.8, "0.5 is the profile's p50");
+  assert.equal(at({ energy: 1 }).shot_seconds.target, 1.6, "more energy, shorter shots");
+  assert.equal(at({ energy: 0 }).shot_seconds.target, 9.5);
+  assert.equal(at({ density: 1 }).coverage.target, 0.86, "more density, more coverage");
+  assert.equal(at({ density: 1 }).longest_undressed_seconds.target, 6, "and shorter undressed runs, down to the band's low end");
+  assert.equal(at({ density: 1 }).face_time.target, 0.55);
+  assert.equal(at({ energy: 1, density: 1 }).unknown_measure.target, 2, "a measure no dial moves holds its p50");
+  assert.ok(at({ energy: 0.75 }).visual_changes_per_min.target > 16 && at({ energy: 0.75 }).visual_changes_per_min.target < 26);
+});
+
+test("dials: defaults, pack, then story; polish picks the ambient level when nothing else does", () => {
+  const pack = { ...upgradeV2Pack(v2()).pack, dials: { energy: 0.9, polish: 0.2 } };
+  assert.deepEqual(styleDials(pack), { energy: 0.9, density: 0.5, playfulness: 0.5, polish: 0.2 });
+  assert.deepEqual(styleDials(pack, { style: { name: "channel", dials: { energy: 0.1, polish: 3 } } }), { energy: 0.1, density: 0.5, playfulness: 0.5, polish: 1 });
+  assert.deepEqual(dialChoices({ playfulness: 0.9, polish: 0.9 }), { mood: "playful", ambient: "standard" });
+  assert.deepEqual(dialChoices({ playfulness: 0.1, polish: 0.1 }), { mood: "serious", ambient: "off" });
+  assert.equal(applyStyle(story(), pack).story.ambient.level, "off");
+  assert.equal(applyStyle(story({ ambient: { level: "lively" } }), pack).story.ambient.level, "lively", "the story's level wins");
+  assert.equal(applyStyle(story(), { ...pack, ambient: { level: "subtle" } }).story.ambient.level, "subtle", "the pack's explicit level wins");
+  const ok = validateStory(story({ style: { name: "channel", dials: { energy: 0.2 } } }));
+  assert.equal(ok.ok, true, ok.errors.join("; "));
+  assert.match(validateStory(story({ style: { name: "channel", dials: { energy: 2, chaos: 1 } } })).errors.join(" "), /style\.dials\.energy.*style\.dials\.chaos|style\.dials\.chaos.*style\.dials\.energy/s);
+  const lines = stylePromptLines({ ...pack, profile: { measures: { coverage: { p10: 0.4, p50: 0.6, p90: 0.8 } } } }).join("\n");
+  assert.match(lines, /Dials: energy 0\.9/);
+  assert.match(lines, /coverage 0\.6 \(band 0\.4-0\.8\)/);
 });
