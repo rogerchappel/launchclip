@@ -9,7 +9,7 @@ import {createRequire} from 'node:module';
 import {MODULES, catalogBTimeline, catalogBView, contrastRatio, formatNumber, mixColor, parseExpression, sampleIndex} from '../kit/core/catalog-b.mjs';
 import {createBase} from '../kit/core/catalog-b-base.mjs';
 import {loopValue, propsToStyle, transformString} from '../kit/core/catalog-b-view.mjs';
-import {EMITTERS, opsToGsap, renderNode} from '../kit/hyperframes/catalog-b.mjs';
+import {EMITTERS, gsapOwnedTransforms, opsToGsap, renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 import {mediaSkip} from './helpers/media.js';
 
@@ -619,4 +619,20 @@ test('catalogue B: every module is registered in all three registries', async ()
     const fixture = JSON.parse(readFileSync(join(FIXTURES, file), 'utf8'));
     assert.ok(fixture.story.scenes.some(scene => scene.id === fixture.sceneId), file);
   }
+});
+
+test('HyperFrames: GSAP owns a moved transform; a lead tl.set restores it unless the start already sets it', () => {
+  const node = (id, transform) => ({tag: 'div', id, style: {opacity: 0, transform}, children: []});
+  const view = {tag: 'div', id: 'm', style: {}, children: [node('a', 'translate(-60px, 0px)'), node('b', 'translate(0px, 40px) scale(0.97, 0.97)'), node('c', 'translate(-50%, 0px)'), node('d', 'translate(0px, 8px)')]};
+  const tween = target => ({type: 'tween', target, start: 1, duration: 0.5, ease: 'none', from: {x: -60}, to: {x: 0}});
+  const ops = [{type: 'set', target: 'b', time: 2, props: {y: 40, scale: 0.97}}, tween('a'), tween('b'), tween('c')];
+  const owned = gsapOwnedTransforms(view, ops, 2);
+  const style = id => owned.view.children.find(child => child.id === id).style;
+  assert.equal(style('a').transform, undefined);
+  assert.equal(style('a').opacity, 0, 'only the transform comes off');
+  assert.equal(style('b').transform, undefined);
+  assert.equal(style('c').transform, 'translate(-50%, 0px)', 'a percentage GSAP x cannot express stays in the CSS');
+  assert.equal(style('d').transform, 'translate(0px, 8px)', 'an element no op moves keeps its CSS');
+  assert.deepEqual(owned.ops.slice(0, 1), [{type: 'set', target: 'a', time: 2, props: {x: -60, y: 0, rotation: 0, scaleX: 1, scaleY: 1}}]);
+  assert.deepEqual(owned.ops.slice(1), ops, "b's own set at the start already owns its transform");
 });

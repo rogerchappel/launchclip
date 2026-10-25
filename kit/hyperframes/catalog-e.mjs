@@ -9,15 +9,16 @@
 // the subject. All motion is one op list; GSAP targets ids across parts.
 
 import {catalogETimeline, catalogEView} from '../core/catalog-e.mjs';
-import {opsToGsap, renderNode} from './catalog-b.mjs';
+import {gsapOwnedTransforms, opsToGsap, renderNode} from './catalog-b.mjs';
 
 /** {html, overlay?, behind?, css, motion, events, layout}. */
 export function emitCatalogE(model) {
   return emitParts(model, catalogEView(model), catalogETimeline(model));
 }
 
-/** The shared emitter for {front, behind, media, overlay} views (catalogues E and F). */
-export function emitParts(model, view, ops) {
+/** The shared emitter for {front, behind, media, overlay} views (catalogues E and F, characters); GSAP owns the moved transforms. */
+export function emitParts(model, parts, timeline) {
+  const {view, ops} = gsapOwnedTransforms(parts, timeline, model.start);
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}" data-module="${model.module}"${extra}`;
   const main = model.layer === 'behind' ? view.behind : view.front;
   const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};

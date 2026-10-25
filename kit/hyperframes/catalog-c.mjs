@@ -12,15 +12,15 @@
 // base, because HyperFrames only seeks media that are direct root children).
 
 import {BASE_CAMERA, cameraOps, catalogCTimeline, catalogCView} from '../core/catalog-c.mjs';
-import {opsToGsap, renderNode} from './catalog-b.mjs';
+import {gsapOwnedTransforms, opsToGsap, renderNode} from './catalog-b.mjs';
 
 /** Emitter shared by every catalogue C module: {html, css, motion, events, layout}. */
 export function emitCatalogC(model) {
-  const view = catalogCView(model);
+  const {view, ops} = gsapOwnedTransforms(catalogCView(model), catalogCTimeline(model), model.start);
   const timed = `class="clip lc-catalog-c" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${model.track}" data-module="${model.module}"${model.camera ? ' data-launchclip-camera="base"' : ''}`;
   const html = renderNode(view, timed);
   const css = `#${model.id}{pointer-events:none}#${model.id} svg{display:block}`;
-  const motion = opsToGsap(catalogCTimeline(model)).join('\n');
+  const motion = opsToGsap(ops).join('\n');
   return {html, css, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 

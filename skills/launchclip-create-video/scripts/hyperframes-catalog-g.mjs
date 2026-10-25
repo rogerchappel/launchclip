@@ -3,13 +3,14 @@
 // emitted as calls on the host's paused GSAP timeline.
 
 import {catalogGTimeline, catalogGView} from './catalog-g.mjs';
-import {opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
+import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 export function emitCatalogG(model) {
+  const {view, ops} = gsapOwnedTransforms(catalogGView(model), catalogGTimeline(model), model.start);
   const timed = `class="clip lc-catalog-g" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${model.track}" data-module="${model.module}"`;
-  const html = renderNode(catalogGView(model), timed);
+  const html = renderNode(view, timed);
   const css = `#${model.id}{pointer-events:none}#${model.id} svg{display:block}`;
-  const motion = opsToGsap(catalogGTimeline(model)).join('\n');
+  const motion = opsToGsap(ops).join('\n');
   return {html, css, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 

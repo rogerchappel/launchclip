@@ -36,13 +36,16 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // transforms from the stylesheet (with exit hard kills) and the loop clone's
 // timeline was rendered at its hold: HyperFrames renders of the old and new
 // HTML match frame for frame (SSIM within the same build's render noise).
+// cooling, promo-16x9, explainer-9x16 and footage were re-pinned when GSAP
+// took over every catalogue's moved transforms from the inline CSS: renders
+// of the old and new HTML differ by no more than two renders of the old one.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "47cde505528e40d0911af122639db6b7586849c6d68b7fbe8c6f2f0ba21df237",
+  cooling: "13485746cdd3903f2e771888bb99c14ec960fb4830536922b65e2dce40dd6bc0",
   minimal: "79747aab75134d50fa6c9dfe3f7152a13ab2031a8e2fa067ef32d61bdee1dc62",
-  "promo-16x9": "f0f498c396b8be630573c1a72038849d0c76e67590b267ee7f82dac60bc97950",
-  "explainer-9x16": "7e292b3ec4ad62f6d2f2d724d544711f6d9563ed2d54147562c7fa81988dfc3d",
+  "promo-16x9": "671e18ec5bdbf3701f9cece5e8c92c73365940e7911a21f3f5aafbea0c4063d1",
+  "explainer-9x16": "4f3e0efaa1828eeb7731b15e355acee1385dd26038cef0b6d0c5f7962052e936",
   "data-story-9x16": "728ce9ee594389a6e49f6574f094f84b17b5b94947e4d2d58cc44254d504f21f",
-  footage: "dba545f22de4e32fddda06b8957c1bbabbfe26aff9052628af953021567213eb"
+  footage: "fcec4922e423409d87754e482de20ac463f1989cba99716ec9a6c3428dea27fb"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).

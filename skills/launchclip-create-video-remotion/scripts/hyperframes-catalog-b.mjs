@@ -49,6 +49,68 @@ const gsapProps = props => {
   return out;
 };
 
+// GSAP owns the transform of every element the op list moves: its CSS
+// transform comes off, and unless a tl.set at the module start already
+// writes it, an equal tl.set leads the op list. GSAP composes translate,
+// rotate and scale in that order, so the frames are unchanged, and nothing is
+// left for GSAP to overwrite (HyperFrames' gsap_css_transform_conflict lint).
+// Remotion keeps the CSS transforms: frameState applies the same ops over them.
+const TRANSFORM_PROPS = new Set(['x', 'y', 'rotation', 'scale', 'scaleX', 'scaleY']);
+const TRANSFORM_DEFAULTS = {x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1};
+const TRANSFORM_ORDER = ['translate', 'rotate', 'scale'];
+
+/** A view transform (translate px, rotate deg, scale; in GSAP's order) as GSAP props. */
+export function transformProps(transform) {
+  const props = {...TRANSFORM_DEFAULTS};
+  const pattern = /(translate|rotate|scale)\(([^)]*)\)/g;
+  const unsupported = () => new Error(`hyperframes emitter: unsupported transform ${transform}`);
+  let rest = String(transform), last = -1;
+  for (const [whole, fn, args] of String(transform).matchAll(pattern)) {
+    const order = TRANSFORM_ORDER.indexOf(fn);
+    if (order <= last) throw unsupported();
+    last = order;
+    const units = fn === 'translate' ? /^-?[\d.]+(e-?\d+)?(px)?$/ : fn === 'rotate' ? /^-?[\d.]+(e-?\d+)?(deg)?$/ : /^-?[\d.]+(e-?\d+)?$/;
+    const parts = args.split(',').map(value => value.trim());
+    if (parts.some(value => !units.test(value))) throw unsupported();
+    const values = parts.map(value => Number.parseFloat(value));
+    if (fn === 'translate') [props.x, props.y = 0] = values;
+    else if (fn === 'rotate') props.rotation = values[0];
+    else [props.scaleX, props.scaleY = values[0]] = values;
+    rest = rest.replace(whole, '');
+  }
+  if (rest.trim()) throw unsupported();
+  return props;
+}
+
+/**
+ * The view (one node, or {front, behind, media, overlay} parts) with
+ * GSAP-owned transforms taken off, and the op list with the tl.set ops that
+ * put them back. A transform GSAP cannot express stays in the CSS.
+ */
+export function gsapOwnedTransforms(view, ops, start) {
+  const moved = new Set(ops.filter(op => Object.keys(op.props ?? {...op.from, ...op.to}).some(key => TRANSFORM_PROPS.has(key))).map(op => op.target));
+  const opening = ops.filter(op => op.type === 'set' && Math.abs(op.time - start) < 1e-6);
+  const written = (id, key) => opening.some(op => op.target === id && (key in op.props || (key.startsWith('scale') && 'scale' in op.props)));
+  const sets = [];
+  const strip = node => {
+    if (!node || typeof node !== 'object') return node;
+    let style = node.style;
+    if (node.id && moved.has(node.id) && style?.transform) {
+      let props = null;
+      try { props = transformProps(style.transform); } catch { /* keep the CSS */ }
+      if (props) {
+        const {transform, ...others} = style;
+        style = others;
+        // A tl.set at the start that writes every non-default value already owns it.
+        if (Object.entries(props).some(([key, value]) => value !== TRANSFORM_DEFAULTS[key] && !written(node.id, key))) sets.push({type: 'set', target: node.id, time: start, props});
+      }
+    }
+    return {...node, ...(style ? {style} : {}), children: (node.children ?? []).map(strip)};
+  };
+  const out = typeof view?.tag === 'string' ? strip(view) : Object.fromEntries(Object.entries(view).map(([part, node]) => [part, node ? strip(node) : node]));
+  return {view: out, ops: [...sets, ...ops]};
+}
+
 /** GSAP calls for a renderer-neutral op list, against a host timeline `tl`. */
 export function opsToGsap(ops) {
   return ops.map(op => {
@@ -65,11 +127,11 @@ export function opsToGsap(ops) {
 
 /** Emitter shared by every catalogue B module: {html, css, motion, events, layout}. */
 export function emitCatalogB(model) {
-  const view = catalogBView(model);
+  const {view, ops} = gsapOwnedTransforms(catalogBView(model), catalogBTimeline(model), model.start);
   const timed = `class="clip lc-catalog-b" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${model.track}" data-module="${model.module}"`;
   const html = renderNode(view, timed);
   const css = `#${model.id}{pointer-events:none}#${model.id} svg{display:block}`;
-  const motion = opsToGsap(catalogBTimeline(model)).join('\n');
+  const motion = opsToGsap(ops).join('\n');
   return {html, css, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 
