@@ -764,6 +764,28 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: object, caption
 
+### cast-scene (keeps captions)
+One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
+params:
+- set: desk-laptop | phone | meeting | screen
+- screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
+- cast: [{id, pose?, expression?, facing?: left|right, cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
+events: <character>-cue-<i>
+
+### character-cameo (keeps captions)
+One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.
+params:
+- character: a cast or starter character id
+- pose: stand | point | wave | slump | type | think | cheer | shrug | walk
+- expression: neutral | happy | delighted | frustrated | confused | surprised | focused
+- facing: left | right
+- cues: [{at, pose?, expression?}]
+- says: [{from, to}] | "auto"
+- side: left | right (where the character stands)
+- card: {kicker?, title ≤ 64, body? ≤ 140}
+- panel: boolean (default: true without a card)
+events: <character>-cue-<i>
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -820,6 +842,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | icon-row | 2 s | 0.5 s | scene − 0.65 s | items pop in order; with no at, the first pops at 0.6 s and the rest follow by stagger (default 0.18 s) |
 | section-card | 2 s | 0.5 s | scene − 0.65 s | the kicker and rule land 0.25 s before the title |
 | object-card | 2 s | 0.5 s | scene − 0.65 s | the caption follows the object by 0.25 s; accents pop from 0.35 s after it |
+| cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 
 ## Example
 
