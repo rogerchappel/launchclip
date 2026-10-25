@@ -137,6 +137,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'callout-arrow', intents: ['product'], when: 'points at one thing on screen ("see this", "right here", "this button"): an arrow draws from a label to the spot and rings it', patterns: ['\\b(this button|right here|see this|look at this|over here)\\b'] },
   { module: 'tooltip', intents: ['product'], when: 'explains one control or spot in the product ("hover", "click here", "tap"): a dot lands on it and a tooltip rises beside it', patterns: ['\\b(hover|tap (on|the)|click (on|the|here))\\b'] },
   { module: 'motion-title', intents: ['hook', 'turn'], when: 'announces or names something in a few words ("announcing", "introducing", "say hello to"): a title built by the style\'s text effect, with a kicker and sub-line', patterns: ['^(announcing|introducing|presenting|say hello to)\\b'] },
+  { module: 'icon-grid', intents: ['list', 'product'], when: 'lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels', patterns: ['\\b(works with|integrates with|everything you need|all the features|built-in)\\b'] },
   { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] }
 ].map((row) => Object.freeze({ ...row, patterns: Object.freeze(row.patterns) })));
 
