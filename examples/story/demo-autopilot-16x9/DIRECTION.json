@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "product-demo",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 8], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [9, 15], "intent": "product", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [16, 31], "intent": "claim", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [32, 32], "intent": "claim", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [33, 38], "intent": "product", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [39, 51], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [52, 67], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [68, 71], "intent": "process", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [72, 81], "intent": "claim", "treatment": "insert", "scenes": ["s4"] }
+      ],
+      "layout": "full"
+    },
+    {
+      "id": "s2",
+      "lines": [
+        { "words": [82, 83], "intent": "claim", "treatment": "insert", "scenes": ["s5"] },
+        { "words": [84, 86], "intent": "claim", "treatment": "insert", "scenes": ["s5"] },
+        { "words": [87, 88], "intent": "product", "treatment": "insert", "scenes": ["s5"] },
+        { "words": [89, 94], "intent": "product", "treatment": "insert", "scenes": ["s6"] },
+        { "words": [95, 98], "intent": "cta", "treatment": "insert", "scenes": ["s6"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}
