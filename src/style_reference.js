@@ -10,15 +10,18 @@
 //   frames sampled across each video, downsampled to 160 px wide; roles by
 //   luminance and saturation with contrast enforced (kit/core/style.mjs);
 //   plus a vivid-hue histogram, so small accents are seen (style check);
-// - pacing: cuts and shot lengths from src/render_motion_analysis.js (ffmpeg
-//   scene scores), mapped to a motion grammar and transition preference;
+// - pacing: visual changes and shot lengths: hard cuts from
+//   src/render_motion_analysis.js (ffmpeg scene scores), structural scene
+//   changes, and graphics appearing or leaving over held footage (overlay
+//   events), mapped to a motion grammar and transition preference;
 // - energy: frame-difference activity (1 - hold ratio) → ambient level;
-// - captions (approximate): text-like edge density per horizontal band →
-//   position, text height → size, the most saturated colour in the band →
-//   highlight colour, the shape of the text rows → case (upper or sentence);
-// - layouts (approximate): persistent flat panel regions beside textured
-//   footage → full / split-left / split-right / framed per sampled frame, the
-//   layout mix and layout changes;
+// - captions (approximate): text lines whose words change between samples at
+//   one height → position, text height → size, the most saturated colour in
+//   the lines → highlight colour, letter-column tops in the band at source
+//   resolution → case (upper or sentence);
+// - layouts (approximate): persistent panel sides (one smooth, even tone)
+//   beside footage → full / split-left / split-right / framed per sampled
+//   frame (480 px, one every 3 s), the layout mix and layout changes;
 // - cadence profile: shot lengths, visual changes and layout changes per
 //   minute as p10/p50/p90 over the references (launchclip.cadence-profile.v1);
 // - sound: integrated loudness, silence ratio and transient rate
@@ -201,10 +204,15 @@ export function downsampleFrame(frame, width) {
   return { at: frame.at, width, height, data };
 }
 
-/** Sample up to `count` rgb24 frames spread across a video (or one frame from an image). */
-export async function sampleFrames(file, { count = 24, width = REFERENCE_SAMPLE_WIDTH, image = false } = {}, run = runBuffer) {
+/**
+ * Sample rgb24 frames spread across a video (or one frame from an image):
+ * `count` of them, or by default one every 3 s (24 to 96), so a split held
+ * for a few lines shows in at least two samples.
+ */
+export async function sampleFrames(file, { count = null, width = REFERENCE_SAMPLE_WIDTH, image = false } = {}, run = runBuffer) {
   const info = await probe(file, run);
   if (!info.width || !info.height) throw new Error(`${file} has no video stream`);
+  count ??= Math.max(24, Math.min(96, Math.round(info.duration / 3) || 24));
   const height = Math.max(2, Math.round((width * info.height) / info.width / 2) * 2);
   const frames = [];
   const times = image || !(info.duration > 0) ? [null] : Array.from({ length: count }, (_, i) => (info.duration * (i + 0.5)) / count);
@@ -589,7 +597,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
   const image = Boolean(options.image);
   // Frames at 480 px for layouts and captions (small captions need the
   // pixels); the palette reads them averaged down to 160 px.
-  const { info, frames: detail } = await sampleFrames(resolved, { count: options.frames ?? 24, width: REFERENCE_DETAIL_WIDTH, image }, run);
+  const { info, frames: detail } = await sampleFrames(resolved, { count: options.frames ?? null, width: REFERENCE_DETAIL_WIDTH, image }, run);
   const frames = detail.map((frame) => downsampleFrame(frame, REFERENCE_SAMPLE_WIDTH));
   const palette = paletteClusters(pixelsFromFrames(frames), { k: 8 });
   const vivid = vividHues(frames);
@@ -1029,13 +1037,13 @@ export function referenceReport(pack, references, inferred) {
   ];
   if (pack.reference_stats.pacing) {
     const p = pack.reference_stats.pacing;
-    lines.push(`Cut rate ${p.cut_rate_per_minute}/min; shot length median ${p.median_shot_seconds} s (p25 ${p.p25_shot_seconds} s, p75 ${p.p75_shot_seconds} s), from ffmpeg scene scores (src/render_motion_analysis.js).`, '', `- motion.grammar: **${grammar.grammar}** (confidence ${grammar.confidence.toFixed(2)}): ${grammar.reason}.`, `- transition preference: ${grammar.transitions.join(', ')}.`);
+    lines.push(`Visual changes ${p.cut_rate_per_minute}/min; shot length median ${p.median_shot_seconds} s (p25 ${p.p25_shot_seconds} s, p75 ${p.p75_shot_seconds} s). A visual change is a hard cut (ffmpeg scene scores, src/render_motion_analysis.js), a structural scene change, or a graphic appearing or leaving over held footage (blocks of the frame stepping from one steady state to another), as a storyboard counts scene starts and ends.`, '', `- motion.grammar: **${grammar.grammar}** (confidence ${grammar.confidence.toFixed(2)}): ${grammar.reason}.`, `- transition preference: ${grammar.transitions.join(', ')}.`);
   } else lines.push('No video reference: the grammar is the editorial default (confidence 0.20).');
   lines.push('', '## Energy → ambient', '');
   if (pack.reference_stats.energy) lines.push(`Activity (share of frames that are not holds) ${pack.reference_stats.energy.activity}; ${pack.reference_stats.energy.bursts_per_minute} motion bursts/min.`, '', `- ambient.level: **${ambient.level}** (confidence ${ambient.confidence.toFixed(2)}).`);
   else lines.push('No video reference: subtle (confidence 0.20).');
-  lines.push('', '## Captions (approximate)', '', 'Bottom-band text heuristics: text-like rows are runs of dense, strong horizontal luminance edges; a band whose text changes between samples scores as captions. Position, size, highlight colour and case (from how dense the top of the text line is) are estimates; the font is not detected.', '', `- captions: \`${JSON.stringify(pack.captions)}\` (confidence ${captions.confidence.toFixed(2)}).`, ...captions.notes.map((note) => `- ${note}`));
-  lines.push('', '## Layouts (approximate)', '', 'Per sampled frame: a flat side (low luma spread, few edges) beside textured footage is a split, a flat border round a textured centre is framed, anything else is full; a panel counts only when a neighbouring sample shows it too.', '');
+  lines.push('', '## Captions (approximate)', '', 'Text lines are runs of rows dense with edges into bright strokes (in windows a tenth of the frame wide, so short or left-aligned captions count); captions are the height on the frame where a line is present in most samples and its words change between samples in the same layout (a logo, a sign in the room or a kicker holds still). Case is re-read from that band at the source resolution: lowercase starts most letter columns at the x-height, capitals at the cap height. Position, size, highlight colour and case are estimates; the font is not detected.', '', `- captions: \`${JSON.stringify(pack.captions)}\` (confidence ${captions.confidence.toFixed(2)}).`, ...captions.notes.map((note) => `- ${note}`));
+  lines.push('', '## Layouts (approximate)', '', 'Per sampled frame (480 px, one every 3 s): a side that is mostly one smooth, even tone (a panel, even with cards and text on it) beside footage is a split, a panel border round footage is framed, anything else is full; a panel counts only when a neighbouring sample shows it too.', '');
   if (layouts?.mix) lines.push(`- layouts: \`${JSON.stringify(pack.layouts)}\` (confidence ${layouts.confidence.toFixed(2)}).`, ...layouts.notes.map((note) => `- ${note}`));
   else lines.push('- No video reference: no layout mix.');
   lines.push('', '## Cadence profile', '');
