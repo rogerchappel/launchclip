@@ -1,0 +1,22 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "explainer-motion",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 0], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [1, 5], "intent": "product", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [6, 15], "intent": "product", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [16, 20], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [21, 30], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [31, 44], "intent": "claim", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [45, 53], "intent": "claim", "treatment": "insert", "scenes": ["s4", "s5"] },
+        { "words": [54, 61], "intent": "number", "treatment": "insert", "scenes": ["s6"] },
+        { "words": [62, 62], "intent": "claim", "treatment": "insert", "scenes": ["s7"] },
+        { "words": [63, 68], "intent": "cta", "treatment": "insert", "scenes": ["s7"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}

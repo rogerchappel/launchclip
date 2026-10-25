@@ -1,0 +1,20 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "short-motion",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 1], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [2, 3], "intent": "claim", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [4, 7], "intent": "process", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [8, 20], "intent": "number", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [21, 26], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [27, 31], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [32, 40], "intent": "claim", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [41, 48], "intent": "claim", "treatment": "insert", "scenes": ["s5"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}

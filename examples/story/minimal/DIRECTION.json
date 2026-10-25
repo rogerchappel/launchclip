@@ -1,0 +1,16 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "short-motion",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 3], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [4, 5], "intent": "turn", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [6, 9], "intent": "claim", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [10, 11], "intent": "claim", "treatment": "insert", "scenes": ["s2"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}

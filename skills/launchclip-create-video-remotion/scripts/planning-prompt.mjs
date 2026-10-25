@@ -13,10 +13,12 @@
 
 import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
 import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
-import { knownModules, catalogModules, isEditorialKind, moduleTiming } from './modules.mjs';
+import { knownModules, catalogModules, isEditorialKind, moduleTiming, SUBJECT_DENSITY } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
 import { stylePromptLines } from './style.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
+import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
+import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -283,13 +285,22 @@ function tierRules(tier) {
     'You may use {"module": "custom", "source": "modules/<file>"} for a topic-specific world. A custom module must be a pure function of absolute time, obey the safe zone, and have a catalogue module it can fall back to; say which one in scene.notes.'];
 }
 
-function laneRules(lane) {
+function laneRules(lane, profile = null) {
   const rules = {
     motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
     'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
-    'footage-led': 'footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.'
+    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)} Add a captions overlay.`
   };
   return lane && rules[lane] ? [rules[lane]] : STORY_LANES.map((name) => rules[name]);
+}
+
+// The footage-led coverage rule: the cadence profile's band (RFC §5.5), not a fixed cap.
+function coverageRule(profile) {
+  const band = profile?.measures?.coverage;
+  const run = profile?.measures?.longest_undressed_seconds;
+  if (!band) return 'Coverage (the share of the runtime with a graphic on screen) lands inside the story\'s cadence profile band (references/profiles.md); no undressed run longer than the profile allows.';
+  const pct = (value) => `${Math.round(value * 100)}%`;
+  return `Coverage (the share of the runtime with a graphic on screen) aims at ${pct(band.p50 ?? band.p10)} and stays between ${pct(band.p10 ?? 0)} and ${pct(band.p90 ?? 1)} (profile ${profile.id})${run?.p90 != null ? `; no stretch longer than ${run.p90} s without a graphic` : ''}.`;
 }
 
 function safeZoneLines(format) {
@@ -387,7 +398,8 @@ function phraseLines({ subject } = {}) {
  * probe summary ({usable, reasons, framing, headroom, head}) or null when
  * there is no cut-out (no runtime, no person, or several people).
  */
-export function subjectLines(subject) {
+export function subjectLines(subject, { profile = null } = {}) {
+  const share = Math.round((profile?.measures?.subject_effect_share?.p90 ?? SUBJECT_DENSITY.share) * 100);
   if (!subject?.usable) {
     const why = subject?.reasons?.length ? subject.reasons.join('; ') : 'the presenter cut-out is not available';
     return [`No subject modules: ${why}. Every scene stays in front (no layer, no masthead or dolly-zoom).`];
@@ -395,7 +407,7 @@ export function subjectLines(subject) {
   return [
     `The presenter can be cut out: ${subject.framing ?? 'unknown'} framing${typeof subject.headroom === 'number' ? `, ${Math.round(subject.headroom * 100)}% headroom above the head` : ''}${subject.head ? `, head centred at x ${subject.head.x}, y ${subject.head.y} of the frame` : ''}.`,
     'scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.',
-    'Density budget: use at most one or two subject effects in a 30–60 s piece (behind or split scenes, the modules that need the subject, and punch-in, zoom-through and pull-back), at least 3 s apart, never two different ones back to back, and together under 35% of the runtime. Validation warns past any of these.',
+    `Density budget: use at most one or two subject effects in a 30–60 s piece (behind or split scenes, the modules that need the subject, and punch-in, zoom-through and pull-back), at least 3 s apart, never two different ones back to back, and together under ${share}% of the runtime${profile ? ` (profile ${profile.id})` : ''}. Validation warns past any of these.`,
     `masthead and app-stage need headroom${subject.framing === 'close-up' ? ' (this recording is a close-up: avoid masthead, app-stage and dolly-zoom)' : ''}; dolly-zoom needs a medium or wide shot.`,
     `A masthead keeps 60% of every letter clear of the head, or layout-check fails it: in a portrait Short that takes about 20% headroom (more with a kicker)${typeof subject.headroom === 'number' && subject.headroom < 0.2 ? `, and this recording has ${Math.round(subject.headroom * 100)}%: use another module` : ''}.`,
     'app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.',
@@ -452,13 +464,172 @@ function section(title, lines) {
   return [`## ${title}`, '', ...lines, ''];
 }
 
+function cadenceLines(profile) {
+  return [
+    `What a strong ${profile.title ?? profile.id} measures like (${profile.provenance?.kind === 'measured' ? `measured from ${profile.references} references` : 'seed ranges, not yet measured'}). Plan to the targets; the gates measure the render against the bands.`,
+    ...profilePromptLines(profile)
+  ];
+}
+
+function directionPlanLines(direction) {
+  return [
+    'The direction map gives every narration line an intent and a treatment. Plan the storyboard to it:',
+    '',
+    '- Create every scene a line names, with that id, starting and ending on the line\'s own words (word anchors), and choose its module for the line\'s intent.',
+    '- dress: an overlay beside the presenter (footage-led) or a scene on track 0 (motion lanes). insert: a full-frame scene (insert: true in footage-led). camera: a punch-in or zoom-through only. face: no scene; the recording plays.',
+    '- A scene may run across the next line when the map names it there too. Keep scenes the map does not name to captions and camera moves.',
+    '',
+    '```json',
+    JSON.stringify(direction),
+    '```'
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Direction map (docs/VIDEO_QUALITY_RFC.md §6): the planner's first call and
+// the skills' reference.
+
+function directionContractLines({ lane } = {}) {
+  const motion = lane && lane !== 'footage-led';
+  return [
+    `schema: "${DIRECTION_SCHEMA}" (exactly); profile: the cadence profile id (given).`,
+    'sections: [{id ("s1"…), title, layout?, lines: [...]}]: topics in order (story beats for a character story). A section holds one footage layout: ' + DIRECTION_LAYOUTS.map((name) => `"${name}"`).join(', ') + ' (footage-led only; "full" is today\'s overlays-over-the-recording).',
+    'lines: [{words: [first, last], intent, treatment, scenes?, why?}]. words are inclusive indexes into the narration words, so the map survives re-timing. Every word belongs to exactly one line, in order.',
+    `intent: one of ${DIRECTION_INTENTS.join(', ')} (see the intent rules).`,
+    `treatment: dress (a visual alongside the presenter), insert (a full-frame visual over the voice), face (hold on the presenter on purpose), camera (a punch-in or camera move only).${motion ? ' This story has no presenter: every line is dress or insert.' : ''}`,
+    'dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").',
+    `Dress every line whose intent calls for a visual (${VISUAL_INTENTS.join(', ')}) unless it works better on the presenter, and then say why. A character story's lines may add cast cues ({id, pose, expression, at: "word:<text>"}) and a set.`
+  ];
+}
+
+function intentRuleLines() {
+  return [
+    '| Intent | The line… |',
+    '| --- | --- |',
+    ...INTENT_RULES.map((rule) => `| ${rule.intent} | ${rule.when.replace(/\|/g, '\\|')} |`),
+    '| hook | is the first line (unless it is a call to action) |',
+    '| claim | matches none of the above |'
+  ];
+}
+
+/**
+ * The instructions for the planner's first call: the direction map before the
+ * storyboard. words: the narration words; the lines are pre-split with their
+ * suggested intents from the shared rules, so both paths classify the same way.
+ */
+export function directionPrompt({ lane, format, profile = null, words, subject = null } = {}) {
+  const hints = intentHints(words);
+  const lines = [
+    `You author DIRECTION.json (${DIRECTION_SCHEMA}) for LaunchClip: the visual decision for every line of the narration, made before the storyboard. The storyboard is planned against it next.`,
+    'Return exactly one JSON object: the complete direction map. No prose, no Markdown fences.',
+    '',
+    ...section('Fixed inputs', [`lane: ${lane ?? '(given)'}`, `format: ${format ? JSON.stringify(format) : '(given)'}`, `profile: ${profile?.id ?? '(none)'}`]),
+    ...section('Contract', directionContractLines({ lane }).map((line) => `- ${line}`)),
+    ...section('Intent rules (first match wins)', intentRuleLines()),
+    ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.']) : []),
+    ...(lane === 'footage-led' ? section('Presenter', [subject?.usable ? `The presenter can be cut out (${subject.framing ?? 'unknown'} framing): split and framed layouts and behind-the-presenter scenes are available.` : 'No presenter cut-out: use full and insert layouts, or split on the base camera.']) : []),
+    ...section('Narration lines (suggested intents)', ['Keep these lines unless two belong together or one holds two ideas; keep the word ranges exact.', '', ...hints.map((hint) => `- [${hint.words[0]}, ${hint.words[1]}] ${hint.intent}: "${hint.text.slice(0, 200)}" (${round2(hint.start)}–${round2(hint.end)} s)`)]),
+    ...section('Example', [JSON.stringify(exampleDirection())])
+  ];
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}
+
+function exampleDirection() {
+  return {
+    schema: DIRECTION_SCHEMA,
+    profile: 'youtube-talking-head-launch',
+    sections: [{ id: 's1', title: 'The problem', layout: 'split-right', lines: [
+      { words: [0, 23], intent: 'claim', treatment: 'dress', scenes: ['die'], why: 'three parallel claims; one visual per claim' },
+      { words: [24, 43], intent: 'problem', treatment: 'dress', scenes: ['build-properly'] },
+      { words: [44, 52], intent: 'personal', treatment: 'face', why: 'the turn lands on his face' }
+    ] }]
+  };
+}
+
+function round2(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+/**
+ * Markdown reference for the create-video skills
+ * (skills-src/references/direction-map.md, generated).
+ */
+export function directionMapReference() {
+  const lines = [
+    '# Direction map',
+    '',
+    '<!-- Generated from kit/core/planning-prompt.mjs by scripts/sync-skills.mjs. Do not edit by hand; run `npm run skills:sync`. -->',
+    '',
+    `Write \`DIRECTION.json\` (${DIRECTION_SCHEMA}) beside \`storyboard.json\` before the storyboard: every line of the narration gets an intent and a visual decision. The storyboard says what renders, the map says why each scene exists, and the cadence profile (\`references/profiles.md\`) says what the whole should measure like. \`launchclip story plan\` and \`launchclip make\` ask the model for the same map first. Design: \`docs/VIDEO_QUALITY_RFC.md\` §6 in the LaunchClip repo.`,
+    '',
+    ...section('Steps', [
+      '1. Read the narration words (`NARRATION.json`, or the edited transcript for footage) and split them into lines at sentence ends. Number the words from 0.',
+      '2. Pick the cadence profile for the story (`launchclip profile list`; `references/profiles.md`) and note its coverage target and undressed limit.',
+      '3. Classify each line with the intent rules below, then choose its treatment. Dress every line whose intent calls for a visual; hold a line on the presenter only on purpose, and say why.',
+      '4. Name the scene ids each dress or insert line will get, then author `storyboard.json` with those scenes on those words.',
+      '5. `launchclip story validate storyboard.json` checks the map: every word in a line, every named scene present and overlapping its words, and coverage, face time and the longest undressed run against the profile band.'
+    ]),
+    ...section('Contract', directionContractLines().map((line) => `- ${line}`)),
+    ...section('Intent rules (first match wins)', intentRuleLines()),
+    ...section('Narrative maps', [
+      `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`
+    ]),
+    ...section('Required', [
+      '- `story validate` requires `DIRECTION.json` in the footage-led, motion and voiceover-motion lanes when the story has narration words (`audio.words`); without words a missing map is a warning.',
+      '- `launchclip finish` gates coverage, direction and face against the profile.'
+    ]),
+    ...section('Example', ['```json', JSON.stringify(exampleDirection(), null, 2), '```'])
+  ];
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+}
+
+/**
+ * Markdown reference for the cadence profiles (skills-src/references/profiles.md,
+ * generated from the shipped profiles in kit/profiles/, which the caller loads).
+ */
+export function profilesReference(profiles = []) {
+  const pct = (value, unit) => (value == null ? '—' : unit === 'share' ? `${Math.round(value * 100)}%` : String(value));
+  const lines = [
+    '# Cadence profiles',
+    '',
+    '<!-- Generated from kit/profiles/*.json by scripts/sync-skills.mjs. Do not edit by hand; run `npm run skills:sync`. -->',
+    '',
+    'A cadence profile (`launchclip.cadence-profile.v1`) is what a strong video of one format and platform measures like: ranges (p10, p50, p90) over measurements of a reference set. Plan to the p50 targets inside the p10–p90 band; `launchclip finish` measures the render against the band. `launchclip profile list` and `launchclip profile show <id>` print them; `launchclip profile measure <folder>` measures your own references into one. Design: `docs/VIDEO_QUALITY_RFC.md` §5.',
+    '',
+    'Every shipped profile is a seed until it is measured: conservative ranges, not statistics. Treat the bands as guard rails.',
+    '',
+    ...section('Choosing a profile', [
+      'The profile follows the story\'s lane, aspect, duration and platform (a direction map\'s `profile` or a style\'s `profile` names one explicitly):',
+      '',
+      '| Profile | Format | Lanes | Aspects | Duration | Provenance |',
+      '| --- | --- | --- | --- | --- | --- |',
+      ...profiles.map((profile) => `| ${profile.id} | ${profile.format} | ${(profile.match?.lanes ?? ['any']).join(', ')} | ${(profile.match?.aspects ?? ['any']).join(', ')} | ${profile.duration_seconds[0]}–${profile.duration_seconds[1]} s | ${profile.provenance.kind} |`)
+    ]),
+    ...section('Measures', [
+      '| Measure | What it is | Gate holds |',
+      '| --- | --- | --- |',
+      ...Object.entries(PROFILE_MEASURES).map(([name, spec]) => `| ${name} | ${spec.describe} | ${spec.check === 'band' ? 'p10 and p90' : spec.check === 'max' ? 'p90 (a ceiling)' : 'p10 (a floor)'} |`)
+    ])
+  ];
+  for (const profile of profiles) {
+    lines.push(...section(profile.id, [
+      `${profile.description ?? profile.title ?? profile.id}`,
+      '',
+      '| Measure | p10 | p50 | p90 |',
+      '| --- | --- | --- | --- |',
+      ...Object.entries(profile.measures).map(([name, band]) => `| ${name} | ${pct(band.p10, PROFILE_MEASURES[name]?.unit)} | ${pct(band.p50, PROFILE_MEASURES[name]?.unit)} | ${pct(band.p90, PROFILE_MEASURES[name]?.unit)} |`)
+    ]));
+  }
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+}
+
 /**
  * The storyboard-authoring instructions for one tier.
  * tier: "structured" | "guided" | "bespoke"; lane, format and brand are the
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   // Subject modules are offered only to a footage-led story whose presenter can be cut out.
@@ -475,13 +646,15 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ]),
     ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style).map((line) => `- ${line}`)) : []),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
-    ...section('Lane rules', laneRules(lane).map((line) => `- ${line}`)),
+    ...section('Lane rules', laneRules(lane, profile).map((line) => `- ${line}`)),
+    ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
+    ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
-    ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject).map((line) => `- ${line}`)) : []),
+    ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines({ subject: lane === 'footage-led' ? Boolean(subject?.usable) : false })]),
     ...moodSection(artDirection, available),
     ...section('Modules', moduleLines(tier, available)),

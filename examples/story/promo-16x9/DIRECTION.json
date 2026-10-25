@@ -1,0 +1,21 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "explainer-motion",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 6], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [7, 16], "intent": "list", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [17, 19], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [20, 22], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [23, 24], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [25, 31], "intent": "claim", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [32, 39], "intent": "claim", "treatment": "insert", "scenes": ["s5"] },
+        { "words": [40, 43], "intent": "claim", "treatment": "insert", "scenes": ["s6"] },
+        { "words": [44, 45], "intent": "cta", "treatment": "insert", "scenes": ["s6"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}

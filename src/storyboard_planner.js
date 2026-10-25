@@ -19,14 +19,18 @@
 
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
+import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "../kit/core/direction.mjs";
+import { compareMeasures } from "../kit/core/profiles.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
-import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
 import { applyStyle } from "../kit/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
+// Repairs for the direction map itself, before the storyboard is planned.
+export const DIRECTION_MAX_REPAIRS = 1;
 
 // Strict-mode compatible envelope: the storyboard travels as a JSON string,
 // because its params are open objects that strict JSON schemas cannot express.
@@ -37,6 +41,28 @@ export const STORYBOARD_ENVELOPE_SCHEMA = Object.freeze({
   additionalProperties: false
 });
 
+export const DIRECTION_ENVELOPE_SCHEMA = Object.freeze({
+  type: "object",
+  properties: { direction_json: { type: "string", description: "The complete DIRECTION.json document, serialised as JSON." } },
+  required: ["direction_json"],
+  additionalProperties: false
+});
+
+// A repair returns both artifacts; an empty direction_json keeps the map.
+export const PLAN_REPAIR_ENVELOPE_SCHEMA = Object.freeze({
+  type: "object",
+  properties: {
+    storyboard_json: { type: "string", description: "The complete corrected storyboard.json document, serialised as JSON." },
+    direction_json: { type: "string", description: "The complete corrected DIRECTION.json, serialised as JSON, or an empty string to keep it unchanged." }
+  },
+  required: ["storyboard_json", "direction_json"],
+  additionalProperties: false
+});
+
+// Profile measures a plan must land inside before it passes; the rest of the
+// band is checked by finish and reported here as warnings.
+const PLAN_BAND_ERRORS = Object.freeze(["coverage", "longest_undressed_seconds"]);
+
 /**
  * Plan a storyboard. Returns a report (never throws on a model or check
  * failure; status is "passed" or "failed"):
@@ -44,7 +70,9 @@ export const STORYBOARD_ENVELOPE_SCHEMA = Object.freeze({
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null } = options;
+  // direction: true plans DIRECTION.json first (one call, RFC §6.4), a map
+  // object plans against that map, false or omitted plans no map.
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
   // the planned storyboard names it, and the checks run on the merged story.
   const brand = options.brand ?? (style?.brand ? styleBrand(style) : DEFAULT_BRAND);
@@ -59,24 +87,33 @@ export async function planStoryboard(options = {}) {
   if (style?.name) fixed.style = style.name;
   // subject: the presenter probe summary ({usable, reasons, framing, headroom,
   // head}); subject modules are offered only when it is usable.
-  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject });
-  const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
-  const request = planRequest({ brief, fixed, hints });
   const started = now();
   const attempts = [];
+  const wantsMap = options.direction === true && DIRECTION_LANES.includes(lane) && wordList.length > 0;
+  let direction = options.direction && typeof options.direction === "object" ? options.direction : null;
+  let directionSource = direction ? "given" : null;
+  let directionPlan = { attempts: [], warnings: [] };
+  if (wantsMap) {
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, now });
+    direction = directionPlan.map;
+    directionSource = direction ? "model" : null;
+  }
+  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction });
+  const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
+  const request = planRequest({ brief, fixed, hints, direction });
   let previous = null;
   let last = null;
 
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
     const kind = attempt === 0 ? "plan" : "repair";
-    const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs });
+    const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction });
     const callStarted = now();
     let result;
     try {
       result = await client.runStructured({
         instructions,
         input,
-        schema: STORYBOARD_ENVELOPE_SCHEMA,
+        schema: kind === "repair" && direction ? PLAN_REPAIR_ENVELOPE_SCHEMA : STORYBOARD_ENVELOPE_SCHEMA,
         schemaName: "launchclip_storyboard",
         model: bareModelId(model) ?? undefined,
         temperature: 0,
@@ -95,7 +132,10 @@ export async function planStoryboard(options = {}) {
     if (!extracted.ok) checked = { ok: false, errors: [`json: ${extracted.error}`], warnings: [], storyboard: null, layout: emptyLayout(), candidate: extracted.text ?? null };
     else {
       const pinned = pinInputs(extracted.storyboard, fixed);
-      checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style });
+      // A repair may return a corrected map with the storyboard.
+      const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
+      if (repairedMap?.ok) direction = repairedMap.map;
+      checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given" });
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
       // extraCheck(storyboard) → [error strings]: caller rules (for example,
@@ -125,13 +165,27 @@ export async function planStoryboard(options = {}) {
     if (checked.ok) break;
   }
 
-  const totals = attempts.reduce((sum, entry) => ({
+  // The model returned no usable map: draft one from the planned storyboard
+  // so validation and the gates still have one, and say so.
+  if (wantsMap && !direction && last?.ok && last.storyboard) {
+    try {
+      const resolved = resolveStory(JSON.parse(JSON.stringify(last.storyboard)), { words: wordList, beats });
+      direction = draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null });
+      directionSource = "drafted";
+      last.warnings = [...last.warnings, "direction: the model returned no valid direction map; DIRECTION.json was drafted from the storyboard (check its treatments)"];
+    } catch (error) {
+      last.warnings = [...last.warnings, `direction: no direction map (${message(error)})`];
+    }
+  }
+
+  const allAttempts = [...directionPlan.attempts, ...attempts];
+  const totals = allAttempts.reduce((sum, entry) => ({
     input_tokens: sum.input_tokens + entry.usage.input_tokens,
     output_tokens: sum.output_tokens + entry.usage.output_tokens,
     total_tokens: sum.total_tokens + entry.usage.total_tokens
   }), emptyUsage());
-  const priced = attempts.filter((entry) => entry.cost_usd != null);
-  const costWarnings = [...new Set(attempts.map((entry) => entry.cost_warning).filter(Boolean))];
+  const priced = allAttempts.filter((entry) => entry.cost_usd != null);
+  const costWarnings = [...new Set(allAttempts.map((entry) => entry.cost_warning).filter(Boolean))];
   return {
     schema_version: STORYBOARD_PLAN_VERSION,
     status: last?.ok ? "passed" : "failed",
@@ -144,12 +198,17 @@ export async function planStoryboard(options = {}) {
     max_repairs: repairs,
     valid_first_attempt: Boolean(attempts[0]?.ok),
     errors: last?.errors ?? [],
-    warnings: last?.warnings ?? [],
+    warnings: [...directionPlan.warnings, ...(last?.warnings ?? [])],
     layout: last?.layout ?? emptyLayout(),
+    direction,
+    direction_source: directionSource,
+    direction_attempts: directionPlan.attempts,
+    profile: profile?.id ?? null,
+    cadence: last?.cadence ?? null,
     usage: totals,
     cost: {
       estimated_usd: Math.round(priced.reduce((sum, entry) => sum + entry.cost_usd, 0) * 1e8) / 1e8,
-      complete: priced.length === attempts.length && attempts.length > 0,
+      complete: priced.length === allAttempts.length && attempts.length > 0,
       warnings: costWarnings
     },
     elapsed_ms: now() - started,
@@ -166,7 +225,7 @@ export async function planStoryboard(options = {}) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -188,7 +247,26 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   }
   const second = validateStory(resolved, { modules: knownModules() });
   errors.push(...second.errors.filter((entry) => !validation.errors.includes(entry)).map((entry) => `validation: ${entry} (after resolving anchors)`));
-  if (second.ok) warnings.push(...subjectDensityWarnings(resolved));
+  if (second.ok) warnings.push(...subjectDensityWarnings(resolved, { profile }));
+  // The direction map against this storyboard, and the measures it gives
+  // against the cadence profile (RFC §6.2).
+  let cadence = null;
+  if (second.ok && direction) {
+    const map = validateDirection(direction, { words, story: resolved });
+    errors.push(...map.errors.map((entry) => `direction: ${entry}`));
+    warnings.push(...map.warnings.map((entry) => `direction: ${entry}`));
+    if (map.ok && profile && words.length) {
+      const measures = directionMeasures(direction, resolved, { words });
+      const bands = compareMeasures(measures, profile);
+      cadence = { profile: profile.id, coverage: measures.coverage, face_time: measures.face_time, longest_undressed_seconds: measures.longest_undressed_seconds, bands: bands.filter((band) => band.status !== "inside") };
+      for (const band of bands) {
+        if (band.status === "inside") continue;
+        const line = `cadence: ${band.detail} (profile ${profile.id}); ${band.measure === "coverage" ? (band.status === "below" ? "dress more lines (turn face lines whose intent calls for a visual into dress or insert lines with scenes)" : "hold more lines on the presenter") : band.measure === "longest_undressed_seconds" ? "dress a line inside the longest undressed run" : "adjust the scenes"}`;
+        if (bandErrors && PLAN_BAND_ERRORS.includes(band.measure)) errors.push(line);
+        else warnings.push(line);
+      }
+    }
+  }
 
   const models = new Map();
   for (const scene of resolved.scenes) {
@@ -227,7 +305,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   } catch (error) {
     errors.push(`layout: ${message(error)}`);
   }
-  return { ok: errors.length === 0, errors, warnings, storyboard, layout };
+  return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence };
 }
 
 /** Tier rules (RFC §7) as error strings. */
@@ -295,7 +373,75 @@ export function pinInputs(story, fixed) {
   return { storyboard: copy, warnings };
 }
 
-function planRequest({ brief, fixed, hints }) {
+/**
+ * The planner's first call: DIRECTION.json from the brief and the narration
+ * lines, with at most DIRECTION_MAX_REPAIRS repairs. Scene names are checked
+ * for shape only; the storyboard pass checks them against real scenes.
+ * → {map | null, attempts, warnings}
+ */
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, now = () => Date.now() }) {
+  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject });
+  const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, ""].join("\n");
+  const attempts = [];
+  const warnings = [];
+  let previous = null;
+  for (let attempt = 0; attempt <= DIRECTION_MAX_REPAIRS; attempt += 1) {
+    const kind = attempt === 0 ? "direction" : "direction-repair";
+    const input = attempt === 0 ? base : [base, `## Repair ${attempt} of ${DIRECTION_MAX_REPAIRS}`, "", "Your previous direction map failed these checks:", "", ...previous.errors.map((entry) => `- ${entry}`), "", "Previous map:", "", previous.text ?? "(no parseable JSON object was returned)", "", "Return the complete corrected direction map as one JSON object.", ""].join("\n");
+    const started = now();
+    let result;
+    try {
+      result = await client.runStructured({ instructions, input, schema: DIRECTION_ENVELOPE_SCHEMA, schemaName: "launchclip_direction", model: bareModelId(model) ?? undefined, temperature: 0, maxOutputTokens: 8_000 });
+    } catch (error) {
+      attempts.push({ attempt, kind, ok: false, errors: [`model: ${message(error)}`], warnings: [], layout: { errors: 0, warnings: 0 }, usage: emptyUsage(), cost_usd: 0, model, elapsed_ms: now() - started });
+      warnings.push(`direction: the direction call failed (${message(error)})`);
+      break;
+    }
+    const usage = normalizeUsage(result?.usage);
+    const cost = estimateModelUsageCost(providerOf(client, model), result?.model ?? model, usage);
+    const extracted = extractDirection(result);
+    let errors = extracted.ok ? [] : [`json: ${extracted.error}`];
+    if (extracted.ok) {
+      const map = extracted.map;
+      if (profile && !map.profile) map.profile = profile.id;
+      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true });
+      errors = check.errors;
+    }
+    attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });
+    if (!errors.length) return { map: extracted.map, attempts, warnings };
+    previous = { errors, text: extracted.ok ? JSON.stringify(extracted.map) : extracted.text ?? null };
+  }
+  return { map: null, attempts, warnings };
+}
+
+/**
+ * Pull a direction map out of a client result: {direction_json: "<json>"},
+ * a map object, or raw text. → {ok: true, map} | {ok: false, error, text}
+ */
+export function extractDirection(result) {
+  const value = result?.value;
+  const isMap = (candidate) => candidate && typeof candidate === "object" && !Array.isArray(candidate) && Array.isArray(candidate.sections);
+  const fromText = (text) => {
+    if (typeof text !== "string" || !text.trim()) return { ok: false, error: "the model returned no direction map", text: null };
+    const parsed = parseText(text);
+    if (!parsed.ok) return { ok: false, error: parsed.error, text: parsed.text };
+    const candidate = parsed.storyboard;
+    if (isMap(candidate)) return { ok: true, map: candidate };
+    if (typeof candidate?.direction_json === "string") return fromText(candidate.direction_json);
+    if (isMap(candidate?.direction_json)) return { ok: true, map: candidate.direction_json };
+    return { ok: false, error: "the JSON object is not a direction map (no sections)", text: JSON.stringify(candidate).slice(0, 40_000) };
+  };
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (typeof value.direction_json === "string") return fromText(value.direction_json);
+    if (isMap(value.direction_json)) return { ok: true, map: value.direction_json };
+    if (isMap(value)) return { ok: true, map: value };
+    return { ok: false, error: "the model returned no direction map", text: JSON.stringify(value).slice(0, 40_000) };
+  }
+  if (typeof value === "string") return fromText(value);
+  return fromText(result?.text);
+}
+
+function planRequest({ brief, fixed, hints, direction = null }) {
   const lines = [
     "Write the storyboard for this brief.",
     "",
@@ -312,6 +458,7 @@ function planRequest({ brief, fixed, hints }) {
   if (fixed.style) lines.push(`style: ${JSON.stringify(fixed.style)}`);
   if (Object.keys(fixed.audio).length) lines.push(`audio: ${JSON.stringify(fixed.audio)} (add music and sfx as you see fit)`);
   if (fixed.base) lines.push(`base: ${JSON.stringify(fixed.base)}`);
+  if (direction) lines.push("", "## Direction map", "", "Plan the storyboard against DIRECTION.json (in the instructions): every scene a line names, on that line's words.");
   if (hints.length) {
     lines.push("", "## Phrase hints (from the phrase → module table)", "");
     for (const hint of hints.slice(0, 24)) lines.push(`- "${hint.sentence.slice(0, 160)}" → ${hint.modules.join(", ")}`);
@@ -319,7 +466,7 @@ function planRequest({ brief, fixed, hints }) {
   return `${lines.join("\n")}\n`;
 }
 
-function repairRequest({ request, previous, errors, attempt, repairs }) {
+function repairRequest({ request, previous, errors, attempt, repairs, direction = null }) {
   const prior = previous == null ? "(no parseable JSON object was returned)" : typeof previous === "string" ? previous.slice(0, 40_000) : JSON.stringify(previous);
   return [
     request.trimEnd(),
@@ -337,6 +484,7 @@ function repairRequest({ request, previous, errors, attempt, repairs }) {
     "A params error names the first offending item a module found (rows[1], steps[0], left.label…); the same rule applies to every sibling item, so fix all of them in that scene, not only the one named.",
     "",
     "Return the complete corrected storyboard as one JSON object. Fix only the scenes and params the errors name (shorten copy, change a param, retime or swap a scene's module); keep everything else. Keep lane, format, brand, audio and base exactly as given. The checks and their thresholds are fixed and cannot be relaxed.",
+    ...(direction ? ["", "Errors prefixed direction: or cadence: are about the direction map and the profile band. Fix them in the storyboard (add or move the scenes a line names), in the map (a line's treatment, scenes or why), or both. Return {storyboard_json, direction_json}; direction_json is the complete corrected map, or an empty string to keep it.", "", "Current direction map:", "", JSON.stringify(direction)] : []),
     ""
   ].join("\n");
 }

@@ -17,6 +17,8 @@ import path from "node:path";
 import { DEFAULT_BRAND } from "../../kit/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
+import { directionJson } from "../../kit/core/direction.mjs";
+import { profileForStory } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { getVoiceProvider } from "../voice/index.js";
 import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
@@ -41,6 +43,7 @@ export const MAKE_PATHS = Object.freeze({
   script: "SCRIPT.json",
   words: "NARRATION.json",
   story: "storyboard.json",
+  direction: "DIRECTION.json",
   plan: ".launchclip/storyboard-plan.json",
   state: ".launchclip/make-state.json",
   transcripts: ".launchclip/make/transcripts",
@@ -433,9 +436,14 @@ async function stageStoryboard(ctx) {
   const lane = routing.lane;
   const fixedAudio = { ...ctx.audio };
   const subject = ctx.subject?.probe ?? null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 1, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
+  // The cadence profile the plan aims at (RFC §5.5): the style's, else the
+  // shipped one for the routed lane, aspect, duration and platform.
+  const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { style: style?.pack ?? null, projectDir: project });
+  report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
+  const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
-  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) {
+  const directionFile = path.join(project, MAKE_PATHS.direction);
+  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
     report.repairs = state.plan.repairs ?? null;
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
@@ -446,7 +454,7 @@ async function stageStoryboard(ctx) {
   // Footage-led overlays must sit on track 1+, which the structured tier
   // forbids (it bans scene.track), so footage-led plans at the guided tier.
   const tier = lane === "footage-led" ? "guided" : "structured";
-  ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (storyboard pass; up to ${maxRepairs} repair passes)`);
+  ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
   const plan = await planStoryboard({
     brief,
     words: ctx.words,
@@ -460,9 +468,12 @@ async function stageStoryboard(ctx) {
     base: lane === "footage-led" ? ctx.base.src : null,
     ...(lane === "footage-led" && subject ? { subject } : {}),
     style: style?.pack ?? null,
+    direction: true,
+    profile,
     maxRepairs,
     extraCheck: (story) => assetErrors(story, allowed)
   });
+  for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
   report.repairs = { tier, used: plan.repairs_used, max: plan.max_repairs, valid_first_attempt: plan.valid_first_attempt, attempts: plan.attempts.map((attempt) => ({ attempt: attempt.attempt, kind: attempt.kind, ok: attempt.ok, errors: attempt.errors.slice(0, 12) })) };
@@ -471,10 +482,12 @@ async function stageStoryboard(ctx) {
     throw new Error(`the storyboard failed its checks after ${plan.attempts.length} attempt(s):\n- ${plan.errors.slice(0, 10).join("\n- ")}`);
   }
   const story = finalizeStory(plan.storyboard, ctx);
-  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null });
+  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false });
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
-  state.plan = { hash: planHash, repairs: report.repairs };
+  if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
+  report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
+  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction) };
   return { status: "done" };
 }
 

@@ -1,0 +1,23 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "short-motion",
+  "sections": [
+    {
+      "id": "s1",
+      "lines": [
+        { "words": [0, 8], "intent": "hook", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [9, 9], "intent": "claim", "treatment": "insert", "scenes": ["s1"] },
+        { "words": [10, 20], "intent": "claim", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [21, 25], "intent": "claim", "treatment": "insert", "scenes": ["s2"] },
+        { "words": [26, 33], "intent": "claim", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [34, 46], "intent": "number", "treatment": "insert", "scenes": ["s3"] },
+        { "words": [47, 50], "intent": "claim", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [51, 54], "intent": "problem", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [55, 60], "intent": "claim", "treatment": "insert", "scenes": ["s4"] },
+        { "words": [61, 65], "intent": "claim", "treatment": "insert", "scenes": ["s5"] },
+        { "words": [66, 68], "intent": "claim", "treatment": "insert", "scenes": ["s5"] }
+      ],
+      "layout": "full"
+    }
+  ]
+}

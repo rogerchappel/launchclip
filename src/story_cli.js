@@ -12,6 +12,9 @@ import { readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { resolveStyleV2 } from "./style_store.js";
+import { DIRECTION_FILE, DIRECTION_LANES, directionJson, directionMeasures, validateDirection } from "../kit/core/direction.mjs";
+import { compareMeasures } from "../kit/core/profiles.mjs";
+import { profileForStory } from "./profile_store.js";
 
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
@@ -40,6 +43,64 @@ export function moduleParamErrors(resolved) {
 }
 
 // launchclip story <validate|resolve> <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out file]
+/**
+ * The map beside a story: DIRECTION.json beside storyboard.json, or
+ * <name>.DIRECTION.json beside a loose <name>.story.json.
+ */
+export function directionFileFor(storyFile) {
+  const base = path.basename(storyFile);
+  if (base === "storyboard.json") return path.join(path.dirname(storyFile), DIRECTION_FILE);
+  return path.join(path.dirname(storyFile), `${base.replace(/(\.story)?\.json$/i, "")}.${DIRECTION_FILE}`);
+}
+
+/**
+ * The direction-map check `story validate` runs. A missing map is an error in
+ * the narrated lanes when the story has narration words, a warning without
+ * them. → {errors, warnings, summary, profileDoc}
+ */
+export async function checkStoryDirection({ story, resolved = null, words = null, storyDir, storyFile = null, flag = null, style = null }) {
+  const errors = [];
+  const warnings = [];
+  const file = flag && flag !== true ? path.resolve(String(flag)) : directionFileFor(storyFile ?? path.join(storyDir, "storyboard.json"));
+  const needed = DIRECTION_LANES.includes(story?.lane);
+  let profileDoc = null;
+  let picked = null;
+  if (!(await exists(file))) {
+    if (needed && story?.audio?.words) errors.push(`direction: the ${story.lane} lane needs ${DIRECTION_FILE} beside the storyboard: every narration line with an intent and a treatment (see references/direction-map.md)`);
+    else if (needed) warnings.push(`direction: no ${DIRECTION_FILE}; write one before the storyboard when the story has narration (references/direction-map.md)`);
+    try { picked = profileForStory(resolved ?? story, { style }); profileDoc = picked.profile; } catch { profileDoc = null; }
+    return { errors, warnings, summary: needed ? { file: null, status: errors.length ? "missing" : "absent", profile: profileDoc?.id ?? null } : null, profileDoc };
+  }
+  const map = await readJson(file, DIRECTION_FILE);
+  try { picked = profileForStory(resolved ?? story, { direction: map, style }); profileDoc = picked.profile; }
+  catch (error) { errors.push(`direction: ${error.message}`); }
+  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null });
+  errors.push(...check.errors.map((entry) => `direction: ${entry}`));
+  warnings.push(...check.warnings.map((entry) => `direction: ${entry}`));
+  if (!words) warnings.push("direction: no narration words, so the map's lines were not checked against them");
+  let measures = null;
+  let bands = [];
+  if (check.ok && resolved && words?.length) {
+    measures = directionMeasures(map, resolved, { words });
+    if (profileDoc) bands = compareMeasures(measures, profileDoc);
+    for (const band of bands) if (band.status !== "inside") warnings.push(`cadence: ${band.detail} (profile ${profileDoc.id})`);
+    for (const line of measures.missed) warnings.push(`direction: words [${line.words.join(", ")}] (${line.intent}) call for a visual but play on the ${line.treatment === "face" ? "presenter" : "camera"} alone: a missed opportunity unless the why says otherwise`);
+  }
+  return {
+    errors,
+    warnings,
+    profileDoc,
+    summary: {
+      file,
+      status: check.ok ? "valid" : "invalid",
+      profile: profileDoc?.id ?? null,
+      profile_reason: picked?.reason ?? null,
+      lines: map.sections?.reduce((sum, section) => sum + (section.lines?.length ?? 0), 0) ?? 0,
+      ...(measures ? { coverage: measures.coverage, face_time: measures.face_time, longest_undressed_seconds: measures.longest_undressed_seconds, missed: measures.missed.length, bands: bands.map(({ measure, status, value, band }) => ({ measure, status, value, band })) } : {})
+    }
+  };
+}
+
 // launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
 // launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
@@ -58,6 +119,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
     const errors = [...validation.errors];
     let boundaries = null;
     let resolvedChecked = false;
+    let resolvedStory = null;
     if (validation.ok && (words || beats || !usesAnchors(story))) {
       try {
         const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story), subject: await readStorySubject(path.dirname(file), story), track: await readStoryTrack(path.dirname(file), story) });
@@ -68,13 +130,20 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
         if (second.ok) {
           boundaries = deriveBoundaries(resolved);
           errors.push(...moduleParamErrors(resolved));
-          for (const warning of subjectDensityWarnings(resolved)) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
+          resolvedStory = resolved;
         }
         resolvedChecked = true;
       } catch (error) {
         errors.push(error.message);
       }
     }
+    // The direction map (RFC §6): required in the narrated lanes, checked
+    // against the narration and the resolved storyboard, and measured
+    // against the cadence profile.
+    const direction = await checkStoryDirection({ story, resolved: resolvedStory, words: words?.list ?? null, storyDir: path.dirname(file), storyFile: file, flag: flags.direction, style: styled.style });
+    errors.push(...direction.errors.filter((entry) => !errors.includes(entry)));
+    validation.warnings.push(...direction.warnings);
+    if (resolvedStory) for (const warning of subjectDensityWarnings(resolvedStory, { profile: direction.profileDoc })) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
     const result = {
       stage: "story",
       action,
@@ -85,6 +154,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
       errors,
       warnings: [...(styled.style?.warnings ?? []), ...validation.warnings],
       style: styled.style ? { name: styled.style.name, source: styled.style.source, file: styled.style.file, applied: styled.style.applied } : null,
+      direction: direction.summary,
       boundaries
     };
     if (flags.out) {
@@ -201,9 +271,14 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
       warnings.push(`presenter probe skipped (${String(error?.message ?? error).split("\n")[0]}); planning without subject effects. Run launchclip doctor`);
     }
   }
+  // The cadence profile the plan aims at (RFC §5.5): --profile, the style's,
+  // else the shipped one for the lane, aspect, duration and platform.
+  const { profile: cadence } = profileForStory({ lane, format }, { profile: flags.profile && flags.profile !== true ? String(flags.profile) : null, style: style?.pack ?? null, projectDir: outDir });
   const report = await planStoryboard({
     brief,
     words: words?.list ?? null,
+    direction: !flags["no-direction"],
+    profile: cadence,
     lane,
     format,
     brand,
@@ -226,6 +301,8 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     lane: report.lane,
     style: style ? { name: style.name, source: style.source, file: style.file } : null,
     subject: subject ? { usable: subject.usable, framing: subject.framing, ...(subject.usable ? {} : { reasons: subject.reasons }) } : null,
+    profile: report.profile,
+    direction: report.direction ? { out: path.join(outDir, DIRECTION_FILE), source: report.direction_source, attempts: report.direction_attempts.length, ...(report.cadence ? { coverage: report.cadence.coverage, face_time: report.cadence.face_time, longest_undressed_seconds: report.cadence.longest_undressed_seconds } : {}) } : null,
     model: report.model,
     out: report.status === "passed" ? out : null,
     report: reportFile,
@@ -238,6 +315,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   };
   if (report.status === "passed") {
     await writeJson(out, report.storyboard);
+    if (report.direction) await writeFile(path.join(outDir, DIRECTION_FILE), directionJson(report.direction));
     return summary;
   }
   let rejected = null;

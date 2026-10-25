@@ -42,12 +42,16 @@ skill when they want the bespoke, reviewed path below.
    `launchclip voice <project>` (local Kokoro, cached), and adjust the text or
    `speed` until the measured take fits. It writes `NARRATION.json`; size
    `format.duration` and the scenes to that take.
-4. **Storyboard.** Write `storyboard.json` from
+4. **Direction map, then storyboard.** First write `DIRECTION.json` from
+   [references/direction-map.md](references/direction-map.md): every
+   narration line gets an intent and a treatment, aimed at the cadence
+   profile in [references/profiles.md](references/profiles.md). Then write
+   `storyboard.json` against it from
    [references/storyboard-modules.md](references/storyboard-modules.md):
    one catalogue module per scene, typed `in` transitions (the boundaries
    `cinematic-check` reads), and scene starts and hits anchored to narration
    words (`word:<text>`). Pick one `motion.grammar` and, for travel, the world
-   camera. Check with `launchclip story validate` and
+   camera. Check with `launchclip story validate` (it checks the map too) and
    `launchclip layout-check`. Also write `STORYBOARD.md`, `DESIGN.md` and
    `QUALITY.md`.
 5. **Candidates.** Render two opening candidates and two for one risky
@@ -124,6 +128,13 @@ Read a reference when its step comes up, not all at once.
 - [references/storyboard-modules.md](references/storyboard-modules.md): every
   module, its params and events, transitions, grammar and camera, anchors and
   the safe-zone and caption rules.
+- [references/direction-map.md](references/direction-map.md): the
+  `DIRECTION.json` you write before the storyboard: an intent and a treatment
+  for every narration line, the shared intent rules, and what `story validate`
+  checks.
+- [references/profiles.md](references/profiles.md): the cadence profiles
+  (coverage, face time, pacing and motion bands per format) that the map and
+  the gates measure against.
 - [references/subject-effects.md](references/subject-effects.md): effects that
   use the presenter cut out of a recording (a word behind their head, a dolly
   zoom): probing and matting the recording, the behind layer and its rules.

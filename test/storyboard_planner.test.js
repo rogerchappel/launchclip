@@ -49,12 +49,22 @@ function brokenStoryboard() {
   return story;
 }
 
-function fakeClient(responses) {
+// Storyboard calls are queued responses; the direction-map call (RFC §6.4)
+// answers from `direction` (a map, a function, or none: no map, so the
+// planner drafts one) and is recorded apart.
+function fakeClient(responses, { direction = null } = {}) {
   const calls = [];
+  const directionCalls = [];
   return {
     provider: "openai",
     calls,
+    directionCalls,
     async runStructured(request) {
+      if (request.schemaName === "launchclip_direction") {
+        directionCalls.push(request);
+        const map = typeof direction === "function" ? direction(request, directionCalls.length) : direction;
+        return { model: "gpt-5.6-luna", value: { direction_json: map ? JSON.stringify(map) : "" }, usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 } };
+      }
       calls.push(request);
       const next = responses[Math.min(calls.length - 1, responses.length - 1)];
       if (next instanceof Error) throw next;
@@ -258,4 +268,81 @@ test("extraCheck errors go back to the model as repairs", async () => {
   assert.equal(report.status, "passed", report.errors.join("\n"));
   assert.equal(report.repairs_used, 1);
   assert.match(client.calls[1].input, /assets: scenes\[0\] references assets\/missing\.png/);
+});
+
+// ---------------------------------------------------------------------------
+// The direction map first (docs/VIDEO_QUALITY_RFC.md §6.4)
+
+const MAP = {
+  schema: "launchclip.direction-map.v1",
+  profile: "short-motion",
+  sections: [{ id: "s1", title: "Cooling", lines: [
+    { words: [0, 4], intent: "hook", treatment: "insert", scenes: ["s1"] },
+    { words: [5, 12], intent: "claim", treatment: "insert", scenes: ["s2"] },
+    { words: [13, 15], intent: "claim", treatment: "insert", scenes: ["s3"] },
+    { words: [16, 18], intent: "cta", treatment: "insert", scenes: ["s4"] }
+  ] }]
+};
+const SHORT_MOTION = JSON.parse(await readFile(new URL("../kit/profiles/short-motion.json", import.meta.url), "utf8"));
+
+test("direction: the planner asks for the map first, then plans the storyboard against it", async () => {
+  const client = fakeClient([envelope(goodStoryboard())], { direction: MAP });
+  const report = await plan(client, { direction: true, profile: SHORT_MOTION });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(client.directionCalls.length, 1);
+  assert.match(client.directionCalls[0].instructions, /You author DIRECTION\.json/);
+  assert.match(client.directionCalls[0].instructions, /- \[0, 4\] hook: "Why does coffee cool fast"/, "the lines come pre-split with the shared intent rules");
+  assert.match(client.directionCalls[0].instructions, /## Cadence profile \(short-motion\)/);
+  assert.match(client.calls[0].instructions, /## Direction map \(plan the storyboard against it\)/);
+  assert.match(client.calls[0].instructions, /"scenes":\["s2"\]/);
+  assert.deepEqual(report.direction, MAP);
+  assert.equal(report.direction_source, "model");
+  assert.equal(report.profile, "short-motion");
+  assert.equal(report.cadence.coverage, 1);
+  assert.equal(report.direction_attempts.length, 1);
+  assert.equal(report.usage.total_tokens, 150 + 10200, "the direction call is counted");
+});
+
+test("direction: the repair loop repairs both the map and the storyboard", async () => {
+  const wrong = structuredClone(MAP);
+  wrong.sections[0].lines[1].scenes = ["equation"];
+  const fixed = structuredClone(MAP);
+  const client = fakeClient([envelope(goodStoryboard()), (request) => ({ model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(goodStoryboard()), direction_json: JSON.stringify(fixed) }, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }, request })], { direction: wrong });
+  const report = await plan(client, { direction: true, profile: SHORT_MOTION });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(report.repairs_used, 1);
+  assert.match(report.attempts[0].errors.join("\n"), /direction: .*names scene "equation", which is not in the storyboard/);
+  assert.match(client.calls[1].input, /Current direction map/);
+  assert.deepEqual(client.calls[1].schema.required, ["storyboard_json", "direction_json"]);
+  assert.deepEqual(report.direction, fixed);
+});
+
+test("direction: a map that fails its own checks is repaired before the storyboard", async () => {
+  const gap = structuredClone(MAP);
+  gap.sections[0].lines.splice(2, 1);
+  const client = fakeClient([envelope(goodStoryboard())], { direction: (request, n) => (n === 1 ? gap : MAP) });
+  const report = await plan(client, { direction: true, profile: SHORT_MOTION });
+  assert.equal(report.status, "passed");
+  assert.equal(client.directionCalls.length, 2);
+  assert.match(client.directionCalls[1].input, /every line needs an entry: words \[13, 15\]/);
+  assert.deepEqual(report.direction_attempts.map((entry) => entry.kind), ["direction", "direction-repair"]);
+});
+
+test("direction: with no map from the model, one is drafted from the storyboard and flagged", async () => {
+  const client = fakeClient([envelope(goodStoryboard())]);
+  const report = await plan(client, { direction: true, profile: SHORT_MOTION });
+  assert.equal(report.status, "passed");
+  assert.equal(report.direction_source, "drafted");
+  assert.equal(report.direction.schema, "launchclip.direction-map.v1");
+  assert.ok(report.warnings.some((warning) => /drafted from the storyboard/.test(warning)));
+});
+
+test("direction: coverage outside the profile band fails the plan so the loop repairs it", () => {
+  const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 }, shot_seconds: { p10: 0.1, p50: 0.2, p90: 0.3 } } };
+  const result = checkStoryboard(goodStoryboard(), { words: WORDS, tier: "structured", direction: MAP, profile: tight });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /cadence: coverage 100% is above the profile band .*hold more lines on the presenter/);
+  assert.match(result.warnings.join("\n"), /cadence: shot_seconds .* above the profile band/, "the rest of the band only warns");
+  const advisory = checkStoryboard(goodStoryboard(), { words: WORDS, tier: "structured", direction: MAP, profile: tight, bandErrors: false });
+  assert.equal(advisory.ok, true);
 });
