@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/layouts-tall",
+  "mode": "story",
+  "times": [1.0, 2.1666667, 3.5, 5.2, 6.4, 7.6333333, 8.5, 9.1666667],
+  "threshold": { "ssim": 0.97 }
+}

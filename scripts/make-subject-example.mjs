@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generate the stand-in recording and its exact matte for examples/story/subject/.
 //
-//   node scripts/make-subject-example.mjs [--out examples/story/subject] [--duration 6] [--product]
+//   node scripts/make-subject-example.mjs [--out examples/story/subject] [--duration 6] [--product] [--aspect 9:16|16:9] [--track]
 //
 // Writes, deterministically (no models, no network):
 //   assets/recording.mp4                  6 s 720x1280 30 fps: a still striped
@@ -12,6 +12,11 @@
 //                                         measured from that alpha
 //   assets/subject/0.000-6.000.plate.jpg  the room alone (the exact plate)
 //   assets/subject/0.000-6.000.contours.json  the traced outline per frame
+//
+// --aspect 16:9 draws a 1280x720 recording with the presenter in a medium
+// shot instead. --track also writes assets/subject/track.json
+// (launchclip.subject-track.v1, filed for assets/recording.mp4): the exact
+// boxes at 10 fps over the whole recording.
 //
 // --product also writes stand-in product media for catalogue E:
 //   assets/app.png          a 1280x800 app screenshot (sidebar, cards, chart)
@@ -26,26 +31,33 @@ import {createHash} from 'node:crypto';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CONTOURS_SCHEMA, SUBJECT_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo} from '../kit/core/subject.mjs';
+import {CONTOURS_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectTrack} from '../kit/core/subject.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 const flag = (name, fallback) => (args.includes(name) && args[args.indexOf(name) + 1] ? args[args.indexOf(name) + 1] : fallback);
 const out = path.resolve(ROOT, flag('--out', 'examples/story/subject'));
-const W = 720, H = 1280, FPS = 30, DURATION = Number(flag('--duration', 6));
+const LANDSCAPE = flag('--aspect', '9:16') === '16:9';
+const W = LANDSCAPE ? 1280 : 720, H = LANDSCAPE ? 720 : 1280, FPS = 30, DURATION = Number(flag('--duration', 6));
 const FRAMES = FPS * DURATION;
-const STATS_W = 180, STATS_H = 320;
+const STATS_W = W / 4, STATS_H = H / 4;
+// The presenter's figure in px: 9:16 is the original example's; 16:9 is a
+// medium shot of the same figure.
+const FIGURE = LANDSCAPE
+  ? {sway: 16, headY: 200, headR: 64, neckW: 27, neckY: 297, neckH: 40, shoulder: 327, slopeFrom: 47, torsoW: 168, skin: 290, neckEnd: 336, panel: [900, 1200, 90, 430]}
+  : {sway: 22, headY: 330, headR: 96, neckW: 40, neckY: 475, neckH: 60, shoulder: 520, slopeFrom: 70, torsoW: 250, skin: 432, neckEnd: 500, panel: [470, 690, 160, 620]};
 const RANGE = `0.000-${DURATION.toFixed(3)}`;
 
 // Coverage of the presenter at (x, y) in frame `index`, 0–1 with a 1.5 px
 // soft edge: a round head, a neck and a torso with sloped shoulders.
 function presenter(x, y, index) {
-  const sway = Math.sin((index / FPS) * 1.6) * 22;
+  const F = FIGURE;
+  const sway = Math.sin((index / FPS) * 1.6) * F.sway;
   const cx = W / 2 + sway;
-  const head = 1.5 - (Math.hypot(x - cx, (y - 330) * 0.92) - 96);
-  const neck = Math.min(1.5 - (Math.abs(x - cx) - 40), 1.5 - (Math.abs(y - 475) - 60));
-  const shoulder = 520 + Math.max(0, Math.abs(x - cx) - 70) * 0.35;
-  const torso = Math.min(1.5 - (Math.abs(x - cx) - 250), y - shoulder + 1.5);
+  const head = 1.5 - (Math.hypot(x - cx, (y - F.headY) * 0.92) - F.headR);
+  const neck = Math.min(1.5 - (Math.abs(x - cx) - F.neckW), 1.5 - (Math.abs(y - F.neckY) - F.neckH));
+  const shoulder = F.shoulder + Math.max(0, Math.abs(x - cx) - F.slopeFrom) * 0.35;
+  const torso = Math.min(1.5 - (Math.abs(x - cx) - F.torsoW), y - shoulder + 1.5);
   return Math.max(0, Math.min(1, Math.max(head, neck, torso) / 3));
 }
 
@@ -54,15 +66,16 @@ function presenter(x, y, index) {
 // a frozen frame.
 function room(x, y) {
   const stripe = Math.floor((x + y * 0.35) / 64) % 2;
-  const panel = x > 470 && x < 690 && y > 160 && y < 620;
+  const [px0, px1, py0, py1] = FIGURE.panel;
+  const panel = x > px0 && x < px1 && y > py0 && y < py1;
   if (panel) return [40, 92, 150];
   const shade = 1 - y / H * 0.45;
   return stripe ? [Math.round(196 * shade), Math.round(150 * shade), Math.round(102 * shade)] : [Math.round(168 * shade), Math.round(122 * shade), Math.round(84 * shade)];
 }
 
 function person(y) {
-  if (y < 432) return [214, 168, 138];
-  if (y < 500) return [190, 146, 118];
+  if (y < FIGURE.skin) return [214, 168, 138];
+  if (y < FIGURE.neckEnd) return [190, 146, 118];
   return [36, 54, 82];
 }
 
@@ -124,6 +137,14 @@ await writeFile(path.join(out, `assets/subject/${RANGE}.json`), `${JSON.stringif
 const contours = {schema: CONTOURS_SCHEMA, range: {in: 0, out: DURATION}, frames: outlines};
 if (!validateSubjectContours(contours).ok) throw new Error(`contours.json failed its schema: ${validateSubjectContours(contours).errors.join('; ')}`);
 await writeFile(path.join(out, `assets/subject/${RANGE}.contours.json`), `${JSON.stringify(contours)}\n`);
+if (args.includes('--track')) {
+  // Every third frame of the exact boxes: 10 fps.
+  const step = FPS / TRACK_FPS;
+  const trackFrames = frames.filter((_, index) => index % step === 0).map((frame, index) => ({...frame, t: Math.round((index / TRACK_FPS) * 1e3) / 1e3}));
+  const track = {schema: TRACK_SCHEMA, source: info.source, model: 'synthetic', fps: TRACK_FPS, ...summarizeSamples(trackFrames), frames: trackFrames, base: 'assets/recording.mp4'};
+  if (!validateSubjectTrack(track).ok) throw new Error(`track.json failed its schema: ${validateSubjectTrack(track).errors.join('; ')}`);
+  await writeFile(path.join(out, 'assets/subject/track.json'), `${JSON.stringify(track)}\n`);
+}
 if (args.includes('--product')) await writeProductMedia();
 console.log(`wrote ${path.relative(ROOT, out)}: recording.mp4, subject/${RANGE}.{webm,json,plate.jpg,contours.json}${args.includes('--product') ? ', app.png, demo/flow.mp4' : ''} (${info.framing}, head ${JSON.stringify(info.head)})`);
 
