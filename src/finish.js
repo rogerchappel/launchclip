@@ -20,7 +20,7 @@ import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "nod
 import path from "node:path";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
@@ -33,7 +33,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "../kit/core/story.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
-import { directionFileFor, validateStory } from "./story_cli.js";
+import { directionFileFor, moduleParamErrors, validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
@@ -696,7 +696,10 @@ const STAGES = [
       }
       const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
       const second = validateStory(resolved);
-      if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
+      // A scene whose params do not resolve would render as a "Missing
+      // module" placeholder, so it fails here as it does in story validate.
+      const invalid = [...second.errors, ...moduleParamErrors(resolved)];
+      if (invalid.length) throw new Error(`resolved storyboard is invalid:\n- ${invalid.join("\n- ")}`);
       ctx.warnings.push(...second.warnings);
       ctx.resolved = resolved;
       ctx.boundaries = deriveBoundaries(resolved);
@@ -1130,6 +1133,7 @@ async function renderStory(ctx, adapter, { output, scenes = [], previewScene = n
       renderWhole: async (file) => {
         const hfDir = path.join(ctx.project, PATHS.hyperframes);
         const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
+        ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
         ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
         await adapter.render(hfDir, file, { quality: ctx.quality });
       }
@@ -1170,6 +1174,7 @@ async function runGates(ctx) {
   const format = storyFormat(ctx.resolved);
   const duration = Number(ctx.resolved.resolved?.duration ?? format.duration);
   const gates = {};
+  gates.placeholders = placeholderGate(ctx);
   gates.layout = ctx.layout
     ? { status: ctx.layout.status === "failed" ? "failed" : "passed", profile: ctx.layout.profile, errors: ctx.layout.errors, findings: ctx.layout.findings.slice(0, 20) }
     : { status: "skipped", reason: "layout check did not run" };
@@ -1262,6 +1267,41 @@ async function runGates(ctx) {
     next_step: `Have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json (citing the qa/temporal-evidence IDs), then run: launchclip cinematic-check ${ctx.project} --renderer ${ctx.rendererName} --video ${rel(ctx.project, ctx.out)} --expect-audio`
   };
   return gates;
+}
+
+/**
+ * Placeholders: no scene may ship as a labelled "Missing module" card. A
+ * scene renders as one when its module is unknown to the kit, when its params
+ * do not resolve, when it is a custom module under HyperFrames (custom
+ * modules are Remotion-only), or when the HyperFrames compiler reported
+ * falling back for it (an emitter failure).
+ */
+export function placeholderScenes(resolved, { renderer, compileWarnings = [] } = {}) {
+  const known = new Set(knownModules());
+  const scenes = [];
+  for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
+    if (scene?.module === "custom") {
+      if (renderer === "hyperframes") scenes.push({ id: scene.id, module: scene.module, reason: "custom modules render only in Remotion" });
+      continue;
+    }
+    if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, reason: `module "${scene?.module}" is not a known module` }); continue; }
+    try { resolveModule(scene, resolved); }
+    catch (error) { scenes.push({ id: scene.id, module: scene.module, reason: error.message }); }
+  }
+  for (const message of compileWarnings) {
+    const id = String(message).match(/^(?:hyperframes: )?([^:\s]+):/)?.[1];
+    if (id && !scenes.some((entry) => entry.id === id)) scenes.push({ id, module: resolved?.scenes?.find((scene) => scene.id === id)?.module ?? null, reason: String(message).replace(/^(?:hyperframes: )?[^:\s]+: /, "").replace(/; rendering a placeholder$/, "") });
+  }
+  return scenes;
+}
+
+function placeholderGate(ctx) {
+  const scenes = placeholderScenes(ctx.resolved, { renderer: ctx.rendererName, compileWarnings: ctx.compiledPlaceholders ?? [] });
+  return {
+    status: scenes.length ? "failed" : "passed",
+    scenes: scenes.slice(0, 20),
+    errors: scenes.slice(0, 12).map((entry) => `${entry.id} (${entry.module ?? "no module"}) renders as a "Missing module" placeholder: ${entry.reason}`)
+  };
 }
 
 // The story's style pack (for its cadence profile), resolved once per run.

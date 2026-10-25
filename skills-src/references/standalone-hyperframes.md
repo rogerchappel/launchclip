@@ -221,7 +221,9 @@ root `launchclip-story` composition with one paused timeline, each scene's
 module inside a scene layer, typed transitions between track-0 scenes with the
 phase-2 boundary attributes, one root `<audio>` from `audio.mix`, word captions,
 the loop ending, the brand fonts and ambient motion. Unknown modules render a labelled
-placeholder and a compile warning. Keep the output in its own directory: a
+placeholder and a compile warning; `launchclip finish` fails its validate stage
+on a scene whose params do not resolve and its `placeholders` gate on any scene
+that would render as one. Keep the output in its own directory: a
 directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
