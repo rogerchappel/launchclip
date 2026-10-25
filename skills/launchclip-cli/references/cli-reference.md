@@ -1207,6 +1207,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
   ```
 
+- `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints.
+
+  ```text
+  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--out <dir|style.json>] [--force]
+  ```
+
+- `style reroll`: Give a project with a generated style a new seed (its constraints kept); --undo goes back once.
+
+  ```text
+  launchclip style reroll [<project>] [--tone <tone>] [--seed <hex>] [--undo]
+  ```
+
+- `style keep`: Copy a project's generated style to ~/.launchclip/styles/<name> as a personal style.
+
+  ```text
+  launchclip style keep <project> --as <name> [--force]
+  ```
+
 - `profile list`: List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).
 
   ```text
@@ -1403,7 +1421,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `story plan`: Plan DIRECTION.json and then storyboard.json from a brief with a model: the direction map first (one call), then the storyboard against it and the cadence profile; the repair loop repairs both.
 
   ```text
-  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--profile id|profile.json] [--no-direction] [--no-subject] [--max-repairs 2]
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path | --seed <hex>] [--tone <tone>] [--profile id|profile.json] [--no-direction] [--no-subject] [--max-repairs 2]
   ```
 
 - `cinematic-check`: Check a finished project against the cinematic gates and receipts.
@@ -1459,7 +1477,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path> | --seed <hex>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 

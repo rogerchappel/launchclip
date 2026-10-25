@@ -2,6 +2,23 @@
 
 Every LaunchClip video follows a **style pack**: your colours and fonts, how things move, how the camera behaves, the caption look, and how busy the sound is. Pick one and every video you make stays on brand.
 
+## No style? You get a fresh look
+
+If you give LaunchClip no style and no brand (no `--style`, no `brand.json`, no logo), it doesn't fall back to one house look. It draws a random **seed** and builds a whole style from it: the palette, the type pairing, light or dark, panels, motion, captions, the camera and the characters. Every choice comes from curated families that pass the same contrast and legibility checks as the built-in styles, and the look always stays clearly apart from them. Words in your prompt such as *calm*, *playful* or *premium* set the tone, and the seed picks a look within it.
+
+```
+style: seed 7f3a91c2 (dark, playful, Unbounded / Inter). Reroll with launchclip style reroll
+```
+
+The style is saved in the project (`.launchclip/styles/seed-7f3a91c2/style.json`) and the storyboard names it, so re-renders and edits always look the same.
+
+- **A different look:** `launchclip style reroll ./my-video` (then `launchclip finish ./my-video`). It keeps the tone and any art direction and changes the seed. `--tone playful` changes the tone as well, and `--undo` goes back once.
+- **A look you've seen before:** `launchclip make "…" --seed 7f3a91c2` makes exactly that look again.
+- **A look to keep:** `launchclip style keep ./my-video --as my-look` copies it to `~/.launchclip/styles/my-look`, so `--style my-look` uses it anywhere.
+- **Without a project:** `launchclip style generate --seed 7f3a91c2 --tone warm --theme light --out ./looks/warm` writes the pack. The `--world`, `--drawing-style`, `--character-set`, `--background` and `--panel` options pin those choices too.
+
+Naming a style or giving a brand always wins over a seed.
+
 ## Three ways to get a style
 
 ### 1. Start from a built-in style
