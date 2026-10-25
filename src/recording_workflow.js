@@ -89,8 +89,8 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     ? validateSemanticRetakes(JSON.parse(await readFile(path.resolve(options.retakeDecisions), "utf8")), normalizeRecordingTranscript(transcript), { retakeWindow: policy.retakeWindow })
     : options.retakeModel
       ? await (adapters.identifySemanticRetakes ?? identifySemanticRetakes)(transcript, { durationSeconds, retakeWindow: policy.retakeWindow, model: options.retakeModel, baseUrl: options.retakeBaseUrl }, adapters.semantic)
-      : { status: "not-requested", retakes: [], removals: [] };
-  const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes });
+      : { status: "not-requested", retakes: [], restarts: [], removals: [] };
+  const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes, semanticRestarts: semantic.restarts ?? [] });
   const audio = policy.audioSilence
     ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
         durationSeconds, boundaryPlan: basePlan, silenceDuration: policy.audioSilenceDuration,
@@ -136,7 +136,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     duration_seconds: plan.duration_seconds,
     rendered_duration_seconds: rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds,
     take_policy: policy.takePolicy, filler_cleanup: policy.removeFillers,
-    audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length,
+    audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length, semantic_restarts: (semantic.restarts ?? []).length,
     audio_enhancement: audioEnhancement,
     qa_status: "passed", qa_attempts: qa.attempts, qa_session: qa.files.qa_session,
     files, checksums, cached: false

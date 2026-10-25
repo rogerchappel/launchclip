@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { probeMedia } from "./media_trim.js";
+import { REJECTED_SPEECH_REASONS } from "./recording_edit.js";
 
 const execute = promisify(execFile);
 export const RECORDING_AUDIO_VERSION = "launchclip.recording-audio.v1";
@@ -163,7 +164,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     return [{ ...word, start, end }];
   });
   if (!sourceWords.length) throw new Error("Audio alignment found no voiced transcript words");
-  const rejectedReasons = new Set(["semantic-retake", "repeated-take", "filler", "false-start"]);
+  const rejectedReasons = new Set(REJECTED_SPEECH_REASONS);
   const rejectedCuts = plan.removed_segments.filter((segment) => rejectedReasons.has(segment.reason));
   const spliceRanges = [];
   const spliceProtection = [];
@@ -263,7 +264,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
 
 function recordingBoundaryWindows(plan, duration, silence, waveform, floor) {
   if (Math.abs(plan?.source_duration_seconds - duration) > 0.001 || !Array.isArray(plan?.words) || !Array.isArray(plan?.kept_segments) || !Array.isArray(plan?.removed_segments)) throw new Error("Invalid acoustic boundary plan");
-  const rejected = plan.removed_segments.filter((cut) => ["semantic-retake", "repeated-take", "filler", "false-start"].includes(cut.reason));
+  const rejected = plan.removed_segments.filter((cut) => REJECTED_SPEECH_REASONS.includes(cut.reason));
   const windows = [];
   for (const keep of plan.kept_segments) {
     checkedRange(keep.source_start_seconds, keep.source_end_seconds, duration);

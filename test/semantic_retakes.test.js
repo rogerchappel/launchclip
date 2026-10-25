@@ -23,7 +23,7 @@ test("model prompt contains canonical original indices and universal restart rul
 });
 test("no model is contacted without opt-in; unique and contrasting passages can remain intact", async () => {
   await assert.rejects(identifySemanticRetakes(words), /explicitly selected/);
-  assert.deepEqual(await identifySemanticRetakes(words, { decisions: receipt([]) }), { transcript_hash: semanticTranscriptHash(words), retakes: [], removals: [] });
+  assert.deepEqual(await identifySemanticRetakes(words, { decisions: receipt([]) }), { transcript_hash: semanticTranscriptHash(words), retakes: [], restarts: [], removals: [] });
   const contrasting = [...phrase("The short route saves time.", 1), ...phrase("The longer path avoids traffic.", 4)];
   assert.deepEqual((await identifySemanticRetakes(contrasting, {}, { infer: async () => ({ retakes: [] }) })).removals, []);
 });

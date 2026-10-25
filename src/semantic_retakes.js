@@ -1,17 +1,20 @@
 import { createHash } from "node:crypto";
-import { normalizeRecordingTranscript } from "./recording_edit.js";
+import { checkRestart, normalizeRecordingTranscript, RESTART_GAP_SECONDS, RESTART_MAX_WORDS } from "./recording_edit.js";
 
 const RESPONSE_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["retakes"],
-  properties: { retakes: { type: "array", items: {
+  type: "object", additionalProperties: false, required: ["retakes", "restarts"],
+  properties: { retakes: { type: "array", items: pairSchema() }, restarts: { type: "array", items: pairSchema() } },
+};
+function pairSchema() {
+  return {
     type: "object", additionalProperties: false,
     required: ["earlier", "later", "later_complete", "explanation"],
     properties: {
       earlier: rangeSchema(), later: rangeSchema(),
       later_complete: { type: "boolean" }, explanation: { type: "string" },
     },
-  } } },
-};
+  };
+}
 function rangeSchema() { return { type: "object", additionalProperties: false, required: ["first_word", "last_word"], properties: { first_word: { type: "integer" }, last_word: { type: "integer" } } }; }
 
 /** Identify nearby restarts using supplied decisions, an injected model, or opt-in local Ollama. */
@@ -29,7 +32,8 @@ export async function identifySemanticRetakes(transcript, options = {}, adapters
     "Do not remove contrasts, corrections containing distinct information, intentional summaries, unique lines, or unrelated intervening words.",
     "An unfinished earlier restart may be replaced by a complete later statement. If uncertain, return no pair.",
     `The later take must begin no more than ${retakeWindow} seconds after the earlier one ends.`,
-    "Return ONLY JSON: {retakes:[{earlier:{first_word:0,last_word:4},later:{first_word:5,last_word:12},later_complete:true,explanation:'why this is a restart'}]}. Indices are inclusive ORIGINAL word indices. Use whole supplied passage boundaries. Return {retakes:[]} when none exist.",
+    `Also find restarts INSIDE a sentence: a few abandoned words immediately followed by their restatement (for example "we can, we can ship it" or "less talking, more talking"). Use restarts for these, with word-level boundaries; earlier is at most ${RESTART_MAX_WORDS} words, later begins right after it (only filler words between) within ${RESTART_GAP_SECONDS} seconds, and is the complete restatement.`,
+    "Return ONLY JSON: {retakes:[{earlier:{first_word:0,last_word:4},later:{first_word:5,last_word:12},later_complete:true,explanation:'why this is a restart'}],restarts:[{earlier:{first_word:20,last_word:21},later:{first_word:22,last_word:25},later_complete:true,explanation:'why the restatement replaces these words'}]}. Indices are inclusive ORIGINAL word indices. Retakes use whole supplied passage boundaries. Return {retakes:[],restarts:[]} when none exist.",
     JSON.stringify({ passages }),
   ].join("\n");
   const infer = adapters.infer ?? localInference;
@@ -69,6 +73,7 @@ export function validateSemanticRetakes(decisions, transcript, options = {}) {
     } else retakes.push(sanitized);
   }
   retakes.sort((a, b) => a.earlier.first_word - b.earlier.first_word);
+  const restarts = validateRestarts(decisions.restarts ?? [], words, passages);
   for (let index = 1; index < retakes.length; index++) {
     if (retakes[index].earlier.first_word <= retakes[index - 1].earlier.last_word) throw new Error("Semantic retake removals overlap; no cuts applied");
   }
@@ -79,7 +84,38 @@ export function validateSemanticRetakes(decisions, transcript, options = {}) {
       if (overlaps && (entry.later.first_word !== other.earlier.first_word || entry.later.last_word !== other.earlier.last_word)) throw new Error("Semantic retake replacement is partially removed by another decision; no cuts applied");
     }
   }
-  return { transcript_hash: semanticTranscriptHash(words), retakes, removals: retakes.map(({ earlier, explanation }) => ({ ...earlier, start: words[earlier.first_word].start, end: words[earlier.last_word].end, reason: "semantic-retake", explanation })) };
+  const removals = [...retakes.map((entry) => ({ ...entry, reason: "semantic-retake" })), ...restarts.map((entry) => ({ ...entry, reason: "semantic-restart" }))]
+    .map(({ earlier, explanation, reason }) => ({ ...earlier, start: words[earlier.first_word].start, end: words[earlier.last_word].end, reason, explanation }))
+    .sort((a, b) => a.first_word - b.first_word);
+  return { transcript_hash: semanticTranscriptHash(words), retakes, restarts, removals };
+}
+
+// Word-level restarts: inclusive original indices, each range inside one
+// passage, restated immediately; the later restatement always survives.
+function validateRestarts(entries, words, passages) {
+  if (!Array.isArray(entries)) throw new Error("Semantic restart decisions require a restarts array; no cuts applied");
+  const passageOf = new Map(passages.flatMap((passage, index) => passage.words.map((word) => [word.index, index])));
+  const restarts = [];
+  for (const entry of entries) {
+    try { checkRestart(entry, words); } catch (error) { throw new Error(`${error.message}; no cuts applied`); }
+    const { earlier, later } = entry;
+    for (const range of [earlier, later]) {
+      if (passageOf.get(range.first_word) !== passageOf.get(range.last_word)) throw new Error("Semantic restart ranges must each stay inside one passage; no cuts applied");
+    }
+    const sanitized = { earlier: { first_word: earlier.first_word, last_word: earlier.last_word }, later: { first_word: later.first_word, last_word: later.last_word }, later_complete: true, explanation: entry.explanation.trim() };
+    const duplicate = restarts.find((prior) => prior.earlier.first_word === earlier.first_word && prior.earlier.last_word === earlier.last_word);
+    if (duplicate) {
+      if (later.last_word > duplicate.later.last_word) Object.assign(duplicate, sanitized);
+    } else restarts.push(sanitized);
+  }
+  restarts.sort((a, b) => a.earlier.first_word - b.earlier.first_word);
+  for (let index = 1; index < restarts.length; index++) {
+    if (restarts[index].earlier.first_word <= restarts[index - 1].earlier.last_word) throw new Error("Semantic restart removals overlap; no cuts applied");
+  }
+  for (const entry of restarts) {
+    if (restarts.some((other) => entry.earlier.first_word <= other.later.last_word && other.later.first_word <= entry.earlier.last_word)) throw new Error("Semantic restart would remove another restart's restatement; merge chained restarts into one range; no cuts applied");
+  }
+  return restarts;
 }
 
 export function semanticTranscriptHash(transcript) {

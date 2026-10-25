@@ -36,7 +36,9 @@ in source order. For reworded restarts, first use the active agent to compare
 nearby complete passages in the original normalized transcript. Follow the
 generic receipt contract in `docs/semantic-retakes.md`: compute its transcript
 hash, use original inclusive word indices, keep the later complete restatement,
-and leave uncertain or intentionally contrasting statements alone. Save decisions
+and leave uncertain or intentionally contrasting statements alone. Restarts
+inside a sentence ("we can, we can ship it", "less talking, more talking") go in
+the receipt's `restarts` array with word-level ranges. Save decisions
 outside the repository and pass `--retake-decisions retakes.json` with the same
 `--recording-transcript` file. Decisions are automated; no take-selection gate.
 Standalone CLI users can instead explicitly select an installed local Ollama
