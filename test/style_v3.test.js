@@ -39,7 +39,7 @@ test("validates the v3 fields", () => {
     layouts: { by_intent: { list: "diagonal" }, panel: { treatment: "chrome", radius: 500 } },
     vocabulary: { icon_tint: "pink", illustration: "yes", prefer: { claim: "concept-card" } },
     profile: { schema: "launchclip.cadence-profile.v1", id: "x", format: "footage-led", duration_seconds: [1, 2], references: 0, provenance: { kind: "seed", note: "n", sources: [] }, measures: { coverage: { p10: 0.8, p50: 0.5 } } },
-    cast: { drawing_style: "outlined", colors: { fill: "teal" }, characters: ["../x"] },
+    cast: { drawing_style: "oil-paint", colors: { fill: "teal" }, characters: ["../x"] },
     brand_frame: { kicker: { label: "x".repeat(41), position: "middle" }, progress: { thickness: 40 }, show: "never" },
     dials: { energy: 2, chaos: 0.5 },
     captions: { lanes: { podcast: {}, "footage-led": { preset: "sparkle" } } }
