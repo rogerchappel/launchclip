@@ -345,9 +345,12 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   `STYLE_BACKGROUND_KINDS`, a `variants` module the catalogue does not list
   (when `modules` is passed) and unknown `generated` keys are warnings, so the
   kits that draw them can grow first. `cast.members` entries are checked as
-  story cast entries (`storyCastErrors`). `STYLE_BACKGROUND_KINDS` mirrors
-  `kit/core/backgrounds.mjs`; the sound palette and genre lists mirror
-  `kit/core/sound/options.mjs` (names outside them warn).
+  story cast entries (`storyCastErrors`) and `cast.set` against the
+  characters kit's `CHARACTER_SET_NAMES`. `STYLE_BACKGROUND_KINDS` mirrors
+  `kit/core/backgrounds.mjs`. `sound` goes through the sound kit's
+  `soundProblems` (palette, ambience, genre, key, bpm, progression,
+  `sfx_density` as low/normal/high or 0–1) and `world` through the worlds
+  kit's `storyWorldErrors`, the same checks finish and the story use.
 - `applyStyle` fills `story.background`, `story.panel` (the pack's
   `layouts.panel` whole, `fill` included; not the default panel an upgraded
   v2 pack carries, so v2 packs render as before) and `story.world` when the
@@ -451,7 +454,16 @@ saved pack is what renders, so a new version changes only rerolls.
 - The option lists (`SEED_PANEL_TREATMENTS`, `SEED_BACKGROUND_KINDS`,
   `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
   `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`,
-  `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) hold what the kits draw today.
+  `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) come from the kits where
+  they have landed: `SEED_MODULE_VARIANTS` is `moduleVariants()`,
+  `SEED_DRAWING_STYLES` the characters kit's styles, and the sound lists
+  `kit/core/sound/options.mjs`. A tone narrows the sound palettes and genres
+  (`TONE_SOUND`); the genre sets bpm, key and progression (`GENRE_SPECS`).
+  The seed draws only topic-neutral character sets (`SEED_CHARACTER_SETS`:
+  office-team, startup-founders, students, creators, city-crowd); themed
+  sets come from the `character_set` constraint, and `generateCast` builds
+  2–4 people for the set and palette. The `world` constraint is a kind or a
+  list of kinds (suggestWorld's fits) the seed picks within.
   With no world in the direction the seed draws a topic-neutral one
   (`SEED_WORLDS`: abstract-stage, skyline, rooftop, park, city-street,
   home-desk), day and dusk twice as often as night except for premium and
@@ -463,9 +475,7 @@ saved pack is what renders, so a new version changes only rerolls.
   most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
   `PANEL_FILL_CHANCE`; intensity and amount in the low quarter). `sound` holds a palette, a music genre, bpm inside the
   tone's range, key and progression, ambience `auto` and the tone's SFX
-  density. The background, variant, character, world and sound kits widen
-  these lists. `cast.members` are 2–4 people drawn from the rig's options (never a
-  starter id, which would pull in that starter's params).
+  density.
 - The brand frame is off (a generated style has no brand name); its kicker
   position, sections and progress line are still drawn, for when it is
   turned on.
