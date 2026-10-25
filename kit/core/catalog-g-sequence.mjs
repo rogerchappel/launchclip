@@ -3,7 +3,7 @@
 
 import {fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
-import {CARD_PARAMS, cardTiming, createCardBase, flow, flowText, iconParam, pick, pop, rise} from './catalog-g-base.mjs';
+import {CARD_PARAMS, cardTiming, createCardBase, flow, flowText, iconParam, pick, pop, rise, spread} from './catalog-g-base.mjs';
 import {iconNode} from './icons.mjs';
 
 const hidden = {opacity: 0};
@@ -42,7 +42,10 @@ function resolveCompare(params, ctx) {
     const heights = parts.map(part => panelH ?? r2(part.height + pad * 2));
     return {layout, pad, between, colW, inner: r2(inner), parts, heights, height: r2(layout === 'columns' ? heights[0] : heights[0] + between + heights[1])};
   };
-  const measure = (width, maxHeight) => pick([...b.scales.map(k => () => variant(width, k, 'columns')), ...b.scales.map(k => () => variant(width, k, 'stacked'))], maxHeight);
+  const measure = (width, maxHeight) => {
+    const out = pick([...b.scales.map(k => () => variant(width, k, 'columns')), ...b.scales.map(k => () => variant(width, k, 'stacked'))], maxHeight);
+    return out?.layout === 'stacked' && b.fills ? spread(out, maxHeight, {between: [1, u(120)]}) : out;
+  };
   const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1500)});
   const L = box.layout;
   const leftAt = b.timeOf('left', p.at, 'params.at', 0.5);
@@ -128,7 +131,10 @@ function resolveTimeline(params, ctx) {
     const node = u(76 * Math.min(1.3, k)), textX = r2(node + u(28)), textW = r2(width - textX);
     const labels = steps.map(step => labelFit(step, textW, k)), details = steps.map(step => detailFit(step, textW, k));
     const size = Math.min(...labels.map(f => f.size)), dsize = details.some(Boolean) ? Math.min(...details.filter(Boolean).map(f => f.size)) : 0;
-    const rows = steps.map((_, i) => r2(Math.max(node, labels[i].lines * size * 1.2 + (details[i] ? u(6) + details[i].lines * dsize * 1.25 : 0))));
+    // One pitch for every step, so the nodes sit evenly along the line
+    // whichever labels the (conservative) measure wraps.
+    const pitch = Math.max(...steps.map((_, i) => r2(Math.max(node, labels[i].lines * size * 1.2 + (details[i] ? u(6) + details[i].lines * dsize * 1.25 : 0)))));
+    const rows = steps.map(() => pitch);
     const gap = u(30 * k);
     return {direction: 'vertical', title: t, titleH, node, textX, textW, size, dsize, rows, gap, height: r2(titleH + rows.reduce((a, r) => a + r, 0) + gap * (n - 1))};
   };
@@ -144,7 +150,8 @@ function resolveTimeline(params, ctx) {
     const quiet = f => () => { try { return f(); } catch { return null; } };
     const h = b.scales.map(k => quiet(() => horizontal(width, k))), v = b.scales.map(k => () => vertical(width, k));
     const order = directionIn === 'vertical' ? v : directionIn === 'horizontal' ? b.scales.map(k => () => horizontal(width, k)) : portrait ? v : [...h, ...v];
-    return pick(order, maxHeight);
+    const out = pick(order, maxHeight);
+    return out?.direction === 'vertical' && b.fills ? spread(out, maxHeight, {gap: [n - 1, r2(out.node * 1.2)]}) : out;
   };
   // A vertical list reads as one block nearer the middle of a 9:16 frame.
   const box = b.place(measure, {maxWidth: u(portrait && directionIn !== 'horizontal' ? 760 : portrait ? 900 : 1600)});
@@ -165,7 +172,7 @@ function resolveTimeline(params, ctx) {
   } else {
     for (let i = 0; i < n; i++) centres.push({x: r2(B.x + L.cell * (i + 0.5)), y: r2(B.y + L.titleH + L.node / 2)});
   }
-  return b.finish({box: B, layout: L, title, steps: placed, centres, line: theme.border, progress: colors.primary, nodeFill: theme.surface, nodeText: colors.primary, labelColor: theme.foreground, detailColor: theme.muted, titleColor: theme.muted},
+  return b.finish({box: B, layout: L, title, steps: placed, centres, line: theme.border, progress: colors.primary, nodeFill: theme.surface, nodeText: colors.primary, labelColor: theme.foreground, detailColor: theme.muted, titleColor: b.titleColor},
     {minTextPx: L.size});
 }
 
@@ -174,7 +181,7 @@ function timelineView(model) {
   const c = model.content, L = c.layout, B = c.box;
   const kids = [];
   const vertical = L.direction === 'vertical';
-  if (c.title) kids.push(el('div', null, abs(B.x, B.y, B.width, undefined, {margin: 0, whiteSpace: 'normal', fontFamily: fonts.body, fontWeight: 600, fontSize: L.title.size, lineHeight: '1.15', color: c.titleColor, textAlign: vertical ? 'left' : 'center'}), [c.title]));
+  if (c.title) kids.push(el('div', null, abs(B.x, B.y, B.width, undefined, {margin: 0, whiteSpace: 'normal', fontFamily: fonts.body, fontWeight: 700, fontSize: L.title.size, lineHeight: '1.15', color: c.titleColor, textAlign: vertical ? 'left' : 'center'}), [c.title]));
   const a = c.centres[0], z = c.centres.at(-1);
   const thick = r2(6 * unit);
   // The track, then the progress line over it (scaled along from its start).

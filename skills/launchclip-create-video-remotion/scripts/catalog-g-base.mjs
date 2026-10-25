@@ -17,7 +17,7 @@
 // …layout} or null (does not fit that width), and draw rect-local from the
 // box place() returns.
 
-import {createBase, r2, rt, timingRules} from './catalog-b-base.mjs';
+import {contrastRatio, createBase, r2, rt, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {headRect} from './catalog-c.mjs';
 import {iconNode, iconPath} from './icons.mjs';
@@ -73,8 +73,17 @@ export function createCardBase(moduleId, params, ctx, {allowed, required = []}) 
   };
   b.overlay = overlay;
   // Content scales tried largest first: a plate fills the frame (the hero
-  // fill rule), a card beside the presenter stays compact.
-  b.scales = fixed ? [1.25, 1, 0.82, 0.68] : overlay ? [1, 0.82, 0.68] : [1.5, 1.25, 1, 0.82, 0.68];
+  // fill rule), a rect or a layout panel grows its type until the content
+  // fills it (like the editorial modules' density "fill"), a card beside the
+  // presenter stays compact.
+  b.scales = fixed || panel ? [2, 1.75, 1.5, 1.25, 1, 0.82, 0.68] : overlay ? [1, 0.82, 0.68] : [1.5, 1.25, 1, 0.82, 0.68];
+  // Content centred in a region it does not size (a plate, a panel or a rect)
+  // spreads its spacing into the room left over (spread()).
+  b.fills = !(surface === 'card' && !fixed);
+  // Titles over a list read in paper (or primary when that is the stronger),
+  // at least 4.5:1 on the brand background.
+  const onBg = color => contrastRatio(color, b.colors.bg);
+  b.titleColor = onBg(b.colors.paper) >= 4.5 || onBg(b.colors.paper) >= onBg(b.colors.primary) ? b.colors.paper : b.colors.primary;
   b.surface = surface;
   b.pad = pad;
   b.place = (measure, {maxWidth = Infinity} = {}) => {
@@ -115,6 +124,27 @@ function intersect(a, b) {
   const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
   const width = r2(Math.min(a.x + a.width, b.x + b.width) - x), height = r2(Math.min(a.y + a.height, b.y + b.height) - y);
   return width > 0 && height > 0 ? {x: r2(x), y: r2(y), width, height} : a;
+}
+
+/**
+ * A list layout spread to fill maxHeight: the room left over (to 90% of
+ * maxHeight) goes into its gaps, given as {key: [count, cap]} (layout[key]
+ * is used count times and grows to at most cap px). → the layout with the
+ * new gaps and height.
+ */
+export function spread(layout, maxHeight, gaps) {
+  const uses = Object.values(gaps).reduce((sum, [count]) => sum + count, 0);
+  const extra = maxHeight * 0.9 - layout.height;
+  if (!(extra > 0) || !uses) return layout;
+  const out = {...layout};
+  let added = 0;
+  for (const [key, [count, cap]] of Object.entries(gaps)) {
+    const grow = Math.max(0, Math.min(extra / uses, cap - layout[key]));
+    out[key] = r2(layout[key] + grow);
+    added += grow * count;
+  }
+  out.height = r2(layout.height + added);
+  return out;
 }
 
 /** The opaque brand card behind a module's content (null on a plate). */
