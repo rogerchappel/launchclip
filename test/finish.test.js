@@ -7,9 +7,10 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
+import { runStoryCommand } from "../src/story_cli.js";
 import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
 import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
-import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, runFinish, stageDecision } from "../src/finish.js";
+import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -227,7 +228,8 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["layout", "loudness", "motion", "audio", "temporal_evidence", "direction", "coverage", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "loudness", "motion", "audio", "temporal_evidence", "direction", "coverage", "critic"]);
+    assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");
     assert.equal(report.gates.coverage.profile, "short-motion");
@@ -377,6 +379,42 @@ test("runFinish compiles HyperFrames projects before rendering them", async () =
   } finally {
     await rm(project, { recursive: true, force: true });
   }
+});
+
+test("no scene ships as a Missing module placeholder", async () => {
+  // A param error fails the validate stage, as story validate does, before anything renders.
+  const invalid = await narratedProject({ mutate: (story) => { story.scenes[1].params.rows[0].at = 99; } });
+  try {
+    const adapters = fakeAdapters();
+    const report = await runFinish(invalid, {}, adapters);
+    assert.equal(report.status, "failed");
+    assert.equal(report.stages[1].name, "validate");
+    assert.equal(report.stages[1].status, "failed");
+    assert.match(report.stages[1].error, /both renderers would draw a placeholder/);
+    assert.equal(adapters.lastRender, undefined, "nothing renders");
+  } finally {
+    await rm(invalid, { recursive: true, force: true });
+  }
+  // An unknown module still renders (it is a warning), but the placeholders gate fails it.
+  const unknown = await narratedProject({ mutate: (story) => { story.scenes[1].module = "not-a-module"; } });
+  try {
+    const report = await runFinish(unknown, {}, fakeAdapters());
+    assert.equal(report.status, "needs-repair");
+    assert.equal(report.gates.placeholders.status, "failed");
+    assert.match(report.gates.placeholders.errors[0], /^s2 \(not-a-module\) renders as a "Missing module" placeholder/);
+  } finally {
+    await rm(unknown, { recursive: true, force: true });
+  }
+});
+
+test("placeholderScenes covers custom modules in HyperFrames and compiler fallbacks", async () => {
+  const story = (await runStoryCommand("resolve", path.join(MINIMAL, "storyboard.json"), { narration: path.join(MINIMAL, "NARRATION.json") })).story_resolved;
+  assert.deepEqual(placeholderScenes(story, { renderer: "hyperframes" }), []);
+  const custom = { ...story, scenes: [{ ...story.scenes[0], module: "custom", params: { component: "Hero" } }, ...story.scenes.slice(1)] };
+  assert.deepEqual(placeholderScenes(custom, { renderer: "remotion" }), []);
+  assert.deepEqual(placeholderScenes(custom, { renderer: "hyperframes" }).map((entry) => entry.id), ["s1"]);
+  const fallback = placeholderScenes(story, { renderer: "hyperframes", compileWarnings: [`s2: HyperFrames emitter for "${story.scenes[1].module}" failed (boom); rendering a placeholder`] });
+  assert.deepEqual(fallback, [{ id: "s2", module: story.scenes[1].module, reason: `HyperFrames emitter for "${story.scenes[1].module}" failed (boom)` }]);
 });
 
 test("a failing stage blocks the rest, is reported, and the CLI exits non-zero", async () => {

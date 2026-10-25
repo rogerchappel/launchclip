@@ -288,7 +288,9 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
 - Fonts come only from bundled files (see [Fonts](#fonts)), never from Google
   Fonts or the host's installed fonts.
 - A scene whose module is unknown, invalid, or has no component renders a
-  labelled placeholder box, never a blank frame.
+  labelled placeholder box, never a blank frame. `launchclip finish` fails its
+  validate stage on a scene whose params do not resolve and its `placeholders`
+  gate on any scene that would render as one.
 - A `footage-led` story adds a `base` recording (`{src, trim | edl, volume,
   fit, focus}`; see `recorded-video.md`).
   - `BaseLayer` mounts it under every scene: one
