@@ -5,10 +5,13 @@
 // Checks, each an error (fails the gate) or a warning (heuristic; reported):
 // - palette: the render's colour clusters against the style's (reference
 //   palette, else brand colours), measured both ways. Footage-led renders are mostly footage, so
-//   there it only asks that the brand primary shows up somewhere (warning).
+//   there it only asks that the brand primary shows up somewhere (warning):
+//   the storyboard says where it is drawn (captions, brand frame, graphic
+//   scenes); the share of pixels in the primary's hue only backs that up.
 // - captions: the story's captions use the style's preset for its lane
-//   (error); the case measured from the render's text band matches the
-//   preset's (warning).
+//   (error); their resolved case matches the style's (warning). Without a
+//   storyboard the case is read from the render's caption band, a heuristic
+//   that is only a note when its confidence is low.
 // - layout mix: the render's footage layouts against the reference mix
 //   (warning; only when the style was drafted from references).
 // - cadence: the render's shot length and visual and layout changes per
@@ -23,16 +26,16 @@
 // - brand frame: when the style has one, the story draws it (error), unless
 //   the story turns it off with "frame": false (warning).
 import { brandFramePlan, storyFrame } from "../kit/core/brand-frame.mjs";
-import { CAPTION_PRESETS, captionPresetName, captionsOverlayOf } from "../kit/core/captions.mjs";
-import { colorDistance, packCaptionsFor } from "../kit/core/style.mjs";
+import { CAPTION_PRESETS, captionOptions, captionPresetName, captionsOverlayOf } from "../kit/core/captions.mjs";
+import { colorDistance, hexToHsl, packCaptionsFor } from "../kit/core/style.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
-import { storyboardMeasures } from "../kit/core/cadence.mjs";
+import { isGraphicScene, storyboardMeasures } from "../kit/core/cadence.mjs";
 import { directionMeasures } from "../kit/core/direction.mjs";
 import { storySections } from "../kit/core/story.mjs";
 import { resolveProfile } from "./profile_store.js";
 import { compareToStyle, paletteDistance } from "./style_reference.js";
 
-export const ADHERENCE = Object.freeze({ palette: 0.12, presence: 0.15, layoutMix: 0.35 });
+export const ADHERENCE = Object.freeze({ palette: 0.12, presence: 0.15, primaryShare: 0.002, layoutMix: 0.35 });
 
 const round = (value, places = 3) => (Number.isFinite(value) ? Math.round(value * 10 ** places) / 10 ** places : null);
 
@@ -56,8 +59,15 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
     if (lane === "footage-led") {
       const primary = pack?.brand?.colors?.primary;
       if (primary) {
+        // What the storyboard draws in the primary is exact; the pixels only support it.
+        const drawn = primaryUses(story, primary);
+        const share = primaryShare(measured, primary);
         const nearest = Math.min(...measured.palette.map((entry) => colorDistance(entry.hex, primary)));
-        add("palette", "warning", nearest <= ADHERENCE.presence, `brand primary ${primary} within ${ADHERENCE.presence}`, round(nearest, 4), nearest <= ADHERENCE.presence ? "the brand primary shows in the render" : `no colour in the render is near the brand primary ${primary}; footage dominates, so check captions, frame and panels use the brand colours`);
+        const seen = share !== null ? share >= ADHERENCE.primaryShare : nearest <= ADHERENCE.presence;
+        const pixels = share !== null ? `${round(share * 100, 2)}% of sampled pixels are near it` : `nearest render colour ${round(nearest, 4)} away`;
+        if (drawn.length) add("palette", "warning", true, `brand primary ${primary} drawn`, drawn, `the storyboard draws the brand primary in ${drawn.join(", ")} (${pixels})`);
+        else if (story && Array.isArray(story.scenes)) add("palette", "warning", seen, `brand primary ${primary} drawn`, share ?? round(nearest, 4), seen ? `the brand primary shows in the render (${pixels})` : `nothing in the storyboard draws the brand primary ${primary} and ${pixels}; give the captions, frame or panels a brand colour`);
+        else add("palette", seen ? "warning" : "note", seen, `brand primary ${primary} within ${ADHERENCE.presence}`, share ?? round(nearest, 4), seen ? `the brand primary shows in the render (${pixels})` : `little of the brand primary ${primary} shows in sampled frames (${pixels}); footage dominates, so check captions, frame and panels by eye (a heuristic)`);
       }
     } else {
       // Both ways: every render colour near a style colour, and the style's main colours present in the render.
@@ -79,11 +89,15 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
       add("captions", "error", used === wanted, wanted, used, used === wanted ? `captions use the style's ${wanted} preset` : `captions use ${used}, but the style's ${lane ?? "default"} preset is ${wanted}; remove the overlay's style/preset so the style fills it`);
     }
   }
-  const presetCase = overlay ? CAPTION_PRESETS[captionPresetName(overlay, story)]?.case : null;
-  const seenCase = measured?.captions?.case ?? null;
-  if (presetCase && seenCase) {
-    const want = presetCase === "upper" ? "upper" : "as-is";
-    add("caption case", "warning", seenCase === want, want, seenCase, seenCase === want ? "the measured caption case matches the preset" : `the render's caption text looks ${seenCase === "upper" ? "upper-case" : "sentence case"}, but the preset draws ${want === "upper" ? "capitals" : "sentence case"} (a heuristic; check by eye)`);
+  // Caption case: our own captions' resolved case is exact; the measured case is a heuristic for renders without a storyboard.
+  const styleCase = caseOf(pack?.reference_stats?.captions?.case ?? (wanted && wanted !== "none" ? CAPTION_PRESETS[wanted]?.case : null));
+  if (styleCase && overlay) {
+    const drawn = caseOf(captionOptions(overlay, { brand: story?.brand, format: story?.format, story }).case);
+    add("caption case", "warning", drawn === styleCase, styleCase, drawn, drawn === styleCase ? "the storyboard's captions draw the style's case" : `the storyboard's captions draw ${drawn === "upper" ? "capitals" : "sentence case"}, but the style uses ${styleCase === "upper" ? "capitals" : "sentence case"}; remove the overlay's case so the style fills it`);
+  } else if (styleCase && !story && measured?.captions?.case) {
+    const seenCase = measured.captions.case;
+    const confident = Number(measured.captions.confidence) >= 0.5;
+    add("caption case", confident ? "warning" : "note", seenCase === styleCase, styleCase, seenCase, seenCase === styleCase ? "the measured caption case matches the style" : `the render's caption text looks ${seenCase === "upper" ? "upper-case" : "sentence case"}, but the style uses ${styleCase === "upper" ? "capitals" : "sentence case"} (a heuristic, confidence ${measured.captions.confidence ?? "?"}; check by eye)`);
   }
 
   // Layout mix.
@@ -131,6 +145,53 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
 
   const failed = checks.some((entry) => entry.severity === "error" && !entry.ok);
   return { status: failed ? "failed" : "passed", checks };
+}
+
+// "upper" stays upper; sentence and title case both read as not capitals.
+const caseOf = (value) => (value ? (value === "upper" ? "upper" : "as-is") : null);
+
+const roleHex = (value, colors, fallback) => {
+  const name = value ?? fallback;
+  return typeof name === "string" && name.startsWith("#") ? name.toLowerCase() : colors?.[name]?.toLowerCase?.() ?? null;
+};
+
+/**
+ * Where a resolved story draws a colour near `primary`: the captions' accent
+ * or spoken word, the brand frame's kicker underline and progress line, and
+ * its graphic scenes (catalogue modules draw their accents in the primary).
+ * → ["captions accent word", "kicker underline", …]
+ */
+export function primaryUses(story, primary) {
+  if (!story || !primary) return [];
+  const colors = story.brand?.colors ?? {};
+  const near = (hex) => Boolean(hex) && colorDistance(hex, primary) <= ADHERENCE.presence;
+  const uses = [];
+  const overlay = captionsOverlayOf(story);
+  if (overlay) {
+    const options = captionOptions(overlay, { brand: story.brand, format: story.format, story });
+    if (options.emphasis && near(options.colors.accent)) uses.push("captions accent word");
+    else if (options.word !== "none" && near(options.colors.active)) uses.push("captions spoken word");
+  }
+  const frame = story.frame === false ? null : storyFrame(story);
+  if (frame?.kicker && frame.kicker.underline !== false && near(roleHex(frame.kicker.color, colors, "primary"))) uses.push("kicker underline");
+  if (frame?.progress && near(roleHex(frame.progress.color, colors, "primary"))) uses.push("progress line");
+  const graphic = (Array.isArray(story.scenes) ? story.scenes : []).filter(isGraphicScene).length;
+  if (graphic && near(colors.primary)) uses.push(`${graphic} graphic scene${graphic === 1 ? "" : "s"}`);
+  return uses;
+}
+
+/**
+ * The share of sampled pixels in the primary's hue (its 15° bin and the two
+ * beside it), from analyzeReference's vivid-hue histogram; null when the
+ * render has none or the primary is not a saturated colour.
+ */
+export function primaryShare(measured, primary) {
+  const hues = measured?.vivid?.hues;
+  if (!Array.isArray(hues) || !hues.length) return null;
+  const { h, s, l } = hexToHsl(primary);
+  if (s < 0.4 || l < 0.2 || l > 0.85) return null;
+  const bin = Math.floor((((h % 360) + 360) % 360) / (360 / hues.length));
+  return [-1, 0, 1].reduce((sum, offset) => sum + (Number(hues[(bin + offset + hues.length) % hues.length]) || 0), 0);
 }
 
 /**
