@@ -33,7 +33,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "../kit/core/story.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
-import { validateStory } from "./story_cli.js";
+import { directionFileFor, validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
@@ -997,6 +997,8 @@ const STAGES = [
         video: await fileHash(ctx.out),
         evidence: await fileHash(path.join(ctx.project, PATHS.evidence)),
         audio_manifest: await fileHash(path.join(ctx.project, PATHS.audioManifest)),
+        // The direction and coverage gates read the map.
+        direction: await fileHash(directionFileFor(path.join(ctx.project, "storyboard.json"))),
         layout: ctx.layout,
         story: ctx.resolved,
         style: ctx.style?.file ? await fileHash(ctx.style.file) : ctx.style?.name ?? null,
