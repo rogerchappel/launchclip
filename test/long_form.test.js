@@ -6,10 +6,10 @@ import test from "node:test";
 import { brandFramePlan } from "../kit/core/brand-frame.mjs";
 import { storyboardMeasures } from "../kit/core/cadence.mjs";
 import { validateDirection } from "../kit/core/direction.mjs";
-import { PROMISE_ID, chaptersFromMap, ffmetadataChapters, sectionCardId, structureLongForm, youtubeChapterProblems, youtubeChapters, youtubeTimestamp } from "../kit/core/long-form.mjs";
+import { PROMISE_ID, chaptersFromMap, matchSegment, ffmetadataChapters, sectionCardId, structureLongForm, youtubeChapterProblems, youtubeChapters, youtubeTimestamp } from "../kit/core/long-form.mjs";
 import { directionPrompt } from "../kit/core/planning-prompt.mjs";
 import { resolveStory, storyChapters, validateStory } from "../kit/core/story.mjs";
-import { brandFrameErrors } from "../kit/core/style.mjs";
+import { brandFrameErrors, segmentErrors, stylePromptLines, validateStylePack } from "../kit/core/style.mjs";
 import { runCli } from "../src/cli.js";
 import { profileForStory } from "../src/profile_store.js";
 import { coverageGate } from "../src/quality_gates.js";
@@ -295,4 +295,61 @@ test("attention resets: the coverage gate and story validate check the ceiling",
   } finally {
     await rm(project, { recursive: true, force: true });
   }
+});
+
+const TOOL = Object.freeze({ id: "tool-of-the-week", title: "Tool of the week", kicker: "Every Friday", layout: "split-right", modules: ["object-card", "concept-card"], icon: "wrench", match: ["tool of the week", "this week's tool"] });
+
+test("segment formats: the style's shape, its prompt lines and the map's segment field", () => {
+  assert.deepEqual(segmentErrors([TOOL]), []);
+  assert.deepEqual(segmentErrors([{ ...TOOL, id: "Bad Id", layout: "insert", extra: 1, modules: ["nope"] }, TOOL, TOOL], { modules: ["concept-card"] }), [
+    "segments[0].extra is not supported (id, title, kicker, layout, modules, icon, match)",
+    "segments[0].id must be a lowercase slug (a-z, 0-9, -)",
+    "segments[0].layout must be one of full, split-left, split-right, framed, stacked",
+    "segments[0].modules: \"nope\" is not a module",
+    "segments[1].modules: \"object-card\" is not a module",
+    "segments[2].id \"tool-of-the-week\" is used twice",
+    "segments[2].modules: \"object-card\" is not a module"
+  ]);
+  assert.ok(validateStylePack({ schema: "launchclip.style.v3", name: "show", segments: "x" }).errors.some((error) => /segments must be a list/.test(error)));
+  const lines = stylePromptLines({ name: "show", segments: [TOOL] }, { lane: "footage-led" });
+  assert.ok(lines.some((line) => /Recurring segments/.test(line)));
+  assert.ok(lines.includes("- tool-of-the-week: \"Tool of the week\", layout split-right, prefer object-card, concept-card (a section titled like \"tool of the week\" or \"this week's tool\")."));
+  const { map, words } = longFormFixture();
+  const named = { ...map, sections: map.sections.map((section, i) => (i === 1 ? { ...section, segment: "tool-of-the-week" } : section)) };
+  assert.equal(validateDirection(named, { words, lane: "footage-led", segments: [TOOL] }).ok, true);
+  assert.ok(validateDirection(named, { words, lane: "footage-led", segments: [] }).errors.some((error) => /segment "tool-of-the-week" is not one of the style's segment formats/.test(error)));
+  const prompt = directionPrompt({ lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 600 }, words, segments: [TOOL] });
+  assert.match(prompt, /## Recurring segments/);
+  assert.match(prompt, /- tool-of-the-week: "Tool of the week", layout split-right, prefer object-card, concept-card/);
+});
+
+test("segment formats: every episode's segment chapter opens and lays out the same way", () => {
+  const episodes = [0, 1].map((n) => {
+    const { story, map, words } = longFormFixture();
+    map.sections[1].title = n ? "This week's tool: Raycast" : "Tool of the week";
+    return structureLongForm(story, { words, map, segments: [TOOL] });
+  });
+  for (const episode of episodes) {
+    const card = episode.story.scenes.find((scene) => scene.id === sectionCardId("c2"));
+    assert.equal(card.params.kicker, "Every Friday");
+    assert.equal(card.params.icon, "wrench");
+    assert.equal(card.params.number, undefined);
+    const other = episode.story.scenes.find((scene) => scene.id === sectionCardId("c3"));
+    assert.equal(other.params.kicker, "Chapter 3");
+    assert.equal(episode.story.chapters[1].segment, "tool-of-the-week");
+    assert.equal(episode.map.sections[1].segment, "tool-of-the-week");
+    assert.equal(episode.map.sections[1].layout, "split-right");
+    const chapter = episode.chapters[1];
+    assert.deepEqual(episode.story.sections.find((section) => section.id === "segment-c2"), { id: "segment-c2", start: chapter.start, end: chapter.end, layout: "split-right" });
+    assert.deepEqual(episode.segments, [{ chapter: "c2", segment: "tool-of-the-week", card: sectionCardId("c2"), layout: "split-right", modules: ["concept-card"] }]);
+    assert.equal(checkStoryboard(episode.story, { words: longFormFixture().words, direction: episode.map, tier: "guided", style: null }).ok, true);
+  }
+  // A segment none of whose modules play gets a warning; an unknown one too.
+  const { story, map, words } = longFormFixture();
+  const strict = structureLongForm(story, { words, map, segments: [{ ...TOOL, modules: ["object-card"] }] });
+  assert.ok(strict.warnings.some((warning) => /chapter "c2" uses none of its modules \(object-card\)/.test(warning)));
+  const unknown = structureLongForm({ ...story, chapters: [{ id: "a", title: "A", start: 0, segment: "nope" }, { id: "b", title: "B", start: 200 }, { id: "c", title: "C", start: 400 }] }, { words, map, segments: [TOOL] });
+  assert.ok(unknown.warnings.some((warning) => /names segment "nope", which the style does not define/.test(warning)));
+  assert.equal(matchSegment("Tool Of The Week #12", [TOOL]).id, "tool-of-the-week");
+  assert.equal(matchSegment("How it works", [TOOL]), null);
 });
