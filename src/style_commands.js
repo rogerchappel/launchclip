@@ -4,7 +4,8 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { analyzeReference, compareToStyle, draftStyleFromReferences } from "./style_reference.js";
-import { styleAdherence, styleProfile } from "./style_adherence.js";
+import { storyCadence, styleAdherence, styleProfile } from "./style_adherence.js";
+import { readProjectDirection } from "./quality_gates.js";
 import { readProjectStory } from "./story_loader.js";
 import { applyStyle } from "../kit/core/style.mjs";
 import { resolveStyleV2, writeStyleV2 } from "./style_store.js";
@@ -62,7 +63,7 @@ export function projectRender(project, video) {
  * launchclip style check <project> --against <name>: measured stats vs the
  * pack's reference stats, plus the adherence checks (src/style_adherence.js)
  * when the project has a storyboard: palette, captions, layout mix, cadence
- * in the style's band and the brand frame. `finish` runs the same checks as
+ * in the style's band (counted from the storyboard) and the brand frame. `finish` runs the same checks as
  * its style gate.
  */
 export async function checkStyleCommand(projectPath, flags = {}, { root } = {}, adapters = {}) {
@@ -78,7 +79,9 @@ export async function checkStyleCommand(projectPath, flags = {}, { root } = {}, 
   try { read = await readProjectStory(project); }
   catch (error) { storyError = error.message; }
   const story = read ? (read.resolved.meta?.style?.name === style.name ? read.resolved : applyStyle({ ...read.resolved, meta: { ...read.resolved.meta, style: undefined } }, style.pack, { intro: false, outro: false }).story) : null;
-  const adherence = story ? styleAdherence({ story, pack: style.pack, measured, profile: await styleProfile(style.pack) }) : null;
+  // Cadence from the storyboard (and the direction map's sections); the render's pixels only measure what a storyboard cannot say.
+  const cadence = story ? storyCadence(story, { map: (await readProjectDirection(project)).map, words: read.words }) : null;
+  const adherence = story ? styleAdherence({ story, pack: style.pack, measured, profile: await styleProfile(style.pack), cadence }) : null;
   const result = {
     stage: "style",
     action: "check",

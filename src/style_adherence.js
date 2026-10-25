@@ -14,6 +14,10 @@
 // - cadence: the render's shot length and visual and layout changes per
 //   minute sit inside the style's profile band (kit/core/profiles.mjs
 //   compareMeasures: each measure's own band, max or min rule) (error).
+//   For our own renders these come from the resolved storyboard (scene starts
+//   and ends, camera moves, layout changes), exactly as the coverage gate
+//   counts them; a cut detector on the pixels misses graphics that change
+//   over a held shot. Pixel pacing is used only without a storyboard.
 //   Without a measured profile, the reference pacing stands in (error), else
 //   the motion grammar's shot range (warning) (compareToStyle).
 // - brand frame: when the style has one, the story draws it (error), unless
@@ -22,6 +26,9 @@ import { brandFramePlan, storyFrame } from "../kit/core/brand-frame.mjs";
 import { CAPTION_PRESETS, captionPresetName, captionsOverlayOf } from "../kit/core/captions.mjs";
 import { colorDistance, packCaptionsFor } from "../kit/core/style.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
+import { storyboardMeasures } from "../kit/core/cadence.mjs";
+import { directionMeasures } from "../kit/core/direction.mjs";
+import { storySections } from "../kit/core/story.mjs";
 import { resolveProfile } from "./profile_store.js";
 import { compareToStyle, paletteDistance } from "./style_reference.js";
 
@@ -33,10 +40,12 @@ const round = (value, places = 3) => (Number.isFinite(value) ? Math.round(value 
  * story: the resolved, style-merged story; pack: the v3 style; measured:
  * analyzeReference() of the render; profile: the style's cadence profile
  * object (pack.profile when inline, or a shipped profile the caller looked
- * up by id; null to skip the band check).
+ * up by id; null to skip the band check); cadence: the storyboard's
+ * measures (storyCadence), else they are computed from `story` when it is
+ * resolved, else the render's pixel pacing stands in.
  * → {status: "passed" | "failed", checks: [{check, severity, ok, expected, measured, detail}]}
  */
-export function styleAdherence({ story, pack, measured, profile = typeof pack?.profile === "object" ? pack.profile : null }) {
+export function styleAdherence({ story, pack, measured, profile = typeof pack?.profile === "object" ? pack.profile : null, cadence = storyCadence(story) }) {
   const checks = [];
   const add = (check, severity, ok, expected, value, detail) => checks.push({ check, severity, ok, expected, measured: value, detail });
   const lane = story?.lane;
@@ -86,20 +95,24 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
     add("layout mix", "warning", distance <= ADHERENCE.layoutMix, referenceMix, mix, distance <= ADHERENCE.layoutMix ? "the layout mix is close to the references'" : `the layout mix is ${distance} from the references' (limit ${ADHERENCE.layoutMix})`);
   }
 
-  // Cadence.
+  // Cadence: the storyboard's exact numbers for our own renders, the pixels otherwise.
   const duration = Number(measured?.pacing?.duration_seconds ?? measured?.duration_seconds);
-  const values = {
-    shot_seconds: measured?.pacing?.shot_seconds?.median,
-    visual_changes_per_min: measured?.pacing?.cut_rate_per_minute,
-    layout_changes_per_min: measured?.layouts?.frames?.length && duration > 0 ? (measured.layouts.changes / duration) * 60 : undefined
-  };
+  const values = cadence
+    ? { shot_seconds: cadence.shot_seconds?.p50, visual_changes_per_min: cadence.visual_changes_per_min, layout_changes_per_min: cadence.layout_changes_per_min }
+    : {
+      shot_seconds: measured?.pacing?.shot_seconds?.median,
+      visual_changes_per_min: measured?.pacing?.cut_rate_per_minute,
+      layout_changes_per_min: measured?.layouts?.frames?.length && duration > 0 ? (measured.layouts.changes / duration) * 60 : undefined
+    };
+  const source = cadence ? "from the storyboard" : "measured from the render";
   // The profile's own band rules (kit/core/profiles.mjs compareMeasures:
   // "band", "max" or "min" per measure), as the profile gates use them.
   const banded = profile?.measures ? compareMeasures({ ...values, shot_seconds: Number.isFinite(values.shot_seconds) ? { p50: values.shot_seconds } : undefined }, profile, { only: Object.keys(values) }) : [];
-  for (const entry of banded) add(`cadence: ${entry.measure}`, "error", entry.status === "inside", entry.band.map((value) => value ?? "—").join("–"), entry.value, `${entry.detail} (${profile.id ?? "style profile"})`);
+  for (const entry of banded) add(`cadence: ${entry.measure}`, "error", entry.status === "inside", entry.band.map((value) => value ?? "—").join("–"), entry.value, `${entry.detail} (${profile.id ?? "style profile"}; ${source})`);
   if (!banded.length) {
     // Reference pacing is measured, so it gates; a grammar's shot range is a rule of thumb, so it warns.
-    for (const metric of compareToStyle(measured ?? {}, pack ?? {}).metrics.filter((entry) => /shot|cut rate/.test(entry.metric))) {
+    const pacing = cadence ? { ...measured, pacing: { ...measured?.pacing, shot_seconds: { median: values.shot_seconds }, cut_rate_per_minute: values.visual_changes_per_min } } : measured;
+    for (const metric of compareToStyle(pacing ?? {}, pack ?? {}).metrics.filter((entry) => /shot|cut rate/.test(entry.metric))) {
       add(`cadence: ${metric.metric}`, /grammar/.test(metric.metric) ? "warning" : "error", metric.ok, metric.expected, metric.measured, metric.ok ? "the pacing matches the style" : `the pacing drifts from the style (drift ${metric.drift})`);
     }
   }
@@ -118,6 +131,31 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
 
   const failed = checks.some((entry) => entry.severity === "error" && !entry.ok);
   return { status: failed ? "failed" : "passed", checks };
+}
+
+/**
+ * Cadence measures of one of our renders from its resolved storyboard: the
+ * direction map's (kit/core/direction.mjs directionMeasures, with its section
+ * layouts) when there is a map and narration, else the storyboard's own
+ * (kit/core/cadence.mjs storyboardMeasures, with the story's footage
+ * sections). Null when the story is not resolved (no duration).
+ */
+export function storyCadence(story, { map = null, words = null } = {}) {
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  if (!(duration > 0) || !Array.isArray(story?.scenes)) return null;
+  try {
+    if (map && words?.length) return directionMeasures(map, story, { words });
+    // Story sections leave gaps where the frame is full; fill them so leaving a split counts as a change.
+    const sections = [];
+    let clock = 0;
+    for (const section of storySections(story).sort((a, b) => a.start - b.start)) {
+      if (section.start > clock + 1e-6) sections.push({ start: clock, end: section.start, layout: "full" });
+      sections.push(section);
+      clock = Math.max(clock, section.end);
+    }
+    if (sections.length && clock < duration - 1e-6) sections.push({ start: clock, end: duration, layout: "full" });
+    return storyboardMeasures(story, { sections });
+  } catch { return null; }
 }
 
 /**
