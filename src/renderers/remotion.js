@@ -5,7 +5,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadStoryModule, readProjectStory } from "../story_loader.js";
 import { adapterError, captureCommand, runCommand } from "./command.js";
-import { MEZZANINE, encodeRemotionDelivery, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
+import { MEZZANINE, encodeRemotionDelivery, remotionRoot, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
+
+export { remotionRoot };
 
 const require = createRequire(import.meta.url);
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -35,9 +37,9 @@ export function remotionToolInfo() {
 export function createRemotionRenderer(defaults = {}) {
   const option = (opts, name) => opts[name] ?? defaults[name];
   const runner = (opts) => option(opts, "run") ?? runCommand;
-  const remotion = (run, args) => {
+  const remotion = (run, args, project) => {
     const invocation = remotionInvocation(args);
-    return captureCommand(run, invocation.command, invocation.args, { cwd: PACKAGE_ROOT });
+    return captureCommand(run, invocation.command, invocation.args, { cwd: remotionRoot(project) });
   };
 
   const adapter = {
@@ -87,7 +89,7 @@ export function createRemotionRenderer(defaults = {}) {
     async render(projectDir, outFile, opts = {}) {
       const prepared = await adapter.prepare(projectDir, opts);
       await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
-      const result = await remotion(runner(opts), adapter.renderArgs(prepared, outFile, opts));
+      const result = await remotion(runner(opts), adapter.renderArgs(prepared, outFile, opts), prepared.project);
       if (!result.ok) throw adapterError("Remotion render", result);
       return { renderer: "remotion", output: path.resolve(outFile), format: prepared.format, props: prepared.propsFile, raw: result };
     },
@@ -117,7 +119,7 @@ export function createRemotionRenderer(defaults = {}) {
       const prepared = await adapter.prepare(projectDir, opts);
       await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
       const args = adapter.stillArgs(prepared, at, outFile);
-      const result = await remotion(runner(opts), args);
+      const result = await remotion(runner(opts), args, prepared.project);
       if (!result.ok) throw adapterError("Remotion still", result);
       return { renderer: "remotion", output: path.resolve(outFile), seconds: at, frame: frameAt(at, prepared.format), raw: result };
     },
@@ -136,7 +138,7 @@ export function createRemotionRenderer(defaults = {}) {
         findings.push({ source: "story", severity: "error", message: error.message });
       }
       if (prepared) {
-        const result = await remotion(runner(opts), adapter.compositionsArgs(prepared));
+        const result = await remotion(runner(opts), adapter.compositionsArgs(prepared), prepared.project);
         const listed = compositionListed(result);
         checks.compositions = { ...result, ok: result.ok && listed };
         if (!result.ok) findings.push({ source: "remotion-compositions", severity: "error", message: `remotion compositions failed (exit ${result.exit_code})` });
