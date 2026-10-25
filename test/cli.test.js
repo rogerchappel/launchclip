@@ -19,6 +19,8 @@ test("parses boolean and value flags", () => {
 
 test("requires flag values", () => {
   assert.throws(() => parseFlags(["--out"]), /Missing value/);
+  // Switches documented without a value parse as switches, even last.
+  assert.deepEqual(parseFlags(["--prototype", "--no-direction", "--refresh-free-vision-models"]), { prototype: true, "no-direction": true, "refresh-free-vision-models": true });
 });
 
 test("prints the package version without initializing runtime services", async () => {
