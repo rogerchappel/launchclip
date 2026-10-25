@@ -707,7 +707,7 @@ export async function screenChanges(file, { fps = 10, threshold = 0.7, exclude =
  * least 2.5% of the cells step (outside `exclude`, [from, to] height
  * fractions), merged within 0.8 s. → [seconds]
  */
-export function overlayEventsFromGrayFrames(buffer, width, height, fps, { exclude = null } = {}) {
+export function overlayEventsFromGrayFrames(buffer, width, height, fps, { exclude = null, minShare = 0.025 } = {}) {
   const size = width * height;
   const count = Math.floor(buffer.length / size);
   const cell = Math.max(2, Math.floor(Math.max(width, height) / 16));
@@ -736,7 +736,7 @@ export function overlayEventsFromGrayFrames(buffer, width, height, fps, { exclud
   }
   const events = [];
   for (let f = 1; f < count - 1; f += 1) {
-    if (share[f] >= 0.025 && share[f] >= share[f - 1] && share[f] > share[f + 1] && (!events.length || f / fps - events.at(-1) > 0.8)) events.push(f / fps);
+    if (share[f] >= minShare && share[f] >= share[f - 1] && share[f] > share[f + 1] && (!events.length || f / fps - events.at(-1) > 0.8)) events.push(f / fps);
   }
   return events;
 }
