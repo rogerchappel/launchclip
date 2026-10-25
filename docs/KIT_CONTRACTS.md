@@ -1542,3 +1542,23 @@ caption band.
   - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
     `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
     same tree and ops.
+
+## Icon set (`kit/core/icons.mjs`)
+
+One in-repo family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md)
+§8), drawn for LaunchClip as original geometry (no third-party paths).
+
+- Every icon is SVG path data in a 24-unit box (`ICON_BOX`), stroked at
+  `ICON_STROKE` (2 units) with round caps and joins, never filled, with a
+  2-unit margin. Boxes use a 1.5–2 unit corner radius.
+- Names are stable kebab-case ids (`shield`, `rocket`, `code`, `bolt`,
+  `calendar`, `chart-up`, `users`, `lock`, `check`, …). Add icons, never
+  rename or remove one. `ICON_NAMES` lists them in contact-sheet order.
+- `iconPath(name)` returns the path data and throws on an unknown name with
+  close matches; `isIcon(name)` tests one.
+- `iconNode(name, {id?, x, y, size, color, stroke?, style?})` returns a view
+  node (an `<svg>` holding one `<path>`), so both renderers draw icons through
+  the shared view tree. Modules tint icons from brand colours; the stroke is
+  in box units, so the weight scales with the size.
+- `node scripts/icon-sheet.mjs out.png` renders every icon at 96 px and 24 px
+  for a check by eye (`--html`, `--color`, `--bg`).
