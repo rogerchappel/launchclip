@@ -779,7 +779,10 @@ Work in this order:
    `launchclip voice --text "..." --voice kokoro --speed 1.2` without a
    project). It synthesises the take (cached), writes `NARRATION.json`, and
    prints the duration, word count, words per minute and one row per sentence
-   with its start, end and first-word anchor. Adjust the text or `speed` and
+   with its start, end and first-word anchor (for a dialogue story,
+   `audio.narration.lines`, one row per line with its speaker; each line is
+   voiced in its speaker's voice and `finish` reuses those takes). Adjust the
+   text or `speed` and
    rerun until the duration fits the target; never guess the length from a
    word count.
 3. **Size the scenes to the real take:** set `format.duration` to the

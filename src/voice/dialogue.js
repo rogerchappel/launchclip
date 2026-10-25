@@ -9,7 +9,7 @@ import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { NARRATION_DEFAULTS, narrationRequest, synthesizeNarration } from "./narrate.js";
+import { NARRATION_DEFAULTS, narrationDocument, narrationRequest, synthesizeNarration } from "./narrate.js";
 
 const execFileAsync = promisify(execFile);
 export const DIALOGUE_GAP = 0.3;
@@ -42,6 +42,11 @@ export function dialogueRequests(story, overrides = {}) {
 /** The plain narration text of a dialogue (for captions and checks). */
 export const dialogueText = (story) => (story?.audio?.narration?.lines ?? []).map((line) => String(line?.text ?? "").trim()).filter(Boolean).join(" ");
 
+/** The NARRATION.json document for a dialogue take: words keep their speaker, plus the per-line spans. */
+export function dialogueDocument(story, entries, take) {
+  return { ...narrationDocument({ ...entries[0].request, voice: null, text: dialogueText(story) }, take), lines: take.lines };
+}
+
 /**
  * Synthesise every line and join them into outFile.
  * options: {outFile, cacheDir, voiceProvider, normalizeVoice, gap}
@@ -70,10 +75,32 @@ export async function synthesizeDialogue(entries, { outFile, cacheDir = null, vo
   let offset = 0;
   for (const { speaker, request, take } of takes) {
     for (const word of take.words) words.push({ text: word.text, start: round3(word.start + offset), end: round3(word.end + offset), speaker });
-    lines.push({ speaker, voice: request.voice, start: round3(offset), end: round3(offset + take.duration), cached: take.cached });
+    lines.push({ speaker, voice: request.voice, text: request.text, start: round3(offset), end: round3(offset + take.duration), cached: take.cached });
     offset += take.duration + gap;
   }
   return { file: outFile, words, duration: round3(offset - gap), lines, sampleRate: 24000, loudness: null, cached: takes.every(({ take }) => take.cached) };
+}
+
+/** A plain-text report like the narration one, with one row per line and its speaker. */
+export function formatDialogueReport({ request, take, narrationFile, voiceFile }) {
+  const voices = [...new Map(take.lines.map((line) => [line.speaker, line.voice])).entries()].map(([speaker, voice]) => `${speaker}:${voice ?? "default"}`);
+  const wpm = take.duration > 0 ? Math.round(take.words.length / take.duration * 60) : 0;
+  const rows = [
+    `voice: ${request.provider} dialogue (${voices.join(", ")}) at speed ${request.speed}${take.cached ? " (cached takes)" : ""}`,
+    `duration: ${take.duration.toFixed(2)} s   words: ${take.words.length}   lines: ${take.lines.length}   rate: ${wpm} wpm`,
+    `narration: ${narrationFile}`,
+    `audio: ${voiceFile}`,
+    "",
+    "  #  start    end      dur   speaker     anchor              text"
+  ];
+  take.lines.forEach((line, i) => {
+    const first = take.words.find((word) => word.start >= line.start - 0.001 && word.speaker === line.speaker);
+    const anchor = first ? `word:${first.text.replace(/[^\p{L}\p{N}'-]/gu, "").toLowerCase()}` : "";
+    const text = String(line.text ?? "");
+    rows.push(`${String(i + 1).padStart(3)}  ${line.start.toFixed(2).padStart(6)}  ${line.end.toFixed(2).padStart(6)}  ${(line.end - line.start).toFixed(2).padStart(6)}   ${String(line.speaker).padEnd(10)}  ${anchor.padEnd(18)}  ${text.length > 50 ? `${text.slice(0, 47)}...` : text}`);
+  });
+  rows.push("", "Size format.duration to the duration plus a short tail, give each beat its lines' span, and anchor scene starts and hits to words (word:<text>) rather than seconds.");
+  return `${rows.join("\n")}\n`;
 }
 
 const round3 = (value) => Math.round(value * 1000) / 1000;
