@@ -455,31 +455,38 @@ saved pack is what renders, so a new version changes only rerolls.
   picks the transition preference and caption preset; the world camera only
   for playful, snappy, smooth and cinematic; light themes keep the
   stroke-free caption presets.
-- The option lists (`SEED_PANEL_TREATMENTS`, `SEED_BACKGROUND_KINDS`,
-  `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
-  `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`,
-  `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) come from the kits where
-  they have landed: `SEED_MODULE_VARIANTS` is `moduleVariants()`,
-  `SEED_DRAWING_STYLES` the characters kit's styles, and the sound lists
-  `kit/core/sound/options.mjs`. A tone narrows the sound palettes and genres
-  (`TONE_SOUND`); the genre sets bpm, key and progression (`GENRE_SPECS`).
-  The seed draws only topic-neutral character sets (`SEED_CHARACTER_SETS`:
-  office-team, startup-founders, students, creators, city-crowd); themed
-  sets come from the `character_set` constraint, and `generateCast` builds
-  2–4 people for the set and palette. The `world` constraint is a kind or a
-  list of kinds (suggestWorld's fits) the seed picks within.
-  With no world in the direction the seed draws a topic-neutral one
-  (`SEED_WORLDS`: abstract-stage, skyline, rooftop, park, city-street,
-  home-desk), day and dusk twice as often as night except for premium and
-  energetic tones; topical worlds come only from art direction.
-  Backgrounds are weighted towards subtle patterns and textures
-  (`SEED_BACKGROUND_KINDS` is `[kind, weight]`; flat is rare), each with a
-  `fade` and params drawn inside `SEED_BACKGROUND_PARAMS` (the backgrounds
-  kit's well-reading subranges; the kinds that take one also get a `color` role, and texture a `type`), and
-  most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
-  `PANEL_FILL_CHANCE`; intensity and amount in the low quarter). `sound` holds a palette, a music genre, bpm inside the
-  tone's range, key and progression, ambience `auto` and the tone's SFX
-  density.
+- The option lists come from the kits: `SEED_MODULE_VARIANTS` is
+  `moduleVariants()` (every module with designed variants, catalogue H
+  included), `SEED_DRAWING_STYLES` the characters kit's styles,
+  `SEED_PANEL_TREATMENTS` the panels kit's, `SEED_BACKGROUND_KINDS` every
+  background kind but logo-pattern (a seeded style has no logo),
+  `SEED_ICON_STYLES` and `SEED_ILLUSTRATIONS` the style's, and the sound lists
+  `kit/core/sound/options.mjs`. Weighted lists are `[value, integer weight]`.
+- Categorical choices step through their options (`spread`): the index is
+  (seed × a prime + an offset) mod the option count, so every run of n
+  consecutive seeds visits all n options of a dimension, and random seeds stay
+  uniform. `test/style_seed.test.js` checks that 50 consecutive seeds cover
+  every option of every dimension. A starter-distance redraw redraws only
+  the palette.
+- Sound: a tone narrows the palettes and genres (`TONE_SOUND`); the genre
+  sets bpm, key and progression (`GENRE_SPECS`). Ambience is `auto` (the
+  world's own bed) most of the time, else `none` or any bed (`SEED_AMBIENCE`).
+- Characters: every set in `CHARACTER_SET_NAMES`, the everyday ones
+  (`NEUTRAL_CHARACTER_SETS`: office-team, startup-founders, students,
+  creators, city-crowd) twice as often as the themed ones; `generateCast`
+  builds 2–4 people for the set and palette.
+- Worlds: the `world` constraint is a kind or a list of kinds the seed picks
+  within. make and story plan pass the prompt's fits
+  (`promptConstraints`: `suggestWorld(prompt).worlds` when it matched a
+  topic); with no topic the seed draws a topic-neutral one (`SEED_WORLDS`:
+  abstract-stage, skyline, rooftop, park, city-street, home-desk). Day and
+  dusk come twice as often as night, except for premium and energetic tones.
+- Backgrounds lean towards subtle patterns and textures (flat is rare), each
+  with a `fade` and params drawn inside `SEED_BACKGROUND_PARAMS` (the
+  backgrounds kit's well-reading subranges; the kinds that take one also get
+  a `color` role, texture a `type`, motif a `shape`). Most non-glass panels get
+  a quiet `fill` (`SEED_PANEL_FILLS`, `PANEL_FILL_CHANCE`; intensity and amount
+  in the low quarter).
 - The brand frame is off (a generated style has no brand name); its kicker
   position, sections and progress line are still drawn, for when it is
   turned on.

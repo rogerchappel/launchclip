@@ -52,7 +52,7 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
     if (pack.layouts.panel.fill) assert.notEqual(pack.layouts.panel.fill.kind, "blobs");
     assert.equal(pack.ambient.background, pack.background.kind === "blobs");
     const { palette, music, ambience } = pack.sound;
-    assert.ok(palette && music.genre && music.key && Number.isInteger(music.progression) && ambience === "auto", pack.name);
+    assert.ok(palette && music.genre && music.key && Number.isInteger(music.progression) && ambience, pack.name);
     assert.ok(music.bpm >= music.bpm_range[0] && music.bpm <= music.bpm_range[1]);
   }
   // With no world in the direction, a topic-neutral world, mostly by day or dusk.
@@ -233,4 +233,43 @@ test("applyStyle hands the seeded fields to the story; the story's own values wi
   const own = applyStyle({ ...story, background: { kind: "flat" }, panel: { treatment: "solid" } }, pack).story;
   assert.deepEqual(own.background, { kind: "flat" });
   assert.deepEqual(own.panel, { treatment: "solid" });
+});
+
+test("50 consecutive seeds cover every option of every dimension", async () => {
+  const { WORLD_KINDS } = await import("../kit/core/worlds/index.mjs");
+  const { SEED_AMBIENCE, SEED_CHARACTER_SETS, SEED_DRAWING_STYLES, SEED_ICON_STYLES, SEED_ILLUSTRATIONS, SEED_MODULE_VARIANTS, SEED_MUSIC_GENRES, SEED_PANEL_TREATMENTS, SEED_SOUND_PALETTES, SEED_BACKGROUND_KINDS, THEMES, PALETTE_SCHEMES } = await import("../kit/core/style-seed.mjs");
+  for (const base of [0, 0x5eed0000, 0xfffffe00]) {
+    const run = Array.from({ length: 50 }, (_, i) => ((base + i) >>> 0).toString(16).padStart(8, "0"));
+    const packs = run.map((seed) => generateStyle({ seed }));
+    const names = (list) => list.map((entry) => (Array.isArray(entry) ? entry[0] : entry));
+    const dimensions = {
+      theme: [(p) => p.generated.theme, THEMES],
+      scheme: [(p) => p.generated.scheme, PALETTE_SCHEMES],
+      pairing: [(p) => p.generated.pairing, FONT_PAIRINGS.map((entry) => entry.id)],
+      grammar: [(p) => p.motion.grammar, ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"]],
+      panel: [(p) => p.layouts.panel.treatment, SEED_PANEL_TREATMENTS],
+      background: [(p) => p.background.kind, names(SEED_BACKGROUND_KINDS)],
+      "ambient level": [(p) => p.ambient.level, ["off", "subtle", "standard", "lively"]],
+      "icon style": [(p) => p.vocabulary.icon_style, SEED_ICON_STYLES],
+      illustration: [(p) => p.vocabulary.illustration, SEED_ILLUSTRATIONS],
+      "drawing style": [(p) => p.cast.drawing_style, SEED_DRAWING_STYLES],
+      "character set": [(p) => p.cast.set, names(SEED_CHARACTER_SETS)],
+      world: [(p) => p.world.kind, SEED_WORLDS],
+      "world time": [(p) => p.world.time, ["day", "dusk", "night"]],
+      "sound palette": [(p) => p.sound.palette, SEED_SOUND_PALETTES],
+      genre: [(p) => p.sound.music.genre, SEED_MUSIC_GENRES],
+      ambience: [(p) => p.sound.ambience, names(SEED_AMBIENCE)]
+    };
+    for (const [id, list] of Object.entries(SEED_MODULE_VARIANTS)) dimensions[`variant ${id}`] = [(p) => p.variants[id], list];
+    for (const [dimension, [get, options]] of Object.entries(dimensions)) {
+      const seen = new Set(packs.map(get));
+      assert.deepEqual(options.filter((option) => !seen.has(option)), [], `${dimension} from ${run[0]}`);
+    }
+    // With a topic, the fitting worlds; across every world, every one is drawn.
+    const everywhere = new Set(run.map((seed) => generateStyle({ seed, constraints: { world: [...WORLD_KINDS] } }).world.kind));
+    assert.deepEqual(WORLD_KINDS.filter((kind) => !everywhere.has(kind)), [], `every world from ${run[0]}`);
+  }
+  // The catalogue's modules with designed variants, catalogue H included, are all drawn.
+  const { moduleVariants } = await import("../kit/core/modules.mjs");
+  assert.deepEqual(Object.keys(SEED_MODULE_VARIANTS).sort(), Object.keys(moduleVariants()).sort());
 });
