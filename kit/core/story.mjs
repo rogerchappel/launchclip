@@ -43,7 +43,7 @@ const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
 // style: a style pack (src/story_style.js merges it before validation);
 // motion, camera, ambient, layout: style-driven settings, carried through as data.
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout"]);
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -456,6 +456,8 @@ export function validateStory(story, { modules } = {}) {
   }
 
   if (usesWords && !(isObject(audio) && audio.words) && !narrated) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
+  // Footage layouts (kit/core/footage-layout.mjs).
+  validateSections(story, { err, warn });
 
   return { ok: errors.length === 0, errors, warnings };
 }
@@ -560,6 +562,11 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
       ? range.map((value, k) => resolve(value, `overlays[${index}].hide[${h}][${k}]`))
       : range);
   });
+  if (Array.isArray(copy.sections)) copy.sections.forEach((section, index) => {
+    if (!isObject(section)) return;
+    if (section.start !== undefined) section.start = resolve(section.start, `sections[${index}].start`);
+    if (section.end !== undefined) section.end = resolve(section.end, `sections[${index}].end`);
+  });
   copy.scenes = scenes
     .map((scene, index) => ({ scene, index }))
     .sort((a, b) => (Number(a.scene?.start) - Number(b.scene?.start)) || ((a.scene?.track ?? 0) - (b.scene?.track ?? 0)) || a.index - b.index)
@@ -605,6 +612,8 @@ export function deriveBoundaries(story) {
     const final = pool.reduce((best, entry) => (!best || entry.scene.end >= best.scene.end) ? entry : best, null);
     boundaries.push(boundary(ending.loop_to, final?.scene.id ?? null, ending.in, ms(duration - ending.in.dur)));
   }
+  // Footage layouts: each layout-shift between sections is a boundary.
+  if (story?.lane === "footage-led" && Array.isArray(story?.sections) && story.sections.length) boundaries.push(...(layoutSpans(story)?.boundaries ?? []));
   return boundaries.sort((a, b) => a.start_seconds - b.start_seconds);
 }
 
@@ -904,4 +913,134 @@ function assetPath(value, path, err) {
   if (!projectPath(value, path, err)) return false;
   if (!value.replace(/^\.\//, "").startsWith("assets/")) { err(`${path} must be a project-relative path under assets/; got ${JSON.stringify(value)}`); return false; }
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Footage layouts (story.sections; geometry and rendering live in
+// kit/core/footage-layout.mjs)
+
+export const FOOTAGE_LAYOUTS = Object.freeze(["full", "split-left", "split-right", "framed", "stacked", "insert"]);
+export const SECTION_TRANSITIONS = Object.freeze(["layout-shift", "cut"]);
+export const PANEL_ROLES = Object.freeze(["bg", "primary", "accent", "paper", "ink"]);
+export const ROOM_MODES = Object.freeze(["keep", "dim", "replace"]);
+export const LAYOUT_SIDES = Object.freeze({ framed: ["left", "right", "top", "bottom"], stacked: ["top", "bottom"] });
+// A layout-shift runs this long by default (seconds), and at most 2 s.
+export const LAYOUT_SHIFT = 0.5;
+// Room treatments for a section's `room`.
+export const SECTION_ROOMS = Object.freeze({ dim: Object.freeze({ dim: 0.55 }), replace: Object.freeze({ hide: true }) });
+
+const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "transition"]);
+const SECTION_HEX6 = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Check story.sections (validateStory calls this). err/warn take a message.
+ * Times may be unresolved anchors here; resolved stories are checked again.
+ */
+export function validateSections(story, { err, warn = () => {} } = {}) {
+  const sections = story?.sections;
+  if (sections === undefined) return;
+  if (!Array.isArray(sections)) { err("sections must be a list of {id, start, end, layout}"); return; }
+  if (sections.length && story.lane !== "footage-led") err("sections hold footage layouts, which need the footage-led lane");
+  const portrait = Number(story.format?.height) > Number(story.format?.width);
+  const ids = new Set();
+  let previous = null;
+  sections.forEach((section, index) => {
+    const path = `sections[${index}]`;
+    if (!isObject(section)) { err(`${path} must be {id, start, end, layout}`); return; }
+    for (const key of Object.keys(section)) if (!SECTION_KEYS.has(key)) err(`${path}.${key} is not supported (allowed: ${[...SECTION_KEYS].join(", ")})`);
+    if (typeof section.id !== "string" || !/^[a-z0-9][a-z0-9-]{0,47}$/i.test(section.id)) err(`${path}.id must be a short id (letters, digits, hyphens)`);
+    else if (ids.has(section.id)) err(`${path}.id "${section.id}" is used twice`);
+    else ids.add(section.id);
+    if (!FOOTAGE_LAYOUTS.includes(section.layout)) err(`${path}.layout must be one of ${FOOTAGE_LAYOUTS.join(", ")}`);
+    if (section.layout === "stacked" && !portrait) err(`${path}.layout "stacked" is for 9:16; use split-left or split-right in a landscape story`);
+    if (section.side !== undefined) {
+      const sides = LAYOUT_SIDES[section.layout];
+      if (!sides) err(`${path}.side applies only to ${Object.keys(LAYOUT_SIDES).join(" and ")}`);
+      else if (!sides.includes(section.side)) err(`${path}.side must be one of ${sides.join(", ")}`);
+    }
+    if (section.panel !== undefined && !PANEL_ROLES.includes(section.panel) && !SECTION_HEX6.test(String(section.panel))) err(`${path}.panel must be a brand colour (${PANEL_ROLES.join(", ")}) or #rrggbb`);
+    if (section.ring !== undefined && !(typeof section.ring === "number" && section.ring >= 0 && section.ring <= 24)) err(`${path}.ring must be 0–24 px`);
+    if (section.room !== undefined && !ROOM_MODES.includes(section.room)) err(`${path}.room must be one of ${ROOM_MODES.join(", ")}`);
+    if (section.zoom !== undefined && !(typeof section.zoom === "number" && section.zoom >= 1 && section.zoom <= 1.6)) err(`${path}.zoom must be 1–1.6`);
+    if (section.transition !== undefined) {
+      const transition = section.transition;
+      if (!isObject(transition) || !SECTION_TRANSITIONS.includes(transition.type)) err(`${path}.transition must be {type: ${SECTION_TRANSITIONS.map((type) => `"${type}"`).join(" | ")}, dur?}`);
+      else if (transition.dur !== undefined && !(typeof transition.dur === "number" && transition.dur > 0 && transition.dur <= 2)) err(`${path}.transition.dur must be > 0 and at most 2 s`);
+    }
+    if (typeof section.start === "number" && typeof section.end === "number") {
+      if (!(section.end > section.start)) err(`${path} needs end after start`);
+      else if (previous && section.start < previous.end - EPS) err(`${path} starts before ${previous.id ?? "the section before it"} ends; sections may not overlap`);
+      previous = section;
+    } else if (section.start === undefined || section.end === undefined) err(`${path} needs start and end (seconds or anchors)`);
+    if (section.layout === "full" && (section.panel !== undefined || section.ring !== undefined)) warn(`${path}: a full section has no panel; panel and ring do nothing`);
+  });
+}
+
+/** Resolved sections, sorted and frame-snapped: [{id, start, end, layout, side, panel (#hex), ring, room, zoom, transition: {type, dur}}]. */
+export function storySections(story) {
+  const list = Array.isArray(story?.sections) ? story.sections : [];
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const snap = (value) => round6(Math.round(Number(value) * fps) / fps);
+  const colors = story?.brand?.colors ?? {};
+  return list
+    .filter((section) => isObject(section) && typeof section.start === "number" && typeof section.end === "number" && FOOTAGE_LAYOUTS.includes(section.layout))
+    .map((section) => ({
+      id: section.id,
+      start: snap(Math.max(0, section.start)),
+      end: snap(Math.min(duration, section.end)),
+      layout: section.layout,
+      side: section.side ?? defaultSide(section.layout, story),
+      panel: SECTION_HEX6.test(String(section.panel)) ? section.panel : colors[section.panel ?? "bg"] ?? colors.bg ?? "#000000",
+      ring: typeof section.ring === "number" ? section.ring : section.layout === "framed" ? 6 : 0,
+      ringColor: colors.primary ?? "#ffffff",
+      room: section.room ?? "keep",
+      zoom: typeof section.zoom === "number" ? section.zoom : 1,
+      transition: { type: section.transition?.type ?? "layout-shift", dur: Number(section.transition?.dur ?? LAYOUT_SHIFT) }
+    }))
+    .filter((section) => section.end > section.start + EPS)
+    .sort((a, b) => a.start - b.start);
+}
+
+function defaultSide(layout, story) {
+  // Graphics on top: the caption band runs across the lower half.
+  if (layout === "stacked") return "bottom";
+  if (layout === "framed") return Number(story?.format?.height) > Number(story?.format?.width) ? "top" : "left";
+  return null;
+}
+
+
+/**
+ * The timeline as back-to-back layout spans: the sections and the `full`
+ * gaps between them, each with the layout-shift that brings it in
+ * (`shift: {start, frames}` or null for none or a cut), plus the shifts as
+ * boundaries. Null without sections.
+ * → {sections, spans, boundaries}
+ */
+export function layoutSpans(story) {
+  const sections = storySections(story);
+  if (!sections.length) return null;
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const full = { id: null, layout: "full", side: null, panel: null, ring: 0, zoom: 1, room: "keep", transition: { type: "layout-shift", dur: LAYOUT_SHIFT } };
+  const spans = [];
+  let clock = 0;
+  for (const section of sections) {
+    if (section.start > clock + EPS) spans.push({ ...full, start: clock, end: section.start });
+    spans.push(section);
+    clock = section.end;
+  }
+  if (clock < duration - EPS) spans.push({ ...full, start: clock, end: duration });
+  const key = (span) => (span.layout === "full" ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom]));
+  const boundaries = [];
+  spans.forEach((span, index) => {
+    span.shift = null;
+    if (index === 0 || key(span) === key(spans[index - 1])) return;
+    const frames = span.transition.type === "cut" ? 0 : Math.round(Math.min(span.transition.dur, span.end - span.start, 2) * fps);
+    span.shift = { start: span.start, frames };
+    if (frames < 1) return;
+    const from = spans[index - 1];
+    boundaries.push({ boundary_id: span.id ? `${span.id}-layout` : `${from.id}-layout-out`, sequence_id: null, kind: "ordinary", type: "layout-shift", start_seconds: round6(span.start), duration_seconds: round6(frames / fps), from_id: from.id ?? null, to_id: span.id ?? null });
+  });
+  return { sections, spans, boundaries };
 }
