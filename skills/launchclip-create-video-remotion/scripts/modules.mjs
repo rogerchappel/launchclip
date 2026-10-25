@@ -23,7 +23,7 @@ import { profileGeometry } from './layout-check.mjs';
 import { brandFrameSafe, intersectRects } from './brand-frame.mjs';
 import { sceneAmbient } from './ambient.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
-import { layoutAt } from './footage-layout.mjs';
+import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -164,16 +164,16 @@ export function resolveModule(scene, story, { track, end } = {}) {
     if (problems.length) throw new Error(problems.join('; '));
     // Brand frame (kit/core/brand-frame.mjs): the area a module may use
     // without colliding with the frame, as model.frame.safe; inside a footage
-    // layout's panel (layoutAt(...).safe) it is that panel's safe area
+    // layout's panel (sceneLayoutAt(...).safe) it is that panel's safe area
     // narrowed to the frame's.
     const frameSafe = story?.frame ? brandFrameSafe(story) : null;
     if (frameSafe) {
-      const panel = Number.isFinite(Number(scene?.start)) ? layoutAt(story, Number(scene.start))?.safe ?? null : null;
+      const panel = Number.isFinite(Number(scene?.start)) ? sceneLayoutAt(story, Number(scene.start), Number.isFinite(Number(scene?.end)) ? Number(scene.end) : Number(scene.start))?.safe ?? null : null;
       model.frame = { ...(model.frame && typeof model.frame === 'object' ? model.frame : {}), safe: intersectRects(panel ?? model.frame?.safe, frameSafe) };
     }
     return model;
   } catch (error) {
-    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}`);
+    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}${sectionFitHint(scene, story, { end: finalEnd })}`);
   }
 }
 
@@ -387,6 +387,21 @@ export function moduleFit(scene, story, { width, height, end } = {}) {
  * "; checklist needs 640 px height at width 900 (or width ≥ 1100 at this
  * height)". Empty when the error is not about geometry or no size fits.
  */
+/**
+ * For a footage-led scene placed in the full frame although it overlaps a
+ * section: which section it fell outside and by how much, so a fitting
+ * error ("does not fit beside the presenter") names the real cause.
+ */
+export function sectionFitHint(scene, story, { end } = {}) {
+  if (story?.lane !== 'footage-led' || scene?.insert === true) return '';
+  const start = Number(scene?.start), finish = Number(end ?? scene?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || sceneLayoutAt(story, start, finish)) return '';
+  const section = storySections(story).find((entry) => entry.layout !== 'full' && Math.min(finish, entry.end) - Math.max(start, entry.start) > 1e-6);
+  if (!section) return '';
+  const before = section.start - start;
+  return `; it was placed in the full frame because it falls outside section ${section.id} (${section.layout}, ${round(section.start)}–${round(section.end)} s): ${before > 0 ? `it starts ${round(before)} s before it` : `it ends ${round(finish - section.end)} s after it`}; move it inside ${section.id}`;
+}
+
 export function rectFitHint(scene, story, message, { end } = {}) {
   const rect = scene?.params?.rect;
   if (!rect || typeof rect !== 'object' || !GEOMETRY_ERROR.test(String(message ?? ''))) return '';
@@ -440,7 +455,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     // of the face and the caption band (docs/SUBJECT_EFFECTS_RFC.md §6.2).
     // In a footage layout's panel (kit/core/footage-layout.mjs) the card
     // fits the panel's safe area instead.
-    const layout = story?.lane === 'footage-led' ? layoutAt(story, start) : null;
+    const layout = story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null;
     const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led'
       ? (layout?.safe ? panelChecklistRect(model, layout.safe, format) : footageChecklistRect(model, subjectContext(story, start, { end: start + duration }), format))
       : null;
@@ -455,7 +470,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? layoutAt(story, start) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

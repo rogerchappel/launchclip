@@ -9,7 +9,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {deriveBoundaries, resolveStory, validateStory} from '../kit/core/story.mjs';
 import {resolveModule} from '../kit/core/modules.mjs';
-import {captionZone, captionZones, layoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '../kit/core/footage-layout.mjs';
+import {captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '../kit/core/footage-layout.mjs';
 import {captionPlan, captionZoneIndex} from '../kit/core/captions.mjs';
 import {elementsFromStory, profileGeometry} from '../kit/core/layout-check.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
@@ -232,4 +232,30 @@ test('the compiler and the layout check place captions in the zones', async () =
   const source = readFileSync(join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
   assert.equal((source.match(/zones=\{layout\?\.captions\}/g) ?? []).length, 2, 'Remotion hands WordCaptions the same zones');
   assert.match(readFileSync(join(ROOT, 'kit/hyperframes/story-compiler.mjs'), 'utf8'), /zones: layout\?\.captions/);
+});
+
+test('a scene that starts a moment before its section takes the section layout, with a warning', () => {
+  const sections = [{id: 's5', start: 2, end: 8, layout: 'split-left'}];
+  const list = (start, end) => ({id: 'inside', module: 'checklist', track: 1, start, end, params: {title: 'Inside', rows: [{label: 'Engineering', status: 'active', at: 0.3}, {label: 'Security', status: 'active', at: 0.6}]}});
+  const early = story(sections, {scenes: [list(1.8, 6)]});
+  assert.equal(layoutAt(early, 1.8), null, 'the start alone is outside the section');
+  assert.equal(sceneLayoutAt(early, 1.8, 6).section, 's5');
+  assert.equal(resolveModule(early.scenes[0], resolveStory(early)).subjectPlacement, 'panel');
+  assert.deepEqual(validateStory(early).warnings.filter((w) => w.startsWith('scene inside')), ["scene inside: starts 0.2 s before section s5 (2 s); it is placed in s5's split-left layout; move its start to 2"]);
+  // Mostly outside: the full frame, and the warning says why.
+  const outside = story(sections, {scenes: [list(0.5, 2.5)]});
+  assert.equal(sceneLayoutAt(outside, 0.5, 2.5), null);
+  assert.match(validateStory(outside).warnings.join('\n'), /scene inside: starts 1\.5 s before section s5 \(2 s\) but is mostly outside it, so it is placed in the full frame, not s5's split-left panel; move it inside s5 \(2–8 s\) or out of it/);
+  // Ending past a section, mostly inside.
+  assert.match(validateStory(story(sections, {scenes: [list(5, 8.3)]})).warnings.join('\n'), /ends 0\.3 s after section s5 \(8 s\); it is placed in s5's split-left layout; move its end to 8/);
+  // Inside a section, or an insert: no warning.
+  assert.deepEqual(validateStory(story(sections, {scenes: [list(2, 8)]})).warnings.filter((w) => w.startsWith('scene ')), []);
+  assert.deepEqual(validateStory(story(sections, {scenes: [{...list(1, 3), insert: true, track: 0}]})).warnings.filter((w) => w.startsWith('scene ')), []);
+});
+
+test('a fitting error names the section a scene fell outside', async () => {
+  const {sectionFitHint} = await import('../kit/core/modules.mjs');
+  const value = resolveStory(story([{id: 's5', start: 2, end: 8, layout: 'split-left'}], {scenes: [{id: 'card', module: 'lower-third', track: 1, start: 0.5, end: 2.5, params: {name: 'Ada'}}]}));
+  assert.equal(sectionFitHint(value.scenes[0], value), '; it was placed in the full frame because it falls outside section s5 (split-left, 2–8 s): it starts 1.5 s before it; move it inside s5');
+  assert.equal(sectionFitHint({...value.scenes[0], start: 1.9, end: 6}, value), '', 'snapped into the section: no hint');
 });
