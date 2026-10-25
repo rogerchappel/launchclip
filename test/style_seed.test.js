@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  AVOID_LOOKS, FONT_PAIRINGS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
+  AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
   fingerprintKey, generateStyle, hexToOklch, nearestStarter, normalizeSeed, oklchToHex, paletteContrast,
   randomSeed, seedSummaryLine, styleDistance, styleFingerprint, toneFromText
 } from "../kit/core/style-seed.mjs";
@@ -36,7 +36,15 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
   // Subtle patterns and textures most of the time, not flat fills.
   assert.ok(packs.filter((pack) => pack.background.kind === "flat").length <= 8);
   assert.ok(packs.filter((pack) => pack.layouts.panel.fill).length >= 15);
+  const inRange = (kind, params, where, { fill = false } = {}) => {
+    for (const [name, [lo, hi]] of Object.entries(SEED_BACKGROUND_PARAMS[kind] ?? {})) {
+      const top = fill && ["intensity", "amount"].includes(name) ? lo + (hi - lo) * 0.25 : hi;
+      assert.ok(params[name] >= lo && params[name] <= top + 0.01, `${where} ${kind}.${name} ${params[name]}`);
+    }
+  };
   for (const pack of packs) {
+    inRange(pack.background.kind, pack.background.params, pack.name);
+    if (pack.layouts.panel.fill) inRange(pack.layouts.panel.fill.kind, pack.layouts.panel.fill.params, pack.name, { fill: true });
     if (pack.layouts.panel.fill) assert.notEqual(pack.layouts.panel.fill.kind, "blobs");
     assert.equal(pack.ambient.background, pack.background.kind === "blobs");
     const { palette, music, ambience } = pack.sound;
