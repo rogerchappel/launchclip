@@ -1,0 +1,97 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "short-talking-head",
+  "title": "Short talking head",
+  "description": "A presenter on camera, dressed with graphics, for Shorts, Reels and TikTok.",
+  "format": "footage-led",
+  "match": {
+    "lanes": [
+      "footage-led"
+    ],
+    "aspects": [
+      "9:16"
+    ],
+    "platforms": [
+      "youtube-shorts",
+      "instagram-reels",
+      "tiktok"
+    ]
+  },
+  "duration_seconds": [
+    5,
+    60
+  ],
+  "references": 0,
+  "provenance": {
+    "kind": "seed",
+    "note": "Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.",
+    "sources": []
+  },
+  "measures": {
+    "shot_seconds": {
+      "p10": 0.8,
+      "p50": 2.2,
+      "p90": 5
+    },
+    "visual_changes_per_min": {
+      "p10": 10,
+      "p50": 22,
+      "p90": 45
+    },
+    "coverage": {
+      "p10": 0.35,
+      "p50": 0.6,
+      "p90": 0.92
+    },
+    "face_time": {
+      "p10": 0.45,
+      "p50": 0.75,
+      "p90": 1
+    },
+    "longest_undressed_seconds": {
+      "p50": 4,
+      "p90": 8
+    },
+    "first_visual_seconds": {
+      "p50": 0.5,
+      "p90": 1.5
+    },
+    "text_hold_seconds": {
+      "p10": 0.8,
+      "p50": 2,
+      "p90": 5
+    },
+    "caption_words_on_screen": {
+      "p50": 3,
+      "p90": 6
+    },
+    "layout_changes_per_min": {
+      "p50": 2,
+      "p90": 10
+    },
+    "subject_effect_share": {
+      "p50": 0.2,
+      "p90": 0.35
+    },
+    "flow_velocity_p90": {
+      "p10": 0,
+      "p50": 1.1,
+      "p90": 6
+    },
+    "hold_ratio": {
+      "p90": 0.995
+    },
+    "motion_bursts_per_min": {
+      "p10": 0
+    },
+    "change_energy_p50": {
+      "p10": 0
+    },
+    "first_motion_seconds": {
+      "p90": 2
+    },
+    "hook_events": {
+      "p10": 1
+    }
+  }
+}

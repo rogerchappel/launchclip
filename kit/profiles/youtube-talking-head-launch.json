@@ -1,0 +1,97 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "youtube-talking-head-launch",
+  "title": "YouTube talking-head launch",
+  "description": "A founder or presenter launch video, 1–5 minutes in 16:9, for YouTube and landing pages.",
+  "format": "footage-led",
+  "match": {
+    "lanes": [
+      "footage-led"
+    ],
+    "aspects": [
+      "16:9",
+      "1:1"
+    ],
+    "platforms": [
+      "youtube",
+      "landing-page"
+    ]
+  },
+  "duration_seconds": [
+    60,
+    300
+  ],
+  "references": 0,
+  "provenance": {
+    "kind": "seed",
+    "note": "Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.",
+    "sources": []
+  },
+  "measures": {
+    "shot_seconds": {
+      "p10": 1.2,
+      "p50": 3.8,
+      "p90": 11
+    },
+    "visual_changes_per_min": {
+      "p10": 6,
+      "p50": 16,
+      "p90": 32
+    },
+    "coverage": {
+      "p10": 0.35,
+      "p50": 0.62,
+      "p90": 0.9
+    },
+    "face_time": {
+      "p10": 0.45,
+      "p50": 0.72,
+      "p90": 0.95
+    },
+    "longest_undressed_seconds": {
+      "p50": 8,
+      "p90": 14
+    },
+    "first_visual_seconds": {
+      "p50": 0.5,
+      "p90": 2
+    },
+    "text_hold_seconds": {
+      "p10": 1,
+      "p50": 2.4,
+      "p90": 6
+    },
+    "caption_words_on_screen": {
+      "p50": 3,
+      "p90": 6
+    },
+    "layout_changes_per_min": {
+      "p50": 2.5,
+      "p90": 6
+    },
+    "subject_effect_share": {
+      "p50": 0.15,
+      "p90": 0.35
+    },
+    "flow_velocity_p90": {
+      "p10": 0,
+      "p50": 1.1,
+      "p90": 6
+    },
+    "hold_ratio": {
+      "p90": 0.995
+    },
+    "motion_bursts_per_min": {
+      "p10": 0
+    },
+    "change_energy_p50": {
+      "p10": 0
+    },
+    "first_motion_seconds": {
+      "p90": 2
+    },
+    "hook_events": {
+      "p10": 1
+    }
+  }
+}
