@@ -9,6 +9,7 @@
 // - palette: k-means (k = 8, deterministic k-means++ seeding) over pixels of
 //   frames sampled across each video, downsampled to 160 px wide; roles by
 //   luminance and saturation with contrast enforced (kit/core/style.mjs);
+//   plus a vivid-hue histogram, so small accents are seen (style check);
 // - pacing: cuts and shot lengths from src/render_motion_analysis.js (ffmpeg
 //   scene scores), mapped to a motion grammar and transition preference;
 // - energy: frame-difference activity (1 - hold ratio) → ambient level;
@@ -141,6 +142,30 @@ export function pixelsFromFrames(frames, { step = 2 } = {}) {
   const pixels = [];
   for (const frame of frames) for (let i = 0; i + 2 < frame.data.length; i += 3 * step) pixels.push([frame.data[i], frame.data[i + 1], frame.data[i + 2]]);
   return pixels;
+}
+
+/**
+ * Saturated pixels by hue: the share of all sampled pixels (every `step`-th)
+ * that are vivid (HSL saturation > 0.4, lightness 0.2–0.85) in each of `bins`
+ * hue bins (bin 0 starts at red). A small accent (an orange kicker, icons, one
+ * caption word) shows here even when k-means folds it into a bigger cluster.
+ * → {share, hues: [share per bin]}
+ */
+export function vividHues(frames, { bins = 24, step = 2 } = {}) {
+  const hues = new Array(bins).fill(0);
+  let total = 0, vivid = 0;
+  for (const frame of frames) for (let i = 0; i + 2 < frame.data.length; i += 3 * step) {
+    total += 1;
+    const r = frame.data[i] / 255, g = frame.data[i + 1] / 255, b = frame.data[i + 2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2, d = max - min;
+    if (!d || l < 0.2 || l > 0.85) continue;
+    if ((l > 0.5 ? d / (2 - max - min) : d / (max + min)) <= 0.4) continue;
+    const h = (max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
+    hues[Math.min(bins - 1, Math.floor(h / (360 / bins)))] += 1;
+    vivid += 1;
+  }
+  return { share: total ? round(vivid / total, 5) : 0, hues: hues.map((count) => (total ? round(count / total, 5) : 0)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +362,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
   const image = Boolean(options.image);
   const { info, frames } = await sampleFrames(resolved, { count: options.frames ?? 24, image }, run);
   const palette = paletteClusters(pixelsFromFrames(frames), { k: 8 });
+  const vivid = vividHues(frames);
   const captions = image ? null : detectCaptions(frames);
   const layouts = image ? null : detectLayouts(frames);
   let pacing = null, energy = null, sound = null;
@@ -378,7 +404,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
       };
     } else sound = { audio: false };
   }
-  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, captions, layouts, pacing, energy, sound };
+  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, vivid, captions, layouts, pacing, energy, sound };
 }
 
 // ---------------------------------------------------------------------------
