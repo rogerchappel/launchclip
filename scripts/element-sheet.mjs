@@ -12,7 +12,7 @@
 //
 //   node scripts/element-sheet.mjs [--modules bar-chart,pie-chart]
 //     [--aspects 9:16,16:9] [--at settled|build|2.4] [--out qa/elements/sheet.png]
-//     [--parity qa/parity --prefix h-] [--tile 420]
+//     [--parity qa/parity --prefix h-] [--sample mid-hold] [--tile 420]
 import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +29,7 @@ export const FORMATS = Object.freeze({'9:16': {width: 1080, height: 1920, fps: 3
 export const SCENE = 4;
 
 function args(argv) {
-  const out = {modules: null, aspects: ['9:16', '16:9'], at: 'settled', out: path.join(ROOT, 'qa', 'elements', 'sheet.png'), parity: null, prefix: 'h-', tile: 420};
+  const out = {modules: null, aspects: ['9:16', '16:9'], at: 'settled', out: path.join(ROOT, 'qa', 'elements', 'sheet.png'), parity: null, prefix: 'h-', tile: 420, sample: 'mid-hold'};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--modules') out.modules = argv[++i].split(',');
@@ -39,6 +39,7 @@ function args(argv) {
     else if (a === '--parity') out.parity = path.resolve(argv[++i]);
     else if (a === '--prefix') out.prefix = argv[++i];
     else if (a === '--tile') out.tile = Number(argv[++i]);
+    else if (a === '--sample') out.sample = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
   return out;
@@ -98,7 +99,7 @@ async function main(argv) {
           try { report = JSON.parse(await readFile(path.join(dir, 'report.json'), 'utf8')); } catch { /* not rendered */ }
           // Only variants the run rendered (every variant in portrait, the default in landscape).
           if (!report) continue;
-          const still = report.samples.find(s => s.name === 'mid-hold') ?? report.samples.at(-2);
+          const still = report.samples.find(s => s.name === opts.sample) ?? report.samples.find(s => s.name === 'mid-hold') ?? report.samples.at(-2);
           tiles.push({name: `${name} · ssim ${report.minSsim.toFixed(3)}`, width: width * scale, html: `<img src="${pathToFileURL(path.join(dir, still.hyperframes)).href}" style="width:${width * scale}px;height:${TILE_H}px">`});
           continue;
         }
