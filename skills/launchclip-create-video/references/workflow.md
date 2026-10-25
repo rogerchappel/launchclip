@@ -118,7 +118,10 @@ polish; 0-1, moving targets inside the profile band only).
   scene. Name the kicker and sections with `"frame": {"kicker": {"label":
   "Inside Ship Mode"}, "labels": [{"scene": "<id>", "label": "How it works"}]}`
   (`"frame": false` turns it off). Modules get its safe area as
-  `model.frame.safe`.
+  `model.frame.safe`. Its text follows each scene's backdrop: `frame.color`
+  stays while it contrasts with the scene (a cast set's light wall, a dark
+  plate), else the frame takes the brand colour that does. To force a colour
+  for a stretch, add `"color"` (a brand role or hex) to that `labels` entry.
 - Turn a dial for one video with `"style": {"name": "<name>", "dials":
   {"energy": 0.3}}`.
 - Check the merged result with `launchclip story validate storyboard.json`; its
