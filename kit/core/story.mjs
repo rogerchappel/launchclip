@@ -47,10 +47,25 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
-  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED }
+  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
+  "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
+  "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.02, 0.12], speed: BG_SPEED },
+  motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.02, 0.2], angle: [0, 180], speed: BG_SPEED },
+  texture: { amount: BG_UNIT, scale: BG_SCALE }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
+// Option params per kind (kit/core/backgrounds.mjs BACKGROUND_OPTIONS): color
+// on patterned kinds, fade on every kind but blobs, a motif's shape, a
+// texture's type. Icon kinds also take icons: "auto" or 1–8 icon names.
+const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
+export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
+  ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
+  ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
+  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
+  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
+}])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
@@ -862,28 +877,34 @@ function validateAmbient(value, path, err) {
 
 // The same rules as kit/core/backgrounds.mjs backgroundErrors(), kept here so
 // this file stays import-free.
-function validateBackground(value, err) {
+function validateBackground(value, err, path = "background") {
   if (value === undefined || value === null) return;
-  if (!isObject(value)) { err("background must be an object {kind, params?}"); return; }
-  for (const key of Object.keys(value)) if (!["kind", "params"].includes(key)) err(`background.${key} is not supported (allowed: kind, params)`);
-  if (!STORY_BACKGROUND_KINDS.includes(value.kind)) { err(`background.kind must be one of ${STORY_BACKGROUND_KINDS.join(", ")}`); return; }
+  if (!isObject(value)) { err(`${path} must be an object {kind, params?}`); return; }
+  for (const key of Object.keys(value)) if (!["kind", "params"].includes(key)) err(`${path}.${key} is not supported (allowed: kind, params)`);
+  if (!STORY_BACKGROUND_KINDS.includes(value.kind)) { err(`${path}.kind must be one of ${STORY_BACKGROUND_KINDS.join(", ")}`); return; }
   if (value.params === undefined) return;
-  if (!isObject(value.params)) { err("background.params must be an object"); return; }
-  const spec = STORY_BACKGROUND_PARAMS[value.kind];
-  const colored = !["flat", "paper", "mesh", "blobs"].includes(value.kind);
-  const allowed = [...Object.keys(spec), ...(colored ? ["color"] : [])];
+  if (!isObject(value.params)) { err(`${path}.params must be an object`); return; }
+  const spec = STORY_BACKGROUND_PARAMS[value.kind], options = STORY_BACKGROUND_OPTIONS[value.kind];
+  const icons = value.kind === "icon-pattern" || value.kind === "icon-scatter";
+  const allowed = [...Object.keys(spec), ...Object.keys(options), ...(icons ? ["icons"] : [])];
   for (const [key, given] of Object.entries(value.params)) {
-    if (!allowed.includes(key)) { err(`background.params.${key} is not supported for ${value.kind}${allowed.length ? ` (allowed: ${allowed.join(", ")})` : " (it takes no params)"}`); continue; }
-    if (key === "color") { if (!STORY_BACKGROUND_COLORS.includes(given)) err(`background.params.color must be one of ${STORY_BACKGROUND_COLORS.join(", ")}`); continue; }
+    if (!allowed.includes(key)) { err(`${path}.params.${key} is not supported for ${value.kind}${allowed.length ? ` (allowed: ${allowed.join(", ")})` : " (it takes no params)"}`); continue; }
+    if (options[key]) { if (!options[key].includes(given)) err(`${path}.params.${key} must be one of ${options[key].join(", ")}`); continue; }
+    if (key === "icons") { if (given !== "auto" && !(Array.isArray(given) && given.length >= 1 && given.length <= 8 && given.every(nonEmpty))) err(`${path}.params.icons must be "auto" or a list of 1–8 icon names`); continue; }
     const [min, max] = spec[key];
-    if (!(typeof given === "number" && given >= min && given <= max)) err(`background.params.${key} must be a number from ${min} to ${max}`);
+    if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }
 }
 
 function validatePanel(value, err) {
   if (value === undefined || value === null) return;
-  if (!isObject(value)) { err("panel must be an object {treatment, radius?}"); return; }
-  for (const key of Object.keys(value)) if (!["treatment", "radius"].includes(key)) err(`panel.${key} is not supported (allowed: treatment, radius)`);
+  if (!isObject(value)) { err("panel must be an object {treatment, radius?, fill?}"); return; }
+  for (const key of Object.keys(value)) if (!["treatment", "radius", "fill"].includes(key)) err(`panel.${key} is not supported (allowed: treatment, radius, fill)`);
+  // fill: a background drawn inside the panel (not blobs, which draw only on plates).
+  if (value.fill !== undefined) {
+    validateBackground(value.fill, err, "panel.fill");
+    if (isObject(value.fill) && value.fill.kind === "blobs") err("panel.fill.kind cannot be blobs (the ambient field draws only on plates)");
+  }
   if (!STORY_PANEL_TREATMENTS.includes(value.treatment)) err(`panel.treatment must be one of ${STORY_PANEL_TREATMENTS.join(", ")}`);
   if (value.radius !== undefined && !(typeof value.radius === "number" && value.radius >= 0 && value.radius <= 48)) err("panel.radius must be a number from 0 to 48 (px at a 1080 px short side)");
 }
