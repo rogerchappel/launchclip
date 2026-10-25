@@ -1502,6 +1502,19 @@ Where it runs:
 - `launchclip story long-form <project> [--dry-run]` runs it on a project's storyboard.json and DIRECTION.json; the skills call it after writing both.
 - The direction prompt carries `longFormLines()` for long stories, and `references/direction-map.md` carries them too.
 
+### Attention resets
+
+A long video needs a change of picture at a steady interval: a layout change, an insert or a section card (RFC §10.2). These are planned, not random.
+
+- **The measure.** `longest_without_reset_seconds` (check `max`) is the longest run between resets. `youtube-long-form` seeds it at p50 60 s (the planning target) and p90 120 s (the ceiling).
+  - `storyboardMeasures` reports it with `reset_times` and `intervals.unreset`. `resetTimes(story, scenes, {sections, inserts, duration})` counts each insert start, each `section-card` start (`RESET_MODULES`), and each layout change. Layout changes come from the story's footage `sections` and from the direction map's section layouts.
+- **Planning.** In the footage-led lane, the structure pass runs `planResets` after the cards and the promise. It reads the target and ceiling from the profile (`resetBand`, default 60/120 s). It splits every run longer than the target into equal parts and resets each split point:
+  - first, it makes the nearest overlay card an insert. The card must be within a third of the target, an insert-ready catalogue G card (`INSERT_READY_MODULES`), 1.5–10 s long, with nothing else on screen. The card loses its track, gains `insert: true` and a 0.25 s fade, and its map line becomes an insert line;
+  - else it adds a footage section `reset-n` (split-right, or stacked in portrait) for up to 20 s, where no section or insert is;
+  - else it warns.
+  The result is `resets: {target, ceiling, times, longest, promoted, sections}`.
+- **Checks.** The coverage gate fails a run past the ceiling (`COVERAGE_GATE_MEASURES`) and adds a `sparseness` finding per run. `story validate` reports it as an error, unlike the other bands, because the fix is structural: `launchclip story long-form` places the resets.
+
 ### Exports
 
 - **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).
