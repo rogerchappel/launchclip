@@ -1655,7 +1655,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
 | `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
-| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused |
+| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 
 ### The kit (`kit/core/characters/`)
 

@@ -112,6 +112,32 @@ test('character-cameo: a card beside one character; sit is refused', () => {
   assert.throws(() => resolveModule({...scene, params: {character: 'nobody'}}, {...story([scene]), cast: undefined}), /params\.character "nobody" is not a starter/);
 });
 
+test('character-cameo: keeps inside the brand frame safe area, and takes a rect (guided and bespoke tiers)', async () => {
+  const {brandFrameSafe} = await import('../kit/core/brand-frame.mjs');
+  const {planningPrompt} = await import('../kit/core/planning-prompt.mjs');
+  const scene = {id: 'cameo', module: 'character-cameo', start: 0, end: 4, params: {character: 'maya', pose: 'shrug', card: {kicker: 'Take 1', title: 'Heard as blame'}}};
+  const portrait = {format: {width: 1080, height: 1920, fps: 30, duration: 4}};
+  const plain = story([scene], portrait);
+  const framed = story([scene], {...portrait, title: 'Same couple', frame: {kicker: {label: 'Same couple'}, labels: [{scene: 'cameo', label: 'Take 1'}]}});
+  const safe = brandFrameSafe(framed);
+  // Without a frame the cameo starts at the profile safe zone's top, where a kicker would sit.
+  assert.ok(resolveModule(scene, plain).rect.y < safe.y);
+  const model = resolveModule(scene, framed);
+  assert.ok(model.rect.y >= safe.y && model.rect.y + model.rect.height <= safe.y + safe.height + 1e-6, JSON.stringify(model.rect));
+  assert.ok(model.content.cardBox.y >= safe.y, 'the card clears the kicker');
+  // params.rect places it, inside the frame's safe area.
+  const rect = {x: 120, y: 420, width: 820, height: 700};
+  const placed = resolveModule({...scene, params: {...scene.params, rect}}, framed);
+  assert.deepEqual(placed.rect, rect);
+  assert.ok(placed.content.cardBox.y >= rect.y && placed.content.actors[0].floor <= rect.y + rect.height);
+  assert.throws(() => resolveModule({...scene, params: {...scene.params, rect: {...rect, y: 300}}}, framed), /params\.rect\.y/);
+  // The registry lists rect, so the guided and bespoke planners may set it; the structured tier may not.
+  assert.ok('rect' in MODULES['character-cameo'].params);
+  const line = (tier) => planningPrompt({tier, lane: 'motion', format: portrait.format, brand}).split('\n').find((text) => /^- rect: .*brand frame/.test(text));
+  assert.match(line('guided'), /guided and bespoke tiers only/);
+  assert.equal(line('structured'), undefined);
+});
+
 test('story: cast is a story field; word anchors in cues and lines resolve to scene seconds', () => {
   const scene = {id: 'desk', module: 'cast-scene', start: 'word:Every', end: 6, params: {set: 'desk-laptop', cast: [
     {id: 'maya', pose: 'type', cues: [{at: 'word:again', pose: 'slump', expression: 'frustrated'}], says: [{from: 'word:It', to: 'word:again'}]}]}};
