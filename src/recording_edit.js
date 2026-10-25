@@ -187,7 +187,8 @@ export function planRecordingEdit(transcript, options = {}) {
   if (!trimSilence) {
     for (let index = 0; index < ranges.length; index++) {
       ranges[index].start = index === 0 ? 0 : ranges[index - 1].end;
-      const nextRetake = cuts.find((retake) => retake.start > groups[index].end);
+      // A word-level cut can start exactly where the kept word before it ends.
+      const nextRetake = cuts.find((retake) => retake.start >= groups[index].end);
       ranges[index].end = nextRetake?.start ?? duration;
       const precedingRetake = cuts.filter((retake) => retake.end <= groups[index].start).at(-1);
       if (precedingRetake) ranges[index].start = Math.max(ranges[index].start, precedingRetake.end);
