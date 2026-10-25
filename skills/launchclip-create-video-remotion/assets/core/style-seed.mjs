@@ -51,7 +51,8 @@ export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot
 // Per-kind param subranges that read well (from the backgrounds kit; every
 // value inside kit/core/backgrounds.mjs BACKGROUND_PARAMS is contrast-safe).
 // Panel fills take the low quarter of intensity and amount, so card text
-// stays calm. `color` applies to the patterned kinds.
+// stays calm. `color` goes only on the kinds that take it (BACKGROUND_OPTIONS
+// in kit/core/backgrounds.mjs); texture also draws its type.
 export const SEED_BACKGROUND_PARAMS = Object.freeze({
   texture: { amount: [0.3, 0.8], scale: [0.8, 1.4] },
   'grain-gradient': { angle: [0, 360], intensity: [0.25, 0.7], grain: [0.2, 0.6] },
@@ -64,7 +65,8 @@ export const SEED_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.2, 0.5] },
   paper: { grain: [0.3, 0.7], intensity: [0.2, 0.6] }
 });
-const PATTERNED = new Set(['texture', 'dot-grid', 'topographic', 'halftone', 'mesh', 'geometric', 'stripes']);
+const COLOR_KINDS = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays']);
+export const SEED_TEXTURES = Object.freeze(['noise', 'fibre', 'canvas', 'linen']);
 const CALM_PARAMS = new Set(['intensity', 'amount']);
 
 /** Seeded params for a background kind (a panel fill keeps intensity low). */
@@ -75,7 +77,9 @@ function drawBackgroundParams(s, kind, { fill = false } = {}) {
     params[name] = name === 'angle' ? Math.round(s.range(lo, top)) : round(s.range(lo, top), 2);
   }
   const color = s.pick(['primary', 'accent', 'paper']);
-  if (PATTERNED.has(kind)) params.color = color;
+  const texture = s.pick(SEED_TEXTURES);
+  if (COLOR_KINDS.has(kind)) params.color = color;
+  if (kind === 'texture') params.type = texture;
   return params;
 }
 
