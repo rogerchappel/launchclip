@@ -7,6 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { resolveAnchor } from "../kit/core/story.mjs";
 import { analyzeBeatsFile, analyzeSamples, beatsDocument, gridFromBpm, transformGrid } from "../src/music/beats.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -107,7 +108,7 @@ async function ffmpegAvailable() {
   try { await execFileAsync("ffmpeg", ["-version"]); return true; } catch { return false; }
 }
 
-test("synth-audio-kit beds: the analysed grid matches the bed's own BEATS.json", { timeout: 600_000 }, async (t) => {
+test("synth-audio-kit beds: the analysed grid matches the bed's own BEATS.json", { skip: mediaSkip(), timeout: 600_000 }, async (t) => {
   if (!(await ffmpegAvailable())) { t.skip("FFmpeg is not installed"); return; }
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-beats-"));
   try {

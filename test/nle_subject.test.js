@@ -10,6 +10,7 @@ import { readFcpxml } from "../src/nle/fcpxml.js";
 import { readOtio } from "../src/nle/otio.js";
 import { overlayPlan } from "../src/nle/timeline.js";
 import { readXmeml } from "../src/nle/xmeml.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -182,7 +183,7 @@ test("--overlays none exports no subject track", async (t) => {
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-hide_banner", "-decoders"], { stdio: "pipe" }).toString().includes("libvpx-vp9") || (() => { throw new Error("no libvpx-vp9"); })(); return true; } catch { return false; } })();
 
-test("transcodeMatte keeps the matte's alpha in ProRes 4444", { skip: !hasFfmpeg && "ffmpeg with libvpx-vp9 is not installed" }, async (t) => {
+test("transcodeMatte keeps the matte's alpha in ProRes 4444", { skip: mediaSkip(!hasFfmpeg && "ffmpeg with libvpx-vp9 is not installed") }, async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-matte-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const out = path.join(dir, "matte.mov");

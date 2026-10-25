@@ -13,10 +13,11 @@ import { runCli } from "../src/cli.js";
 import { checkRecipe, formatDoctor, similarity, surveyRepo } from "../src/demo/doctor.js";
 import { waitForHealthy } from "../src/demo/app.js";
 import { recorderAvailability } from "../src/demo/record.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const EXAMPLES = path.resolve(import.meta.dirname, "..", "examples");
 const available = await recorderAvailability();
-const needsBrowser = { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 120000 };
+const needsBrowser = { skip: mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`), timeout: 120000 };
 
 async function freePort() {
   return new Promise((resolve) => {

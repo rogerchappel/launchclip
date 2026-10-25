@@ -11,6 +11,7 @@ import { colorDistance, STYLE_SCHEMA, validateStylePack } from "../kit/core/styl
 import { validateProfile } from "../kit/core/profiles.mjs";
 import { boundariesFromGrayFrames, captionCase, captionsFromDetection, compareToStyle, detectCaptions, detectLayouts, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, paletteClusters, profileFromReferences } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const skip = hasFfmpeg ? false : "ffmpeg is not installed";
@@ -79,7 +80,7 @@ test("pacing maps to a grammar", () => {
   assert.equal(grammarFromPacing({ median_shot_seconds: 9 }, { activity: 0.1 }).grammar, "documentary");
 });
 
-test("drafts a pack from synthetic reference videos: palette, pacing, report, no media copied", { skip, timeout: 120_000 }, async () => {
+test("drafts a pack from synthetic reference videos: palette, pacing, report, no media copied", { skip: mediaSkip(skip), timeout: 120_000 }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-style-ref-"));
   try {
     const fast = path.join(dir, "fast.mp4");

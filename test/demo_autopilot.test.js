@@ -15,6 +15,7 @@ import { runCli } from "../src/cli.js";
 import { approveFlows, approvedFlows, runAutopilot } from "../src/demo/autopilot.js";
 import { runDemoCommand } from "../src/demo/cli.js";
 import { recorderAvailability } from "../src/demo/record.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const FIXTURE = path.resolve(import.meta.dirname, "..", "examples", "demo-app");
 const available = await recorderAvailability();
@@ -68,7 +69,7 @@ test("demo record and approve through the CLI usage table", async () => {
   await assert.rejects(runCli(["demo", "approve", "/nonexistent-dir"], { stdout: { write: () => {} }, stderr: { write: () => {} } }), /no demo-record\.json/);
 });
 
-test("records the demo-app fixture: clip, action log, contact sheet, review, product-demo params", { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 180000 }, async (t) => {
+test("records the demo-app fixture: clip, action log, contact sheet, review, product-demo params", { skip: mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`), timeout: 180000 }, async (t) => {
   const { dir, app, out } = await workspace();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const port = await freePort();
@@ -108,7 +109,7 @@ test("records the demo-app fixture: clip, action log, contact sheet, review, pro
   assert.ok(model.content.samples.some((sample) => sample.scale > 1.5));
 });
 
-test("records an app with no seed and no sign-in: plan fixtures answer the API, the session signs in", { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 180000 }, async (t) => {
+test("records an app with no seed and no sign-in: plan fixtures answer the API, the session signs in", { skip: mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`), timeout: 180000 }, async (t) => {
   const { dir, app, out } = await workspace();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const port = await freePort();
