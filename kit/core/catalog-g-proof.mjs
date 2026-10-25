@@ -516,10 +516,19 @@ export const quoteCard = {
 // ---------------------------------------------------------------------------
 // excerpt: real lines of code or text with highlights, in a window.
 
+// Variants: window (a panel, lines sliding in, a marker sweep, the original),
+// terminal (a window bar with three dots, line numbers in a gutter and a
+// cursor that steps down the lines; marked lines get a primary gutter arrow),
+// document (no panel: lines set large beside a drawn rule, marked lines
+// underlined by a sweep, the source as a footnote) and stack (each line on
+// its own chip, dropping in; marked chips light up in primary while the rest
+// dim).
+export const EXCERPT_VARIANTS = Object.freeze(['window', 'terminal', 'document', 'stack']);
+
 const PLACEHOLDER_TEXT = /lorem ipsum|dolor sit amet|\b(todo|tbd|placeholder)\b/i;
 
 function resolveExcerpt(params, ctx) {
-  const b = createCardBase('excerpt', params, ctx, {allowed: ['lines', 'type', 'title', 'source', 'highlightAt', 'at'], required: ['lines', 'source']});
+  const b = createCardBase('excerpt', params, ctx, {allowed: ['lines', 'type', 'title', 'source', 'highlightAt', 'at'], required: ['lines', 'source'], variants: EXCERPT_VARIANTS});
   const {check, u, portrait, theme, colors, start} = b;
   const p = b.params;
   const kind = p.type === undefined ? 'text' : check.oneOf(p.type, 'params.type', ['text', 'code']);
@@ -547,10 +556,50 @@ function resolveExcerpt(params, ctx) {
     const src = fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
     const sourceGap = u(20 * k);
     const panelH = r2(padY * 2 + headH + bodyH);
-    return {padX, padY, inner: r2(inner), head, headH, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
+    return {mode: 'window', padX, padY, inner: r2(inner), head, headH, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
   };
-  const measure = (width, maxHeight) => pick([...b.scales.filter(k => k <= 1.25), 0.6].map(k => () => variant(width, k)), maxHeight);
-  const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1640)});
+  const fitLines = (width, k, preferred) => {
+    const sizes = lines.map(line => (line.text ? fitText(check, `params.lines[${line.index}].text`, line.text.trim(), {family, width, preferred: Math.max(b.min.key, u(preferred * k)), min: b.min.key, maxLines: kind === 'code' ? 1 : 2}) : null));
+    const size = Math.min(...sizes.filter(Boolean).map(f => f.size));
+    return {size, rows: sizes.map(f => (f ? f.lines : 1))};
+  };
+  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
+  // terminal: a bar with dots (and the title), a gutter of line numbers.
+  const terminal = (width, k) => {
+    const padX = u(32 * Math.min(1, k)), padY = u(26 * Math.min(1, k)), barH = u(64 * Math.min(1.2, k)), gutter = u(64 * Math.min(1.2, k));
+    const inner = r2(width - padX * 2 - gutter);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width: r2(width - u(200)), preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const {size, rows} = fitLines(inner - u(30), k, kind === 'code' ? 42 : 46);
+    const lineH = r2(size * (kind === 'code' ? 1.45 : 1.35)), bodyH = r2(rows.reduce((sum, n) => sum + n * lineH, 0));
+    // One more row under the lines: the prompt the cursor ends on.
+    const src = fitSource(width, k), sourceGap = u(20 * k), panelH = r2(barH + padY * 2 + bodyH + lineH);
+    return {mode: 'terminal', padX, padY, barH, gutter, inner, head, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
+  };
+  // document: a rule down the left, the lines large, the source as a footnote.
+  const document_ = (width, k) => {
+    const rule = u(8), ruleGap = u(40 * k), inner = r2(width - rule - ruleGap);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width: inner, preferred: u(30 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const headH = head ? r2(head.size * 1.3 + u(26 * k)) : 0;
+    const {size, rows} = fitLines(inner, k, kind === 'code' ? 50 : 60);
+    const lineH = r2(size * (kind === 'code' ? 1.5 : 1.42)), bodyH = r2(rows.reduce((sum, n) => sum + n * lineH, 0));
+    const src = fitSource(inner, k), sourceGap = u(34 * k);
+    const blockH = r2(headH + bodyH);
+    return {mode: 'document', rule, ruleGap, inner, head, headH, size, lineH, rows, bodyH, blockH, source: src, sourceGap, height: r2(blockH + sourceGap + u(2) + u(14) + src.lines * src.size * 1.3)};
+  };
+  // stack: each line on a chip.
+  const stack = (width, k) => {
+    const padX = u(28 * Math.min(1, k)), padY = u(14 * Math.min(1, k)), gap = u(14 * k);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width, preferred: u(30 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const headH = head ? r2(head.size * 1.3 + u(20 * k)) : 0;
+    const {size, rows} = fitLines(r2(width - padX * 2), k, kind === 'code' ? 42 : 46);
+    const lineH = r2(size * 1.3), chips = rows.map(n => r2(n * lineH + padY * 2));
+    const src = fitSource(width, k), sourceGap = u(22 * k);
+    const bodyH = r2(chips.reduce((sum, h) => sum + h, 0) + gap * (chips.length - 1));
+    return {mode: 'stack', padX, padY, gap, head, headH, size, lineH, rows, chips, bodyH, source: src, sourceGap, height: r2(headH + bodyH + sourceGap + src.lines * src.size * 1.3)};
+  };
+  const shaped = {terminal, document: document_, stack}[b.variant];
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.filter(k => k <= 1.25).map(k => () => shaped(width, k)) : []), ...[...b.scales.filter(k => k <= 1.25), 0.6].map(k => () => variant(width, k))], maxHeight);
+  const box = b.place(measure, {maxWidth: u(portrait ? 940 : b.variant === 'document' ? 1500 : 1640)});
   const L = box.layout;
   const t0 = b.timeOf('lines', p.at, 'params.at', 0.05);
   const step = Math.min(0.12, 0.6 / lines.length);
@@ -562,14 +611,145 @@ function resolveExcerpt(params, ctx) {
     highlightAt = b.timeOf('highlight', p.highlightAt, 'params.highlightAt', Math.min(t0 - start + step * lines.length + 0.5, b.lastEvent));
     b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: highlightAt, endTime: rt(highlightAt + 0.45), role: 'emphasis', cue: 'tick'});
   } else if (p.highlightAt !== undefined) check.fail('params.highlightAt', 'needs a line with highlight: true');
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, kind, lines: shown, title, source, sourceText, marked,
-    panel: theme.panel, border: theme.border, textColor: theme.foreground, dimColor: theme.muted, titleColor: theme.muted, sourceColor: theme.muted, mark: colors.primary, t0, highlightAt},
-  {minTextPx: L.size});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, kind, lines: shown, title, source, sourceText, marked,
+    panel: theme.panel, border: theme.border, textColor: theme.foreground, dimColor: theme.muted, titleColor: theme.muted, sourceColor: theme.muted, mark: colors.primary, t0, highlightAt};
+  if (L.mode === 'terminal') Object.assign(content, {dots: [colors.primary, colors.accent, theme.muted], cursor: colors.accent});
+  return b.finish(content, {minTextPx: L.size});
 }
+
+const lineText = (model, line, h, width, extra = {}) => {
+  const {fonts} = model;
+  const c = model.content, L = c.layout;
+  return el('div', null, abs(0, 0, width, h, {display: 'flex', alignItems: 'center', margin: 0, fontFamily: c.kind === 'code' ? fonts.meta : fonts.body, fontWeight: c.kind === 'code' ? 400 : 500, fontSize: L.size,
+    lineHeight: `${r2(L.lineH / L.size)}`, color: c.textColor, whiteSpace: c.kind === 'code' ? 'pre' : 'normal', overflowWrap: 'break-word', ...extra}), [line.text || ' ']);
+};
+const sourceLine = (model, width, extra = {}) => {
+  const {id, fonts} = model;
+  const c = model.content, L = c.layout;
+  return flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, ...extra}, c.sourceText);
+};
+
+const EXCERPT_VIEWS = {
+  terminal(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const dot = r2(16 * unit);
+    const bar = [
+      el('div', null, abs(0, 0, B.width, L.barH, {borderBottom: `${r2(2 * unit)}px solid ${c.border}`})),
+      ...c.dots.map((color, i) => el('div', null, abs(r2(L.padX + i * dot * 1.9), r2((L.barH - dot) / 2), dot, dot, {borderRadius: '50%', background: color}))),
+      c.title ? el('div', null, abs(r2(L.padX + dot * 6.5), 0, r2(B.width - L.padX * 2 - dot * 6.5), L.barH, {display: 'flex', alignItems: 'center', margin: 0, fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', color: c.titleColor, whiteSpace: 'nowrap', overflow: 'hidden'}), [c.title]) : null
+    ].filter(Boolean);
+    let y = L.barH + L.padY;
+    const rows = c.lines.map((line, i) => {
+      const h = r2(L.rows[i] * L.lineH), top = r2(y);
+      y += h;
+      return el('div', `${id}-line-${line.index}`, abs(L.padX, top, r2(B.width - L.padX * 2), h, {...hidden}), [
+        el('div', null, abs(0, 0, r2(L.gutter - 16 * unit), r2(L.lineH), {display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: 0, fontFamily: fonts.meta, fontSize: r2(L.size * 0.72), lineHeight: '1', color: c.dimColor}), [String(line.index + 1)]),
+        line.highlight ? el('div', `${id}-mark-${line.index}`, abs(L.gutter, 0, r2(24 * unit), r2(L.lineH), {display: 'flex', alignItems: 'center', margin: 0, fontFamily: fonts.meta, fontSize: L.size, lineHeight: '1', color: c.mark}), ['›']) : null,
+        el('div', null, abs(r2(L.gutter + 30 * unit), 0, r2(L.inner - 30 * unit), h), [lineText(model, line, h, r2(L.inner - 30 * unit))])
+      ].filter(Boolean));
+    });
+    const cursorH = r2(L.lineH * 0.78);
+    const cursor = el('div', `${id}-cursor`, abs(r2(L.padX + L.gutter + 30 * unit), r2(L.barH + L.padY + (L.lineH - cursorH) / 2), r2(L.size * 0.55), cursorH, {background: c.cursor}));
+    return [column(B.x, B.y, B.width, L.height, [
+      flow(`${id}-panel`, B.width, L.panelH, {boxSizing: 'border-box', borderRadius: r2(18 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`}, [...bar, ...rows, cursor]),
+      sourceLine(model, B.width)
+    ], {align: 'start'})];
+  },
+  document(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    let y = L.headH;
+    const rows = c.lines.map((line, i) => {
+      const h = r2(L.rows[i] * L.lineH), top = r2(y);
+      y += h;
+      return el('div', `${id}-line-${line.index}`, abs(0, top, L.inner, h, {...hidden}), [
+        line.highlight ? el('div', `${id}-mark-${line.index}`, abs(0, r2(h - 8 * unit), L.inner, r2(6 * unit), {borderRadius: r2(3 * unit), background: c.mark, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})) : null,
+        lineText(model, line, h, L.inner)
+      ].filter(Boolean));
+    });
+    const head = c.title ? [el('div', null, abs(0, 0, L.inner, undefined, {margin: 0, fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', letterSpacing: '0.08em', color: c.titleColor, whiteSpace: 'nowrap', overflow: 'hidden'}), [c.title])] : [];
+    const textX = r2(L.rule + L.ruleGap);
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [
+      el('div', `${id}-rule`, abs(0, 0, L.rule, L.blockH, {borderRadius: L.rule, background: c.mark, transformOrigin: '50% 0%', transform: 'scale(1, 0)'})),
+      el('div', null, abs(textX, 0, L.inner, L.blockH), [...head, ...rows]),
+      el('div', null, abs(textX, r2(L.blockH + L.sourceGap), L.inner, undefined, {display: 'flex', flexDirection: 'column'}), [
+        flow(null, r2(Math.min(L.inner * 0.25, 140 * unit)), r2(2 * unit), {background: c.border, marginBottom: r2(14 * unit)}, []),
+        flowText(`${id}-source`, L.inner, {...hidden, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
+      ])
+    ])];
+  },
+  stack(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const chips = c.lines.map((line, i) => flow(`${id}-line-${line.index}`, B.width, L.chips[i], {...hidden, boxSizing: 'border-box', borderRadius: r2(14 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`, marginTop: i ? L.gap : 0, transformOrigin: '50% 50%'}, [
+      // A marked chip gets a primary outline and an edge bar.
+      line.highlight ? el('div', `${id}-mark-${line.index}`, abs(r2(-2 * unit), r2(-2 * unit), r2(B.width), L.chips[i], {boxSizing: 'border-box', borderRadius: r2(14 * unit), border: `${r2(3 * unit)}px solid ${c.mark}`, opacity: 0})) : null,
+      line.highlight ? el('div', `${id}-edge-${line.index}`, abs(r2(10 * unit), L.padY, r2(6 * unit), r2(L.chips[i] - L.padY * 2), {borderRadius: r2(3 * unit), background: c.mark, transformOrigin: '50% 50%', transform: 'scale(1, 0)'})) : null,
+      el('div', null, abs(L.padX, L.padY, r2(B.width - L.padX * 2), r2(L.chips[i] - L.padY * 2)), [lineText(model, line, r2(L.chips[i] - L.padY * 2), r2(B.width - L.padX * 2))])
+    ].filter(Boolean)));
+    const head = c.title ? flowText(null, B.width, {marginBottom: r2(L.headH - L.head.size * 1.3), fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', letterSpacing: '0.08em', color: c.titleColor}, c.title) : null;
+    return [column(B.x, B.y, B.width, L.height, [head, ...chips, sourceLine(model, B.width)].filter(Boolean), {align: 'start'})];
+  }
+};
+
+const EXCERPT_TIMELINES = {
+  terminal(model, ops) {
+    const {id, start} = model;
+    const c = model.content, L = c.layout;
+    let y = 0;
+    const tops = c.lines.map((_, i) => { const top = y; y += L.rows[i] * L.lineH; return r2(top); });
+    tops.push(r2(y));
+    set(ops, `${id}-cursor`, start, {opacity: 0, x: 0, y: 0});
+    tw(ops, `${id}-cursor`, rt(Math.max(start, c.t0 - 0.1)), 0.1, 'none', {opacity: 0}, {opacity: 1});
+    c.lines.forEach((line, i) => {
+      set(ops, `${id}-line-${line.index}`, start, {opacity: 0});
+      tw(ops, `${id}-line-${line.index}`, line.time, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
+      // As a line shows, the cursor steps down to the row under it (the last
+      // ends on the prompt row).
+      tw(ops, `${id}-cursor`, line.time, 0.1, 'power2.out', {y: tops[i]}, {y: tops[i + 1]});
+    });
+    if (c.marked) for (const line of c.lines) {
+      if (line.highlight) pop(ops, model, `${id}-mark-${line.index}`, c.highlightAt, {scale: 0.3, duration: 0.4});
+      else tw(ops, `${id}-line-${line.index}`, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.45});
+    }
+  },
+  document(model, ops) {
+    const {id, start} = model;
+    const c = model.content;
+    set(ops, `${id}-rule`, start, {scaleX: 1, scaleY: 0});
+    tw(ops, `${id}-rule`, rt(Math.max(start, c.t0 - 0.1)), 0.7, 'power3.out', {scaleY: 0}, {scaleY: 1});
+    for (const line of c.lines) {
+      rise(ops, model, `${id}-line-${line.index}`, line.time, {distance: 18, duration: 0.45});
+      if (c.marked && line.highlight) {
+        set(ops, `${id}-mark-${line.index}`, start, {scaleX: 0, scaleY: 1});
+        tw(ops, `${id}-mark-${line.index}`, c.highlightAt, 0.5, 'power3.inOut', {scaleX: 0}, {scaleX: 1});
+      } else if (c.marked) tw(ops, `${id}-line-${line.index}`, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.5});
+    }
+  },
+  stack(model, ops) {
+    const {id, start, unit} = model;
+    const c = model.content;
+    for (const line of c.lines) {
+      const target = `${id}-line-${line.index}`;
+      set(ops, target, start, {opacity: 0, x: 0, y: r2(-28 * unit), rotation: -2});
+      tw(ops, target, line.time, 0.45, 'back.out(1.4)', {opacity: 0, y: r2(-28 * unit), rotation: -2}, {opacity: 1, y: 0, rotation: 0});
+      if (!c.marked) continue;
+      if (line.highlight) {
+        set(ops, `${id}-mark-${line.index}`, start, {opacity: 0});
+        tw(ops, `${id}-mark-${line.index}`, c.highlightAt, 0.3, 'power2.out', {opacity: 0}, {opacity: 1});
+        set(ops, `${id}-edge-${line.index}`, start, {scaleX: 1, scaleY: 0});
+        tw(ops, `${id}-edge-${line.index}`, c.highlightAt, 0.4, 'power3.out', {scaleY: 0}, {scaleY: 1});
+        tw(ops, target, c.highlightAt, 0.4, 'back.out(2)', {scaleX: 0.96, scaleY: 0.96}, {scaleX: 1, scaleY: 1});
+      } else tw(ops, target, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.45});
+    }
+  }
+};
 
 function excerptView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (EXCERPT_VIEWS[L.mode]) return EXCERPT_VIEWS[L.mode](model);
   const family = c.kind === 'code' ? fonts.meta : fonts.body;
   let y = L.padY + L.headH;
   const rows = c.lines.map((line, i) => {
@@ -596,6 +776,11 @@ function excerptView(model) {
 function excerptTimeline(model, ops) {
   const {id} = model;
   const c = model.content;
+  if (EXCERPT_TIMELINES[c.layout.mode]) {
+    EXCERPT_TIMELINES[c.layout.mode](model, ops);
+    rise(ops, model, `${id}-source`, rt(c.t0 + 0.3), {distance: 10});
+    return;
+  }
   for (const line of c.lines) {
     const target = `${id}-line-${line.index}`;
     set(ops, target, model.start, {opacity: 0, x: r2(-14 * model.unit), y: 0});
@@ -618,5 +803,6 @@ export const excerpt = {
   events: ['lines', 'highlight'],
   timing: cardTiming(['lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last']),
   mood: ['editorial', 'launch'],
+  variants: EXCERPT_VARIANTS,
   resolve: resolveExcerpt, view: excerptView, timeline: excerptTimeline
 };
