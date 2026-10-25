@@ -112,3 +112,21 @@ test('castFromStyle reads a seeded style pack cast; a generated cast plays a sce
     assert.ok(model.content.actors.every(actor => actor.style === style));
   }
 });
+
+test('balanced casts: a woman and a man, and a light-skinned person, in every cast of two or more', async () => {
+  const {SKIN_ORDER} = await import('../kit/core/characters/palette.mjs');
+  const light = SKIN_ORDER.slice(0, Math.ceil(SKIN_ORDER.length / 3));
+  for (const set of CHARACTER_SET_NAMES) for (let k = 0; k < 40; k++) for (const count of [2, 3, 6]) {
+    const cast = generateCast({seed: `b${k}`, set, count});
+    assert.ok(cast.some(m => light.includes(m.skin)), `${set} ${k} ${count}: a light skin tone`);
+    const kinds = new Set(cast.map(m => m.voice.slice(1, 2)));
+    assert.ok(kinds.has('f') && kinds.has('m'), `${set} ${k} ${count}: women and men`);
+  }
+});
+
+test('the starter cast includes white men and women, children and a teen', () => {
+  for (const id of ['oliver', 'hannah', 'ben', 'lily', 'kofi', 'max']) assert.ok(starterCharacter(id), id);
+  assert.equal(starterCharacter('ben').params.age, 'child');
+  assert.equal(starterCharacter('max').params.age, 'teen');
+  assert.deepEqual(generateCast({seed: 'x', set: 'kids', count: 12}).filter(m => ['oliver', 'hannah', 'ben', 'lily', 'kofi', 'max'].includes(m.id)), [], 'generated ids never reuse a starter id');
+});

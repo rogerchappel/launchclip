@@ -11,8 +11,11 @@
 //       headwear?, mobility?, colors}]
 //   castFromStyle(pack.cast) → story.cast {style, characters}
 //
-// Respect rules: no caricature (proportions stay inside the rig's ranges),
-// every skin tone equally likely, faith and cultural headwear (headscarf,
+// Balance: every cast of two or more has a woman and a man, and its first
+// members span the lighter, middle and deeper thirds of the skin tones, so
+// white people appear alongside everyone else.
+//
+// Respect rules: no caricature (proportions stay inside the rig's ranges), faith and cultural headwear (headscarf,
 // turban, kippah) and mobility aids appear as ordinary options at modest
 // rates, and facial hair and children's features follow age.
 //
@@ -235,20 +238,33 @@ export function generateCast({seed, set = 'office-team', count = 3, palette = nu
   if (!Number.isInteger(count) || count < 1 || count > 12) throw new Error('generateCast count must be 1 to 12');
   const rng = makeRng(`${seed}:${set}`);
   const colors = clothing(palette);
-  // Skin tones spread across the whole range: a shuffled walk, so a cast of
-  // three never draws three neighbours.
-  const tones = [...SKIN_ORDER];
-  for (let i = tones.length - 1; i > 0; i--) { const k = Math.floor(rng.next() * (i + 1)); [tones[i], tones[k]] = [tones[k], tones[i]]; }
+  // Skin tones: the first members take one tone each from the lighter,
+  // middle and deeper thirds of the range (in a seeded order), so every cast
+  // of two or more includes a light-skinned (white) person and spans the
+  // range; the rest walk a shuffled list, so no cast draws three neighbours.
+  const shuffle = list => { const out = [...list]; for (let i = out.length - 1; i > 0; i--) { const k = Math.floor(rng.next() * (i + 1)); [out[i], out[k]] = [out[k], out[i]]; } return out; };
+  const third = Math.ceil(SKIN_ORDER.length / 3);
+  const bands = [SKIN_ORDER.slice(0, third), SKIN_ORDER.slice(third, 2 * third), SKIN_ORDER.slice(2 * third)].map(shuffle);
+  const bandOrder = count === 2 ? shuffle([0, rng.chance(0.5) ? 1 : 2]) : shuffle([0, 1, 2]);
+  const tones = shuffle(SKIN_ORDER);
+  const toneFor = (i, attempt) => (i < bandOrder.length ? bands[bandOrder[i]][attempt % bands[bandOrder[i]].length] : tones[(i + attempt) % tones.length]);
+  // Women and men: a cast of two or more has at least one of each; after
+  // that the fewer of the two comes next (sometimes a name that fits either).
+  const pair = rng.chance(0.5) ? ['f', 'm'] : ['m', 'f'];
   const names = [...NAMES];
   const out = [];
   const seen = new Set();
   for (let i = 0; i < count; i++) {
     const age = Array.isArray(spec.ages) ? spec.ages[i % spec.ages.length] : rng.weighted(spec.ages);
+    const women = out.filter(e => e.voiceKind === 'f').length, men = out.filter(e => e.voiceKind === 'm').length;
+    const wanted = count === 1 ? null : i < 2 ? pair[i] : women <= men ? 'f' : 'm';
+    const either = i >= 2 && rng.chance(0.15);
     let entry = null;
     for (let attempt = 0; attempt < 24 && !entry; attempt++) {
-      const nameIndex = Math.floor(rng.next() * names.length);
+      const pool = names.map((entry, index) => ({entry, index})).filter(({entry: [, kind]}) => !wanted || kind === wanted || (either && kind === 'n'));
+      const {index: nameIndex} = pool[Math.floor(rng.next() * pool.length)];
       const [name, voiceKind] = names[nameIndex];
-      const skin = tones[(i + attempt) % tones.length];
+      const skin = toneFor(i, attempt);
       const params = normalizeRigParams(person(rng, spec, age, skin, voiceKind, colors), `generated ${name}`);
       const print = rigFingerprint(params);
       if (seen.has(print) || out.some(other => likeness(other.params, params) >= 5)) continue;
