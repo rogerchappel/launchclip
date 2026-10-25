@@ -40,10 +40,35 @@ export function captionBandFor(format) {
 
 export const CAPTION_DEFAULT_COLORS = Object.freeze({ idle: '#ffffff', active: '#ffd23f' });
 
+// Transcript tokens that belong to the word before them: a hyphenated tail
+// ("-free" after "hands"), bare closing punctuation, or a clitic ("'s", "n't").
+const ATTACHES_BACK = /^(?:[-‐‑][\p{L}\p{N}]|[.,!?;:%…)\]}"”’]+$|['’](?:s|re|ve|ll|d|m|t)$|n['’]t$)/iu;
+// A word ending in a hyphen, or a bare opening mark, takes the next token.
+const ATTACHES_FORWARD = /(?:[\p{L}\p{N}][-‐‑]|^[(\["“‘])$/u;
+
+/**
+ * Words for display: tokens the transcript split off a word ("hands" +
+ * "-free", "word" + ",") are joined back into one caption word that runs
+ * from the first token's start to the last one's end. The transcript's own
+ * word timings are never changed.
+ */
+export function joinAttachedWords(words) {
+  const out = [];
+  for (const word of words) {
+    const previous = out.at(-1);
+    if (previous && (ATTACHES_BACK.test(word.text) || ATTACHES_FORWARD.test(previous.text))) {
+      out[out.length - 1] = { ...previous, text: previous.text + word.text, end: Math.max(previous.end, word.end) };
+      continue;
+    }
+    out.push(word);
+  }
+  return out;
+}
+
 export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.28 } = {}) {
-  const clean = words
+  const clean = joinAttachedWords(words
     .map((word) => ({ text: String(word.text ?? word.word ?? '').trim(), start: Number(word.start), end: Number(word.end) }))
-    .filter((word) => word.text && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start);
+    .filter((word) => word.text && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start));
   const chunks = [];
   let current = [];
   const flush = () => {
@@ -392,7 +417,8 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
   const used = new Set();
   const zoneCls = (index) => { if (index < 0) return ''; used.add(index); return ` lc-cap-z${index + 1}`; };
   const emphasis = o.emphasis ? captionEmphasis(ctx.story, overlay) : new Set();
-  const list = visibleChunks(chunksForCaptions(chunks, o), ctx.hide ?? []);
+  // Chunks from an older captions.json may still hold split tokens.
+  const list = visibleChunks(chunksForCaptions(chunks, o), ctx.hide ?? []).map((chunk) => ({ ...chunk, words: joinAttachedWords(chunk.words) }));
   const spoken = (chunk) => [chunk.start, Math.max(chunk.start, chunk.words.at(-1)?.end ?? chunk.end)];
   const nodes = [];
   const tweens = [];
