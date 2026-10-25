@@ -422,6 +422,10 @@ saved pack is what renders, so a new version changes only rerolls.
   `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
   `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`,
   `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) hold what the kits draw today.
+  With no world in the direction the seed draws a topic-neutral one
+  (`SEED_WORLDS`: abstract-stage, skyline, rooftop, park, city-street,
+  home-desk), day and dusk twice as often as night except for premium and
+  energetic tones; topical worlds come only from art direction.
   Backgrounds are weighted towards subtle patterns and textures
   (`SEED_BACKGROUND_KINDS` is `[kind, weight]`; flat is rare), each with a
   `fade` and params drawn inside `SEED_BACKGROUND_PARAMS` (the backgrounds
