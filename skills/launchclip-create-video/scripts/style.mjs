@@ -18,7 +18,7 @@
 import { CAPTION_PRESET_NAMES } from './captions.mjs';
 import { FONT_REGISTRY, fontFamilyName, registeredFamily } from './fonts.mjs';
 import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
-import { DRAWING_STYLES } from './characters/cues.mjs';
+import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
 
 export const STYLE_SCHEMA = 'launchclip.style.v3';
 export const STYLE_V2_SCHEMA = 'launchclip.style.v2';
@@ -31,11 +31,21 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
-export const STYLE_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
+export const STYLE_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper', 'outline', 'soft-shadow']);
+// Seeded-style fields (docs/SEEDED_STYLES_RFC.md §3.1–3.2). The kits that
+// draw them (backgrounds, module variants, characters, worlds) own the full
+// lists; a value outside these is a warning, so a kit can grow first.
+export const STYLE_BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric-field', 'soft-blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays']);
+export const STYLE_ICON_STYLES = Object.freeze(['outline', 'duotone']);
+export const STYLE_ILLUSTRATIONS = Object.freeze(['flat', 'flat-shadow', 'line']);
+export const STYLE_WORLD_TIMES = Object.freeze(['day', 'dusk', 'night']);
+export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 'at', 'constraints', 'theme', 'scheme', 'pairing', 'redraws']);
+const SEED_HEX = /^[0-9a-f]{8}$/;
+const SLUG = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export const STYLE_DIALS = Object.freeze(['energy', 'density', 'playfulness', 'polish']);
 export const STYLE_CAPTION_LANES = Object.freeze(['motion', 'voiceover-motion', 'footage-led']);
 export const STYLE_FRAME_POSITIONS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
@@ -409,11 +419,14 @@ function validateV3Fields(pack, { err, warn, modules }) {
   }
   if (pack.vocabulary !== undefined) {
     const v = pack.vocabulary;
-    if (!isObject(v)) err('vocabulary must be {icon_tint, illustration, prefer}');
+    const keys = ['icon_tint', 'icon_stroke', 'icon_style', 'illustration', 'prefer'];
+    if (!isObject(v)) err(`vocabulary must be {${keys.join(', ')}}`);
     else {
-      for (const key of Object.keys(v)) if (!['icon_tint', 'illustration', 'prefer'].includes(key)) err(`vocabulary.${key} is not supported (icon_tint, illustration, prefer)`);
+      for (const key of Object.keys(v)) if (!keys.includes(key)) err(`vocabulary.${key} is not supported (${keys.join(', ')})`);
       if (v.icon_tint !== undefined && !isColorRef(v.icon_tint)) err('vocabulary.icon_tint must be a brand role or a hex colour');
-      if (v.illustration !== undefined && typeof v.illustration !== 'boolean') err('vocabulary.illustration must be true or false');
+      if (v.icon_stroke !== undefined && !(typeof v.icon_stroke === 'number' && v.icon_stroke >= 1 && v.icon_stroke <= 3)) err('vocabulary.icon_stroke must be a stroke width from 1 to 3 (24-unit icon box)');
+      if (v.icon_style !== undefined && !STYLE_ICON_STYLES.includes(v.icon_style)) err(`vocabulary.icon_style must be one of ${STYLE_ICON_STYLES.join(', ')}`);
+      if (v.illustration !== undefined && typeof v.illustration !== 'boolean' && !STYLE_ILLUSTRATIONS.includes(v.illustration)) err(`vocabulary.illustration must be true, false or a treatment (${STYLE_ILLUSTRATIONS.join(', ')})`);
       if (v.prefer !== undefined) {
         if (!isObject(v.prefer)) err('vocabulary.prefer must be {intent: [module ids]}');
         else for (const [intent, ids] of Object.entries(v.prefer)) {
@@ -427,10 +440,20 @@ function validateV3Fields(pack, { err, warn, modules }) {
   if (pack.cast !== undefined) {
     // The characters kit (kit/core/characters/) fills the cast in; its shape and drawing style are checked here.
     const c = pack.cast;
-    if (!isObject(c)) err('cast must be {drawing_style, colors, characters}');
+    const keys = ['drawing_style', 'colors', 'characters', 'set', 'members'];
+    if (!isObject(c)) err(`cast must be {${keys.join(', ')}}`);
     else {
-      for (const key of Object.keys(c)) if (!['drawing_style', 'colors', 'characters'].includes(key)) err(`cast.${key} is not supported (drawing_style, colors, characters)`);
+      for (const key of Object.keys(c)) if (!keys.includes(key)) err(`cast.${key} is not supported (${keys.join(', ')})`);
       if (c.drawing_style !== undefined && !DRAWING_STYLES.includes(c.drawing_style)) err(`cast.drawing_style must be one of the kit's drawing styles (${DRAWING_STYLES.join(', ')})`);
+      if (c.set !== undefined && !(nonEmpty(c.set) && SLUG.test(c.set))) err('cast.set must be a character set id (a lowercase slug)');
+      if (c.members !== undefined) {
+        // Generated people in the story cast's entry shape (kit/core/characters/cues.mjs).
+        if (!Array.isArray(c.members) || c.members.length > 8) err('cast.members must be a list of at most 8 characters');
+        else {
+          const errors = storyCastErrors({ characters: c.members });
+          for (const message of errors) err(message.replace(/^cast\.characters/, 'cast.members'));
+        }
+      }
       if (c.colors !== undefined) {
         if (!isObject(c.colors)) err('cast.colors must be {slot: brand role or hex}');
         else for (const [slot, value] of Object.entries(c.colors)) if (!isColorRef(value)) err(`cast.colors.${slot} must be a brand role or a hex colour`);
@@ -443,11 +466,56 @@ function validateV3Fields(pack, { err, warn, modules }) {
     if (isObject(pack.brand_frame) && pack.brand_frame.labels !== undefined) warn('brand_frame.labels belong to a story (story.frame.labels); a style\'s labels are ignored');
   }
   if (pack.segments !== undefined) for (const message of segmentErrors(pack.segments, { modules })) err(message);
+  seededFieldErrors(pack, { err, warn, known });
   if (pack.dials !== undefined) {
     if (!isObject(pack.dials)) err(`dials must be {${STYLE_DIALS.join(', ')}}, each 0-1`);
     else for (const [key, value] of Object.entries(pack.dials)) {
       if (!STYLE_DIALS.includes(key)) err(`dials.${key} is not a dial (${STYLE_DIALS.join(', ')})`);
       else if (!isUnit(value)) err(`dials.${key} must be a number from 0 to 1`);
+    }
+  }
+}
+
+// The seeded-style fields (docs/SEEDED_STYLES_RFC.md §3.1): the generator's
+// provenance and the choices other kits read. Shapes are checked here; names
+// the kits do not know yet are warnings.
+function seededFieldErrors(pack, { err, warn, known }) {
+  if (pack.generated !== undefined) {
+    const g = pack.generated;
+    if (!isObject(g)) err('generated must be {seed, generator, tone?, at?, ...}');
+    else {
+      for (const key of Object.keys(g)) if (!STYLE_GENERATED_KEYS.includes(key)) warn(`generated.${key} is not a provenance field and is ignored`);
+      if (!SEED_HEX.test(String(g.seed ?? ''))) err('generated.seed must be 8 lowercase hex characters');
+      if (!nonEmpty(g.generator)) err('generated.generator must name the generator version (launchclip.style-seed.v1)');
+      if (g.tone !== undefined && g.tone !== null && !nonEmpty(g.tone)) err('generated.tone must be a tone name');
+      if (g.at !== undefined && !(nonEmpty(g.at) && Number.isFinite(Date.parse(g.at)))) err('generated.at must be an ISO date');
+      if (g.constraints !== undefined && !isObject(g.constraints)) err('generated.constraints must be an object');
+    }
+  }
+  if (pack.background !== undefined) {
+    const b = pack.background;
+    if (!isObject(b)) err('background must be {kind, params}');
+    else {
+      for (const key of Object.keys(b)) if (!['kind', 'params'].includes(key)) err(`background.${key} is not supported (kind, params)`);
+      if (!(nonEmpty(b.kind) && SLUG.test(b.kind))) err('background.kind must be a background kind (a lowercase slug)');
+      else if (!STYLE_BACKGROUND_KINDS.includes(b.kind)) warn(`background.kind "${b.kind}" is not one of ${STYLE_BACKGROUND_KINDS.join(', ')}`);
+      if (b.params !== undefined && !isObject(b.params)) err('background.params must be an object');
+    }
+  }
+  if (pack.variants !== undefined) {
+    if (!isObject(pack.variants)) err('variants must be {module: variant}');
+    else for (const [id, variant] of Object.entries(pack.variants)) {
+      if (!(nonEmpty(variant) && SLUG.test(variant))) err(`variants.${id} must be a variant name (a lowercase slug)`);
+      else if (known && !known.has(id)) warn(`variants: "${id}" is not a known module`);
+    }
+  }
+  if (pack.world !== undefined) {
+    const w = pack.world;
+    if (!isObject(w)) err('world must be {kind, time}');
+    else {
+      for (const key of Object.keys(w)) if (!['kind', 'time'].includes(key)) err(`world.${key} is not supported (kind, time)`);
+      if (!(nonEmpty(w.kind) && SLUG.test(w.kind))) err('world.kind must be a world id (a lowercase slug)');
+      if (w.time !== undefined && !STYLE_WORLD_TIMES.includes(w.time)) err(`world.time must be one of ${STYLE_WORLD_TIMES.join(', ')}`);
     }
   }
 }

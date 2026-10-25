@@ -278,10 +278,18 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  reference_stats?: {palette, pacing, energy, sound},
  // v3 (docs/VIDEO_QUALITY_RFC.md §9):
  layouts?: {by_intent?: {<intent>: layout}, by_section?: {<section>: layout},
-            panel?: {treatment?: solid|glass|paper, radius?: 0-120 px}},
- vocabulary?: {icon_tint?: role|hex, illustration?: boolean, prefer?: {<intent>: [module id]}},
+            panel?: {treatment?: solid|glass|paper|outline|soft-shadow, radius?: 0-120 px}},
+ vocabulary?: {icon_tint?: role|hex, icon_stroke?: 1-3, icon_style?: outline|duotone,
+               illustration?: boolean | flat|flat-shadow|line, prefer?: {<intent>: [module id]}},
  profile?: "<shipped profile id>" | <launchclip.cadence-profile.v1 profile>,
- cast?: {drawing_style?, colors?: {<rig slot>: role|hex}, characters?: [id]},
+ cast?: {drawing_style?, colors?: {<rig slot>: role|hex}, characters?: [id],
+         set?: <character set id>, members?: [<story cast entry>]},   // ≤8 members
+ // seeded styles (docs/SEEDED_STYLES_RFC.md §3.1):
+ generated?: {seed: 8 hex, generator: "launchclip.style-seed.v1", tone?, at?: ISO date,
+              constraints?, theme?, scheme?, pairing?, redraws?},
+ background?: {kind: <slug>, params?: {...}},
+ variants?: {<module>: <variant>},
+ world?: {kind: <world id>, time?: day|dusk|night},
  brand_frame?: false | {enabled?, logo?: path, color?: role|hex,
                 kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?},
                 sections?: boolean | {position?, color?},
@@ -300,6 +308,13 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   an inline profile that must pass `kit/core/profiles.mjs` `validateProfile`
   (`cadenceProfileErrors`). `cast` is shape-checked only (the characters kit
   fills it).
+- The seeded-style fields are shape-checked: `background.kind` outside
+  `STYLE_BACKGROUND_KINDS`, a `variants` module the catalogue does not list
+  (when `modules` is passed) and unknown `generated` keys are warnings, so the
+  kits that draw them can grow first. `cast.members` entries are checked as
+  story cast entries (`storyCastErrors`). `applyStyle` does not merge
+  `background`, `variants`, `world` or `cast.members` into the story; the
+  kits read them from the pack.
 - `brandFrameErrors(frame, where)` checks `brand_frame` and the story's
   `frame` (the same shape, plus `labels`).
 - `upgradeV2Pack(pack, {render})` → `{pack, notes}` fills the v3 fields from
@@ -360,6 +375,60 @@ scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intr
   `warm-documentary`, `neon-explainer`; each validates, passes the contrast
   check (`checkPackContrast`: paper/bg 4.5:1, primary and accent/bg 3:1,
   ink/primary 3:1) and merges into every golden story without param errors.
+
+### Seeded styles (`kit/core/style-seed.mjs`)
+
+With no style or brand, `make` and `story plan` generate a pack from a seed
+(docs/SEEDED_STYLES_RFC.md). `generateStyle({seed, tone?, constraints?, at?})`
+→ a valid `launchclip.style.v3` pack named `seed-<hex>` with a `generated`
+block. One seed, tone and constraint set always give the same pack (`at` only
+stamps the provenance); `GENERATOR_VERSION` versions the mapping, and a
+saved pack is what renders, so a new version changes only rerolls.
+
+- Every dimension draws from its own stream (`seededRandom` from
+  `ambient.mjs`, seeded with the seed hashed with the dimension's name), so
+  pinning one constraint never reshuffles another.
+- Constraints (`CONSTRAINT_KEYS`): `tone` (`TONES`), `theme`
+  (`dark|light|tinted`), `world` (id or `{kind, time}`), `drawing_style`,
+  `character_set`, `background` (kind or `{kind, params}`) and `panel`
+  (treatment or `{treatment, radius}`). Art direction chooses them; the seed
+  picks among what fits. They pass through to `world`, `cast.drawing_style`,
+  `cast.set`, `background` and `layouts.panel`, and are recorded in
+  `generated.constraints`.
+- Palette: a harmony scheme (`PALETTE_SCHEMES`) in OKLCH, lightness ranges by
+  theme, chroma by tone, then each role moved in lightness until
+  `paletteContrast` passes (`PALETTE_CONTRAST`: paper/bg, ink/primary and
+  ink/paper 4.5:1; primary/bg, accent/bg and ink/accent 3:1). Primary and
+  accent sit at least 30° apart unless the scheme is monochrome. Out-of-gamut
+  colours lose chroma, never lightness or hue (`oklchToHex`).
+- Type: `FONT_PAIRINGS` (display, body, meta, case, weight, tones) over the
+  bundled fonts; a tone narrows the table to its pairings. Title case sets
+  `layout.title_case`.
+- Tone (`TONE_TABLE`, §3.3) narrows the grammars, themes, ambient levels,
+  chroma, SFX density, music hints and the dials' centres (the seed adds up to
+  ±0.12). `toneFromText(prompt)` reads tone words (`TONE_WORDS`). The grammar
+  picks the transition preference and caption preset; the world camera only
+  for playful, snappy, smooth and cinematic; light themes keep the
+  stroke-free caption presets.
+- The option lists (`SEED_PANEL_TREATMENTS`, `SEED_BACKGROUND_KINDS`,
+  `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
+  `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`) hold what the
+  kits draw today; the background, variant, character and world kits widen
+  them. `cast.members` are 2–4 people drawn from the rig's options (never a
+  starter id, which would pull in that starter's params).
+- The brand frame is off (a generated style has no brand name); its kicker
+  position, sections and progress line are still drawn, for when it is
+  turned on.
+- Distance (§3.6): `styleFingerprint(pack)` (palette in OKLab, theme, fonts,
+  panel, grammar, caption preset), `fingerprintKey`, `styleDistance(a, b)`
+  (0–1: palette half, the four categories an eighth each) and
+  `nearestStarter(pack)` against `AVOID_LOOKS` (the five starters, which
+  `test/style_seed.test.js` checks against `kit/styles`, and the renderers'
+  fallback look). A candidate under `MIN_STARTER_DISTANCE` (0.3) overall or
+  `MIN_PALETTE_DISTANCE` (0.06) in palette is redrawn from the next seed state
+  (`generated.redraws`).
+- `styleSummary(pack)` → `seed 7f3a91c2 (dark, playful, Unbounded / Inter)`;
+  `seedSummaryLine(pack)` is the line make and story plan print.
 
 ### Brand frame (`kit/core/brand-frame.mjs`)
 
