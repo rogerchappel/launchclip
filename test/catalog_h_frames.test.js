@@ -39,9 +39,9 @@ test('device-frame: every device, a mock screen without an image, the image with
     assert.equal(model.content.device, device);
     assert.match(EMITTERS['device-frame'](model).html, /id="scene-ui-0"/);
   }
-  const shot = resolve('device-frame', {device: 'laptop', image: 'assets/testsrc.png'});
+  const shot = resolve('device-frame', {device: 'laptop', image: 'assets/screens/dashboard.png'});
   const html = EMITTERS['device-frame'](shot).html;
-  assert.match(html, /<img[^>]+src="assets\/testsrc\.png"/);
+  assert.match(html, /<img[^>]+src="assets\/screens\/dashboard\.png"/);
   assert.doesNotMatch(html, /scene-ui-0/);
   assert.throws(() => resolve('device-frame', {image: 'https://example.com/a.png'}), /project-local/);
   assert.throws(() => resolve('device-frame', {device: 'watch'}), /params\.device/);
@@ -67,6 +67,9 @@ test('paper: torn edges are deterministic, stickers and badges land at their til
   assert.equal(settled(resolve('badge')).get('scene-badge').rotation, -10);
   assert.throws(() => resolve('sticker', {}), /needs text or an icon/);
   assert.throws(() => resolve('badge', {text: 'A very long badge'}), /params\.text/);
+  // A stacked polaroid's back frames keep their tilt in the op state (Remotion draws transforms from it).
+  const stack = settled(resolve('polaroid', {...SAMPLES.polaroid, variant: 'stack'}));
+  assert.deepEqual([stack.get('scene-back-0').rotation, stack.get('scene-back-1').rotation], [-11, 5]);
   const tape = resolve('tape-note', {...SAMPLES['tape-note'], variant: 'corners'});
   assert.equal(tape.content.tape.pieces.length, 2);
   // The polaroid develops: its dark layer has faded by the hold.

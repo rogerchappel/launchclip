@@ -33,7 +33,7 @@
         "end": 4,
         "params": {
           "device": "laptop",
-          "image": "assets/testsrc.png",
+          "image": "assets/screens/dashboard.png",
           "caption": "A real screenshot in the frame",
           "variant": "dark"
         }

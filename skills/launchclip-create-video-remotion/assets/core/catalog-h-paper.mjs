@@ -103,7 +103,13 @@ function polaroidView(model) {
 function polaroidTimeline(model, ops) {
   const {id, start, unit: u} = model;
   const c = model.content;
-  if (c.variant === 'stack') [0, 1].forEach(i => riseOps(ops, `${id}-back-${i}`, start, rt(c.t - 0.12 + i * 0.06), r2(-60 * u), {duration: 0.5}));
+  // The back frames keep their own tilt in the ops: a Remotion transform
+  // from the op list replaces the CSS one, so the rotation must be in it.
+  if (c.variant === 'stack') [c.tilt - 7, c.tilt + 9].forEach((rot, i) => {
+    const back = `${id}-back-${i}`, t = rt(c.t - 0.12 + i * 0.06);
+    set(ops, back, start, {opacity: 0, x: 0, y: r2(-60 * u), rotation: rot});
+    tw(ops, back, t, 0.5, 'power3.out', {opacity: 0, y: r2(-60 * u)}, {opacity: 1, y: 0});
+  });
   set(ops, `${id}-photo`, start, {opacity: 0, x: 0, y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08});
   tw(ops, `${id}-photo`, c.t, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
   tw(ops, `${id}-photo`, c.t, 0.75, 'back.out(1.3)', {y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08}, {y: 0, rotation: 0, scaleX: 1, scaleY: 1});

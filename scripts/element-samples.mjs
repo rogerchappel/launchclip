@@ -38,6 +38,6 @@ export const SAMPLES = Object.freeze({
 
 /** Extra parity cases beyond one per variant: {name, module, variant, shape, params}. */
 export const EXTRA_SAMPLES = Object.freeze([
-  {name: 'device-frame-laptop-image', module: 'device-frame', variant: 'dark', shape: 'landscape', params: {device: 'laptop', image: 'assets/testsrc.png', caption: 'A real screenshot in the frame'}},
+  {name: 'device-frame-laptop-image', module: 'device-frame', variant: 'dark', shape: 'landscape', params: {device: 'laptop', image: 'assets/screens/dashboard.png', caption: 'A real screenshot in the frame'}},
   {name: 'speech-bubble-thought', module: 'speech-bubble', variant: 'comic', shape: 'portrait', params: {text: 'What if the video made itself?', type: 'thought', tail: 'bottom-right'}}
 ]);
