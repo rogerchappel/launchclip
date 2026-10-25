@@ -22,6 +22,7 @@ import { characterView } from "../kit/core/characters/view.mjs";
 import { CAST_MODULES } from "../kit/core/story.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { renderNode } from "../kit/hyperframes/catalog-b.mjs";
+import { applyProjectStyle } from "./story_style.js";
 
 export const CAST_SHEET = Object.freeze({ png: "qa/cast-sheet.png", json: "qa/cast-sheet.json" });
 
@@ -31,8 +32,10 @@ async function loadStoryFile(target) {
   if (!info) throw new Error(`${target} does not exist`);
   const file = info.isDirectory() ? path.join(target, "storyboard.json") : target;
   if (!existsSync(file)) throw new Error(`${file} does not exist`);
-  const story = JSON.parse(await readFile(file, "utf8"));
   const project = path.dirname(file);
+  // A style pack (story.style) fills the brand and the cast's colour mapping,
+  // as finish does, so the sheet draws the characters in the video's colours.
+  const { story } = await applyProjectStyle(JSON.parse(await readFile(file, "utf8")), { projectDir: project });
   const directionFile = path.join(project, "DIRECTION.json");
   const direction = existsSync(directionFile) ? JSON.parse(await readFile(directionFile, "utf8")) : null;
   return { story, project, file, direction };
