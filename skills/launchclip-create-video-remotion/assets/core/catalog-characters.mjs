@@ -25,6 +25,7 @@ import {media, mediaNode} from './catalog-e.mjs';
 import {EXPRESSIONS, POSES, rigGeometry} from './characters/rig.mjs';
 import {drawFlat, drawnHeight} from './characters/style-flat.mjs';
 import {characterView} from './characters/view.mjs';
+import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
 import {SETS, SET_INFO, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
@@ -38,7 +39,7 @@ const timingOf = id => ({...CHARACTER_TIMING[id], gaps: [], rules: [
   'gestures (wave, type, walk, cheer, think) loop while the pose holds'
 ]});
 
-const ACTOR_KEYS = ['id', 'pose', 'expression', 'facing', 'cues', 'says', 'holds'];
+const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 'says', 'holds'];
 
 // ---------------------------------------------------------------------------
 // Shared: actors
@@ -97,17 +98,46 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter}) {
     facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: drawnHeight(member.params), geometry, enter};
 }
 
+// A held phone sits in the hand away from the facing side.
+const actorProps = actor => actor.holds === 'phone' ? {[actor.facing === 'left' ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
+
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = sceneJoints(first.pose, {...actor, geometry: actor.geometry});
-  let props = null;
-  if (actor.holds === 'phone') {
-    const side = actor.facing === 'left' ? 'r' : 'l';
-    props = {[side]: phoneProp(actor.colors, 98)};
-  }
-  const drawing = drawFlat(actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props});
+  const drawing = drawFlat(actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor)});
   return characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
+}
+
+// A gesture's far swing (acting.mjs gestureOps) as joint values.
+function gesturePeak(j) {
+  const g = j.gesture;
+  if (!g) return null;
+  if (g.joint === 'walk') return {...j, legL: j.legL + g.amount, legR: j.legR - g.amount, armL: j.armL - g.amount * 0.8, armR: j.armR + g.amount * 0.8};
+  if (g.joint === 'fore') return {...j, foreL: j.foreL + g.amount, foreR: j.foreR - g.amount};
+  if (g.joint === 'bodyY') return {...j, bodyY: j.bodyY + g.amount};
+  const s = g.joint.endsWith('L') ? 'L' : 'R';
+  return {...j, [`fore${s}`]: j[`fore${s}`] + g.amount};
+}
+
+/**
+ * How far an actor reaches on the canvas over the scene: the union of its
+ * drawn bounds in every pose it takes (and each gesture's far swing), with
+ * its held prop. → {left, top, right, bottom} canvas px.
+ */
+export function actorReach(actor) {
+  const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
+  for (const pose of new Set(actor.states.map(state => state.pose))) {
+    const joints = sceneJoints(pose, {...actor, geometry: actor.geometry});
+    for (const j of [joints, gesturePeak(joints)].filter(Boolean)) {
+      const b = drawingBounds(drawFlat(actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor)}));
+      out.left = Math.min(out.left, actor.x + b.left * actor.scale);
+      out.right = Math.max(out.right, actor.x + b.right * actor.scale);
+      out.top = Math.min(out.top, actor.floor + b.top * actor.scale);
+      out.bottom = Math.max(out.bottom, actor.floor + b.bottom * actor.scale);
+    }
+  }
+  return {left: r2(out.left), top: r2(out.top), right: r2(out.right), bottom: r2(out.bottom)};
 }
 
 function actorsOps(model, ops) {
@@ -142,6 +172,43 @@ function castEvents(b, actors) {
 // ---------------------------------------------------------------------------
 // cast-scene
 
+// Screen positions by cast size, left to right (the layout's slots).
+const POSITION_NAMES = {1: ['centre'], 2: ['left', 'right'], 3: ['left', 'centre', 'right']};
+const POSITIONS = ['left', 'centre', 'center', 'right'];
+
+/**
+ * Which layout slot each cast entry takes. A scene entry's `position` wins,
+ * then the story cast's `position` for that character (so a character keeps
+ * its side from shot to shot), and anyone left fills the free slots in list
+ * order. → slot index per entry.
+ */
+function castSlots(b, entries, cast) {
+  const {check} = b;
+  const names = POSITION_NAMES[entries.length];
+  const wanted = entries.map((raw, i) => {
+    const own = raw?.position === undefined ? null : check.oneOf(raw.position, `params.cast[${i}].position`, POSITIONS);
+    const name = own === 'center' ? 'centre' : own;
+    if (name && !names.includes(name)) check.fail(`params.cast[${i}].position`, `${JSON.stringify(raw.position)} does not fit ${entries.length} character${entries.length === 1 ? '' : 's'} (positions: ${names.join(', ')})`);
+    if (name) return {name, explicit: true};
+    let story = null;
+    try { story = cast?.members?.get(raw?.id)?.position ?? null; } catch { story = null; }
+    story = story === 'center' ? 'centre' : story;
+    return story && names.includes(story) ? {name: story, explicit: false} : null;
+  });
+  const taken = new Map();
+  wanted.forEach((want, i) => {
+    if (!want?.explicit) return;
+    if (taken.has(want.name)) check.fail(`params.cast[${i}].position`, `${want.name} is already taken by params.cast[${taken.get(want.name)}]`);
+    taken.set(want.name, i);
+  });
+  // Story-cast positions next, where the slot is still free.
+  wanted.forEach((want, i) => { if (want && !want.explicit && !taken.has(want.name)) taken.set(want.name, i); });
+  const slots = new Array(entries.length).fill(null);
+  for (const [name, i] of taken) slots[i] = names.indexOf(name);
+  const free = names.map((_, k) => k).filter(k => !slots.includes(k));
+  return slots.map(slot => slot ?? free.shift());
+}
+
 function resolveCastScene(params, ctx) {
   const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
@@ -161,12 +228,14 @@ function resolveCastScene(params, ctx) {
     try { return drawnHeight(castMember(cast, entry?.id, `params.cast[${i}].id`).params); } catch { return 1000; }
   });
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit});
+  const slotOf = castSlots(b, p.cast, cast);
   const actors = p.cast.map((raw, i) => {
-    const slot = layout.slots[i];
+    const slot = layout.slots[slotOf[i]];
     const actor = resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start});
     // The phone set: the first character holds the phone unless someone else is given it.
     if (setName === 'phone' && i === 0 && !p.cast.some(entry => entry?.holds !== undefined)) actor.holds = 'phone';
-    return {...actor, x: slot.x, floor: slot.floor, scale: slot.scale};
+    const placed = {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale};
+    return {...placed, reach: actorReach(placed)};
   });
   castEvents(b, actors);
   const tops = actors.map(actor => actor.floor - (actor.height + (layout.seated ? -actor.geometry.sitDrop : 0)) * actor.scale);
@@ -233,10 +302,13 @@ function resolveCameo(params, ctx) {
       : {x: side === 'left' ? rect.x : r2(rect.x + rect.width * 0.64), y: rect.y, width: r2(rect.width * 0.36), height: rect.height};
   const probe = resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start});
   const pad = u(10);
-  const scale = r2(Math.min((area.height - pad * 2) / probe.height, (area.width - pad * 2) / 620) * 1000) / 1000;
+  // Sized to its tallest pose: a wave or a cheer reaches above the head.
+  const tallest = Math.max(probe.height, -actorReach({...probe, x: 0, floor: 0, scale: 1}).top);
+  const scale = r2(Math.min((area.height - pad * 2) / tallest, (area.width - pad * 2) / 620) * 1000) / 1000;
   const x = r2(card && portrait ? (side === 'left' ? area.x + area.width * 0.28 : area.x + area.width * 0.72) : area.x + area.width / 2);
   const floor = r2(area.y + area.height - pad);
-  const actor = {...probe, x, floor, scale};
+  const placed = {...probe, x, floor, scale};
+  const actor = {...placed, reach: actorReach(placed)};
   let cardBox = null;
   if (card) {
     const box = portrait ? {x: rect.x, y: rect.y, width: rect.width, height: r2(rect.height * 0.32)}
@@ -288,7 +360,7 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, pose?, expression?, facing?: left|right, cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',

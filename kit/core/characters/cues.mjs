@@ -32,7 +32,7 @@ export const KOKORO_VOICES = Object.freeze([
   'bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily', 'bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis'
 ]);
 const ID = /^[a-z][a-z0-9-]{0,23}$/;
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'build', 'height', 'skin', 'hair', 'outfit', 'accessories', 'colors'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'build', 'height', 'skin', 'hair', 'outfit', 'accessories', 'colors', 'position'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -70,6 +70,7 @@ export function storyCastErrors(cast) {
     if (seen.has(entry.id)) errors.push(`${path}.id "${entry.id}" is listed twice; each character appears once in a cast`);
     seen.add(entry.id);
     if (entry.voice !== undefined && (typeof entry.voice !== 'string' || !entry.voice.trim())) errors.push(`${path}.voice must be a voice id (Kokoro: ${KOKORO_VOICES.slice(0, 4).join(', ')}, …)`);
+    if (entry.position !== undefined && !['left', 'centre', 'center', 'right'].includes(entry.position)) errors.push(`${path}.position must be left, centre or right (the side this character takes in every cast scene it shares)`);
     if (entry.name !== undefined && (typeof entry.name !== 'string' || !entry.name.trim() || entry.name.length > 40)) errors.push(`${path}.name must be a string of 1–40 characters`);
     try { castParams(entry, path); } catch (error) { errors.push(error.message); }
   });
@@ -111,7 +112,7 @@ export function resolveStoryCast(story) {
   castEntries(cast).forEach((entry, i) => {
     const params = castParams(entry, `cast.characters[${i}]`);
     const starter = starterCharacter(entry.from ?? entry.id);
-    out.set(entry.id, {id: entry.id, name: entry.name ?? starter?.name ?? entry.id, voice: entry.voice ?? null, starter: false, ...characterLook(params, {style, brand: story?.brand, mapping})});
+    out.set(entry.id, {id: entry.id, name: entry.name ?? starter?.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, starter: false, ...characterLook(params, {style, brand: story?.brand, mapping})});
   });
   return {members: out, style, mapping, listed: out.size > 0, brand: story?.brand ?? null};
 }

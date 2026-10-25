@@ -3,6 +3,7 @@ import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
 import { knownModules, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { validateCastCues } from "../kit/core/characters/cues.mjs";
+import { CAST_MODULES } from "../kit/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -151,6 +152,13 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
     const direction = await checkStoryDirection({ story, resolved: resolvedStory, words: words?.list ?? null, storyDir: path.dirname(file), storyFile: file, flag: flags.direction, style: styled.style });
     errors.push(...direction.errors.filter((entry) => !errors.includes(entry)));
     validation.warnings.push(...direction.warnings);
+    // The cast gate finish runs (src/cast.js): characters drawn the same,
+    // every limb and prop on the canvas and in the safe zone, sides kept.
+    if (resolvedStory && resolvedStory.scenes.some((scene) => CAST_MODULES.includes(scene.module))) {
+      const { castGate } = await import("./cast.js");
+      const gate = castGate(resolvedStory); // the map's cast cues are checked with the direction above
+      errors.push(...gate.findings.map((finding) => `cast: ${finding.detail}`).filter((entry) => !errors.includes(entry)));
+    }
     if (resolvedStory) for (const warning of subjectDensityWarnings(resolvedStory, { profile: direction.profileDoc })) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
     const result = {
       stage: "story",

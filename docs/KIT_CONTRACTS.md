@@ -1654,7 +1654,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused |
 
 ### The kit (`kit/core/characters/`)
@@ -1686,8 +1686,25 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   and end on the pose; breathing, a head sway and blinks run on their own
   groups; expressions crossfade over 0.16 s; mouths open on spoken words (two
   flaps on a long word, a steady rhythm when a range has no word timings).
-- `sets.mjs`: the room, furniture and slots for each set.
+- `sets.mjs`: the room, furniture and slots for each set (left to right; a
+  slot faces the middle of the frame).
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
+- `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
+  joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
+  over every pose an actor takes in a scene, each gesture's far swing and a
+  held phone, in canvas px, as `content.actors[i].reach`.
+- `placement.mjs`: `castPlacement(story, models)`, the cast gate's placement
+  findings: a reach off the canvas, or out of the safe zone at the sides or
+  top; and two characters who swap sides between consecutive cast scenes
+  unless both scenes give them an explicit `position`.
+
+**Placement.** A cast-scene entry's `position` (`left`, `centre` or
+`right`; `centre` only with one or three characters) picks its slot; then
+the story cast's `position` for that character, where it fits; anyone left
+takes the free slots in list order. `facing` defaults to the slot's, which
+is inward, so a `point` or `wave` reaches into the frame. Give a couple
+story-cast positions and the order of a scene's cast list no longer moves
+them.
 
 Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
 `C-breath`, `C-head`/`C-hb` (head and the hair behind it), `C-headidle`,
@@ -1699,7 +1716,7 @@ Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
 
 ```json
 { "style": "flat", "colors": { "primary": "teal" },
-  "characters": [ { "id": "maya", "voice": "af_heart" },
+  "characters": [ { "id": "maya", "voice": "af_heart", "position": "left" },
                   { "id": "sam", "from": "theo", "hair": { "style": "curly" } },
                   { "id": "riley", "skin": "deep", "hair": { "style": "locs", "color": "black" } } ] }
 ```
@@ -1707,7 +1724,9 @@ Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
 An id (or `from`) naming a starter starts from its params; the fields given
 override them. Other ids need their own skin and hair. When the cast lists
 characters, scenes may only use those; without a cast, scenes may use any
-starter. Scenes name characters by id and never carry params, so a
+starter. `position` (left, centre or right) is the side the character
+takes in every cast scene it shares, unless a scene says otherwise. Scenes
+name characters by id and never carry params, so a
 character cannot change inside a story. `storyCastErrors(cast)` and
 `resolveStoryCast(story)` validate it; a style pack's cast mapping reaches
 the story through `story.cast` (the style merge fills it).
@@ -1751,8 +1770,10 @@ the story through `story.cast` (the style merge fills it).
 - `launchclip finish` runs `castGate(resolved, {direction})` in its validate
   stage and reports `gates.cast`: the story cast is valid, every character
   scene resolves, the direction map's cast cues resolve, each character is
-  identical in every scene, and voices are local Kokoro voices. A failure
-  stops finish before rendering.
+  identical in every scene, every limb and prop stays on the canvas and in
+  the safe zone, characters keep their sides between shots, and voices are
+  local Kokoro voices. A failure stops finish before rendering;
+  `launchclip story validate` reports the same findings (`cast: …`).
 
 ### Parity
 
