@@ -42,9 +42,15 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const qaDir = projectFile(project, options.qaDir ?? "qa/cinematic");
   await mkdir(qaDir, { recursive: true });
 
-  let verification = adapters.verifyProject
-    ? await adapters.verifyProject(project, qaDir, { ...options, renderer: rendererName })
-    : await verifyProject(project, qaDir, rendererAdapter(rendererName, adapters, storyModule));
+  // A storyboard project has no index.html of its own: HyperFrames checks
+  // what finish compiled from it.
+  const verifyDir = verificationProject(project, rendererName, { storyboard: Boolean(storyboard), html: html != null });
+  let verification = verifyDir !== project && !hasExactFile(verifyDir, "index.html")
+    ? missingCompiledVerification(project, rendererName)
+    : adapters.verifyProject
+      ? await adapters.verifyProject(verifyDir, qaDir, { ...options, renderer: rendererName })
+      : await verifyProject(verifyDir, qaDir, rendererAdapter(rendererName, adapters, storyModule));
+  if (verifyDir !== project) verification = { ...verification, verified_project: path.relative(project, verifyDir) };
   await writeJson(path.join(qaDir, "verification.json"), verification);
 
   // The story's cadence profile sets the motion bands (a talking head is not
@@ -422,6 +428,31 @@ function augmentVerification(verification, phase2Checks) {
 function rendererAdapter(name, adapters, storyModule) {
   if (adapters.renderer) return adapters.renderer;
   return getRenderer(name, { run: adapters.run, storyModule, ...(adapters.rendererOptions ?? {}) });
+}
+
+// Where finish compiles a storyboard project for HyperFrames.
+export const COMPILED_HYPERFRAMES = ".launchclip/finish/hyperframes";
+
+/**
+ * The directory the renderer check runs on: the project itself, except a
+ * HyperFrames storyboard project without a hand-authored index.html, which is
+ * checked through the composition finish compiled (COMPILED_HYPERFRAMES).
+ */
+export function verificationProject(project, rendererName, { storyboard, html }) {
+  return rendererName === "hyperframes" && storyboard && !html ? path.join(project, COMPILED_HYPERFRAMES) : project;
+}
+
+function missingCompiledVerification(project, rendererName) {
+  const message = `${COMPILED_HYPERFRAMES}/index.html is missing; run launchclip finish ${project} to compile the storyboard before cinematic-check`;
+  return {
+    schema_version: "launchclip.subscription-verification.v1",
+    status: "failed",
+    renderer: rendererName,
+    created_at: new Date().toISOString(),
+    checks: { compiled: { ok: false } },
+    findings: [{ source: rendererName, severity: "error", message }],
+    failed: ["compiled"]
+  };
 }
 
 // Runs the renderer adapter's check and records each sub-check as

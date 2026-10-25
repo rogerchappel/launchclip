@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -113,6 +113,38 @@ test("verifies a HyperFrames project through the renderer adapter", async () => 
   assert.deepEqual(Object.keys(verification.checks), ["lint", "check"]);
   const lint = JSON.parse(await readFile(path.join(result.qa, "lint.json"), "utf8"));
   assert.equal(lint.ok, true);
+});
+
+test("checks a HyperFrames storyboard project through the composition finish compiled", async () => {
+  const project = await fixture({ complete: false });
+  await rm(path.join(project, "index.html"));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyboard()));
+  const adapters = passingAdapters({ duration: 12, width: 720, height: 1280 });
+  delete adapters.verifyProject;
+  adapters.storyModule = storyModule;
+  const calls = [];
+  adapters.run = async (_command, args) => {
+    calls.push(args.slice(1));
+    return { stdout: JSON.stringify({ ok: true, errorCount: 0 }), stderr: "" };
+  };
+  const options = { expectAudio: true, renderer: "hyperframes" };
+  const missing = await checkCinematicProject(project, options, adapters);
+  assert.deepEqual(calls, [], "nothing to check before finish compiles the storyboard");
+  const before = JSON.parse(await readFile(path.join(missing.qa, "verification.json"), "utf8"));
+  assert.deepEqual(before.failed, ["compiled"]);
+  assert.match(before.findings[0].message, /\.launchclip\/finish\/hyperframes\/index\.html is missing; run launchclip finish/);
+
+  const compiled = path.join(project, ".launchclip", "finish", "hyperframes");
+  await mkdir(compiled, { recursive: true });
+  await writeFile(path.join(compiled, "index.html"), "<div data-composition-id=\"main\"></div>");
+  const result = await checkCinematicProject(project, options, adapters);
+  assert.deepEqual(calls, [
+    ["lint", "--json", compiled],
+    ["check", "--json", "--strict", "--snapshots", "--at-transitions", compiled]
+  ]);
+  const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
+  assert.equal(verification.status, "passed");
+  assert.equal(verification.verified_project, path.join(".launchclip", "finish", "hyperframes"));
 });
 
 test("fails the HyperFrames adapter check on a blocking finding", async () => {

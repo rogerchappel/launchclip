@@ -22,7 +22,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
-import { applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
+import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -74,7 +74,7 @@ export const PATHS = Object.freeze({
   state: ".launchclip/finish-state.json",
   copy: ".launchclip/finish/storyboard.json",
   resolved: ".launchclip/finish/story.resolved.json",
-  hyperframes: ".launchclip/finish/hyperframes",
+  hyperframes: COMPILED_HYPERFRAMES,
   voice: "assets/audio/narration.wav",
   words: "NARRATION.json",
   captions: "assets/captions/captions.json",
@@ -1249,7 +1249,6 @@ async function runGates(ctx) {
     status: "pending",
     reason: "finish does not produce critic receipts",
     next_step: `Have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json (citing the qa/temporal-evidence IDs), then run: launchclip cinematic-check ${ctx.project} --renderer ${ctx.rendererName} --video ${rel(ctx.project, ctx.out)} --expect-audio`
-      + (ctx.rendererName === "hyperframes" && !hasExactFile(ctx.project, "index.html") ? ` (HyperFrames checks need the compiled index.html; finish compiled it to ${PATHS.hyperframes})` : "")
   };
   return gates;
 }
