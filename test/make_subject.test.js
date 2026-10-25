@@ -37,6 +37,8 @@ function client(prompts, scenes) {
     client: {
       provider: "openai",
       async runStructured(request) {
+        // The direction-map call gets no map; make drafts DIRECTION.json from the storyboard.
+        if (request.schemaName === "launchclip_direction") return { model: "recorded", value: { direction_json: "" }, usage: { input_tokens: 1, output_tokens: 1 } };
         prompts.push(request.instructions);
         const board = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 6.6 }, brand: DEFAULT_BRAND, audio: { words: "NARRATION.json" }, base: "assets/base-edit.mp4", scenes, overlays: [{ type: "captions", style: "word-highlight" }] };
         return { model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(board) }, usage: { input_tokens: 10, output_tokens: 10 } };
