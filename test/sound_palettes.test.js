@@ -278,10 +278,8 @@ test("rendered: a palette slice, a genre bed and an ambience loop pass the liste
     assert.equal((await analyseFile(bed.file)).clipped, 0);
     const loop = await synthAmbience("rain", path.join(dir, "ambience"), { seed: "t1" });
     const { left } = await decodePcm(loop.file);
-    let typical = 0;
-    for (let i = 1; i < left.length; i++) typical += Math.abs(left[i] - left[i - 1]);
-    typical /= left.length - 1;
-    assert.ok(Math.abs(left[0] - left.at(-1)) < typical * 4 + 0.002, "the loop has no step at its seam");
+    const steps = Array.from({ length: left.length - 1 }, (_, i) => Math.abs(left[i + 1] - left[i])).sort((x, y) => x - y);
+    assert.ok(Math.abs(left[0] - left.at(-1)) <= steps[Math.floor(steps.length * 0.999)] * 1.5, "the loop has no step at its seam");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

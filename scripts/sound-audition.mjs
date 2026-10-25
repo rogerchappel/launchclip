@@ -137,6 +137,7 @@ export async function audition(options) {
     if (Math.abs(grid.bpm - bed.bpm) > 1) result.problems.push(`genre ${genre}: analysed ${grid.bpm} BPM for a ${bed.bpm} BPM bed`);
     if (worst !== null && worst > 25) result.problems.push(`genre ${genre}: beats ${Math.round(worst)} ms off the grid`);
     if (s.clipped > 0) result.problems.push(`genre ${genre}: clips`);
+    if (level.true_peak_db > -1) result.problems.push(`genre ${genre}: true peak ${level.true_peak_db} dBTP is above -1`);
     if (level.lufs < -24 || level.lufs > -12) result.problems.push(`genre ${genre}: ${level.lufs} LUFS is outside -24..-12`);
     result.genres[genre] = entry;
   });
@@ -146,15 +147,18 @@ export async function audition(options) {
     const made = await synthAmbience(name, path.join(work, 'ambience'), { seed });
     const file = path.join(out, 'ambience', `${name}.wav`);
     await ffmpeg(['-stream_loop', '1', '-i', made.file, '-c:a', 'pcm_s16le', file]);
+    // The seam's sample step against the bed's own steps: a click would stand
+    // far above the 99.9th percentile of them.
     const { left } = await decodePcm(made.file);
-    let typical = 0;
-    for (let i = 1; i < left.length; i++) typical += Math.abs(left[i] - left[i - 1]);
-    typical /= left.length - 1;
+    const steps = new Float32Array(left.length - 1);
+    for (let i = 1; i < left.length; i++) steps[i - 1] = Math.abs(left[i] - left[i - 1]);
+    steps.sort();
+    const typical = steps[Math.floor(steps.length * 0.999)];
     const seam = Math.abs(left[0] - left[left.length - 1]);
     const level = await loudness(made.file);
     const s = await analyseFile(made.file);
-    result.ambience[name] = { file: path.relative(out, file), loop_seconds: made.loop_seconds, lufs: level.lufs, seam_step: Number(seam.toFixed(5)), typical_step: Number(typical.toFixed(5)), bands: s.bands };
-    if (seam > typical * 4 + 0.002) result.problems.push(`ambience ${name}: the loop seam steps ${seam.toFixed(4)} (typical ${typical.toFixed(4)})`);
+    result.ambience[name] = { file: path.relative(out, file), loop_seconds: made.loop_seconds, lufs: level.lufs, seam_step: Number(seam.toFixed(5)), p999_step: Number(typical.toFixed(5)), bands: s.bands };
+    if (seam > typical * 1.5) result.problems.push(`ambience ${name}: the loop seam steps ${seam.toFixed(4)} (99.9th percentile step ${typical.toFixed(4)})`);
   });
 
   // Mixes: each genre with a palette's cues and a bed, through build-mix and
@@ -201,8 +205,8 @@ function markdown(result) {
   for (const [id, entry] of Object.entries(result.palettes)) lines.push(`| ${id} | ${entry.files} | ${entry.problems} | ${entry.file} |`);
   lines.push('', '## Genres', '', '| Genre | BPM | Key | Prog | Analysed BPM | Grid error | LUFS | True peak | Sheet |', '|---|---|---|---|---|---|---|---|---|');
   for (const [id, e] of Object.entries(result.genres)) lines.push(`| ${id} | ${e.bpm} | ${e.key} | ${e.progression} | ${e.analysed_bpm} | ${e.grid_error_ms} ms | ${e.lufs} | ${e.true_peak_db} | ${e.file} |`);
-  lines.push('', '## Ambience', '', '| Bed | Loop | LUFS | Seam step / typical | File |', '|---|---|---|---|---|');
-  for (const [id, e] of Object.entries(result.ambience)) lines.push(`| ${id} | ${e.loop_seconds} s | ${e.lufs} | ${e.seam_step} / ${e.typical_step} | ${e.file} |`);
+  lines.push('', '## Ambience', '', '| Bed | Loop | LUFS | Seam step / 99.9th pct step | File |', '|---|---|---|---|---|');
+  for (const [id, e] of Object.entries(result.ambience)) lines.push(`| ${id} | ${e.loop_seconds} s | ${e.lufs} | ${e.seam_step} / ${e.p999_step} | ${e.file} |`);
   if (Object.keys(result.mixes).length) {
     lines.push('', '## Gate mixes', '', '| Genre | Palette | Ambience | LUFS | True peak | Voice–music margin | Loudness gate | Audio gate |', '|---|---|---|---|---|---|---|---|');
     for (const [id, e] of Object.entries(result.mixes)) lines.push(`| ${id} | ${e.palette} | ${e.ambience} | ${e.integrated_lufs} | ${e.true_peak_db} | ${e.voice_music_margin_db} dB | ${e.loudness_compliant ? 'passed' : 'failed'} | ${e.audio_gate} |`);
