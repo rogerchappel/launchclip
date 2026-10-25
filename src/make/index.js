@@ -582,7 +582,8 @@ async function stageCritic(ctx) {
   if (!wanted) return pending(`${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
   if (!ctx.model.vision) return pending(`${ctx.model.spec} cannot take images`);
   ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (headless critic over qa/critic-sheets/)`);
-  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider });
+  const quality = ctx.finish?.gates?.coverage?.findings ?? [];
+  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality });
   if (result.cost_usd !== undefined) addCost(report, "critic", ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
   if (result.status !== "written") return pending(result.reason ?? "the critic did not run");
   report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
