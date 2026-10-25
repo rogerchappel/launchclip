@@ -16,6 +16,7 @@ import { INTENT_RULES, intentHints } from "../kit/core/direction.mjs";
 import { directionMapReference, profilesReference } from "../kit/core/planning-prompt.mjs";
 import { shippedProfiles } from "../src/profile_store.js";
 import { planStoryCommand, runStoryCommand } from "../src/story_cli.js";
+import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
 
 const EXAMPLES = fileURLToPath(new URL("../examples/story/", import.meta.url));
 const SKILLS = ["launchclip-create-video", "launchclip-create-video-remotion"].map((name) => fileURLToPath(new URL(`../skills/${name}/references/`, import.meta.url)));
@@ -67,7 +68,10 @@ for (const entry of FIXTURES) {
     // Headless: story plan asks for the map, then the storyboard against it.
     const cli = await fixture(t, entry.name);
     const seen = [];
-    const flags = { brief: path.join(cli, "brief.md"), narration: path.join(cli, "NARRATION.json"), tier: "guided", lane: entry.lane, out: path.join(cli, "storyboard.json"), format: entry.format, duration: entry.duration, ...(entry.base ? { base: entry.base } : {}) };
+    // The fixture's own brand, so the plan does not draw a seeded style (the
+    // recorded storyboard is fitted to these fonts).
+    await writeFile(path.join(cli, "brand.json"), JSON.stringify(source.brand ?? DEFAULT_BRAND));
+    const flags = { brand: path.join(cli, "brand.json"), brief: path.join(cli, "brief.md"), narration: path.join(cli, "NARRATION.json"), tier: "guided", lane: entry.lane, out: path.join(cli, "storyboard.json"), format: entry.format, duration: entry.duration, ...(entry.base ? { base: entry.base } : {}) };
     const planned = await planStoryCommand(flags, { client: recordedClient(map, source, seen), subjectProbe: async () => ({ probe: PROBE }) });
     assert.equal(planned.status, "passed", JSON.stringify(planned.warnings));
     assert.equal(planned.lane, entry.lane);

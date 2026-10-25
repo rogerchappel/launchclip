@@ -224,7 +224,9 @@ test("launchclip story plan writes storyboard.json and the plan report", async (
     await writeFile(path.join(dir, "brief.md"), BRIEF);
     await writeFile(path.join(dir, "NARRATION.json"), JSON.stringify({ words: WORDS }));
     const client = fakeClient([envelope(brokenStoryboard()), envelope(goodStoryboard())]);
-    const result = await planStoryCommand({ brief: path.join(dir, "brief.md"), narration: path.join(dir, "NARRATION.json"), out: path.join(dir, "storyboard.json"), duration: "12" }, { client });
+    // The default brand, so the fixed storyboard is not checked against a seeded style's fonts.
+    await writeFile(path.join(dir, "brand.json"), JSON.stringify(DEFAULT_BRAND));
+    const result = await planStoryCommand({ brief: path.join(dir, "brief.md"), narration: path.join(dir, "NARRATION.json"), out: path.join(dir, "storyboard.json"), duration: "12", brand: path.join(dir, "brand.json") }, { client });
     assert.equal(result.status, "passed");
     assert.equal(result.lane, "voiceover-motion");
     assert.equal(result.repairs_used, 1);
