@@ -128,6 +128,28 @@ test("sceneFilter compiles one scene on the background, like ModuleReview", asyn
   await assert.rejects(compileStoryToHyperFrames(story, { sourceDir: MINIMAL, sceneFilter: ["nope"], write: false }), /matched no scene/);
 });
 
+test("window compiles a stretch of the story as a composition from 0 (finish --preview-scene)", async () => {
+  const story = await minimalStory();
+  const late = (await compileStoryToHyperFrames(story, { sourceDir: MINIMAL, window: [3, 6], write: false })).html;
+  assert.match(late, /id="launchclip-root" data-composition-id="launchclip-story" data-start="0" data-duration="3"/);
+  assert.match(late, /<audio id="lc-audio" class="clip" src="assets\/audio\/mix.wav" data-start="0" data-duration="3" data-media-start="3"/, "the soundtrack plays from the window's start");
+  assert.match(late, /<section id="s1" class="clip" data-start="0" data-duration="0.4"/, "a scene straddling the start keeps its tail (the transition into s2)");
+  assert.match(late, /<section id="s2" class="clip" data-start="0" data-duration="3"/);
+  assert.match(late, /lcWindow\.add\(tl\.tweenFromTo\(3, 6, \{ duration: 3, ease: 'none'/);
+  assert.match(late, /window\.__timelines\["launchclip-story"\] = lcWindow;/);
+  const early = (await compileStoryToHyperFrames(story, { sourceDir: MINIMAL, window: [0, 71 / 30], write: false })).html;
+  assert.match(early, /id="launchclip-root"[^>]*data-duration="2.3666"/, "rounded down, never a frame long");
+  assert.match(early, /<section id="s2" class="" data-track-index="4" style="display:none !important;/, "a scene outside the window is off the timeline and hidden");
+  // Frame n of the window is the story timeline at start + n / fps.
+  const wrapper = gsap.timeline({ paused: true });
+  const inner = gsap.timeline({ paused: true });
+  inner.to({}, { duration: 6 });
+  wrapper.add(inner.tweenFromTo(3, 6, { duration: 3, ease: "none", immediateRender: false }), 0);
+  wrapper.seek(1.5);
+  assert.equal(inner.time(), 4.5);
+  await assert.rejects(compileStoryToHyperFrames(story, { sourceDir: MINIMAL, window: [4, 4], write: false }), /0 <= start < end/);
+});
+
 test("unknown modules render a labelled placeholder and a warning; invalid stories throw", async () => {
   const story = await minimalStory((value) => {
     value.scenes[0].module = "not-a-module";
