@@ -1066,6 +1066,38 @@ export function validateSections(story, { err, warn = () => {} } = {}) {
     } else if (section.start === undefined || section.end === undefined) err(`${path} needs start and end (seconds or anchors)`);
     if (section.layout === "full" && (section.panel !== undefined || section.ring !== undefined)) warn(`${path}: a full section has no panel; panel and ring do nothing`);
   });
+  // Scenes that spill over a section's edge: a scene mostly inside a section
+  // takes its layout (sceneSection); one mostly outside is placed as full.
+  const timed = sections.filter((section) => isObject(section) && typeof section.start === "number" && typeof section.end === "number" && section.end > section.start && section.layout !== "full");
+  for (const scene of Array.isArray(story.scenes) ? story.scenes : []) {
+    if (!isObject(scene) || scene.insert === true || typeof scene.start !== "number" || typeof scene.end !== "number") continue;
+    for (const section of timed) {
+      const overlap = Math.min(scene.end, section.end) - Math.max(scene.start, section.start);
+      if (!(overlap > EPS) || (scene.start >= section.start - EPS && scene.end <= section.end + EPS)) continue;
+      const before = section.start - scene.start, after = scene.end - section.end;
+      const spill = before > EPS ? `starts ${ms(before)} s before section ${section.id} (${ms(section.start)} s)` : `ends ${ms(after)} s after section ${section.id} (${ms(section.end)} s)`;
+      const move = before > EPS ? `move its start to ${ms(section.start)}` : `move its end to ${ms(section.end)}`;
+      const inside = sceneSection([section], scene.start, scene.end) === section;
+      warn(inside
+        ? `scene ${scene.id}: ${spill}; it is placed in ${section.id}'s ${section.layout} layout; ${move}`
+        : `scene ${scene.id}: ${spill} but is mostly outside it, so it is placed in the full frame, not ${section.id}'s ${section.layout} panel; move it inside ${section.id} (${ms(section.start)}–${ms(section.end)} s) or out of it`);
+    }
+  }
+}
+
+/**
+ * The section a scene over [start, end] belongs to: the one holding at
+ * least half of it (the largest share wins), or null.
+ */
+export function sceneSection(sections, start, end = start) {
+  const span = Math.max(end - start, EPS);
+  let best = null, most = 0;
+  for (const section of sections ?? []) {
+    if (!isObject(section) || typeof section.start !== "number" || typeof section.end !== "number") continue;
+    const overlap = Math.min(end, section.end) - Math.max(start, section.start);
+    if (overlap > most + EPS) { best = section; most = overlap; }
+  }
+  return best && (most >= span / 2 - EPS || (start >= best.start - EPS && start < best.end - EPS)) ? best : null;
 }
 
 /** Resolved sections, sorted and frame-snapped: [{id, start, end, layout, side, panel (#hex), ring, room, zoom, transition: {type, dur}}]. */

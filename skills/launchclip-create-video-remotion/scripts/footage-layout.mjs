@@ -37,9 +37,9 @@
 import { captionsOverlayOf } from "./captions.mjs";
 import { captionBandAt, profileGeometry } from "./layout-check.mjs";
 import { sourceTimeAt, subjectContext } from "./subject-layer.mjs";
-import { SECTION_ROOMS, layoutSpans, storyBase, storySections } from "./story.mjs";
+import { SECTION_ROOMS, layoutSpans, sceneSection, storyBase, storySections } from "./story.mjs";
 
-export { FOOTAGE_LAYOUTS, LAYOUT_SHIFT, LAYOUT_SIDES, PANEL_ROLES, ROOM_MODES, SECTION_ROOMS, SECTION_TRANSITIONS, layoutSpans, storySections, validateSections } from "./story.mjs";
+export { FOOTAGE_LAYOUTS, LAYOUT_SHIFT, LAYOUT_SIDES, PANEL_ROLES, ROOM_MODES, SECTION_ROOMS, SECTION_TRANSITIONS, layoutSpans, sceneSection, storySections, validateSections } from "./story.mjs";
 
 export const LAYOUT_FRAME = "lc-layout-frame";
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
@@ -109,7 +109,21 @@ export function panelSafeArea(panel, canvas, { captions = true, captionBand: ban
  * every section (the full frame).
  */
 export function layoutAt(story, t) {
-  const section = storySections(story).find((entry) => t >= entry.start - EPS && t < entry.end - EPS);
+  return sectionLayout(story, storySections(story).find((entry) => t >= entry.start - EPS && t < entry.end - EPS));
+}
+
+/**
+ * The layout a scene renders in: the section that holds at least half of
+ * [start, end], else the layout at its start (layoutAt). A scene that starts
+ * a moment before its section (71.0 s against 71.2 s) still gets the panel;
+ * validateSections warns so it can be moved.
+ */
+export function sceneLayoutAt(story, start, end = start) {
+  const section = sceneSection(storySections(story), start, end);
+  return section ? sectionLayout(story, section) : layoutAt(story, start);
+}
+
+function sectionLayout(story, section) {
   if (!section) return null;
   const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
   const geometry = layoutGeometry(section.layout, section.side, canvas);
