@@ -29,7 +29,10 @@ skill when they want the bespoke, reviewed path below.
    compact intake", "Freeze the brief and evidence"). Pointed at a SaaS
    codebase? Record its key flows next with `launchclip demo record` ("Record
    the product (demo autopilot)" in the same reference) and show them as
-   `product-demo` scenes.
+   `product-demo` scenes. No style or brand given? Write the art-direction
+   constraints into `BRIEF.md` and generate a seeded style
+   (`launchclip style generate --project <project> --tone <tone>`; "No
+   style given" in [references/workflow.md](references/workflow.md)).
 2. **Concept and story.** Five distinct concepts judged in a fresh context →
    `CONCEPTS.json`; an independently edited retention story → `STORY.json`;
    the exact narration → `SCRIPT.md`.

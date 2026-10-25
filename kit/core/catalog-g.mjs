@@ -14,7 +14,9 @@
 //
 // Every module works in the motion lanes (on the plate), as a footage-led
 // insert (full frame) and as a footage-led overlay (on a brand card clear of
-// the presenter's head): see catalog-g-base.mjs. Conventions are catalogue
+// the presenter's head): see catalog-g-base.mjs. Each module has designed
+// variants (VARIANTS, docs/SEEDED_STYLES_RFC.md §3.2): params.variant, else
+// the style's story.variants[module], else the first, its original look. Conventions are catalogue
 // B's (one static view tree, one renderer-neutral op list, `at` from the
 // scene start, hits time events of the same name).
 
@@ -28,7 +30,9 @@ import {compare, timeline} from './catalog-g-sequence.mjs';
 const ASPECTS = ['9:16', '16:9'];
 const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard, statCard, quoteCard, excerpt, compare, timeline];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, mood: def.mood}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, mood: def.mood, variants: def.variants}]));
+/** Each module's designed variants, the default (its original look) first. */
+export const VARIANTS = Object.freeze(Object.fromEntries(DEFINITIONS.map(def => [def.id, def.variants])));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {

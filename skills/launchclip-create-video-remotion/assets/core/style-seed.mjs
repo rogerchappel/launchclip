@@ -25,11 +25,12 @@
 import { seededRandom } from './ambient.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
 import { DRAWING_STYLES } from './characters/cues.mjs';
-import { STARTER_IDS } from './characters/cast.mjs';
-import { HAIR_COLORS, SKIN_TONES } from './characters/palette.mjs';
-import { ACCESSORIES, BUILDS, HAIR_STYLES, HEIGHTS, TOPS } from './characters/rig.mjs';
+import { CHARACTER_SET_NAMES, generateCast } from './characters/generate.mjs';
+import { moduleVariants } from './modules.mjs';
+import { GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
+import { WORLD_KINDS } from './worlds/index.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
-import { STYLE_FRAME_POSITIONS, STYLE_MUSIC_GENRES, STYLE_SCHEMA, STYLE_SOUND_PALETTES, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
+import { STYLE_FRAME_POSITIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
 export const GENERATOR_VERSION = 'launchclip.style-seed.v1';
 export const SEED_PATTERN = /^[0-9a-f]{8}$/;
@@ -85,14 +86,18 @@ function drawBackgroundParams(s, kind, { fill = false } = {}) {
 
 export const SEED_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
 export const PANEL_FILL_CHANCE = 0.6;
-export const SEED_SOUND_PALETTES = STYLE_SOUND_PALETTES;
-export const SEED_MUSIC_GENRES = STYLE_MUSIC_GENRES;
-export const SEED_MUSIC_KEYS = Object.freeze(['C', 'D', 'E', 'F', 'G', 'A', 'Bb', 'Eb', 'F#']);
-export const SEED_PROGRESSIONS = 4;
+// Sound (kit/core/sound/options.mjs): a tone narrows the palettes and genres
+// (TONE_SOUND); the genre sets the bpm range, keys and progressions.
+export const SEED_SOUND_PALETTES = SOUND_PALETTES;
+export const SEED_MUSIC_GENRES = MUSIC_GENRES;
 export const SEED_ICON_STYLES = Object.freeze(['outline']);
 export const SEED_ILLUSTRATIONS = Object.freeze(['flat']);
 export const SEED_DRAWING_STYLES = DRAWING_STYLES;
-export const SEED_CHARACTER_SETS = Object.freeze(['starter']);
+// The characters kit's sets (kit/core/characters/generate.mjs) that suit any
+// prompt; themed ones (family, kids, seniors, chefs, medical, athletes) come
+// from art direction (constraint character_set, any CHARACTER_SET_NAMES).
+// generateCast builds the people from the seed.
+export const SEED_CHARACTER_SETS = Object.freeze(['office-team', 'startup-founders', 'students', 'creators', 'city-crowd'].filter((name) => CHARACTER_SET_NAMES.includes(name)));
 // Topic-neutral worlds (from the worlds kit) the seed may draw for any prompt;
 // topical ones (kitchen, gym, server-room, ...) are left to art direction.
 // Props stay empty: a world dresses itself, and props are for direction.
@@ -100,16 +105,9 @@ export const SEED_WORLDS = Object.freeze(['abstract-stage', 'skyline', 'rooftop'
 // [time, weight]: day and dusk above night, except for night-friendly tones.
 export const SEED_WORLD_TIMES = Object.freeze([['day', 2], ['dusk', 2], ['night', 1]].map(Object.freeze));
 const NIGHT_TONES = new Set(['premium', 'energetic']);
-// Catalogue modules with designed variants → the variants the seed may pick.
-// Today every module has only its default look.
-export const SEED_MODULE_VARIANTS = Object.freeze({
-  'concept-card': Object.freeze(['default']),
-  'icon-row': Object.freeze(['default']),
-  'stat-card': Object.freeze(['default']),
-  'quote-card': Object.freeze(['default']),
-  'object-card': Object.freeze(['default']),
-  'section-card': Object.freeze(['default'])
-});
+// Modules with designed variants → their names, default first
+// (kit/core/modules.mjs moduleVariants: catalogue G, editorial and the rest).
+export const SEED_MODULE_VARIANTS = Object.freeze(Object.fromEntries(Object.entries(moduleVariants()).map(([id, names]) => [id, Object.freeze(names)])));
 export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel']);
 
 /**
@@ -448,44 +446,6 @@ export function nearestStarter(pack) {
 }
 
 // ---------------------------------------------------------------------------
-// Cast (§3.2): 2–4 people from the rig's options
-
-const FIRST_NAMES = ['ada', 'bea', 'cal', 'dev', 'eli', 'femi', 'gus', 'hana', 'ines', 'jun', 'kai', 'lia', 'mo', 'nia', 'oli', 'pia', 'raf', 'sol', 'tao', 'uma', 'vik', 'wren', 'yara', 'zed', 'aiko', 'bo', 'chen', 'dara', 'emre', 'ivy', 'kofi', 'luz', 'mei', 'noor', 'remy', 'sana', 'tomas', 'ziggy'];
-const TOP_COLORS = ['primary', 'accent', 'paper', 'cream', 'sand', 'stone', 'slate', 'charcoal', 'navy', 'olive', 'forest', 'brick', 'mustard', 'teal', 'plum', 'rose', 'sky'];
-const BOTTOM_COLORS = ['charcoal', 'navy', 'denim', 'stone', 'olive', 'black', 'slate', 'sand'];
-const SHOE_COLORS = ['black', 'white', 'tan', 'charcoal'];
-
-function drawCast(s) {
-  const count = 2 + Math.floor(s.random() * 3);
-  // A starter's id would pull in that starter's params (cues.mjs), so generated people never use one.
-  const names = FIRST_NAMES.filter((name) => !STARTER_IDS.includes(name));
-  const members = [];
-  const skins = Object.keys(SKIN_TONES);
-  for (let i = 0; i < count; i += 1) {
-    const id = names.splice(Math.floor(s.random() * names.length), 1)[0];
-    const hairStyle = s.pick(HAIR_STYLES);
-    const top = s.pick(TOPS);
-    const accessories = [];
-    if (s.chance(0.3)) accessories.push(s.pick(['glasses', 'round-glasses']));
-    if (!['headscarf'].includes(hairStyle) && s.chance(0.25)) accessories.push(s.pick(['beard', 'stubble', 'moustache']));
-    const extra = s.pick(ACCESSORIES.filter((name) => !/glasses|beard|stubble|moustache/.test(name)));
-    if (s.chance(0.3) && !(hairStyle === 'headscarf' && ['earrings', 'hearing-aid'].includes(extra))) accessories.push(extra);
-    members.push({
-      id,
-      name: id[0].toUpperCase() + id.slice(1),
-      build: s.pick(BUILDS),
-      height: s.pick(HEIGHTS),
-      skin: s.pick(skins),
-      hair: { style: hairStyle, color: hairStyle === 'headscarf' ? s.pick(['primary', 'accent', 'plum', 'teal', 'navy']) : s.pick(Object.keys(HAIR_COLORS)) },
-      outfit: { top, bottom: top === 'dress' ? 'skirt' : s.chance(0.2) ? 'skirt' : 'trousers' },
-      ...(accessories.length ? { accessories } : {}),
-      colors: { top: s.pick(TOP_COLORS), bottom: s.pick(BOTTOM_COLORS), shoes: s.pick(SHOE_COLORS) }
-    });
-  }
-  return members;
-}
-
-// ---------------------------------------------------------------------------
 // The pack
 
 /** One kind from [[kind, weight], ...]. */
@@ -508,6 +468,10 @@ export function normalizeConstraints(constraints = {}) {
   }
   if (out.tone !== undefined && !TONES.includes(out.tone)) throw new Error(`tone must be one of ${TONES.join(', ')}`);
   if (out.theme !== undefined && !THEMES.includes(out.theme)) throw new Error(`theme must be one of ${THEMES.join(', ')}`);
+  if (out.character_set !== undefined && !CHARACTER_SET_NAMES.includes(out.character_set)) throw new Error(`character_set must be one of ${CHARACTER_SET_NAMES.join(', ')}`);
+  const worlds = out.world === undefined ? [] : Array.isArray(out.world) ? out.world : [typeof out.world === 'string' ? out.world : out.world?.kind];
+  for (const kind of worlds) if (!WORLD_KINDS.includes(kind)) throw new Error(`world must be one of ${WORLD_KINDS.join(', ')}`);
+  if (Array.isArray(out.world) && !out.world.length) delete out.world;
   return out;
 }
 
@@ -602,10 +566,14 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     drawing_style: fixed.drawing_style ?? draw('drawing-style').pick(SEED_DRAWING_STYLES),
     set: fixed.character_set ?? draw('character-set').pick(SEED_CHARACTER_SETS),
     colors: { fill: 'primary', accent: 'accent', line: palette.dark ? 'paper' : 'ink' },
-    members: drawCast(draw('cast'))
+    members: []
   };
+  const castStream = draw('cast');
+  cast.members = generateCast({ seed: `${hex}${attempt ? `#${attempt}` : ''}`, set: cast.set, count: 2 + Math.floor(castStream.random() * 3), palette: palette.colors });
   const worldStream = draw('world');
-  const worldFixed = asObject(fixed.world, 'kind');
+  // A list (suggestWorld's fitting worlds) is a constraint the seed picks within.
+  const worldPick = Array.isArray(fixed.world) ? worldStream.pick(fixed.world) : null;
+  const worldFixed = worldPick ? { kind: worldPick } : asObject(fixed.world, 'kind');
   const worldKind = SEED_WORLDS.length ? worldStream.pick(SEED_WORLDS) : null;
   const worldTime = weighted(worldStream, NIGHT_TONES.has(toneName) ? STYLE_WORLD_TIMES.map((time) => [time, 1]) : SEED_WORLD_TIMES);
   const world = worldFixed ? { kind: worldFixed.kind, time: worldFixed.time ?? worldTime } : worldKind ? { kind: worldKind, time: worldTime } : undefined;
@@ -623,6 +591,10 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const dialStream = draw('dials');
   const dials = Object.fromEntries(Object.entries(t.dials).map(([key, centre]) => [key, round(Math.max(0.05, Math.min(0.95, centre + dialStream.range(-0.12, 0.12))), 2)]));
   const music = draw('sound');
+  const fits = TONE_SOUND[toneName] ?? { palettes: SEED_SOUND_PALETTES, genres: SEED_MUSIC_GENRES };
+  const soundPalette = music.pick(fits.palettes);
+  const genre = music.pick(fits.genres);
+  const spec = GENRE_SPECS[genre];
 
   const fonts = { display: pairing.display, body: pairing.body, meta: pairing.meta };
   const pack = {
@@ -634,8 +606,8 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     ambient: { level, background: kind === 'blobs' },
     captions: { preset: caption, position: 'auto', lanes: { 'footage-led': { ...STYLE_V3_DEFAULTS.caption_lanes['footage-led'] } } },
     sound: {
-      palette: music.pick(SEED_SOUND_PALETTES),
-      music: { genre: music.pick(SEED_MUSIC_GENRES), bpm: Math.round(music.range(t.bpm[0], t.bpm[1])), key: music.pick(SEED_MUSIC_KEYS), progression: Math.floor(music.random() * SEED_PROGRESSIONS), prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...t.bpm] },
+      palette: soundPalette,
+      music: { genre, bpm: Math.round(music.range(spec.bpm[0], spec.bpm[1])), key: music.pick(spec.keys), progression: Math.floor(music.random() * spec.progressions), prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...spec.bpm] },
       ambience: 'auto',
       sfx_density: t.sfx
     },

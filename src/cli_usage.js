@@ -23,7 +23,7 @@ export const USAGE = Object.freeze([
   ["style show", "style show <name|path> [--root .launchclip/styles]"],
   ["style upgrade", "style upgrade <name> [--root .launchclip/styles]"],
   ["style check", "style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]"],
-  ["style generate", "style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--out <dir|style.json>] [--force]"],
+  ["style generate", "style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--out <dir|style.json> | --project <dir>] [--force]"],
   ["style reroll", "style reroll [<project>] [--tone <tone>] [--seed <hex>] [--undo]"],
   ["style keep", "style keep <project> --as <name> [--force]"],
   ["profile list", "profile list", {comment: "the shipped cadence profiles"}],

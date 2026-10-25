@@ -1210,7 +1210,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints.
 
   ```text
-  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--out <dir|style.json>] [--force]
+  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--out <dir|style.json> | --project <dir>] [--force]
   ```
 
 - `style reroll`: Give a project with a generated style a new seed (its constraints kept); --undo goes back once.

@@ -46,6 +46,10 @@ test("style generate writes one seed's pack, the same every time", async () => {
     const printed = await cli(["style", "generate", "--seed", "00000001"]);
     assert.equal(printed.pack.name, "seed-00000001");
     await assert.rejects(cli(["style", "generate", "--seed", "nothex"]), /8 hex characters/);
+    const project = await cli(["style", "generate", "--seed", "00000002", "--tone", "premium", "--project", path.join(dir, "video")]);
+    assert.equal(project.path, path.join(dir, "video", ".launchclip", "styles", "seed-00000002", "style.json"));
+    assert.match(project.line, /^style: seed 00000002 \(/);
+    assert.equal((await resolveStyleV2("seed-00000002", { projectDir: path.join(dir, "video") })).pack.generated.tone, "premium");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

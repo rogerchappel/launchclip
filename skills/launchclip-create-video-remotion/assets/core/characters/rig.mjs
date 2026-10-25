@@ -16,17 +16,31 @@
 
 import {COLOR_SLOTS, isColorName} from './palette.mjs';
 
-export const BUILDS = Object.freeze(['slim', 'average', 'athletic', 'broad', 'round']);
-export const HEIGHTS = Object.freeze(['short', 'average', 'tall']);
-export const HAIR_STYLES = Object.freeze(['bald', 'buzz', 'short', 'sidepart', 'curly', 'afro', 'pixie', 'bob', 'wavy', 'long', 'ponytail', 'bun', 'braids', 'locs', 'headscarf']);
-export const TOPS = Object.freeze(['tee', 'shirt', 'hoodie', 'blazer', 'sweater', 'dress']);
-export const BOTTOMS = Object.freeze(['trousers', 'skirt']);
-export const ACCESSORIES = Object.freeze(['glasses', 'round-glasses', 'beard', 'stubble', 'moustache', 'earrings', 'hearing-aid', 'freckles', 'lanyard']);
+export const BUILDS = Object.freeze(['slim', 'average', 'athletic', 'broad', 'round', 'petite', 'stocky', 'curvy']);
+export const HEIGHTS = Object.freeze(['short', 'average', 'tall', 'very-short', 'very-tall']);
+export const AGES = Object.freeze(['child', 'teen', 'adult', 'senior']);
+export const HAIR_STYLES = Object.freeze(['bald', 'buzz', 'short', 'sidepart', 'curly', 'afro', 'pixie', 'bob', 'wavy', 'long', 'ponytail', 'bun', 'braids', 'locs', 'headscarf',
+  'undercut', 'quiff', 'spiky', 'balding', 'shoulder', 'pigtails', 'topknot', 'cornrows', 'twists', 'space-buns', 'mohawk']);
+export const TOPS = Object.freeze(['tee', 'shirt', 'hoodie', 'blazer', 'sweater', 'dress',
+  'polo', 'tank', 'turtleneck', 'cardigan', 'jacket', 'coat', 'scrubs', 'lab-coat', 'chef-coat', 'jersey', 'kurta']);
+export const BOTTOMS = Object.freeze(['trousers', 'skirt', 'shorts', 'long-skirt', 'leggings']);
+/** Layers worn over the top. */
+export const OVERS = Object.freeze(['apron', 'vest', 'hi-vis']);
+export const GLASSES = Object.freeze(['glasses', 'round-glasses', 'sunglasses', 'cat-eye-glasses']);
+export const FACIAL_HAIR = Object.freeze(['beard', 'stubble', 'moustache', 'goatee', 'long-beard', 'sideburns']);
+export const ACCESSORIES = Object.freeze(['glasses', 'round-glasses', 'beard', 'stubble', 'moustache', 'earrings', 'hearing-aid', 'freckles', 'lanyard',
+  'sunglasses', 'cat-eye-glasses', 'goatee', 'long-beard', 'sideburns', 'watch', 'necklace', 'tie', 'bowtie', 'scarf', 'stethoscope', 'backpack', 'crossbody-bag', 'bindi', 'nose-stud']);
+export const HEADWEAR = Object.freeze(['cap', 'beanie', 'beret', 'bucket-hat', 'sunhat', 'chef-hat', 'hard-hat', 'surgical-cap', 'headband', 'turban', 'kippah', 'headphones', 'grad-cap', 'bike-helmet']);
+/** Headwear that covers the hair on top of the head (the hair's front is not drawn). */
+export const COVERING_HEADWEAR = Object.freeze(['beanie', 'chef-hat', 'hard-hat', 'surgical-cap', 'turban', 'bike-helmet']);
+export const MOBILITY = Object.freeze(['wheelchair', 'cane', 'white-cane', 'forearm-crutch', 'prosthetic-leg', 'prosthetic-arm']);
+/** Mobility aids held in one hand (the hand away from the facing side). */
+export const HELD_AIDS = Object.freeze(['cane', 'white-cane', 'forearm-crutch']);
 
 export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit']);
 export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused']);
 
-const PARAM_KEYS = ['build', 'height', 'skin', 'hair', 'outfit', 'accessories', 'colors'];
+const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
 
 // ---------------------------------------------------------------------------
 // Params
@@ -40,13 +54,21 @@ const isObj = value => value && typeof value === 'object' && !Array.isArray(valu
 /**
  * Validate and normalise rig params. → a new object with every field present
  * and keys in a fixed order, so two equal characters serialise identically.
+ * Optional fields (age, outfit.over, headwear, mobility) appear only when
+ * set, so characters made before they existed keep their identity.
  *
- *   build        slim | average | athletic | broad | round
- *   height       short | average | tall (default average)
+ *   build        slim | average | athletic | broad | round | petite | stocky | curvy
+ *   height       short | average | tall | very-short | very-tall (default average)
+ *   age          child | teen | adult | senior (default adult)
  *   skin         a SKIN_TONES name or hex (the skin colour slot)
  *   hair         {style, color}
- *   outfit       {top, bottom}; colours come from colors.top / bottom / shoes
- *   accessories  ACCESSORIES names (default none)
+ *   outfit       {top, bottom, over?}; colours come from colors.top / bottom / shoes
+ *                (over: an apron, vest or hi-vis layer in the accent colour)
+ *   accessories  ACCESSORIES names (default none): glasses, facial hair, jewellery,
+ *                a tie, a scarf, a stethoscope, a bag, a watch…
+ *   headwear     a HEADWEAR name (default none)
+ *   mobility     a MOBILITY aid (default none): a wheelchair, a cane, a white
+ *                cane, a forearm crutch, a prosthetic leg or arm
  *   colors       {top, bottom, shoes, accent?} palette names, brand roles or hex
  */
 export function normalizeRigParams(params, path = 'character') {
@@ -54,6 +76,7 @@ export function normalizeRigParams(params, path = 'character') {
   for (const key of Object.keys(params)) if (!PARAM_KEYS.includes(key)) fail(`${path}.${key}`, `is not a rig param (allowed: ${PARAM_KEYS.join(', ')})`);
   const build = oneOf(params.build ?? 'average', `${path}.build`, BUILDS);
   const height = oneOf(params.height ?? 'average', `${path}.height`, HEIGHTS);
+  const age = oneOf(params.age ?? 'adult', `${path}.age`, AGES);
   if (!isColorName(params.skin)) fail(`${path}.skin`, 'must be a skin tone name or a six-digit hex');
   if (!isObj(params.hair)) fail(`${path}.hair`, 'must be {style, color}');
   for (const key of Object.keys(params.hair)) if (!['style', 'color'].includes(key)) fail(`${path}.hair.${key}`, 'is not supported (allowed: style, color)');
@@ -61,21 +84,30 @@ export function normalizeRigParams(params, path = 'character') {
   const hairColor = params.hair.color ?? 'black';
   if (!isColorName(hairColor)) fail(`${path}.hair.color`, 'must be a hair colour name, brand role or six-digit hex');
   const outfitIn = params.outfit ?? {};
-  if (!isObj(outfitIn)) fail(`${path}.outfit`, 'must be {top, bottom}');
-  for (const key of Object.keys(outfitIn)) if (!['top', 'bottom'].includes(key)) fail(`${path}.outfit.${key}`, 'is not supported (allowed: top, bottom)');
+  if (!isObj(outfitIn)) fail(`${path}.outfit`, 'must be {top, bottom, over?}');
+  for (const key of Object.keys(outfitIn)) if (!['top', 'bottom', 'over'].includes(key)) fail(`${path}.outfit.${key}`, 'is not supported (allowed: top, bottom, over)');
   const top = oneOf(outfitIn.top ?? 'tee', `${path}.outfit.top`, TOPS);
   const bottom = oneOf(outfitIn.bottom ?? (top === 'dress' ? 'skirt' : 'trousers'), `${path}.outfit.bottom`, BOTTOMS);
+  const over = outfitIn.over === undefined || outfitIn.over === null ? null : oneOf(outfitIn.over, `${path}.outfit.over`, OVERS);
   const accessoriesIn = params.accessories ?? [];
   if (!Array.isArray(accessoriesIn)) fail(`${path}.accessories`, 'must be an array');
   const accessories = [...new Set(accessoriesIn.map((name, i) => oneOf(name, `${path}.accessories[${i}]`, ACCESSORIES)))].sort();
-  if (accessories.includes('glasses') && accessories.includes('round-glasses')) fail(`${path}.accessories`, 'can have one pair of glasses');
+  if (accessories.filter(name => GLASSES.includes(name)).length > 1) fail(`${path}.accessories`, 'can have one pair of glasses');
+  const headwear = params.headwear === undefined || params.headwear === null ? null : oneOf(params.headwear, `${path}.headwear`, HEADWEAR);
+  const mobility = params.mobility === undefined || params.mobility === null ? null : oneOf(params.mobility, `${path}.mobility`, MOBILITY);
   if (hairStyle === 'headscarf' && (accessories.includes('earrings') || accessories.includes('hearing-aid'))) fail(`${path}.accessories`, 'earrings and hearing aids sit under a headscarf; leave them out');
+  if (hairStyle === 'headscarf' && headwear && headwear !== 'headphones') fail(`${path}.headwear`, `${headwear} does not go over a headscarf (headphones can)`);
+  if ((age === 'child' || age === 'teen') && accessories.some(name => FACIAL_HAIR.includes(name) && name !== 'sideburns')) fail(`${path}.accessories`, `a ${age} has no beard, stubble or moustache`);
+  if (age === 'child' && hairStyle === 'balding') fail(`${path}.hair.style`, 'balding does not fit a child');
   const colorsIn = params.colors ?? {};
   if (!isObj(colorsIn)) fail(`${path}.colors`, 'must be an object');
   for (const key of Object.keys(colorsIn)) if (!['top', 'bottom', 'shoes', 'accent'].includes(key)) fail(`${path}.colors.${key}`, 'is not a colour slot (allowed: top, bottom, shoes, accent; skin and hair have their own fields)');
   const colors = {skin: params.skin, hair: hairColor, top: colorsIn.top ?? 'primary', bottom: colorsIn.bottom ?? 'charcoal', shoes: colorsIn.shoes ?? 'black', accent: colorsIn.accent ?? 'accent'};
   for (const slot of COLOR_SLOTS) if (!isColorName(colors[slot])) fail(`${path}.colors.${slot}`, `must be a palette colour, brand role or six-digit hex; got ${JSON.stringify(colors[slot])}`);
-  return {build, height, skin: params.skin, hair: {style: hairStyle, color: hairColor}, outfit: {top, bottom}, accessories, colors};
+  return {
+    build, height, ...(age !== 'adult' ? {age} : {}), skin: params.skin, hair: {style: hairStyle, color: hairColor},
+    outfit: {top, bottom, ...(over ? {over} : {})}, accessories, ...(headwear ? {headwear} : {}), ...(mobility ? {mobility} : {}), colors
+  };
 }
 
 /** Stable identity string of normalised params (and the drawing style). */
@@ -86,28 +118,41 @@ export function rigFingerprint(params, style = 'flat') {
 // ---------------------------------------------------------------------------
 // Geometry
 
-const BUILD_SHAPE = {
+export const BUILD_SHAPE = Object.freeze({
   slim: {shoulder: 80, waist: 60, hip: 64, arm: 40, leg: 52},
   average: {shoulder: 92, waist: 74, hip: 74, arm: 46, leg: 58},
   athletic: {shoulder: 106, waist: 72, hip: 74, arm: 52, leg: 62},
   broad: {shoulder: 114, waist: 92, hip: 86, arm: 54, leg: 66},
-  round: {shoulder: 100, waist: 108, hip: 100, arm: 52, leg: 68}
-};
-const HEIGHT_SCALE = {short: 0.93, average: 1, tall: 1.07};
+  round: {shoulder: 100, waist: 108, hip: 100, arm: 52, leg: 68},
+  petite: {shoulder: 76, waist: 58, hip: 66, arm: 38, leg: 50},
+  stocky: {shoulder: 108, waist: 100, hip: 92, arm: 56, leg: 66},
+  curvy: {shoulder: 88, waist: 72, hip: 100, arm: 46, leg: 62}
+});
+export const HEIGHT_SCALE = Object.freeze({short: 0.93, average: 1, tall: 1.07, 'very-short': 0.86, 'very-tall': 1.13});
+// Age: body length and width scale, and the head (children have a large head for their body).
+export const AGE_SHAPE = Object.freeze({
+  child: {length: 0.6, width: 0.74, head: 0.9},
+  teen: {length: 0.9, width: 0.9, head: 0.97},
+  adult: {length: 1, width: 1, head: 1},
+  senior: {length: 0.98, width: 1, head: 1}
+});
 
 /**
  * Body measurements for rig params. Lengths scale with height; the head does
- * not, so tall and short characters read as the same family.
+ * not, so tall and short characters read as the same family. Age scales the
+ * body and, a little, the head.
  */
 export function rigGeometry(params) {
-  const s = HEIGHT_SCALE[params.height];
-  const b = BUILD_SHAPE[params.build];
-  const foot = 26;
+  const a = AGE_SHAPE[params.age ?? 'adult'];
+  const s = HEIGHT_SCALE[params.height] * a.length;
+  const b0 = BUILD_SHAPE[params.build];
+  const b = a.width === 1 ? b0 : Object.fromEntries(Object.entries(b0).map(([key, value]) => [key, Math.round(value * a.width)]));
+  const foot = Math.round(26 * (a.length === 1 ? 1 : (1 + a.length) / 2));
   const thigh = Math.round(180 * s), shin = Math.round(170 * s);
   const hipY = -(thigh + shin + foot);
   const torso = Math.round(268 * s);
-  const neck = 30;
-  const headR = 110;
+  const neck = Math.round(30 * (a.length === 1 ? 1 : a.length));
+  const headR = Math.round(110 * a.head);
   return {
     foot, thigh, shin, torso, neck,
     hipY,
