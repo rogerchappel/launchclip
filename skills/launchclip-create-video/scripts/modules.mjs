@@ -22,6 +22,7 @@ import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { brandFrameSafe, intersectRects } from './brand-frame.mjs';
 import { sceneAmbient } from './ambient.mjs';
+import { storyPanel } from './panels.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 
@@ -166,6 +167,10 @@ export function resolveModule(scene, story, { track, end } = {}) {
     // without colliding with the frame, as model.frame.safe; inside a footage
     // layout's panel (sceneLayoutAt(...).safe) it is that panel's safe area
     // narrowed to the frame's.
+    // Panel treatment (kit/core/panels.mjs): the story's card surface, read
+    // by catalogue G's cardSurface. Absent without story.panel.
+    const panel = storyPanel(story);
+    if (panel) model.panel = panel;
     const frameSafe = story?.frame ? brandFrameSafe(story) : null;
     if (frameSafe) {
       const panel = Number.isFinite(Number(scene?.start)) ? sceneLayoutAt(story, Number(scene.start), Number.isFinite(Number(scene?.end)) ? Number(scene.end) : Number(scene.start))?.safe ?? null : null;
