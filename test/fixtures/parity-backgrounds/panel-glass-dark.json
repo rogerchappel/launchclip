@@ -1,0 +1,80 @@
+{
+  "describe": "glass panel on a dark palette over the mesh background",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "mesh"
+    },
+    "panel": {
+      "treatment": "glass",
+      "radius": 24
+    },
+    "scenes": [
+      {
+        "id": "s1",
+        "module": "metric",
+        "start": 0,
+        "end": 3,
+        "energy": 1,
+        "params": {
+          "title": "Build time",
+          "metric": {
+            "mode": "illustration",
+            "unit": "example minutes",
+            "format": "number",
+            "decimals": 0,
+            "values": [
+              {
+                "value": 48,
+                "at": 0.4
+              },
+              {
+                "value": 12,
+                "at": 1.6
+              }
+            ]
+          }
+        },
+        "hits": [
+          {
+            "at": "word:twelve",
+            "event": "settle",
+            "cue": "tick"
+          }
+        ]
+      },
+      {
+        "id": "s2",
+        "module": "icon-row",
+        "start": 3,
+        "end": 6,
+        "energy": 2,
+        "in": {
+          "type": "fade",
+          "dur": 0.4
+        },
+        "params": {
+          "surface": "card",
+          "items": [
+            {
+              "icon": "rocket",
+              "label": "Ship"
+            },
+            {
+              "icon": "chart-up",
+              "label": "Grow"
+            },
+            {
+              "icon": "users",
+              "label": "Share"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

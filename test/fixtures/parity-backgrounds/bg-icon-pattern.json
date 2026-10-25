@@ -1,0 +1,13 @@
+{
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "describe": "icon-pattern: the default icon set tiled in offset rows",
+  "patch": {
+    "background": {
+      "kind": "icon-pattern"
+    }
+  }
+}

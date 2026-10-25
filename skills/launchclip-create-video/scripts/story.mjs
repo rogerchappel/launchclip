@@ -31,6 +31,42 @@ export const STORY_MUSIC_PROVIDERS = ["synth", "elevenlabs", "file"];
 export const STORY_MUSIC_SYNC = ["auto", "off", "cuts", "hits"];
 // story.ambient / scenes[i].ambient levels (kit/core/ambient.mjs AMBIENT_LEVELS).
 export const STORY_AMBIENT_LEVELS = ["off", "subtle", "standard", "lively"];
+// story.background kinds and their param ranges [min, max]; story.panel
+// treatments (kit/core/backgrounds.mjs BACKGROUND_PARAMS, kit/core/panels.mjs
+// PANEL_TREATMENTS; kept in step by test/backgrounds.test.js).
+const BG_ANGLE = [0, 360], BG_UNIT = [0, 1], BG_SCALE = [0.5, 2], BG_SPEED = [0, 2];
+export const STORY_BACKGROUND_PARAMS = Object.freeze({
+  flat: {},
+  gradient: { angle: BG_ANGLE, intensity: BG_UNIT, speed: BG_SPEED },
+  "grain-gradient": { angle: BG_ANGLE, intensity: BG_UNIT, grain: BG_UNIT, speed: BG_SPEED },
+  paper: { grain: BG_UNIT, intensity: BG_UNIT },
+  geometric: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
+  blobs: {},
+  "dot-grid": { scale: BG_SCALE, density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  mesh: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
+  topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
+  halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
+  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
+  "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
+  "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.02, 0.12], speed: BG_SPEED },
+  motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.02, 0.2], angle: [0, 180], speed: BG_SPEED },
+  texture: { amount: BG_UNIT, scale: BG_SCALE }
+});
+export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
+export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
+// Option params per kind (kit/core/backgrounds.mjs BACKGROUND_OPTIONS): color
+// on patterned kinds, fade on every kind but blobs, a motif's shape, a
+// texture's type. Icon kinds also take icons: "auto" or 1–8 icon names.
+const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
+export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
+  ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
+  ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
+  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
+  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
+}])));
+export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -47,7 +83,9 @@ const EPS = 1e-6;
 // cast: the story's characters (kit/core/characters/cues.mjs validates it);
 // variants: {<module>: <variant>}, each module's designed look for the whole
 // video (a style pack's variants; each module checks its own names).
-const TOP_LEVEL = new Set(["variants", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
+// background, panel: the plate's background kind and the card surface (a style pack's
+// background and layouts.panel; kit/core/backgrounds.mjs, kit/core/panels.mjs).
+const TOP_LEVEL = new Set(["variants", "background", "panel", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -275,6 +313,10 @@ export function validateStory(story, { modules } = {}) {
 
   // ambient: the ambient-motion control (kit/core/ambient.mjs).
   validateAmbient(story.ambient, "ambient", err);
+
+  // background and panel: the plate's background kind and the card surface (kit/core/backgrounds.mjs, kit/core/panels.mjs).
+  validateBackground(story.background, err);
+  validatePanel(story.panel, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -853,6 +895,43 @@ function validateAmbient(value, path, err) {
   for (const key of Object.keys(value)) if (!["level", "background", "drift"].includes(key)) err(`${path}.${key} is not supported (allowed: level, background, drift)`);
   if (value.level !== undefined && !STORY_AMBIENT_LEVELS.includes(value.level)) err(`${path}.level must be one of ${STORY_AMBIENT_LEVELS.join(", ")}`);
   for (const key of ["background", "drift"]) if (value[key] !== undefined && typeof value[key] !== "boolean") err(`${path}.${key} must be true or false`);
+}
+
+// ---------------------------------------------------------------------------
+// Background and panel
+
+// The same rules as kit/core/backgrounds.mjs backgroundErrors(), kept here so
+// this file stays import-free.
+function validateBackground(value, err, path = "background") {
+  if (value === undefined || value === null) return;
+  if (!isObject(value)) { err(`${path} must be an object {kind, params?}`); return; }
+  for (const key of Object.keys(value)) if (!["kind", "params"].includes(key)) err(`${path}.${key} is not supported (allowed: kind, params)`);
+  if (!STORY_BACKGROUND_KINDS.includes(value.kind)) { err(`${path}.kind must be one of ${STORY_BACKGROUND_KINDS.join(", ")}`); return; }
+  if (value.params === undefined) return;
+  if (!isObject(value.params)) { err(`${path}.params must be an object`); return; }
+  const spec = STORY_BACKGROUND_PARAMS[value.kind], options = STORY_BACKGROUND_OPTIONS[value.kind];
+  const icons = value.kind === "icon-pattern" || value.kind === "icon-scatter";
+  const allowed = [...Object.keys(spec), ...Object.keys(options), ...(icons ? ["icons"] : [])];
+  for (const [key, given] of Object.entries(value.params)) {
+    if (!allowed.includes(key)) { err(`${path}.params.${key} is not supported for ${value.kind}${allowed.length ? ` (allowed: ${allowed.join(", ")})` : " (it takes no params)"}`); continue; }
+    if (options[key]) { if (!options[key].includes(given)) err(`${path}.params.${key} must be one of ${options[key].join(", ")}`); continue; }
+    if (key === "icons") { if (given !== "auto" && !(Array.isArray(given) && given.length >= 1 && given.length <= 8 && given.every(nonEmpty))) err(`${path}.params.icons must be "auto" or a list of 1–8 icon names`); continue; }
+    const [min, max] = spec[key];
+    if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
+  }
+}
+
+function validatePanel(value, err) {
+  if (value === undefined || value === null) return;
+  if (!isObject(value)) { err("panel must be an object {treatment, radius?, fill?}"); return; }
+  for (const key of Object.keys(value)) if (!["treatment", "radius", "fill"].includes(key)) err(`panel.${key} is not supported (allowed: treatment, radius, fill)`);
+  // fill: a background drawn inside the panel (not blobs, which draw only on plates).
+  if (value.fill !== undefined) {
+    validateBackground(value.fill, err, "panel.fill");
+    if (isObject(value.fill) && value.fill.kind === "blobs") err("panel.fill.kind cannot be blobs (the ambient field draws only on plates)");
+  }
+  if (!STORY_PANEL_TREATMENTS.includes(value.treatment)) err(`panel.treatment must be one of ${STORY_PANEL_TREATMENTS.join(", ")}`);
+  if (value.radius !== undefined && !(typeof value.radius === "number" && value.radius >= 0 && value.radius <= 48)) err("panel.radius must be a number from 0 to 48 (px at a 1080 px short side)");
 }
 
 // ---------------------------------------------------------------------------

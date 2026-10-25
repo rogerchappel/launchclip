@@ -8,7 +8,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "../kit/core/camera-world.mjs";
-import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
+import { captionDipHidden, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
+import { backgroundContrastFindings } from "../kit/core/backgrounds.mjs";
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -171,7 +172,11 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   try { textFindings = await subjectTextFindings(project, resolved); }
   catch (error) { warnings.push(`behind-text check skipped: ${error.message}`); }
   const frameFindings = brandFrameFindings(resolved, elements, canvas);
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings].sort((a, b) => a.at - b.at);
+  // Background contrast (kit/core/backgrounds.mjs): caption and panel text
+  // against every tone the story's background kind lays over bg.
+  const overlay = captionsOverlayOf(resolved);
+  const backgroundFindings = backgroundContrastFindings(resolved, { captions: overlay && overlay.style !== "none" ? captionOptions(overlay, { brand: resolved.brand, format: resolved.format, story: resolved }) : null });
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,

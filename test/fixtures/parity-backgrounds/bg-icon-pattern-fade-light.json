@@ -1,0 +1,38 @@
+{
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "describe": "icon-pattern on a light palette, faded away from the centre",
+  "patch": {
+    "brand": {
+      "colors": {
+        "bg": "#f5f1e8",
+        "primary": "#c2410c",
+        "accent": "#0e7490",
+        "ink": "#f5f1e8",
+        "paper": "#1c1917"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "background": {
+      "kind": "icon-pattern",
+      "params": {
+        "icons": [
+          "rocket",
+          "chart-up",
+          "users",
+          "sparkle"
+        ],
+        "rotation": -12,
+        "opacity": 0.1,
+        "fade": "center"
+      }
+    }
+  }
+}
