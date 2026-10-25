@@ -364,7 +364,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
         <BrandFrame story={story} />
         {overlay && Array.isArray(__captions) && __captions.length ? (
-          <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
+          <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
         ) : null}
         {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
       </AbsoluteFill>
@@ -393,7 +393,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       ) : null}
       <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
-        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
+        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
       ) : null}
       {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
     </AbsoluteFill>

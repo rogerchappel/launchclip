@@ -14,7 +14,7 @@ import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
 import { brandFrameLayout, intersectRects } from "../kit/core/brand-frame.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "../kit/core/subject-layer.mjs";
-import { layoutPlan, layoutStateAt, withLayoutCameras } from "../kit/core/footage-layout.mjs";
+import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "../kit/core/footage-layout.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -139,7 +139,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // compilers compute the drift they draw, so a drift can never carry key
   // text out of the safe zone, into the caption band or onto a neighbour.
   const ambient = ambientDrift(resolved, canvas);
-  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => ambient.inflate(scene, moduleLayout(scene, story)), profile });
+  // Footage layouts put the captions on the presenter's side (captionZones), as both compilers do.
+  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => ambient.inflate(scene, moduleLayout(scene, story)), profile, captionZones: resolved.base ? captionZones(resolved) : [] });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });

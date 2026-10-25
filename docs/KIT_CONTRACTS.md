@@ -1420,10 +1420,14 @@ to a stretch of the recording, not to one scene.
 ### Geometry and the frame element
 
 - `layoutGeometry(layout, side, canvas)` → `{window, radius, panel}`. The window is where the presenter shows.
-- `panelSafeArea(panel, canvas, {captions})` is the panel inside the profile's safe zone. It sits a gutter (4% of the short edge) in from the window and, when the story has captions, above the caption band.
+- `panelSafeArea(panel, canvas, {captions, captionBand})` is the panel inside the profile's safe zone. It sits a gutter (4% of the short edge) in from the window and, when the story has captions, above the caption band where that band runs under the panel. `layoutAt` passes the layout's caption zone as `captionBand`, so a split's panel runs to the bottom of the safe zone.
 - `layoutAt(story, t)` → `{section, layout, side, presenter, panel, safe, color}`, or null outside sections. `resolveModule` passes it to catalogue modules as `ctx.layout`.
   - The brand frame (style v3) and modules place themselves in `safe`.
   - A footage-led checklist without `rect` inside a section with a panel fits `safe`, never below its legal text scale (`subjectPlacement: "panel"`).
+- Captions sit on the presenter's side, never across the seam between the panel and the footage. `captionZone(layout, side, canvas, band)` narrows the caption band (the profile's band at the overlay's `position`) to the presenter's window, a gutter in from its edges. When the band would fall outside the window (a 9:16 `framed` top or `stacked` top), it moves up into it. Full and insert keep the band, as does a window the band already sits inside (`stacked` bottom), so those return null.
+  - `captionZones(story)` → `[{section, start, end, rect}]`; `layoutPlan(story).captions` holds them.
+  - Both compilers hand them to `captionPlan` (`ctx.zones`). Each caption line takes the zone it is mostly spoken in (`captionZoneIndex`: at least half of its spoken span), gets the class `lc-cap-z<n>`, and is centred and wrapped inside the zone. The CSS is the same text in both renderers. A zone narrower than 480 px at 1080 sets smaller type, down to 70%, so one long word still fits. A `lower-band` band never runs across a zone change.
+  - The layout check checks the captions there: one `captions@<section>` element per zone, and the band element is hidden over those sections.
 - The panel is one element in both renderers: `#lc-layout-frame` in HyperFrames, `LayoutFrame` (`kit/remotion/LayoutFrame.tsx`) in Remotion.
   - It's a box at the window, styled by `layoutFrameStyle(state, canvas)`.
   - Its `box-shadow` is the ring in the brand primary, then a spread of twice the canvas in the panel colour, so it paints everything outside the window.
@@ -1432,7 +1436,7 @@ to a stretch of the recording, not to one scene.
 
 ### Plan, camera and transitions
 
-`layoutPlan(story)` is null without sections, so other stories compile byte for byte as before. Otherwise it returns `{sections, spans, ops, boundaries, rooms, warnings, canvas}`.
+`layoutPlan(story)` is null without sections, so other stories compile byte for byte as before. Otherwise it returns `{sections, spans, ops, boundaries, rooms, warnings, canvas, captions}`.
 
 - **Spans.** `layoutSpans(story)` gives the sections plus `full` gaps, back to back. Each span carries the shift that brings it in. A span shifts when its layout, side, panel, ring or zoom differs from the span before it; two adjacent sections that differ only in where the head sits cut.
 - **States.** Each span has a state `{window, radius, panel, ring, ringColor, camera, hidden}`. The camera is the base camera that reframes the presenter:

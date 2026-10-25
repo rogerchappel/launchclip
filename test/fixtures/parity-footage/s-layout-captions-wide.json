@@ -1,0 +1,26 @@
+{
+  "project": "examples/story/layouts-wide",
+  "mode": "story",
+  "patch": {
+    "overlays": [
+      {
+        "type": "captions",
+        "src": "assets/captions.json"
+      }
+    ]
+  },
+  "files": {
+    "assets/captions.json": "{\"chunks\":[{\"id\":\"cap-001\",\"start\":0.6,\"end\":2.22,\"words\":[{\"text\":\"Before\",\"start\":0.6,\"end\":0.82},{\"text\":\"the\",\"start\":0.87,\"end\":1.09},{\"text\":\"split\",\"start\":1.14,\"end\":1.36},{\"text\":\"the\",\"start\":1.41,\"end\":1.63},{\"text\":\"line\",\"start\":1.68,\"end\":1.9},{\"text\":\"sits\",\"start\":1.95,\"end\":2.17}]},{\"id\":\"cap-002\",\"start\":2.22,\"end\":2.49,\"words\":[{\"text\":\"centred.\",\"start\":2.22,\"end\":2.44}]},{\"id\":\"cap-003\",\"start\":2.49,\"end\":4.11,\"words\":[{\"text\":\"Now\",\"start\":2.49,\"end\":2.71},{\"text\":\"the\",\"start\":2.76,\"end\":2.98},{\"text\":\"captions\",\"start\":3.03,\"end\":3.25},{\"text\":\"stay\",\"start\":3.3,\"end\":3.52},{\"text\":\"beside\",\"start\":3.57,\"end\":3.79},{\"text\":\"the\",\"start\":3.84,\"end\":4.06}]},{\"id\":\"cap-004\",\"start\":4.11,\"end\":5.19,\"words\":[{\"text\":\"presenter\",\"start\":4.11,\"end\":4.33},{\"text\":\"in\",\"start\":4.38,\"end\":4.6},{\"text\":\"the\",\"start\":4.65,\"end\":4.87},{\"text\":\"split.\",\"start\":4.92,\"end\":5.14}]},{\"id\":\"cap-005\",\"start\":5.19,\"end\":6.54,\"words\":[{\"text\":\"Framed\",\"start\":5.19,\"end\":5.41},{\"text\":\"keeps\",\"start\":5.46,\"end\":5.68},{\"text\":\"them\",\"start\":5.73,\"end\":5.95},{\"text\":\"inside\",\"start\":6,\"end\":6.22},{\"text\":\"the\",\"start\":6.27,\"end\":6.49}]},{\"id\":\"cap-006\",\"start\":6.54,\"end\":7.08,\"words\":[{\"text\":\"frame\",\"start\":6.54,\"end\":6.76},{\"text\":\"too.\",\"start\":6.81,\"end\":7.03}]},{\"id\":\"cap-007\",\"start\":7.08,\"end\":8.7,\"words\":[{\"text\":\"And\",\"start\":7.08,\"end\":7.3},{\"text\":\"the\",\"start\":7.35,\"end\":7.57},{\"text\":\"other\",\"start\":7.62,\"end\":7.84},{\"text\":\"way\",\"start\":7.89,\"end\":8.11},{\"text\":\"they\",\"start\":8.16,\"end\":8.38},{\"text\":\"follow\",\"start\":8.43,\"end\":8.65}]},{\"id\":\"cap-008\",\"start\":8.7,\"end\":9.86,\"words\":[{\"text\":\"the\",\"start\":8.7,\"end\":8.92},{\"text\":\"presenter\",\"start\":8.97,\"end\":9.19},{\"text\":\"across.\",\"start\":9.24,\"end\":9.46}]}]}\n"
+  },
+  "times": [
+    1,
+    3.2,
+    4.4,
+    6.2,
+    8.2,
+    9.4
+  ],
+  "threshold": {
+    "ssim": 0.97
+  }
+}

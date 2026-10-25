@@ -364,14 +364,36 @@ export function chunksForCaptions(chunks, options) {
 const r4 = (value) => Math.round(value * 10000) / 10000;
 
 /**
+ * The zone a span of speech is mostly spoken in: the index into zones
+ * ([{start, end, rect}]) that covers at least half of [start, end], or -1.
+ */
+export function captionZoneIndex(zones = [], start, end) {
+  const span = Math.max(end - start, 1e-3);
+  let best = -1, most = 0;
+  zones.forEach((zone, index) => {
+    const overlap = Math.min(end, zone.end) - Math.max(start, zone.start);
+    if (overlap > most) { best = index; most = overlap; }
+  });
+  return best >= 0 && most >= span / 2 - 1e-6 ? best : -1;
+}
+
+/**
  * The caption plan for chunks under a captions overlay.
- * ctx: {brand, format, story (auto emphasis), hide: [[from, to]]}.
+ * ctx: {brand, format, story (auto emphasis), hide: [[from, to]], zones}.
+ * zones: footage layout caption zones ([{start, end, rect}] px,
+ * kit/core/footage-layout.mjs captionZones): a line mostly spoken inside one
+ * is placed and wrapped within its rect instead of the band.
  * → {preset, options, css, nodes, tweens}
  */
 export function captionPlan(chunks, overlay = {}, ctx = {}) {
   const o = captionOptions(overlay, ctx);
+  const zones = Array.isArray(ctx.zones) ? ctx.zones.filter((zone) => zone?.rect) : [];
+  const zoneOf = (start, end) => captionZoneIndex(zones, start, end);
+  const used = new Set();
+  const zoneCls = (index) => { if (index < 0) return ''; used.add(index); return ` lc-cap-z${index + 1}`; };
   const emphasis = o.emphasis ? captionEmphasis(ctx.story, overlay) : new Set();
   const list = visibleChunks(chunksForCaptions(chunks, o), ctx.hide ?? []);
+  const spoken = (chunk) => [chunk.start, Math.max(chunk.start, chunk.words.at(-1)?.end ?? chunk.end)];
   const nodes = [];
   const tweens = [];
   const tw = (id, at, dur, ease, to, from, ir) => tweens.push({ id, at: r4(Math.max(0, at)), dur, ease, to, ...(from ? { from } : {}), ...(from && ir ? { ir: true } : {}) });
@@ -384,12 +406,13 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     const segments = [];
     for (const chunk of list) {
       const last = segments.at(-1);
-      if (last && chunk.start - last.end < 0.35) { last.end = Math.max(last.end, chunk.end); continue; }
-      segments.push({ start: chunk.start, end: chunk.end });
+      const zone = zoneOf(...spoken(chunk));
+      if (last && chunk.start - last.end < 0.35 && last.zone === zone) { last.end = Math.max(last.end, chunk.end); continue; }
+      segments.push({ start: chunk.start, end: chunk.end, zone });
     }
     segments.forEach((segment, index) => {
       const id = `capband-${String(index + 1).padStart(3, '0')}`;
-      nodes.push({ tag: 'div', id, cls: 'lc-cap-band' });
+      nodes.push({ tag: 'div', id, cls: `lc-cap-band${zoneCls(segment.zone)}` });
       tw(id, segment.start - 0.06, 0.3, 'power3.out', { scaleX: 1, opacity: 1 }, { scaleX: 0, opacity: 1 }, false);
       tw(id, Math.max(segment.start + 0.26, segment.end - 0.16), 0.16, 'power1.in', { opacity: 0 });
     });
@@ -397,7 +420,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
 
   for (const chunk of list) {
     const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
-    const line = { tag: 'div', id: chunk.id, cls: o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap', children: [] };
+    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}`, children: [] };
     nodes.push(line);
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
     tw(chunk.id, chunk.start, entrance.dur, entrance.ease, inTo, { ...entrance.from }, true);
@@ -499,11 +522,42 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     });
     tw(chunk.id, Math.max(chunk.start + 0.12, chunk.end - exit.dur), exit.dur, exit.ease, { ...exit.to });
   }
-  return { preset: o.preset, options: o, css: captionPlanCss(o), nodes, tweens };
+  const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect }));
+  return { preset: o.preset, options: o, css: captionPlanCss(o, { zones: placed, format: ctx.format }), nodes, tweens };
 }
 
-/** Static CSS for a caption plan's options (identical text in both renderers). */
-export function captionPlanCss(o) {
+// Caption zones narrower than this share of the canvas's short side set
+// smaller type, down to CAPTION_ZONE_MIN_SCALE.
+export const CAPTION_ZONE_WIDTH = 480 / 1080;
+export const CAPTION_ZONE_MIN_SCALE = 0.7;
+
+/**
+ * CSS for caption zones: each zone's lines are centred in its rect and
+ * wrap within it, bands span it. Percentages of the captions container (the
+ * band at o.bandTop), so both renderers lay them out identically.
+ */
+function captionZoneCss(o, zones, format) {
+  const W = Number(format?.width), H = Number(format?.height);
+  if (!zones.length || !(W > 0 && H > 0)) return [];
+  const b = o.band;
+  const box = { x: b.left * W, y: o.bandTop * H, width: (1 - b.left - b.right) * W, height: b.height * H };
+  const pct = (value) => `${round(value * 100)}%`;
+  const out = [];
+  for (const { index, rect } of zones) {
+    const l = (rect.x - box.x) / box.width, r = (box.x + box.width - rect.x - rect.width) / box.width;
+    const t = (rect.y - box.y) / box.height, bt = (box.y + box.height - rect.y - rect.height) / box.height;
+    const fw = rect.width / box.width, fh = rect.height / box.height;
+    // A zone narrower than CAPTION_ZONE_WIDTH sets smaller type, so one long word still fits.
+    const scale = Math.min(1, Math.max(CAPTION_ZONE_MIN_SCALE, rect.width / (CAPTION_ZONE_WIDTH * Math.min(W, H))));
+    const size = scale < 1 ? ` font-size: ${round(o.size * scale)}px;` : '';
+    out.push(`.lc-cap.lc-cap-z${index + 1} { left: ${pct(l)}; right: ${pct(r)}; top: ${pct(t)}; bottom: ${pct(bt)}; width: fit-content; height: fit-content; max-width: ${pct(fw)}; margin: auto;${size} }`);
+    if (o.layout === 'band') out.push(`.lc-cap-band.lc-cap-z${index + 1} { left: ${pct(l - 0.02 * fw)}; right: ${pct(r - 0.02 * fw)}; top: ${pct(t + 0.04 * fh)}; bottom: ${pct(bt + 0.04 * fh)}; }`);
+  }
+  return out;
+}
+
+/** Static CSS for a caption plan's options and zones (identical text in both renderers). */
+export function captionPlanCss(o, { zones = [], format } = {}) {
   const b = o.band;
   const pct = (value) => `${round(value * 100)}%`;
   const C = o.colors;
@@ -529,6 +583,7 @@ export function captionPlanCss(o) {
     default: break;
   }
   if (o.layout === 'band') lines.push(`.lc-cap-band { position: absolute; left: -2%; right: -2%; top: 4%; bottom: 4%; background: ${C.band}; border-left: ${round(o.size * 0.22)}px solid ${C.bandEdge}; border-radius: ${round(o.size * 0.12)}px; transform-origin: 0% 50%; transform: scaleX(0); }`);
+  lines.push(...captionZoneCss(o, zones, format));
   return `${lines.join('\n')}\n`;
 }
 

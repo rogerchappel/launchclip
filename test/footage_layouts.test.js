@@ -9,7 +9,9 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {deriveBoundaries, resolveStory, validateStory} from '../kit/core/story.mjs';
 import {resolveModule} from '../kit/core/modules.mjs';
-import {layoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '../kit/core/footage-layout.mjs';
+import {captionZone, captionZones, layoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '../kit/core/footage-layout.mjs';
+import {captionPlan, captionZoneIndex} from '../kit/core/captions.mjs';
+import {elementsFromStory, profileGeometry} from '../kit/core/layout-check.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {readProjectStory} from '../src/story_loader.js';
 import {checkLayoutProject} from '../src/layout_check.js';
@@ -170,4 +172,64 @@ test('Remotion kit: LayoutFrame from the same plan, cameras composed', () => {
   assert.match(source, /withLayoutCameras\(models, layout/);
   assert.match(source, /\{layout \? <LayoutFrame plan=\{layout\} \/> : null\}/);
   assert.ok(source.indexOf('<SubjectLayer base={base}') < source.indexOf('<LayoutFrame'), 'the frame draws over the subject');
+});
+
+test('captions sit on the presenter side of a split, framed or stacked section', () => {
+  const wide = {width: 1920, height: 1080}, tall = {width: 1080, height: 1920};
+  const band = (canvas) => profileGeometry(canvas).captionBand;
+  // Narrowed to the presenter's window, a gutter in, never wider than the band.
+  assert.deepEqual(captionZone('split-left', null, wide, band(wide)), {x: 192, y: 864, width: 648, height: 140});
+  assert.deepEqual(captionZone('split-right', null, wide, band(wide)), {x: 1080, y: 864, width: 648, height: 140});
+  assert.deepEqual(captionZone('framed', 'left', wide, band(wide)), {x: 192, y: 854, width: 614, height: 140});
+  // Moved up into a window above the band; unchanged where the band already sits inside the window.
+  assert.deepEqual(captionZone('framed', 'top', tall, band(tall)), {x: 86, y: 653, width: 832, height: 230});
+  assert.deepEqual(captionZone('stacked', 'top', tall, band(tall)), {x: 65, y: 687, width: 853, height: 230});
+  assert.equal(captionZone('stacked', 'bottom', tall, band(tall)), null);
+  assert.equal(captionZone('full', null, wide, band(wide)), null);
+  assert.equal(captionZone('insert', null, wide, band(wide)), null);
+  // With the captions beside the presenter, the panel's safe area runs past the band.
+  const captioned = {...story([{id: 'a', start: 2, end: 5, layout: 'split-left'}]), overlays: [{type: 'captions'}]};
+  assert.deepEqual(captionZones(captioned), [{section: 'a', start: 2, end: 5, rect: {x: 192, y: 864, width: 648, height: 140}}]);
+  assert.deepEqual(layoutAt(captioned, 3).safe, {x: 926, y: 54, width: 898, height: 972});
+});
+
+test('a caption line takes the zone it is mostly spoken in; both renderers get the same CSS', () => {
+  const zones = [{start: 2, end: 5, rect: {x: 192, y: 864, width: 648, height: 140}}, {start: 7.5, end: 10, rect: {x: 1080, y: 864, width: 648, height: 140}}];
+  assert.equal(captionZoneIndex(zones, 3, 4), 0);
+  assert.equal(captionZoneIndex(zones, 1.5, 3), 0, 'two thirds inside');
+  assert.equal(captionZoneIndex(zones, 0.5, 2.6), -1, 'mostly before the section');
+  assert.equal(captionZoneIndex(zones, 7, 8.2), 1);
+  const words = (list, start) => list.map((text, i) => ({text, start: start + i * 0.3, end: start + i * 0.3 + 0.25}));
+  const chunks = [
+    {id: 'cap-001', start: 0.5, end: 1.6, words: words(['Before', 'the', 'split'], 0.5)},
+    {id: 'cap-002', start: 3, end: 4, words: words(['Beside', 'the', 'presenter'], 3)},
+    {id: 'cap-003', start: 8, end: 9, words: words(['Other', 'side'], 8)}
+  ];
+  const plan = captionPlan(chunks, {type: 'captions', preset: 'quiet-accent'}, {format: {width: 1920, height: 1080}, zones});
+  assert.deepEqual(plan.nodes.map((node) => node.cls), ['lc-cap', 'lc-cap lc-cap-z1', 'lc-cap lc-cap-z2']);
+  // Percentages of the caption container (x 192–1728): the left 42% and the right 42%.
+  assert.match(plan.css, /\.lc-cap\.lc-cap-z1 \{ left: 0%; right: 57\.813%; top: 0%; bottom: 0%; width: fit-content; height: fit-content; max-width: 42\.188%; margin: auto; \}/);
+  assert.match(plan.css, /\.lc-cap\.lc-cap-z2 \{ left: 57\.813%; right: 0%;/);
+  // A narrow portrait zone sets smaller type so one long word still fits.
+  const tall = captionPlan(chunks, {type: 'captions', preset: 'word-highlight'}, {format: {width: 1080, height: 1920}, zones: [{start: 2, end: 5, rect: {x: 583, y: 1190, width: 335, height: 230}}]});
+  assert.match(tall.css, /\.lc-cap\.lc-cap-z1 \{[^}]* font-size: 51\.8px; \}/);
+  // Without zones the plan is unchanged.
+  assert.deepEqual(captionPlan(chunks, {type: 'captions'}, {format: {width: 1920, height: 1080}}).css, captionPlan(chunks, {type: 'captions'}, {format: {width: 1920, height: 1080}, zones: []}).css);
+  // lower-band: a band never runs across a zone change.
+  const band = captionPlan(chunks.map((chunk) => ({...chunk, end: chunk.end + 2})), {type: 'captions', preset: 'lower-band'}, {format: {width: 1920, height: 1080}, zones});
+  assert.ok(band.nodes.filter((node) => node.cls?.startsWith('lc-cap-band')).some((node) => node.cls === 'lc-cap-band lc-cap-z1'));
+});
+
+test('the compiler and the layout check place captions in the zones', async () => {
+  const {resolved} = await readProjectStory(WIDE);
+  const captioned = {...resolved, overlays: [{type: 'captions', src: 'assets/captions.json'}]};
+  const plan = layoutPlan(captioned);
+  assert.deepEqual(plan.captions.map((zone) => zone.section), ['steps', 'proof', 'close']);
+  const captions = elementsFromStory(captioned, {moduleLayout: () => [], captionZones: plan.captions});
+  assert.deepEqual(captions.map((element) => element.id), ['captions', 'captions@steps', 'captions@proof', 'captions@close']);
+  assert.deepEqual(captions[0].hide, [[2, 5], [5, 7.5], [7.5, 10]]);
+  assert.deepEqual(captions[1].rect, {x: 192, y: 864, width: 648, height: 140});
+  const source = readFileSync(join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
+  assert.equal((source.match(/zones=\{layout\?\.captions\}/g) ?? []).length, 2, 'Remotion hands WordCaptions the same zones');
+  assert.match(readFileSync(join(ROOT, 'kit/hyperframes/story-compiler.mjs'), 'utf8'), /zones: layout\?\.captions/);
 });
