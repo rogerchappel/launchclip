@@ -226,7 +226,11 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["layout", "loudness", "motion", "audio", "temporal_evidence", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["layout", "loudness", "motion", "audio", "temporal_evidence", "direction", "coverage", "critic"]);
+    assert.equal(report.gates.direction.status, "passed");
+    assert.equal(report.gates.coverage.status, "passed");
+    assert.equal(report.gates.coverage.profile, "short-motion");
+    assert.equal(report.gates.motion.profile, "short-motion", "the motion floors come from the cadence profile");
     assert.equal(report.gates.layout.status, "passed");
     assert.equal(report.gates.loudness.status, "passed");
     assert.equal(report.gates.motion.status, "passed");
@@ -877,6 +881,31 @@ test("runFinish drops a collapsing matte's subject scenes to their fallback", as
     assert.deepEqual(rendered.base.subject, { mattes: [] });
     // The user's storyboard is untouched.
     assert.equal(JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8")).scenes.length, 5);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish --prototype renders only the opening 20–30 s, cut at a scene end, and gates it", async () => {
+  const project = await narratedProject({ mutate: (story) => {
+    story.format.duration = 45;
+    const [metric, checklist] = story.scenes;
+    story.scenes = [{ ...metric, start: 0, end: 12 }, { ...checklist, start: 12, end: 24 }, { ...metric, id: "s3", start: 24, end: 45 }];
+    delete story.ending;
+    return story;
+  } });
+  try {
+    await rm(path.join(project, "DIRECTION.json"), { force: true });
+    const report = await runFinish(project, { renderer: "remotion", prototype: true }, fakeAdapters());
+    assert.equal(report.status, "prototype", JSON.stringify(report.stages.filter((stage) => stage.error)));
+    assert.equal(report.output, path.join(project, "renders/prototype.mp4"));
+    assert.deepEqual(report.prototype, { cut: 24, duration: 45 });
+    const copy = JSON.parse(await readFile(path.join(project, PATHS.copy), "utf8"));
+    assert.equal(copy.format.duration, 24);
+    assert.deepEqual(copy.scenes.map((scene) => scene.id), ["s1", "s2"], "scenes after the cut are dropped");
+    assert.equal(report.gates.coverage.scope, "prototype: the opening 24 s");
+    assert.ok(report.next_steps.some((step) => /Review the prototype \(renders\/prototype\.mp4, the opening 24 s of 45 s\)/.test(step)));
+    await assert.rejects(runFinish(project, { renderer: "remotion", prototype: true, candidate: "a" }, fakeAdapters()), /--prototype or --candidate/);
   } finally {
     await rm(project, { recursive: true, force: true });
   }
