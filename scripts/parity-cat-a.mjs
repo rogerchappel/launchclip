@@ -21,6 +21,7 @@ import { MODULES } from "../kit/core/catalog-a.mjs";
 import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
 import { hyperframesInvocation } from "../src/toolchain.js";
 import { injectParityFonts } from "./parity-fonts.mjs";
+import { bundleForRun } from "./remotion-bundle.mjs";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,9 +88,8 @@ async function sideBySide(a, b, out) {
 
 let bundled = null;
 async function remotionStills(story, scene, frames, outDir) {
-  const { bundle } = await import("@remotion/bundler");
   const { renderStill, selectComposition } = await import("@remotion/renderer");
-  bundled ??= await bundle({ entryPoint: ENTRY, onProgress: () => {} });
+  bundled ??= await bundleForRun({ entryPoint: ENTRY, onProgress: () => {} });
   const inputProps = { scene, story };
   const composition = await selectComposition({ serveUrl: bundled, id: "ModuleReview", inputProps, logLevel: "error" });
   const files = [];

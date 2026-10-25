@@ -20,6 +20,7 @@ import { promisify } from 'node:util';
 import { resolveEditorialModule } from '../kit/core/editorial-core.mjs';
 import { buildEditorialModule } from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 import { injectParityFonts } from './parity-fonts.mjs';
+import { bundleForRun } from './remotion-bundle.mjs';
 
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -93,8 +94,7 @@ async function hyperframesStills(project, times, outDir) {
 let bundled = null;
 async function remotionBundle(publicDir) {
   if (bundled?.publicDir === publicDir) return bundled.serveUrl;
-  const { bundle } = await import('@remotion/bundler');
-  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir, onProgress: () => {} });
+  const serveUrl = await bundleForRun({ entryPoint: ENTRY, publicDir, onProgress: () => {} });
   bundled = { publicDir, serveUrl };
   return serveUrl;
 }

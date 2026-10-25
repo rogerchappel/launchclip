@@ -22,6 +22,7 @@ import {promisify} from 'node:util';
 import {MODULES} from '../kit/core/catalog-b.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-b.mjs';
 import {injectParityFonts} from './parity-fonts.mjs';
+import {bundleForRun} from './remotion-bundle.mjs';
 
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -95,8 +96,7 @@ async function hyperframesStills(story, model, times, dir) {
 let bundled = null;
 async function remotionBundle() {
   if (!bundled) {
-    const {bundle} = await import('@remotion/bundler');
-    bundled = await bundle({entryPoint: ENTRY, publicDir: FIXTURE_DIR});
+    bundled = await bundleForRun({entryPoint: ENTRY, publicDir: FIXTURE_DIR});
   }
   return bundled;
 }
