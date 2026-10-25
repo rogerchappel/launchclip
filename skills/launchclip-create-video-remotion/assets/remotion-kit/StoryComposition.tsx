@@ -43,7 +43,7 @@ import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWi
 // @ts-ignore plain ESM from kit/core
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
-import { backgroundPlan, layerStyle as backgroundLayerStyle, sceneBackground } from "../core/backgrounds.mjs";
+import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSvg, layoutFillClip, panelFillPlan, sceneBackground } from "../core/backgrounds.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -51,7 +51,7 @@ import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCamera
 // @ts-ignore plain ESM from kit/core
 import { propsToStyle } from "../core/catalog-b-view.mjs";
 // @ts-ignore plain ESM from kit/core
-import { layoutPlan, withLayoutCameras } from "../core/footage-layout.mjs";
+import { layoutPlan, layoutStateAt, withLayoutCameras } from "../core/footage-layout.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -124,12 +124,26 @@ export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSS
 // at absolute time t, in place of the blob field. Matches the HyperFrames
 // .lc-bg-layer markup.
 export const BackgroundField: React.FC<{ plan: any; t: number }> = ({ plan, t }) => (
-  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} aria-hidden>
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", ...fieldStyle(plan) }} aria-hidden>
     {plan.layers.map((layer: any) => (
-      <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layer.svg } : undefined} />
+      <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, staticFile) } : undefined} />
     ))}
   </AbsoluteFill>
 );
+
+// A footage-layout panel fill (story.panel.fill): the pattern clipped to the
+// canvas minus the presenter's window, per frame from the layout plan's
+// state. Matches the HyperFrames #lc-layout-fill.
+export const LayoutFill: React.FC<{ layout: any; plan: any }> = ({ layout, plan }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+  return (
+    <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", clipPath: layoutFillClip(layoutStateAt(layout, t), layout.canvas) }} aria-hidden>
+      <BackgroundField plan={plan} t={t} />
+    </AbsoluteFill>
+  );
+};
 
 // World mode: the field as one continuous backdrop in the depth layer, each
 // blob repeated on its own lattice (camera-world.mjs backgroundFieldTiles) in
@@ -337,6 +351,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const base = React.useMemo(() => storyBase(story), [story]);
   // Footage layouts: the sections' frame and the reframing base camera.
   const layout = React.useMemo(() => (base ? layoutPlan(story) : null), [story, base]);
+  const layoutFill = React.useMemo(() => (layout ? panelFillPlan(story, { width: story.format.width, height: story.format.height }) : null), [layout, story]);
   const cameraOps = React.useMemo(() => {
     const models = layers.map((layer: any) => layer.model);
     const rooms = [...models, ...(layout?.rooms ?? [])];
@@ -406,6 +421,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} styles={subject.styles} /> : null}
       {layout ? <LayoutFrame plan={layout} /> : null}
+      {layout && layoutFill ? <LayoutFill layout={layout} plan={layoutFill} /> : null}
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>

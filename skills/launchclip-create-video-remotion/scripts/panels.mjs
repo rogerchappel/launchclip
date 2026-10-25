@@ -26,19 +26,25 @@ const r2 = (value) => Math.round(value * 100) / 100;
 /** Validation messages for story.panel (empty = valid). */
 export function panelErrors(value, path = 'panel') {
   if (value === undefined || value === null) return [];
-  if (!isObject(value)) return [`${path} must be an object {treatment, radius?}`];
+  if (!isObject(value)) return [`${path} must be an object {treatment, radius?, fill?}`];
   const errors = [];
-  for (const key of Object.keys(value)) if (!['treatment', 'radius'].includes(key)) errors.push(`${path}.${key} is not supported (allowed: treatment, radius)`);
+  for (const key of Object.keys(value)) if (!['treatment', 'radius', 'fill'].includes(key)) errors.push(`${path}.${key} is not supported (allowed: treatment, radius, fill)`);
+  // fill is a background {kind, params}: kit/core/backgrounds.mjs backgroundErrors checks it.
+  if (value.fill !== undefined && !isObject(value.fill)) errors.push(`${path}.fill must be a background {kind, params?}`);
   if (!PANEL_TREATMENTS.includes(value.treatment)) errors.push(`${path}.treatment must be one of ${PANEL_TREATMENTS.join(', ')}`);
   if (value.radius !== undefined && !(typeof value.radius === 'number' && value.radius >= PANEL_RADIUS.min && value.radius <= PANEL_RADIUS.max)) errors.push(`${path}.radius must be a number from ${PANEL_RADIUS.min} to ${PANEL_RADIUS.max} (px at a 1080 px short side)`);
   return errors;
 }
 
-/** The story's panel → {treatment, radius | null}, or null when the story sets none (today's cards). */
+/**
+ * The story's panel → {treatment, radius | null, fill?}, or null when the
+ * story sets none (today's cards). fill is the raw {kind, params} a panel
+ * carries inside it (kit/core/backgrounds.mjs panelFillPlan resolves it).
+ */
 export function storyPanel(story) {
   const value = story?.panel;
   if (!isObject(value) || !PANEL_TREATMENTS.includes(value.treatment)) return null;
-  return { treatment: value.treatment, radius: typeof value.radius === 'number' ? value.radius : null };
+  return { treatment: value.treatment, radius: typeof value.radius === 'number' ? value.radius : null, ...(isObject(value.fill) ? { fill: value.fill } : {}) };
 }
 
 // ---------------------------------------------------------------------------
