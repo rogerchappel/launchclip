@@ -460,6 +460,12 @@ every line whose intent calls for a visual unless the face does it better.
 no map, and reports coverage, face time and the longest undressed run against
 the band.
 
+A recording of five minutes or more is long form: follow
+[long-form.md](long-form.md). Its map's sections become chapters, `launchclip
+story long-form` adds the promise, section cards, progress line and attention
+resets after you author the storyboard, and `launchclip cutdown --to shorts`
+cuts Shorts from its sections.
+
 Then save `EDIT-DIRECTION.json` using the bundled readiness helper's contract (linked
 in the verification section), plus a human-readable `STORYBOARD.md`. Cover the
 whole accepted timeline, including deliberate quiet presenter beats. For each
