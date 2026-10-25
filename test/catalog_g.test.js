@@ -168,3 +168,11 @@ test('in a footage layout section, a card places inside the layout panel', async
   assert.equal(model.placement, 'panel');
   assert.ok(inside(model.rect, panel), 'inside the panel');
 });
+
+test('a brand frame narrows where a card may go', () => {
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6}, brand, frame: {kicker: {label: 'Ledgerly'}, progress: true},
+    scenes: [{id: 'c', module: 'concept-card', start: 0.5, end: 4, params: SAMPLES['concept-card']}]};
+  const model = resolveModule(story.scenes[0], story);
+  assert.ok(model.frame?.safe, 'the story has a frame');
+  assert.ok(inside(model.rect, model.frame.safe), 'the card stays inside the frame safe area');
+});

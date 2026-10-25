@@ -1896,8 +1896,9 @@ Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
 | `panel` | `ctx.layout.safe` is set (a footage layout's graphics panel) | `plate` | That panel |
 | `rect` | `params.rect` | as above | That rect (at least 360 × 200 px, inside the safe zone) |
 
-- `ctx.frame.safe` (a brand frame's safe area), when present, narrows the
-  safe zone. `ctx.insert` is `scene.insert === true` (set by `resolveModule`).
+- `ctx.frame.safe` (the brand frame's safe area, `brandFrameSafe(story)`, which
+  `resolveModule` passes when the story has a `frame`) narrows the safe zone.
+  `ctx.insert` is `scene.insert === true` (also set by `resolveModule`).
 - `params.surface` (`card` | `plate`) overrides the default surface.
 - When nothing fits beside the presenter, resolution fails ("…do not fit
   beside the presenter…; shorten it, or make the scene an insert") instead of
