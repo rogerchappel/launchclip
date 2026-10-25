@@ -10,6 +10,7 @@ import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from 
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt } from "../src/renderers/remotion.js";
 import * as storyModule from "./fixtures/story-stub.mjs";
+import { mediaSkip } from "./helpers/media.js";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -205,7 +206,7 @@ test("build-evidence builds remotion still arguments from the schedule frame", (
     ["still", "/tmp/bundle", "LaunchclipStory", "/p/o.png", "--props", "p.json", "--frame=3", "--overwrite", "--log", "warn"]);
 });
 
-test("remotion adapter renders a real still and MP4, and build-evidence validates against them", { timeout: 240_000 }, async (t) => {
+test("remotion adapter renders a real still and MP4, and build-evidence validates against them", { skip: mediaSkip(), timeout: 240_000 }, async (t) => {
   try {
     const { ensureBrowser } = await import("@remotion/renderer");
     await ensureBrowser();

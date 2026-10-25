@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { getRenderer } from "../src/renderers/index.js";
 import { compileStoryCommand } from "../src/story_cli.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MINIMAL = path.join(ROOT, "examples/story/minimal");
@@ -19,7 +20,7 @@ async function chromeAvailable() {
   }
 }
 
-test("kit/remotion renders a real LaunchclipStory still of examples/story/minimal", { timeout: 240_000 }, async (t) => {
+test("kit/remotion renders a real LaunchclipStory still of examples/story/minimal", { skip: mediaSkip(), timeout: 240_000 }, async (t) => {
   const missing = await chromeAvailable();
   if (missing) { t.skip(`Chrome Headless Shell is unavailable: ${missing}`); return; }
   // Work on a copy: the adapter writes .launchclip/story.resolved.json into the project.

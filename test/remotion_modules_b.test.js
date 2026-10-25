@@ -11,6 +11,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { resolveEditorialModule } from "../kit/core/editorial-core.mjs";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODULES = path.join(ROOT, "kit", "remotion", "modules");
@@ -62,7 +63,7 @@ test("parity fixtures cover every batch B kind and resolve", async () => {
   assert.deepEqual([...kinds].sort(), Object.keys(KINDS).sort());
 });
 
-test("every batch B kind renders a real Remotion still", { timeout: 600_000 }, async (t) => {
+test("every batch B kind renders a real Remotion still", { skip: mediaSkip(), timeout: 600_000 }, async (t) => {
   try {
     const { ensureBrowser } = await import("@remotion/renderer");
     await ensureBrowser();
