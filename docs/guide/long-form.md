@@ -65,3 +65,22 @@ Every other chapter comes from the render cache, the full video is put back toge
 
 - the MP4 itself, so players that read chapters show them;
 - [editor exports](editors.md): chapter markers in Final Cut Pro, and markers in Premiere Pro, Resolve and OpenTimelineIO.
+
+## Cut Shorts from it
+
+Turn any chapter into a Short:
+
+```bash
+launchclip cutdown ./my-video --to shorts --section c2
+launchclip finish ./my-video/cutdowns/c2-shorts
+```
+
+The Short isn't a crop of the long video. LaunchClip picks the strongest 15–58 seconds of the chapter and plans them again for a vertical screen:
+
+- your edit, cut-outs and face tracking are reused, so nothing is re-processed;
+- side-by-side layouts stack vertically;
+- it opens on a hook card with the first line's key words and loops back to it;
+- it adds captions and enough graphics to hold attention at Shorts pace.
+
+`CUTDOWN.json` in the new project shows which seconds it took, what it kept and added, and whether the Short passes the Shorts checks. Leave out `--section` to let LaunchClip pick the best stretch of the whole video. Add `--model` to have the AI planner design the Short from scratch instead (paid).
+
