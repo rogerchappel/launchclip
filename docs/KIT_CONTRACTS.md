@@ -833,6 +833,133 @@ export function driftPlan({rect, level, start, end, canvas, bounds, minTextPx, m
 export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift) / driftExtent(rect, drift)
 ```
 
+## Backgrounds and panels (`kit/core/backgrounds.mjs`, `kit/core/panels.mjs`)
+
+Seeded styles ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) §3.2, phase 2)
+choose the plate's background and the card surface once per video. A style
+pack carries them as `background` and `layouts.panel`; `applyStyle` merges
+them into the story as `story.background` and `story.panel`, and the
+renderers read only the story. Both files are plain ESM: `backgrounds.mjs`
+imports only `./ambient.mjs` and `./panels.mjs`, and `panels.mjs` imports
+nothing.
+
+### `story.background`
+
+```json
+{ "background": { "kind": "dot-grid", "params": { "scale": 1.2, "density": 0.4, "color": "paper" } } }
+```
+
+| Kind | Params (range, default) | Motion |
+|---|---|---|
+| `flat` | none | still |
+| `gradient` | angle 0–360 (160), intensity 0–1 (0.5), speed 0–2 (1), color | the gradient turns ±5° |
+| `grain-gradient` | gradient's, plus grain 0–1 (0.4) | the gradient turns; the grain is still |
+| `paper` | grain 0–1 (0.5), intensity 0–1 (0.4) | still |
+| `geometric` | density, scale 0.5–2 (1), intensity, speed, color | two depths of outlined shapes drift and turn |
+| `blobs` | none | today's ambient field; the default when `background` is absent |
+| `dot-grid` | scale, density, intensity, speed, color | the grid sways by half a cell |
+| `mesh` | intensity, scale, speed | four corner washes drift and breathe |
+| `stripes` | angle 0–180 (45), scale, density 0.15–0.6 (0.35), intensity (0.35), speed, color | the bands sway across |
+| `topographic` | density, scale, intensity, speed, color | contours drift and turn ±1° |
+| `halftone` | angle 0–360 (135), scale, intensity, speed, color | the screen sways |
+| `light-rays` | angle −60–60 (0), density, intensity, speed, color | the rays swing ±3° |
+
+`color` is `primary`, `accent` or `paper` (each kind has its own default).
+Density, intensity and grain default to 0.5 unless the table says otherwise.
+`validateStory` checks the kinds and ranges (`STORY_BACKGROUND_PARAMS`, kept in
+step with `BACKGROUND_PARAMS` by test), and so does `backgroundErrors(value)`.
+
+- **Colour.** Every layer takes its colour from the palette. Each colour a
+  layer lays over `bg` is clamped (`safeAlpha`) so text in `paper`, the
+  modules' foreground, keeps 4.5:1 on it, or bg's own ratio when that is
+  already lower. Grain is clamped at both extremes, toward white and toward
+  black. `backgroundPlan(story).tones` lists every colour text can sit on.
+- **Motion** obeys the ambient level, which is story-wide (`fieldLevel`). Level
+  off draws the background still; subtle, standard and lively scale its speed
+  by 0.6, 1 and 1.4, and `params.speed` scales it again (0 keeps it still).
+  Every layer axis is an ambient wave axis, so GSAP plays it as half-period
+  `sine.inOut` tweens (`layerTweens`, through `axisSegments`), and Remotion
+  evaluates the same cosine per frame (`layerStateAt`).
+- **Where it draws.** It draws wherever the field draws today: inside every
+  track-0 plate (`.lc-ambient-field` holding `.lc-bg-layer` divs in
+  HyperFrames; `BackgroundField` in `SceneLayer` in Remotion), and in loop
+  clones. `sceneBackground(story, scene)` decides whether a plate draws it.
+  For blobs that is the field's own rule. Any other kind draws at every level
+  unless `ambient.background` is false or the lane is footage-led. In world
+  camera mode the background sits fixed to the screen under the camera, and
+  the depth layer drops its glows.
+- **No background** (or `kind: "blobs"`) leaves the render byte for byte as
+  before: `backgroundPlan` returns null, and the compilers draw
+  `ambientField`. Segment digests (`src/render_segments.js`) gain a
+  `background` key only when a kind is set.
+
+```js
+export const BACKGROUND_KINDS, BACKGROUND_PARAMS, BACKGROUND_COLORS
+export function backgroundErrors(value, path?)       // → string[]
+export function storyBackground(story)               // → {kind, params} with defaults filled; blobs when absent
+export function sceneBackground(story, scene)        // → boolean: does this plate draw it
+export function backgroundPlan(story)                // → {kind, level, params, colors, layers, tones} | null (blobs)
+export function backgroundTones(story)               // → ["#rrggbb", ...] text can sit on
+export function layerStateAt(layer, t) / layerTransform(state) / layerStyle(layer, t) / layerCss(layer, t) / layerTweens(layer, from, to)
+export function backgroundContrastFindings(story, {captions}) // the layout gate's findings
+```
+
+A layer is `{id, box: {x, y, width, height}, style, svg, axes}`: inline CSS in
+camelCase, optional SVG markup, and wave axes on `x`, `y` (px), `rotation`
+(degrees) and `scale`. The transform pivots on the box centre in GSAP's 2D
+order: translate, then rotate, then scale.
+
+### `story.panel`
+
+```json
+{ "panel": { "treatment": "soft-shadow", "radius": 18 } }
+```
+
+`treatment` is one of `solid`, `glass`, `paper`, `outline` and `soft-shadow`.
+`radius` runs from 0 to 48 px at a 1080 px short side; the default is 32.
+`panelSurfaceStyle(treatment, {colors, unit, border, radius})` returns the
+surface CSS. Every treatment follows the theme: `panelTheme(colors)` reads
+light or dark from `bg`, and the shadows, borders and glass tint change with
+it. Text keeps the module's own colour, and each fill (`panelFill`) stays on
+the background's side of the contrast.
+
+| Treatment | Surface |
+|---|---|
+| `solid` | an opaque bg card with a thin border and drop shadow (today's card) |
+| `glass` | a translucent card with an 18 px backdrop blur and a hairline border |
+| `paper` | a sheet a shade off bg, with a crisp edge shadow |
+| `outline` | a 3 px primary border over a 35% bg wash, no shadow |
+| `soft-shadow` | an opaque card with no border, lifted by a wide soft shadow |
+
+`resolveModule` copies `storyPanel(story)` onto the model as `model.panel`.
+Catalogue G's `cardSurface` (the card behind `surface: "card"` modules, which
+is the default over footage) draws it in both renderers. Without
+`story.panel`, the card is today's card.
+
+### Contrast gate
+
+`layout-check` adds `background-contrast` errors from
+`backgroundContrastFindings`. It checks, on every background tone:
+
+- text in paper, on the plain background and on the story's panel fill
+  composited over each tone, at 4.5:1;
+- caption words in their idle colour at 3:1, the large-type floor. Captions
+  with a 4 px or wider outline, a plate, a band or chips behind them are
+  exempt.
+
+### Fixtures and sheet
+
+- `test/fixtures/parity-backgrounds/` holds one story fixture per kind
+  (`bg-<kind>`) and one per treatment on a dark and a light palette
+  (`panel-<treatment>-<theme>`, over `mesh`). Each fixture is
+  `{project, times, patch}`; `patch` replaces top-level storyboard keys.
+  - `node scripts/parity-backgrounds.mjs [--only …]` renders them through
+    both renderers.
+  - `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js` renders them too.
+  - Every sample must reach SSIM 0.97.
+- `node scripts/background-sheet.mjs` renders a still of every kind on a
+  light and a dark palette into `qa/background-sheet/sheet.png`.
+
 ## World camera (`kit/core/camera-world.mjs`)
 
 ```json
