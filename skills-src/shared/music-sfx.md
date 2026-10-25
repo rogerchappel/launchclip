@@ -14,8 +14,13 @@ audio.
   OpenAI key for subscription-mode orchestration or music.
 - **Sound effects:** support none, authorized local files, the locked SFX
   library, or the original procedural kit from `scripts/synth-audio-kit.mjs`
-  (local FFmpeg, no samples, no cost; several seeded variants per cue, UI
-  clicks and mechanical keystrokes). With the LaunchClip CLI, `launchclip
+  (local FFmpeg, no samples, no cost; 31 families with several seeded variants
+  each, UI clicks and mechanical keystrokes). When the style pack has a
+  `sound` block, pass its palette and the style's seed (`--palette <id>
+  --seed <seed>`), its genre for the bed (`--genre <id> --key <k>
+  --progression <n>`) and its ambience bed (`--ambience <bed>`; for `auto`
+  use the style's world), so the video sounds like its style; the option
+  lists and the world → ambience map are in `scripts/sound/options.mjs`. With the LaunchClip CLI, `launchclip
   finish` resolves cues through the library seeded once with `launchclip sfx
   seed` (ElevenLabs with the user's explicit approval, or the procedural kit),
   then the kit; see
