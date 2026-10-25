@@ -10,7 +10,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { narrationWords } from "../kit/core/captions.mjs";
-import { concatArgs, concatList, defaultSegmentTools, muxArgs, planSegments, renderWithSegments } from "../src/render_segments.js";
+import { concatArgs, concatList, defaultSegmentTools, muxArgs, planSegments, remuxForJoinArgs, renderWithSegments } from "../src/render_segments.js";
 import { resolveStory } from "../src/story.js";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -181,6 +181,10 @@ test("concat: a duration line per segment and packets re-stamped from their inde
   assert.equal(concatList(["/tmp/a.mp4"]), "file '/tmp/a.mp4'\n");
   const args = concatArgs("list.txt", "out.mp4", { fps: 30 });
   assert.deepEqual(args.slice(args.indexOf("-c")), ["-c", "copy", "-bsf:v", "setts=time_base=1/90000:prescale=1:ts=N/(30*TB_OUT):duration=1/(30*TB_OUT)", "-video_track_timescale", "90000", "-an", "out.mp4"]);
+  // FFmpeg before 7.1 (no prescale): segments are remuxed to 90 kHz first, and the stamps use the input timebase.
+  const old = concatArgs("list.txt", "out.mp4", { fps: 30, prescale: false });
+  assert.equal(old[old.indexOf("-bsf:v") + 1], "setts=ts=N/(30*TB):duration=1/(30*TB)");
+  assert.deepEqual(remuxForJoinArgs("a.mp4", "b.mp4"), ["-i", "a.mp4", "-map", "0:v:0", "-c", "copy", "-video_track_timescale", "90000", "-an", "b.mp4"]);
 });
 
 async function ffmpegMissing() {
@@ -243,11 +247,14 @@ test("FFmpeg: the join stamps every frame on its slot, whatever the segments' co
       await ffmpeg(["-f", "lavfi", "-i", `testsrc2=size=160x120:rate=30,trim=start_frame=${i}:end_frame=${i + 1}`, "-c:v", "libx264", "-qp", "0", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-video_track_timescale", "1000", file]);
       files.push(file);
     }
-    const joined = path.join(dir, "joined.mp4");
-    await defaultSegmentTools().concat(files, joined, { fps: 30, frames: files.map(() => 1) });
-    const stamps = await packets(joined);
-    assert.equal(stamps.length, 24);
-    stamps.forEach(([pts, dts, duration], index) => assert.deepEqual([pts, dts, duration], [index * 3000, index * 3000, 3000], `frame ${index}`));
+    // Both join paths: with setts prescale (FFmpeg 7.1+) and without (older FFmpeg, as on Ubuntu).
+    for (const prescale of [true, false]) {
+      const joined = path.join(dir, `joined-${prescale}.mp4`);
+      await defaultSegmentTools().concat(files, joined, { fps: 30, frames: files.map(() => 1), prescale });
+      const stamps = await packets(joined);
+      assert.equal(stamps.length, 24, `prescale ${prescale}`);
+      stamps.forEach(([pts, dts, duration], index) => assert.deepEqual([pts, dts, duration], [index * 3000, index * 3000, 3000], `prescale ${prescale}, frame ${index}`));
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -517,11 +517,17 @@ export function concatList(files, { fps, frames } = {}) {
  * segments' container metadata says. The lossless segments have no B-frames
  * (x264 ultrafast), so packets are in presentation order and pts = dts holds.
  */
-export function concatArgs(list, output, { fps } = {}) {
+export function concatArgs(list, output, { fps, prescale = true } = {}) {
   const rate = Number(fps);
   // time_base + prescale: the expressions are evaluated in the 90 kHz output
-  // timebase, whatever timebase the first segment was written with.
-  const restamp = rate > 0 ? ["-bsf:v", `setts=time_base=1/${JOIN_TIMESCALE}:prescale=1:ts=N/(${rate}*TB_OUT):duration=1/(${rate}*TB_OUT)`] : [];
+  // timebase, whatever timebase the first segment was written with. FFmpeg
+  // before 7.1 has no prescale; there the segments are first remuxed to the
+  // 90 kHz timescale (remuxForJoin), so the expressions in the input
+  // timebase (TB) give the same whole ticks.
+  const stamp = prescale
+    ? `setts=time_base=1/${JOIN_TIMESCALE}:prescale=1:ts=N/(${rate}*TB_OUT):duration=1/(${rate}*TB_OUT)`
+    : `setts=ts=N/(${rate}*TB):duration=1/(${rate}*TB)`;
+  const restamp = rate > 0 ? ["-bsf:v", stamp] : [];
   return ["-f", "concat", "-safe", "0", "-i", list, "-map", "0:v:0", "-c", "copy", ...restamp, "-video_track_timescale", String(JOIN_TIMESCALE), "-an", output];
 }
 
@@ -546,16 +552,46 @@ export function muxArgs({ video, audio, output, offset = 0, duration, frames, fp
   return ["-i", video, ...input, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...limit, "-movflags", "+faststart", output];
 }
 
+/** FFmpeg arguments that stream-copy one segment to the 90 kHz join timescale. */
+export function remuxForJoinArgs(input, output) {
+  return ["-i", input, "-map", "0:v:0", "-c", "copy", "-video_track_timescale", String(JOIN_TIMESCALE), "-an", output];
+}
+
+let settsPrescale = null;
+/** Whether this FFmpeg's setts filter has the prescale option (7.1 and later); checked once. */
+export function ffmpegHasSettsPrescale() {
+  settsPrescale ??= execFileAsync("ffmpeg", ["-hide_banner", "-h", "bsf=setts"], { maxBuffer: 1 << 20 })
+    .then(({ stdout, stderr }) => /\bprescale\b/.test(`${stdout}${stderr}`))
+    .catch(() => false);
+  return settsPrescale;
+}
+
 export function defaultSegmentTools() {
   const ffmpeg = (args) => execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 1 << 26 });
   return {
     // Join segments (stream copy) with exact per-frame timestamps; options:
-    // {fps, frames: [frame count of each file]}.
+    // {fps, frames: [frame count of each file], prescale (default: detected)}.
     async concat(files, output, options = {}) {
+      const prescale = options.prescale ?? await ffmpegHasSettsPrescale();
       const list = `${output}.txt`;
-      await writeFile(list, concatList(files, options));
-      try { await ffmpeg(concatArgs(list, output, options)); }
-      finally { await rm(list, { force: true }); }
+      const remuxed = [];
+      try {
+        let inputs = files;
+        if (!prescale && Number(options.fps) > 0) {
+          inputs = [];
+          for (const [index, file] of files.entries()) {
+            const copy = `${output}.join-${index}.mp4`;
+            await ffmpeg(remuxForJoinArgs(file, copy));
+            remuxed.push(copy);
+            inputs.push(copy);
+          }
+        }
+        await writeFile(list, concatList(inputs, options));
+        await ffmpeg(concatArgs(list, output, { ...options, prescale }));
+      } finally {
+        await rm(list, { force: true });
+        await Promise.all(remuxed.map((file) => rm(file, { force: true })));
+      }
     },
     // The soundtrack as AAC (48 kHz stereo, 320 kb/s, as Remotion encodes it),
     // padded or cut to the timeline; cached, so a re-render only remuxes it.
