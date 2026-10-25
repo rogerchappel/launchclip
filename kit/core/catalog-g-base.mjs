@@ -178,8 +178,11 @@ export function cardSurface(model) {
   if (model.surface !== 'card') return null;
   const {theme, unit: u, rect} = model;
   if (model.panel) {
-    const {treatment, radius} = model.panel;
-    return el('div', null, abs(0, 0, rect.width, rect.height, panelSurfaceStyle(treatment, {colors: theme, unit: u, border: theme.border, radius: radius ?? 32})));
+    const {treatment, radius, fill} = model.panel;
+    const surface = panelSurfaceStyle(treatment, {colors: theme, unit: u, border: theme.border, radius: radius ?? 32});
+    // A panel fill (model.panel.fill, kit/core/backgrounds.mjs cardFillStyles): still pattern layers clipped to the card.
+    const inner = fill ? [el('div', null, abs(0, 0, rect.width, rect.height, {overflow: 'hidden', borderRadius: surface.borderRadius, ...fill.mask}), fill.styles.map(style => el('div', null, style)))] : [];
+    return el('div', null, abs(0, 0, rect.width, rect.height, surface), inner);
   }
   return el('div', null, abs(0, 0, rect.width, rect.height, {boxSizing: 'border-box', borderRadius: r2(32 * u), background: theme.bg,
     border: `${r2(2 * u)}px solid ${theme.border}`, boxShadow: `0 ${r2(18 * u)}px ${r2(48 * u)}px #00000073`}));

@@ -26,7 +26,7 @@ import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
 import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
-import { backgroundPlan, layerCss, layerTweens, sceneBackground } from '../core/backgrounds.mjs';
+import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from '../core/backgrounds.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
@@ -145,9 +145,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const field = isolate || backdrop ? null : ambientField(story);
   const geometry = profileGeometry({ width: W, height: H });
   const backdropLayer = (key, from, to) => {
-    const html = backdrop.layers.map((layer) => `<div id="lc-bg-${key}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layer.svg ?? ''}</div>`).join('');
+    const html = backdrop.layers.map((layer) => `<div id="lc-bg-${key}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`).join('');
     const lines = backdrop.layers.flatMap((layer) => layerTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-bg-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
-    return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true">${html}</div>`, motion: lines };
+    const mask = Object.entries(fieldStyle(backdrop)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
+    return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true"${mask ? ` style="${mask}"` : ''}>${html}</div>`, motion: lines };
   };
   const fieldLayer = (key, from, to) => {
     if (backdrop) return backdropLayer(key, from, to);
@@ -396,6 +397,17 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       for (const entry of layout.boundaries) baseMarkup.push(`<div class="lc-layout-boundary" aria-hidden="true" data-launchclip-transition-type="layout-shift"${boundaryAttrs(entry)} style="display:none"></div>`);
       motion.push(`// footage layout (${layout.sections.map((section) => `${section.id} ${section.layout}`).join(', ')})`);
       motion.push(...layout.ops.map((op) => `tl.set(${js(`#${LAYOUT_FRAME}`)}, ${js(frameStyle(op.state))}, ${num(op.time)});`));
+      // A panel fill (story.panel.fill, kit/core/backgrounds.mjs): the
+      // pattern over the panel colour, clipped to the canvas minus the
+      // presenter's window on the same frames as the frame element.
+      const fillPlan = panelFillPlan(story, { width: W, height: H });
+      if (fillPlan) {
+        const html = fillPlan.layers.map((layer) => `<div id="lc-layout-fill-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, 0)}">${layerSvg(layer) ?? ''}</div>`).join('');
+        const mask = Object.entries(fieldStyle(fillPlan)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
+        baseMarkup.push(`<div id="lc-layout-fill" class="lc-layout-fill" data-launchclip-background="${fillPlan.kind}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${subjectNeeded ? subjectZ + 5 : 5};clip-path:${attr(layoutFillClip(layout.ops[0].state, layout.canvas))}"><div class="lc-layout-fill-field" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${mask}">${html}</div></div>`);
+        motion.push(...layout.ops.map((op) => `tl.set("#lc-layout-fill", ${js({ clipPath: layoutFillClip(op.state, layout.canvas) })}, ${num(op.time)});`));
+        motion.push(...fillPlan.layers.flatMap((layer) => layerTweens(layer, 0, D).map((tw) => `tl.fromTo(${js(`#lc-layout-fill-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`)));
+      }
     }
   } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');
   if (!base && models.some((model) => model.room || model.subjectCamera)) warnings.push('a scene moves the subject or treats the room, but the story has no base recording; it has no effect');

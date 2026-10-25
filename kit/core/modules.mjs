@@ -22,7 +22,8 @@ import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { brandFrameSafe, intersectRects } from './brand-frame.mjs';
 import { sceneAmbient } from './ambient.mjs';
-import { storyPanel } from './panels.mjs';
+import { panelFill, storyPanel } from './panels.mjs';
+import { cardFillStyles, fieldStyle, panelFillPlan } from './backgrounds.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 
@@ -170,7 +171,15 @@ export function resolveModule(scene, story, { track, end } = {}) {
     // Panel treatment (kit/core/panels.mjs): the story's card surface, read
     // by catalogue G's cardSurface. Absent without story.panel.
     const panel = storyPanel(story);
-    if (panel) model.panel = panel;
+    if (panel) {
+      const { fill, ...surface } = panel;
+      model.panel = surface;
+      // panel.fill: a still background inside a card, at the card's size on its fill colour.
+      if (fill && model.surface === 'card' && model.rect?.width > 0) {
+        const plan = panelFillPlan(story, { width: model.rect.width, height: model.rect.height, bg: panelFill(surface.treatment, story.brand?.colors ?? {}).color });
+        if (plan) model.panel.fill = { styles: cardFillStyles(plan), mask: fieldStyle(plan) };
+      }
+    }
     const frameSafe = story?.frame ? brandFrameSafe(story) : null;
     if (frameSafe) {
       const panel = Number.isFinite(Number(scene?.start)) ? sceneLayoutAt(story, Number(scene.start), Number.isFinite(Number(scene?.end)) ? Number(scene.end) : Number(scene.start))?.safe ?? null : null;
