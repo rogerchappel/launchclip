@@ -1,11 +1,13 @@
 // Which source ranges of the base a planned storyboard needs matted: every
 // scene that needs the subject (a behind or split layer, a subjectCamera,
-// a room, or a traced outline), its window mapped back through the base's
+// a room, or a traced outline) and every footage layout section that treats
+// the room, its window mapped back through the base's
 // trims to source seconds, padded and merged. `launchclip make` mattes exactly these.
 
 import { resolveModule } from "../../kit/core/modules.mjs";
 import { storyBase } from "../../kit/core/story.mjs";
 import { needsSubject, subjectWindows } from "../../kit/core/subject-layer.mjs";
+import { SECTION_ROOMS, storySections } from "../../kit/core/footage-layout.mjs";
 
 export const MATTE_PAD_SECONDS = 0.5;
 
@@ -16,7 +18,8 @@ export function plannedSubjectWindows(resolved) {
     try { model = resolveModule(scene, resolved); } catch { /* a scene that does not resolve is reported by validate */ }
     return { scene, model, start: Number(scene.start), end: Number(scene.end) };
   });
-  return subjectWindows(entries, { include: (entry) => needsSubject(entry.scene, entry.model) || Boolean(entry.model?.usesOutline) });
+  const rooms = storySections(resolved).filter((section) => SECTION_ROOMS[section.room]).map((section) => ({ scene: { id: `layout:${section.id}` }, model: { room: SECTION_ROOMS[section.room] }, start: section.start, end: section.end }));
+  return subjectWindows([...entries, ...rooms], { include: (entry) => needsSubject(entry.scene, entry.model) || Boolean(entry.model?.usesOutline) });
 }
 
 /**
