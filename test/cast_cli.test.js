@@ -211,3 +211,20 @@ test("the cast gate fails a limb off the canvas or out of the safe zone, and a c
   const meant = short([phone("a", 0, [{ id: "maya", position: "left" }, { id: "theo", position: "right" }]), phone("b", 4, [{ id: "maya", position: "right" }, { id: "theo", position: "left" }])]);
   assert.deepEqual(castPlacement(resolveStory(meant, { words: [] }), [meant.scenes[0], meant.scenes[1]].map((scene) => resolveModule(scene, meant))), []);
 });
+
+test("cast show and sheet draw a styled story in its style pack's colours, as finish does", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-cast-style-"));
+  try {
+    const story = example();
+    delete story.brand;
+    story.style = "bold-creator";
+    await writeFile(path.join(dir, "storyboard.json"), JSON.stringify(story));
+    const { applyProjectStyle } = await import("../src/story_style.js");
+    const styled = (await applyProjectStyle(story, { projectDir: dir })).story;
+    const theo = await castShow("theo", { story: dir });
+    assert.equal(theo.colors.top, styled.brand.colors.accent, "theo's top is the accent role, here the pack's accent");
+    assert.notEqual(theo.colors.top, (await castShow("theo", { story: EXAMPLE })).colors.top);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
