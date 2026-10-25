@@ -878,6 +878,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, highlight
+variants: columns (default), bars, lollipop, blocks
 
 ### stacked-bar (keeps captions)
 Stacked columns or bars: each category builds series by series with a legend and totals; data from params.
@@ -892,6 +893,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: columns (default), bars
 
 ### pie-chart (keeps captions)
 Donut, pie or half-donut: slices sweep on in one continuous turn, the legend lands slice by slice, and the centre counts up the total; one slice can be highlighted.
@@ -908,6 +910,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, highlight
+variants: donut (default), pie, half
 
 ### area-chart (keeps captions)
 One to three series over labelled points: the area and line reveal left to right and the end value lands; gradient, line-only or stepped.
@@ -923,6 +926,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: gradient (default), line, steps
 
 ### scatter-plot (keeps captions)
 Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.
@@ -942,6 +946,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, highlight
+variants: dots (default), bubbles, rings
 
 ### radar-chart (keeps captions)
 Radar (spider) chart: the grid lands, then each series' shape grows out from the centre; 3–8 labelled axes.
@@ -955,6 +960,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: polygon (default), circles, dots
 
 ### sparkline (keeps captions)
 A KPI card: label, a value that counts along its trend, a delta chip and the sparkline drawing on (line, area or bars).
@@ -970,6 +976,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: line (default), area, bars
 
 ### progress-ring (keeps captions)
 A ring (or half dial) fills to a value while the centre counts up, with a label below; plain, thick, segmented or half.
@@ -984,6 +991,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: ring (default), thick, segmented, half
 
 ### funnel-chart (keeps captions)
 A conversion funnel: stages widen in top to bottom with counting values and the step-to-step rate between them; tapered, bars or steps.
@@ -998,6 +1006,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: tapered (default), bars, steps
 
 ### waterfall (keeps captions)
 A waterfall (bridge) chart: a starting total, each gain or loss stepping from the last level, and the resulting total; gains in primary, losses in accent.
@@ -1012,6 +1021,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: bridge (default), floating
 
 ### sankey (keeps captions)
 A Sankey flow diagram: nodes in up to four columns, with ribbons as wide as each flow drawing from source to target column by column.
@@ -1024,6 +1034,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: ribbons (default), lines
 
 ### heatmap (keeps captions)
 A heatmap grid: labelled rows and columns whose cells pop in a diagonal wave, shaded from the panel to the brand tone by value, with a low–high legend.
@@ -1042,6 +1053,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
+variants: squares (default), circles, rounded
 
 ### leaderboard (keeps captions)
 A ranked leaderboard: rows slide in from last place to first with rank badges, counting values and (bars) a bar each; one row can be called out.
@@ -1057,6 +1069,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, highlight
+variants: bars (default), rows, cards
 
 ### comparison-table (keeps captions)
 A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick.
@@ -1071,6 +1084,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, highlight
+variants: grid (default), striped, cards
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
@@ -1096,6 +1110,16 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
 - light: {dir?, color?, intensity?} the key light (as cast-scene)
 events: <character>-cue-<i>
+
+### world (keeps captions)
+A layered environment drawn in code (inside rooms, streets and outdoor places) at day, dusk or night, recoloured from the brand, with props; the plate behind characters, cards or captions on higher tracks. A slow camera move gives parallax depth.
+params:
+- kind: office | kitchen | city-street | park (default: story.world.kind)
+- time: day | dusk | night (default: story.world.time, else day)
+- props: [id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: laptop, phone, tablet, mug, coffee-cup, books, notebook, pen-cup, lightbulb, trophy, coins, piggy-bank, calculator, headphones, camera, microphone, keyboard, monitor, succulent, globe, hourglass, alarm-clock, gift, jar, cake, pizza, bowl, pan, pot, cutting-board, bread, fruit-bowl, teapot, kettle, water-bottle, apple, candle, game-controller, flowers, clipboard, envelope, desk-lamp, plant, leafy-plant, tree, pine-tree, palm-tree, bush, lamp-post, bench, bike, car, scooter, rocket, chart-easel, whiteboard, box, boxes, trash-can, fire-hydrant, traffic-cone, mailbox, suitcase, backpack, briefcase, stool, office-chair, floor-lamp, guitar, ladder, telescope, tent, campfire, signpost, flag, umbrella, server-rack, robot, dumbbell, kettlebell, ball, skateboard, clock, framed-art, poster, wall-shelf, neon-sign, calendar, tv, wall-chart, map, dartboard, balloons, kite, drone, hot-air-balloon
+- camera: still | drift | pan-left | pan-right | push | pull or {move, amount 0..1} (default drift)
+- detail: simple | standard | rich (default: from story.cast.style)
+- scrim: auto | top | bottom | left | right | centre | none | true (darken the quiet area for text on top; default none)
 
 ## Timing rules
 
@@ -1174,6 +1198,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | comparison-table | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
 
 ## Example
 

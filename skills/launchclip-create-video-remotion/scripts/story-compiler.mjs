@@ -40,6 +40,7 @@ import { EMITTERS as CATALOG_F_EMITTERS } from './hyperframes-catalog-f.mjs';
 import { EMITTERS as CATALOG_G_EMITTERS } from './hyperframes-catalog-g.mjs';
 import { EMITTERS as CATALOG_H_EMITTERS } from './hyperframes-catalog-h.mjs';
 import { EMITTERS as CHARACTER_EMITTERS } from './hyperframes-catalog-characters.mjs';
+import { EMITTERS as WORLD_EMITTERS } from './hyperframes-catalog-world.mjs';
 import { cameraOverlaps } from './catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from './subject-layer.mjs';
 import { LAYOUT_FRAME, layoutFrameStyle, layoutPlan, withLayoutCameras } from './footage-layout.mjs';
@@ -52,7 +53,7 @@ const TOGGLE_LEAD = 0.0005;
 
 /** Every HyperFrames emitter, keyed by module id. */
 export function hyperframesEmitters() {
-  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...CATALOG_D_EMITTERS, ...CATALOG_E_EMITTERS, ...CATALOG_F_EMITTERS, ...CATALOG_G_EMITTERS, ...CATALOG_H_EMITTERS, ...CHARACTER_EMITTERS, ...EDITORIAL_EMITTERS };
+  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...CATALOG_D_EMITTERS, ...CATALOG_E_EMITTERS, ...CATALOG_F_EMITTERS, ...CATALOG_G_EMITTERS, ...CATALOG_H_EMITTERS, ...CHARACTER_EMITTERS, ...WORLD_EMITTERS, ...EDITORIAL_EMITTERS };
 }
 
 /**
