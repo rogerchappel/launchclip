@@ -29,6 +29,8 @@ launchclip edit-recording recording.mov --out .launchclip/recording-edit --aspec
 ```
 
 This defaults to local Whisper (`base.en`, configurable with `--recording-model`)
+plus a second local model for consensus word timing (`small.en`, configurable
+with `--consensus-model`, `none` for one model; see `docs/recording-qa.md`),
 and calls no paid model or transcription provider. Whisper must already be
 installed; its first run can download the selected model. Reuse a word-timed
 JSON transcript with `--recording-transcript words.json` to avoid transcription.
