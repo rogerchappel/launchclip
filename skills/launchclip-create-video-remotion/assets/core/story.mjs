@@ -81,9 +81,11 @@ const EPS = 1e-6;
 // motion, camera, ambient, layout: style-driven settings, carried through as data;
 // frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape);
 // cast: the story's characters (kit/core/characters/cues.mjs validates it);
+// variants: {<module>: <variant>}, each module's designed look for the whole
+// video (a style pack's variants; each module checks its own names).
 // background, panel: the plate's background kind and the card surface (a style pack's
 // background and layouts.panel; kit/core/backgrounds.mjs, kit/core/panels.mjs).
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters"]);
+const TOP_LEVEL = new Set(["variants", "background", "panel", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -294,6 +296,17 @@ export function validateStory(story, { modules } = {}) {
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
   const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
+  // world: the video-wide world for world scenes, usually from the style. Its
+  // shape is checked here; kinds, times and props when a world scene resolves
+  // (kit/core/catalog-world.mjs, kit/core/worlds/ storyWorldErrors).
+  if (story.world !== undefined && story.world !== null) {
+    if (!isObject(story.world)) err("world must be {kind, time?, props?, detail?}");
+    else {
+      for (const key of Object.keys(story.world)) if (!["kind", "time", "props", "detail"].includes(key)) err(`world.${key} is not a world field (kind, time, props, detail)`);
+      for (const key of ["kind", "time", "detail"]) if (story.world[key] !== undefined && !nonEmpty(story.world[key])) err(`world.${key} must be a name`);
+      if (story.world.props !== undefined && !Array.isArray(story.world.props)) err("world.props must be a list of props");
+    }
+  }
 
   // ambient: the ambient-motion control (kit/core/ambient.mjs).
   validateAmbient(story.ambient, "ambient", err);
@@ -301,6 +314,14 @@ export function validateStory(story, { modules } = {}) {
   // background and panel: the plate's background kind and the card surface (kit/core/backgrounds.mjs, kit/core/panels.mjs).
   validateBackground(story.background, err);
   validatePanel(story.panel, err);
+
+  // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
+  if (story.variants !== undefined && story.variants !== null) {
+    if (!isObject(story.variants)) err("variants must be {<module>: <variant name>}");
+    else for (const [key, value] of Object.entries(story.variants)) {
+      if (!/^[a-z][a-z0-9-]*$/.test(key) || typeof value !== "string" || !/^[a-z][a-z0-9-]*$/.test(value)) err(`variants.${key} must be a variant name (lowercase kebab-case)`);
+    }
+  }
 
   // frame: the brand frame the compilers draw around scenes (RFC §9.2).
   validateFrame(story.frame, { err, warn, scenes: Array.isArray(story.scenes) ? story.scenes : [] });
@@ -345,7 +366,8 @@ export function validateStory(story, { modules } = {}) {
       if (scene.source !== undefined) err(`${path}.source is only allowed with module "custom"`);
     }
     if (scene.params !== undefined && !isObject(scene.params)) err(`${path}.params must be an object`);
-    if (isObject(scene.params)) for (const key of ["id", "kind", "aspect", "start", "duration"]) if (key in scene.params) err(`${path}.params.${key} is not allowed; it comes from the scene and the format`);
+    // A world scene's kind names its environment (kit/core/catalog-world.mjs), not an editorial kind.
+    if (isObject(scene.params)) for (const key of ["id", "kind", "aspect", "start", "duration"]) if (key in scene.params && !(key === "kind" && scene.module === "world")) err(`${path}.params.${key} is not allowed; it comes from the scene and the format`);
 
     const start = scene.start === undefined ? (err(`${path}.start is required`), null) : anchorField(scene.start, `${path}.start`);
     const end = scene.end === undefined ? (err(`${path}.end is required`), null) : anchorField(scene.end, `${path}.end`);

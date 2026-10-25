@@ -16,7 +16,9 @@ import { MODULES as CATALOG_D } from './catalog-d.mjs';
 import { MODULES as CATALOG_E } from './catalog-e.mjs';
 import { MODULES as CATALOG_F } from './catalog-f.mjs';
 import { MODULES as CATALOG_G } from './catalog-g.mjs';
+import { MODULES as CATALOG_H } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
+import { MODULES as WORLD } from './catalog-world.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -30,10 +32,10 @@ import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
 
-/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D, E, F, G and the character modules). */
+/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D, E, F, G, H, the character modules and the world module). */
 export function catalogModules() {
   const merged = {};
-  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E], ['catalog-f', CATALOG_F], ['catalog-g', CATALOG_G], ['characters', CHARACTERS]]) {
+  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E], ['catalog-f', CATALOG_F], ['catalog-g', CATALOG_G], ['catalog-h', CATALOG_H], ['characters', CHARACTERS], ['world', WORLD]]) {
     for (const [id, definition] of Object.entries(table ?? {})) {
       if (EDITORIAL_KINDS.includes(id)) throw new Error(`${label} module "${id}" collides with an editorial kind`);
       if (merged[id]) throw new Error(`${label} module "${id}" is defined twice`);
@@ -46,6 +48,17 @@ export function catalogModules() {
 /** Editorial kinds plus catalogue ids. */
 export function knownModules() {
   return [...EDITORIAL_KINDS, ...Object.keys(catalogModules())];
+}
+
+/**
+ * Every module's designed variants, {<module>: [names]} with the default (the
+ * module's original look) first (docs/SEEDED_STYLES_RFC.md §3.2). A style's
+ * variants (story.variants) and a scene's params.variant name one of these.
+ */
+export function moduleVariants() {
+  const out = {};
+  for (const [id, definition] of Object.entries(catalogModules())) if (Array.isArray(definition.variants) && definition.variants.length > 1) out[id] = [...definition.variants];
+  return out;
 }
 
 export function isEditorialKind(id) {
@@ -484,7 +497,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

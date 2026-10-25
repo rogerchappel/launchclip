@@ -28,6 +28,9 @@ state them:
   −14 LUFS master are on by default for portrait videos of 60 s or less
 - language: the user's language
 - output: `.launchclip/agent-<source-slug>` in the active workspace
+- style: the user's named style or brand; with neither, a seeded style
+  generated from your art direction in the brief step. "A different look"
+  later means `launchclip style reroll`
 - audio: preserve supplied speech; ask once about music and SFX when the user
   has not already decided. Never silently spend provider credits.
 

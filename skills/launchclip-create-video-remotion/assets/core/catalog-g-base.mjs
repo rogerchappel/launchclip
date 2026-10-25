@@ -17,7 +17,7 @@
 // …layout} or null (does not fit that width), and draw rect-local from the
 // box place() returns.
 
-import {contrastRatio, createBase, r2, rt, timingRules} from './catalog-b-base.mjs';
+import {contrastRatio, createBase, mixColor, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {headRect} from './catalog-c.mjs';
 import {iconNode, iconPath} from './icons.mjs';
@@ -25,6 +25,7 @@ import {panelSurfaceStyle} from './panels.mjs';
 
 export const CARD_SURFACES = Object.freeze(['card', 'plate']);
 export const CARD_PARAMS = Object.freeze({
+  variant: 'one of the module\'s VARIANTS, its designed look (optional; default: the style\'s variants[module], else the first); usually leave it to the style',
   surface: 'card | plate (default: card over footage, plate on a plate or insert)',
   rect: '{x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane)'
 });
@@ -35,14 +36,31 @@ export const cardTiming = (rules = []) => ({...timingRules({rules}), leadIn: 0})
 const ENTER_LEAD = 0.15;
 
 /**
- * createBase plus placement. Returns the createBase object with
- * {overlay, surface, pad, place(measure, {maxWidth}) → {rect, x, y, width, layout}}.
+ * A module's designed variant (docs/SEEDED_STYLES_RFC.md §3.2): a per-scene
+ * params.variant wins, then the style's choice (ctx.variants[moduleId], from
+ * story.variants), then the first, which is the module's original look.
+ * Variants change layout, shapes and entrances, never the params.
  */
-export function createCardBase(moduleId, params, ctx, {allowed, required = []}) {
+export function variantOf(moduleId, variants, value, ctx, check) {
+  const style = ctx?.variants && typeof ctx.variants === 'object' ? ctx.variants[moduleId] : undefined;
+  const name = value ?? style ?? variants[0];
+  if (variants.includes(name)) return name;
+  const path = value !== undefined ? 'params.variant' : `style variants.${moduleId}`;
+  return check.fail(path, `must be one of ${variants.join(', ')} (the ${moduleId} variants); got ${JSON.stringify(name)}`);
+}
+
+/**
+ * createBase plus placement. Returns the createBase object with
+ * {overlay, surface, pad, variant, place(measure, {maxWidth}) → {rect, x, y, width, layout}}.
+ * `variants` is the module's VARIANTS list (the first is the default).
+ */
+export function createCardBase(moduleId, params, ctx, {allowed, required = [], variants = ['default']}) {
   const raw = params && typeof params === 'object' ? params : {};
-  const {rect: rectIn, surface: surfaceIn, ...rest} = raw;
+  const {rect: rectIn, surface: surfaceIn, variant: variantIn, ...rest} = raw;
   const b = createBase(moduleId, rest, ctx, {allowed, required});
   const {check, u, canvas, portrait} = b;
+  b.variant = variantOf(moduleId, variants, variantIn, ctx, check);
+  b.model.variant = b.variant;
   // A footage layout's panel (ctx.layout.safe, footage-layouts) holds the
   // card like a plate; a brand frame's safe area (ctx.frame.safe, style v3)
   // narrows the zone. Both are optional.
@@ -275,4 +293,56 @@ export function iconTile(id, name, size, color, unit, {glyph = 0.56} = {}) {
     el('div', null, abs(0, 0, size, size, {boxSizing: 'border-box', borderRadius: r2(size * 0.28), background: `${color}24`, border: `${r2(2 * unit)}px solid ${color}66`})),
     iconNode(name, {x: inset, y: inset, size: g, color})
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Variant helpers: brand fills that keep text legible on any palette.
+
+/** The text colour that reads best on `fill` (ink, paper or bg) → {color, ratio}. */
+export function inkOn(b, fill) {
+  let color = b.colors.ink, ratio = 0;
+  for (const option of [b.colors.ink, b.colors.paper, b.colors.bg]) {
+    const r = contrastRatio(option, fill);
+    if (r > ratio) { color = option; ratio = r; }
+  }
+  return {color, ratio};
+}
+
+/**
+ * A solid shape with text on it: the brand `tone` when its best text colour
+ * reaches `min`:1, else the panel tone with paper text →
+ * {fill, ink, solid: whether the brand tone held}.
+ */
+export function solidFill(b, tone = 'primary', min = 3) {
+  const fill = b.colors[tone];
+  const best = inkOn(b, fill);
+  if (best.ratio >= min) return {fill, ink: best.color, solid: true};
+  return {fill: b.theme.panel, ink: b.theme.foreground, solid: false};
+}
+
+/**
+ * A translucent tint of `tone` behind text of colour `text`, as strong as
+ * `alpha` while the text keeps `min`:1 on the tint over bg → #RRGGBBAA.
+ */
+export function tintBehind(b, tone, text, {alpha = 0.34, min = 4.5} = {}) {
+  const fill = b.colors[tone];
+  for (let a = alpha; a > 0.06; a -= 0.04) if (contrastRatio(text, mixColor(fill, b.colors.bg, a)) >= min) return `${fill}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
+  return `${fill}0f`;
+}
+
+/**
+ * The lines fitText's conservative wrap makes of `text` (catalogue B's
+ * advance model), for a variant that draws per line. The model overestimates
+ * widths, so each forced line fits the browser's real width too.
+ */
+export function wrapWords(text, size, family, width) {
+  const lines = [];
+  const space = textWidth(' ', size, family);
+  let line = '', used = 0;
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    const w = textWidth(word, size, family);
+    if (used && used + space + w > width) { lines.push(line); line = word; used = w; } else { line = line ? `${line} ${word}` : word; used += (used ? space : 0) + w; }
+  }
+  if (line) lines.push(line);
+  return lines;
 }

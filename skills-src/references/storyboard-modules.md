@@ -151,6 +151,16 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | tells a story with people ("meet Maya, a…", "imagine you're…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture [motion, voiceover-motion] | cast-scene |
 | gives the viewer's situation a face for one beat ("if you're a…", "your customer", "someone like you"): one animated character beside a card or on a panel | character-cameo |
 | a short note, tip or warning card [motion, voiceover-motion] | callout |
+| compares a few real values side by side ("by platform", "per region", "each month"): bars grow to their values, one can stay lit | bar-chart |
+| splits a whole into shares ("half of", "a third", "the split", "breakdown"): a donut or pie sweeps on with its legend | pie-chart |
+| shows a real series over time ("every month since", "over the year"): the area reveals left to right | area-chart |
+| walks a conversion path ("of those", "signed up", "drop-off", "funnel"): stages narrow with the rate between them | funnel-chart |
+| explains how a total changed through gains and losses ("we gained… but lost…", "net"): steps from the start to the new total | waterfall |
+| shows where something flows ("where the money goes", "how traffic splits"): ribbons from sources to destinations | sankey |
+| shows when or where activity peaks across two dimensions ("busiest day and hour"): cells shade in a wave | heatmap |
+| ranks things ("top five", "the most popular", "number one"): rows land from last place to first | leaderboard |
+| compares products feature by feature ("unlike X, it…", "the only one that"): a table of ticks and crosses with the pick outlined | comparison-table |
+| states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
 
@@ -732,9 +742,11 @@ params:
 - sub: sub-line ≤ 64 (optional)
 - tone: word colour: paper (default) | primary | accent
 - at: word time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: icon, word, sub
+variants: stacked (default), side-icon, banner, marker
 
 ### icon-row (keeps captions)
 Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.
@@ -744,9 +756,11 @@ params:
 - layout: auto (default) | row | list
 - stagger: seconds between pops (default 0.18)
 - at: first pop time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: item-<i>
+variants: tiles (default), pills, orbit, list
 
 ### section-card (keeps captions)
 A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.
@@ -756,9 +770,11 @@ params:
 - number: chapter number 1–99 (optional)
 - icon: icon name (optional; not with number)
 - at: title time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: kicker, title
+variants: centered (default), split, tab, frame
 
 ### object-card (keeps captions)
 A simple illustrated object built from the icon set and brand shapes (boat, box, calendar, laptop, rocket, smartphone, chart, shield, mail, trophy, lightbulb, globe, team, gift), with a caption and an optional label. For naming a product, a deliverable or an idea as a thing ("it ships in a box", "your calendar, handled").
@@ -767,9 +783,11 @@ params:
 - caption: string ≤ 48
 - label: string ≤ 24 (optional, uppercased)
 - at: object time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: object, caption
+variants: stage (default), polaroid, split, spotlight
 
 ### stat-card (keeps captions)
 One real figure, big, that counts up to its value and lands, with a label and its source line ("Source: …", required). For a number the script states: a result, a price, a count. Never for a made-up or illustrative figure.
@@ -781,9 +799,11 @@ params:
 - count: boolean (default true when the value starts with a number)
 - tone: value colour: primary (default) | accent | paper
 - at: count start
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: count, hit
+variants: giant (default), ring, bar, ticker
 
 ### quote-card (keeps captions)
 A real quote with its attribution: a quote mark, the words (one phrase can light up on a marker), then "— Name" and their role or where it was said. For a customer, press or expert line the user supplied. Never invent a quote or attribute one to "a customer".
@@ -794,9 +814,11 @@ params:
 - source: where it was said ≤ 60 (optional)
 - highlight: a phrase from the quote (optional)
 - at: quote time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: quote, author, highlight
+variants: mark (default), pull, bubble, centered
 
 ### excerpt (keeps captions)
 A real excerpt in a window: 1–8 lines of code or text exactly as written in the source (README, docs, an article, a commit), revealed line by line; marked lines get a highlight sweep while the rest dim. The source line is required. Never paraphrase or invent lines.
@@ -807,9 +829,11 @@ params:
 - source: where it comes from ≤ 60 (required)
 - highlightAt: seconds from scene start (optional; default after the lines)
 - at: first line time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: lines, highlight
+variants: window (default), terminal, document, stack
 
 ### compare (keeps captions)
 A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states.
@@ -819,9 +843,11 @@ params:
 - mode: before-after (default) | columns
 - stagger: seconds between items (default 0.16)
 - at: left panel time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: left, right
+variants: panels (default), split, table, cards
 
 ### timeline (keeps captions)
 Two to six steps along a line: numbered (or icon) nodes that pop as each step is said while a primary line runs on to them, with a label and optional detail. Vertical in 9:16, across in 16:9 when the labels fit. For a process, a history or a roadmap.
@@ -831,9 +857,234 @@ params:
 - direction: auto (default) | vertical | horizontal
 - stagger: seconds between steps (default 0.45)
 - at: first step time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: step-<i>
+variants: rail (default), milestones, cards, stairs
+
+### bar-chart (keeps captions)
+Bars or columns grow to their values with counting labels; one bar can be highlighted after the build. Columns turn sideways when their labels do not fit.
+params:
+- data: [{label ≤ 24, value ≥ 0, color? (primary | accent | paper | #rrggbb)}] 2–10
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- max: axis maximum (optional; default the largest value)
+- tone: bar colour (primary | accent | paper | #rrggbb; default primary)
+- highlight: index of the bar to keep lit while the others dim (optional)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: columns (default), bars, lollipop, blocks
+
+### stacked-bar (keeps captions)
+Stacked columns or bars: each category builds series by series with a legend and totals; data from params.
+params:
+- categories: [string ≤ 20] 2–7
+- series: [{label ≤ 20, values: [number ≥ 0 per category], color? (primary | accent | paper | #rrggbb)}] 2–5
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- totals: boolean (default true)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: columns (default), bars
+
+### pie-chart (keeps captions)
+Donut, pie or half-donut: slices sweep on in one continuous turn, the legend lands slice by slice, and the centre counts up the total; one slice can be highlighted.
+params:
+- data: [{label ≤ 22, value ≥ 0, color? (primary | accent | paper | #rrggbb)}] 2–6
+- percent: boolean: the legend shows shares (default true) or values
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- center: {value? (default the counting total), label? ("Total")} or false; donut and half only
+- highlight: slice index (optional)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: donut (default), pie, half
+
+### area-chart (keeps captions)
+One to three series over labelled points: the area and line reveal left to right and the end value lands; gradient, line-only or stepped.
+params:
+- labels: [string ≤ 12] 3–16, the x points
+- series: [{values: [number per label], label? ≤ 20, color? (primary | accent | paper | #rrggbb)}] 1–3
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- min: axis minimum (optional)
+- max: axis maximum (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: gradient (default), line, steps
+
+### scatter-plot (keeps captions)
+Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.
+params:
+- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60
+- xLabel: string ≤ 32
+- yLabel: string ≤ 32
+- x: {min, max} (optional)
+- y: {min, max} (optional)
+- trend: boolean: draw the least-squares line (default false)
+- tone: dot colour (primary | accent | paper | #rrggbb)
+- highlight: point index to call out (optional)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: dots (default), bubbles, rings
+
+### radar-chart (keeps captions)
+Radar (spider) chart: the grid lands, then each series' shape grows out from the centre; 3–8 labelled axes.
+params:
+- axes: [string ≤ 16] 3–8
+- series: [{values: [number ≥ 0 per axis], label? ≤ 20, color? (primary | accent | paper | #rrggbb)}] 1–3
+- max: axis maximum (optional; default the largest value)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: polygon (default), circles, dots
+
+### sparkline (keeps captions)
+A KPI card: label, a value that counts along its trend, a delta chip and the sparkline drawing on (line, area or bars).
+params:
+- values: [number] 4–60, oldest first
+- label: string ≤ 36, required
+- value: headline text (optional; default the last value, counted)
+- delta: string ≤ 10 such as "+12%" (default from first to last) or false
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- tone: line colour (primary | accent | paper | #rrggbb)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: line (default), area, bars
+
+### progress-ring (keeps captions)
+A ring (or half dial) fills to a value while the centre counts up, with a label below; plain, thick, segmented or half.
+params:
+- value: number, required (0..max)
+- max: number (default 100: the value is a percent)
+- label: string ≤ 40, required
+- sub: string ≤ 60 (optional)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- tone: ring colour (primary | accent | paper | #rrggbb)
+- at: fill start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: ring (default), thick, segmented, half
+
+### funnel-chart (keeps captions)
+A conversion funnel: stages widen in top to bottom with counting values and the step-to-step rate between them; tapered, bars or steps.
+params:
+- stages: [{label ≤ 24, value ≥ 0, color? (primary | accent | paper | #rrggbb)}] 2–6, widest first
+- rates: boolean: show each step's conversion (default true)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- tone: base colour (primary | accent | paper | #rrggbb)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: tapered (default), bars, steps
+
+### waterfall (keeps captions)
+A waterfall (bridge) chart: a starting total, each gain or loss stepping from the last level, and the resulting total; gains in primary, losses in accent.
+params:
+- opening: {label ≤ 16, value}, the starting total
+- steps: [{label ≤ 16, delta (+ or −)}] 1–8
+- total: end column label ≤ 16 (default "Total")
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: bridge (default), floating
+
+### sankey (keeps captions)
+A Sankey flow diagram: nodes in up to four columns, with ribbons as wide as each flow drawing from source to target column by column.
+params:
+- flows: [{from ≤ 18, to ≤ 18, value > 0}] 2–14; node columns follow the links
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: ribbons (default), lines
+
+### heatmap (keeps captions)
+A heatmap grid: labelled rows and columns whose cells pop in a diagonal wave, shaded from the panel to the brand tone by value, with a low–high legend.
+params:
+- rows: [string ≤ 14] 1–10
+- columns: [string ≤ 8] 2–14
+- values: [[number per column] per row]
+- showValues: boolean (default when cells are large enough)
+- low: legend low label (default the minimum)
+- high: legend high label (default the maximum)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- tone: shade (primary | accent | paper | #rrggbb)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: squares (default), circles, rounded
+
+### leaderboard (keeps captions)
+A ranked leaderboard: rows slide in from last place to first with rank badges, counting values and (bars) a bar each; one row can be called out.
+params:
+- entries: [{label ≤ 24, value ≥ 0, detail? ≤ 30, icon? (icon name), color? (primary | accent | paper | #rrggbb)}] 3–8
+- sort: boolean: rank by value (default true)
+- highlight: rank index to call out after the build (optional; first place is lit)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: bars (default), rows, cards
+
+### comparison-table (keeps captions)
+A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick.
+params:
+- columns: [string ≤ 16] 2–4, the things compared
+- rows: [{label ≤ 28, values: [true | false | null | string ≤ 10 per column]}] 2–8
+- highlight: column index to outline after the build (optional)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: grid (default), striped, cards
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
@@ -841,6 +1092,7 @@ params:
 - set: desk-laptop | phone | meeting | screen
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
+- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
@@ -856,7 +1108,18 @@ params:
 - card: {kicker?, title ≤ 64, body? ≤ 140}
 - panel: boolean (default: true without a card)
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
+- light: {dir?, color?, intensity?} the key light (as cast-scene)
 events: <character>-cue-<i>
+
+### world (keeps captions)
+A layered environment drawn in code (inside rooms, streets and outdoor places) at day, dusk or night, recoloured from the brand, with props; the plate behind characters, cards or captions on higher tracks. A slow camera move gives parallax depth.
+params:
+- kind: office | kitchen | city-street | park (default: story.world.kind)
+- time: day | dusk | night (default: story.world.time, else day)
+- props: [id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: laptop, phone, tablet, mug, coffee-cup, books, notebook, pen-cup, lightbulb, trophy, coins, piggy-bank, calculator, headphones, camera, microphone, keyboard, monitor, succulent, globe, hourglass, alarm-clock, gift, jar, cake, pizza, bowl, pan, pot, cutting-board, bread, fruit-bowl, teapot, kettle, water-bottle, apple, candle, game-controller, flowers, clipboard, envelope, desk-lamp, plant, leafy-plant, tree, pine-tree, palm-tree, bush, lamp-post, bench, bike, car, scooter, rocket, chart-easel, whiteboard, box, boxes, trash-can, fire-hydrant, traffic-cone, mailbox, suitcase, backpack, briefcase, stool, office-chair, floor-lamp, guitar, ladder, telescope, tent, campfire, signpost, flag, umbrella, server-rack, robot, dumbbell, kettlebell, ball, skateboard, clock, framed-art, poster, wall-shelf, neon-sign, calendar, tv, wall-chart, map, dartboard, balloons, kite, drone, hot-air-balloon
+- camera: still | drift | pan-left | pan-right | push | pull or {move, amount 0..1} (default drift)
+- detail: simple | standard | rich (default: from story.cast.style)
+- scrim: auto | top | bottom | left | right | centre | none | true (darken the quiet area for text on top; default none)
 
 ## Timing rules
 
@@ -919,8 +1182,23 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | excerpt | 2 s | 0 s | scene − 0.65 s | lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last |
 | compare | 2 s | 0 s | scene − 0.65 s | the right panel lands 0.25 s plus stagger × left items after the left (or on a right hit) |
 | timeline | 2 s | 0 s | scene − 0.65 s | steps land in order; with no at, the first lands at 0.05 s and the rest follow by stagger (default 0.45 s) |
+| bar-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| stacked-bar | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| pie-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| area-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| radar-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| sparkline | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| progress-ring | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| funnel-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| waterfall | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| sankey | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| heatmap | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| leaderboard | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
+| comparison-table | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
 
 ## Example
 
