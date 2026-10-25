@@ -1358,10 +1358,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   ```
 
-- `story validate`: Validate a storyboard.json (errors and warnings).
+- `story validate`: Validate a storyboard.json (errors and warnings). In the footage-led, motion and voiceover-motion lanes it also requires DIRECTION.json when the story has narration words, checks it against the narration and the scenes, and reports coverage, face time and the longest undressed run against the cadence profile.
 
   ```text
-  launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+  launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--direction DIRECTION.json] [--out report.json]
   ```
 
 - `story resolve`: Resolve a storyboard.json's time anchors to seconds.
@@ -1376,10 +1376,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
   ```
 
-- `story plan`: Plan a storyboard.json from a brief with a model.
+- `story plan`: Plan DIRECTION.json and then storyboard.json from a brief with a model: the direction map first (one call), then the storyboard against it and the cadence profile; the repair loop repairs both.
 
   ```text
-  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--no-subject] [--max-repairs 2]
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--profile id|profile.json] [--no-direction] [--no-subject] [--max-repairs 2]
   ```
 
 - `cinematic-check`: Check a finished project against the cinematic gates and receipts.

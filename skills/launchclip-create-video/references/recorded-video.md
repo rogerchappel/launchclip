@@ -207,9 +207,10 @@ overlays, punch-ins and full-frame inserts:
   `base-edit.mp4`, which is already cut, leave both out.
 - **Overlays** sit on track 1 or higher; same-track scenes still cannot overlap.
   **Inserts** (`insert: true`, track 0) cover the picture with any catalogue
-  module while the recording's audio keeps playing. Spend inserts on strong
-  lines: the RFC targets 10–40% motion share for footage-led cuts, and 20–50%
-  when resources supply inserts.
+  module while the recording's audio keeps playing. Which lines get overlays
+  and inserts comes from `DIRECTION.json` (below), and how much of the runtime
+  they cover comes from the cadence profile's coverage band
+  ([profiles.md](profiles.md)), not a fixed share.
 - **Footage modules.**
   - `punch-in`: a word-timed spring zoom (1.06–1.25) toward `focus`. It is a
     camera on the base, not an overlay.
@@ -404,7 +405,22 @@ A decorative count of illustrative shapes is not an actual viewer count.
 
 ### Build a whole-transcript direction map
 
-Save `EDIT-DIRECTION.json` using the bundled readiness helper's contract (linked
+Write `DIRECTION.json` before `storyboard.json`, from
+[direction-map.md](direction-map.md): every line of the edited transcript
+gets an intent (hook, claim, problem, turn, proof, number, list, process,
+product, personal, quote, cta) and a treatment. `dress` puts a visual
+alongside the presenter and `insert` a full-frame visual over the voice;
+both name their scenes. `face` holds on the presenter on purpose and
+`camera` uses only a punch-in; both give a short why. Pick the profile for the
+cut (`launchclip profile list`; a 9:16 Short is `short-talking-head`, a
+1–5 minute 16:9 launch `youtube-talking-head-launch`) and dress enough lines to
+land inside its coverage band, with no undressed run past its limit. Dress
+every line whose intent calls for a visual unless the face does it better.
+`launchclip story validate` fails a footage-led story with narration words and
+no map, and reports coverage, face time and the longest undressed run against
+the band.
+
+Then save `EDIT-DIRECTION.json` using the bundled readiness helper's contract (linked
 in the verification section), plus a human-readable `STORYBOARD.md`. Cover the
 whole accepted timeline, including deliberate quiet presenter beats. For each
 sequence record the spoken anchor/time range, purpose (explain, demonstrate,

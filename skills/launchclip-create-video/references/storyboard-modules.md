@@ -33,7 +33,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 
 - motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.
 - voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.
-- footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.
+- footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. Coverage (the share of the runtime with a graphic on screen) lands inside the story's cadence profile band (references/profiles.md); no undressed run longer than the profile allows. Add a captions overlay.
 
 ## Motion grammar and camera
 

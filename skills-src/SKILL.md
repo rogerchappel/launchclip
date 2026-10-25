@@ -22,6 +22,13 @@ Read a reference when its step comes up, not all at once.
 - [references/storyboard-modules.md](references/storyboard-modules.md): every
   module, its params and events, transitions, grammar and camera, anchors and
   the safe-zone and caption rules.
+- [references/direction-map.md](references/direction-map.md): the
+  `DIRECTION.json` you write before the storyboard: an intent and a treatment
+  for every narration line, the shared intent rules, and what `story validate`
+  checks.
+- [references/profiles.md](references/profiles.md): the cadence profiles
+  (coverage, face time, pacing and motion bands per format) that the map and
+  the gates measure against.
 - [references/subject-effects.md](references/subject-effects.md): effects that
   use the presenter cut out of a recording (a word behind their head, a dolly
   zoom): probing and matting the recording, the behind layer and its rules.

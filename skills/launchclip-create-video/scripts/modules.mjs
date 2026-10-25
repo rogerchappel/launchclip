@@ -182,16 +182,18 @@ export function isSubjectEffect(scene) {
 }
 
 /** Density warnings for a resolved footage-led story, as strings. */
-export function subjectDensityWarnings(story) {
-  return subjectDensityFindings(story).map((finding) => finding.detail);
+export function subjectDensityWarnings(story, options = {}) {
+  return subjectDensityFindings(story, options).map((finding) => finding.detail);
 }
 
 /**
  * Density findings for a resolved footage-led story (numeric scene times):
  * [{ids, at, detail}]. Stories outside the lane, or with no subject effects,
- * get none.
+ * get none. The runtime share comes from the cadence profile's
+ * subject_effect_share ceiling (p90) when one is given (kit/core/profiles.mjs).
  */
-export function subjectDensityFindings(story) {
+export function subjectDensityFindings(story, { profile = null } = {}) {
+  const share = Number(profile?.measures?.subject_effect_share?.p90 ?? SUBJECT_DENSITY.share);
   if (!storyBase(story)) return [];
   const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
   const frame = 1 / (Number.isFinite(fps) && fps > 0 ? fps : 30);
@@ -207,8 +209,8 @@ export function subjectDensityFindings(story) {
     covered += Math.max(0, effect.end - Math.max(effect.start, reach));
     reach = Math.max(reach, effect.end);
   }
-  if (Number.isFinite(duration) && duration > 0 && covered / duration > SUBJECT_DENSITY.share + 1e-9) {
-    findings.push({ ids: effects.map((effect) => effect.id), at: round3(effects[0].start), detail: `subject effects cover ${Math.round((covered / duration) * 100)}% of the runtime (${round3(covered)} of ${round3(duration)} s; ${effects.map((effect) => effect.id).join(', ')}); keep them under ${Math.round(SUBJECT_DENSITY.share * 100)}% so each one lands. Drop or shorten some` });
+  if (Number.isFinite(duration) && duration > 0 && covered / duration > share + 1e-9) {
+    findings.push({ ids: effects.map((effect) => effect.id), at: round3(effects[0].start), detail: `subject effects cover ${Math.round((covered / duration) * 100)}% of the runtime (${round3(covered)} of ${round3(duration)} s; ${effects.map((effect) => effect.id).join(', ')}); keep them under ${Math.round(share * 100)}%${profile?.id ? ` (profile ${profile.id})` : ''} so each one lands. Drop or shorten some` });
   }
   for (let i = 1; i < effects.length; i += 1) {
     const before = effects[i - 1], after = effects[i];

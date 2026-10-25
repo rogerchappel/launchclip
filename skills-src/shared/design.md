@@ -1,5 +1,13 @@
 ## Design the video
 
+Write the direction map first: `DIRECTION.json` from
+[references/direction-map.md](references/direction-map.md) gives every line
+of the narration an intent and a treatment (dress, insert, face or camera),
+and names the scenes that will show it. Aim the treatments at the story's
+cadence profile ([references/profiles.md](references/profiles.md)): coverage
+near its target, no undressed run past its limit. Then author the storyboard
+against the map.
+
 Author `storyboard.json` from
 [references/storyboard-modules.md](references/storyboard-modules.md). It is
 generated from the module registry and lists every catalogue and editorial

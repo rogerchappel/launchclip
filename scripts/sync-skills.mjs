@@ -25,8 +25,10 @@
 //                                              references/, agents/, scripts/,
 //                                              assets/remotion-kit/ and assets/core/)
 //
-// references/storyboard-modules.md is generated from kit/core/planning-prompt.mjs
-// (GENERATED_REFERENCES) into skills-src/references/ and both skills.
+// references/storyboard-modules.md, subject-effects.md and direction-map.md are
+// generated from kit/core/planning-prompt.mjs, and profiles.md from the shipped
+// profiles in kit/profiles/ (GENERATED_REFERENCES), into skills-src/references/
+// and both skills.
 //
 // The renderer-neutral scripts are maintained in
 // skills/launchclip-create-video/scripts/ and copied into the Remotion skill.
@@ -37,7 +39,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { storyboardModulesReference, subjectEffectsReference } from '../kit/core/planning-prompt.mjs';
+import { directionMapReference, profilesReference, storyboardModulesReference, subjectEffectsReference } from '../kit/core/planning-prompt.mjs';
+import { shippedProfiles } from '../src/profile_store.js';
 import { usageMarkdown } from '../src/cli_usage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,7 +65,9 @@ const SHARED_REFERENCES = [
 // generator always reads this checkout's kit/core registry.
 export const GENERATED_REFERENCES = {
   'storyboard-modules.md': storyboardModulesReference,
-  'subject-effects.md': subjectEffectsReference
+  'subject-effects.md': subjectEffectsReference,
+  'direction-map.md': directionMapReference,
+  'profiles.md': () => profilesReference(shippedProfiles())
 };
 
 // Renderer-neutral scripts, maintained in the HyperFrames skill.
