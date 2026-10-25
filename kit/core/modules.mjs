@@ -7,7 +7,7 @@
 //
 // Canonical copy: kit/core/modules.mjs.
 
-import { EDITORIAL_KINDS, checklistTypeIn, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
+import { EDITORIAL_KINDS, EDITORIAL_VARIANTS, checklistTypeIn, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
 import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
@@ -53,6 +53,7 @@ export function knownModules() {
  */
 export function moduleVariants() {
   const out = {};
+  for (const [id, names] of Object.entries(EDITORIAL_VARIANTS)) out[id] = [...names];
   for (const [id, definition] of Object.entries(catalogModules())) if (Array.isArray(definition.variants) && definition.variants.length > 1) out[id] = [...definition.variants];
   return out;
 }
@@ -454,7 +455,13 @@ function resolveModuleInner(scene, story, { track, end }) {
     if (!canvas || canvas.width !== format.width || canvas.height !== format.height) {
       throw new Error(`module "${module}": editorial modules need a 1080x1920 (9:16) or 1920x1080 (16:9) format; got ${format.width}x${format.height}`);
     }
-    const spec = { ...brandModuleDefaults(story?.brand), ...statusRackDefaults(module, story?.brand, params), ...params, id, kind: module, aspect, start, duration };
+    // The style's variant for this kind (story.variants), unless the scene names one.
+    const chosen = story?.variants?.[module];
+    if (chosen !== undefined && params.variant === undefined && EDITORIAL_VARIANTS[module] && !EDITORIAL_VARIANTS[module].includes(chosen)) {
+      throw new Error(`module "${module}": style variants.${module} must be one of ${EDITORIAL_VARIANTS[module].join(', ')} (the ${module} variants); got ${JSON.stringify(chosen)}`);
+    }
+    const variant = params.variant === undefined && chosen !== undefined && EDITORIAL_VARIANTS[module] ? { variant: chosen } : {};
+    const spec = { ...brandModuleDefaults(story?.brand), ...statusRackDefaults(module, story?.brand, params), ...variant, ...params, id, kind: module, aspect, start, duration };
     if (track !== undefined) spec.track = track;
     const resolveSpec = (value) => {
       try { return styled ? resolveEditorialModule(value, { grammar }) : resolveEditorialModule(value); }
