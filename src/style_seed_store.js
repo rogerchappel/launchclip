@@ -49,13 +49,19 @@ export async function projectSeedStyle(projectDir, { storyFile = path.join(proje
 
 /**
  * The art-direction constraints from flags (--tone, --theme, --world,
- * --drawing-style, --character-set, --background, --panel).
+ * --drawing-style, --character-set, --background, --panel). --world takes
+ * one world or several (repeated, or comma-separated) for the seed to pick
+ * among.
  */
 export function constraintFlags(flags = {}) {
   const out = {};
   for (const key of CONSTRAINT_KEYS) {
     const value = flags[key] ?? flags[key.replace(/_/g, "-")];
-    if (value !== undefined && value !== true) out[key] = String(value);
+    if (value === undefined || value === true) continue;
+    if (key === "world") {
+      const worlds = [].concat(value).flatMap((entry) => String(entry).split(",")).map((entry) => entry.trim()).filter(Boolean);
+      out.world = worlds.length === 1 ? worlds[0] : worlds;
+    } else out[key] = String(value);
   }
   return out;
 }
