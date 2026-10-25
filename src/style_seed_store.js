@@ -87,13 +87,21 @@ export function adoptStyleLook(story, pack) {
 }
 
 /**
- * launchclip style generate --seed <hex> [--tone] [constraint flags] [--out]:
- * a pack without a project. --out is a style.json path or a directory (the
- * pack is written to <dir>/style.json); without it the pack is returned.
+ * launchclip style generate --seed <hex> [--tone] [constraint flags] [--out | --project]:
+ * --out is a style.json path or a directory (the pack is written to
+ * <dir>/style.json); --project saves it as that project's style
+ * (.launchclip/styles/seed-<hex>/style.json) for a storyboard to name;
+ * with neither the pack is returned.
  */
 export async function styleGenerateCommand(flags = {}, { cwd = process.cwd(), clock = () => new Date().toISOString() } = {}) {
   const constraints = constraintFlags(flags);
-  const pack = generateStyle({ seed: flags.seed && flags.seed !== true ? normalizeSeed(flags.seed) : freshSeed(), constraints, at: clock() });
+  const seed = flags.seed && flags.seed !== true ? normalizeSeed(flags.seed) : freshSeed();
+  if (flags.project && flags.project !== true) {
+    if (flags.out) throw new Error("pass --out or --project, not both");
+    const made = await generateProjectStyle(path.resolve(cwd, String(flags.project)), { seed, constraints, clock });
+    return { stage: "style", action: "generate", status: "ready", name: made.name, seed: made.pack.generated.seed, summary: made.summary, line: made.line, path: made.file, next: `set "style": "${made.name}" in storyboard.json and leave brand out` };
+  }
+  const pack = generateStyle({ seed, constraints, at: clock() });
   const result = { stage: "style", action: "generate", status: "ready", name: pack.name, seed: pack.generated.seed, summary: styleSummary(pack) };
   if (!flags.out || flags.out === true) return { ...result, pack };
   const target = path.resolve(cwd, String(flags.out));
