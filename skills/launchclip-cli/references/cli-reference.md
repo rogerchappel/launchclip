@@ -1207,6 +1207,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
   ```
 
+- `profile list`: List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).
+
+  ```text
+  launchclip profile list                            # the shipped cadence profiles
+  ```
+
+- `profile show`: Show one cadence profile (a shipped id or a profile file), validated.
+
+  ```text
+  launchclip profile show <id|profile.json>
+  ```
+
+- `profile measure`: Measure a folder of reference videos into a cadence profile. Only statistics are kept, never frames, audio or text; --rights says what right you have to analyse them. --replace writes over a shipped profile and refreshes kit/profiles/PROVENANCE.md.
+
+  ```text
+  launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1]
+  ```
+
 - `intake`: Write a production workspace from a source (repository, product, topic or voiceover).
 
   ```text
