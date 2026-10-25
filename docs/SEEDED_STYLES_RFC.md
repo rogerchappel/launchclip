@@ -108,7 +108,48 @@ words `suggestMotion()` and `suggestModuleMoods()` already map. Tone narrows the
 families; the seed picks inside them. A prompt with no tone words gets the
 seed alone.
 
-### 3.4 Not looking like the starters
+### 3.4 Direction chooses, the seed varies
+
+The seed is not the art director. When an agent (the skills) or the model
+pipeline does art direction, it chooses what fits the prompt: a cooking video
+gets a kitchen world and warm paper; a security explainer gets a technical
+dark theme and line icons. The direction writes those choices as
+**constraints** (`style generate --tone warm --world kitchen --theme light`,
+or the same keys in the brief), and the seed only picks among the options
+that satisfy them. With no direction at all, the seed picks within tone
+defaults.
+
+```
+prompt → art direction (fit) → constraints → seed (variety inside them) → pack
+```
+
+This keeps the fit with the prompt while giving variety. It only works if each
+constraint still leaves many good options, so the libraries have to be large
+(§3.5).
+
+### 3.5 Expanding the programmatic worlds
+
+The variety comes from the libraries, not the seed. Today the libraries are
+small: one character drawing style, about 24 cast members, 4 sets, an ambient
+blob field, three panel treatments and 11 fonts. A seed over those makes
+combinations of the same few looks. This RFC grows each library, all drawn in
+code (SVG and CSS, deterministic, no network):
+
+| Library | Today | Target | Notes |
+|---|---|---|---|
+| Worlds (new) | none | 16+ environments: office, home desk, kitchen, street, city skyline, park, beach, mountains, night sky, space, studio, classroom, cafe, workshop, server room, abstract stage | layered (sky or wall, mid, foreground) for parallax; each in day, dusk and night variants and recoloured from the palette; a world can sit behind characters, cards or captions |
+| Props (new) | inside the sets only | 60+: laptop, phone, mug, plant, books, whiteboard, rocket, chart easel, coins, trophy, lightbulb, box, bike, car, tree… | placeable in any world or set, recoloured from the palette, in the active drawing style |
+| Sets | 4 | 12+ | adds kitchen counter, sofa, podium, stage, car, park bench, video call, standing desk |
+| Characters | 1 style, ~24 members | 5 drawing styles; rig options with enough range for thousands of distinct casts (builds, heights, skin tones, hair, facial hair, glasses, headwear, outfits, accessories, mobility aids) | casts are generated from the options, not picked from a fixed list; consistency gate per style |
+| Backgrounds | 6 kinds | 12+: plus dot grid, mesh, stripes, topographic lines, halftone, light rays | |
+| Frames and layouts | split, full, panels | plus device frames (browser, phone, laptop), polaroid, sticker, torn paper, TV and window frames | |
+| Fonts | 11 | 25+ OFL families in curated pairings | |
+
+A fit table maps prompt topics to worlds and props (cooking → kitchen, cafe;
+fitness → park, gym; dev tools → home desk, server room), which art
+direction uses and the seed falls back to.
+
+### 3.6 Not looking like the starters
 
 A style fingerprint (palette in OKLCH, font pairing, panel treatment, grammar,
 caption preset) is compared with the five starters and with the generator's
@@ -132,7 +173,7 @@ them.
 
 ## 5. Phases and PRs
 
-Small commits, PRs against main. Phases 2–4 run in parallel with phase 1,
+Small commits, PRs against main. Phases 2–5 run in parallel with phase 1,
 against this contract.
 
 | Phase | Lands | Done when |
@@ -141,8 +182,9 @@ against this contract.
 | 1 | The generator (`kit/core/style-seed.mjs`): PRNG, palette harmony in OKLCH with contrast checks, type pairings and more OFL fonts, theme, motion and caption choice by tone, the starter-distance check; the CLI (`--seed`, `style generate`, `reroll`, `keep`); wiring into make, story plan and the skills | 50 seeds give 50 packs that all validate, pass contrast, and are pairwise distinct by fingerprint; one seed always gives one pack |
 | 2 | Backgrounds and panels: the background pool and the outline and soft-shadow panels, in both renderers | Each background kind and panel has a parity fixture; text contrast holds on every kind |
 | 3 | Module variants: designed variants for catalogue G cards and the editorial modules, chosen through `style.variants` | Each variant has a parity fixture; the default variant matches today's render |
-| 4 | Character drawing styles: outlined, paper, line and soft-shade beside flat, plus seeded casts | A cast sheet per style; the consistency gate holds in every style |
-| 5 | Integration: the seed picks phase 2–4 options; a gallery script renders one short story with 12 seeds side by side | A reviewer can't find two of the 12 that look like the same brand |
+| 4 | Characters: outlined, paper, line and soft-shade beside flat; a wider rig option range; casts generated from options; 8 more sets | A cast sheet per style; the consistency gate holds in every style |
+| 5 | Worlds and props (`kit/core/worlds/`): 16 layered environments with time-of-day variants, 60 props, the topic fit table, a `world` module | A contact sheet per world; parity fixtures; props render in every drawing style |
+| 6 | Integration: art-direction constraints in the skills and pipeline, the seed picking phase 2–5 options; a gallery script renders one short story with 12 seeds side by side | A reviewer can't find two of the 12 that look like the same brand, and each fits the prompt |
 
 ## 6. Open questions
 
