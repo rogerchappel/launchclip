@@ -12,6 +12,7 @@ import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
+import { brandFrameLayout, intersectRects } from "../kit/core/brand-frame.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "../kit/core/subject-layer.mjs";
 import { layoutPlan, layoutStateAt, withLayoutCameras } from "../kit/core/footage-layout.mjs";
 
@@ -168,7 +169,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   let textFindings = [];
   try { textFindings = await subjectTextFindings(project, resolved); }
   catch (error) { warnings.push(`behind-text check skipped: ${error.message}`); }
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings].sort((a, b) => a.at - b.at);
+  const frameFindings = brandFrameFindings(resolved, elements, canvas);
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -181,6 +183,26 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     warnings,
     findings
   };
+}
+
+// Brand frame (kit/core/brand-frame.mjs): key text or hero content that
+// overlaps the frame's kicker or section label while the frame shows. A
+// warning, since modules place themselves in the profile safe zone and only
+// those that read model.frame.safe keep clear of the frame by construction.
+export function brandFrameFindings(resolved, elements, canvas) {
+  const layout = brandFrameLayout(resolved, canvas);
+  if (!layout?.regions.length) return [];
+  const findings = [];
+  for (const element of elements) {
+    if (!(element.role === "text" || element.role === "hero") || !element.rect) continue;
+    for (const region of layout.regions) {
+      const shared = intersectRects(element.rect, region.rect);
+      if (!(shared.width > 0.5 && shared.height > 0.5)) continue;
+      findings.push({ rule: "brand-frame", severity: "warning", ids: [element.id, region.id], at: Number(element.start ?? 0),
+        detail: `${element.id} overlaps the brand frame's ${region.id === "frame-kicker" ? "kicker" : "section label"} (${Math.round(shared.width)}×${Math.round(shared.height)} px); keep it inside the frame's safe area y ${layout.safe.y}–${Math.round(layout.safe.y + layout.safe.height)} px, or move the kicker with frame.kicker.position` });
+    }
+  }
+  return findings;
 }
 
 // Camera moves: sample every frame of every world-camera move, transform each

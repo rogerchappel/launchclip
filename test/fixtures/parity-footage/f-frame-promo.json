@@ -1,0 +1,18 @@
+{
+  "project": "examples/story/promo-16x9",
+  "mode": "story",
+  "patch": {
+    "frame": {
+      "kicker": { "label": "Relay", "position": "top-right" },
+      "progress": { "position": "top", "thickness": 8 },
+      "show": "scenes",
+      "labels": [
+        { "start": 0, "label": "Intro" },
+        { "scene": "s3", "label": "How it works" },
+        { "scene": "s6", "label": "Get started" }
+      ]
+    }
+  },
+  "times": [0.3, 2, 8.5, 11, 15, 22.5, 25],
+  "threshold": { "ssim": 0.97 }
+}

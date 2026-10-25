@@ -359,6 +359,39 @@ scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intr
   check (`checkPackContrast`: paper/bg 4.5:1, primary and accent/bg 3:1,
   ink/primary 3:1) and merges into every golden story without param errors.
 
+### Brand frame (`kit/core/brand-frame.mjs`)
+
+`story.frame` (filled from the style's `brand_frame`, or written by hand;
+`false` for none) is drawn by the compilers around scenes, never by modules
+(RFC §9.2): a kicker (the `logo` image, a ≤ 40-character `label`, defaulting to
+a story `title` of ≤ 32 characters, and an underline that draws on), section
+labels (`labels: [{scene | start, label}]`, each shown from its start to the
+next) and an optional `progress` line along the bottom (or top) edge.
+`show: "scenes"` shows it only over runs of scenes. The kicker sits in a
+corner of the profile safe zone (`top-left` by default) and the labels in the
+opposite top corner, each claiming a `78 × k` px band (k = short side / 1080).
+
+- `brandFramePlan(story, {format})` → `{css, nodes, tweens, layout}` in the
+  caption-plan shape (same tween rules). HyperFrames mounts it in
+  `#lc-frame-root` (z-index 90000, under the captions at 100000) with
+  `brandFrameRuntime(plan)`; Remotion's `kit/remotion/frame/BrandFrame.tsx`
+  draws the same plan above the scenes and under `WordCaptions`, evaluating
+  tweens with `captionElementStateAt`. A `sceneFilter` compile (module review)
+  draws no frame, and a story without one compiles byte for byte as before.
+- `brandFrameSafe(story, format)` → `{x, y, width, height}` (or null): the
+  profile safe zone less the frame's bands and progress line. `resolveModule`
+  attaches it as `model.frame.safe`; inside a footage layout section it is
+  the panel's safe area (`kit/core/footage-layout.mjs` `layoutAt(story,
+  scene.start).safe`) intersected (`intersectRects`) with it. Modules that place
+  themselves inside `model.frame.safe` never collide with the frame.
+- `launchclip layout-check` warns (`brand-frame`) when key text or a hero
+  overlaps the kicker or section label (`brandFrameFindings`).
+- Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,
+  logo, progress, three labels) and `f-frame-promo.json` (16:9 motion, kicker
+  top right, progress on top, `show: "scenes"`); `parity-footage.mjs` fixtures
+  take `patch` (top-level storyboard keys) and `files` (extra text files) on a
+  copy of the project.
+
 ### Mimic a reference (`src/style_reference.js`)
 
 `analyzeReference(file)` samples 24 frames (160 px wide) and measures: palette
