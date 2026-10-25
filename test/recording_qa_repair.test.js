@@ -97,3 +97,19 @@ test("join batches preserve original indexes and never claim partial coverage pa
   assert.equal(end.next_join_offset, null);
   assert.equal(end.unresolved_joins.length, 300);
 });
+test("a repair elsewhere keeps the rejected cuts in a gap as they were", () => {
+  // The gap before "tools." holds a splice handle, a false start and another
+  // handle; repairing the first segment must not merge them into one cut,
+  // since audio_analysis spans and QA cite the false start's own boundary.
+  const candidate = plan();
+  candidate.removed_segments.splice(1, 1,
+    { source_start_seconds: 1.9, source_end_seconds: 2.2, reason: "rejected-splice-handle" },
+    { source_start_seconds: 2.2, source_end_seconds: 2.8, reason: "false-start" },
+    { source_start_seconds: 2.8, source_end_seconds: 3.1, reason: "rejected-splice-handle" });
+  const result = repairRecordingPlan(candidate, [expand(0, "start")], { sourceTranscript: source, trimEdges: false });
+  assert.equal(result.applied.length, 1);
+  const gap = result.plan.removed_segments.filter((cut) => cut.source_start_seconds >= 1.9 - 1e-6 && cut.source_end_seconds <= 3.1 + 1e-6);
+  assert.deepEqual(gap.map((cut) => [cut.source_start_seconds, cut.source_end_seconds, cut.reason]), [[1.9, 2.2, "rejected-splice-handle"], [2.2, 2.8, "false-start"], [2.8, 3.1, "rejected-splice-handle"]]);
+  // The repaired head: the silence cut is clipped to the new keep start.
+  assert.deepEqual(result.plan.removed_segments[0], { source_start_seconds: 0, source_end_seconds: 1, reason: "waveform-silence" });
+});
