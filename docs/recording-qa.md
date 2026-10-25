@@ -45,6 +45,19 @@ A proven acoustic issue uses `{kind:'clipped-boundary', segment_index, edge:'sta
 
 Every repaired render changes the evidence. Transcribe and inspect the new export again, then obtain a fresh semantic receipt. Preserve media and QA receipts for each iteration. This module does not publish, delete source footage, or silently rewrite speech.
 
+## Consensus word timing
+
+Cut quality depends on word timing, and one recogniser is not enough: `base.en` can time a first word too early, starting it inside a rejected word's tail; `small.en` can drop words, or give them no duration. `edit-recording` therefore transcribes the source with two local Whisper models by default (`--recording-model base.en`, `--consensus-model small.en`) and merges them word by word with `mergeConsensusTranscripts(primary, secondary, {models, levels})`:
+
+- The word sequences are aligned. A word either model heard is kept, with that model's own timing; a word with no valid duration from either is not kept.
+- Each matched word's start and end are compared separately. Within the tolerance (0.08 s) they agree and the primary edge is used.
+- A wider disagreement goes to the measured 10 ms RMS envelope of the source (`measureFrameLevels`, one streaming local FFmpeg pass): the start whose level rises more across a 50 ms probe either side wins, and the end whose level falls more. Without a 3 dB margin, the primary edge stays.
+- A wording disagreement keeps the primary word. A single-model word that would overlap a kept neighbour is not kept rather than retimed.
+
+Every timing is one recogniser's own edge; nothing is interpolated. The merged transcript is `source-transcript.json`, with the receipt under `consensus`; both raw transcripts are in `consensus-inputs.json`. The plan carries the disagreements as `transcript_consensus`, and QA lists the unsettled ones on retained speech (wording, a word only one model heard or timed, a dropped overlap, and timings the envelope could not separate) as nonblocking `recogniser-disagreement` issues, located on the edit timeline. The independent transcription of the rendered edit still gates the result as before.
+
+`--consensus-model none` returns to a single model. A supplied `--recording-transcript` is used alone unless `--consensus-transcript` supplies the second word-timed transcript. The second model costs a second local transcription, and its first run may download weights; no paid provider is called.
+
 ## Word timestamps that swallow a retake tail
 
 A recognizer can assign the first chosen word a timestamp that includes a short

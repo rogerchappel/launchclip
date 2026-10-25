@@ -10,6 +10,7 @@ import { normalizeRecordingTranscript, planRecordingEdit } from "./recording_edi
 import { createBrollPlan, renderBrollChecklist } from "./broll_plan.js";
 import { analyzeRecordingAudio, refineRecordingEditPlan } from "./recording_audio.js";
 import { identifySemanticRetakes, validateSemanticRetakes } from "./semantic_retakes.js";
+import { measureFrameLevels, mergeConsensusTranscripts } from "./recording_consensus.js";
 import { inspectRecordingJoins, runRecordingQa } from "./recording_qa_workflow.js";
 import { AUDIO_ENHANCE_ENGINE_FILES, enhanceRecordingAudio, validateEnhanceOptions } from "./audio_enhance.js";
 
@@ -41,8 +42,14 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     broll_plan: path.join(directory, "broll-plan.json"),
     broll_checklist: path.join(directory, "BROLL.md")
   };
+  // Two local recognisers by default (recordingOptions); a supplied primary
+  // transcript joins a consensus only with a supplied second transcript.
+  const consensusModel = options.consensusModel && options.consensusModel !== "none" ? options.consensusModel : null;
+  const consensus = options.consensusTranscript ? true : Boolean(consensusModel && !options.transcript);
+  if (consensus && !options.consensusTranscript && consensusModel === (options.model ?? "base.en")) throw new Error("Consensus transcription needs a second, different model (--consensus-model)");
+  if (consensus) files.consensus_inputs = path.join(directory, "consensus-inputs.json");
   const manifestPath = path.join(directory, "recording.json");
-  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null, options.retakeDecisions ? path.resolve(options.retakeDecisions) : null, options.qaDecisions ? path.resolve(options.qaDecisions) : null].filter(Boolean);
+  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null, options.consensusTranscript ? path.resolve(options.consensusTranscript) : null, options.retakeDecisions ? path.resolve(options.retakeDecisions) : null, options.qaDecisions ? path.resolve(options.qaDecisions) : null].filter(Boolean);
   if ([...Object.values(files), manifestPath].some((file) => protectedInputs.includes(file))) {
     throw new Error("Recording output must not overwrite source media or supplied transcript");
   }
@@ -60,11 +67,12 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   };
   const inputHash = await checksum(input);
   const transcriptHash = options.transcript ? await checksum(path.resolve(options.transcript)) : null;
+  const consensusTranscriptHash = options.consensusTranscript ? await checksum(path.resolve(options.consensusTranscript)) : null;
   if (options.retakeDecisions && options.retakeModel) throw new Error("Choose supplied retake decisions or a local retake model, not both");
   const retakeDecisionsHash = options.retakeDecisions ? await checksum(path.resolve(options.retakeDecisions)) : null;
   const qaDecisionsHash = options.qaDecisions ? await checksum(path.resolve(options.qaDecisions)) : null;
-  const engineHash = digest(await Promise.all(["recording_workflow.js", "recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js", "recording_qa_workflow.js", "recording_qa.js", "recording_qa_repair.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
-  const candidateHash = digest({ version: "recording-workflow.v3", qaModel: options.qaModel ?? null, qaBaseUrl: options.qaBaseUrl ?? null, qaAttempts: options.qaAttempts ?? 3, qaTranscriptionModel: options.qaTranscriptionModel ?? "base.en", engineHash, inputHash, transcriptHash, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
+  const engineHash = digest(await Promise.all(["recording_workflow.js", "recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js", "recording_consensus.js", "recording_qa_workflow.js", "recording_qa.js", "recording_qa_repair.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
+  const candidateHash = digest({ version: "recording-workflow.v3", qaModel: options.qaModel ?? null, qaBaseUrl: options.qaBaseUrl ?? null, qaAttempts: options.qaAttempts ?? 3, qaTranscriptionModel: options.qaTranscriptionModel ?? "base.en", engineHash, inputHash, transcriptHash, consensus: consensus ? { model: options.consensusTranscript ? null : consensusModel, transcriptHash: consensusTranscriptHash } : null, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
   // Audio clean-up runs after the cuts are QA'd, so it keys the published
   // edit but not the QA session: changing --enhance reuses the QA evidence.
   const { preset: enhancePreset, voiceIsolation } = validateEnhanceOptions({ preset: options.enhance, voiceIsolation: options.voiceIsolation });
@@ -82,15 +90,30 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   } catch (error) { if (error.code !== "ENOENT") throw error; }
 
   const session = await readQaSession(directory, candidateHash);
-  const transcript = options.transcript
-    ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8"))
-    : session ? await readSessionTranscript(files.source_transcript, session) : await (adapters.transcribe ?? transcribeRecording)(input, options);
+  let consensusInputs = null;
+  let transcript;
+  if (session && (consensus || !options.transcript)) transcript = await readSessionTranscript(files.source_transcript, session);
+  else {
+    const primary = options.transcript ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8")) : await (adapters.transcribe ?? transcribeRecording)(input, options);
+    if (!consensus) transcript = primary;
+    else {
+      const secondary = options.consensusTranscript
+        ? JSON.parse(await readFile(path.resolve(options.consensusTranscript), "utf8"))
+        : await (adapters.transcribe ?? transcribeRecording)(input, { ...options, model: consensusModel });
+      const models = [options.transcript ? "supplied-transcript" : options.model ?? "base.en", options.consensusTranscript ? "supplied-consensus-transcript" : consensusModel];
+      const levels = await (adapters.measureFrameLevels ?? measureFrameLevels)(input, { durationSeconds });
+      transcript = mergeConsensusTranscripts(primary, secondary, { models, levels });
+      consensusInputs = { schema_version: "launchclip.recording-consensus-inputs.v1", models, transcripts: [primary, secondary] };
+    }
+  }
   const semantic = options.retakeDecisions
     ? validateSemanticRetakes(JSON.parse(await readFile(path.resolve(options.retakeDecisions), "utf8")), normalizeRecordingTranscript(transcript), { retakeWindow: policy.retakeWindow })
     : options.retakeModel
       ? await (adapters.identifySemanticRetakes ?? identifySemanticRetakes)(transcript, { durationSeconds, retakeWindow: policy.retakeWindow, model: options.retakeModel, baseUrl: options.retakeBaseUrl }, adapters.semantic)
       : { status: "not-requested", retakes: [], restarts: [], removals: [] };
-  const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes, semanticRestarts: semantic.restarts ?? [] });
+  const editPlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes, semanticRestarts: semantic.restarts ?? [] });
+  const agreement = transcript.consensus;
+  const basePlan = agreement ? { ...editPlan, transcript_consensus: { models: agreement.models, tolerance_seconds: agreement.tolerance_seconds, disagreements: agreement.disagreements } } : editPlan;
   const audio = policy.audioSilence
     ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
         durationSeconds, boundaryPlan: basePlan, silenceDuration: policy.audioSilenceDuration,
@@ -102,6 +125,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   await readCaptureTracker(files, { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds }, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   await mkdir(directory, { recursive: true });
   await writeJson(files.source_transcript, transcript);
+  if (consensusInputs) await writeJson(files.consensus_inputs, consensusInputs);
   const qa = await runRecordingQa(input, plan, {
     directory, requestHash: candidateHash, sourceTranscript: transcript,
     maxAttempts: options.qaAttempts ?? 3, model: options.qaModel, baseUrl: options.qaBaseUrl,
@@ -137,6 +161,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     rendered_duration_seconds: rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds,
     take_policy: policy.takePolicy, filler_cleanup: policy.removeFillers,
     audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length, semantic_restarts: (semantic.restarts ?? []).length,
+    ...(agreement ? { transcript_consensus: { models: agreement.models, agreed_words: agreement.agreed_words, disagreements: agreement.disagreements.length } } : {}),
     audio_enhancement: audioEnhancement,
     qa_status: "passed", qa_attempts: qa.attempts, qa_session: qa.files.qa_session,
     files, checksums, cached: false
@@ -233,6 +258,7 @@ export function recordingOptions(flags = {}) {
     retakeWindow: flags["retake-window"] == null ? 90 : Number(flags["retake-window"]),
     minRepeatWords: flags["min-repeat-words"] == null ? 6 : Number(flags["min-repeat-words"]),
     model: flags["recording-model"] ?? "base.en", language: flags.language ?? "en",
+    consensusModel: flags["consensus-model"] ?? "small.en", consensusTranscript: flags["consensus-transcript"],
     qaModel: flags["qa-model"], qaBaseUrl: flags["qa-base-url"], qaDecisions: flags["qa-decisions"],
     qaAttempts: flags["qa-attempts"] == null ? 3 : Number(flags["qa-attempts"]),
     qaTranscriptionModel: flags["qa-recording-model"] ?? "base.en",

@@ -57,6 +57,9 @@ export function assessRecordingQa(plan, renderedTranscript, options = {}) {
     for (const resolution of semantic.acoustic_resolutions) { const mapped = acousticIssueIndices.find((entry) => entry.acousticIndex === resolution.issue_index); if (mapped) resolved.add(mapped.issueIndex); }
     for (const finding of semantic.findings) issues.push({ ...finding, repairable: false });
   }
+  // The source was merged from two recognisers; disagreements on retained
+  // speech are recorded for review. The rendered-output ASR still gates.
+  for (const issue of consensusIssues(plan)) issues.push(issue);
   if (options.sourceTranscript) {
     const sourceWords = normalizeRecordingTranscript(options.sourceTranscript);
     for (const [issueIndex, issue] of issues.slice(0, transcriptIssueCount).entries()) {
@@ -176,6 +179,23 @@ export function recordingAcousticIssues(plan, acoustic) {
   return [...supplied, ...boundaries, ...swallowed];
 }
 
+function consensusIssues(plan) {
+  const consensus = plan.transcript_consensus;
+  if (consensus === undefined) return [];
+  if (!Array.isArray(consensus?.disagreements) || !Array.isArray(consensus.models)) throw new Error("Invalid recording transcript consensus");
+  return consensus.disagreements.flatMap((entry) => {
+    if (typeof entry?.kind !== "string" || ![entry.start_seconds, entry.end_seconds].every(Number.isFinite) || !explanation(entry.explanation)) throw new Error("Invalid recording transcript disagreement");
+    // Timings the measured envelope settled stay in the consensus receipt.
+    const sides = Object.values(entry.resolution ?? {});
+    if (entry.kind === "timing" && sides.length && sides.every((side) => side?.by === "envelope")) return [];
+    const segment = (plan.kept_segments ?? []).find((range) => entry.start_seconds < range.source_end_seconds && entry.end_seconds > range.source_start_seconds);
+    if (!segment) return [];
+    const offset = segment.start_seconds - segment.source_start_seconds;
+    const start = Math.max(segment.start_seconds, entry.start_seconds + offset);
+    const end = Math.min(segment.end_seconds, entry.end_seconds + offset);
+    return [{ kind: "recogniser-disagreement", disagreement: entry.kind, word: entry.word, source_start_seconds: entry.start_seconds, source_end_seconds: entry.end_seconds, start_seconds: start, end_seconds: Math.max(start, end), explanation: `${consensus.models.join(" and ")} disagree (${entry.kind}): ${entry.explanation.trim()}`, blocking: false, repairable: false }];
+  });
+}
 function align(expected, actual) {
   const rows = Array.from({ length: expected.length + 1 }, () => new Uint32Array(actual.length + 1));
   for (let i = 0; i <= expected.length; i++) rows[i][0] = i;
