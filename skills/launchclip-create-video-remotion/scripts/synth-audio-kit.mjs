@@ -1,14 +1,21 @@
 #!/usr/bin/env node
-// Synthesize an original, license-free SFX kit and an optional ambient music
-// bed with local FFmpeg only. Nothing is downloaded and no provider is called,
-// so the output can ship inside any project.
+// Synthesize an original, license-free SFX kit, an optional music bed and an
+// optional ambience loop with local FFmpeg only. Nothing is downloaded and no
+// provider is called, so the output can ship inside any project.
 // Usage:
-//   node synth-audio-kit.mjs <out-dir> [--bed <seconds>] [--bpm 100]
-//     [--kick-from <s>] [--kick-to <s>] [--key A|C|D|E|F|G] [--only whoosh,keystroke]
-// Writes <out-dir>/sfx/*.wav, optional <out-dir>/music/bed.wav, and
-// <out-dir>/AUDIO-KIT.json (+ BEATS.json when a bed is made).
+//   node synth-audio-kit.mjs <out-dir> [--palette <id>] [--seed <s>]
+//     [--only whoosh,keystroke] [--with chime,ding]
+//     [--bed <seconds>] [--genre <id>] [--bpm 100] [--key A] [--progression 0]
+//     [--kick-from <s>] [--kick-to <s>] [--ambience <bed>]
+// With no --palette the historic families render exactly as they always
+// have; with one, every family is drawn in that palette from the seed. With
+// no --genre the bed is the historic pad and kick; with one, it is that
+// genre's bed (sound/music.mjs). Option lists: sound/options.mjs.
+// Writes <out-dir>/sfx/*.wav, optional <out-dir>/music/bed.wav and
+// <out-dir>/ambience/<bed>.wav, and <out-dir>/AUDIO-KIT.json (+ BEATS.json
+// when a bed is made).
 import { execFile } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +24,7 @@ import { FAMILY_BUILDERS, familySpec } from './sound/families.mjs';
 import { palette as paletteTimbre } from './sound/palettes.mjs';
 import { AMBIENCE_BEDS, HISTORIC_SFX_FAMILIES, SFX_FAMILY_NAMES, SOUND_PALETTES } from './sound/options.mjs';
 import { ambienceSpec } from './sound/ambience.mjs';
+import { genreBed } from './sound/music.mjs';
 
 const run = promisify(execFile);
 
@@ -421,6 +429,101 @@ export async function synthAmbience(name, directory, { seed = DEFAULT_KIT_SEED }
   return { name, file: output, loop_seconds: spec.seconds, lufs: AMBIENCE_LUFS, measured_lufs: level.measured, seed };
 }
 
+// Genre beds (sound/music.mjs), in two passes. First each stem's cycle is
+// rendered on its own and measured, and its gain set so it plays at the
+// stem's level (LUFS): every voicing, progression and seed is balanced the
+// same way. Then the cycles are looped to the bed's length, shaped by their
+// role's envelope (see music.mjs), sent to a convolution room and summed; a
+// limiter only guards the peaks.
+
+/** The full-length envelope of a stem role, as an aevalsrc expression. */
+export function roleEnvelope(role, { seconds, kickFrom, kickTo, beat, pump = 0 }) {
+  const fade = `min(t/1.2,1)*clip((${fmt(seconds)}-t)/1.6,0,1)`;
+  const open = kickTo > kickFrom;
+  const win = open ? `clip((t-${fmt(kickFrom - 0.03)})/0.03,0,1)*clip((${fmt(kickTo + 0.15)}-t)/0.15,0,1)` : '0';
+  if (role === 'drums' || role === 'lead') return `${fade}*${win}`;
+  if (role === 'bass') return `${fade}*(0.35+0.65*${win})`;
+  if (role === 'pumped' && pump > 0) {
+    const m = `mod(t,${fmt(beat)})`;
+    return `${fade}*(1-${fmt(pump)}*${win}*exp(-${m}/0.1)*min(${m}/0.004,1))`;
+  }
+  return fade;
+}
+
+/** The filter script that renders one stem's cycle (sources included), output [o]. */
+export function stemCycleGraph(bed, entry) {
+  return `aevalsrc=exprs='${entry.expr[0]}|${entry.expr[1]}':s=${RATE}:d=${fmt(bed.cycle)},${entry.filter}[o]`;
+}
+
+/**
+ * The filter script of a genre bed. Inputs 0..n-1 are the stems' cycle files
+ * in order; gains[i] is each stem's linear gain. Output [o].
+ */
+export function genreGraph(bed, { seconds, kickFrom, kickTo, gains }) {
+  const total = Math.round(seconds * RATE);
+  const cycleSamples = Math.round(bed.cycle * RATE);
+  const parts = [];
+  const roles = [...new Set(bed.stems.map((entry) => entry.role))];
+  roles.forEach((role) => {
+    const users = bed.stems.filter((entry) => entry.role === role).length;
+    const expr = roleEnvelope(role, { seconds, kickFrom, kickTo, beat: bed.beat, pump: bed.pump });
+    parts.push(`aevalsrc=exprs='${expr}|${expr}':s=${RATE}:d=${fmt(seconds)},asplit=${users}${Array.from({ length: users }, (_, i) => `[env-${role}-${i}]`).join('')}`);
+  });
+  const used = Object.fromEntries(roles.map((role) => [role, 0]));
+  const dry = [];
+  const sends = [];
+  bed.stems.forEach((entry, index) => {
+    const envelope = `[env-${entry.role}-${used[entry.role]++}]`;
+    const routed = entry.send > 0 && bed.room;
+    parts.push(`[${index}]aloop=loop=-1:size=${cycleSamples},atrim=end_sample=${total},asetpts=N/SR/TB[cyc${index}]`);
+    parts.push(`[cyc${index}]${envelope}amultiply,volume=${fmt(gains[index])}${routed ? `,asplit=2[dry${index}][snd${index}]` : `[dry${index}]`}`);
+    dry.push(`[dry${index}]`);
+    if (routed) {
+      parts.push(`[snd${index}]volume=${fmt(entry.send)}[send${index}]`);
+      sends.push(`[send${index}]`);
+    }
+  });
+  if (bed.crackle > 0) {
+    parts.push(`aevalsrc=exprs='gt(random(0),0.9992)*(2*random(1)-1)|gt(random(2),0.9992)*(2*random(3)-1)':s=${RATE}:d=${fmt(seconds)},highpass=f=1500,lowpass=f=6000,volume=${fmt(bed.crackle * 40)}[crackle]`);
+    dry.push('[crackle]');
+  }
+  let inputs = dry.join('');
+  let count = dry.length;
+  if (sends.length) {
+    const tau = fmt(bed.room.seconds / 6.9);
+    parts.push(`${sends.join('')}amix=inputs=${sends.length}:normalize=0[sends]`);
+    parts.push(`aevalsrc=exprs='(2*random(0)-1)*exp(-t/${tau})*min(t/0.006,1)|(2*random(1)-1)*exp(-t/${tau})*min(t/0.006,1)':s=${RATE}:d=${fmt(bed.room.seconds)},highpass=f=200,lowpass=f=${bed.room.tone}[ir]`);
+    parts.push(`[sends][ir]afir=irnorm=2,volume=${fmt(bed.room.mix)}[wet]`);
+    inputs += '[wet]';
+    count += 1;
+  }
+  parts.push(`${inputs}amix=inputs=${count}:normalize=0:duration=first,${bed.master},alimiter=limit=0.85:level=0:latency=1,atrim=end_sample=${total}[o]`);
+  return parts.join(';\n');
+}
+
+/** Render a genre bed to <directory>/bed.wav; returns the BEATS fields. */
+export async function synthGenreBed(directory, { seconds, genre, bpm, key, progression, kickFrom = 0, kickTo = seconds, seed = DEFAULT_KIT_SEED }) {
+  const bed = genreBed({ genre, bpm, key, progression }, seed);
+  const work = path.join(directory, '.stems');
+  await mkdir(work, { recursive: true });
+  const cycles = await pool(bed.stems, 4, async (entry, index) => {
+    const script = path.join(work, `${index}.filtergraph`);
+    const file = path.join(work, `${index}-${entry.name}.wav`);
+    await writeFile(script, stemCycleGraph(bed, entry));
+    await ffmpeg(['-filter_complex_script', script, '-map', '[o]', '-ac', '2', '-c:a', 'pcm_f32le', file]);
+    const lufs = await measureLufs(file);
+    return { file, gain: lufs === null ? 0 : 10 ** ((entry.level - lufs) / 20) };
+  });
+  const output = path.join(directory, 'bed.wav');
+  const script = path.join(work, 'bed.filtergraph');
+  await writeFile(script, genreGraph(bed, { seconds, kickFrom, kickTo, gains: cycles.map((cycle) => cycle.gain) }));
+  await ffmpeg([...cycles.flatMap((cycle) => ['-i', cycle.file]), '-filter_complex_script', script, '-map', '[o]', '-ar', String(RATE), '-ac', '2', '-c:a', 'pcm_s16le', output]);
+  await rm(work, { recursive: true, force: true });
+  const beats = [];
+  for (let t = 0; t < seconds; t += bed.beat) beats.push(Math.round(t * 1000) / 1000);
+  return { file: output, bpm: bed.bpm, key: bed.key, genre: bed.genre, progression: bed.progression, beat_seconds: bed.beat, beats, downbeats: beats.filter((_, i) => i % 4 === 0), kick_from: kickFrom, kick_to: kickTo };
+}
+
 async function synthBed(directory, options) {
   const { pad, kick, hat, beat } = bedExpressions(options);
   const output = path.join(directory, 'bed.wav');
@@ -445,7 +548,7 @@ async function pool(items, limit, job) {
   const worker = async () => {
     while (next < items.length) {
       const index = next++;
-      results[index] = await job(items[index]);
+      results[index] = await job(items[index], index);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
@@ -481,8 +584,13 @@ async function main(argv) {
     const seconds = Number(flag('--bed'));
     const musicDir = path.join(outDir, 'music');
     await mkdir(musicDir, { recursive: true });
-    const bed = await synthBed(musicDir, { seconds, bpm: Number(flag('--bpm') ?? 100), key: flag('--key') ?? 'A', kickFrom: Number(flag('--kick-from') ?? 0), kickTo: Number(flag('--kick-to') ?? seconds) });
-    kit.music = { file: bed.file, bpm: bed.bpm };
+    const kickFrom = Number(flag('--kick-from') ?? 0);
+    const kickTo = Number(flag('--kick-to') ?? seconds);
+    const genre = flag('--genre');
+    const bed = genre
+      ? await synthGenreBed(musicDir, { seconds, genre, bpm: flag('--bpm') !== undefined ? Number(flag('--bpm')) : undefined, key: flag('--key'), progression: flag('--progression') !== undefined ? Number(flag('--progression')) : undefined, kickFrom, kickTo, seed })
+      : await synthBed(musicDir, { seconds, bpm: Number(flag('--bpm') ?? 100), key: flag('--key') ?? 'A', kickFrom, kickTo });
+    kit.music = { file: bed.file, bpm: bed.bpm, ...(genre ? { genre: bed.genre, key: bed.key, progression: bed.progression } : {}) };
     await writeFile(path.join(outDir, 'BEATS.json'), `${JSON.stringify({ schema_version: 'launchclip.beats.v1', source: bed.file, ...bed }, null, 2)}\n`);
   }
   await writeFile(path.join(outDir, 'AUDIO-KIT.json'), `${JSON.stringify(kit, null, 2)}\n`);
