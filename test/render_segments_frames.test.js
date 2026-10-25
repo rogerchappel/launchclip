@@ -10,7 +10,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { narrationWords } from "../kit/core/captions.mjs";
-import { concatArgs, concatList, defaultSegmentTools, muxArgs, planSegments, remuxForJoinArgs, renderWithSegments } from "../src/render_segments.js";
+import { concatArgs, concatList, defaultSegmentTools, ffmpegHasSettsPrescale, muxArgs, planSegments, remuxForJoinArgs, renderWithSegments } from "../src/render_segments.js";
 import { resolveStory } from "../src/story.js";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -248,7 +248,8 @@ test("FFmpeg: the join stamps every frame on its slot, whatever the segments' co
       files.push(file);
     }
     // Both join paths: with setts prescale (FFmpeg 7.1+) and without (older FFmpeg, as on Ubuntu).
-    for (const prescale of [true, false]) {
+    // The prescale path needs FFmpeg 7.1+; older FFmpeg (Ubuntu's) checks the fallback only.
+    for (const prescale of (await ffmpegHasSettsPrescale()) ? [true, false] : [false]) {
       const joined = path.join(dir, `joined-${prescale}.mp4`);
       await defaultSegmentTools().concat(files, joined, { fps: 30, frames: files.map(() => 1), prescale });
       const stamps = await packets(joined);

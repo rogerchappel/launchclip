@@ -981,6 +981,8 @@ test("runFinish drops a collapsing matte's subject scenes to their fallback", as
     await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story, null, 2));
     const adapters = fakeAdapters();
     const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    // When the gate is missing, say why: which gates ran and what validate saw.
+    assert.ok(report.gates?.subject, JSON.stringify({ gates: Object.keys(report.gates ?? {}), stages: report.stages.map((stage) => [stage.name, stage.status, String(stage.error ?? stage.reason ?? "").slice(0, 300)]), validate: report.stages.find((stage) => stage.name === "validate")?.details?.subject ?? null, warnings: report.warnings.slice(0, 8) }));
     assert.equal(report.gates.subject.status, "fallback");
     assert.match(report.gates.subject.ranges[0].reasons.join(" "), /collapses in 6 frames/);
     assert.deepEqual(report.gates.subject.changes.map((change) => [change.id, change.action]), [["word", "skipped"], ["dolly", "skipped"], ["aside", "front"]]);
