@@ -72,6 +72,14 @@ test('cast-scene with a real capture: the screen media sits between the set and 
   assert.equal(model.content.actors[0].facing, 'left', 'the cast faces the screen');
 });
 
+test('a character scene on frame 0 is shown on frame 0; a later one fades in', () => {
+  const first = resolve(desk());
+  assert.equal(frameState(charactersTimeline(first), 0).get('desk').opacity, 1, 'the frame-0 hook is not blank');
+  const later = resolve({...desk(), start: 1, end: 7});
+  assert.equal(frameState(charactersTimeline(later), 1).get('desk').opacity, 0);
+  assert.equal(frameState(charactersTimeline(later), 3).get('desk').opacity, 1);
+});
+
 test('the op list renders the same through GSAP as through frameState', () => {
   const model = resolve(desk());
   const ops = charactersTimeline(model);

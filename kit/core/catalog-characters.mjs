@@ -116,12 +116,18 @@ function actorsOps(model, ops) {
   });
 }
 
-// Root fade (opacity only: a set does not slide), on every hoisted part.
+// Root fade (opacity only: a set does not slide), on every hoisted part. A
+// scene on the video's first frame is the frame-0 hook: it is already shown
+// on frame 0, with no fade in (as hook-title and kinetic-words).
 function rootFade(model, ops, ids) {
   const m = model.motion;
+  const settled = model.start <= 1 / model.fps + 1e-6;
   for (const id of ids) {
-    set(ops, id, model.start, {opacity: 0});
-    tw(ops, id, m.enterStart, m.enterDuration, 'power1.out', {opacity: 0}, {opacity: 1});
+    if (settled) set(ops, id, model.start, {opacity: 1});
+    else {
+      set(ops, id, model.start, {opacity: 0});
+      tw(ops, id, m.enterStart, m.enterDuration, 'power1.out', {opacity: 0}, {opacity: 1});
+    }
     tw(ops, id, m.exitStart, m.exitDuration, 'power1.in', {opacity: 1}, {opacity: 0});
     set(ops, id, model.end, {opacity: 0});
   }
