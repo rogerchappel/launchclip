@@ -34,3 +34,5 @@ export const ObjectCard = typed('object-card');
 export const StatCard = typed('stat-card');
 export const QuoteCard = typed('quote-card');
 export const Excerpt = typed('excerpt');
+export const Compare = typed('compare');
+export const Timeline = typed('timeline');

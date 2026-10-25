@@ -1,7 +1,7 @@
 // Catalogue G Remotion components (the visual vocabulary), keyed by module
 // id (docs/KIT_CONTRACTS.md, "Catalogue G").
 import type React from 'react';
-import {ConceptCard, Excerpt, IconRow, ObjectCard, QuoteCard, SectionCard, StatCard} from './CatalogG';
+import {Compare, ConceptCard, Excerpt, IconRow, ObjectCard, QuoteCard, SectionCard, StatCard, Timeline} from './CatalogG';
 
 export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
   'concept-card': ConceptCard,
@@ -11,4 +11,6 @@ export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
   'stat-card': StatCard,
   'quote-card': QuoteCard,
   'excerpt': Excerpt,
+  'compare': Compare,
+  'timeline': Timeline,
 };

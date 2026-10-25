@@ -127,6 +127,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | states a real figure with its source in the brief or assets ("87% of", "saves $1,400", "3× faster"): the figure counts up with a label and a source line (no source, no stat-card) | stat-card |
 | quotes a named person or outlet, with the exact words in the brief ("as Ada put it", "said", "wrote"): the quote with its attribution (never "a customer") | quote-card |
 | shows real lines from code, a README, docs, a changelog or an article, supplied verbatim: the lines in a window with the key ones highlighted | excerpt |
+| contrasts the old way and the new, or two options ("before", "instead of", "the old way", "X versus Y"): two panels, before and after (or two columns) | compare |
+| walks through steps in order, a history or a roadmap ("first… then… finally", "day one", "by week three", "next quarter"): nodes along a line that land on their words | timeline |
 | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
 | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
 | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge [footage-led] (needs the subject) | app-stage |
@@ -809,6 +811,30 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: lines, highlight
 
+### compare (keeps captions)
+A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states.
+params:
+- left: {title ≤ 24, items: [≤ 40] 1–4, icon?}
+- right: {title ≤ 24, items: [≤ 40] 1–4, icon?}
+- mode: before-after (default) | columns
+- stagger: seconds between items (default 0.16)
+- at: left panel time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: left, right
+
+### timeline (keeps captions)
+Two to six steps along a line: numbered (or icon) nodes that pop as each step is said while a primary line runs on to them, with a label and optional detail. Vertical in 9:16, across in 16:9 when the labels fit. For a process, a history or a roadmap.
+params:
+- steps: [{label ≤ 28, detail? ≤ 40, icon?, at?}] 2–6
+- title: string ≤ 48 (optional)
+- direction: auto (default) | vertical | horizontal
+- stagger: seconds between steps (default 0.45)
+- at: first step time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: step-<i>
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -890,6 +916,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | stat-card | 2 s | 0.5 s | scene − 0.65 s | the count runs 0.9 s from at and hits on the exact value |
 | quote-card | 2 s | 0.5 s | scene − 0.65 s | the author follows the quote by 0.45 s; the highlight lands 0.35 s after the author (or on a highlight hit) |
 | excerpt | 2 s | 0.5 s | scene − 0.65 s | lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last |
+| compare | 2 s | 0.5 s | scene − 0.65 s | the right panel lands 0.25 s plus stagger × left items after the left (or on a right hit) |
+| timeline | 2 s | 0.5 s | scene − 0.65 s | steps land in order; with no at, the first lands at 0.55 s and the rest follow by stagger (default 0.45 s) |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 

@@ -6,7 +6,7 @@
     "width": 1080,
     "height": 1920,
     "fps": 30,
-    "duration": 20,
+    "duration": 22,
     "platform": "youtube-shorts"
   },
   "brand": {
@@ -222,6 +222,58 @@
           },
           "}"
         ]
+      }
+    },
+    {
+      "id": "timeline",
+      "module": "timeline",
+      "track": 3,
+      "start": 13.2,
+      "end": 17,
+      "params": {
+        "direction": "horizontal",
+        "steps": [
+          {
+            "label": "Record",
+            "icon": "mic"
+          },
+          {
+            "label": "Cut",
+            "icon": "scissors"
+          },
+          {
+            "label": "Post",
+            "icon": "send"
+          }
+        ]
+      }
+    },
+    {
+      "id": "compare-insert",
+      "module": "compare",
+      "insert": true,
+      "start": 20,
+      "end": 22,
+      "in": {
+        "type": "fade",
+        "dur": 0.3
+      },
+      "params": {
+        "stagger": 0.12,
+        "left": {
+          "title": "Before",
+          "items": [
+            "A week in the editor",
+            "Captions by hand"
+          ]
+        },
+        "right": {
+          "title": "After",
+          "items": [
+            "Twelve minutes",
+            "Captions from the transcript"
+          ]
+        }
       }
     }
   ]

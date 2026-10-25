@@ -9,6 +9,8 @@
 //   stat-card     a real figure that counts up, with its label and source
 //   quote-card    a real quote with a named attribution
 //   excerpt       real lines of code or text with highlights, in a window
+//   compare       before and after, or two columns
+//   timeline      steps along a line that build on their words
 //
 // Every module works in the motion lanes (on the plate), as a footage-led
 // insert (full frame) and as a footage-led overlay (on a brand card clear of
@@ -21,9 +23,10 @@ import {grammarTweens} from './grammar.mjs';
 import {cardSurface} from './catalog-g-base.mjs';
 import {conceptCard, iconRow, objectCard, sectionCard} from './catalog-g-cards.mjs';
 import {excerpt, quoteCard, statCard} from './catalog-g-proof.mjs';
+import {compare, timeline} from './catalog-g-sequence.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard, statCard, quoteCard, excerpt];
+const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard, statCard, quoteCard, excerpt, compare, timeline];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, mood: def.mood}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
