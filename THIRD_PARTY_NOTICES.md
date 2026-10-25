@@ -148,6 +148,15 @@ Bemis. The full licence text is kept at the top of
 `kit/core/icons-lucide.mjs`; keep it with any copy of that file. The icons are
 not relicensed under LaunchClip's MIT License.
 
+## World map data
+
+`kit/core/world-110m.mjs` holds country shapes from Natural Earth 1:110m Admin 0
+countries (public domain, <https://www.naturalearthdata.com>), taken from the
+`world-atlas@2.0.2` package (ISC License, Copyright 2013-2019 Michael Bostock)
+and projected by `scripts/vendor-world.mjs`. The world-atlas licence text is
+kept at the top of that file. Natural Earth asks for no attribution; we credit
+it anyway.
+
 ## Other direct dependencies
 
 At the time of the 0.2.0 release, HyperFrames declares Apache-2.0;
