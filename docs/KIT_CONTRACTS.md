@@ -1457,6 +1457,63 @@ There are two examples, `examples/story/layouts-wide` (16:9: full, split-left, f
 
 `test/fixtures/parity-footage/s-layout-wide.json` and `s-layout-tall.json` hold both renderers to SSIM ≥ 0.97 at frame-exact times, mid-shift and settled (0.994 minimum when added).
 
+## Long form (`kit/core/long-form.mjs`)
+
+Long videos (5–30 minutes, the `youtube-long-form` profile) get structure before density (docs/VIDEO_QUALITY_RFC.md §10.2).
+
+### Chapters
+
+The chapter contract is one top-level story field, `chapters`, in `kit/core/story.mjs` (import-free):
+
+```json
+"chapters": [
+  { "id": "c1", "title": "The problem", "start": 0 },
+  { "id": "c2", "title": "Tool of the week", "start": "word:tool", "segment": "tool-of-the-week" }
+]
+```
+
+- `validateChapters` (called by `validateStory`) checks the following:
+  - ids are unique short ids, and titles are 1–60 characters;
+  - starts are seconds or anchors, in order, the first at 0;
+  - `segment` names a segment format (see below).
+- It warns when YouTube would ignore the list: fewer than three chapters, or one shorter than 10 s (`CHAPTER_MIN_COUNT`, `CHAPTER_MIN_SECONDS`).
+- `resolveStory` resolves chapter starts like scene times. `storyChapters(story)` → `[{index, id, title, start, end, segment}]`; each chapter runs to the next one's start, and the last to the end.
+
+Chapters come from the direction map: `chaptersFromMap(map, words, {duration})` makes one per section, starting at its first word (or its `start`). The first chapter starts at 0. A section shorter than 10 s joins the chapter after it. A section without a `title` is "Part n", so the planner and the skills give every section a short title.
+
+### The structure pass
+
+`structureLongForm(story, {words, map})` → `{story, map, chapters, added, changed, warnings}` works on copies and is deterministic:
+
+- **Chapters.** It sets `story.chapters` from the map unless the story has them.
+- **Section cards.** At each chapter start after the first, it adds a `section-card` (`chapter-<id>`): kicker "Chapter n", the number and the chapter title, held 2.6 s. It's an insert in the footage-led lane.
+- **The opening promise.** After the hook line, it adds an `icon-row` (`promise`, track 1 in the footage-led lane) titled "In this video". It lists the next two to five chapters, with an icon per chapter from its title. If the line after the hook is taken, the promise moves to the next line start with room, up to 45 s in.
+- **The progress line.** It sets `frame.progress: {ticks: true}`. The brand frame draws a tick at each chapter start (`lc-frame-tick-NN`, both renderers), and the frame's section labels fall back to the chapter titles. `frame: false` keeps no frame.
+- **Room.** Anything on the new scene's track and every graphic is in its way.
+  - A scene that starts inside the card's window starts after it. A scene running across the window's start ends before it. Either move happens only when the scene keeps at least 1 s and still overlaps every map line that names it.
+  - Otherwise the card shortens, or starts up to 4 s late. A card with less than 1.4 s of room is skipped with a warning.
+  - Moved scenes are listed in `changed`.
+- **The map.** It gains section titles. A face or camera line under a new scene becomes an insert or dress line naming it.
+- **Idempotence.** Running it again drops what it added last time first.
+
+Where it runs:
+
+- `planStoryboard` runs it on a passing plan when the story is long form (`isLongForm`: the long-form profile, or 300 s and up; `longForm: false` turns it off). It keeps the result only when the structured storyboard passes the same checks, and reports it as `long_form: {chapters, added, changed, warnings}`.
+- `launchclip story long-form <project> [--dry-run]` runs it on a project's storyboard.json and DIRECTION.json; the skills call it after writing both.
+- The direction prompt carries `longFormLines()` for long stories, and `references/direction-map.md` carries them too.
+
+### Exports
+
+- **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).
+  - It muxes the chapters into the delivery MP4 by stream copy (`ffmetadataChapters`, adapter `muxChapters`). The MP4 muxer adds a QuickTime chapter track beside the picture and sound.
+  - The report carries `chapters: {file, list, youtube: "ok" | "ignored", problems}`, and `youtubeChapterProblems` warns when YouTube would ignore the list.
+  - Prototypes, candidates and previews carry no chapters. The master's input hash includes the chapters only when there are some, so other projects' caches stay valid.
+- **NLE exports.** Chapters are timeline markers of kind `chapter`, first at their frame:
+  - FCPXML writes `<chapter-marker>`;
+  - xmeml writes a `<marker>` named after the chapter;
+  - the EDL writes a GREEN `* LOC:`;
+  - OTIO writes a GREEN `Marker.2` with `metadata.launchclip.chapter`.
+
 ## Catalogue E (`kit/core/catalog-e.mjs`)
 
 Product moments around the presenter
