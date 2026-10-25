@@ -4,7 +4,9 @@
 //
 // Checks, each an error (fails the gate) or a warning (heuristic; reported):
 // - palette: the render's colour clusters against the style's (reference
-//   palette, else brand colours), measured both ways. Footage-led renders are mostly footage, so
+//   palette, else brand colours), measured both ways. The colours are the
+//   styled story's: a storyboard `brand` override wins over the pack, and
+//   then the override's colours replace the pack's reference palette. Footage-led renders are mostly footage, so
 //   there it only asks that the brand primary shows up somewhere (warning):
 //   the storyboard says where it is drawn (captions, brand frame, graphic
 //   scenes); the share of pixels in the primary's hue only backs that up.
@@ -53,11 +55,16 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
   const add = (check, severity, ok, expected, value, detail) => checks.push({ check, severity, ok, expected, measured: value, detail });
   const lane = story?.lane;
 
-  // Palette.
-  const expected = pack?.reference_stats?.palette ?? Object.values(pack?.brand?.colors ?? {}).map((hex) => ({ hex, weight: 1 }));
+  // Palette: the styled story's colours (its own brand overrides, the pack's
+  // for the rest). When the story overrides a pack colour, the pack's
+  // reference palette no longer describes the render, so its colours stand in.
+  const colors = { ...(pack?.brand?.colors ?? {}), ...(story?.brand?.colors ?? {}) };
+  const overrides = brandOverrides(story, pack);
+  const reference = overrides.length ? null : pack?.reference_stats?.palette ?? null;
+  const expected = reference ?? Object.values(colors).map((hex) => ({ hex, weight: 1 }));
   if (measured?.palette?.length && expected.length) {
     if (lane === "footage-led") {
-      const primary = pack?.brand?.colors?.primary;
+      const primary = colors.primary;
       if (primary) {
         // What the storyboard draws in the primary is exact; the pixels only support it.
         const drawn = primaryUses(story, primary);
@@ -72,10 +79,9 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
     } else {
       // Both ways: every render colour near a style colour, and the style's main colours present in the render.
       // With brand colours only, the reverse asks for the background, text and primary (an accent may rightly be rare).
-      const colors = pack?.brand?.colors ?? {};
-      const main = pack?.reference_stats?.palette ?? [["bg", 0.6], ["paper", 0.2], ["primary", 0.2]].filter(([role]) => colors[role]).map(([role, weight]) => ({ hex: colors[role], weight }));
+      const main = reference ?? [["bg", 0.6], ["paper", 0.2], ["primary", 0.2]].filter(([role]) => colors[role]).map(([role, weight]) => ({ hex: colors[role], weight }));
       const distance = Math.max(paletteDistance(measured.palette, expected), paletteDistance(main, measured.palette) ?? 0);
-      add("palette", "error", distance <= ADHERENCE.palette, `≤ ${ADHERENCE.palette}`, distance, distance <= ADHERENCE.palette ? "the render's colours match the style" : `the render's colours are ${distance} from the style's palette (limit ${ADHERENCE.palette}); check brand.colors overrides and full-bleed media`);
+      add("palette", "error", distance <= ADHERENCE.palette, `≤ ${ADHERENCE.palette}`, distance, distance <= ADHERENCE.palette ? `the render's colours match the ${overrides.length ? `story's brand colours (it overrides ${overrides.join(", ")})` : "style"}` : `the render's colours are ${distance} from the ${overrides.length ? `story's brand colours (it overrides ${overrides.join(", ")})` : "style's palette"} (limit ${ADHERENCE.palette}); check full-bleed media and colours set outside brand.colors`);
     }
   }
 
@@ -145,6 +151,12 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
 
   const failed = checks.some((entry) => entry.severity === "error" && !entry.ok);
   return { status: failed ? "failed" : "passed", checks };
+}
+
+/** The brand colour roles a story sets to something other than the pack's. */
+export function brandOverrides(story, pack) {
+  const own = story?.brand?.colors ?? {}, packed = pack?.brand?.colors ?? {};
+  return Object.keys(own).filter((role) => packed[role] && typeof own[role] === "string" && colorDistance(own[role], packed[role]) > 0.02);
 }
 
 // "upper" stays upper; sentence and title case both read as not capitals.

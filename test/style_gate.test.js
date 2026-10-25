@@ -10,7 +10,7 @@ import test from "node:test";
 
 import { applyStyle, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
 import { resolveStory } from "../kit/core/story.mjs";
-import { primaryShare, primaryUses, storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
+import { brandOverrides, primaryShare, primaryUses, storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
 import { vividHues } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { PATHS, runFinish } from "../src/finish.js";
@@ -122,6 +122,28 @@ test("vivid hues see a small accent k-means folds away", () => {
   const { share, hues } = vividHues([{ width, height, data }], { step: 1 });
   assert.equal(share, 0.02);
   assert.equal(hues[1], 0.02, "#fb6302 sits at 23°, the 15–30° bin");
+});
+
+test("the palette is checked against the storyboard's brand override, not the pack's", async () => {
+  // QA: a story that overrides brand.colors was checked against the pack's palette.
+  const brand = { colors: { bg: "#f4efe6", paper: "#1b1b1b", ink: "#1b1b1b", primary: "#e0115f", accent: "#1f8a70" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } };
+  const story = await STORY({ brand });
+  assert.deepEqual(brandOverrides(story, PACK), ["bg", "paper", "ink", "primary", "accent"]);
+  const inStoryColours = { ...MEASURED, palette: [{ hex: "#f3eee5", weight: 0.75 }, { hex: "#1c1c1c", weight: 0.15 }, { hex: "#df125e", weight: 0.1 }] };
+  const ok = styleAdherence({ story, pack: PACK, measured: inStoryColours }).checks.find((entry) => entry.check === "palette");
+  assert.equal(ok.ok, true, ok.detail);
+  assert.match(ok.detail, /story's brand colours \(it overrides bg, paper, ink, primary, accent\)/);
+  const inPackColours = styleAdherence({ story, pack: PACK, measured: MEASURED }).checks.find((entry) => entry.check === "palette");
+  assert.equal(inPackColours.ok, false, "a render in the pack's colours ignored the story's override");
+
+  // Footage-led: the primary looked for is the story's.
+  const footage = { lane: "footage-led", style: "channel", brand, base: { src: "base.mp4" }, overlays: [], scenes: [], format: { width: 1920, height: 1080, fps: 30, duration: 10 }, resolved: { duration: 10, fps: 30 } };
+  const hues = new Array(24).fill(0); hues[22] = 0.01;
+  const footageCheck = styleAdherence({ story: footage, pack: { ...PACK, brand_frame: { enabled: false } }, measured: { palette: [{ hex: "#3a2a20", weight: 1 }], vivid: { share: 0.01, hues } }, cadence: null }).checks.find((entry) => entry.check === "palette");
+  assert.equal(footageCheck.ok, true, footageCheck.detail);
+  assert.match(footageCheck.expected, /#e0115f/);
+  // Colours the story leaves out come from the pack; no override, no change.
+  assert.deepEqual(brandOverrides({ brand: { colors: { primary: "#ffcc00" } } }, PACK), []);
 });
 
 test("our own renders take cadence from the storyboard, not a cut detector", async () => {
