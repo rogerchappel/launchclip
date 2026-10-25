@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { colorDistance, STYLE_SCHEMA, validateStylePack } from "../kit/core/style.mjs";
 import { validateProfile } from "../kit/core/profiles.mjs";
-import { boundariesFromGrayFrames, captionCase, captionsFromDetection, compareToStyle, detectCaptions, detectLayouts, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, paletteClusters, profileFromReferences } from "../src/style_reference.js";
+import { boundariesFromGrayFrames, captionCase, captionsFromDetection, columnCase, compareToStyle, detectCaptions, detectLayouts, downsampleFrame, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, overlayEventsFromGrayFrames, paletteClusters, panelShare, profileFromReferences } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -201,4 +201,105 @@ test("a cadence profile from references: shots pooled, changes per 30 s window",
   assert.deepEqual(profile.measures.layout_changes_per_min, { p10: 3, p50: 3, p90: 3 });
   for (const range of Object.values(profile.measures)) assert.ok(range.p10 <= range.p50 && range.p50 <= range.p90);
   assert.equal(profileFromReferences("none", [{ kind: "image" }]), null);
+});
+
+// 480x270 RGB frames like the approved reference: a dark warm panel with a
+// card and text on one side, the presenter (grainy, with a smooth shirt) on
+// the other, and a short left-aligned caption that changes per sample.
+function referenceFrame({ panel = null, caption = null, sign = 0, seed = 1 } = {}) {
+  const w = 480, h = 270, data = Buffer.alloc(w * h * 3);
+  let state = seed * 7919 + 3;
+  const grain = () => { state = (state * 1103515245 + 12345) % 2147483648; return (state >> 8) % 40; };
+  const set = (x, y, [r, g, b]) => { const i = (y * w + x) * 3; data[i] = r; data[i + 1] = g; data[i + 2] = b; };
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+    const inPanel = panel === "right" ? x >= 250 : panel === "left" ? x < 230 : false;
+    if (inPanel) { set(x, y, [24, 20, 18]); continue; }
+    // Footage: a grainy room, and a shirt that is smooth but shaded.
+    const shirt = Math.abs(x - (panel === "right" ? 120 : panel === "left" ? 360 : 240)) < 70 && y > 150;
+    const v = shirt ? 70 + Math.round((y - 150) * 0.35 + (x % 97) * 0.2) : 40 + grain() + ((x * 3 + y) % 50);
+    set(x, y, [v, v + 6, v - 4]);
+  }
+  if (panel) {
+    const x0 = panel === "right" ? 280 : 30;
+    for (let y = 90; y < 170; y += 1) for (let x = x0; x < x0 + 170; x += 1) set(x, y, [44, 38, 34]);
+    for (let y = 110; y < 116; y += 1) for (let x = x0 + 10; x < x0 + 150; x += 1) if (x % 4 < 2) set(x, y, [230, 230, 230]);
+  }
+  // A sign in the room: held text that moves with the footage.
+  for (let y = 30; y < 38; y += 1) for (let x = 60 + sign; x < 130 + sign; x += 1) if (x % 5 < 2) set(x, y, [235, 235, 235]);
+  if (caption !== null) {
+    const x0 = panel === "right" ? 40 : panel === "left" ? 260 : 40;
+    for (let y = 212; y < 220; y += 1) for (let x = x0; x < x0 + 70; x += 1) {
+      const on = ((x + caption * 7) % 6) < 2 && (x + caption * 13) % 23 > 3;
+      if (on) set(x, y, x > x0 + 50 ? [251, 120, 20] : [240, 240, 236]);
+    }
+  }
+  return { at: seed, width: w, height: h, data };
+}
+
+test("splits from a panel side with cards on it beside footage, even with a smooth shirt", () => {
+  const right = referenceFrame({ panel: "right" });
+  assert.ok(panelShare(right, 288, 480, 0, 270) >= 0.6, "the panel side");
+  assert.ok(panelShare(right, 0, 192, 0, 270) <= 0.4, "the footage side, shirt included");
+  const kinds = [null, null, "right", "right", "right", "left", "left", null, null, "right"];
+  const result = detectLayouts(kinds.map((panel, i) => referenceFrame({ panel, seed: i + 1 })));
+  assert.deepEqual(result.frames, ["full", "full", "split-right", "split-right", "split-right", "split-left", "split-left", "full", "full", "full"]);
+  assert.equal(result.changes, 3, "into the right split, across to the left, back to full");
+});
+
+test("captions: a short line whose words change, not a sign that holds or moves with the footage", () => {
+  const panels = [null, null, "right", "right", "left", "left", null, null];
+  const frames = panels.map((panel, i) => referenceFrame({ panel, caption: i, sign: panel ? 40 : 0, seed: i + 1 }));
+  const layouts = detectLayouts(frames).frames;
+  const captions = detectCaptions(frames, { layouts });
+  assert.equal(captions.position, "bottom");
+  assert.ok(Math.abs(captions.y - 0.8) < 0.03, `y ${captions.y}`);
+  assert.equal(captions.change, 1);
+  assert.ok(captions.highlight && colorDistance(captions.highlight, "#fb7814") < 0.12, `highlight ${captions.highlight}`);
+  const sign = captions.bands.find((band) => band.y < 0.2);
+  assert.ok(!sign || sign.change === 0, `the sign holds within a layout: ${JSON.stringify(sign)}`);
+  // Without changing words there are no captions.
+  assert.equal(detectCaptions(panels.map((panel, i) => referenceFrame({ panel, caption: 0, seed: i + 1 })), { layouts }).position, null);
+});
+
+test("caption case from letter-column tops across lines of one size", () => {
+  // base 40; capitals start at the cap height (top 20); lowercase at the x-height (26), ascenders at 20.
+  const line = (tops) => ({ tops, base: 40 });
+  const upper = columnCase([line(Array(60).fill(20)), line([...Array(50).fill(20), ...Array(4).fill(30)]), line(Array(40).fill(21))]);
+  assert.equal(upper.case, "upper");
+  const lower = columnCase([line([...Array(50).fill(26), ...Array(8).fill(20)]), line(Array(60).fill(26)), line([...Array(40).fill(27), ...Array(10).fill(20)])]);
+  assert.equal(lower.case, "as-is", "a line with no tall letters reads against the others' height");
+  assert.equal(columnCase([line(Array(20).fill(20))]).case, null, "one line cannot tell");
+});
+
+test("overlay events: a card appearing and leaving over moving footage, not a moving hand", () => {
+  const w = 160, h = 90, fps = 10, frames = [];
+  let state = 5;
+  const grain = () => { state = (state * 1103515245 + 12345) % 2147483648; return (state >> 8) % 24; };
+  for (let f = 0; f < 80; f += 1) {
+    const frame = Buffer.alloc(w * h);
+    const t = f / fps;
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+      let v = 60 + grain();
+      // A hand sweeping back and forth across the right of the frame.
+      if (Math.abs(x - (120 + Math.round(25 * Math.sin(t * 3)))) < 8 && y > 40) v = 170;
+      // A card from 2 s to 5 s.
+      if (t >= 2 && t < 5 && x >= 10 && x < 70 && y >= 10 && y < 50) v = 210;
+      frame[y * w + x] = v;
+    }
+    frames.push(frame);
+  }
+  const events = overlayEventsFromGrayFrames(Buffer.concat(frames), w, h, fps);
+  assert.equal(events.length, 2, events.join(","));
+  assert.ok(Math.abs(events[0] - 2) <= 0.2 && Math.abs(events[1] - 5) <= 0.2, events.join(","));
+  assert.deepEqual(overlayEventsFromGrayFrames(Buffer.concat(frames), w, h, fps, { exclude: [0, 0.6] }), [], "a card inside the excluded band is left out");
+});
+
+test("downsampleFrame averages blocks", () => {
+  const data = Buffer.alloc(4 * 2 * 3);
+  for (let i = 0; i < 4 * 3; i += 1) data[i] = 200;
+  const half = downsampleFrame({ at: 1, width: 4, height: 2, data }, 2);
+  assert.equal(half.width, 2);
+  assert.equal(half.height, 2);
+  assert.equal(half.data[0], 200);
+  assert.equal(half.data[2 * 3], 0);
 });
