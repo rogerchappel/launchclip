@@ -2132,6 +2132,45 @@ panel and its first content land together.
 | `compare` | claim | `left` / `right` `{title ≤ 24, items: [≤ 40] 1–4, icon?}`, `mode` before-after/columns, `stagger` (0.16), `at` | `left`, `right` (whoosh) | Two panels side by side when the items fit two lines per column, else stacked. In before-after mode the left side is muted with crosses, an arrow pops, and the right panel has a primary edge and ticks; in columns mode both panels are neutral, with dots |
 | `timeline` | process | `steps` 2–6 `{label ≤ 28, detail? ≤ 40, icon?, at?}`, `title` ≤ 48, `direction` auto/vertical/horizontal, `stagger` (0.45), `at` | `step-<i>` (pop-soft) | Numbered or icon nodes pop on their steps; a primary line runs on to each node over the 0.35 s before it lands (scaleX or scaleY of a bar over the track). Vertical by default in 9:16 (box at most 760 px wide), across in 16:9 when the labels fit |
 
+### Variants
+
+Each module has designed variants ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)
+§3.2): looks that differ in layout, shape language and entrance, over the same
+params, so one storyboard renders in any variant. The first variant is the
+module's original look and its default; it renders exactly as before variants
+existed.
+
+- `VARIANTS` (`kit/core/catalog-g.mjs`) maps each module to its names, and each
+  module definition carries `variants`. `moduleVariants()` in
+  `kit/core/modules.mjs` lists every module that has more than one, for the
+  style generator.
+- The variant comes from a scene's `params.variant`, else the story's
+  `variants` (`{"<module>": "<variant>"}`, which a style pack fills), else the
+  default. An unknown name fails with the module's list of names:
+  `params.variant must be one of stacked, side-icon, banner, marker (the
+  concept-card variants); got "sparkly"`.
+- A variant that has no room for its own shape (a short overlay, a small rect)
+  falls back to the default layout rather than failing; `model.variant` still
+  names the one asked for and `content.layout.mode` the one drawn.
+- Shapes with text on them use `solidFill` (primary when its best text colour
+  reaches the contrast floor, else the panel), and tints behind text use
+  `tintBehind` (the strongest tint that keeps 4.5:1), so a variant reads on any
+  palette.
+
+| Module | Variants (default first) |
+| --- | --- |
+| `concept-card` | `stacked` (icon over the word); `side-icon` (a solid icon tile, or a bar with no icon, beside the word, a rule that draws and the sub-line; the tile slides and turns in); `banner` (the word on a brand band with a notched end that wipes in, the icon on a disc over its start); `marker` (a big left-set word, a highlighter band that sweeps under each line, the icon spinning in above) |
+| `icon-row` | `tiles` (tinted tiles in a row or a list); `pills` (capsules with the icon on a solid disc, one row when every label fits a line, else a column; they slide in and the discs pop); `orbit` (nodes on a dashed ring around a hub, flying out from its centre, labels outside the ring; in 16:9 the title stands to its left); `list` (numbered rows between rules that draw, the icon at the row end) |
+| `section-card` | `centered` (head, kicker, a rule and the title, centred); `split` (a big chapter number or icon, a vertical rule that grows, the kicker and title set left); `tab` (number · kicker on a solid tab that drops in, the title rising line by line over a full-width rule); `frame` (corner brackets that close in on the kicker and title, the number or icon on a disc over the foot) |
+
+`node scripts/variant-sheet.mjs [--modules …] [--gates]` builds a story per
+aspect with a scene per variant, writes a contact sheet of settled stills
+(`qa/variants/sheet-9x16.png`, `sheet-16x9.png`) and, with `--gates`, runs
+`launchclip layout-check` and `hyperframes lint` and `check` on it (no errors,
+no `content_overlap` or `clipped_text`). `node scripts/variant-fixtures.mjs`
+writes a parity fixture per non-default variant
+(`test/fixtures/parity/g-<module>-<variant>.json`, alternating 9:16 and 16:9).
+
 **Honesty rules.** `stat-card` and `excerpt` refuse a missing source, or a source that is a placeholder (`source`, `TBD`, `n/a`, `example`, `illustrative`, …). `quote-card` refuses a generic attribution (`Anonymous`, `a customer`, `our users`, …) and a highlight that is not in the quote. `excerpt` refuses placeholder text (`lorem ipsum`, `TODO`) and shows lines exactly as supplied.
 
 Phrase rows in `PHRASE_MODULE_TABLE` carry an `intents` list (names from
