@@ -19,6 +19,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 
 ## Next
 
+- **A fresh look for every project** ([RFC](SEEDED_STYLES_RFC.md)): with no style or brand, each project gets its own generated style (palette, fonts, backgrounds, motion, captions, characters), saved so it stays the same; reroll it, pin a seed, or keep it as your own style.
 - **Videos that look designed, not decorated** ([RFC](VIDEO_QUALITY_RFC.md)):
   - Pacing and density are measured from strong reference videos, per format: Shorts, long form, your own footage and motion graphics.
   - Every line of the story gets a visual decision, and footage gets split-screen layouts and a much larger visual vocabulary.
