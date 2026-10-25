@@ -10,7 +10,7 @@ import {resolveModule} from '../kit/core/modules.mjs';
 import {sceneDrift} from '../kit/core/ambient.mjs';
 import {profileGeometry} from '../kit/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
-import {assertMatchesFrameState} from './catalog_b.test.js';
+import {assertMatchesFrameState} from './helpers/frame_state.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const brand = {colors: {bg: '#10132a', primary: '#7c70ff', accent: '#22c3ee', ink: '#10132a', paper: '#f4f2ff'}, fonts: {display: 'space-grotesk', body: 'inter', meta: 'jetbrains-mono'}};
