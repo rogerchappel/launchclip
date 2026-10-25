@@ -1820,7 +1820,7 @@ scene fails to resolve on an unknown one.
   `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
   sheets; `storyWorldErrors`; `worldCatalogue()`.
-- 7 worlds in three groups. Inside: office, home-desk, kitchen, living-room, cafe.
+- 12 worlds in three groups. Inside: office, home-desk, kitchen, living-room, classroom, cafe, workshop, server-room, studio, gym.
   Street: city-street.
   Outside: park. Each has `geo` (floor or
   ground line, anchors, quiet area), `back`, `mid`, `front` and optional
