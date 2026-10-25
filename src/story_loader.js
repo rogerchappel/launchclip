@@ -1,13 +1,16 @@
+import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { applyProjectStyle } from "./story_style.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 
 // kit/core/story.mjs is the canonical storyboard.json implementation (see
 // docs/KIT_CONTRACTS.md). It is loaded lazily so the HyperFrames path keeps
 // working without it, and so tests can inject a stub through `storyModule`.
+const execFileAsync = promisify(execFile);
 export const DEFAULT_STORY_MODULE = fileURLToPath(new URL("../kit/core/story.mjs", import.meta.url));
 const REQUIRED_EXPORTS = ["resolveStory", "deriveBoundaries", "storyFormat"];
 
@@ -64,6 +67,11 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   const subject = await readStorySubject(project, story);
   // The whole-video head track, assets/subject/track.json.
   const track = await readStoryTrack(project, story);
+  // base.crop needs the recording's size; without a track, probe it.
+  if (story.base && typeof story.base === "object" && story.base.crop && !story.base.size && !track) {
+    const size = await probeVideoSize(path.join(project, String(story.base.src ?? story.base.source ?? "")));
+    if (size) story.base.size = size;
+  }
   const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl, subject, track });
   return { file: storyFile, story, resolved, words, format: module.storyFormat(resolved), module, style: styled.style };
 }
@@ -86,6 +94,15 @@ export async function readStoryEdl(project, story) {
 export function narrationFile(project, story) {
   const declared = typeof story?.audio?.words === "string" ? path.resolve(project, story.audio.words) : null;
   return declared && existsSync(declared) ? declared : path.join(project, "NARRATION.json");
+}
+
+// A video's {width, height} from ffprobe, or null.
+async function probeVideoSize(file) {
+  try {
+    const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", file], { maxBuffer: 1024 * 1024 });
+    const stream = JSON.parse(stdout).streams?.[0];
+    return stream?.width > 0 && stream?.height > 0 ? { width: stream.width, height: stream.height } : null;
+  } catch { return null; }
 }
 
 async function readOptionalJson(file) {

@@ -27,7 +27,7 @@
 
 import { CAMERA_IDENTITY, cameraSampleProps } from "./catalog-c.mjs";
 import { frameState, sampleTime } from "./catalog-b-view.mjs";
-import { storyBase } from "./story.mjs";
+import { baseMediaBox, storyBase } from "./story.mjs";
 import { boxExtent, subjectAt, subjectCoverShare } from "./subject.mjs";
 
 export { subjectCoverShare };
@@ -225,7 +225,8 @@ export function subjectModelErrors(model) {
  *              the whole-video track (resolved.subjectTrack) puts the
  *              presenter over [t, end]: the extent of each frame's boxes,
  *              so a placement clear of it stays clear of the head; else null
- *   plate      {src, fit, focus}: the range's room plate, drawn like the base
+ *   plate      {src, fit, focus, crop, size}: the range's room plate, drawn
+ *              like the base (story.mjs baseMediaStyle)
  *   placement  "measured" with a measured head (matte or track), else "default"
  *   source     "matte", "track" or null: where head and body came from
  *   outlineAt  (t) => the traced silhouette at timeline t: canvas points
@@ -251,7 +252,7 @@ export function subjectContext(story, t, { end = t } = {}) {
     head,
     body: toCanvas(measured?.body),
     headroom: measured?.headroom ?? null,
-    plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus } } : null,
+    plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus }, ...(base.crop ? { crop: base.crop, size: base.size ?? measured?.size ?? null } : {}) } : null,
     placement: head ? "measured" : "default",
     source: head ? measured.from : null,
     outlineAt: (at) => subjectOutlineAt(story, at)
@@ -318,15 +319,17 @@ export function sourceTimeAt(base, t) {
 
 /**
  * A source-frame box (fractions, centre x/y) as a canvas rect in px, through
- * the base's object-fit and object-position.
+ * the base's object-fit and object-position, or its crop box (base.crop,
+ * baseMediaBox), as the compilers draw the recording.
  * source: {width, height} of the recording; canvas: {width, height}.
  */
 export function sourceBoxToCanvas(box, base, source, canvas) {
+  const cropped = baseMediaBox(base, canvas, source);
   const scale = base.fit === "contain" ? Math.min(canvas.width / source.width, canvas.height / source.height) : Math.max(canvas.width / source.width, canvas.height / source.height);
-  const width = source.width * scale;
-  const height = source.height * scale;
-  const left = (canvas.width - width) * base.focus.x;
-  const top = (canvas.height - height) * base.focus.y;
+  const width = cropped ? cropped.width : source.width * scale;
+  const height = cropped ? cropped.height : source.height * scale;
+  const left = cropped ? cropped.x : (canvas.width - width) * base.focus.x;
+  const top = cropped ? cropped.y : (canvas.height - height) * base.focus.y;
   return { x: round6(left + (box.x - box.w / 2) * width), y: round6(top + (box.y - box.h / 2) * height), width: round6(box.w * width), height: round6(box.h * height) };
 }
 

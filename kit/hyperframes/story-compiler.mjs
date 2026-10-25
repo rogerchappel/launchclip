@@ -20,7 +20,7 @@ import { copyFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promi
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
+import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
 import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
@@ -319,10 +319,16 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // under full-frame inserts.
   const baseMarkup = [];
   if (base) {
-    const fit = `object-fit:${base.fit};object-position:${num(base.focus.x * 100)}% ${num(base.focus.y * 100)}%`;
+    // The canvas box with the base's fit and focus, or, with base.crop, the
+    // whole recording's box clipped to the crop (baseMediaStyle); the mattes
+    // draw in the same box, so they stay aligned.
+    const media = baseMediaStyle(base, { width: W, height: H });
+    const fit = media.clipPath
+      ? `left:${num(media.left)}px;top:${num(media.top)}px;width:${num(media.width)}px;height:${num(media.height)}px;object-fit:${media.objectFit};object-position:${media.objectPosition};clip-path:${media.clipPath};transform-origin:${media.transformOrigin}`
+      : `left:0;top:0;width:${W}px;height:${H}px;object-fit:${base.fit};object-position:${num(base.focus.x * 100)}% ${num(base.focus.y * 100)}%;transform-origin:50% 50%`;
     for (const segment of base.segments) {
       const timing = `data-start="${num(segment.start)}" data-duration="${num(segment.duration)}" data-media-start="${num(segment.sourceStart)}"`;
-      baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:1"></video>`);
+      baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;${fit};z-index:1"></video>`);
       if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume)}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
     }
     // Subject: the matte clips over the base, under every front scene, moved
@@ -337,7 +343,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       const clips = subjectSegments(story, subjectWindows(entries));
       if (!clips.length) warnings.push(`${entries.filter((entry) => needsSubject(entry.scene, entry.model)).map((entry) => entry.scene.id).join(', ')}: these scenes need the cut-out subject, but base.subject has no matte for their time (run: launchclip subject matte <recording> --range <in>-<out> --project <dir>)`);
       for (const clip of clips) {
-        baseMarkup.push(`<video id="lc-subject-${clip.index}" class="clip lc-subject-media" src="${attr(clip.src)}" data-start="${num(clip.start)}" data-duration="${num(clip.duration)}" data-media-start="${num(clip.mediaStart)}" data-track-index="${SUBJECT_TRACK}" data-launchclip-subject-segment="${clip.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:${subjectZ}"></video>`);
+        baseMarkup.push(`<video id="lc-subject-${clip.index}" class="clip lc-subject-media" src="${attr(clip.src)}" data-start="${num(clip.start)}" data-duration="${num(clip.duration)}" data-media-start="${num(clip.mediaStart)}" data-track-index="${SUBJECT_TRACK}" data-launchclip-subject-segment="${clip.index}" muted playsinline style="position:absolute;${fit};z-index:${subjectZ}"></video>`);
         if (sourceDir && !existsSync(path.join(sourceDir, clip.src))) warnings.push(`subject matte ${clip.src} was not found in ${sourceDir}`);
       }
       const subjectOps = subjectCameraOps(cameraModels, { subjectFilterAt: (t) => subjectFilterAt(models, t) });

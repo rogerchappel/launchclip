@@ -44,6 +44,7 @@ import {CATALOG_B_STYLE, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {subjectCoverShare} from './subject.mjs';
+import {baseMediaStyle} from './story.mjs';
 
 export const BASE_CAMERA = 'lc-base-camera';
 export const CAMERA_IDENTITY = Object.freeze({x: 0, y: 0, scaleX: 1, scaleY: 1});
@@ -718,7 +719,9 @@ function dollyZoomView(model) {
   const {id} = model;
   const c = model.content, W = model.canvas.width, H = model.canvas.height;
   if (!c.plate) return [];
-  const img = el('img', `${id}-plate`, abs(0, 0, W, H, {objectFit: c.plate.fit, objectPosition: `${c.plate.focus.x * 100}% ${c.plate.focus.y * 100}%`}), [], {src: c.plate.src, alt: ''});
+  // Drawn exactly like the base (with base.crop, the recording's crop box).
+  const {left, top, width, height, transformOrigin, ...fit} = baseMediaStyle(c.plate, model.canvas, c.plate.size ?? undefined);
+  const img = el('img', `${id}-plate`, abs(left, top, width, height, fit), [], {src: c.plate.src, alt: ''});
   return [el('div', `${id}-room`, abs(0, 0, W, H, {overflow: 'hidden', transformOrigin: `${c.origin.x}px ${c.origin.y}px`, transform: transformString({scaleX: c.from, scaleY: c.from})}), [img])];
 }
 

@@ -609,6 +609,8 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   // frames: [{t, head, body}]}, which subjectContext and the face rule read
   // where no matte covers the time.
   if (isObject(track) && Array.isArray(track.frames) && copy.base != null && subjectMode(copy.base) !== "off") copy.resolved.subjectTrack = track;
+  // A crop in pixels needs the recording's size: the track measured it.
+  if (isObject(copy.base) && isObject(copy.base.crop) && copy.base.size === undefined && isObject(track?.source) && Number.isInteger(track.source.width) && Number.isInteger(track.source.height)) copy.base.size = { width: track.source.width, height: track.source.height };
   return copy;
 }
 
@@ -830,7 +832,8 @@ function validateAmbient(value, path, err) {
 // Footage-led base
 
 export const BASE_FITS = ["cover", "contain"];
-const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl", "subject"]);
+const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl", "subject", "crop", "size"]);
+const CROP_SIDES = ["left", "right", "top", "bottom"];
 export const SCENE_LAYERS = ["front", "behind", "split"];
 export const SUBJECT_MODES = ["auto", "off"];
 const MATTE_KEYS = new Set(["src", "in", "out", "info", "plate", "contours", "summary", "outline"]);
@@ -842,7 +845,7 @@ function validateBase(base, { err, warn, duration, resolved }) {
     return;
   }
   if (!isObject(base)) { err("base must be null, an assets/ video path or an object with src"); return; }
-  for (const key of Object.keys(base)) if (!BASE_KEYS.has(key)) err(`base.${key} is not supported (allowed: src, start, trim, volume, fit, focus, edl, subject)`);
+  for (const key of Object.keys(base)) if (!BASE_KEYS.has(key)) err(`base.${key} is not supported (allowed: src, start, trim, volume, fit, focus, edl, subject, crop, size)`);
   if (base.src !== undefined && base.source !== undefined) err("base.src and base.source name the same file; keep base.src");
   const src = base.src ?? base.source;
   const srcPath = base.src !== undefined || base.source === undefined ? "base.src" : "base.source";
@@ -855,6 +858,8 @@ function validateBase(base, { err, warn, duration, resolved }) {
     if (!isObject(base.focus) || Object.keys(base.focus).some((key) => key !== "x" && key !== "y")) err("base.focus must be {x, y} with fractions between 0 and 1");
     else for (const axis of ["x", "y"]) if (!(typeof base.focus[axis] === "number" && base.focus[axis] >= 0 && base.focus[axis] <= 1)) err(`base.focus.${axis} must be a fraction between 0 and 1`);
   }
+  if (base.size !== undefined && !(isObject(base.size) && Object.keys(base.size).every((key) => key === "width" || key === "height") && ["width", "height"].every((key) => Number.isInteger(base.size[key]) && base.size[key] > 0))) err("base.size must be {width, height}: the recording's size in pixels");
+  if (base.crop !== undefined) validateCrop(base, { err, resolved });
   if (base.subject !== undefined) validateSubject(base.subject, err);
   if (base.edl !== undefined) {
     if (projectPath(base.edl, "base.edl", err) && !/\.json$/i.test(base.edl)) err(`base.edl must point at an edit-recording plan (edit-plan.json); got ${JSON.stringify(base.edl)}`);
@@ -877,6 +882,30 @@ function validateBase(base, { err, warn, duration, resolved }) {
       if (base.start !== undefined && base.start > 0) err("base.start applies only without base.trim; put the in-point in the first trim range");
       if (duration !== null && length + EPS < duration) warn(`the trimmed base runs ${ms(length)}s, shorter than format.duration (${duration}s); the frames after it show the background`);
     }
+  }
+}
+
+// base.crop: {left, right, top, bottom} cut off the recording's edges before
+// it is fitted. A value under 1 is a fraction of the recording's width or
+// height; 1 or more is source pixels, which needs the recording's size
+// (base.size, filled by the loader, or the subject track's source size).
+function validateCrop(base, { err, resolved }) {
+  const crop = base.crop;
+  if (!isObject(crop) || !Object.keys(crop).length) { err("base.crop must be {left?, right?, top?, bottom?}: fractions under 1, or source pixels"); return; }
+  for (const key of Object.keys(crop)) if (!CROP_SIDES.includes(key)) err(`base.crop.${key} is not supported (allowed: ${CROP_SIDES.join(", ")})`);
+  let pixels = false;
+  for (const side of CROP_SIDES) {
+    const value = crop[side];
+    if (value === undefined) continue;
+    if (!(typeof value === "number" && Number.isFinite(value) && value >= 0)) { err(`base.crop.${side} must be a non-negative number (a fraction under 1, or source pixels)`); return; }
+    if (value >= 1 && !Number.isInteger(value)) err(`base.crop.${side} is in source pixels, so it must be a whole number; got ${value}`);
+    if (value >= 1) pixels = true;
+  }
+  const size = isObject(base.size) ? base.size : null;
+  if (pixels && !size && resolved) { err("base.crop is in pixels, but the recording's size is unknown; set base.size {width, height} or give the crop as fractions"); return; }
+  const fraction = (side, length) => { const value = Number(crop[side] ?? 0); return value >= 1 ? (length ? value / length : 0) : value; };
+  for (const [a, b, length, axis] of [["left", "right", size?.width, "width"], ["top", "bottom", size?.height, "height"]]) {
+    if (fraction(a, length) + fraction(b, length) > 0.5 + EPS) err(`base.crop.${a} and base.crop.${b} remove more than half the recording's ${axis}`);
   }
 }
 
@@ -932,7 +961,8 @@ export function subjectMode(base) {
  * null. Timeline time maps to trimmed base time: trim ranges play back to back
  * from timeline 0. Boundaries snap to the frame grid so both renderers cut on
  * the same frame.
- * → {src, fit, focus: {x, y}, volume, subject: {mode, mattes: [{src, in, out, info?}]}, segments: [{index, start, end, duration, sourceStart}], length}
+ * → {src, fit, focus: {x, y}, volume, crop: {left, right, top, bottom} (fractions) | null, size: {width, height} | null, subject: {mode, mattes: [{src, in, out, info?}]}, segments: [{index, start, end, duration, sourceStart}], length}
+ * size is base.size, else the subject track's or the first matte's source size.
  */
 export function storyBase(story) {
   const raw = story?.base;
@@ -955,15 +985,72 @@ export function storyBase(story) {
     if (end - start > EPS) segments.push({ index: segments.length, start: round6(start), end: round6(end), duration: round6(end - start), sourceStart: round6(snap(from)) });
     clock += to - from;
   }
+  const mattes = subjectMode(base) === "mattes" ? base.subject.mattes : [];
+  const sized = (value) => (isObject(value) && Number(value.width) > 0 && Number(value.height) > 0 ? { width: Number(value.width), height: Number(value.height) } : null);
+  const size = sized(base.size) ?? sized(story?.resolved?.subjectTrack?.source) ?? sized(mattes.find((matte) => isObject(matte?.summary?.source))?.summary.source);
   return {
     src,
     fit: BASE_FITS.includes(base.fit) ? base.fit : "cover",
+    crop: baseCrop(base.crop, size),
+    size,
     focus: { x: Number(base.focus?.x ?? 0.5), y: Number(base.focus?.y ?? 0.5) },
     volume: typeof base.volume === "number" ? base.volume : 1,
     subject: { mode: subjectMode(base), mattes: subjectMode(base) === "mattes" ? base.subject.mattes.map((matte) => ({ src: matte.src, in: Number(matte.in), out: Number(matte.out), ...(matte.info ? { info: matte.info } : {}), ...(matte.plate ? { plate: matte.plate } : {}), ...(isObject(matte.summary) ? { summary: matte.summary } : {}), ...(isObject(matte.outline) ? { outline: matte.outline } : {}) })) : [] },
     segments,
     length: segments.length ? segments[segments.length - 1].end : 0
   };
+}
+
+// base.crop as fractions of the recording, or null for none (or a pixel
+// crop without a known size).
+function baseCrop(crop, size) {
+  if (!isObject(crop)) return null;
+  const out = {};
+  for (const side of CROP_SIDES) {
+    const value = Number(crop[side] ?? 0);
+    if (!(Number.isFinite(value) && value >= 0)) return null;
+    if (value >= 1 && !size) return null;
+    out[side] = value >= 1 ? value / (side === "left" || side === "right" ? size.width : size.height) : value;
+  }
+  return CROP_SIDES.some((side) => out[side] > 0) && out.left + out.right < 1 && out.top + out.bottom < 1 ? out : null;
+}
+
+/**
+ * Where a cropped base draws: the whole recording as a box on the canvas,
+ * sized and placed so that its crop rect is fitted (cover or contain, at
+ * base.focus) exactly as an uncropped recording would be, and clipped to the
+ * crop rect. Base videos, subject mattes and room plates all draw in this
+ * box (object-fit: fill), so they stay aligned; the face track maps through
+ * it. source: the recording's {width, height} (default base.size). Null
+ * without a crop or a size, where media keep the canvas box and object-fit.
+ * → {x, y, width, height, clip: {top, right, bottom, left} (px inside the
+ *   box), origin: {x, y} (the canvas centre inside the box, for transforms)}
+ */
+export function baseMediaBox(base, canvas, source = base?.size) {
+  if (!base?.crop || !source || !(source.width > 0 && source.height > 0)) return null;
+  const crop = { left: 0, right: 0, top: 0, bottom: 0, ...base.crop };
+  const cw = source.width * (1 - crop.left - crop.right), ch = source.height * (1 - crop.top - crop.bottom);
+  const scale = base.fit === "contain" ? Math.min(canvas.width / cw, canvas.height / ch) : Math.max(canvas.width / cw, canvas.height / ch);
+  const width = source.width * scale, height = source.height * scale;
+  const x = (canvas.width - cw * scale) * base.focus.x - crop.left * width;
+  const y = (canvas.height - ch * scale) * base.focus.y - crop.top * height;
+  return {
+    x: round6(x), y: round6(y), width: round6(width), height: round6(height),
+    clip: { top: round6(crop.top * height), right: round6(crop.right * width), bottom: round6(crop.bottom * height), left: round6(crop.left * width) },
+    origin: { x: round6(canvas.width / 2 - x), y: round6(canvas.height / 2 - y) }
+  };
+}
+
+/**
+ * CSS for a media element drawn like the base: the canvas box with the
+ * base's object-fit and object-position, or the crop box (baseMediaBox).
+ * → {left, top, width, height, objectFit, objectPosition, clipPath?, transformOrigin}
+ */
+export function baseMediaStyle(base, canvas, source = base?.size) {
+  const box = baseMediaBox(base, canvas, source);
+  if (!box) return { left: 0, top: 0, width: canvas.width, height: canvas.height, objectFit: base.fit, objectPosition: `${round6(base.focus.x * 100)}% ${round6(base.focus.y * 100)}%`, transformOrigin: "50% 50%" };
+  const c = box.clip;
+  return { left: box.x, top: box.y, width: box.width, height: box.height, objectFit: "fill", objectPosition: "50% 50%", clipPath: `inset(${c.top}px ${c.right}px ${c.bottom}px ${c.left}px)`, transformOrigin: `${box.origin.x}px ${box.origin.y}px` };
 }
 
 function round6(value) {

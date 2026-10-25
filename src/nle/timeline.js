@@ -171,6 +171,7 @@ export function buildTimeline(story, media = {}, options = {}) {
     if (media.base.width && media.base.height && Math.abs(media.base.width / media.base.height - width / height) > 0.01) {
       warnings.push(`the recording is ${media.base.width}x${media.base.height} in a ${width}x${height} timeline; base.fit "${base.fit}" and base.focus are not carried, so set the clip's spatial conform in the editor`);
     }
+    if (base.crop) warnings.push(`base.crop (${["left", "right", "top", "bottom"].filter((side) => base.crop[side] > 0).map((side) => `${side} ${Math.round(base.crop[side] * 1000) / 10}%`).join(", ")}) is not carried; crop the clip in the editor`);
   } else if (base) {
     warnings.push(`base recording ${base.src} was not found; V1 is empty`);
   } else if (media.plate?.source) {
