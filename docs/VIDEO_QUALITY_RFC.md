@@ -4,7 +4,8 @@ Status: draft, open for review
 Date: 2026-10-25
 Builds on: [STORYBOARD_ENGINE_RFC.md](STORYBOARD_ENGINE_RFC.md),
 [SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md),
-[KIT_CONTRACTS.md](KIT_CONTRACTS.md) (style packs, gates, footage-led lane)
+[KIT_CONTRACTS.md](KIT_CONTRACTS.md) (style packs, gates, footage-led lane),
+[ROADMAP.md](ROADMAP.md) ("Animated characters")
 
 ## 1. Summary
 
@@ -34,10 +35,14 @@ plan to it, and verify the render against it.**
 4. **A larger visual vocabulary**: concept cards, brand-tinted icons, simple
    illustrated objects, excerpts, comparisons, timelines, quote and stat
    cards, chosen by intent.
-5. **A style system** that carries layout rules, vocabulary choices, captions,
+5. **Character narratives** for fully animated stories: a built-in cast
+   drawn in code (the roadmap's character kit), directed line by line with
+   poses, expressions and sets, inside the same profiles, direction map and
+   gates as every other format.
+6. **A style system** that carries layout rules, vocabulary choices, captions,
    motion grammar, cadence profile and a brand frame. Customisation is a few
    high-level dials inside measured ranges, plus component overrides.
-6. **A quality loop that judges taste**: a prototype of the opening first,
+7. **A quality loop that judges taste**: a prototype of the opening first,
    candidates on risky beats, and a critic whose rubric includes missed
    opportunities and compares frames against the reference set.
 
@@ -172,6 +177,7 @@ One per format and platform pair, starting with:
 | `youtube-long-form` | footage-led, 5–30 min, 16:9 | YouTube |
 | `explainer-motion` | motion and voiceover-motion, 30–180 s | any |
 | `product-demo` | demo-led, 30–120 s | any |
+| `story-characters` | motion with a cast, 30–180 s, 16:9 or 9:16 | any |
 
 The profile is chosen from the routed lane, aspect, duration and platform,
 which `make` and the skills already know.
@@ -238,7 +244,29 @@ which `make` and the skills already know.
   replaces the "10–40%" prompt rule and joins the subject density budget,
   which becomes a profile measure instead of a fixed cap.
 
-### 6.3 Who writes it
+### 6.3 Narrative maps
+
+For a story told by characters (section 10.5), sections are story beats
+rather than topics: `setup`, `problem`, `attempt`, `turn`, `resolution` and
+`cta`. Each line also says who acts:
+
+```json
+{ "words": [12, 24], "intent": "problem", "treatment": "dress", "scenes": ["desk-fail"],
+  "cast": [{ "id": "maya", "pose": "slump", "expression": "frustrated", "at": "word:again" }],
+  "set": "desk-laptop", "why": "the problem lands on her reaction" }
+```
+
+- Cast entries name characters from the story's cast, and poses and
+  expressions from the kit's named sets. They're cued to words, so acting
+  stays timed to the narration.
+- Validation checks that every named character, pose, expression and set
+  exists, and that a character's identity (its cast entry) never changes
+  inside a story.
+- Narrative profiles measure what story-led videos need: scene length,
+  character screen time, expression changes per minute, and how soon the
+  problem lands.
+
+### 6.4 Who writes it
 
 - **Headless:** `story plan` and `make` ask the model for the direction map
   first (one structured call), then the storyboard against it. The repair loop
@@ -312,6 +340,13 @@ used only under compatible licences, listed in `THIRD_PARTY_NOTICES.md`.
 **Illustrated objects** are composed from the icon set plus brand shapes
 (for example a boat, a box or a calendar), not drawn per video.
 
+**Characters and sets** (section 10.5) are part of the same vocabulary. A
+`cast-scene` module places one or more characters in a set, and a
+`character-cameo` puts one character beside a card or in a footage panel
+(for example someone reacting to a stat). Both draw from the same kit, so an
+explainer can use a character for one beat without becoming a full
+character story.
+
 ## 9. The style system
 
 ### 9.1 What a style carries
@@ -328,6 +363,9 @@ sound, module preferences) with:
   from the user's references.
 - **The brand frame:** a logo, a kicker style, section labels, a progress
   indicator, and where each appears.
+- **A cast:** the drawing style, how the rig's colour slots map to the
+  palette, and the default characters for that brand, so a series reuses the
+  same people.
 - **Caption defaults per lane:** footage-led defaults to a quieter
   sentence-case preset with one accent word. `word-highlight` stays available.
 
@@ -448,6 +486,47 @@ motion grammars and rendered candidates. It gains:
 - a transition-rhythm measure in the motion profiles, so cut and transition
   cadence is checked, not just per-scene timing.
 
+### 10.5 Character narratives
+
+When someone asks for a fully animated story, especially "someone hits the
+problem, then your product fixes it", the planner routes to a story led by
+characters. It builds on the roadmap's **Animated characters** item: our own
+kit, drawn in code, not a vendored one.
+
+- **The kit:** one rig for many people. A character is a mix of build, skin
+  tone, hair, outfit and accessories, coloured through the style's cast
+  mapping. A few dozen ship ready-made. Named poses (`stand`, `point`,
+  `slump`, `type`, `cheer`, …) and expressions (`neutral`, `frustrated`,
+  `delighted`, …) are the only way to direct them, so every shot of a
+  character comes from the same parameters and can't drift.
+- **Sets** fit product stories: a desk and laptop, a phone in hand, a meeting
+  room, and a screen showing the user's own app. The screen plays a real
+  capture from the assets or a demo-autopilot flow, never an invented UI.
+- **Directing:** the narrative map (section 6.3) gives each line its
+  characters, poses, expressions and set, cued to words. The direction map's
+  coverage rules still apply; in this format, coverage is usually close to
+  100% and the profile measures acting instead (expression changes, character
+  screen time, scene length).
+- **Voice:** a single narrator (Kokoro or ElevenLabs) by default. Dialogue
+  gives each speaking character its own voice, chosen once per cast entry and
+  reused across a series. Mouth movement follows the voice's words (open and
+  closed shapes on word timings); full lip sync is an open question.
+- **Mixing formats:** a footage-led or explainer video can borrow a
+  character for a beat (`character-cameo`), and a character story can cut to
+  the product (an insert of the real app) or end on the founder's own
+  footage.
+- **Checks:**
+  - a cast sheet per story (every character in every pose it uses, rendered
+    once), reviewed by the critic;
+  - a consistency gate that the cast entries, poses and sets resolve, and
+    that each character's parameters are identical in every scene;
+  - parity in both renderers, as for every module.
+- **Honesty:** characters are illustrative people, not depictions of real
+  ones. A character based on a real person (for example the founder) is made
+  only from that person's own request and description. Quotes, numbers and
+  product claims spoken by characters follow the same evidence rules as on
+  screen text.
+
 ## 11. The quality loop
 
 ### 11.1 Prototype first
@@ -476,7 +555,11 @@ which fixes the false failure on locked-off talking heads. New gates:
 
 - `missed-opportunity`: a line whose intent calls for a visual and has none;
 - `sparseness`: a run longer than the profile allows;
-- `brand-consistency`: a scene that breaks the style or the brand frame.
+- `brand-consistency`: a scene that breaks the style or the brand frame;
+- `acting`: a pose or expression that doesn't match its line, or a
+  character that holds still while the story moves (character stories);
+- `character-consistency`: a character that looks different between shots
+  (character stories).
 
 The critic also gets a **reference comparison sheet**: render frames beside
 anonymised frames from the profile's own reference set (our own references
@@ -500,6 +583,7 @@ never the shipped defaults, and never sends their data anywhere else.
 | `launchclip finish` | Coverage, direction and style gates; `--prototype` renders the opening only |
 | `launchclip style create --from-reference` | Also measures a cadence profile, layout mix and caption treatment |
 | `launchclip style check` | Becomes a gate when the story names a style |
+| `launchclip cast list / show / sheet` | New. Browse the built-in cast and the style's cast; render a story's cast sheet |
 | `launchclip profile list / show / measure` | New. Inspect shipped profiles; measure a folder of references into one |
 
 **Skills:**
@@ -530,9 +614,11 @@ Small commits, stacked PRs, each green on its own.
 | 8 | Base-edit quality: in-sentence restart decisions, consensus word timing, guarded tail contraction | The Ship Mode raw recording edits clean, with no residue or kept restarts, with no manual retranscription |
 | 9 | Long form: chapters and section cards, attention resets, recurring segments, cut-downs re-planned against the Shorts profile | A 10-minute fixture renders by chapter, and a Short cut from it passes the Shorts profile |
 | 10 | Retention feedback (opt-in) | A connected channel's style profile updates from its retention, and shipped defaults are unchanged |
+| 11 | Character narratives: the kit (rig, cast, poses, expressions, sets) in both renderers, `cast-scene` and `character-cameo`, narrative maps, the `story-characters` profile, cast sheets, the consistency gate, dialogue voices | A two-character "problem, then the product fixes it" example plans from one prompt, renders in both renderers within parity, and passes the cast sheet and consistency gate |
 
 Phases 3 and 5 can run beside phase 2. Phase 8 is independent and can start
-any time.
+any time. Phase 11 needs phases 2, 5 and 6 (the direction map, the
+vocabulary and the style's cast), and its kit work can start beside them.
 
 ## 14. Open questions
 
@@ -551,3 +637,11 @@ any time.
    way. Where do we draw the line before generated imagery, which brings cost,
    consistency and honesty questions?
 7. **Style v3 migration.** Upgrade in place, or keep v2 and add v3 alongside?
+8. **Character mouths.** Are open and closed shapes on word timings enough,
+   or do character stories need phoneme-level lip sync (and a local aligner
+   for it)?
+9. **Drawing styles.** How many drawing styles ship first (flat, outlined,
+   textured paper), and does each need its own rig art or only its own
+   shading?
+10. **Cast in a series.** Should a style's cast be fixed per brand, or chosen
+    per story from a larger cast?
