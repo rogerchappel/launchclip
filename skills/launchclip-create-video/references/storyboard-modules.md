@@ -823,6 +823,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: lines, highlight
+variants: window (default), terminal, document, stack
 
 ### compare (keeps captions)
 A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states.
@@ -836,6 +837,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: left, right
+variants: panels (default), split, table, cards
 
 ### timeline (keeps captions)
 Two to six steps along a line: numbered (or icon) nodes that pop as each step is said while a primary line runs on to them, with a label and optional detail. Vertical in 9:16, across in 16:9 when the labels fit. For a process, a history or a roadmap.
@@ -849,6 +851,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: step-<i>
+variants: rail (default), milestones, cards, stairs
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
