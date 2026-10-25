@@ -7,11 +7,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  AVOID_LOOKS, FONT_PAIRINGS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
+  AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
   fingerprintKey, generateStyle, hexToOklch, nearestStarter, normalizeSeed, oklchToHex, paletteContrast,
   randomSeed, seedSummaryLine, styleDistance, styleFingerprint, toneFromText
 } from "../kit/core/style-seed.mjs";
-import { checkPackContrast, contrastRatio, validateStylePack } from "../kit/core/style.mjs";
+import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "../kit/core/style.mjs";
 import { FONT_REGISTRY, registeredFamily } from "../kit/core/fonts.mjs";
 
 const STYLES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "kit", "styles");
@@ -32,6 +32,28 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
   assert.equal(new Set(fingerprints.map(fingerprintKey)).size, 50);
   for (let i = 0; i < fingerprints.length; i += 1) {
     for (let j = i + 1; j < fingerprints.length; j += 1) assert.ok(styleDistance(fingerprints[i], fingerprints[j]) > 0.02, `${packs[i].name} ~ ${packs[j].name}`);
+  }
+  // Subtle patterns and textures most of the time, not flat fills.
+  assert.ok(packs.filter((pack) => pack.background.kind === "flat").length <= 8);
+  assert.ok(packs.filter((pack) => pack.layouts.panel.fill).length >= 15);
+  const inRange = (kind, params, where, { fill = false } = {}) => {
+    for (const [name, [lo, hi]] of Object.entries(SEED_BACKGROUND_PARAMS[kind] ?? {})) {
+      const top = fill && ["intensity", "amount"].includes(name) ? lo + (hi - lo) * 0.25 : hi;
+      assert.ok(params[name] >= lo && params[name] <= top + 0.01, `${where} ${kind}.${name} ${params[name]}`);
+    }
+  };
+  for (const pack of packs) {
+    inRange(pack.background.kind, pack.background.params, pack.name);
+    for (const surface of [pack.background, pack.layouts.panel.fill].filter(Boolean)) {
+      if (["mesh", "texture"].includes(surface.kind)) assert.equal(surface.params.color, undefined, `${pack.name} ${surface.kind} takes no color`);
+      if (surface.kind === "texture") assert.ok(["noise", "fibre", "canvas", "linen"].includes(surface.params.type));
+    }
+    if (pack.layouts.panel.fill) inRange(pack.layouts.panel.fill.kind, pack.layouts.panel.fill.params, pack.name, { fill: true });
+    if (pack.layouts.panel.fill) assert.notEqual(pack.layouts.panel.fill.kind, "blobs");
+    assert.equal(pack.ambient.background, pack.background.kind === "blobs");
+    const { palette, music, ambience } = pack.sound;
+    assert.ok(palette && music.genre && music.key && Number.isInteger(music.progression) && ambience === "auto", pack.name);
+    assert.ok(music.bpm >= music.bpm_range[0] && music.bpm <= music.bpm_range[1]);
   }
   // The families spread: every theme, several grammars and pairings.
   assert.equal(new Set(packs.map((pack) => pack.generated.theme)).size, 3);
@@ -78,8 +100,10 @@ test("constraints pass through to the fields the kits read", () => {
   assert.ok(["day", "dusk", "night"].includes(pack.world.time));
   assert.equal(pack.cast.set, "chefs");
   assert.equal(pack.cast.drawing_style, "flat");
-  assert.deepEqual(pack.background, { kind: "grain-gradient", params: {} });
-  assert.deepEqual(pack.layouts.panel, { treatment: "outline", radius: 12 });
+  assert.equal(pack.background.kind, "grain-gradient");
+  assert.ok(["none", "center", "top", "bottom", "left", "right"].includes(pack.background.params.fade));
+  assert.equal(pack.layouts.panel.treatment, "outline");
+  assert.equal(pack.layouts.panel.radius, 12);
   assert.deepEqual(pack.generated.constraints, { tone: "warm", theme: "light", world: "kitchen", drawing_style: "flat", character_set: "chefs", background: "grain-gradient", panel: { treatment: "outline", radius: 12 } });
   assert.equal(validateStylePack(pack).ok, true);
   // Pinning one dimension never reshuffles another: each draws its own stream.
@@ -148,8 +172,9 @@ test("validation accepts the seeded fields and rejects bad shapes", () => {
   const good = validateStylePack({
     ...base,
     generated: { seed: "7f3a91c2", generator: GENERATOR_VERSION, tone: "warm", at: "2026-10-26T00:00:00Z" },
-    layouts: { panel: { treatment: "soft-shadow", radius: 18 } },
-    background: { kind: "grain-gradient", params: { angle: 30 } },
+    layouts: { panel: { treatment: "soft-shadow", radius: 18, fill: { kind: "texture", params: { fade: "top" } } } },
+    background: { kind: "grain-gradient", params: { angle: 30, fade: "center" } },
+    sound: { palette: "cinematic", music: { genre: "synth", bpm: 96, key: "F#", progression: 2, bpm_range: [90, 110] }, ambience: "auto", sfx_density: 0.4 },
     vocabulary: { icon_stroke: 1.75, icon_style: "duotone", illustration: "flat-shadow" },
     variants: { "concept-card": "stacked" },
     cast: { drawing_style: "flat", set: "office", members: [{ id: "ada", skin: "tan", hair: { style: "bob", color: "black" } }] },
@@ -159,16 +184,33 @@ test("validation accepts the seeded fields and rejects bad shapes", () => {
   const bad = validateStylePack({
     ...base,
     generated: { seed: "nope", tone: 3, at: "yesterday", extra: 1 },
-    layouts: { panel: { treatment: "chrome" } },
+    layouts: { panel: { treatment: "chrome", fill: { kind: "blobs" }, glow: 1 } },
     background: { kind: "Plaid!", params: 2, angle: 3 },
+    sound: { palette: "Loud!", music: { bpm: 0, key: "H", progression: -1 }, ambience: "", sfx_density: 2 },
     vocabulary: { icon_stroke: 9, icon_style: "filled", illustration: "watercolour" },
     variants: { "concept-card": "" },
     cast: { set: "Office Team", members: [{ id: "ada" }] },
     world: { kind: "", time: "noon" }
   });
   const text = bad.errors.join("\n");
-  for (const pattern of [/generated\.seed/, /generated\.generator/, /generated\.tone/, /generated\.at/, /layouts\.panel\.treatment/, /background\.kind/, /background\.params/, /background\.angle/, /vocabulary\.icon_stroke/, /vocabulary\.icon_style/, /vocabulary\.illustration/, /variants\.concept-card/, /cast\.set/, /cast\.members\[0\]/, /world\.kind/, /world\.time/]) assert.match(text, pattern);
+  for (const pattern of [/generated\.seed/, /generated\.generator/, /generated\.tone/, /generated\.at/, /layouts\.panel\.treatment/, /layouts\.panel\.fill/, /layouts\.panel\.glow/, /sound\.palette/, /sound\.music\.bpm/, /sound\.music\.key/, /sound\.music\.progression/, /sound\.ambience/, /sound\.sfx_density/, /background\.kind/, /background\.params/, /background\.angle/, /vocabulary\.icon_stroke/, /vocabulary\.icon_style/, /vocabulary\.illustration/, /variants\.concept-card/, /cast\.set/, /cast\.members\[0\]/, /world\.kind/, /world\.time/]) assert.match(text, pattern);
   assert.match(bad.warnings.join("\n"), /generated\.extra/);
   assert.match(validateStylePack({ ...base, background: { kind: "plaid" } }).warnings.join("\n"), /background\.kind "plaid"/);
+  assert.match(validateStylePack({ ...base, background: { kind: "blobs", params: { fade: "top" } } }).errors.join("\n"), /fade/);
   assert.equal(contrastRatio("#000000", "#ffffff") > 20, true);
+});
+
+test("applyStyle hands the seeded fields to the story; the story's own values win", () => {
+  const pack = generateStyle({ seed: "7f3a91c2", constraints: { world: "kitchen" } });
+  const story = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, scenes: [], variants: { "concept-card": "stacked" } };
+  const { story: out, applied } = applyStyle(story, pack);
+  assert.deepEqual(out.background, pack.background);
+  assert.deepEqual(out.panel, pack.layouts.panel);
+  assert.deepEqual(out.world, pack.world);
+  assert.equal(out.variants["concept-card"], "stacked");
+  assert.equal(out.variants["icon-row"], pack.variants["icon-row"]);
+  for (const key of ["background", "panel", "world", "variants.icon-row"]) assert.ok(applied.includes(key), key);
+  const own = applyStyle({ ...story, background: { kind: "flat" }, panel: { treatment: "solid" } }, pack).story;
+  assert.deepEqual(own.background, { kind: "flat" });
+  assert.deepEqual(own.panel, { treatment: "solid" });
 });

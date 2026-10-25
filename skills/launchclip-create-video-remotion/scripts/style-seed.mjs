@@ -29,7 +29,7 @@ import { STARTER_IDS } from './characters/cast.mjs';
 import { HAIR_COLORS, SKIN_TONES } from './characters/palette.mjs';
 import { ACCESSORIES, BUILDS, HAIR_STYLES, HEIGHTS, TOPS } from './characters/rig.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
-import { STYLE_FRAME_POSITIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
+import { STYLE_FRAME_POSITIONS, STYLE_MUSIC_GENRES, STYLE_SCHEMA, STYLE_SOUND_PALETTES, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
 export const GENERATOR_VERSION = 'launchclip.style-seed.v1';
 export const SEED_PATTERN = /^[0-9a-f]{8}$/;
@@ -41,7 +41,54 @@ export const TONES = Object.freeze(['calm', 'serious', 'warm', 'energetic', 'pla
 export const THEMES = Object.freeze(['dark', 'light', 'tinted']);
 export const PALETTE_SCHEMES = Object.freeze(['complementary', 'split-complementary', 'analogous', 'triadic', 'monochrome', 'duotone']);
 export const SEED_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
-export const SEED_BACKGROUND_KINDS = Object.freeze(['flat', 'soft-blobs']);
+// Plain flat fills look poor, so subtle patterns and textures carry most of
+// the weight; flat and today's blobs stay possible. Kinds that need content
+// the seed does not have (logo-pattern, icon-pattern, motif) are left to art
+// direction. Each entry is [kind, weight].
+export const SEED_BACKGROUND_KINDS = Object.freeze([['texture', 3], ['grain-gradient', 3], ['dot-grid', 2], ['topographic', 2], ['halftone', 2], ['mesh', 2], ['gradient', 2], ['geometric', 1], ['stripes', 1], ['paper', 1], ['blobs', 1], ['flat', 1]].map(Object.freeze));
+// Fills inside cards and footage panels: quiet textures only.
+export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot-grid', 'halftone', 'topographic']);
+// Per-kind param subranges that read well (from the backgrounds kit; every
+// value inside kit/core/backgrounds.mjs BACKGROUND_PARAMS is contrast-safe).
+// Panel fills take the low quarter of intensity and amount, so card text
+// stays calm. `color` goes only on the kinds that take it (BACKGROUND_OPTIONS
+// in kit/core/backgrounds.mjs); texture also draws its type.
+export const SEED_BACKGROUND_PARAMS = Object.freeze({
+  texture: { amount: [0.3, 0.8], scale: [0.8, 1.4] },
+  'grain-gradient': { angle: [0, 360], intensity: [0.25, 0.7], grain: [0.2, 0.6] },
+  gradient: { angle: [0, 360], intensity: [0.25, 0.7] },
+  'dot-grid': { scale: [0.7, 1.5], density: [0.2, 0.7], intensity: [0.3, 0.7] },
+  topographic: { density: [0.3, 0.8], scale: [0.8, 1.4], intensity: [0.3, 0.6] },
+  halftone: { angle: [0, 360], scale: [0.7, 1.4], intensity: [0.3, 0.7] },
+  mesh: { intensity: [0.3, 0.7], scale: [0.7, 1.6] },
+  geometric: { density: [0.3, 0.7], scale: [0.8, 1.5], intensity: [0.3, 0.6] },
+  stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.2, 0.5] },
+  paper: { grain: [0.3, 0.7], intensity: [0.2, 0.6] }
+});
+const COLOR_KINDS = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays']);
+export const SEED_TEXTURES = Object.freeze(['noise', 'fibre', 'canvas', 'linen']);
+const CALM_PARAMS = new Set(['intensity', 'amount']);
+
+/** Seeded params for a background kind (a panel fill keeps intensity low). */
+function drawBackgroundParams(s, kind, { fill = false } = {}) {
+  const params = {};
+  for (const [name, [lo, hi]] of Object.entries(SEED_BACKGROUND_PARAMS[kind] ?? {})) {
+    const top = fill && CALM_PARAMS.has(name) ? lo + (hi - lo) * 0.25 : hi;
+    params[name] = name === 'angle' ? Math.round(s.range(lo, top)) : round(s.range(lo, top), 2);
+  }
+  const color = s.pick(['primary', 'accent', 'paper']);
+  const texture = s.pick(SEED_TEXTURES);
+  if (COLOR_KINDS.has(kind)) params.color = color;
+  if (kind === 'texture') params.type = texture;
+  return params;
+}
+
+export const SEED_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
+export const PANEL_FILL_CHANCE = 0.6;
+export const SEED_SOUND_PALETTES = STYLE_SOUND_PALETTES;
+export const SEED_MUSIC_GENRES = STYLE_MUSIC_GENRES;
+export const SEED_MUSIC_KEYS = Object.freeze(['C', 'D', 'E', 'F', 'G', 'A', 'Bb', 'Eb', 'F#']);
+export const SEED_PROGRESSIONS = 4;
 export const SEED_ICON_STYLES = Object.freeze(['outline']);
 export const SEED_ILLUSTRATIONS = Object.freeze(['flat']);
 export const SEED_DRAWING_STYLES = DRAWING_STYLES;
@@ -79,7 +126,29 @@ export const FONT_PAIRINGS = Object.freeze([
   { id: 'instrument-inter', display: 'instrument-serif', body: 'inter', case: 'title', weight: 400, tones: ['premium', 'calm', 'warm', 'serious'] },
   { id: 'instrument-space', display: 'instrument-serif', body: 'space-grotesk', case: 'title', weight: 400, tones: ['premium', 'warm'] },
   { id: 'stix-space', display: 'stix-two-text', body: 'space-grotesk', case: 'title', weight: 600, tones: ['serious', 'calm', 'premium'] },
-  { id: 'stix-bricolage', display: 'stix-two-text', body: 'bricolage-grotesque', case: 'title', weight: 600, tones: ['warm', 'serious'] }
+  { id: 'stix-bricolage', display: 'stix-two-text', body: 'bricolage-grotesque', case: 'title', weight: 600, tones: ['warm', 'serious'] },
+  { id: 'anton-manrope', display: 'anton', body: 'manrope', case: 'upper', weight: 400, tones: ['energetic', 'serious'] },
+  { id: 'bebas-dm', display: 'bebas-neue', body: 'dm-sans', case: 'upper', weight: 400, tones: ['energetic', 'technical', 'serious'] },
+  { id: 'bebas-manrope', display: 'bebas-neue', body: 'manrope', case: 'upper', weight: 400, tones: ['energetic', 'playful'] },
+  { id: 'oswald-jakarta', display: 'oswald', body: 'plus-jakarta-sans', case: 'upper', weight: 600, tones: ['energetic', 'serious'] },
+  { id: 'oswald-dm', display: 'oswald', body: 'dm-sans', case: 'upper', weight: 600, tones: ['technical', 'serious'] },
+  { id: 'shoulders-outfit', display: 'big-shoulders-display', body: 'outfit', case: 'upper', weight: 800, tones: ['energetic', 'playful'] },
+  { id: 'shoulders-manrope', display: 'big-shoulders-display', body: 'manrope', case: 'upper', weight: 800, tones: ['technical', 'energetic'], meta: 'fira-code' },
+  { id: 'fraunces-dm', display: 'fraunces', body: 'dm-sans', case: 'title', weight: 600, tones: ['warm', 'playful', 'calm'] },
+  { id: 'fraunces-manrope', display: 'fraunces', body: 'manrope', case: 'title', weight: 700, tones: ['warm', 'premium'] },
+  { id: 'playfair-dm', display: 'playfair-display', body: 'dm-sans', case: 'title', weight: 700, tones: ['premium', 'serious'] },
+  { id: 'playfair-lexend', display: 'playfair-display', body: 'lexend', case: 'title', weight: 600, tones: ['premium', 'calm'] },
+  { id: 'dmserif-jakarta', display: 'dm-serif-display', body: 'plus-jakarta-sans', case: 'title', weight: 400, tones: ['premium', 'warm', 'calm'] },
+  { id: 'dmserif-outfit', display: 'dm-serif-display', body: 'outfit', case: 'title', weight: 400, tones: ['calm', 'warm'] },
+  { id: 'young-dm', display: 'young-serif', body: 'dm-sans', case: 'title', weight: 400, tones: ['warm', 'playful'] },
+  { id: 'young-lexend', display: 'young-serif', body: 'lexend', case: 'title', weight: 400, tones: ['warm', 'calm'] },
+  { id: 'sora-dm', display: 'sora', body: 'dm-sans', case: 'title', weight: 700, tones: ['technical', 'calm'], meta: 'fira-code' },
+  { id: 'lexend-manrope', display: 'lexend', body: 'manrope', case: 'title', weight: 700, tones: ['technical', 'playful'] },
+  { id: 'outfit-sora', display: 'outfit', body: 'sora', case: 'title', weight: 800, tones: ['playful', 'energetic'] },
+  { id: 'jakarta-dm', display: 'plus-jakarta-sans', body: 'dm-sans', case: 'title', weight: 800, tones: ['technical', 'calm', 'premium'], meta: 'fira-code' },
+  { id: 'unbounded-outfit', display: 'unbounded', body: 'outfit', case: 'title', weight: 700, tones: ['playful'] },
+  { id: 'syne-dm', display: 'syne', body: 'dm-sans', case: 'title', weight: 700, tones: ['premium', 'technical'] },
+  { id: 'space-fira', display: 'space-grotesk', body: 'inter', case: 'title', weight: 700, tones: ['technical'], meta: 'fira-code' }
 ].map((entry) => Object.freeze({ meta: 'jetbrains-mono', ...entry, tones: Object.freeze(entry.tones) })));
 
 // Tone → the families it narrows to (§3.3). `null` (no tone words) leaves
@@ -413,6 +482,14 @@ function drawCast(s) {
 // ---------------------------------------------------------------------------
 // The pack
 
+/** One kind from [[kind, weight], ...]. */
+function weighted(s, entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let at = s.random() * total;
+  for (const [kind, weight] of entries) { at -= weight; if (at < 0) return kind; }
+  return entries.at(-1)[0];
+}
+
 const asObject = (value, key) => (value == null ? null : typeof value === 'string' ? { [key]: value } : value);
 
 /** Clean constraints: only CONSTRAINT_KEYS, strings trimmed, empty values dropped. Throws on a tone or theme it does not know. */
@@ -492,10 +569,19 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const panel = { treatment: panelFixed.treatment ?? treatment, radius: panelFixed.radius ?? radius };
   const surface = draw('background');
   const backgroundFixed = asObject(fixed.background, 'kind') ?? {};
-  const kind = backgroundFixed.kind ?? surface.pick(SEED_BACKGROUND_KINDS);
-  const background = { kind, params: backgroundFixed.params ?? (kind === 'soft-blobs' ? { density: round(surface.range(0.3, 0.8), 2), scale: round(surface.range(0.8, 1.4), 2) } : {}) };
+  const drawn = weighted(surface, SEED_BACKGROUND_KINDS);
+  const fade = surface.pick(SEED_FADES);
+  const kind = backgroundFixed.kind ?? drawn;
+  const drawnParams = drawBackgroundParams(draw('background-params'), kind);
+  const background = { kind, params: backgroundFixed.params ?? (kind === 'blobs' ? {} : { ...drawnParams, fade }) };
+  const fillStream = draw('panel-fill');
+  const fillKind = fillStream.pick(SEED_PANEL_FILLS);
+  const fillFade = fillStream.pick(SEED_FADES);
+  const fillParams = drawBackgroundParams(fillStream, fillKind, { fill: true });
+  if (panelFixed.fill === undefined && panel.treatment !== 'glass' && fillStream.chance(PANEL_FILL_CHANCE)) panel.fill = { kind: fillKind, params: { ...fillParams, fade: fillFade } };
+  else if (panelFixed.fill) panel.fill = panelFixed.fill;
   let level = motion.pick(t.ambient);
-  if (kind === 'soft-blobs' && level === 'off') level = 'subtle';
+  if (kind === 'blobs' && level === 'off') level = 'subtle';
 
   const captionsStream = draw('captions');
   const presets = GRAMMAR_CAPTIONS[grammar].filter((name) => palette.dark || LIGHT_CAPTIONS.has(name));
@@ -539,9 +625,14 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     brand: { colors: palette.colors, fonts },
     motion: { grammar, transition_preference: preference },
     camera,
-    ambient: { level, background: kind === 'soft-blobs' },
+    ambient: { level, background: kind === 'blobs' },
     captions: { preset: caption, position: 'auto', lanes: { 'footage-led': { ...STYLE_V3_DEFAULTS.caption_lanes['footage-led'] } } },
-    sound: { sfx_density: t.sfx, music: { prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...t.bpm] } },
+    sound: {
+      palette: music.pick(SEED_SOUND_PALETTES),
+      music: { genre: music.pick(SEED_MUSIC_GENRES), bpm: Math.round(music.range(t.bpm[0], t.bpm[1])), key: music.pick(SEED_MUSIC_KEYS), progression: Math.floor(music.random() * SEED_PROGRESSIONS), prompt_hints: [music.pick(t.music), music.pick(t.music)].filter((v, i, list) => list.indexOf(v) === i), bpm_range: [...t.bpm] },
+      ambience: 'auto',
+      sfx_density: t.sfx
+    },
     layout: { title_case: pairing.case === 'title' },
     layouts: { by_intent: {}, by_section: {}, panel },
     background,
