@@ -1,18 +1,23 @@
-// The icon set (docs/VIDEO_QUALITY_RFC.md §8): one in-repo family of line
-// icons, drawn for LaunchClip as original geometry. Every icon is SVG path
-// data in a 24-unit box, stroked (never filled) at ICON_STROKE units with
-// round caps and joins, and keeps a 2-unit margin so mixed icons sit
+// The icon set (docs/VIDEO_QUALITY_RFC.md §8): LaunchClip's own line icons,
+// drawn as original geometry, plus the Lucide set (ISC, vendored as path
+// data in kit/core/icons-lucide.mjs by scripts/vendor-lucide.mjs). Both share
+// one grammar: SVG path data in a 24-unit box, stroked at ICON_STROKE units
+// with round caps and joins, with a 2-unit margin, so mixed icons sit
 // together as one set. Corners of boxes use a 1.5–2 unit radius.
 //
 // Names are stable kebab-case ids the planner can pick (`icon: "shield"`);
-// never rename one, only add. Icons carry no colour: modules tint them from
-// the brand (iconNode's `color`), and both renderers draw them through the
-// shared view tree as one <path> inside an <svg>.
+// never rename one, only add. When a Lucide name matches one of LaunchClip's
+// own, LaunchClip's drawing keeps the name. Icons carry no colour: modules
+// tint them from the brand (iconNode's `color`), and both renderers draw them
+// through the shared view tree as <path>s inside an <svg>. Two styles
+// (ICON_STYLES): "stroke" (the default) and "duotone", which lays a
+// translucent tint of the colour under the icon's closed shapes.
 //
 // Contract: docs/KIT_CONTRACTS.md ("Icon set"). Contact sheet:
 // `node scripts/icon-sheet.mjs out.png`.
 
 import {el} from './catalog-b-view.mjs';
+import {LUCIDE} from './icons-lucide.mjs';
 
 export const ICON_BOX = 24;
 export const ICON_STROKE = 2;
@@ -31,7 +36,7 @@ const pg = points => `${pl(points)} Z`;
 const ln = (x1, y1, x2, y2) => `M${n(x1)} ${n(y1)} L${n(x2)} ${n(y2)}`;
 /** A round dot: a zero-length stroke with a round cap. */
 const dot = (x, y) => `M${n(x)} ${n(y)} h.01`;
-const circle = (cx, cy, r) => `M${n(cx - r)} ${n(cy)} a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0 a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0`;
+const circle = (cx, cy, r) => `M${n(cx - r)} ${n(cy)} a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0 a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0 Z`;
 /** Rounded rectangle. */
 const rr = (x, y, w, h, r) => `M${n(x + r)} ${n(y)} H${n(x + w - r)} a${n(r)} ${n(r)} 0 0 1 ${n(r)} ${n(r)} V${n(y + h - r)} a${n(r)} ${n(r)} 0 0 1 ${n(-r)} ${n(r)} H${n(x + r)} a${n(r)} ${n(r)} 0 0 1 ${n(-r)} ${n(-r)} V${n(y + r)} a${n(r)} ${n(r)} 0 0 1 ${n(r)} ${n(-r)} Z`;
 /** Circular arc, clockwise from a0 to a1 (a1 > a0, may pass 360). */
@@ -41,7 +46,7 @@ const head = (x, y, deg, len = 4, spread = 42) => `M${P(pt(x, y, len, deg + 180 
 /** Ellipse turned by `rot` degrees about its centre. */
 const ellipse = (cx, cy, rx, ry, rot = 0) => {
   const a = pt(cx, cy, rx, rot), b = pt(cx, cy, rx, rot + 180);
-  return `M${P(a)} A${n(rx)} ${n(ry)} ${n(rot)} 1 1 ${P(b)} A${n(rx)} ${n(ry)} ${n(rot)} 1 1 ${P(a)}`;
+  return `M${P(a)} A${n(rx)} ${n(ry)} ${n(rot)} 1 1 ${P(b)} A${n(rx)} ${n(ry)} ${n(rot)} 1 1 ${P(a)} Z`;
 };
 /** Regular star (points ≥ 4). */
 const star = (cx, cy, outer, inner, points = 5, turn = -90) => pg(Array.from({length: points * 2}, (_, i) => pt(cx, cy, i % 2 ? inner : outer, turn + i * 180 / points)));
@@ -268,10 +273,27 @@ const DRAWN = {
   anchor: join(circle(12, 5, 2), ln(12, 7, 12, 21), ln(8.5, 10.5, 15.5, 10.5), 'M4.5 13.5 C5 18 8 21 12 21 C16 21 19 18 19.5 13.5', pl([[3, 15], [4.5, 13.5], [6.5, 15]]), pl([[17.5, 15], [19.5, 13.5], [21, 15]]))
 };
 
-/** name → SVG path data in the 24-unit box. */
-export const ICONS = Object.freeze({...DRAWN});
-/** Every icon name, in contact-sheet order. */
+const LUCIDE_ONLY = Object.keys(LUCIDE).filter(name => !Object.hasOwn(DRAWN, name));
+const strokeOf = entry => (Array.isArray(entry) ? entry[0] : entry);
+
+/** name → SVG path data in the 24-unit box (LaunchClip's drawings, then Lucide's). */
+export const ICONS = Object.freeze({...DRAWN, ...Object.fromEntries(LUCIDE_ONLY.map(name => [name, strokeOf(LUCIDE[name])]))});
+/** Every icon name, in contact-sheet order: LaunchClip's own first. */
 export const ICON_NAMES = Object.freeze(Object.keys(ICONS));
+/** name → "launchclip" | "lucide": where each drawing comes from. */
+export const ICON_SOURCES = Object.freeze(Object.fromEntries(ICON_NAMES.map(name => [name, Object.hasOwn(DRAWN, name) ? 'launchclip' : 'lucide'])));
+/** name → path data Lucide fills (small dots), drawn solid in the icon colour. */
+export const ICON_SOLIDS = Object.freeze(Object.fromEntries(LUCIDE_ONLY.filter(name => Array.isArray(LUCIDE[name])).map(name => [name, LUCIDE[name][1]])));
+/** The icon styles iconNode draws. */
+export const ICON_STYLES = Object.freeze(['stroke', 'duotone']);
+
+/**
+ * The closed shapes of `d` (each run from an absolute M that ends in Z), for
+ * a duotone tint. Open strokes (lines, arrows, ticks) take no tint.
+ */
+export function closedPath(d) {
+  return String(d).split(/(?=M)/).map(part => part.trim()).filter(part => /[Zz]$/.test(part)).join(' ');
+}
 
 export const isIcon = name => typeof name === 'string' && Object.hasOwn(ICONS, name);
 
@@ -284,14 +306,21 @@ export function iconPath(name) {
 }
 
 /**
- * View node for one icon: an <svg> of `size` px at (x, y) holding one stroked
- * <path>. `stroke` is in box units (ICON_STROKE by default), so the weight
- * scales with the size. `style` is merged into the svg's style (opacity,
- * transforms); `id` lets a timeline animate it.
+ * View node for one icon: an <svg> of `size` px at (x, y). The stroked <path>
+ * comes first; a Lucide icon with filled dots adds a solid <path>; `mode:
+ * "duotone"` puts a tint of the closed shapes underneath (`tint`, default the
+ * colour, at `tintOpacity`, default 0.28; an icon with no closed shape draws
+ * as stroke only). `stroke` is in box units (ICON_STROKE by default), so the
+ * weight scales with the size. `style` is merged into the svg's style
+ * (opacity, transforms); `id` lets a timeline animate it.
  */
-export function iconNode(name, {id = null, x = 0, y = 0, size = 48, color = '#ffffff', stroke = ICON_STROKE, style = {}} = {}) {
+export function iconNode(name, {id = null, x = 0, y = 0, size = 48, color = '#ffffff', stroke = ICON_STROKE, style = {}, mode = 'stroke', tint = null, tintOpacity = 0.28} = {}) {
   const d = iconPath(name);
-  return el('svg', id, {position: 'absolute', left: x, top: y, width: size, height: size, overflow: 'visible', ...style}, [
-    el('path', null, null, [], {d, stroke: color, strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none'})
-  ], {width: size, height: size, viewBox: `0 0 ${ICON_BOX} ${ICON_BOX}`, fill: 'none'});
+  if (!ICON_STYLES.includes(mode)) throw new Error(`icon mode must be one of ${ICON_STYLES.join(', ')}; got ${JSON.stringify(mode)}`);
+  const paths = [el('path', null, null, [], {d, stroke: color, strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none'})];
+  if (ICON_SOLIDS[name]) paths.push(el('path', null, null, [], {d: ICON_SOLIDS[name], fill: color, stroke: color, strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round'}));
+  const closed = mode === 'duotone' ? closedPath(d) : '';
+  if (closed) paths.unshift(el('path', null, null, [], {d: closed, fill: tint ?? color, fillOpacity: tintOpacity, stroke: 'none'}));
+  return el('svg', id, {position: 'absolute', left: x, top: y, width: size, height: size, overflow: 'visible', ...style}, paths,
+    {width: size, height: size, viewBox: `0 0 ${ICON_BOX} ${ICON_BOX}`, fill: 'none'});
 }

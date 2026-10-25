@@ -34,6 +34,7 @@ export const SAMPLES = Object.freeze({
   'tooltip': {title: 'New', text: 'Drop a recording here to cut it'},
   'callout-arrow': {text: 'Your brand colours'},
   'motion-title': {kicker: 'Launch week', text: 'Ship the video with the feature', highlight: 'video', sub: 'One prompt, every format'},
+  'icon-grid': {title: 'Everything in one prompt', items: [{icon: 'clapperboard', label: 'Scenes'}, {icon: 'captions', label: 'Captions'}, {icon: 'audio-waveform', label: 'Voice'}, {icon: 'palette', label: 'Brand'}, {icon: 'smartphone', label: 'Shorts'}, {icon: 'monitor-play', label: 'YouTube'}]},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 

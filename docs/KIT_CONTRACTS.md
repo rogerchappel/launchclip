@@ -2049,23 +2049,39 @@ caption band.
 
 ## Icon set (`kit/core/icons.mjs`)
 
-One in-repo family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md)
-§8), drawn for LaunchClip as original geometry (no third-party paths).
+One family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):
+LaunchClip's own 173, drawn as original geometry, plus the Lucide set (ISC,
+1,903 icons, `kit/core/icons-lucide.mjs`, vendored by
+`node scripts/vendor-lucide.mjs <unpacked lucide-static package>`; see
+THIRD_PARTY_NOTICES.md). 1,935 names in all: 141 Lucide names match LaunchClip's own, which keep them.
 
 - Every icon is SVG path data in a 24-unit box (`ICON_BOX`), stroked at
-  `ICON_STROKE` (2 units) with round caps and joins, never filled, with a
-  2-unit margin. Boxes use a 1.5–2 unit corner radius.
+  `ICON_STROKE` (2 units) with round caps and joins, with a 2-unit margin.
+  Lucide uses the same grammar, so the two sets mix. The vendor script turns
+  Lucide's circles, rects, lines and polygons into path data; the few dots
+  Lucide fills are a separate solid layer (`ICON_SOLIDS`).
+- When a Lucide name matches one of LaunchClip's own, LaunchClip's drawing
+  keeps the name, so every existing name looks as it did. `ICON_SOURCES`
+  says which set each name draws from; `ICON_NAMES` lists LaunchClip's first.
+- Styles (`ICON_STYLES`): `stroke` (the default) and `duotone`. Duotone lays a
+  tint (`tint`, default the icon colour, at `tintOpacity`, default 0.28) under
+  the icon's closed shapes (`closedPath(d)`: each run from an absolute `M`
+  that ends in `Z`); an icon with no closed shape draws as stroke only.
 - Names are stable kebab-case ids (`shield`, `rocket`, `code`, `bolt`,
   `calendar`, `chart-up`, `users`, `lock`, `check`, …). Add icons, never
   rename or remove one. `ICON_NAMES` lists them in contact-sheet order.
 - `iconPath(name)` returns the path data and throws on an unknown name with
   close matches; `isIcon(name)` tests one.
-- `iconNode(name, {id?, x, y, size, color, stroke?, style?})` returns a view
-  node (an `<svg>` holding one `<path>`), so both renderers draw icons through
-  the shared view tree. Modules tint icons from brand colours; the stroke is
+- `iconNode(name, {id?, x, y, size, color, stroke?, style?, mode?, tint?,
+  tintOpacity?})` returns a view node (an `<svg>` of `<path>`s: the tint, the
+  stroke, then any solid dots), so both renderers draw icons through the
+  shared view tree. Modules tint icons from brand colours; the stroke is
   in box units, so the weight scales with the size.
-- `node scripts/icon-sheet.mjs out.png` renders every icon at 96 px and 24 px
-  for a check by eye (`--html`, `--color`, `--bg`).
+- `node scripts/icon-sheet.mjs out.png` renders every icon for a check by eye
+  (`--html`, `--color`, `--bg`, `--mode duotone`, `--source launchclip|lucide`,
+  `--cols`, `--cell`).
+- `icon-grid` (catalogue H) shows 2–12 icons in a stroke, duotone or tiles
+  variant.
 
 ## Catalogue G (`kit/core/catalog-g.mjs`)
 

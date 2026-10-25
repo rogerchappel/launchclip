@@ -172,6 +172,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | points at one thing on screen ("see this", "right here", "this button"): an arrow draws from a label to the spot and rings it | callout-arrow |
 | explains one control or spot in the product ("hover", "click here", "tap"): a dot lands on it and a tooltip rises beside it | tooltip |
 | announces or names something in a few words ("announcing", "introducing", "say hello to"): a title built by the style's text effect, with a kicker and sub-line | motion-title |
+| lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels | icon-grid |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -1303,6 +1304,18 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: title
 
+### icon-grid (keeps captions)
+A grid of 2–12 icons from the icon set (1,935: LaunchClip's own and Lucide's) that pop in on a stagger, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.
+params:
+- items: [icon name | {icon, label? ≤ 22}] 2–12
+- title: string ≤ 60 (optional)
+- columns: integer 1–6 (default by count and aspect)
+- tone: primary | accent | paper | #rrggbb
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1419,6 +1432,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | tooltip | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
+| icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 
