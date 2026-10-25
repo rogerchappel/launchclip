@@ -46,6 +46,7 @@ import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.j
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
 import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
+import { dialogueRequests, dialogueText, synthesizeDialogue } from "./voice/dialogue.js";
 import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
@@ -591,12 +592,25 @@ const STAGES = [
       }
       // Provider defaults fill voice and speed (Kokoro: af_heart at 1.2), the
       // same request `launchclip voice` measures, so its cached take is reused.
+      if (Array.isArray(narration.lines)) {
+        // Dialogue: one take per line in its speaker's voice (src/voice/dialogue.js).
+        const dialogue = dialogueRequests(ctx.copy, ctx.options.voice ? { provider } : {});
+        return { inputHash: hashValue({ dialogue }), outputs: [PATHS.voice, PATHS.words], request: { dialogue } };
+      }
       const request = narrationRequest(narration, { provider });
       if (provider === "supplied") request.source = supplied ? await fileHash(path.join(ctx.project, supplied)) : null;
       return { inputHash: hashValue(request), outputs: [PATHS.voice, PATHS.words], request };
     },
     async run(ctx, { request }) {
       const outFile = path.join(ctx.project, PATHS.voice);
+      if (request.dialogue) {
+        const take = await synthesizeDialogue(request.dialogue, { outFile, cacheDir: voiceCacheDir(ctx.project), voiceProvider: ctx.adapters.voiceProvider, normalizeVoice: ctx.adapters.normalizeVoice });
+        const first = request.dialogue[0].request;
+        await writeJson(path.join(ctx.project, PATHS.words), { ...narrationDocument({ ...first, voice: null, text: dialogueText(ctx.copy) }, take), lines: take.lines });
+        const details = { provider: first.provider, voice: null, voices: [...new Set(take.lines.map((line) => `${line.speaker}:${line.voice}`))], speed: first.speed, duration_seconds: take.duration, word_count: take.words.length, voice_file: PATHS.voice, words_file: PATHS.words, cached_take: take.cached };
+        STAGES[0].restore(ctx, details);
+        return details;
+      }
       // Synthesised voices arrive at their engine's level (Kokoro is about
       // -22 LUFS), which leaves too little voice-to-music margin in the mix,
       // so synthesizeNarration brings them to the -17 LUFS supplied
@@ -665,12 +679,17 @@ const STAGES = [
       ctx.warnings.push(...second.warnings);
       ctx.resolved = resolved;
       ctx.boundaries = deriveBoundaries(resolved);
+      // Character stories: the cast resolves and every character is the same
+      // person in every scene (src/cast.js castGate).
+      const { castGate } = await import("./cast.js");
+      ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
+      if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject } = await import("./layout_check.js");
       const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       await writeResolvedCopy(ctx);
-      const details = { scenes: resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -1046,6 +1065,8 @@ async function runGates(ctx) {
   // already fallen back (status "fallback", with the scene changes).
   const subjectGate = ctx.subjectGate ?? ctx.state.stages?.validate?.details?.subject;
   if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
+  const castGate = ctx.castGate ?? ctx.state.stages?.validate?.details?.cast;
+  if (castGate && castGate.status !== "skipped") gates.cast = castGate;
 
   const master = ctx.state.stages?.master?.details;
   gates.loudness = !master
@@ -1438,7 +1459,8 @@ async function loadWords(project, story) {
   const file = typeof story?.audio?.words === "string" ? path.join(project, story.audio.words) : null;
   if (!file || !existsSync(file)) return null;
   const words = narrationWords(await readJson(file, story.audio.words));
-  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end) }));
+  // A dialogue's words keep their speaker (character scenes' says: "auto").
+  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}) }));
 }
 
 // Every assets/ path referenced anywhere in the resolved story.

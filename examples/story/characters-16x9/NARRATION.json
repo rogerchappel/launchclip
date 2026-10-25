@@ -1,0 +1,256 @@
+{
+  "words": [
+    {
+      "text": "Every",
+      "start": 0.3,
+      "end": 0.685,
+      "speaker": "narrator"
+    },
+    {
+      "text": "launch,",
+      "start": 0.735,
+      "end": 1.165,
+      "speaker": "narrator"
+    },
+    {
+      "text": "Maya",
+      "start": 1.325,
+      "end": 1.665,
+      "speaker": "narrator"
+    },
+    {
+      "text": "rebuilds",
+      "start": 1.715,
+      "end": 2.235,
+      "speaker": "narrator"
+    },
+    {
+      "text": "the",
+      "start": 2.285,
+      "end": 2.58,
+      "speaker": "narrator"
+    },
+    {
+      "text": "demo",
+      "start": 2.63,
+      "end": 2.97,
+      "speaker": "narrator"
+    },
+    {
+      "text": "video",
+      "start": 3.02,
+      "end": 3.405,
+      "speaker": "narrator"
+    },
+    {
+      "text": "by",
+      "start": 3.455,
+      "end": 3.705,
+      "speaker": "narrator"
+    },
+    {
+      "text": "hand.",
+      "start": 3.755,
+      "end": 4.095,
+      "speaker": "narrator"
+    },
+    {
+      "text": "And",
+      "start": 4.555,
+      "end": 4.85,
+      "speaker": "narrator"
+    },
+    {
+      "text": "every",
+      "start": 4.9,
+      "end": 5.285,
+      "speaker": "narrator"
+    },
+    {
+      "text": "time,",
+      "start": 5.335,
+      "end": 5.675,
+      "speaker": "narrator"
+    },
+    {
+      "text": "it",
+      "start": 5.835,
+      "end": 6.085,
+      "speaker": "narrator"
+    },
+    {
+      "text": "breaks.",
+      "start": 6.135,
+      "end": 6.565,
+      "speaker": "narrator"
+    },
+    {
+      "text": "Not",
+      "start": 7.025,
+      "end": 7.32,
+      "speaker": "maya"
+    },
+    {
+      "text": "again.",
+      "start": 7.37,
+      "end": 7.755,
+      "speaker": "maya"
+    },
+    {
+      "text": "Three",
+      "start": 7.915,
+      "end": 8.3,
+      "speaker": "maya"
+    },
+    {
+      "text": "hours,",
+      "start": 8.35,
+      "end": 8.735,
+      "speaker": "maya"
+    },
+    {
+      "text": "gone.",
+      "start": 8.895,
+      "end": 9.235,
+      "speaker": "maya"
+    },
+    {
+      "text": "Try",
+      "start": 9.695,
+      "end": 9.99,
+      "speaker": "theo"
+    },
+    {
+      "text": "Pulseboard.",
+      "start": 10.04,
+      "end": 10.65,
+      "speaker": "theo"
+    },
+    {
+      "text": "It",
+      "start": 10.81,
+      "end": 11.06,
+      "speaker": "theo"
+    },
+    {
+      "text": "records",
+      "start": 11.11,
+      "end": 11.585,
+      "speaker": "theo"
+    },
+    {
+      "text": "the",
+      "start": 11.635,
+      "end": 11.93,
+      "speaker": "theo"
+    },
+    {
+      "text": "product",
+      "start": 11.98,
+      "end": 12.455,
+      "speaker": "theo"
+    },
+    {
+      "text": "flow",
+      "start": 12.505,
+      "end": 12.845,
+      "speaker": "theo"
+    },
+    {
+      "text": "for",
+      "start": 12.895,
+      "end": 13.19,
+      "speaker": "theo"
+    },
+    {
+      "text": "you.",
+      "start": 13.24,
+      "end": 13.535,
+      "speaker": "theo"
+    },
+    {
+      "text": "Every",
+      "start": 13.995,
+      "end": 14.38,
+      "speaker": "narrator"
+    },
+    {
+      "text": "release",
+      "start": 14.43,
+      "end": 14.905,
+      "speaker": "narrator"
+    },
+    {
+      "text": "gets",
+      "start": 14.955,
+      "end": 15.295,
+      "speaker": "narrator"
+    },
+    {
+      "text": "a",
+      "start": 15.345,
+      "end": 15.55,
+      "speaker": "narrator"
+    },
+    {
+      "text": "fresh",
+      "start": 15.6,
+      "end": 15.985,
+      "speaker": "narrator"
+    },
+    {
+      "text": "demo.",
+      "start": 16.035,
+      "end": 16.375,
+      "speaker": "narrator"
+    },
+    {
+      "text": "No",
+      "start": 16.535,
+      "end": 16.785,
+      "speaker": "narrator"
+    },
+    {
+      "text": "rebuilds.",
+      "start": 16.835,
+      "end": 17.355,
+      "speaker": "narrator"
+    },
+    {
+      "text": "Ship",
+      "start": 17.815,
+      "end": 18.155,
+      "speaker": "maya"
+    },
+    {
+      "text": "the",
+      "start": 18.205,
+      "end": 18.5,
+      "speaker": "maya"
+    },
+    {
+      "text": "video",
+      "start": 18.55,
+      "end": 18.935,
+      "speaker": "maya"
+    },
+    {
+      "text": "with",
+      "start": 18.985,
+      "end": 19.325,
+      "speaker": "maya"
+    },
+    {
+      "text": "the",
+      "start": 19.375,
+      "end": 19.67,
+      "speaker": "maya"
+    },
+    {
+      "text": "launch!",
+      "start": 19.72,
+      "end": 20.15,
+      "speaker": "maya"
+    }
+  ]
+}
