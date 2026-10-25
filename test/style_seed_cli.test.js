@@ -43,6 +43,9 @@ test("style generate writes one seed's pack, the same every time", async () => {
     assert.deepEqual({ ...pack, generated: provenance }, again);
     assert.match(result.summary, /^seed 7f3a91c2 \(light, /);
     await assert.rejects(cli(["style", "generate", "--seed", "7f3a91c2", "--out", path.join(dir, "look")]), /already exists/);
+    const fitted = await cli(["style", "generate", "--seed", "00000003", "--world", "kitchen,cafe", "--world", "home-desk"]);
+    assert.ok(["kitchen", "cafe", "home-desk"].includes(fitted.pack.world.kind));
+    assert.deepEqual(fitted.pack.generated.constraints.world, ["kitchen", "cafe", "home-desk"]);
     const printed = await cli(["style", "generate", "--seed", "00000001"]);
     assert.equal(printed.pack.name, "seed-00000001");
     await assert.rejects(cli(["style", "generate", "--seed", "nothex"]), /8 hex characters/);

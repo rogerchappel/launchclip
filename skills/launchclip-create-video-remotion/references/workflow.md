@@ -149,6 +149,11 @@ a seed vary the look inside it (docs/SEEDED_STYLES_RFC.md):
    tinted), `world`, `drawing_style`, `character_set`, `background` and
    `panel`. A cooking video might be warm and light; a security explainer
    serious and dark. Leave out what does not matter, so the seed has room.
+   For `world`, prefer the fitting worlds over one: the worlds kit's
+   `suggestWorld(prompt).worlds` (`scripts/worlds/index.mjs`) lists them, and
+   the seed picks among them. `character_set` names a themed cast (chefs,
+   medical, kids, ...) only when the story is about those people; otherwise
+   the seed picks an everyday one.
 2. Generate the pack into the project from those constraints (the seed is
    random unless the user gives one):
 
