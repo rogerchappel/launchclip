@@ -29,8 +29,10 @@ test("plates: named lines get a legibility plate that holds the preset's own tex
   const plan = captionPlan(chunks, { type: "captions", plates: ["cap-002"] }, { brand, format: { width: 1080, height: 1920 } });
   assert.deepEqual(plan.nodes.map((node) => node.cls), ["lc-cap", "lc-cap lc-cap-legible"]);
   assert.match(plan.css, /\.lc-cap-legible \{ background: #[0-9a-f]{6}eb;/);
-  assert.equal(captionLegiblePlate("#f4f1ea", brand.colors), "#0b0d12");
-  assert.equal(captionLegiblePlate("#101820", brand.colors), "#ffffff");
+  // The first brand colour that reaches 7:1, so the plate stays in the palette.
+  assert.equal(captionLegiblePlate("#f4f1ea", brand.colors), "#101820");
+  assert.equal(captionLegiblePlate("#101820", brand.colors), "#f4f1ea");
+  assert.equal(captionLegiblePlate("#808080", brand.colors), "#0b0d12", "no brand colour reaches 7:1: the most contrast wins");
   const all = captionPlan(chunks, { type: "captions", plates: "all" }, { brand, format: { width: 1080, height: 1920 } });
   assert.ok(all.nodes.every((node) => node.cls.includes("lc-cap-legible")));
 });
@@ -81,4 +83,27 @@ test("lines whose band crosses a character are plated before the first render", 
     { id: "card", role: "text", rect: { x: 100, y: band.y, width: 800, height: 100 }, start: 0, end: 1 }
   ];
   assert.deepEqual(predictCaptionPlates(s, chunks, elements), ["cap-002"]);
+});
+
+test("on a plate, a preset colour that matches the plate is not read as the text", () => {
+  const { lines, options } = captionLines(story({ plates: "all" }), chunks);
+  const rect = captionBandRect(options, { width: 1080, height: 1920 });
+  const plate = rgb(lines[0].plate);
+  const line = { x: 360, y: rect.y + 80, width: 360, height: 70 };
+  const under = { x: 330, y: rect.y + 60, width: 420, height: 110, color: plate };
+  // The text is the preset's idle colour on its plate; a second preset colour equals the plate.
+  const result = lineLegibility(image({ bg: [16, 24, 32], text: rgb(lines[0].colors[0]), rect: line, under }), rect, [lines[0].colors[0], lines[0].plate], { size: options.size, chars: 10, plate: lines[0].plate });
+  assert.equal(result.legible, true, JSON.stringify(result));
+});
+
+test("a plated line is judged against its plate, even when the night behind it matches the text colour", () => {
+  const { lines, options } = captionLines(story({ plates: "all" }), chunks);
+  const rect = captionBandRect(options, { width: 1080, height: 1920 });
+  const text = rgb(lines[0].colors[0]);
+  const line = { x: 360, y: rect.y + 80, width: 360, height: 70 };
+  const plate = { x: 330, y: rect.y + 66, width: 420, height: 98, color: rgb(lines[0].plate) };
+  // The frame around the plate is the text's own colour (dark text, dark night).
+  const result = lineLegibility(image({ bg: text, text, rect: line, under: plate }), rect, lines[0].colors, { size: options.size, chars: 10, plate: lines[0].plate });
+  assert.equal(result.onPlate, true);
+  assert.equal(result.legible, true, JSON.stringify(result));
 });
