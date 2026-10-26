@@ -124,3 +124,16 @@ test("library init writes a valid library and refuses to overwrite one", async (
   const replaced = await initLibrary(root, { force: true });
   assert.equal(replaced.library.storage.projects, root);
 });
+
+test("launchclip library init writes the file from the CLI", async () => {
+  const { runCli } = await import("../src/cli.js");
+  const root = path.join(await tempDir(), "lib");
+  const out = [];
+  await runCli(["library", "init", root, "--projects", "projects", "--min-free-gb", "25"], { stdout: { write: (value) => out.push(value) } });
+  const result = JSON.parse(out.join(""));
+  assert.equal(result.status, "ready");
+  assert.equal(result.library.storage.projects, path.join(root, "projects"));
+  assert.equal(result.library.storage.min_free_gb, 25);
+  await assert.rejects(runCli(["library", "nope"], { stdout: { write: () => {} } }), /Unknown library action: nope/);
+  await assert.rejects(runCli(["library", "init"], { stdout: { write: () => {} } }), /needs a folder/);
+});
