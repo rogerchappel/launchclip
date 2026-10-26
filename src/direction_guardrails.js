@@ -21,7 +21,7 @@ import { TEXT_FADE, resolveModule } from "../kit/core/modules.mjs";
 import { TRANSFORM_KEYS } from "../kit/core/physics.mjs";
 import { samePlaceCuts, twoCopies } from "../kit/core/story.mjs";
 import { sceneWindows } from "../kit/core/transitions.mjs";
-import { ACTION_INFO } from "../kit/core/characters/actions.mjs";
+import { ACTION_INFO, LOOK_ACTIONS } from "../kit/core/characters/actions.mjs";
 import { narrationWords } from "../kit/core/direction.mjs";
 
 // Sampling step (s) and tolerances for "moves with its layer".
@@ -153,10 +153,14 @@ function performs(state, verb) {
  * Acting (docs/DIRECTION_GUARDRAILS.md §2):
  * - action-missing: a line's key action (map line.action {verb, who}) is not
  *   performed by that character in a cast scene during the line (±0.5 s);
- * - faces-away: a character with a target faces away from it.
+ * - faces-away: a character with a target faces away from it;
+ * - look-unread: a look (look-far, turn-to-look, gaze-at) performed facing
+ *   the camera, so it does not read as looking at anything;
+ * - look-target-hidden: a card covers what the character looks at (the
+ *   window, the street, a prop) while it looks (rects: the layout check's).
  * map: DIRECTION.json; words: NARRATION.json words. Skipped without a map.
  */
-export function actingGate(story, { map, words } = {}) {
+export function actingGate(story, { map, words, rects = [] } = {}) {
   if (!map || !Array.isArray(map.sections)) return { status: "skipped", reason: "no direction map" };
   const list = narrationWords(words);
   const findings = [];
@@ -173,10 +177,19 @@ export function actingGate(story, { map, words } = {}) {
       const from = first.start - ACTING_SLACK, to = last.end + ACTING_SLACK;
       const ids = Array.isArray(line.scenes) ? new Set(line.scenes) : null;
       const candidates = characterScenes.filter(({ entry }) => entry.start < to && entry.renderEnd > from && (!ids || ids.has(entry.id) || ![...ids].some((id) => entries.get(id) && CHARACTER_MODULES.includes(entries.get(id).model.module))));
-      const done = candidates.some(({ entry, model }) => model.content.actors.some((actor) => actor.id === action.who && actor.states.some((state, i) => {
-        const holdEnd = actor.states[i + 1]?.time ?? model.end;
-        return performs(state, action.verb) && state.time < to && holdEnd > from;
-      })));
+      const hits = [];
+      for (const { model } of candidates) for (const actor of model.content.actors) {
+        if (actor.id !== action.who) continue;
+        actor.states.forEach((state, i) => {
+          const holdEnd = actor.states[i + 1]?.time ?? model.end;
+          if (performs(state, action.verb) && state.time < to && holdEnd > from) hits.push({ model, actor, state, holdEnd });
+        });
+      }
+      const done = hits.length > 0;
+      // A look reads only when the character turns from the camera.
+      if (done && LOOK_ACTIONS.includes(action.verb) && hits.every((hit) => hit.state.view === "front")) {
+        findings.push({ rule: "look-unread", severity: "error", at: hits[0].state.time, ids: [hits[0].model.id], detail: `${action.who} performs ${action.verb} facing the camera, so it does not read as looking at anything; give the cue a target (window, street, horizon, skyline, a prop) so the character turns to it` });
+      }
       if (!done) {
         const where = candidates.length ? `cast scenes ${candidates.map(({ entry }) => entry.id).join(", ")}` : "no cast scene";
         const hint = ACTION_INFO[action.verb] ? `a cue {at: "word:…", action: "${action.verb}"${action.target ? `, target: ${JSON.stringify(action.target)}` : ""}}` : `a cue {at: "word:…", pose: "${action.verb}"}`;
@@ -184,8 +197,19 @@ export function actingGate(story, { map, words } = {}) {
       }
     }
   }
+  // What a character looks at stays in view (named places and props, not {x, y}: a card can be the target).
+  const cards = rects.filter((element) => (element.role === "text" || element.role === "hero") && element.rect);
   for (const { entry, model } of characterScenes) {
     for (const actor of model.content.actors) {
+      actor.states.forEach((state, i) => {
+        if (!state.point || !(LOOK_ACTIONS.includes(state.action) || state.view === "back") || (state.target && typeof state.target === "object" && "x" in state.target)) return;
+        // Its own scene's window: a riding cast is held through the move out, over the next place.
+        const holdEnd = Math.min(actor.states[i + 1]?.time ?? model.end, entry.scene.end);
+        const px = state.point.x ?? actor.x, py = state.point.y;
+        if (!Number.isFinite(py)) return;
+        const cover = cards.find((card) => card.start < holdEnd - 1e-6 && card.end > state.time + 1e-6 && px >= card.rect.x && px <= card.rect.x + card.rect.width && py >= card.rect.y && py <= card.rect.y + card.rect.height);
+        if (cover) findings.push({ rule: "look-target-hidden", severity: "error", at: Math.max(state.time, cover.start), ids: [entry.id, cover.id], detail: `${cover.id} covers what ${actor.id} looks at in ${entry.id} (${JSON.stringify(state.target)} at ${Math.round(px)}, ${Math.round(py)}); move the card to one side or bring it in after the look` });
+      });
       const away = actor.states.find((state) => state.target !== null && state.target !== undefined && state.gaze && ((state.gaze.x > 0 && state.facing === "left") || (state.gaze.x < 0 && state.facing === "right")));
       if (away) findings.push({ rule: "faces-away", severity: "error", at: away.time, ids: [entry.id], detail: `${actor.id} in ${entry.id} faces ${away.facing}, away from its target ${JSON.stringify(away.target)}; drop the facing so it faces what it looks at` });
     }

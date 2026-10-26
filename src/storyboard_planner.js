@@ -102,7 +102,9 @@ export async function planStoryboard(options = {}) {
   }
   const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction });
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
-  const request = planRequest({ brief, fixed, hints, direction });
+  // history: a "Recent videos" section (src/visual_history.js historyPrompt)
+  // naming what earlier videos in the series chose, so this plan differs.
+  const request = planRequest({ brief, fixed, hints, direction, history: options.history ?? null });
   let previous = null;
   let last = null;
 
@@ -466,7 +468,7 @@ export function extractDirection(result) {
   return fromText(result?.text);
 }
 
-function planRequest({ brief, fixed, hints, direction = null }) {
+function planRequest({ brief, fixed, hints, direction = null, history = null }) {
   const lines = [
     "Write the storyboard for this brief.",
     "",
@@ -484,6 +486,7 @@ function planRequest({ brief, fixed, hints, direction = null }) {
   if (Object.keys(fixed.audio).length) lines.push(`audio: ${JSON.stringify(fixed.audio)} (add music and sfx as you see fit)`);
   if (fixed.base) lines.push(`base: ${JSON.stringify(fixed.base)}`);
   if (direction) lines.push("", "## Direction map", "", "Plan the storyboard against DIRECTION.json (in the instructions): every scene a line names, on that line's words.");
+  if (nonEmpty(history)) lines.push("", "## Recent videos (do not repeat)", "", String(history).trim());
   if (hints.length) {
     lines.push("", "## Phrase hints (from the phrase → module table)", "");
     for (const hint of hints.slice(0, 24)) lines.push(`- "${hint.sentence.slice(0, 160)}" → ${hint.modules.join(", ")}`);

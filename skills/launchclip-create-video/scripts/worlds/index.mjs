@@ -121,7 +121,8 @@ export const FOCUS_POINTS = Object.freeze(['far', 'window', 'horizon', 'street',
 /**
  * Where a character can look in a world (canvas px): the window of an inside
  * world, the horizon (or the far side of a street), the street across from
- * the kerb, and the skyline above the horizon; `far` is the window when
+ * the kerb (toward the camera in a street world: toward: 'camera'), and the
+ * skyline above the horizon; `far` is the window when
  * there is one, else the horizon. A point's x is null when the world gives
  * none (a horizon spans the frame): the looker picks its side.
  * props: placed props {id, x, y} (params.props), for a {prop} gaze target.
@@ -136,7 +137,9 @@ export function worldFocus(kind, {canvas = {width: 1920, height: 1080}, time = '
   const win = g.win ? {x: Math.round(g.win.x + g.win.w / 2), y: Math.round(g.win.y + g.win.h / 2), far: true} : null;
   const horizonY = g.horizonY ?? g.vanishY ?? g.waterY ?? g.baseY ?? (win ? win.y : Math.round((g.floorY ?? H * 0.7) * 0.45));
   const horizon = {x: win?.x ?? null, y: Math.round(horizonY), far: true};
-  const street = g.baseY !== undefined ? {x: null, y: Math.round(g.baseY), far: true} : win ?? horizon;
+  // In a street world the cast stands on the far pavement: the road and the
+  // other side of the street are toward the camera.
+  const street = g.baseY !== undefined ? {x: null, y: Math.round(H * 0.95), far: true, toward: 'camera'} : win ?? horizon;
   const skyline = {x: horizon.x, y: Math.round(Math.max(0, horizonY - H * 0.12)), far: true};
   let placed = [];
   try { placed = placeProps(k, g.anchors, props).map(item => ({id: item.id, x: Math.round(item.x), y: Math.round(item.y)})); } catch { placed = []; }

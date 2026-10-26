@@ -3,6 +3,7 @@
 //   desk-laptop  a desk with a laptop per character, seen from the front;
 //                the cast sits behind it
 //   phone        the cast stands; the first character holds a phone
+//   standing     the cast just stands, hands free: in a world, nothing else
 //   meeting      a table the cast sits behind, with a wall screen when a
 //                real capture is supplied (otherwise a window)
 //   screen       a big screen that plays a real capture (an image or video
@@ -21,7 +22,7 @@ import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {OUTLINE} from './palette.mjs';
 
-export const SETS = Object.freeze(['desk-laptop', 'phone', 'meeting', 'screen', 'kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk']);
+export const SETS = Object.freeze(['desk-laptop', 'phone', 'meeting', 'screen', 'kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk', 'standing']);
 export const SEATED_SETS = Object.freeze(['desk-laptop', 'meeting', 'sofa', 'car', 'park-bench', 'video-call']);
 export const SCREEN_SETS = Object.freeze(['screen', 'meeting']);
 // Backdrops: the set's own room, or its furniture alone in a world.
@@ -38,7 +39,8 @@ export const SET_INFO = Object.freeze({
   'car': {seated: true, screen: 'none', world: true, describe: 'a car seen through the windscreen: the first character drives, the rest ride beside'},
   'park-bench': {seated: true, screen: 'none', world: true, describe: 'a park: the cast sits on a bench under trees and sky'},
   'video-call': {seated: true, screen: 'none', world: false, describe: 'a video call: each character in their own tile at home, with call controls below'},
-  'standing-desk': {seated: false, screen: 'none', world: true, describe: 'an office: the cast stands at a standing desk with monitors seen from behind'}
+  'standing-desk': {seated: false, screen: 'none', world: true, describe: 'an office: the cast stands at a standing desk with monitors seen from behind'},
+  'standing': {seated: false, screen: 'none', world: true, describe: 'the cast stands with nothing in hand: in a world (a street, a rooftop, a park) there is no furniture at all; its own room is a plain wall and window'}
 });
 // Sets with a furniture-only form (backdrop "world"); a video call is its own room.
 export const WORLD_SETS = Object.freeze(SETS.filter(name => SET_INFO[name].world));
@@ -237,7 +239,7 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
       slots = xs.map((x, i) => ({x, floor, scale, facing: 'left', index: i}));
     }
     back.push(...screenFrame(screenRect, s, c, {stand: false}));
-  } else if (name === 'phone') {
+  } else if (name === 'phone' || name === 'standing') {
     const scale = scaleFor(standShare);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.32), W * (portrait ? 0.7 : 0.68));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));

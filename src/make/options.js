@@ -34,6 +34,9 @@ export const MAKE_FLAGS = Object.freeze([
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
+  ["visual-history-dir", {}],
+  ["visual-history-limit", { setting: true }],
+  ["visual-similarity-limit", { setting: true }],
   ["repo", {}],
   ["approve-demo", { boolean: true }],
   ["redemo", { boolean: true }],
@@ -75,6 +78,9 @@ export function makeOptionsFromFlags(flags = {}) {
     url: flags.url,
     allowHost: flags["allow-host"],
     demoPlan: flags["demo-plan"],
+    visualHistoryDir: flags["visual-history-dir"],
+    visualHistoryLimit: flags["visual-history-limit"],
+    visualSimilarityLimit: flags["visual-similarity-limit"],
     ...(flags["no-subject"] ? { subject: false } : {})
   };
 }
@@ -95,6 +101,8 @@ export function validateMakeOptions(options = {}) {
   if (options.aspect != null) resolveAspect(options.aspect, null);
   if (options.duration != null) resolveDuration({ duration: options.duration }, {});
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
+  if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   return { voice, renderer, quality, script: scriptPlanOptions(options) };
 }
 
