@@ -164,7 +164,7 @@ function directActor(b, actor, path, scene) {
     const gaze = view === 'three-quarter' && point ? {x: Math.sign(turned.x || (facing === 'left' ? -1 : 1)) * GAZE.quarter, y: turned.y, scale: GAZE.quarterScale} : turned;
     if (gaze.x || gaze.y) gazeOn = true;
     if (view === 'back') turns = true;
-    const directed = {...state, target, facing, standing, gaze, view, x, ...(point ? {point: {x: point.x ?? null, y: point.y ?? null, far: Boolean(point.far)}} : {})};
+    const directed = {...state, target, facing, standing, gaze, view, x, ...(point ? {point: {x: point.x ?? null, y: point.y ?? null, far: Boolean(point.far), ...(point.toward ? {toward: point.toward} : {})}} : {})};
     out.push(directed);
     if (action === 'walk-to' && point) {
       const to = Math.min(W - margin, Math.max(margin, point.x ?? (facing === 'left' ? margin : W - margin)));

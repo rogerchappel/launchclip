@@ -20,7 +20,7 @@ import {el} from '../catalog-b-view.mjs';
 import {AGE_SHAPE, BUILD_SHAPE, HEIGHT_SCALE, expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
 import {asShadow} from './bounds.mjs';
-import {backOfHead, backView, frontView, gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
+import {backOfHead, backView, faceView, frontView, gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
 import {aidSide, backpackBack, covers, has, headwear, heldAid, longHem, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 import {capsulePath, darken, ellipsePath, group, lighten, luma, mix, noise, pathNode, placedGroup, r1, radialGradient, strokeLine} from './pens.mjs';
 import {realPen} from './real-pen.mjs';
@@ -485,7 +485,7 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
   const headKids = [
     ...ears(ctx),
     P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}),
-    ...gazeJoint(ctx, joints, gaze, [...faceBase(ctx), ...facialHair(ctx), ...faces, ...eyewear(ctx)]),
+    ...faceView(ctx, turns, gazeJoint(ctx, joints, gaze, [...faceBase(ctx), ...facialHair(ctx), ...faces, ...eyewear(ctx)])),
     ...(covers(params) ? [] : [onHead(hairFront(toonCtx))]),
     ...backView(ctx, turns, () => [P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}), ...(params.hair.style === 'bald' ? [] : [onHead(backOfHead(toonCtx).slice(1))])]),
     onHead(headwear(toonCtx), 1.02)

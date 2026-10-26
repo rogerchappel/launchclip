@@ -404,7 +404,7 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const headKids = [
     ...ears(ctx),
     P.shape(headShape(g), 'skin'),
-    ...gazeJoint(ctx, joints, gaze, features),
+    ...faceView(ctx, turns, gazeJoint(ctx, joints, gaze, features)),
     ...(covers(params) ? [] : hairFront(ctx)),
     ...backView(ctx, turns, () => backOfHead(ctx)),
     ...headwear(ctx)
@@ -469,6 +469,12 @@ export function backOfHead(ctx) {
 export function backView(ctx, on, draw) {
   if (!on || ctx.static) return [];
   return [el('g', `${ctx.id}-back`, {opacity: 0}, draw())];
+}
+
+/** The face (features, beard, glasses) of a character that turns away: hidden from behind ({id}-face-front). */
+export function faceView(ctx, on, parts) {
+  if (!on || ctx.static) return parts;
+  return [el('g', `${ctx.id}-face-front`, {opacity: 1}, parts)];
 }
 
 export function frontView(ctx, on, parts) {
