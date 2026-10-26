@@ -38,6 +38,8 @@ export const SAMPLES = Object.freeze({
   'excerpt': {type: 'code', title: 'storyboard.json', source: 'examples/story/minimal', lines: ['"lane": "motion",', {text: '"style": "seed-7f3a91c2",', highlight: true}, '"scenes": [ … ]']},
   'compare': {left: {title: 'Before', items: ['Edit by hand', 'One format at a time']}, right: {title: 'After', items: ['One prompt', 'Every format at once']}},
   'timeline': {title: 'Launch week', steps: [{label: 'Record', detail: 'Monday'}, {label: 'Edit', detail: 'Tuesday'}, {label: 'Ship', detail: 'Friday'}]},
+  'hook-title': {headline: 'Demos that rebuild themselves.', emphasis: [{text: 'rebuild', at: 0.6}], eyebrow: 'Launch week', kicker: 'Meet Pulseboard', kickerAt: 1.2},
+  'cta': {action: 'Try Pulseboard today', emphasis: 'Pulseboard', detail: 'Free for open source', handle: 'pulseboard.dev'},
   // Editorial modules.
   'checklist': {title: 'Release checklist', rows: [{label: 'Write the changelog', status: 'active', at: 0.4, doneAt: 1.4}, {label: 'Tag the release', status: 'done', at: 0.9}, {label: 'Announce it', status: 'pending', at: 1.2}]},
   'step-rail': {title: 'From idea to clip', numbered: true, steps: [{label: 'Plan', at: 0.4}, {label: 'Record', at: 0.9}, {label: 'Edit', at: 1.4}, {label: 'Share', at: 1.9}]},

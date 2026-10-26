@@ -1,0 +1,48 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Variant parity: a-cta-flush",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "card",
+        "module": "cta",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "action": "Try Pulseboard today",
+          "emphasis": "Pulseboard",
+          "detail": "Free for open source",
+          "handle": "pulseboard.dev",
+          "variant": "flush"
+        }
+      }
+    ]
+  },
+  "sceneId": "card",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

@@ -399,9 +399,11 @@ params:
 - kickerAt: seconds — scene seconds for the kicker pop
 - eyebrow: string, max 32 — small mono label above the headline
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
-- align: string, one of "center" | "left", default "center"
+- align: string, one of "center" | "left", default "center (left for flush and low)"
 - rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+- variant: string, one of "centered" | "flush" | "boxed" | "low", optional — the layout: centered (glow), flush (left, accent bar), boxed (bordered panel) or low (left, bottom of the frame); default: the style's variants[module], else centered; usually leave it to the style
 events: title, emphasis-<n>, kicker
+variants: centered (default), flush, boxed, low
 
 ### kinetic-words (hides captions)
 Lands 1–3 words per beat, timed to the voice; each beat replaces the last (or stacks into a sentence). Hides captions.
@@ -457,7 +459,9 @@ params:
 - loop: boolean, default false
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
 - rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+- variant: string, one of "centered" | "flush" | "boxed" | "low", optional — the layout: centered (glow), flush (left, accent bar), boxed (bordered panel) or low (left, bottom of the frame); default: the style's variants[module], else centered; usually leave it to the style
 events: action, handle, loop
+variants: centered (default), flush, boxed, low
 
 ### function-chart (keeps captions)
 Plots a formula over time as a line that draws on, with a probe readout riding the tip, optional baseline, gap bars and a tail-zoom inset.
