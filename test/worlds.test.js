@@ -221,3 +221,25 @@ test('a world plate never fades itself: a cut between plates is a cut; on a high
   assert.equal(opacity('a', 2.95), 1);
   assert.ok(opacity('over', 3.1) < 1);
 });
+
+test('in world mode a world plate draws a bleed past its frame, and a cast in it stands on the same ground', async () => {
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {worldView} = await import('../kit/core/catalog-world.mjs');
+  const {plateBleed} = await import('../kit/core/camera-world.mjs');
+  const {worldAnchors} = await import('../kit/core/worlds/index.mjs');
+  const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}};
+  const plate = {id: 'street', module: 'world', start: 0, end: 4, params: {kind: 'city-street', time: 'day'}};
+  const cast = {id: 'pair', module: 'cast-scene', track: 1, start: 0, end: 4, params: {set: 'phone', cast: [{id: 'maya'}]}};
+  const story = camera => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 4}, brand, camera, cast: {characters: [{id: 'maya'}]}, scenes: [plate, cast]});
+  const world = story({mode: 'world'}), cuts = story({mode: 'cuts'});
+  assert.deepEqual(plateBleed(world), {x: 65, y: 115});
+  assert.deepEqual(plateBleed(cuts), {x: 0, y: 0});
+  const root = worldView(resolveModule(plate, world)).front;
+  assert.deepEqual([root.style.left, root.style.top, root.style.width, root.style.height], [-65, -115, 1210, 2150]);
+  const plain = worldView(resolveModule(plate, cuts)).front;
+  assert.deepEqual([plain.style.left, plain.style.top, plain.style.width, plain.style.height], [0, 0, 1080, 1920]);
+  // The cast stands on the bled world's ground, moved back into the frame.
+  const floor = resolveModule(cast, world).content.actors[0].floor;
+  assert.equal(floor, worldAnchors('city-street', {canvas: {width: 1210, height: 2150}}).ground.y - 115);
+  assert.equal(resolveModule(cast, cuts).content.actors[0].floor, worldAnchors('city-street', {canvas: {width: 1080, height: 1920}}).ground.y);
+});

@@ -114,6 +114,19 @@ export function rideWorldPlates(story, windows) {
   return windows;
 }
 
+/**
+ * How far a world plate draws past its frame on each side in world mode:
+ * half the gap to a neighbouring plate (camera.spacing), across and along,
+ * so the camera's drift and its travel between plates never uncover the
+ * background. 0 in cuts mode. → {x, y} px.
+ */
+export function plateBleed(story) {
+  const camera = resolveCamera(story);
+  const W = Number(story?.format?.width), H = Number(story?.format?.height);
+  if (camera.mode !== 'world' || !(W > 0 && H > 0)) return { x: 0, y: 0 };
+  return { x: Math.round(W * camera.spacing / 2), y: Math.round(H * camera.spacing / 2) };
+}
+
 /** story.camera with defaults → {mode, layout, spacing, parallax, blur} (blur null = the grammar default: whip-pans full, other moves at grammar.camera.moveBlur). */
 export function resolveCamera(story) {
   const own = isObject(story?.camera) ? story.camera : {};

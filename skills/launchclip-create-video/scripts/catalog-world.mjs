@@ -151,7 +151,11 @@ function resolveWorld(params, ctx) {
   const camera = cameraOf(b);
   const scrimSide = b.params.scrim === undefined ? 'none' : (b.params.scrim === true ? 'auto' : b.params.scrim === false ? 'none' : check.oneOf(b.params.scrim, 'params.scrim', SCRIM_SIDES));
   const style = ctx.cast?.style ?? ctx.cast?.drawing_style ?? null;
-  const world = renderWorld({id: b.id, kind, time, colors, canvas, style, detail, props, seed: `${kind}|${time}|${canvas.width}x${canvas.height}`});
+  // A plate in world mode draws past its frame (ctx.bleed, camera-world.mjs
+  // plateBleed) on a canvas that much larger, centred on the frame.
+  const bleed = (ctx.layer ?? 0) === 0 && ctx.bleed ? {x: ctx.bleed.x ?? 0, y: ctx.bleed.y ?? 0} : {x: 0, y: 0};
+  const drawn = {width: canvas.width + 2 * bleed.x, height: canvas.height + 2 * bleed.y};
+  const world = renderWorld({id: b.id, kind, time, colors, canvas: drawn, style, detail, props, seed: `${kind}|${time}|${drawn.width}x${drawn.height}`});
   const scrim = scrimFor(world, {text: colors.paper, bg: colors.bg, side: scrimSide === 'none' ? 'auto' : scrimSide});
   const content = {
     kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style, foreground,
@@ -171,14 +175,15 @@ function resolveWorld(params, ctx) {
   model.minTextPx = null;
   // The drawing itself is rebuilt by the view from these inputs (pure), so
   // the model stays small and JSON-safe.
-  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${canvas.width}x${canvas.height}`, foreground};
+  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${drawn.width}x${drawn.height}`, foreground, bleed};
   return model;
 }
 
 /** The rendered world for a model (pure: the same model gives the same nodes). */
 export function worldOfModel(model) {
   const r = model.content.render;
-  const world = renderWorld({id: model.id, kind: r.kind, time: r.time, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas: model.canvas,
+  const bleed = r.bleed ?? {x: 0, y: 0};
+  const world = renderWorld({id: model.id, kind: r.kind, time: r.time, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas: {width: model.canvas.width + 2 * bleed.x, height: model.canvas.height + 2 * bleed.y},
     style: r.style, detail: r.detail, props: r.props, seed: r.seed});
   return r.foreground === false ? withoutForeground(world) : world;
 }
@@ -193,9 +198,12 @@ export function worldView(model) {
   const {id, canvas} = model;
   const W = canvas.width, H = canvas.height;
   const world = worldOfModel(model);
+  // The drawing is the frame plus the bleed on each side (0 outside world mode).
+  const {x: bx, y: by} = model.content.render.bleed ?? {x: 0, y: 0};
+  const DW = W + 2 * bx, DH = H + 2 * by;
   const kids = worldLayerNodes(world, id);
-  if (model.content.scrim.on) kids.push(el('div', `${id}-scrim`, abs(0, 0, W, H, {background: model.content.scrim.css, pointerEvents: 'none'})));
-  return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', background: world.palette.skyLow}), kids), media: null, overlay: null};
+  if (model.content.scrim.on) kids.push(el('div', `${id}-scrim`, abs(0, 0, DW, DH, {background: model.content.scrim.css, pointerEvents: 'none'})));
+  return {front: el('div', id, abs(bx ? -bx : 0, by ? -by : 0, DW, DH, {opacity: 0, overflow: 'hidden', background: world.palette.skyLow}), kids), media: null, overlay: null};
 }
 
 /** Renderer-neutral ops: the fade (a world on a higher track only) and the layers' camera move. */

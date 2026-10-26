@@ -189,7 +189,7 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
     </AbsoluteFill>
   );
   return (
-    <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
+    <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
       {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
     </AbsoluteFill>
   );

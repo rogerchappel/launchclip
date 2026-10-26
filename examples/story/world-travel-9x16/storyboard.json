@@ -1,0 +1,18 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "World camera travel: world plates bleed past their frame, so drift and a pan between them never uncover the background",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 6.4, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#cee8ee", "primary": "#89592c", "accent": "#2a7180", "ink": "#fbfeff", "paper": "#1e282b"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "camera": {"mode": "world"},
+  "cast": {"style": "soft-shade", "characters": [{"id": "maya"}, {"id": "theo"}]},
+  "scenes": [
+    {"id": "street", "module": "world", "start": 0, "end": 3.2, "params": {"kind": "city-street", "time": "day", "camera": "drift"}},
+    {"id": "pair", "module": "cast-scene", "track": 1, "start": 0, "end": 3.2, "params": {"set": "park-bench", "cast": [{"id": "maya", "pose": "sit", "expression": "happy"}, {"id": "theo", "pose": "sit", "expression": "happy"}]}},
+    {"id": "park", "module": "world", "start": 3.2, "end": 6.4, "in": {"type": "pan", "dur": 0.6, "direction": "right"}, "params": {"kind": "park", "time": "dusk", "camera": "drift"}},
+    {"id": "bench", "module": "cast-scene", "track": 1, "start": 3.2, "end": 6.4, "params": {"set": "park-bench", "cast": [{"id": "maya", "pose": "sit", "expression": "delighted"}, {"id": "theo", "pose": "sit", "cues": [{"at": 0.8, "pose": "wave"}]}]}}
+  ]
+}
