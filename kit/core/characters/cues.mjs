@@ -128,6 +128,7 @@ export function resolveStoryCast(story) {
 export function castMember(resolved, id, path = 'id') {
   if (typeof id !== 'string' || !id) throw new Error(`${path} must name a character`);
   if (resolved.members.has(id)) return resolved.members.get(id);
+  if (/^@\d+$/.test(id)) throw new Error(`${path} "${id}" refers to character ${id.slice(1)} of the story cast, which has ${resolved.members.size || 'no'} character${resolved.members.size === 1 ? '' : 's'}${resolved.members.size ? ` (${[...resolved.members.keys()].join(', ')})` : ''}`);
   if (resolved.listed) throw new Error(`${path} "${id}" is not in the story cast (${[...resolved.members.keys()].join(', ')}); add it to cast.characters`);
   const starter = starterCharacter(id);
   if (!starter) throw new Error(`${path} "${id}" is not a starter character (${STARTER_IDS.join(', ')}); define it in story.cast`);
