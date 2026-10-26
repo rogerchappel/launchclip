@@ -23,7 +23,7 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { actingGate, ghostingGate, physicsGate } from "./direction_guardrails.js";
+import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -1384,6 +1384,13 @@ async function runGates(ctx) {
     gates.ghosting = ghostingGate(ctx.resolved);
   } catch (error) {
     gates.ghosting = { status: "failed", error: error.message };
+  }
+  try {
+    const density = densityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [], profile: ctx.layout?.profile });
+    if (density.status !== "skipped") gates.density = density;
+    gates.variety = varietyGate(ctx.resolved);
+  } catch (error) {
+    gates.density ??= { status: "failed", error: error.message };
   }
 
   const master = ctx.state.stages?.master?.details;

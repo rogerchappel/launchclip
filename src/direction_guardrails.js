@@ -5,6 +5,8 @@
 //   physicsGate(story)   anchored world elements move only with the camera
 //   actingGate(story, {map, words})  each line's key action is performed
 //   ghostingGate(story)  one copy of a person; nothing half-transparent held
+//   densityGate(story, {rects, profile})  no empty region or lone card held long
+//   varietyGate(story)   the same shot never repeats back to back
 //
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
@@ -14,6 +16,7 @@ import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
 import { worldTimeline } from "../kit/core/catalog-world.mjs";
 import { rideWorldPlates } from "../kit/core/camera-world.mjs";
 import { driftEligible } from "../kit/core/ambient.mjs";
+import { profileGeometry } from "../kit/core/layout-check.mjs";
 import { TEXT_FADE, resolveModule } from "../kit/core/modules.mjs";
 import { TRANSFORM_KEYS } from "../kit/core/physics.mjs";
 import { samePlaceCuts, twoCopies } from "../kit/core/story.mjs";
@@ -298,4 +301,87 @@ export function ghostingGate(story) {
     if (words && hold < need - 1e-6) findings.push({ rule: "text-hold", severity: "error", at: enterEnd, ids: [id], detail: `${id} (${words} words) is fully shown for ${hold} s; it needs ${need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
   }
   return gateResult(findings);
+}
+
+// Density thresholds (docs/DIRECTION_GUARDRAILS.md §5).
+export const DENSITY = Object.freeze({ step: 0.5, emptyRegion: 4, loneCard: 3, cover: 0.1 });
+const FILLING = ["text", "hero", "media"];
+const VISUAL = ["media"];
+
+function coverShare(rect, region) {
+  const w = Math.min(rect.x + rect.width, region.x + region.width) - Math.max(rect.x, region.x);
+  const h = Math.min(rect.y + rect.height, region.y + region.height) - Math.max(rect.y, region.y);
+  return w > 0 && h > 0 ? (w * h) / (region.width * region.height) : 0;
+}
+
+/**
+ * Density (docs/DIRECTION_GUARDRAILS.md §5), every 0.5 s over the safe area,
+ * from the layout check's element rects:
+ * - empty-region: a third of the safe area (top, middle, bottom in 9:16;
+ *   left, centre, right in 16:9) with only the plate in it for over 4 s;
+ * - lone-card: a text card over a world plate with no character or other
+ *   visual for over 3 s.
+ * rects: [{id, role, module?, rect, start, end}] (checkLayoutProject().rects).
+ */
+export function densityGate(story, { rects = [], profile } = {}) {
+  if (!rects.length) return { status: "skipped", reason: "no layout rects" };
+  const canvas = { width: Number(story.format.width), height: Number(story.format.height) };
+  const safe = profileGeometry(canvas, profile ?? (canvas.height > canvas.width ? "shorts" : "landscape")).safeZone;
+  const portrait = canvas.height > canvas.width;
+  const names = portrait ? ["top", "middle", "bottom"] : ["left", "centre", "right"];
+  const regions = names.map((name, i) => portrait
+    ? { name, x: safe.x, y: safe.y + (safe.height / 3) * i, width: safe.width, height: safe.height / 3 }
+    : { name, x: safe.x + (safe.width / 3) * i, y: safe.y, width: safe.width / 3, height: safe.height });
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
+  const worlds = scenesOf(story).filter((scene) => scene?.module === "world" && (scene.track ?? 0) === 0);
+  const findings = [];
+  const runs = new Map();
+  const report = (key, from, to, finding) => {
+    if (to - from <= finding.limit + 1e-6) return;
+    findings.push({ rule: finding.rule, severity: "error", at: round(from, 2), ids: finding.ids, detail: finding.detail(round(to - from, 1), round(from, 2), round(to, 2)) });
+  };
+  const close = (key, t) => { const run = runs.get(key); if (run) { report(key, run.from, t, run.finding); runs.delete(key); } };
+  for (const t of times(0, Math.max(0, duration - 1e-3), DENSITY.step)) {
+    const active = rects.filter((element) => FILLING.includes(element.role) && element.rect && element.id !== "base" && element.start <= t + 1e-6 && element.end > t + 1e-6);
+    for (const region of regions) {
+      const key = `region|${region.name}`;
+      const empty = !active.some((element) => coverShare(element.rect, region) >= DENSITY.cover);
+      if (empty && !runs.has(key)) runs.set(key, { from: t, finding: { rule: "empty-region", limit: DENSITY.emptyRegion, ids: [], detail: (len, a, b) => `the ${region.name} third holds only the plate for ${len} s (${a}–${b} s); put a character, a prop moment or a card there` } });
+      else if (!empty) close(key, t);
+    }
+    const overWorld = worlds.some((scene) => scene.start <= t + 1e-6 && scene.end > t + 1e-6);
+    const cards = active.filter((element) => element.role === "text" || element.role === "hero");
+    const lone = overWorld && cards.length && !active.some((element) => VISUAL.includes(element.role));
+    const key = "lone-card";
+    if (lone && !runs.has(key)) runs.set(key, { from: t, finding: { rule: "lone-card", limit: DENSITY.loneCard, ids: cards.map((card) => card.id), detail: (len, a, b) => `${cards.map((card) => card.id).join(", ")} sits alone over an empty world for ${len} s (${a}–${b} s); keep a character in the set reacting to it or pointing at it` } });
+    else if (!lone) close(key, t);
+  }
+  for (const key of [...runs.keys()]) close(key, duration);
+  return gateResult(findings);
+}
+
+/** A cast scene's shot: its set, cast and what each does (poses and actions; swapping places is not a new shot), and the world it stands in. */
+function shotOf(model) {
+  const actors = [...model.content.actors].sort((a, b) => a.id.localeCompare(b.id));
+  return { set: model.content.set ?? "cameo", cast: actors.map((actor) => actor.id).join("+"), poses: actors.map((actor) => `${actor.id}:${[...new Set(actor.states.map((state) => state.action ?? state.pose))].join(">")}`).join(" "), world: model.content.world ? `${model.content.world.kind}/${model.content.world.time}` : null };
+}
+
+/**
+ * Variety (docs/DIRECTION_GUARDRAILS.md §5): consecutive cast scenes with
+ * the same set, cast, poses and actions are the same shot again (even over a
+ * different world) — an error; the same set and cast more than three times
+ * in a video is a warning.
+ */
+export function varietyGate(story) {
+  const { entries } = renderedModels(story);
+  const shots = [...entries.values()].filter(({ model }) => CHARACTER_MODULES.includes(model.module)).sort((a, b) => a.entry.start - b.entry.start).map(({ entry, model }) => ({ id: entry.id, start: entry.start, ...shotOf(model) }));
+  const findings = [];
+  for (let i = 1; i < shots.length; i += 1) {
+    const a = shots[i - 1], b = shots[i];
+    if (a.set === b.set && a.cast === b.cast && a.poses === b.poses) findings.push({ rule: "repeat-shot", severity: "error", at: b.start, ids: [a.id, b.id], detail: `${b.id} repeats ${a.id}'s shot (${b.set}, ${b.poses})${a.world !== b.world ? ` over a new world (${a.world} → ${b.world})` : ""}; change the set, who is in it, their poses or what they do` });
+  }
+  const counts = new Map();
+  for (const shot of shots) counts.set(`${shot.set}|${shot.cast}`, [...(counts.get(`${shot.set}|${shot.cast}`) ?? []), shot.id]);
+  for (const [key, ids] of counts) if (ids.length > 3) findings.push({ rule: "same-setup", severity: "warning", at: shots.find((shot) => shot.id === ids[3]).start, ids, detail: `${key.replace("|", " with ")} appears ${ids.length} times; vary the set or the cast` });
+  return gateResult(findings, { shots: shots.length });
 }
