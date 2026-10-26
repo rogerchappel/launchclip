@@ -1406,6 +1406,8 @@ params:
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 - world: {kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)
 - backdrop: room | world: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)
+- enter: fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)
+- exit: fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
@@ -1423,6 +1425,8 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
 - light: {dir?, color?, intensity?} the key light (as cast-scene)
 - world: {kind, time?} the world the character stands in (as cast-scene)
+- enter: fade | cut (as cast-scene)
+- exit: fade | cut (as cast-scene)
 events: <character>-cue-<i>
 
 ### world (keeps captions)

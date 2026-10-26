@@ -1,0 +1,19 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Character parity: a cast that cuts in and out with its world plate (enter and exit cut)",
+    "lane": "motion",
+    "format": {"width": 1080, "height": 1920, "platform": "youtube-shorts", "fps": 30, "duration": 5},
+    "brand": {
+      "colors": {"bg": "#cee8ee", "primary": "#89592c", "accent": "#2a7180", "ink": "#fbfeff", "paper": "#1e282b"},
+      "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+    },
+    "base": null,
+    "cast": {"style": "soft-shade", "characters": [{"id": "maya"}, {"id": "theo"}]},
+    "scenes": [
+      {"id": "pair", "module": "cast-scene", "start": 1, "end": 4.5, "params": {"set": "park-bench", "world": {"kind": "park", "time": "day"}, "enter": "cut", "exit": "cut", "cast": [{"id": "maya", "pose": "sit", "expression": "happy"}, {"id": "theo", "pose": "sit", "cues": [{"at": 1.5, "pose": "wave", "expression": "delighted"}]}]}}
+    ]
+  },
+  "sceneId": "pair",
+  "threshold": {"ssim": 0.97}
+}

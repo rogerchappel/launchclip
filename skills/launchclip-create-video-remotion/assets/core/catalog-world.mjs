@@ -67,8 +67,11 @@ function settings(b, ctx) {
 /**
  * The world a scene on a higher track plays over: the track-0 `world` scene
  * that overlaps its window the longest, with that scene's settings (params
- * over story.world). → {scene, kind, time, props, detail} | null. Character
- * scenes read it to take the world's light and stand in it.
+ * over story.world), its window, its entrance (`in`) and the entrance of the
+ * track-0 scene that follows it (`nextIn`; null when there is none).
+ * → {scene, kind, time, props, detail, start, end, in, nextIn} | null.
+ * Character scenes read it to take the world's light, stand in it, and
+ * arrive and leave with it.
  */
 export function worldBeneath(story, scene) {
   if (!scene || (scene.track ?? 0) === 0 || !Array.isArray(story?.scenes)) return null;
@@ -86,7 +89,10 @@ export function worldBeneath(story, scene) {
   const kind = p.kind ?? base.kind;
   const time = p.time ?? base.time ?? 'day';
   if (!WORLD_KINDS.includes(kind) || !WORLD_TIMES.includes(time)) return null;
-  return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null};
+  const bestEnd = Number(best.end);
+  const next = story.scenes.find(other => other !== best && (other?.track ?? 0) === 0 && Math.abs(Number(other.start) - bestEnd) < 1e-3);
+  return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null,
+    start: Number(best.start), end: bestEnd, in: isObject(best.in) ? best.in : null, nextIn: next ? (isObject(next.in) ? next.in : {type: 'cut'}) : null};
 }
 
 /**

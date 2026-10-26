@@ -328,3 +328,27 @@ test('a world leaves out its front layer when a cast stands in it', async () => 
   assert.equal(resolveModule(world, story([world, {...over, params: {...over.params, backdrop: 'room'}}])).content.foreground, true);
   assert.equal(resolveModule({...world, params: {...world.params, foreground: true}}, story([world, over])).content.foreground, true);
 });
+
+test('a cast arrives and leaves with the world plate beneath it, never as a ghost over it', () => {
+  const plate = (id, start, end, extra = {}) => ({id, module: 'world', start, end, params: {kind: 'city-street', time: 'day'}, ...extra});
+  const cast = (start, end, params = {}) => ({id: 'pair', module: 'cast-scene', track: 1, start, end, params: {set: 'phone', cast: [{id: 'maya'}], ...params}});
+  const ops = (scene, scenes) => { const s = story(scenes); return charactersTimeline(resolveModule(scene, s)).filter(op => op.target === 'pair'); };
+  const opacityAt = (list, t) => frameState(list, t).get('pair')?.opacity;
+  // A plate that cuts in: the cast is fully there on its first frame, and cuts out with a cut to the next plate.
+  const a = cast(2, 6);
+  const cut = ops(a, [plate('p0', 0, 2), plate('p1', 2, 6), a, plate('p2', 6, 8)]);
+  assert.equal(opacityAt(cut, 2), 1);
+  assert.equal(opacityAt(cut, 5.99), 1);
+  // A plate that fades in over 0.3 s: the cast fades with it, over the same 0.3 s; the next plate's 0.4 s fade sets the exit.
+  const faded = ops(a, [plate('p0', 0, 2), plate('p1', 2, 6, {in: {type: 'fade', dur: 0.3}}), a, plate('p2', 6, 8, {in: {type: 'fade', dur: 0.4}})]);
+  assert.ok(opacityAt(faded, 2.15) > 0.3 && opacityAt(faded, 2.15) < 0.95);
+  assert.equal(opacityAt(faded, 2.31), 1);
+  assert.equal(opacityAt(faded, 5.59), 1);
+  assert.ok(opacityAt(faded, 5.8) < 1);
+  // Not starting with its plate, or set explicitly: the old fade, or what params say.
+  const late = cast(3, 6);
+  assert.ok(opacityAt(ops(late, [plate('p1', 2, 6), late]), 3.1) < 1);
+  const forced = cast(2, 6, {enter: 'cut'});
+  assert.equal(opacityAt(ops(forced, [forced]), 2), 1);
+  assert.throws(() => resolve({...desk(), params: {...desk().params, enter: 'wipe'}}), /params\.enter/);
+});
