@@ -161,6 +161,61 @@ test("make runs the motion lane end to end with a fake model, the test voice and
   }
 });
 
+test("--visual-history-dir: the second video plans against the first, varies the repeated look dials, lints and records both", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-history-"));
+  try {
+    const history = path.join(cwd, "history");
+    const { calls, model } = fakeModel();
+    const notices = [];
+    const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice: (line) => notices.push(line), clock: (() => { let tick = 0; return () => `2026-10-27T00:00:${String(tick++).padStart(2, "0")}Z`; })() };
+    const options = { assets, voice: "test", music: "synth", cwd, visualHistoryDir: "history" };
+    const first = await runMake(PROMPT, { ...options, out: "one" }, adapters);
+    assert.equal(first.status, "ready-for-review", JSON.stringify(first.stages));
+    assert.deepEqual([first.variety.entries, first.variety.passes, first.variety.varied], [0, true, []]);
+    assert.ok(!calls.some((call) => /## Recent videos/.test(call.input ?? "")), "an empty history adds nothing to the request");
+    const one = JSON.parse(await readFile(path.join(cwd, "one/storyboard.json"), "utf8"));
+    assert.equal(one.background, undefined);
+    assert.equal(one.overlays[0].style, "word-highlight");
+
+    // The fake model returns the same storyboard again: make moves the dials that repeat.
+    const before = calls.length;
+    const second = await runMake(PROMPT, { ...options, out: "two" }, adapters);
+    assert.equal(second.status, "ready-for-review", JSON.stringify(second.stages));
+    const request = calls.slice(before).find((call) => call.schemaName === "launchclip_storyboard");
+    assert.match(request.input, /## Recent videos \(do not repeat\)\n\nThis video joins a series of 1 earlier video/);
+    assert.match(request.input, /hook "Payouts never match your books\."; opens on hook-title; modules hook-title → media-window → cta; background default; captions word-highlight/);
+    const two = JSON.parse(await readFile(path.join(cwd, "two/storyboard.json"), "utf8"));
+    assert.notEqual(two.background?.kind ?? "default", "default", "the background changed");
+    assert.notEqual(two.overlays[0].style, "word-highlight", "the caption preset changed");
+    assert.deepEqual(second.variety.varied.map((change) => change.dial), ["background", "captions"]);
+    assert.ok(notices.some((line) => /^variety: background default → /.test(line)));
+    // Same script and modules: the lint reports it, and make still finishes.
+    assert.equal(second.variety.passes, false);
+    assert.match(second.variety.findings.join("\n"), /too close to one \(Ledgerly\)/);
+    assert.ok(second.warnings.some((line) => /^variety: too close to one/.test(line)));
+    assert.match(formatMakeSummary(second), /variety: 1 finding\(s\) against 1 earlier video\(s\), nearest 0\.\d+; varied background → [a-z-]+, captions → [a-z-]+/);
+    assert.ok(existsSync(path.join(cwd, "two/.launchclip/variety.json")));
+
+    const index = JSON.parse(await readFile(path.join(history, "launchclip-history.json"), "utf8"));
+    assert.deepEqual(index.entries.map((entry) => path.basename(entry.project)), ["two", "one"]);
+    assert.equal(index.entries[0].hook.text, "Payouts never match your books.");
+    assert.deepEqual(index.entries[0].modules, ["hook-title", "media-window", "cta"]);
+    assert.equal(index.entries[0].background.kind, two.background.kind);
+
+    // A rerun of the first keeps its plan, is linted against the second only, and replaces its entry.
+    const again = await runMake(PROMPT, { ...options, out: "one" }, adapters);
+    assert.equal(again.stages.storyboard.status, "cached");
+    assert.equal(again.variety.entries, 1);
+    const reindexed = JSON.parse(await readFile(path.join(history, "launchclip-history.json"), "utf8"));
+    assert.deepEqual(reindexed.entries.map((entry) => path.basename(entry.project)), ["one", "two"]);
+    await assert.rejects(runMake(PROMPT, { ...options, visualSimilarityLimit: 2 }, adapters), /--visual-similarity-limit must be above 0 and at most 1/);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 // The script pass first returns a script that fails the checks (a greeting,
 // an invented user count); the repair pass returns NARRATION unless `stuck`.
 function scriptRepairModel({ stuck = false } = {}) {
