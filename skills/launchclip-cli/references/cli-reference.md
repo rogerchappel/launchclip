@@ -1499,6 +1499,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
   ```
 
+- `script check`: Lint a voiceover script before anything renders. Errors (exit 1): more words than the duration can hold (2.75 a second), a number, quote, rating, user count or deadline that is not in the --brief, a greeting or filler opener or a hook over budget, no call to action or more than one, a call to action before the final quarter, a sentence over 25 words. Warnings: sentence length, reading grade, additive transitions, brand in the first sentence for cold audiences, unbacked superlatives, numbers per sentence and precision, an unanswered hook question, narration rate outside the format's band.
+
+  ```text
+  launchclip script check <script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]... [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--product <name>] [--cta "..."] [--audience consumer|b2b] [--json]
+  ```
+
 - `cutdown`: Cut a Short from one section of a long video: a new 9:16 project (default <project>/cutdowns/<section>-shorts) that re-plans the section against the Shorts profile instead of cropping. It reuses the base edit, mattes and face track, maps word anchors into the section, opens on a hook card and loops back to it. Deterministic and free; --model re-plans with the planner (paid). Then run launchclip finish on it.
 
   ```text

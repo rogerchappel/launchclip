@@ -3,7 +3,9 @@
 // --awareness, or a deterministic default from the brief), then the model
 // writes the narration against that format's beat skeleton and word budget,
 // from the prompt, the notes, the asset descriptions and any transcripts. One
-// optional resize pass corrects the length once the real take is measured.
+// optional repair pass fixes the script checks' errors (src/script_check.js),
+// and one optional resize pass corrects the length once the real take is
+// measured.
 import { chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../../kit/core/script-formats.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 
@@ -66,12 +68,13 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 /**
  * options: {client, model, provider, prompt, notes: [text], assets: [line], transcripts: [text],
  *   duration, words (target override), plan (a chooseScriptPlan() result, or its
- *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous}}
+ *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
+ *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
  *   usage, cost_usd, model, response_id}
  */
 export async function writeScript(options = {}) {
-  const { client, model = null, provider = null, prompt, notes = [], assets = [], transcripts = [], duration, resize = null } = options;
+  const { client, model = null, provider = null, prompt, notes = [], assets = [], transcripts = [], duration, resize = null, repair = null } = options;
   if (!client) throw new Error("writeScript needs a model client");
   const given = options.plan ?? {};
   const plan = chooseScriptPlan({ prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, words: options.words });
@@ -88,6 +91,10 @@ export async function writeScript(options = {}) {
   if (transcripts.length) lines.push("", "## Transcripts of supplied recordings", "", ...transcripts.map((text) => String(text).trim().slice(0, 4000)));
   if (resize?.previous) {
     lines.push("", "## Resize", "", `Your previous narration (${resize.measured_words} words) measured ${resize.measured_seconds}s when spoken; the target is ${duration}s. Rewrite it to about ${words} words, keeping its beats, hook and call to action.`, "", resize.previous);
+  }
+  if (repair?.previous) {
+    const errors = [repair.errors ?? []].flat().map((error, index) => `${index + 1}. ${typeof error === "string" ? error : `[${error.id}] ${error.message} Fix: ${error.fix}`}`);
+    lines.push("", "## Repair", "", "Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief, the length), and return the beats and three title options again.", "", ...errors, "", "Previous narration:", "", repair.previous);
   }
   const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: SCRIPT_SCHEMA, schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : parseText(result?.text);

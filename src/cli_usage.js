@@ -74,6 +74,7 @@ export const USAGE = Object.freeze([
   ["make", "make \"<prompt>\" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start \"npm run dev\"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]"],
   ["fx", "fx <video> <module> [--at <seconds|word:text>] [--until <seconds|word:text> | --for <seconds>] [--params '{...}'|params.json] [--layer front|behind|split] [--captions <style>] [--style <name|path>] [--renderer remotion|hyperframes] [--quality draft|high] [--music none|synth] [--out <project-dir>] [--no-download] [--json]"],
   ["voice", "voice <project | --text \"...\"> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]"],
+  ["script check", "script check <script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]... [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--product <name>] [--cta \"...\"] [--audience consumer|b2b] [--json]"],
   ["cutdown", "cutdown <project> --to shorts [--section <id>] [--max 58] [--out <dir>] [--model provider:model] [--force]"],
   ["export", "export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]"],
   ["sfx seed", "sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]"],
@@ -202,6 +203,7 @@ export const SUMMARIES = Object.freeze({
   validate: "Validate a packet workspace.",
   run: "Run the whole packet lane for a repository.",
   script: "Write a teleprompter script from the planned voiceover.",
+  "script check": "Lint a voiceover script before anything renders. Errors (exit 1): more words than the duration can hold (2.75 a second), a number, quote, rating, user count or deadline that is not in the --brief, a greeting or filler opener or a hook over budget, no call to action or more than one, a call to action before the final quarter, a sentence over 25 words. Warnings: sentence length, reading grade, additive transitions, brand in the first sentence for cold audiences, unbacked superlatives, numbers per sentence and precision, an unanswered hook question, narration rate outside the format's band.",
   align: "Align a recorded take to word timings and a motion timeline.",
   "motion-render": "Render video/motion.mp4 with the motion engine.",
   music: "Generate a music bed for a workspace.",
@@ -209,7 +211,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["skills", "style", "profile", "cast", "story", "sfx", "module", "subject", "demo"]);
+export const USAGE_GROUPS = Object.freeze(["skills", "style", "profile", "cast", "story", "sfx", "module", "subject", "demo", "script"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 
@@ -234,7 +236,8 @@ export function usageRows(command, action = null) {
   const actions = USAGE.filter(([row]) => row.startsWith(`${command} `));
   // A group with its own bare row (demo) lists that row and its actions.
   if (exact.length) return GROUPS.has(command) && !action ? [...exact, ...actions] : exact;
-  return actions;
+  // An unknown action (`script <workspace> --help`) also shows the group's own row.
+  return action ? [...USAGE.filter(([row]) => row === command), ...actions] : actions;
 }
 
 /** The top-level `launchclip --help` text. */

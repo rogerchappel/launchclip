@@ -53,6 +53,9 @@ export async function runCli(argv, io = {}) {
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
+  // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
+  const scriptCheckFile = command === "script" && firstArg === "check" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const scriptCheckInvocation = command === "script" && firstArg === "check" ? { file: scriptCheckFile, flagArgs: scriptCheckFile ? rest.slice(1) : rest } : null;
   // launchclip fx <video> <module> [flags]
   const fxInvocation = command === "fx" ? { video: firstArg && !firstArg.startsWith("--") ? firstArg : null, module: rest[0] && !rest[0].startsWith("--") ? rest[0] : null, flagArgs: rest[0] && !rest[0].startsWith("--") ? rest.slice(1) : rest } : null;
   // launchclip voice takes a project or only flags (--text "...").
@@ -60,7 +63,7 @@ export async function runCli(argv, io = {}) {
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -276,6 +279,13 @@ export async function runCli(argv, io = {}) {
       result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
     } else if (command === "run") {
       result = await runPacket(required(firstArg, "repo path"), flags);
+    } else if (scriptCheckInvocation) {
+      const { runScriptCheck } = await import("./script_check_cli.js");
+      const { formatScriptCheck } = await import("./script_check.js");
+      const report = await runScriptCheck(scriptCheckInvocation.file, flags);
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatScriptCheck(report, { label: report.source }));
+      if (!report.ok) throw new Error(`launchclip script check: ${report.errors.length} error(s) in ${report.source}`);
+      return;
     } else if (command === "script") {
       result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
     } else if (command === "align") {

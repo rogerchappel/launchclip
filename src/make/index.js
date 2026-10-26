@@ -28,6 +28,7 @@ import { inventoryAssets } from "./assets.js";
 import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, writeScript } from "./script.js";
+import { checkScript } from "../script_check.js";
 import { chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
 import { runHeadlessCritic } from "./critic.js";
 import { readProjectStory } from "../story_loader.js";
@@ -375,9 +376,10 @@ async function prepareVoiceover(ctx) {
   return { status: "done" };
 }
 
-// Motion: the script pass writes the narration, the voice is synthesised
-// (Kokoro by default; cached), and one resize pass runs when the measured
-// take misses the target duration by more than 15%.
+// Motion: the script pass writes the narration, the script checks run on it
+// (one repair pass on errors), the voice is synthesised (Kokoro by default;
+// cached), and one resize pass runs when the measured take misses the target
+// duration by more than 15%.
 async function prepareMotion(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
@@ -393,6 +395,13 @@ async function prepareMotion(ctx) {
     const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
+    const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
+    if (!first.ok) {
+      ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan, repair: { previous: script.narration, errors: first.errors } });
+      addCost(report, "script-repair", ctx.model, repaired);
+      script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
+    }
   }
   if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for the narration (cached per text in .launchclip/voice)");
   let take = await synthesize(ctx, script.narration);
@@ -405,6 +414,9 @@ async function prepareMotion(ctx) {
     take = await synthesize(ctx, script.narration);
   }
   script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) };
+  // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
+  script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
+  if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
   state.script = { hash: scriptHash };
   ctx.script = script;
@@ -414,7 +426,7 @@ async function prepareMotion(ctx) {
   if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, provider: voiceProvider };
-  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
 }
