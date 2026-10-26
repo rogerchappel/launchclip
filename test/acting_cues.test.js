@@ -82,3 +82,23 @@ test("gaze offsets: toward the target's side, lifted for far points", () => {
   const far = gazeOffset({ x: null, y: 600, far: true }, actor, canvas);
   assert.ok(far.x > 0 && far.y < 0, "a character left of centre looks out to the right and up");
 });
+
+test("the acting gate: a line's key action is performed by its character on that line", async () => {
+  const { actingGate } = await import("../src/direction_guardrails.js");
+  const words = ["Look", "across", "the", "street", "now"].map((text, i) => ({ text, start: 1 + i * 0.4, end: 1.3 + i * 0.4 }));
+  const map = (action) => ({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", beat: "resolution", lines: [{ words: [0, 4], intent: "claim", treatment: "insert", scenes: ["c"], cast: [{ id: "maya" }], action }] }] });
+  const acted = story([plate(), bench([{ id: "maya", cues: [{ at: 1.5, action: "look-far", target: "street" }] }])]);
+  assert.equal(actingGate(acted, { map: map({ verb: "look-far", who: "maya" }), words }).status, "passed");
+  // Sitting and smiling at the camera does not look across the street.
+  const idle = story([plate(), bench([{ id: "maya", expression: "happy" }])]);
+  const failed = actingGate(idle, { map: map({ verb: "look-far", who: "maya", target: "street" }), words });
+  assert.equal(failed.status, "failed");
+  assert.match(failed.findings[0].detail, /names maya look-far, but cast scenes c on it performs it.*action: "look-far", target: "street"/);
+  // Too late: an action after the line (past the slack) does not count.
+  const late = story([plate(), bench([{ id: "maya", cues: [{ at: 4.5, action: "look-far" }] }])]);
+  assert.equal(actingGate(late, { map: map({ verb: "look-far", who: "maya" }), words }).status, "failed");
+  // An explicit facing away from the target fails.
+  const away = story([plate(), bench([{ id: "maya", facing: "left", target: "right", cues: [{ at: 1.5, action: "gaze-at", target: "right", facing: "left" }] }])]);
+  assert.ok(actingGate(away, { map: map({ verb: "gaze-at", who: "maya" }), words }).findings.some((finding) => finding.rule === "faces-away"));
+  assert.equal(actingGate(acted, {}).status, "skipped");
+});

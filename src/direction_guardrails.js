@@ -3,6 +3,7 @@
 // renderer-neutral op lists both renderers play.
 //
 //   physicsGate(story)   anchored world elements move only with the camera
+//   actingGate(story, {map, words})  each line's key action is performed
 //
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
@@ -16,6 +17,8 @@ import { resolveModule } from "../kit/core/modules.mjs";
 import { TRANSFORM_KEYS } from "../kit/core/physics.mjs";
 import { samePlaceCuts } from "../kit/core/story.mjs";
 import { sceneWindows } from "../kit/core/transitions.mjs";
+import { ACTION_INFO } from "../kit/core/characters/actions.mjs";
+import { narrationWords } from "../kit/core/direction.mjs";
 
 // Sampling step (s) and tolerances for "moves with its layer".
 export const PHYSICS = Object.freeze({ step: 0.1, px: 0.5, scale: 0.001, fadeLow: 0.02, fadeHigh: 0.98 });
@@ -128,4 +131,60 @@ export function physicsGate(story) {
     if (faded) findings.push({ rule: "set-fades", severity: "error", at: faded.t, ids: [id, beneath], detail: `${id}'s ${c.set} is at ${faded.opacity} opacity over the plate ${beneath}, which is already there; it should arrive and leave with the plate (a cut, or the plate's own transition)` });
   }
   return gateResult(findings);
+}
+
+// How far (s) around a line's words an action may land and still count.
+export const ACTING_SLACK = 0.5;
+
+const CHARACTER_MODULES = ["cast-scene", "character-cameo"];
+
+/** Does a directed state perform a verb (an acting cue, or a pose)? */
+function performs(state, verb) {
+  if (state.action === verb || state.pose === verb) return true;
+  // A walk ends on its arrival state, which is still the walk-to.
+  return verb === "walk-to" && state.arrive === true;
+}
+
+/**
+ * Acting (docs/DIRECTION_GUARDRAILS.md §2):
+ * - action-missing: a line's key action (map line.action {verb, who}) is not
+ *   performed by that character in a cast scene during the line (±0.5 s);
+ * - faces-away: a character with a target faces away from it.
+ * map: DIRECTION.json; words: NARRATION.json words. Skipped without a map.
+ */
+export function actingGate(story, { map, words } = {}) {
+  if (!map || !Array.isArray(map.sections)) return { status: "skipped", reason: "no direction map" };
+  const list = narrationWords(words);
+  const findings = [];
+  const { entries } = renderedModels(story);
+  const characterScenes = [...entries.values()].filter(({ model }) => CHARACTER_MODULES.includes(model.module));
+  let named = 0;
+  for (const section of map.sections) {
+    for (const line of Array.isArray(section?.lines) ? section.lines : []) {
+      const action = line?.action;
+      if (!action || !Array.isArray(line.words)) continue;
+      named += 1;
+      const first = list[line.words[0]], last = list[line.words[1]];
+      if (!first || !last) continue;
+      const from = first.start - ACTING_SLACK, to = last.end + ACTING_SLACK;
+      const ids = Array.isArray(line.scenes) ? new Set(line.scenes) : null;
+      const candidates = characterScenes.filter(({ entry }) => entry.start < to && entry.renderEnd > from && (!ids || ids.has(entry.id) || ![...ids].some((id) => entries.get(id) && CHARACTER_MODULES.includes(entries.get(id).model.module))));
+      const done = candidates.some(({ entry, model }) => model.content.actors.some((actor) => actor.id === action.who && actor.states.some((state, i) => {
+        const holdEnd = actor.states[i + 1]?.time ?? model.end;
+        return performs(state, action.verb) && state.time < to && holdEnd > from;
+      })));
+      if (!done) {
+        const where = candidates.length ? `cast scenes ${candidates.map(({ entry }) => entry.id).join(", ")}` : "no cast scene";
+        const hint = ACTION_INFO[action.verb] ? `a cue {at: "word:…", action: "${action.verb}"${action.target ? `, target: ${JSON.stringify(action.target)}` : ""}}` : `a cue {at: "word:…", pose: "${action.verb}"}`;
+        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), detail: `"${String(line.text ?? "").slice(0, 60) || `words ${line.words.join("–")}`}" names ${action.who} ${action.verb}, but ${where} on it performs it (${round(first.start, 2)}–${round(last.end, 2)} s); give ${action.who} ${hint}` });
+      }
+    }
+  }
+  for (const { entry, model } of characterScenes) {
+    for (const actor of model.content.actors) {
+      const away = actor.states.find((state) => state.target !== null && state.target !== undefined && state.gaze && ((state.gaze.x > 0 && state.facing === "left") || (state.gaze.x < 0 && state.facing === "right")));
+      if (away) findings.push({ rule: "faces-away", severity: "error", at: away.time, ids: [entry.id], detail: `${actor.id} in ${entry.id} faces ${away.facing}, away from its target ${JSON.stringify(away.target)}; drop the facing so it faces what it looks at` });
+    }
+  }
+  return gateResult(findings, { actions: named });
 }
