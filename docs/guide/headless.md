@@ -134,7 +134,8 @@ launchclip script check voiceover.txt --duration 30 --brief brief.md --format pr
 
 The script can be plain text, `storyboard.json` (`audio.narration`),
 `NARRATION.json` or `SCRIPT.json`; the duration comes from the file when it
-has one. `--brief` takes the prompt, notes and transcripts the script was
+has one, and `SCRIPT.json`'s plan supplies the format, goal and awareness
+unless you pass `--format`, `--goal` or `--awareness`. `--brief` takes the prompt, notes and transcripts the script was
 written from (repeat it for several files). It exits 1 when there are errors
 and prints the fix for each one.
 

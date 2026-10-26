@@ -18,9 +18,10 @@ export async function runScriptCheck(file, flags = {}) {
     narration: input.narration,
     duration,
     brief,
-    format: flags.format,
-    goal: flags.goal,
-    awareness: flags.awareness,
+    // make's SCRIPT.json records the plan it wrote against; flags override it.
+    format: flags.format ?? input.plan?.format,
+    goal: flags.goal ?? input.plan?.goal,
+    awareness: flags.awareness ?? input.plan?.awareness,
     product: flags.product,
     cta: flags.cta,
     audience: flags.audience
@@ -28,7 +29,7 @@ export async function runScriptCheck(file, flags = {}) {
   return { ...report, source: String(file), input: input.kind, brief_files: briefFiles };
 }
 
-/** The narration and duration inside a script file. */
+/** The narration and duration inside a script file (and SCRIPT.json's plan, when it has one). */
 export function parseScriptFile(file, text) {
   if (!/\.json$/i.test(file)) return { kind: "text", narration: text, duration: null };
   let value;
@@ -38,7 +39,10 @@ export function parseScriptFile(file, text) {
     const spoken = narration.text ?? narration.lines.map((line) => line.text).join(" ");
     return { kind: "storyboard", narration: spoken, duration: positive(value.format?.duration) };
   }
-  if (typeof value?.narration === "string") return { kind: "script", narration: value.narration, duration: positive(value.take?.seconds ?? value.duration) };
+  if (typeof value?.narration === "string") {
+    const plan = value.plan && typeof value.plan === "object" ? { format: value.plan.format, goal: value.plan.goal, awareness: value.plan.awareness } : null;
+    return { kind: "script", narration: value.narration, duration: positive(value.take?.seconds ?? value.duration), ...(plan ? { plan } : {}) };
+  }
   if (typeof value?.text === "string") return { kind: "narration", narration: value.text, duration: positive(value.duration_seconds ?? value.duration) };
   throw new Error(`${file} has no narration: expected storyboard.json (audio.narration.text), NARRATION.json (text), SCRIPT.json (narration) or a .txt file`);
 }

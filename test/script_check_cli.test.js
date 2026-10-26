@@ -72,6 +72,7 @@ test("script check reads the narration out of storyboard, NARRATION and SCRIPT J
   assert.equal(parseScriptFile("story.json", JSON.stringify({ audio: { narration: { lines: [{ speaker: "a", text: "One." }, { speaker: "b", text: "Two." }] } } })).narration, "One. Two.");
   assert.deepEqual(parseScriptFile("NARRATION.json", JSON.stringify({ text: GOOD, duration_seconds: 9.4 })), { kind: "narration", narration: GOOD, duration: 9.4 });
   assert.deepEqual(parseScriptFile("SCRIPT.json", JSON.stringify({ narration: GOOD, take: { seconds: 10.2 } })), { kind: "script", narration: GOOD, duration: 10.2 });
+  assert.deepEqual(parseScriptFile("SCRIPT.json", JSON.stringify({ narration: GOOD, plan: { format: "promo", goal: "convert", awareness: "solution", skeleton: "launch" } })).plan, { format: "promo", goal: "convert", awareness: "solution" });
   assert.equal(parseScriptFile("script.txt", GOOD).duration, null);
   assert.throws(() => parseScriptFile("other.json", "{}"), /has no narration/);
 });

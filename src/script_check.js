@@ -41,20 +41,22 @@
 // least as large; "4 in 10" is a ratio that a brief percentage within five
 // points supports.
 
+import { AWARENESS_LEVELS, MAX_WORDS_PER_SECOND, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS } from "../kit/core/script-formats.mjs";
+
 export const SCRIPT_CHECK_VERSION = "launchclip.script-check.v1";
-// The ids kit/core/script-formats.mjs defines; this module does not import it.
-export const SCRIPT_FORMATS = Object.freeze(["short-form", "long-form", "explainer", "data-explainer", "story", "promo"]);
-export const SCRIPT_GOALS = Object.freeze(["reach", "convert"]);
-export const AWARENESS_LEVELS = Object.freeze(["unaware", "problem", "solution", "product", "most"]);
+// The format, goal and awareness ids are the planning pass's own (kit/core/script-formats.mjs).
+export { SCRIPT_GOALS, AWARENESS_LEVELS };
+export const SCRIPT_FORMATS = SCRIPT_FORMAT_IDS;
 
 // Hard ceiling: 2.75 words a second (165 wpm) cannot be read in the time.
-export const WORDS_PER_SECOND_CEILING = 2.75;
+export const WORDS_PER_SECOND_CEILING = MAX_WORDS_PER_SECOND;
 // Narration-rate bands per format (derived from the report's WPM budget table:
 // dense data ~135, default ~150, energetic short-form ~165; flag below ~130).
 export const WPM_BANDS = Object.freeze({
   "data-explainer": Object.freeze([125, 145]),
   explainer: Object.freeze([130, 160]),
-  story: Object.freeze([125, 160]),
+  // A story narrates over only part of its runtime (the planning pass's coverage), so its floor is lower.
+  story: Object.freeze([Math.floor(125 * (FORMAT_SPECS.story.coverage ?? 1)), 160]),
   "long-form": Object.freeze([135, 165]),
   "short-form": Object.freeze([140, 165]),
   promo: Object.freeze([140, 165])
