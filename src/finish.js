@@ -23,7 +23,7 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { actingGate, physicsGate } from "./direction_guardrails.js";
+import { actingGate, ghostingGate, physicsGate } from "./direction_guardrails.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -1379,6 +1379,11 @@ async function runGates(ctx) {
     gates.physics = physicsGate(ctx.resolved);
   } catch (error) {
     gates.physics = { status: "failed", error: error.message };
+  }
+  try {
+    gates.ghosting = ghostingGate(ctx.resolved);
+  } catch (error) {
+    gates.ghosting = { status: "failed", error: error.message };
   }
 
   const master = ctx.state.stages?.master?.details;

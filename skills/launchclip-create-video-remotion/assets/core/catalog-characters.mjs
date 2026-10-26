@@ -248,8 +248,15 @@ export function actorReach(actor) {
 }
 
 function actorsOps(model, ops) {
+  const single = model.content.single ?? {};
   model.content.actors.forEach((actor, index) => {
-    actingOps(ops, {...actor, cid: `${model.id}-c${index}`, start: model.start, end: model.end, geometry: actor.geometry});
+    const cid = `${model.id}-c${index}`;
+    actingOps(ops, {...actor, cid, start: model.start, end: model.end, geometry: actor.geometry});
+    // One copy of a person (castPassage): hidden until the transition into
+    // this scene has passed, or from the moment the one out of it starts.
+    const shown = actor.walks ? `${cid}-walk` : cid;
+    if (single.arrive?.ids.includes(actor.id) && single.arrive.at > model.start + 1e-6) { set(ops, shown, model.start, {opacity: 0}); set(ops, shown, single.arrive.at, {opacity: 1}); }
+    if (single.leave?.ids.includes(actor.id)) set(ops, shown, single.leave.at, {opacity: 0});
   });
 }
 
@@ -265,8 +272,10 @@ function rootFade(model, ops, ids) {
   const m = model.motion;
   const entry = model.content.entry ?? null, exit = model.content.exit ?? null;
   const settled = model.start <= 1 / model.fps + 1e-6 || entry?.type === 'cut';
-  const enterDuration = entry?.type === 'fade' ? entry.dur : m.enterDuration;
-  const exitDuration = exit?.type === 'fade' ? exit.dur : m.exitDuration;
+  // A person is never see-through for long (docs/DIRECTION_GUARDRAILS.md §4):
+  // a cast's own fade takes at most CAST_FADE seconds, whatever the grammar.
+  const enterDuration = entry?.type === 'fade' ? entry.dur : Math.min(m.enterDuration, CAST_FADE);
+  const exitDuration = exit?.type === 'fade' ? exit.dur : Math.min(m.exitDuration, CAST_FADE);
   for (const id of ids) {
     if (settled) set(ops, id, model.start, {opacity: 1});
     else {
@@ -279,6 +288,7 @@ function rootFade(model, ops, ids) {
 }
 
 export const PASSAGES = Object.freeze(['fade', 'cut']);
+export const CAST_FADE = 0.3;
 
 /**
  * How a character scene arrives and leaves. params.enter / params.exit (fade
@@ -288,20 +298,36 @@ export const PASSAGES = Object.freeze(['fade', 'cut']);
  * a cut, or a fade over that transition. Anything else fades as before.
  * → {entry: {type, dur?} | null, exit: {type, dur?} | null} (null: the default fade)
  */
-function castPassage(b, ctx) {
+function castPassage(b, ctx, ids = []) {
   const {check} = b;
   const p = b.params;
   const w = ctx.beneath;
   const on = (a, c) => Number.isFinite(a) && Math.abs(a - c) < 1e-3;
   const dur = transition => Math.max(0.1, Number(transition?.dur) || 0.3);
   const passage = transition => (!transition || transition.type === 'cut' ? {type: 'cut'} : {type: 'fade', dur: dur(transition)});
+  // No ghosting (docs/DIRECTION_GUARDRAILS.md §4): a character also in the
+  // character scene just before arrives as a cut when the plate's transition
+  // has passed; one also in the scene just after leaves as a cut. One copy of
+  // a person is on screen at a time.
+  // The set still arrives and leaves with its plate; only the shared people wait.
+  const before = ids.filter(id => (ctx.castNeighbours?.before ?? []).includes(id));
+  const after = ids.filter(id => (ctx.castNeighbours?.after ?? []).includes(id));
+  const throughPlate = w && on(w.start, b.start) && w.in && w.in.type !== 'cut' ? dur(w.in) : 0;
+  const nextPasses = w && on(w.end, b.start + b.duration) && w.nextIn && w.nextIn.type !== 'cut';
+  const single = {
+    ...(before.length ? {arrive: {ids: before, at: rt(b.start + throughPlate)}} : {}),
+    // Leaving into a transition, a shared person leaves as it starts (the
+    // riding cast's set slides out with its plate, the person does not).
+    ...(after.length && nextPasses ? {leave: {ids: after, at: rt(b.start + b.duration)}} : {})
+  };
+  const sharedIn = before.length ? {type: 'cut'} : null;
   // Riding a world plate in world mode (camera-world.mjs ridesPlate), the cast
   // moves with the plate and its transition: it never fades on its own.
-  if (ctx.rides && p.enter === undefined && p.exit === undefined) return {entry: {type: 'cut'}, exit: {type: 'cut'}};
+  if (ctx.rides && p.enter === undefined && p.exit === undefined) return {entry: {type: 'cut'}, exit: {type: 'cut'}, single};
   const named = (value, path) => (value === undefined ? undefined : check.oneOf(value, path, PASSAGES) === 'cut' ? {type: 'cut'} : {type: 'fade', dur: b.motion?.enterDuration ?? 0.5});
-  const entry = named(p.enter, 'params.enter') ?? (w && on(w.start, b.start) ? passage(w.in) : null);
+  const entry = named(p.enter, 'params.enter') ?? (sharedIn && !throughPlate ? sharedIn : null) ?? (w && on(w.start, b.start) ? passage(w.in) : null);
   const exit = named(p.exit, 'params.exit') ?? (w && on(w.end, b.start + b.duration) && w.nextIn ? passage(w.nextIn) : null);
-  return {entry, exit};
+  return {entry, exit, single};
 }
 
 function castEvents(b, actors) {
@@ -463,7 +489,7 @@ function resolveCastScene(params, ctx) {
   rect.width = r2(Math.min(canvas.width, Math.max(...actors.map(a => a.x)) + 220 * actors[0].scale) - rect.x);
   rect.height = r2(Math.min(canvas.height, layout.floor) - rect.y);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
+  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
@@ -565,7 +591,7 @@ function resolveCameo(params, ctx) {
   }
   castEvents(b, [actor]);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side};
+  const content = {...castPassage(b, ctx, [actor.id]), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side};
   return b.finish(content, {minTextPx: card ? cardBox.titleSize : b.min.key});
 }
 
