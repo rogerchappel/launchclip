@@ -144,6 +144,17 @@ test("stageDecision runs a stage when forced, new, changed or tampered, else reu
   assert.equal(stageDecision(previous, { inputHash: "a", outputs: { "out.wav": "h2" } }).reason, "out.wav changed since it was written");
 });
 
+test("a hit with cue \"none\" silences the module event it names", () => {
+  const story = {
+    format: { width: 1920, height: 1080, fps: 30, duration: 10 },
+    resolved: { duration: 10, fps: 30, frames: 300 },
+    scenes: [{ id: "chart", module: "x", start: 0, end: 6, hits: [{ at: 1, event: "build", cue: "none" }] }]
+  };
+  const models = { chart: { id: "chart", events: [{ id: "chart-build", name: "build", time: 1, endTime: 2.2, cue: "riser" }, { id: "chart-highlight", name: "highlight", time: 4, cue: "pop" }] } };
+  const { cues } = bindCues(story, { models });
+  assert.deepEqual(cues.map((cue) => [cue.cue, cue.event]), [["pop", "highlight"]]);
+});
+
 test("bindCues binds every hit and cue-carrying module event to a kit cue", () => {
   const story = {
     format: { width: 1080, height: 1920, fps: 30, duration: 10 },
