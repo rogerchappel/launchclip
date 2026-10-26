@@ -177,3 +177,14 @@ test("split transcript tokens join back into one caption word; word timings stay
   // A spaced dash stays its own word.
   assert.deepEqual(joinAttachedWords([{ text: "this", start: 0, end: 0.2 }, { text: "-", start: 0.3, end: 0.4 }, { text: "that", start: 0.5, end: 0.7 }]).map((word) => word.text), ["this", "-", "that"]);
 });
+
+test('a caption line spoken into a hidden range ends where the range starts', async () => {
+  const { visibleChunks } = await import('../kit/core/captions.mjs');
+  const chunk = { id: 'c1', start: 9, end: 10.6, words: [{ text: 'and', start: 9, end: 9.3 }, { text: 'get', start: 9.6, end: 10.1 }, { text: 'your', start: 10.2, end: 10.6 }] };
+  const later = { id: 'c2', start: 10.3, end: 11, words: [{ text: 'first', start: 10.3, end: 11 }] };
+  const [line, ...rest] = visibleChunks([chunk, later], [[10, 12]]);
+  assert.equal(rest.length, 0, 'a line that starts inside the range is dropped');
+  assert.equal(line.end, 10);
+  assert.deepEqual(line.words.map((word) => [word.text, word.end]), [['and', 9.3], ['get', 10]]);
+  assert.deepEqual(visibleChunks([chunk], [[20, 21]]), [chunk], 'a line clear of every range is unchanged');
+});
