@@ -57,7 +57,7 @@ export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot
 // stays calm. `color` goes only on the kinds that take it (BACKGROUND_OPTIONS
 // in kit/core/backgrounds.mjs); texture also draws its type.
 export const SEED_BACKGROUND_PARAMS = Object.freeze({
-  texture: { amount: [0.3, 0.8], scale: [0.8, 1.4] },
+  texture: { amount: [0.5, 0.9], scale: [0.8, 1.4] },
   'grain-gradient': { angle: [0, 360], intensity: [0.25, 0.7], grain: [0.2, 0.6] },
   gradient: { angle: [0, 360], intensity: [0.25, 0.7] },
   'dot-grid': { scale: [0.7, 1.5], density: [0.2, 0.7], intensity: [0.3, 0.7] },
@@ -65,7 +65,7 @@ export const SEED_BACKGROUND_PARAMS = Object.freeze({
   halftone: { angle: [0, 360], scale: [0.7, 1.4], intensity: [0.3, 0.7] },
   mesh: { intensity: [0.3, 0.7], scale: [0.7, 1.6] },
   geometric: { density: [0.3, 0.7], scale: [0.8, 1.5], intensity: [0.3, 0.6] },
-  stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.2, 0.5] },
+  stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.4, 0.75] },
   paper: { grain: [0.3, 0.7], intensity: [0.2, 0.6] }
 });
 const COLOR_KINDS = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif']);
