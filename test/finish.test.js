@@ -1120,3 +1120,111 @@ test("finish plates caption lines that do not read on the render, renders once m
     }
   }
 });
+
+// The minimal story with a cover: s1's metric fits the 1.5 s left after the card.
+function withCover(cover) {
+  return (story) => {
+    story.cover = cover;
+    story.scenes[0].params.metric.values = [{ value: 12, at: 0.3 }];
+    delete story.scenes[0].hits;
+  };
+}
+
+// fakeAdapters plus a still that records each call and writes the image.
+function coverAdapters() {
+  const adapters = fakeAdapters();
+  const renderer = adapters.renderer;
+  adapters.stills = [];
+  adapters.renderer = (name) => ({
+    ...renderer(name),
+    async still(dir, seconds, out, opts = {}) {
+      adapters.stills.push({ name, dir, seconds, out, opts });
+      await mkdir(path.dirname(out), { recursive: true });
+      await writeFile(out, "png");
+      return { output: out };
+    }
+  });
+  return adapters;
+}
+
+test("runFinish without a cover renders no cover image and writes publish.json", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = coverAdapters();
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.cover, undefined);
+    assert.equal(report.thumbnail, undefined);
+    assert.deepEqual(adapters.stills, []);
+    assert.equal(existsSync(path.join(project, "video/cover.png")), false);
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.deepEqual(resolved.scenes.map((scene) => [scene.id, scene.start]), [["s1", 0], ["s2", 3]], "the timeline is unchanged");
+    assert.equal(report.publish, "publish.json");
+    const manifest = JSON.parse(await readFile(path.join(project, "publish.json"), "utf8"));
+    assert.equal(manifest.title, "Minimal dual-renderer story");
+    assert.equal(manifest.video, "renders/draft.mp4");
+    assert.equal(manifest.cover, null);
+    assert.equal(manifest.aspect, "9:16");
+    assert.equal(manifest.platforms.youtube_shorts.fits, true);
+    assert.match(formatFinishSummary(report), /publish: publish\.json/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("runFinish with a cover opens on the card and renders video/cover.png as the thumbnail", async () => {
+  for (const renderer of ["remotion", "hyperframes"]) {
+    const project = await narratedProject({ mutate: withCover({ text: "Builds in twelve minutes?", number: "48→12", kicker: "3 fixes" }) });
+    try {
+      const adapters = coverAdapters();
+      const report = await runFinish(project, { renderer }, adapters);
+      assert.notEqual(report.status, "failed", JSON.stringify(report.stages.find((stage) => stage.status === "failed")));
+      assert.deepEqual(report.cover, { file: "video/cover.png", frame: "first", seconds: 2, renderer, cached: false });
+      assert.equal(report.thumbnail, "video/cover.png");
+      assert.equal(adapters.stills.length, 1);
+      const [still] = adapters.stills;
+      assert.equal(still.out, path.join(project, "video/cover.png"));
+      if (renderer === "remotion") {
+        assert.equal(still.dir, project);
+        assert.equal(still.opts.propsFile, path.join(project, ".launchclip/cover/story.resolved.json"), "the cover keeps its own props");
+        assert.deepEqual(still.opts.story.scenes.map((scene) => [scene.id, scene.module, scene.start, scene.end]), [["cover", "hook-title", 0, 3]]);
+        assert.deepEqual(still.opts.story.scenes[0].params, { headline: "48→12 Builds in twelve minutes?", emphasis: [{ text: "48→12", at: 0.3 }], kicker: "3 fixes", kickerAt: 0.5 });
+      } else {
+        assert.equal(still.dir, path.join(project, ".launchclip/cover/hyperframes"));
+        assert.ok(adapters.calls.compile >= 2, "the cover story compiles to its own HyperFrames project");
+      }
+      // The video opens on the cover card; s1 starts as it ends and the loop returns to the card.
+      const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+      assert.deepEqual(resolved.scenes.map((scene) => [scene.id, scene.start, scene.end]), [["cover", 0, 1.5], ["s1", 1.5, 3], ["s2", 3, 6]]);
+      assert.equal(resolved.ending.loop_to, "cover");
+      assert.equal(report.gates.layout.status, "passed", "the card sits inside the safe zone at a readable size");
+      const manifest = JSON.parse(await readFile(path.join(project, "publish.json"), "utf8"));
+      assert.equal(manifest.cover, "video/cover.png");
+      assert.equal(manifest.cover_frame_seconds, 0);
+      assert.match(formatFinishSummary(report), /cover: video\/cover\.png \(also the opening frame\)/);
+
+      // Unchanged: the receipt keeps the cover from rendering again.
+      const again = await runFinish(project, { renderer }, adapters);
+      assert.equal(again.cover.cached, true);
+      assert.equal(adapters.stills.length, 1);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  }
+});
+
+test("runFinish reports a cover that fails to render as a warning, not a failed finish", async () => {
+  const project = await narratedProject({ mutate: withCover({ text: "Twelve-minute builds", frame: 4 }) });
+  try {
+    const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    assert.notEqual(report.status, "failed");
+    assert.equal(report.cover.status, "failed");
+    assert.equal(report.thumbnail, null);
+    assert.ok(report.warnings.some((warning) => /^cover: video\/cover\.png was not rendered/.test(warning)), report.warnings.join("\n"));
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.scenes[0].id, "s1", "a cover frame in seconds leaves the video as it is");
+    const manifest = JSON.parse(await readFile(path.join(project, "publish.json"), "utf8"));
+    assert.equal(manifest.cover_frame_seconds, 4);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});

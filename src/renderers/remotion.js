@@ -64,7 +64,8 @@ export function createRemotionRenderer(defaults = {}) {
       let props = loaded.resolved;
       if (opts.fps) props = withFps(props, Number(opts.fps));
       const format = opts.fps ? loaded.module.storyFormat(props) : loaded.format;
-      const propsFile = path.join(project, RESOLVED_STORY);
+      // opts.propsFile: write the props elsewhere (the cover still keeps the project's file).
+      const propsFile = opts.propsFile ? path.resolve(opts.propsFile) : path.join(project, RESOLVED_STORY);
       await mkdir(path.dirname(propsFile), { recursive: true });
       await writeFile(propsFile, `${JSON.stringify(props, null, 2)}\n`);
       return { project, propsFile, props, format, entry: adapter.resolveEntry(project, opts), story: loaded };
