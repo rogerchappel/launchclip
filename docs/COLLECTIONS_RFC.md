@@ -148,6 +148,8 @@ The library is found by walking up from the current folder, or from
 - `make` holds the same options as `launchclip make` today (`--format`,
   `--aspect`, `--duration`, `--goal`, `--awareness`, `--renderer`, …). A
   recipe adds nothing a single `make` can't already do; it saves the choice.
+  `profile` is `make --profile` (added in phase 3 for this), and the
+  collection's `voice.id` is `make --voice-id`.
 - `fixed` lists what is the same in every video of the recipe: a shared intro
   or outro, the brand frame, a caption style.
 - `vary` lists what the planner must choose differently from the recent
@@ -178,6 +180,14 @@ A video is a normal project folder at
   "status": "approved-script"
 }
 ```
+
+Phase 3 also records `style` (the style's name), `style_from` (the layer that
+chose it: `collection`, `recipe`, `video`, or `make` for a seed make drew
+itself; only collection and recipe styles are followed for staleness),
+`created_at` and `updated_at`. `status` is one of `planned`,
+`approved-script`, `rendering`, `ready-for-review`, `needs-repair`, `ready`,
+`approved` or `failed`; `stale` is computed on read, never stored. With no
+library, videos go to `<collection>/videos/[<recipe>/]<slug>/`.
 
 The recorded versions of the recipe and style answer "which videos does this
 change affect?" Editing a recipe or style marks the videos built on the old
@@ -247,7 +257,10 @@ launchclip batch retry <collection> [--failed]
 `recipe new --from-video` turns a video the user is happy with into a
 recipe: its format, aspect, length, profile and style become the recipe's
 settings. That is the usual way to start a series: make one video by hand,
-approve it, then make more like it.
+approve it, then make more like it. The source video's `video.json` is then
+recorded as made with the new recipe, so editing the recipe marks it stale
+too. A style that lived only in that project (a seeded pack) is copied to the
+collection's `styles/`.
 
 `topics.csv` has one row per video: `topic`, and optionally `recipe`,
 `sources` (URLs, a repo, a file), `assets` (a folder), `priority`, `notes`.
