@@ -105,9 +105,18 @@ export function narrationWords(data) {
   return Array.isArray(data) ? data : Array.isArray(data?.words) ? data.words : [];
 }
 
-/** Drop chunks whose start falls inside a hidden range, exactly as mountCaptions does. */
+/**
+ * Drop chunks whose start falls inside a hidden range, as mountCaptions does,
+ * and end a chunk that runs into one at its start, so a line spoken just
+ * before a full-frame title has left by the time the title arrives.
+ */
 export function visibleChunks(chunks, hide = []) {
-  return chunks.filter((chunk) => !hide.some(([from, to]) => chunk.start >= from && chunk.start < to));
+  return chunks.filter((chunk) => !hide.some(([from, to]) => chunk.start >= from && chunk.start < to)).map((chunk) => {
+    const cut = Math.min(...hide.map(([from]) => Number(from)).filter((from) => from > chunk.start && from < chunk.end));
+    if (!Number.isFinite(cut)) return chunk;
+    const words = (chunk.words ?? []).filter((word) => word.start < cut).map((word) => (word.end > cut ? { ...word, end: cut } : word));
+    return { ...chunk, end: cut, words };
+  });
 }
 
 export function captionRuntime(chunks) {
