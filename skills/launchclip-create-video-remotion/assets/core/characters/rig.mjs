@@ -37,7 +37,7 @@ export const MOBILITY = Object.freeze(['wheelchair', 'cane', 'white-cane', 'fore
 /** Mobility aids held in one hand (the hand away from the facing side). */
 export const HELD_AIDS = Object.freeze(['cane', 'white-cane', 'forearm-crutch']);
 
-export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit']);
+export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit', 'look', 'stretch']);
 export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused']);
 
 const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
@@ -194,7 +194,11 @@ export const POSE_TABLE = Object.freeze({
   cheer: {lower: 'stand', upper: {armL: 154, foreL: 18, armR: 154, foreR: 18}, head: 0, bodyY: -6, gesture: {joint: 'bodyY', amount: -16, period: 0.36}},
   shrug: {lower: 'stand', upper: {armL: 16, foreL: 92, armR: 16, foreR: 92}, head: 9, shoulderY: -12},
   walk: {lower: 'walk', upper: {armL: 6, foreL: 8, armR: 6, foreR: 8}, gesture: {joint: 'walk', amount: 16, period: 0.6}},
-  sit: {lower: 'sit', upper: {armL: 8, foreL: -36, armR: 8, foreR: -36}}
+  sit: {lower: 'sit', upper: {armL: 8, foreL: -36, armR: 8, foreR: -36}},
+  // Looking into the distance: the facing hand shades the brow, the head lifts.
+  look: {lower: 'stand', side: true, upper: {armA: 158, foreA: 94, armO: 6, foreO: 4}, head: -4, headY: -4, lean: 2},
+  // A stretch: both arms straight up, the body lifted.
+  stretch: {lower: 'stand', upper: {armL: 168, foreL: 6, armR: 168, foreR: 6}, head: -3, bodyY: -8, squash: 1.02}
 });
 
 const LOWER = {

@@ -116,6 +116,33 @@ export function worldAnchors(kind, {canvas = {width: 1920, height: 1080}, time =
   return def.geo(k).anchors;
 }
 
+export const FOCUS_POINTS = Object.freeze(['far', 'window', 'horizon', 'street', 'skyline']);
+
+/**
+ * Where a character can look in a world (canvas px): the window of an inside
+ * world, the horizon (or the far side of a street), the street across from
+ * the kerb, and the skyline above the horizon; `far` is the window when
+ * there is one, else the horizon. A point's x is null when the world gives
+ * none (a horizon spans the frame): the looker picks its side.
+ * props: placed props {id, x, y} (params.props), for a {prop} gaze target.
+ * → {far, window, horizon, street, skyline: {x, y, far: boolean} | null, props}
+ */
+export function worldFocus(kind, {canvas = {width: 1920, height: 1080}, time = 'day', props = []} = {}) {
+  const def = WORLDS[kind];
+  if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
+  const k = worldKit({id: 'focus', kind, time, colors: {}, canvas, detail: detailSpec(detailForStyle(null), null)});
+  const g = def.geo(k);
+  const H = k.H;
+  const win = g.win ? {x: Math.round(g.win.x + g.win.w / 2), y: Math.round(g.win.y + g.win.h / 2), far: true} : null;
+  const horizonY = g.horizonY ?? g.vanishY ?? g.waterY ?? g.baseY ?? (win ? win.y : Math.round((g.floorY ?? H * 0.7) * 0.45));
+  const horizon = {x: win?.x ?? null, y: Math.round(horizonY), far: true};
+  const street = g.baseY !== undefined ? {x: null, y: Math.round(g.baseY), far: true} : win ?? horizon;
+  const skyline = {x: horizon.x, y: Math.round(Math.max(0, horizonY - H * 0.12)), far: true};
+  let placed = [];
+  try { placed = placeProps(k, g.anchors, props).map(item => ({id: item.id, x: Math.round(item.x), y: Math.round(item.y)})); } catch { placed = []; }
+  return {far: win ?? horizon, window: win, horizon, street, skyline, props: placed};
+}
+
 /**
  * One prop on its own, fitted into box {x, y, width, height} (canvas px):
  * for prop sheets and previews. → {nodes, defs}.
