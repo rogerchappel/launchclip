@@ -147,3 +147,25 @@ test("the CLI runs collection new, recipe new with make flags, collection show a
     await rm(assets, { recursive: true, force: true });
   }
 });
+
+test("inside a library a collection's videos go under storage.projects/<collection>, after the drive check", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-collection-library-"));
+  const storage = await mkdtemp(path.join(os.tmpdir(), "launchclip-collection-storage-"));
+  const assets = await assetsDir();
+  try {
+    const { initLibrary, loadLibrary } = await import("../src/library.js");
+    await initLibrary(root, { projects: storage, minFreeGb: 0 });
+    const library = await loadLibrary({ cwd: root, env: {} });
+    await collectionNewCommand("acme", { root, seed: "7f3a91c2" }, { clock: AT });
+    const dir = path.join(root, "acme");
+    const adapters = { cwd: root, clock: AT, env: {}, library, client: fakeModel().model, inventory: inventoryFor(assets), finish: fakeFinish([]), notice() {} };
+    const report = await makeInCollection(FIRST, { collection: dir, assets, voice: "test", music: "synth" }, adapters);
+    assert.equal(path.dirname(report.project), path.join(storage, "acme"));
+    assert.equal(report.library, library.file);
+    assert.ok(existsSync(path.join(report.project, "video.json")));
+    const unmounted = { ...library, storage: { ...library.storage, projects: `/Volumes/launchclip-missing-${process.pid}` } };
+    await assert.rejects(makeInCollection(FIRST, { collection: dir, assets }, { ...adapters, library: unmounted }), /storage\.projects: \/Volumes\/launchclip-missing-\d+ is not mounted/);
+  } finally {
+    for (const folder of [root, storage, assets]) await rm(folder, { recursive: true, force: true });
+  }
+});

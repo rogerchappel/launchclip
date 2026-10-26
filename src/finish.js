@@ -24,6 +24,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
+import { useProjectTemp } from "./render_temp.js";
+import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
@@ -588,6 +590,9 @@ export function defaultAdapters() {
 export async function runFinish(projectPath, options = {}, adapterOverrides = {}) {
   const adapters = { ...defaultAdapters(), ...adapterOverrides };
   const project = path.resolve(projectPath);
+  // Inside a library (options.library, src/library.js) the project's drive is
+  // checked before anything is written.
+  if (options.library) await checkStorage(project, { minFreeGb: options.library.storage.min_free_gb, label: "project", source: options.library.file });
   const storyFile = path.join(project, "storyboard.json");
   if (!hasExactFile(project, "storyboard.json")) throw new Error(`launchclip finish needs ${storyFile}; author storyboard.json first`);
   // The style pack is merged into the working copy; storyboard.json stays as written.
@@ -647,32 +652,43 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   };
   const stages = [];
   let failed = null;
-  for (const definition of STAGES) {
-    if (failed) {
-      stages.push({ name: definition.name, status: "blocked", reason: `${failed} failed`, seconds: 0, outputs: [] });
-      continue;
+  let finished = false;
+  // Temporary render files go beside the project, on its drive (src/render_temp.js).
+  const temp = await useProjectTemp(project);
+  try {
+    for (const definition of STAGES) {
+      if (failed) {
+        stages.push({ name: definition.name, status: "blocked", reason: `${failed} failed`, seconds: 0, outputs: [] });
+        continue;
+      }
+      if (ctx.halt) {
+        stages.push({ name: definition.name, status: "skipped", reason: ctx.halt, seconds: 0, outputs: [] });
+        continue;
+      }
+      const entry = await runStage(ctx, definition);
+      stages.push(entry);
+      if (entry.status === "failed") failed = entry.name;
     }
-    if (ctx.halt) {
-      stages.push({ name: definition.name, status: "skipped", reason: ctx.halt, seconds: 0, outputs: [] });
-      continue;
+    // A drive unplugged mid-render: one clear line, and no report written to a
+    // folder that is gone. Finished stages are cached, so a rerun resumes.
+    const gone = failed ? interruptedByStorage(project, { command: "launchclip finish", stage: failed }) : null;
+    if (gone) throw gone;
+    if (candidate && !failed && existsSync(out)) {
+      const fps = Number(ctx.resolved?.resolved?.fps ?? ctx.resolved?.format?.fps ?? 30);
+      const duration = Number(ctx.resolved?.resolved?.duration ?? ctx.resolved?.format?.duration);
+      const into = options.into ? path.resolve(options.into) : project;
+      ctx.candidateReceipt = await (adapters.recordCandidate ?? recordCandidate)({
+        into, id: candidate, comparison: options.comparison, kind: options.kind, boundary: options.boundary, at: options.at,
+        video: out, fps, duration, source: path.relative(into, project).split(path.sep).join("/") || "."
+      });
     }
-    const entry = await runStage(ctx, definition);
-    stages.push(entry);
-    if (entry.status === "failed") failed = entry.name;
+    // A finished video: the designed cover when the story has one (it becomes
+    // the thumbnail), then publish.json beside it.
+    finished = !failed && !ctx.preview && !candidate && !prototype && existsSync(out);
+    if (finished && ctx.copy.cover) ctx.cover = await finishCover(ctx);
+  } finally {
+    await temp.release();
   }
-  if (candidate && !failed && existsSync(out)) {
-    const fps = Number(ctx.resolved?.resolved?.fps ?? ctx.resolved?.format?.fps ?? 30);
-    const duration = Number(ctx.resolved?.resolved?.duration ?? ctx.resolved?.format?.duration);
-    const into = options.into ? path.resolve(options.into) : project;
-    ctx.candidateReceipt = await (adapters.recordCandidate ?? recordCandidate)({
-      into, id: candidate, comparison: options.comparison, kind: options.kind, boundary: options.boundary, at: options.at,
-      video: out, fps, duration, source: path.relative(into, project).split(path.sep).join("/") || "."
-    });
-  }
-  // A finished video: the designed cover when the story has one (it becomes
-  // the thumbnail), then publish.json beside it.
-  const finished = !failed && !ctx.preview && !candidate && !prototype && existsSync(out);
-  if (finished && ctx.copy.cover) ctx.cover = await finishCover(ctx);
   const report = buildReport(ctx, stages, { seconds: round3((adapters.now() - started) / 1000), failed });
   if (finished) report.publish = await finishPublish(ctx, report);
   await writeJson(path.join(project, PATHS.report), report);

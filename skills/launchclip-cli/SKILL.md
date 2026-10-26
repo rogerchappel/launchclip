@@ -145,7 +145,10 @@ cinematic concept funnel onto an existing story.
 Before a production run, determine:
 
 - primary source and source kind
-- output workspace
+- output workspace (inside a library, a `launchclip.library.json` in the
+  current folder or above, `--library` or `LAUNCHCLIP_LIBRARY`, `make` and
+  `intake` without `--out` write under its `storage.projects`, possibly an
+  external drive; `launchclip library init` creates one)
 - audience, CTA, aspect, duration, language, and creative prompt
 - supporting assets, references, supplied narration/transcript, and presenter
   footage

@@ -17,6 +17,7 @@ import {
   VIDEO_FILE, versionOf, videoProjectDir, videoStatusFor, writeJsonAtomic, writeVideoRecord
 } from "./collection.js";
 import { MAKE_SETTING_FLAGS, settingsFromMakeReport } from "./make/options.js";
+import { checkStorage } from "./storage_check.js";
 import { freshSeed, promptTone } from "./style_seed_store.js";
 
 const RULES_TEMPLATE = `# Rules
@@ -211,8 +212,10 @@ export async function makeInCollection(prompt, flags = {}, adapters = {}) {
   }
   const resolved = await resolveVideoSettings({ library, collection, recipe, flags: videoFlags(flags, cwd) });
   const project = flags.out ? path.resolve(cwd, String(flags.out)) : videoProjectDir({ library, collection, recipe: recipe?.id, slug: slugify(prompt) });
+  // Inside a library the project's drive is checked before anything is written (src/storage_check.js).
+  if (library) await checkStorage(project, { minFreeGb: library.storage.min_free_gb, label: flags.out ? "--out" : "storage.projects", source: library.file });
   await writeJsonAtomic(path.join(project, RESOLVED_FILE), { ...resolved, project, prompt: String(prompt).trim(), resolved_at: clock() });
-  const options = { ...(await makeOptionsFor(resolved, collection, { ...flags, out: project })), cwd };
+  const options = { ...(await makeOptionsFor(resolved, collection, { ...flags, out: project })), cwd, library };
   const report = await (adapters.runMake ?? runMake)(prompt, options, adapters);
   const style = resolved.style ?? await projectStyle(project, report, resolved);
   report.collection = { id: collection.id, dir: collection.dir, recipe: recipe?.id ?? null, resolved: RESOLVED_FILE, video: "video.json" };

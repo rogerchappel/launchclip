@@ -16,8 +16,9 @@
 // handled by the CLI separately.)
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { writeFileAtomic } from "../atomic_write.js";
 import { promisify } from "node:util";
 import { decodeAudio, processFile, writeWavFile, SAMPLE_RATE } from "./process.js";
 import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashOf, libraryVariants, missingFamilies, readLibrary, resolveLibraries, summarizeLibrary, userLibraryDir, writeLibrary } from "./library.js";
@@ -158,8 +159,7 @@ export async function seedLibrary(options = {}) {
           const audio = await generateSoundEffect({ ...request, apiKey, fetch: options.fetch, baseUrl: options.baseUrl });
           result.generations++;
           manifest.generations = (manifest.generations ?? 0) + 1;
-          await mkdir(path.dirname(raw), { recursive: true });
-          await writeFile(raw, audio);
+          await writeFileAtomic(raw, audio);
         }
         staged.push({ raw, hash, take });
       }

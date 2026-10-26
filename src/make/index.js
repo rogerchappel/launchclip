@@ -29,6 +29,7 @@ import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
+import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
 import { runHeadlessCritic } from "./critic.js";
 import { readProjectStory } from "../story_loader.js";
@@ -100,7 +101,11 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
   const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const project = path.resolve(cwd, options.out ?? `launchclip-${slugify(text)}`);
+  // Inside a library (options.library, src/library.js) a project without
+  // --out goes under storage.projects, and its drive is checked first.
+  const library = options.library ?? null;
+  const project = path.resolve(options.out || !library ? cwd : library.storage.projects, options.out ?? `launchclip-${slugify(text)}`);
+  if (library) await checkStorage(project, { minFreeGb: library.storage.min_free_gb, label: options.out ? "--out" : "storage.projects", source: library.file });
   await mkdir(project, { recursive: true });
   const previousState = await readJson(path.join(project, MAKE_PATHS.state)) ?? {};
   const assetsDir = options.assets ? path.resolve(cwd, String(options.assets)) : previousState.assets_dir ?? null;
@@ -110,6 +115,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     status: "running",
     prompt: text,
     project,
+    library: library?.file ?? null,
     assets_dir: assetsDir,
     options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions },
     model: null,
@@ -148,6 +154,9 @@ export async function runMake(prompt, options = {}, adapters = {}) {
       const result = await fn(ctx);
       report.stages[name] = { status: result?.status ?? "done", ...(result?.reason ? { reason: result.reason } : {}) };
     } catch (error) {
+      // A drive unplugged mid-job: stop with one clear line; nothing more can be written there.
+      const gone = interruptedByStorage(project, { command: "launchclip make", stage: name });
+      if (gone) throw gone;
       report.stages[name] = { status: "failed", error: String(error?.message ?? error) };
       report.status = "failed";
       report.failed_stage = name;

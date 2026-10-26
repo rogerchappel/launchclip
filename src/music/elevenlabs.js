@@ -12,9 +12,10 @@
 // xi-api-key header, and never logged, cached or put in an error message.
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { writeFileAtomic } from "../atomic_write.js";
 import { buildMusicRequest } from "./prompt.js";
 
 export const ELEVENLABS_API = "https://api.elevenlabs.io";
@@ -126,13 +127,10 @@ export function create(options = {}) {
         bytes: audio.length,
         created_at: new Date().toISOString()
       };
-      await mkdir(cacheDir, { recursive: true });
       // Write to a temporary name first so an interrupted run never leaves a
       // truncated file that later looks like a cache hit.
-      const temporary = `${cacheFile}.${process.pid}.tmp`;
-      await writeFile(temporary, audio);
-      await rename(temporary, cacheFile);
-      await writeFile(metaFile, `${JSON.stringify(meta, null, 2)}\n`);
+      await writeFileAtomic(cacheFile, audio);
+      await writeFileAtomic(metaFile, `${JSON.stringify(meta, null, 2)}\n`);
       await copyFile(cacheFile, outFile);
       return { file: outFile, cached: false, cache_file: cacheFile, cache_key: key, request: summary, generated_seconds: generatedSeconds, cost_usd: meta.cost_usd_estimate, song_id: meta.song_id, model: request.body.model_id };
     }

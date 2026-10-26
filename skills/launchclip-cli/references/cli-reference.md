@@ -1152,6 +1152,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip doctor
   ```
 
+- `library init`: Write <path>/launchclip.library.json. --projects is where make and intake put new projects when you run them inside the library (default the library folder; an external drive is fine), --finals where finished files collect, --cache where voice, music and isolation caches go (default ~/.cache/launchclip), --min-free-gb the free space a job needs before it starts (default 10). Relative paths resolve against the library folder.
+
+  ```text
+  launchclip library init <path> [--projects <dir>] [--finals <dir>] [--cache <dir>] [--min-free-gb 10] [--name "…"] [--force] # launchclip.library.json: where projects go
+  ```
+
 - `skills list`: List the bundled agent skills.
 
   ```text
@@ -1279,10 +1285,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip recipe new <collection>/<id> [--from-video <project>] [--title "…"] [make setting flags] [--root <dir>] [--force]
   ```
 
-- `intake`: Write a production workspace from a source (repository, product, topic or voiceover).
+- `intake`: Write a production workspace from a source (repository, product, topic or voiceover). Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the workspace goes under storage.projects unless --out.
 
   ```text
-  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>] [--library <path>]
   ```
 
 - `edit-recording`: Edit a raw recording: trim silence, drop retakes and fillers, QA the joins, then clean up the voice audio (--enhance light by default; --voice-isolation elevenlabs is opt-in and paid).
@@ -1484,10 +1490,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip subject matte <video> --range <in>-<out> [--project <story-project>] [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json] # alpha matte.webm + subject.json for one source range
   ```
 
-- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates (layout, loudness, motion against the cadence profile, audio, temporal evidence, and the direction map, coverage and face gates). --prototype renders only the opening 20–30 s (cut at a sentence end) to renders/prototype.mp4, for review before the whole. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt. --chapter <id> re-renders one chapter's segments, stitches the master from the cache and writes the chapter alone to renders/chapters/<id>.mp4; finish also writes renders/chapters.txt and MP4 chapters for a story with chapters. A story with a cover gets video/cover.png, the designed thumbnail, and every finished video gets publish.json (see publish-manifest).
+- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates (layout, loudness, motion against the cadence profile, audio, temporal evidence, and the direction map, coverage and face gates). --prototype renders only the opening 20–30 s (cut at a sentence end) to renders/prototype.mp4, for review before the whole. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt. --chapter <id> re-renders one chapter's segments, stitches the master from the cache and writes the chapter alone to renders/chapters/<id>.mp4; finish also writes renders/chapters.txt and MP4 chapters for a story with chapters. A story with a cover gets video/cover.png, the designed thumbnail, and every finished video gets publish.json (see publish-manifest). Temporary render files go in the project (.launchclip/tmp), not the system temp folder; inside a library the project's drive is checked before the render starts.
 
   ```text
-  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3 | --chapter c2] [--force] [--json]
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3 | --chapter c2] [--library <path>] [--force] [--json]
   launchclip finish <project> --prototype [--renderer remotion|hyperframes] [--quality draft|high] # the opening 20–30 s only
   launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
   ```
@@ -1498,10 +1504,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip publish-manifest <project> [--link <url>] [--utm <campaign>|auto] [--platforms app_store,product_hunt] # publish.json: titles, description, hashtags, CTA and platform fit
   ```
 
-- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions.
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
