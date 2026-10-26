@@ -2102,6 +2102,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   its light and half its grade. The model carries `content.backdrop`,
   `content.world` and `content.drawWorld` (render inputs, or null over a
   plate).
+- **Arriving and leaving with the world.** A cast-scene or character-cameo
+  that starts with the world scene beneath it arrives as that plate does: a
+  cut when the plate cuts in, else a fade over the plate's own transition.
+  One that ends with it leaves as the next track-0 scene arrives: a cut, or a
+  fade over that transition. So a cast never dissolves on its own over a
+  plate that is already there. `params.enter` / `params.exit` (fade | cut)
+  override it; anything else keeps the default fade. The model carries
+  `content.entry` / `content.exit` ({type, dur?} or null).
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;

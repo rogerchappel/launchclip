@@ -187,18 +187,49 @@ function actorsOps(model, ops) {
 // Root fade (opacity only: a set does not slide), on every hoisted part. A
 // scene on the video's first frame is the frame-0 hook: it is already shown
 // on frame 0, with no fade in (as hook-title and kinetic-words).
+//
+// A cast that arrives or leaves with the world beneath it (content.entry /
+// content.exit, see castPassage) cuts with that plate, or fades over the
+// plate's own transition, so it never dissolves on its own over a plate that
+// is already there (a see-through ghost).
 function rootFade(model, ops, ids) {
   const m = model.motion;
-  const settled = model.start <= 1 / model.fps + 1e-6;
+  const entry = model.content.entry ?? null, exit = model.content.exit ?? null;
+  const settled = model.start <= 1 / model.fps + 1e-6 || entry?.type === 'cut';
+  const enterDuration = entry?.type === 'fade' ? entry.dur : m.enterDuration;
+  const exitDuration = exit?.type === 'fade' ? exit.dur : m.exitDuration;
   for (const id of ids) {
     if (settled) set(ops, id, model.start, {opacity: 1});
     else {
       set(ops, id, model.start, {opacity: 0});
-      tw(ops, id, m.enterStart, m.enterDuration, 'power1.out', {opacity: 0}, {opacity: 1});
+      tw(ops, id, model.start, enterDuration, 'power1.out', {opacity: 0}, {opacity: 1});
     }
-    tw(ops, id, m.exitStart, m.exitDuration, 'power1.in', {opacity: 1}, {opacity: 0});
+    if (exit?.type !== 'cut') tw(ops, id, rt(model.end - exitDuration), exitDuration, 'power1.in', {opacity: 1}, {opacity: 0});
     set(ops, id, model.end, {opacity: 0});
   }
+}
+
+export const PASSAGES = Object.freeze(['fade', 'cut']);
+
+/**
+ * How a character scene arrives and leaves. params.enter / params.exit (fade
+ * | cut) win. Otherwise a scene that starts with the world beneath it arrives
+ * as that plate does: a cut when the plate cuts in, else a fade over the
+ * plate's transition; one that ends with it leaves as the next plate arrives:
+ * a cut, or a fade over that transition. Anything else fades as before.
+ * → {entry: {type, dur?} | null, exit: {type, dur?} | null} (null: the default fade)
+ */
+function castPassage(b, ctx) {
+  const {check} = b;
+  const p = b.params;
+  const w = ctx.beneath;
+  const on = (a, c) => Number.isFinite(a) && Math.abs(a - c) < 1e-3;
+  const dur = transition => Math.max(0.1, Number(transition?.dur) || 0.3);
+  const passage = transition => (!transition || transition.type === 'cut' ? {type: 'cut'} : {type: 'fade', dur: dur(transition)});
+  const named = (value, path) => (value === undefined ? undefined : check.oneOf(value, path, PASSAGES) === 'cut' ? {type: 'cut'} : {type: 'fade', dur: b.motion?.enterDuration ?? 0.5});
+  const entry = named(p.enter, 'params.enter') ?? (w && on(w.start, b.start) ? passage(w.in) : null);
+  const exit = named(p.exit, 'params.exit') ?? (w && on(w.end, b.start + b.duration) && w.nextIn ? passage(w.nextIn) : null);
+  return {entry, exit};
 }
 
 function castEvents(b, actors) {
@@ -278,7 +309,7 @@ function castStage(b, ctx, setName) {
 const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
 
 function resolveCastScene(params, ctx) {
-  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world', 'backdrop'], required: ['set', 'cast'], hidesCaptions: false});
+  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world', 'backdrop', 'enter', 'exit'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
   const p = b.params;
   const setName = check.oneOf(p.set, 'params.set', SETS);
@@ -316,7 +347,7 @@ function resolveCastScene(params, ctx) {
   rect.width = r2(Math.min(canvas.width, Math.max(...actors.map(a => a.x)) + 220 * actors[0].scale) - rect.x);
   rect.height = r2(Math.min(canvas.height, layout.floor) - rect.y);
   b.model.layer = 'front';
-  const content = {set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
+  const content = {...castPassage(b, ctx), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
@@ -360,7 +391,7 @@ function castSceneTimeline(model, ops) {
 function resolveCameo(params, ctx) {
   // The cameo keeps inside a brand frame's safe area (its card kicker would
   // otherwise sit on the frame's kicker); params.rect places it within that.
-  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel', 'light', 'world'], required: ['character'], frameSafe: true});
+  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel', 'light', 'world', 'enter', 'exit'], required: ['character'], frameSafe: true});
   const {check, rect, u, portrait} = b;
   const p = b.params;
   let cast;
@@ -400,7 +431,7 @@ function resolveCameo(params, ctx) {
   }
   castEvents(b, [actor]);
   b.model.layer = 'front';
-  const content = {actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side};
+  const content = {...castPassage(b, ctx), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side};
   return b.finish(content, {minTextPx: card ? cardBox.titleSize : b.min.key});
 }
 
@@ -439,11 +470,11 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
-    params: {character: 'a cast or starter character id, or "@1", "@2"… by place in the story cast', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)'},
+    params: {character: 'a cast or starter character id, or "@1", "@2"… by place in the story cast', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)', enter: 'fade | cut (as cast-scene)', exit: 'fade | cut (as cast-scene)'},
     events: ['<character>-cue-<i>']}
 };
 
