@@ -14,6 +14,16 @@
   works (`--no-subject` skips it). A test now plans the footage fixture
   through the CLI and the skill's documented steps and checks they offer the
   same effects and land on the same choices.
+- A designed cover: `cover: {text, number?, kicker?, frame?}` in the
+  storyboard opens a Short on a 1.5 s title card that reads on its own in a
+  profile grid, and `finish` renders the card to `video/cover.png` as the
+  thumbnail with either renderer. The planner sets it for Shorts. Without
+  `cover`, nothing changes.
+- `publish.json` after every finished video, and `launchclip
+  publish-manifest <project>`: titles, description, hashtags, the CTA, the
+  cover and captions, whether the video fits each platform (YouTube Shorts,
+  TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request),
+  and per-platform UTM links with `--link` and `--utm`.
 
 ## 0.2.0 - 2026-10-23
 

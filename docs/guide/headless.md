@@ -105,6 +105,8 @@ Before the script, make starts your app, seeds it, plans 2–4 flows with the sa
 ```
 launchclip-<slug>/
   renders/draft.mp4        the video (renders/final.mp4 with --quality high)
+  publish.json             titles, description, hashtags, CTA and platform fit
+  video/cover.png          the designed cover, when the storyboard has one
   MAKE.json                routing and reasons, models, costs, timings, gate results
   storyboard.json          the plan; edit it and run `launchclip finish` to iterate
   SCRIPT.json, NARRATION.json, ASSETS.json, BRIEF.md
@@ -114,6 +116,30 @@ launchclip-<slug>/
 The command prints a short summary with the gate results and the next steps.
 A failed stage says what to fix. Run the same command again to resume: the
 script, storyboard, voice, music and rendered segments are reused.
+
+## The cover and publishing
+
+For a Short (9:16, 60 s or less) the planner sets a `cover` in the
+storyboard: one number or a short question that echoes the hook, such as
+`{"text": "Protein. All at once?", "number": "100g"}`. The video opens on it
+as a 1.5 s title card, so the first frame reads on its own in a profile grid,
+and `finish` renders the same card to `video/cover.png` as the thumbnail. Set
+`"frame": <seconds>` to keep the opening as it is and name the frame a cover
+picker should use instead.
+
+Every finished video also gets `publish.json`: the title and title options
+from the script, a description, hashtags, the CTA, the aspect, duration, video,
+cover and any `.srt`/`.vtt` captions, and whether the video fits YouTube
+Shorts (vertical, at most 180 s), TikTok, Reels, YouTube, LinkedIn (which
+recommends 15–30 s) and X. Write it again with a tracking link:
+
+```bash
+launchclip publish-manifest launchclip-ledgerly --link https://ledgerly.dev --utm spring-launch
+```
+
+`--utm` tags the link per platform (`utm_source=<platform>&utm_medium=video&utm_campaign=<campaign>`).
+`--platforms app_store,product_hunt` adds the App Store (previews run 15–30 s)
+and Product Hunt (a YouTube link, and a CTA that does not ask for upvotes).
 
 ## Cost
 
