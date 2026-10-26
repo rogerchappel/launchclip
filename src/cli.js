@@ -209,6 +209,9 @@ export async function runCli(argv, io = {}) {
         url: flags.url,
         allowHost: flags["allow-host"],
         demoPlan: flags["demo-plan"],
+        visualHistoryDir: flags["visual-history-dir"],
+        visualHistoryLimit: flags["visual-history-limit"],
+        visualSimilarityLimit: flags["visual-similarity-limit"],
         ...(flags["no-subject"] ? { subject: false } : {})
       }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
       throwIfCostLimited(tracker);

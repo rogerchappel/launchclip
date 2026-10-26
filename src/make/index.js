@@ -36,6 +36,9 @@ import { plannedSubjectRanges } from "../subject/plan.js";
 import { fileProjectMatte, fileProjectTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
+import { packCaptionsFor } from "../../kit/core/style.mjs";
+import { COVER_PATH } from "../cover.js";
+import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -48,6 +51,7 @@ export const MAKE_PATHS = Object.freeze({
   story: "storyboard.json",
   direction: "DIRECTION.json",
   plan: ".launchclip/storyboard-plan.json",
+  variety: ".launchclip/variety.json",
   state: ".launchclip/make-state.json",
   transcripts: ".launchclip/make/transcripts",
   take: ".launchclip/make/narration.wav",
@@ -73,7 +77,10 @@ export function slugify(prompt) {
  * options: {assets, aspect, duration, style, seed, model, voice, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
- *   subject (false: no presenter probe or subject effects)}
+ *   subject (false: no presenter probe or subject effects),
+ *   visualHistoryDir (the series' history index: plan against it, record into it),
+ *   visualHistoryLimit (recent entries the planner sees, default 8),
+ *   visualSimilarityLimit (the variety lint's limit, default 0.6)}
  * adapters: {env, client ({client, provider, model, vision}), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
@@ -96,6 +103,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   if (!RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
+  if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   const scriptOptions = scriptPlanOptions(options);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const project = path.resolve(cwd, options.out ?? `launchclip-${slugify(text)}`);
@@ -109,7 +118,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     prompt: text,
     project,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions },
     model: null,
     routing: null,
     stages: {},
@@ -163,8 +172,23 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     report.status = statuses.includes("failed") ? "needs-repair" : statuses.includes("pending") ? "ready-for-review" : "ready";
   }
   report.finished_at = clock();
+  if (report.variety && ["ready", "ready-for-review"].includes(report.status)) await recordHistory(ctx, clock);
   await writeJson(path.join(project, MAKE_PATHS.report), report);
   return report;
+}
+
+// A finished video joins the history index (the fingerprint the lint used,
+// plus the rendered cover), replacing this project's earlier entry.
+async function recordHistory(ctx, clock) {
+  const { project, report } = ctx;
+  if (!ctx.varietyFingerprint) return;
+  try {
+    const fingerprint = { ...ctx.varietyFingerprint };
+    if (fingerprint.cover && existsSync(path.join(project, COVER_PATH))) fingerprint.cover = { ...fingerprint.cover, file: COVER_PATH };
+    report.variety.recorded = await recordHistoryEntry(report.variety.history_dir, fingerprint, { clock });
+  } catch (error) {
+    report.warnings.push(`variety: the video was not recorded in ${report.variety.history_dir} (${String(error?.message ?? error).split("\n")[0]})`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,8 +485,12 @@ async function stageStoryboard(ctx) {
   const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
+  // The history is left out of planHash: a rerun keeps its storyboard even
+  // after other videos join the history (--replan plans against it afresh).
+  const history = await loadHistory(ctx);
   if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
     report.repairs = state.plan.repairs ?? null;
+    if (history) await lintVariety(ctx, await readJson(storyFile), style, history, state.plan.variety ?? []);
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
   const allowed = new Set([...manifest.map((item) => item.src), ...(ctx.base ? [ctx.base.src] : []), ...Object.values(fixedAudio).filter((value) => String(value).startsWith("assets/"))]);
@@ -489,6 +517,7 @@ async function stageStoryboard(ctx) {
     direction: true,
     profile,
     maxRepairs,
+    ...(history?.prompt ? { history: history.prompt } : {}),
     extraCheck: (story) => assetErrors(story, allowed)
   });
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
@@ -500,13 +529,48 @@ async function stageStoryboard(ctx) {
     throw new Error(`the storyboard failed its checks after ${plan.attempts.length} attempt(s):\n- ${plan.errors.slice(0, 10).join("\n- ")}`);
   }
   const story = finalizeStory(plan.storyboard, ctx);
+  // The look dials that would repeat the latest videos move to unused values
+  // (never the ones a chosen style pack pins); the recheck covers the change.
+  const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
   const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false });
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
+  if (history) await lintVariety(ctx, story, style, history, varied);
   report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
-  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction) };
+  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(history ? { variety: varied } : {}) };
   return { status: "done" };
+}
+
+// --visual-history-dir (docs/COLLECTIONS_RFC.md §6): the index of earlier
+// videos, what the next plan should not repeat, and the planner's section.
+async function loadHistory(ctx) {
+  const { options, project, report } = ctx;
+  if (!options.visualHistoryDir) return null;
+  const dir = path.resolve(options.cwd ?? process.cwd(), String(options.visualHistoryDir));
+  const index = await readHistoryIndex(dir);
+  const avoid = historyAvoid(index.entries, { project, limit: options.visualHistoryLimit ?? DEFAULT_VISUAL_HISTORY_LIMIT });
+  report.variety = { history_dir: dir, entries: avoid.total };
+  return { dir, entries: index.entries, avoid, prompt: historyPrompt(avoid) };
+}
+
+// The dials a chosen style pack pins are brand DNA; a seeded look is not.
+function lockedDials(style, ctx) {
+  if (!style?.pack || ctx.generatedStyle) return {};
+  return { background: Boolean(style.pack.background), captions: Boolean(packCaptionsFor(style.pack, ctx.routing.lane)?.preset) };
+}
+
+// The variety lint: the plan against every entry, weighted towards recent
+// ones. It reports (MAKE.json variety, a warning per finding); it never fails make.
+async function lintVariety(ctx, story, style, history, varied) {
+  const { project, report, options } = ctx;
+  const fingerprint = fingerprintStory(story, { narration: ctx.narrationText ?? null, style: style?.pack ?? null, project, prompt: ctx.text });
+  ctx.varietyFingerprint = fingerprint;
+  const assessment = assessVariety(fingerprint, history.entries, { project, similarityLimit: options.visualSimilarityLimit ?? DEFAULT_VISUAL_SIMILARITY_LIMIT });
+  report.variety = { history_dir: history.dir, entries: assessment.entries, varied, passes: assessment.passes, similarity_limit: assessment.similarity_limit, nearest: assessment.nearest, findings: assessment.findings, file: MAKE_PATHS.variety };
+  await writeJson(path.join(project, MAKE_PATHS.variety), { ...report.variety, fingerprint, compared: assessment.compared });
+  for (const change of varied) ctx.say(`variety: ${change.dial} ${change.from} → ${change.to} (the last videos in ${history.dir} used ${change.from})`);
+  for (const finding of assessment.findings) report.warnings.push(`variety: ${finding} (${MAKE_PATHS.variety}; --replan plans again against the history)`);
 }
 
 /** The planned storyboard plus the fields make owns (narration, music file, title). */
@@ -770,6 +834,10 @@ export function formatMakeSummary(report) {
     lines.push(`  ${name.padEnd(10)} ${String(stage.status).padEnd(8)} ${String(report.timings?.[name] ?? 0).padStart(7)}s  ${stage.error ? stage.error.split("\n")[0] : stage.reason ?? ""}`.trimEnd());
   }
   if (report.repairs) lines.push(`storyboard: ${report.repairs.attempts?.length ?? "?"} attempt(s), ${report.repairs.used} repair pass(es)`);
+  if (report.variety?.nearest !== undefined) {
+    const varied = (report.variety.varied ?? []).map((change) => `${change.dial} → ${change.to}`).join(", ");
+    lines.push(`variety: ${report.variety.passes ? "passed" : `${report.variety.findings.length} finding(s)`} against ${report.variety.entries} earlier video(s)${report.variety.nearest ? `, nearest ${report.variety.nearest.similarity}` : ""}${varied ? `; varied ${varied}` : ""}`);
+  }
   if (report.subject) {
     const detail = report.subject.status === "usable" ? `${report.subject.framing ?? "?"} framing, ${report.subject.mattes?.length ?? 0} matte(s)` : report.subject.reason ?? report.subject.reasons?.join("; ") ?? "";
     lines.push(`subject: ${report.subject.status}${detail ? ` (${detail})` : ""}`);
