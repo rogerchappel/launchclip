@@ -23,8 +23,8 @@ import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
 import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
-import { MUSIC_FLAG_VALUES } from "../music/index.js";
 import { inventoryAssets } from "./assets.js";
+import { validateMakeOptions } from "./options.js";
 import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, writeScript } from "./script.js";
@@ -55,7 +55,6 @@ export const MAKE_PATHS = Object.freeze({
   base: "assets/base-edit.mp4",
   recording: "recording"
 });
-const RENDERERS = ["remotion", "hyperframes"];
 
 /** "A 45-second launch video for Ledgerly" → "launch-video-ledgerly" (≤ 40 chars). */
 export function slugify(prompt) {
@@ -70,7 +69,7 @@ export function slugify(prompt) {
 }
 
 /**
- * options: {assets, aspect, duration, style, seed, model, voice, music, renderer,
+ * options: {assets, aspect, duration, style, seed, model, voice, voiceId, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
  *   subject (false: no presenter probe or subject effects)}
@@ -88,15 +87,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const clock = adapters.clock ?? (() => new Date().toISOString());
   const text = String(prompt ?? "").trim();
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
-  const voiceProvider = String(options.voice ?? "kokoro").toLowerCase();
-  if (!["kokoro", "elevenlabs", "test"].includes(voiceProvider)) throw new Error(`--voice must be kokoro or elevenlabs; got ${options.voice}`);
-  if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
-  if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
-  const renderer = String(options.renderer ?? "remotion").toLowerCase();
-  if (!RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
-  const quality = String(options.quality ?? "draft").toLowerCase();
-  if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
-  const scriptOptions = scriptPlanOptions(options);
+  const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const project = path.resolve(cwd, options.out ?? `launchclip-${slugify(text)}`);
   await mkdir(project, { recursive: true });
@@ -109,7 +100,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     prompt: text,
     project,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
     model: null,
     routing: null,
     stages: {},
@@ -387,7 +378,7 @@ async function prepareMotion(ctx) {
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
   // The planning pass: format, goal and awareness (flags, else the brief's defaults).
   const plan = chooseScriptPlan({ prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options) });
-  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, plan: [plan.format, plan.goal, plan.awareness], v: 2 });
+  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness], v: 2 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = script && state.script?.hash === scriptHash && script.narration;
   if (!reuse) {
@@ -425,7 +416,7 @@ async function prepareMotion(ctx) {
   ctx.format = { ...routing.format, duration: round1(take.duration + 0.8) };
   if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
-  ctx.narration = { text: script.narration, provider: voiceProvider };
+  ctx.narration = { text: script.narration, provider: voiceProvider, ...(options.voiceId ? { voice: String(options.voiceId) } : {}) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
@@ -433,7 +424,7 @@ async function prepareMotion(ctx) {
 
 async function synthesize(ctx, text) {
   const { project, adapters, voiceProvider } = ctx;
-  const request = narrationRequest({ text, provider: voiceProvider });
+  const request = narrationRequest({ text, provider: voiceProvider, ...(ctx.options.voiceId ? { voice: String(ctx.options.voiceId) } : {}) });
   const take = await synthesizeNarration(request, {
     outFile: path.join(project, MAKE_PATHS.take),
     cacheDir: voiceCacheDir(project),

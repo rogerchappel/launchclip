@@ -183,34 +183,9 @@ export async function runCli(argv, io = {}) {
       result = report;
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
+      const { makeOptionsFromFlags } = await import("./make/options.js");
       if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");
-      const report = await runMake(firstArg, {
-        assets: flags.assets,
-        aspect: flags.aspect,
-        duration: flags.duration,
-        style: flags.style,
-        seed: flags.seed,
-        model: flags.model,
-        voice: flags.voice,
-        music: flags.music,
-        renderer: flags.renderer,
-        quality: flags.quality,
-        goal: flags.goal,
-        format: flags.format,
-        awareness: flags.awareness,
-        out: flags.out,
-        replan: Boolean(flags.replan),
-        critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
-        maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
-        repo: flags.repo,
-        approveDemo: Boolean(flags["approve-demo"]),
-        redemo: Boolean(flags.redemo),
-        start: flags.start,
-        url: flags.url,
-        allowHost: flags["allow-host"],
-        demoPlan: flags["demo-plan"],
-        ...(flags["no-subject"] ? { subject: false } : {})
-      }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      const report = await runMake(firstArg, makeOptionsFromFlags(flags), { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
       throwIfCostLimited(tracker);
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
