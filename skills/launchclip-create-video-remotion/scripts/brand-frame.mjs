@@ -15,6 +15,14 @@
 // profileGeometry().safeZone (resolveModule attaches it as model.frame.safe;
 // footage layout panels intersect their own panel rect with it).
 //
+// frameSources() is the frame's source note: a small citation line ("Morton
+// et al., 2016 · J Appl Physiol") along the bottom of the safe zone that
+// stays across a span of scenes (story.frame.sources), so a data explainer
+// keeps its study on screen while the units and rulers above it change. It
+// lives in the frame rather than in a module because it outlives any one
+// scene: scenes enter and exit, the note does not. Its band is taken out of
+// the modules' safe area like the kicker's.
+//
 // frameColorSpans() lets the frame follow what is behind it: one colour for
 // the whole video disappears when a scene's backdrop is close to it (paper
 // text on a cast set's cream wall). Per track-0 scene it keeps frame.color
@@ -39,7 +47,7 @@ const r2 = (value) => Math.round(value * 100) / 100;
 const r4 = (value) => Math.round(value * 10000) / 10000;
 
 // Sizes at k = 1 (the short side is 1080 px).
-export const BRAND_FRAME_METRICS = Object.freeze({ label: 30, section: 24, logo: 40, gap: 12, underline: 4, underlineGap: 10, band: 78, progress: 6 });
+export const BRAND_FRAME_METRICS = Object.freeze({ label: 30, section: 24, logo: 40, gap: 12, underline: 4, underlineGap: 10, band: 78, progress: 6, source: 24, sourceBand: 48 });
 
 /** A hex colour, else a brand role (`value`, then `role`), else the role's fallback. */
 function color(value, brand, role) {
@@ -70,7 +78,8 @@ export function storyFrame(story) {
     show: frame.show === 'scenes' ? 'scenes' : 'always',
     logo: nonEmpty(frame.logo) ? frame.logo : null,
     color: frame.color ?? 'paper',
-    labels: Array.isArray(frame.labels) ? frame.labels : []
+    labels: Array.isArray(frame.labels) ? frame.labels : [],
+    sources: Array.isArray(frame.sources) ? frame.sources : []
   };
 }
 
@@ -88,6 +97,23 @@ export function frameLabels(story, frame = storyFrame(story)) {
     return Number.isFinite(start) && start >= 0 && start < duration && nonEmpty(entry.label) ? { start, label: entry.label.trim(), ...(typeof entry.color === 'string' ? { color: entry.color } : {}) } : null;
   }).filter(Boolean).sort((a, b) => a.start - b.start);
   return starts.map((entry, i) => ({ ...entry, end: i + 1 < starts.length ? starts[i + 1].start : duration }));
+}
+
+/**
+ * Source notes on the timeline: [{start, end, text}], sorted. An entry starts
+ * at `start` (seconds) or a scene's start (`scene`) and runs to `end`
+ * (seconds), the end of scene `until`, else the next note or the video's end.
+ */
+export function frameSources(story, frame = storyFrame(story)) {
+  if (!frame?.sources?.length) return [];
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
+  const scenes = new Map((story?.scenes ?? []).map((scene) => [scene?.id, scene]));
+  const entries = frame.sources.map((entry) => {
+    const start = typeof entry?.start === 'number' ? entry.start : Number(scenes.get(entry?.scene)?.start);
+    const end = typeof entry?.end === 'number' ? entry.end : typeof entry?.until === 'string' ? Number(scenes.get(entry.until)?.end) : null;
+    return Number.isFinite(start) && start >= 0 && start < duration && nonEmpty(entry.text) ? { start, end: Number.isFinite(end) && end > start ? Math.min(end, duration) : null, text: entry.text.trim() } : null;
+  }).filter(Boolean).sort((a, b) => a.start - b.start);
+  return entries.map((entry, i) => ({ ...entry, end: Math.min(entry.end ?? duration, i + 1 < entries.length ? entries[i + 1].start : duration) }));
 }
 
 const isTop = (position) => String(position).startsWith('top');
@@ -117,6 +143,11 @@ export function brandFrameLayout(story, format = story?.format) {
   if (frame.kicker) regions.push({ id: 'frame-kicker', rect: corner(frame.kicker.position, half) });
   const labels = frameLabels(story, frame);
   if (frame.sections && labels.length) regions.push({ id: 'frame-section', rect: corner(frame.sections.position, half) });
+  const sources = frameSources(story, frame);
+  if (sources.length) {
+    const height = M.sourceBand * k;
+    regions.push({ id: 'frame-source', rect: { x: r2(zone.x), y: r2(zone.y + zone.height - height), width: r2(zone.width), height: r2(height) } });
+  }
   let top = zone.y, bottom = zone.y + zone.height;
   for (const region of regions) {
     if (region.rect.y <= zone.y + 1e-6) top = Math.max(top, region.rect.y + region.rect.height);
@@ -132,7 +163,7 @@ export function brandFrameLayout(story, format = story?.format) {
     if (progress.position === 'top') top = Math.max(top, edge);
     else bottom = Math.min(bottom, edge);
   }
-  return { frame, k, zone, regions, labels, progress, safe: { x: r2(zone.x), y: r2(top), width: r2(zone.width), height: r2(Math.max(0, bottom - top)) } };
+  return { frame, k, zone, regions, labels, sources, progress, safe: { x: r2(zone.x), y: r2(top), width: r2(zone.width), height: r2(Math.max(0, bottom - top)) } };
 }
 
 /** The area modules may draw in without colliding with the frame, or null when the story has no frame. */
@@ -220,7 +251,7 @@ export function frameColorSpans(story, frame = storyFrame(story)) {
 export function brandFramePlan(story, { format = story?.format } = {}) {
   const layout = brandFrameLayout(story, format);
   if (!layout) return null;
-  const { frame, k, regions, labels, progress } = layout;
+  const { frame, k, regions, labels, sources, progress } = layout;
   const brand = story?.brand ?? {};
   const fonts = brandFontStacks(brand);
   const M = BRAND_FRAME_METRICS;
@@ -280,6 +311,20 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     root.children.push(holder);
   }
 
+  const sourceRegion = regions.find((region) => region.id === 'frame-source');
+  if (sourceRegion) {
+    css.push(`.lc-frame-source { position: absolute; left: ${px(sourceRegion.rect.x)}; top: ${px(sourceRegion.rect.y)}; width: ${px(sourceRegion.rect.width)}; height: ${px(sourceRegion.rect.height)}; }`);
+    css.push(`.lc-frame-src { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; opacity: 0; font: 500 ${px(M.source * k)}/1.3 ${fonts.meta}; letter-spacing: 0.02em; }`);
+    const holder = { tag: 'div', id: 'lc-frame-source', cls: 'lc-frame-source', children: [] };
+    sources.forEach((entry, i) => {
+      const id = `lc-frame-src-${String(i + 1).padStart(2, '0')}`;
+      holder.children.push({ tag: 'div', id, cls: 'lc-frame-text lc-frame-src', text: entry.text });
+      tw(id, entry.start, 0.4, 'power2.out', { opacity: 0.85 }, { opacity: 0 }, true);
+      if (entry.end < Number(story?.resolved?.duration ?? format?.duration ?? entry.end) - 1e-3) tw(id, Math.max(entry.start + 0.4, entry.end - 0.25), 0.25, 'power1.in', { opacity: 0 });
+    });
+    root.children.push(holder);
+  }
+
   if (progress) {
     const fill = color(isObject(frame.progress) ? frame.progress.color : undefined, brand, 'primary');
     const duration = Number(story?.resolved?.duration ?? format?.duration) || 1;
@@ -302,7 +347,7 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     const walk = (node) => { ids.add(node.id); (node.children ?? []).forEach(walk); };
     nodes.forEach(walk);
     const targets = [
-      ['text', 'color', ['lc-frame-label', ...labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-t`)]],
+      ['text', 'color', ['lc-frame-label', ...labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-t`), ...sources.map((_, i) => `lc-frame-src-${String(i + 1).padStart(2, '0')}`)]],
       ['underline', 'backgroundColor', ['lc-frame-underline']],
       ['dot', 'backgroundColor', labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-dot`)],
       ['text', 'backgroundColor', progress ? progress.ticks.map((_, i) => `lc-frame-tick-${String(i + 1).padStart(2, '0')}`) : []]

@@ -118,6 +118,39 @@ launchclip style upgrade my-channel
 
 - **Recurring segments (`segments`):** named formats a series repeats, like a "tool of the week" with its own kicker, icon, layout and favourite graphics. Every episode's chapter of that name opens and looks the same way; see [long videos](long-form.md#recurring-segments).
 
+## Paint every frame
+
+A style can also set the **medium**: the material every frame looks made of, so a motion-graphics video reads as hand-animated. The colours, motion and captions stay yours; the medium paints over the whole picture.
+
+| Medium | What it looks like |
+|---|---|
+| `oil` | Thick paint: wobbly edges, short brush strokes curving through every fill and dragging the colour, standing up in relief. |
+| `watercolour` | Soft washes: edges that bleed, pigment pooled darker at each edge, uneven washes and paper grain. |
+| `pastel` | Chalk pastel or crayon: crumbly edges, directional strokes and the paper's tooth showing through. |
+| `ink` | Inked like a graphic novel: a black line round every shape, richer colour and a little paper. |
+| `gouache` | Flat storybook paint: matte colour, rough dry-brush edges and soft brush marks. |
+| `none` | The default: no medium, the video renders exactly as before. |
+
+```json
+"medium": "watercolour"
+```
+
+or, with its dials:
+
+```json
+"medium": { "kind": "oil", "strength": 0.8, "boil": true, "grain": 0.5 }
+```
+
+- `strength` (0 to 1, default 0.6): how far the paint moves away from the clean frame.
+- `boil` (default on): the lines are redrawn every third frame, the hand-animated "boil". Turn it off for steady lines.
+- `grain` (0 to 1): how much paper or canvas shows. 0 turns it off.
+
+Put `medium` in a style pack, or in one video's `storyboard.json` (the video's own value wins). Captions and the brand frame are never painted, so they stay as sharp and readable as ever, and the render is the same every time: a re-render, a preview of one scene or a partial re-render paints each frame the same way.
+
+You can also just describe it. With no style named, words in your prompt such as *"oil paint, like the faith shorts"*, *"soft watercolour, dreamy"*, *"crayon on paper, for kids"*, *"inked, like a graphic novel"* or *"flat gouache storybook"* pick the medium, and a look that suits it (dreamy watercolour is calm, on light paper; crayon for kids is playful). *Soft* or *subtle* paints lighter, *thick* or *bold* heavier, and *no boil* keeps the lines still. From the command line, `launchclip style generate --medium watercolour` does the same.
+
+Painting every frame takes time: expect a medium to make a render a few times slower.
+
 ## Turn the dials
 
 Every style has four dials, each from 0 to 1:

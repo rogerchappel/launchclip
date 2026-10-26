@@ -67,6 +67,10 @@ export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_B
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow"];
+// story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
+// kept in step by test/medium.test.js).
+export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink", "gouache"];
+export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -87,7 +91,8 @@ const EPS = 1e-6;
 // background and layouts.panel; kit/core/backgrounds.mjs, kit/core/panels.mjs).
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
-const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
+// medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
+const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -365,6 +370,8 @@ export function validateStory(story, { modules } = {}) {
   // background and panel: the plate's background kind and the card surface (kit/core/backgrounds.mjs, kit/core/panels.mjs).
   validateBackground(story.background, err);
   validatePanel(story.panel, err);
+  // medium: the whole-frame finishing pass (kit/core/medium.mjs).
+  validateMedium(story.medium, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -376,6 +383,7 @@ export function validateStory(story, { modules } = {}) {
 
   // frame: the brand frame the compilers draw around scenes (RFC §9.2).
   validateFrame(story.frame, { err, warn, scenes: Array.isArray(story.scenes) ? story.scenes : [] });
+  validateDataSources(story, warn);
 
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
@@ -915,22 +923,66 @@ function validateMotion(motion, err) {
 // → the effective camera mode ("cuts" | "world") for the transition rules.
 // The brand frame's own shape is checked by kit/core/style.mjs
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
-// it is an object or false, and its section labels point at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "kicker", "sections", "progress", "show", "labels", "color"];
+// it is an object or false, and its section labels and source notes point
+// at real scenes.
+const FRAME_KEYS = ["enabled", "logo", "kicker", "sections", "progress", "show", "labels", "color", "sources"];
+// Modules that show study or survey data; each needs a source on screen.
+const DATA_MODULES = ["unit-grid", "number-line"];
 const FRAME_COLOR_ROLES = ["bg", "paper", "ink", "primary", "accent"];
 function validateFrame(frame, { err, warn, scenes }) {
   if (frame === undefined || frame === false) return;
   if (!isObject(frame)) { err("frame must be the brand frame object or false"); return; }
   for (const key of Object.keys(frame)) if (!FRAME_KEYS.includes(key)) err(`frame.${key} is not a brand frame field (${FRAME_KEYS.join(", ")})`);
+  const ids = new Set(scenes.map((scene) => scene?.id));
+  if (frame.sources !== undefined) {
+    if (!Array.isArray(frame.sources)) err("frame.sources must be a list of {text, start | scene, end? | until?}");
+    else frame.sources.forEach((entry, i) => {
+      const at = `frame.sources[${i}]`;
+      if (!isObject(entry)) { err(`${at} must be {text, start | scene, end? | until?}`); return; }
+      for (const key of Object.keys(entry)) if (!["text", "start", "scene", "end", "until"].includes(key)) err(`${at}.${key} is not supported (text, start, scene, end, until)`);
+      if (!nonEmpty(entry.text) || entry.text.length > 90) err(`${at}.text must be 1-90 characters: the citation ("Morton et al., 2016 · J Appl Physiol")`);
+      if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`${at} needs exactly one of start (seconds) or scene (a scene id)`);
+      else if (typeof entry.start === "number" && !(entry.start >= 0)) err(`${at}.start must be seconds ≥ 0`);
+      if (entry.end !== undefined && entry.until !== undefined) err(`${at} takes end (seconds) or until (a scene id), not both`);
+      if (entry.end !== undefined && !(typeof entry.end === "number" && entry.end > (typeof entry.start === "number" ? entry.start : 0))) err(`${at}.end must be seconds after its start`);
+      for (const key of ["scene", "until"]) if (entry[key] !== undefined && (typeof entry[key] !== "string" || !ids.has(entry[key]))) warn(`${at}.${key} ${JSON.stringify(entry[key])} is not a scene id; the note ${key === "scene" ? "is skipped" : "runs to the next note"}`);
+    });
+  }
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
-  const ids = new Set(scenes.map((scene) => scene?.id));
   frame.labels.forEach((entry, i) => {
     if (!isObject(entry) || !nonEmpty(entry.label) || entry.label.length > 40) err(`frame.labels[${i}].label must be 1-40 characters`);
     else if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`frame.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
     else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`frame.labels[${i}].scene "${entry.scene}" is not a scene id; the label is skipped`);
     if (isObject(entry) && entry.color !== undefined && !(typeof entry.color === "string" && (HEX.test(entry.color) || FRAME_COLOR_ROLES.includes(entry.color)))) err(`frame.labels[${i}].color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour: the frame's text colour while this label shows`);
   });
+}
+
+// No source, no study: a unit-grid or number-line scene shows its source in
+// params.source or under a frame source note (story.frame.sources) that is
+// on screen while it plays. Scenes timed by anchors are only checked against
+// scene-timed notes.
+function validateDataSources(story, warn) {
+  const scenes = Array.isArray(story.scenes) ? story.scenes.filter(isObject) : [];
+  const sources = isObject(story.frame) && Array.isArray(story.frame.sources) ? story.frame.sources.filter(isObject) : [];
+  const byId = new Map(scenes.map((scene) => [scene.id, scene]));
+  const num = (value) => (typeof value === "number" ? value : null);
+  const windows = sources.map((entry, i) => {
+    const start = num(entry.start) ?? num(byId.get(entry.scene)?.start);
+    const end = num(entry.end) ?? num(byId.get(entry.until)?.end);
+    return { entry, start, end, i };
+  }).sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  for (const scene of scenes) {
+    if (!DATA_MODULES.includes(scene.module) || nonEmpty(scene.params?.source)) continue;
+    const covered = windows.some(({ entry, start, end }, k) => {
+      if (entry.scene === scene.id || entry.until === scene.id) return true;
+      const a = num(scene.start), b = num(scene.end);
+      if (start === null || a === null || b === null) return false;
+      const stop = end ?? windows.slice(k + 1).find((next) => next.start !== null && next.start > start)?.start ?? Infinity;
+      return start < b && stop > a;
+    });
+    if (!covered) warn(`scene ${scene.id} (${scene.module}) shows data with no source: add frame.sources [{text: "<author, year · journal>", scene: "${scene.id}"}] (or params.source); no source, no study claim`);
+  }
 }
 
 function validateCamera(camera, { err, warn, lane }) {
@@ -995,6 +1047,22 @@ function validateBackground(value, err, path = "background") {
     const [min, max] = spec[key];
     if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }
+}
+
+// The same rules as kit/core/medium.mjs mediumErrors(), kept here so this
+// file stays import-free.
+function validateMedium(value, err, path = "medium") {
+  if (value === undefined || value === null) return;
+  const kindError = (kind, where) => {
+    const alias = /^water[- ]?color$/i.test(String(kind ?? "").trim()) ? "watercolour" : null;
+    return alias ? `${where} "${kind}" is spelled "${alias}" here; use "${alias}"` : `${where} must be one of ${STORY_MEDIUM_KINDS.join(", ")} (got ${JSON.stringify(kind)})`;
+  };
+  if (typeof value === "string") { if (!STORY_MEDIUM_KINDS.includes(value)) err(kindError(value, path)); return; }
+  if (!isObject(value)) { err(`${path} must be a medium name (${STORY_MEDIUM_KINDS.join(", ")}) or {kind, strength?, boil?, grain?}`); return; }
+  for (const key of Object.keys(value)) if (!STORY_MEDIUM_KEYS.includes(key)) err(`${path}.${key} is not supported (allowed: ${STORY_MEDIUM_KEYS.join(", ")})`);
+  if (!STORY_MEDIUM_KINDS.includes(value.kind)) err(kindError(value.kind, `${path}.kind`));
+  for (const key of ["strength", "grain"]) if (value[key] !== undefined && !(typeof value[key] === "number" && value[key] >= 0 && value[key] <= 1)) err(`${path}.${key} must be a number from 0 to 1`);
+  if (value.boil !== undefined && typeof value.boil !== "boolean") err(`${path}.boil must be true or false`);
 }
 
 function validatePanel(value, err) {

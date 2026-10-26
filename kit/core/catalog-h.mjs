@@ -15,6 +15,8 @@
 //             tooltip, callout-arrow)
 //   titles    catalog-h-text.mjs (motion-title: the 24 named text effects)
 //   icons     catalog-h-icons.mjs (icon-grid, stroke or duotone)
+//   data      catalog-h-data.mjs (unit-grid, number-line: the data-explainer
+//             isotype and ruler)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -32,9 +34,10 @@ import {CALLOUTS} from './catalog-h-callouts.mjs';
 import {TEXT} from './catalog-h-text.mjs';
 import {ICON_MODULES} from './catalog-h-icons.mjs';
 import {MAPS} from './catalog-h-map.mjs';
+import {DATA_MODULES} from './catalog-h-data.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */

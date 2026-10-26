@@ -4,6 +4,13 @@
 
 ### Added
 
+- Style packs and storyboards take a `medium`: `oil`, `watercolour`,
+  `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
+  with wobbly edges, brush strokes or washes, paper grain and lines that boil
+  on threes. Captions and the brand frame stay crisp above it, both renderers
+  draw it, and `none` (the default) changes nothing. Describe it in plain
+  words ("soft watercolour, dreamy") and a generated style picks it up. See
+  [Make it look like you](docs/guide/styles.md#paint-every-frame).
 - The script decides what kind of video it is. `launchclip make` now plans
   the script first, picking a format (`short-form`, `long-form`, `explainer`,
   `data-explainer`, `story`, `promo`), a goal (`reach` or `convert`) and the

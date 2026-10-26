@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameWindows, intersectRects, storyFrame } from "../kit/core/brand-frame.mjs";
+import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameSources, frameWindows, intersectRects, storyFrame } from "../kit/core/brand-frame.mjs";
 import { captionStateAt, indexCaptionTweens } from "../kit/core/captions.mjs";
 import { profileGeometry } from "../kit/core/layout-check.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
@@ -83,7 +83,8 @@ test("modules receive the frame's safe area as model.frame.safe only when the st
 
 const PLANS = [
   story({ progress: true, logo: "assets/logo.svg", labels: [{ start: 0, label: "Why" }, { scene: "b", label: "How" }, { scene: "c", label: "Try it" }] }),
-  story({ show: "scenes", kicker: { position: "top-right", underline: false }, progress: { position: "top", thickness: 8, color: "accent" }, labels: [{ scene: "c", label: "End" }] })
+  story({ show: "scenes", kicker: { position: "top-right", underline: false }, progress: { position: "top", thickness: 8, color: "accent" }, labels: [{ scene: "c", label: "End" }] }),
+  story({ kicker: false, sections: false, sources: [{ scene: "a", until: "b", text: "Morton et al., 2016 · J Appl Physiol" }, { start: 9, text: "Schoenfeld et al., 2017" }] })
 ];
 
 test("the plan is seek-safe: unique ids, known targets, one immediate render, `to` after a prior tween", () => {
@@ -151,6 +152,48 @@ test("the HyperFrames compiler mounts the frame under the captions, and the Remo
   assert.match(component, /captionElementStateAt\(index, node\.id, t\)/);
   const composition = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
   assert.equal(composition.match(/<BrandFrame story=\{story\} \/>\s*\n\s*\{overlay && Array\.isArray\(__captions\)/g)?.length, 2, "both story layouts draw the frame just before the captions");
+});
+
+test("source notes: timed from scenes, a bottom band out of the safe area, validated, and a warning for unsourced data", async () => {
+  const s = PLANS[2];
+  assert.deepEqual(frameSources(s), [{ start: 0, end: 8, text: "Morton et al., 2016 · J Appl Physiol" }, { start: 9, end: 12, text: "Schoenfeld et al., 2017" }]);
+  assert.deepEqual(frameSources(story({ sources: [{ scene: "b", text: "B" }, { start: 0, text: "A" }] })).map((entry) => [entry.start, entry.end]), [[0, 4], [4, 12]], "a note runs to the next");
+  assert.deepEqual(frameSources(story({})), []);
+  for (const format of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+    const zone = profileGeometry(format).safeZone;
+    const layout = brandFrameLayout({ ...s, format: { ...format, duration: 12 } }, format);
+    const band = layout.regions.find((region) => region.id === "frame-source").rect;
+    assert.equal(band.y + band.height, zone.y + zone.height, "the note sits on the bottom of the safe zone");
+    assert.equal(layout.safe.y + layout.safe.height, band.y, "modules stop above it");
+    assert.equal(layout.safe.y, zone.y, "no kicker, no top band");
+  }
+  const plan = brandFramePlan(s);
+  const holder = plan.nodes[0].children.find((node) => node.id === "lc-frame-source");
+  assert.deepEqual(holder.children.map((node) => node.text), ["Morton et al., 2016 · J Appl Physiol", "Schoenfeld et al., 2017"]);
+  const index = indexCaptionTweens(plan.tweens);
+  const at = (t) => captionStateAt(plan, t, index);
+  assert.ok(at(3).get("lc-frame-src-01").opacity > 0.8 && !(at(3).get("lc-frame-src-02")?.opacity > 0), "the first note shows over scenes a and b");
+  assert.equal(at(8.5).get("lc-frame-src-01").opacity, 0, "and is gone after b");
+  assert.ok(at(11).get("lc-frame-src-02").opacity > 0.8);
+  // Validation: shape, scene ids, and the no-source warning for data modules.
+  const { validateStory } = await import("../kit/core/story.mjs");
+  const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 },
+    scenes: [{ id: "a", module: "unit-grid", start: 0, end: 4, params: { count: 10 } }, { id: "b", module: "number-line", start: 4, end: 8, params: { from: 1, to: 25, ranges: [{ from: 8, to: 12, label: "Size" }] } }] };
+  const check = (frame) => validateStory({ ...base, ...(frame === undefined ? {} : { frame }) });
+  const unsourced = check().warnings.filter((w) => /shows data with no source/.test(w));
+  assert.equal(unsourced.length, 2);
+  assert.match(unsourced[0], /scene a \(unit-grid\).*frame\.sources/);
+  assert.equal(check({ kicker: false, sections: false, sources: [{ start: 0, text: "Morton et al., 2016" }] }).warnings.filter((w) => /no source/.test(w)).length, 0, "one note from 0 covers both");
+  assert.equal(check({ kicker: false, sections: false, sources: [{ scene: "a", until: "a", text: "Morton et al., 2016" }] }).warnings.filter((w) => /no source/.test(w)).length, 1, "a note over a only");
+  const errors = check({ sources: [{ text: "", start: 0, scene: "a" }, { text: "x".repeat(91), start: 1, end: 0.5 }, { text: "Ok", scene: "zz", nope: 1 }] });
+  const all = [...errors.errors, ...errors.warnings].join("\n");
+  assert.match(all, /frame\.sources\[0\]\.text must be 1-90 characters/);
+  assert.match(all, /frame\.sources\[0\] needs exactly one of start/);
+  assert.match(all, /frame\.sources\[1\]\.end must be seconds after its start/);
+  assert.match(all, /frame\.sources\[2\]\.nope is not supported/);
+  assert.match(all, /frame\.sources\[2\]\.scene "zz" is not a scene id/);
+  const { brandFrameErrors } = await import("../kit/core/style.mjs");
+  assert.deepEqual(brandFrameErrors({ sources: [] }), [], "a style's sources are accepted (and ignored)");
 });
 
 test("layout-check warns when key text overlaps the frame", () => {
