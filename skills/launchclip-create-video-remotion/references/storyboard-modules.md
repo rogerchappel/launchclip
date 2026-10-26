@@ -53,6 +53,23 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.
 - Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy, smooth or cinematic.
 
+## Direction guardrails (finish gates fail these)
+
+- World physics: walls, furniture, parked cars, props and a cast set's desk or bench are anchored to the world; only the camera moves them (world params.camera: still, drift, pan-left, pan-right, push, pull). Never animate them on their own.
+- Ambient things (clouds, water, flames, signs, light) move in place; mobile things (characters, vehicles, birds) move by acting cues (walk-to), never by drifting.
+- Two world scenes of the same place (kind, time and props) joined by a cut make the room jump: make them one world scene, or move to a different place.
+- A cast-scene over a world plate shares the plate's window (same start and end), so its set never pops in mid-plate.
+- Acting cues (cast-scene cues[].action): look-far (shades the eyes and looks into the distance (default target: far)); turn-to-look (turns to face the target and looks at it, keeping the pose); gaze-at (looks at the target (head and eyes), keeping the pose and facing); point-at (faces the target and points at it); walk-to (turns and walks to the target at a walking pace, then stands); stand-up (gets up from a seat (seated sets) and stands); stretch (stretches both arms overhead).
+- Targets (cue or actor `target`): far, window, horizon, street, skyline, left, right, {prop: id} (a prop in the world beneath), {character: id} or {x, y}. A character with a target faces it and turns its head toward it, not the camera.
+- If the idea is an action (look away, get up, walk over, point at the proof), a character performs it on screen on that line, toward what it is about: a bench sitter looking at the street turns toward the street.
+- No ghosting: one copy of a person on screen at a time. Never put a character in two scenes that overlap; the next shot's copy of a character appears by itself when the transition ends. Never fade a character in or out over a world that is already there.
+- Text reads or is gone: cards fade in and out fast (0.5 s at most, whatever the grammar) and stay fully shown for their reading time (about 0.22 s a word, at least 1.2 s).
+- Captions must read on what is behind them: finish measures every line on the render and adds a backing plate where it does not; keep captions out of a character's face and off busy props where you can.
+- Density: every third of the frame (top, middle, bottom in 9:16) has something in it within 4 s; a card never sits alone over an empty set for more than 3 s. Keep a character in the shot under a card, reacting to it or pointing at it.
+- Variety: never repeat a shot back to back. Two cast scenes in a row need a different set, a different cast or different poses and actions; moving the same pair to a new background is not a new shot.
+- 9:16 composition: a card takes the top band (about 12–45% of the height, rect y ≈ 230–860 at 1080x1920), the cast stands in the lower half on the world's ground, and captions sit in the band between them. Use at most two seated characters in 9:16.
+- A proof or quote beat keeps the cast on screen: the speaker points up at the card (point-at {x, y} of the card) or reacts to it, rather than leaving the set empty.
+
 ## Time anchors
 
 - scene.start, scene.end and hits[].at accept: seconds (2.5); "word:<text>" (the first time that word is spoken); "word:<text>#<n>" (its n-th occurrence); an optional offset ("word:fast-0.2"); "beat:<n>" or "downbeat:<n>" (from BEATS.json).

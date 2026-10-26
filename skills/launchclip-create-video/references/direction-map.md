@@ -21,6 +21,7 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 - treatment: dress (a visual alongside the presenter), insert (a full-frame visual over the voice), face (hold on the presenter on purpose), camera (a punch-in or camera move only).
 - dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").
 - Dress every line whose intent calls for a visual (hook, claim, problem, proof, number, list, process, product, quote, cta) unless it works better on the presenter, and then say why. A character story's lines may add cast cues ({id, pose, expression, at: "word:<text>"}) and a set.
+- A character story's line with cast cues names its key action, and every beat (section) has at least one: action {verb: look-far | turn-to-look | gaze-at | point-at | walk-to | stand-up | stretch | a pose, who, target?}. It is what a character does on screen to show the line (looking far away, standing up, pointing at the proof). The acting gate fails when no cast scene performs it on that line.
 
 ## Intent rules (first match wins)
 
@@ -42,6 +43,7 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 ## Narrative maps
 
 A story told by characters uses story beats as sections (`beat`: setup, problem, attempt, turn, resolution, cta), and each line says who acts: `cast: [{id, pose, expression, at: "word:<text>"}]` and a `set`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.
+Each line with cast cues names its key action, `action: {verb, who, target?}` (an acting cue such as look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch, or a pose), and each beat names at least one. If the idea is an action, someone does it on screen, toward what it is about. `launchclip finish` fails the acting gate when no cast scene performs it on its line.
 
 ## Long form
 
