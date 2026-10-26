@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -155,6 +155,60 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, replan: true }, adapters);
     assert.equal(calls.filter((call) => call.schemaName === "launchclip_make_script").length, 1);
     assert.ok(calls.filter((call) => call.schemaName === "launchclip_storyboard").length > 2);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+// Collections RFC phase 1: inside a library, a project without --out goes
+// under storage.projects, and the library folder (the cwd) gets nothing.
+test("make inside a library puts the project under storage.projects and leaves the library folder alone", async () => {
+  const assets = await assetsDir();
+  const libraryDir = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-library-"));
+  const storage = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-storage-"));
+  try {
+    const { initLibrary, loadLibrary } = await import("../src/library.js");
+    await initLibrary(libraryDir, { projects: storage, minFreeGb: 0 });
+    const cwd = path.join(libraryDir, "acme");
+    await mkdir(cwd);
+    const library = await loadLibrary({ cwd, env: {} });
+    const { model } = fakeModel();
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, library }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice() {} });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.equal(report.project, path.join(storage, `launchclip-${slugify(PROMPT)}`));
+    assert.equal(report.library, library.file);
+    assert.ok(existsSync(path.join(report.project, "storyboard.json")));
+    assert.deepEqual((await readdir(libraryDir)).sort(), ["acme", "launchclip.library.json"]);
+    assert.deepEqual(await readdir(cwd), []);
+    // --out still wins.
+    const out = path.join(cwd, "here");
+    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, library, out }, { env: {}, client: fakeModel().model, inventory: fakeInventory, finish: fakeFinish([]), notice() {} });
+    assert.equal(again.project, out);
+  } finally {
+    for (const dir of [assets, libraryDir, storage]) await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("make inside a library refuses to start on an unmounted drive", async () => {
+  const library = { file: "/lib/launchclip.library.json", storage: { projects: `/Volumes/launchclip-missing-${process.pid}/projects`, min_free_gb: 0 } };
+  await assert.rejects(runMake(PROMPT, { voice: "test", library }, { env: {}, client: fakeModel().model, notice() {} }), (error) => {
+    assert.equal(error.code, "LAUNCHCLIP_STORAGE");
+    assert.match(error.message, /^storage\.projects: \/Volumes\/launchclip-missing-\d+ is not mounted/);
+    return true;
+  });
+});
+
+test("make stops with one clear line when its project folder disappears mid-job", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-cwd-"));
+  try {
+    const finish = async (project) => {
+      await rm(project, { recursive: true, force: true });
+      throw new Error(`ENOENT: no such file or directory, open '${project}/renders/draft.mp4'`);
+    };
+    await assert.rejects(runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: fakeModel().model, inventory: fakeInventory, finish, notice() {} }),
+      /StorageError: launchclip make stopped during finish: .* disappeared\. Reconnect it and run the same command again/);
   } finally {
     await rm(assets, { recursive: true, force: true });
     await rm(cwd, { recursive: true, force: true });

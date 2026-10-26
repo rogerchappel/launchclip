@@ -469,6 +469,27 @@ test("a failing stage blocks the rest, is reported, and the CLI exits non-zero",
   }
 });
 
+test("inside a library finish checks the drive first, and a project that disappears mid-render fails cleanly", async () => {
+  const library = { file: "lib.json", storage: { projects: "/Volumes/x", min_free_gb: 0 } };
+  await assert.rejects(runFinish(`/Volumes/launchclip-missing-${process.pid}/acme/launch`, { library }, fakeAdapters()), (error) => {
+    assert.equal(error.code, "LAUNCHCLIP_STORAGE");
+    assert.match(error.message, /^project: \/Volumes\/launchclip-missing-\d+ is not mounted; connect the drive/);
+    return true;
+  });
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    adapters.renderer = () => ({ name: "remotion", async render() { await rm(project, { recursive: true, force: true }); throw new Error("ENOENT: no such file or directory"); } });
+    await assert.rejects(runFinish(project, {}, adapters), (error) => {
+      assert.equal(error.code, "LAUNCHCLIP_STORAGE");
+      assert.match(error.message, /^launchclip finish stopped during render: .* disappeared\. Reconnect it and run the same command again; finished stages are reused$/);
+      return true;
+    });
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("launchclip finish prints a summary by default", async () => {
   const project = await narratedProject();
   try {

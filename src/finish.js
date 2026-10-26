@@ -24,6 +24,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
+import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
@@ -588,6 +589,9 @@ export function defaultAdapters() {
 export async function runFinish(projectPath, options = {}, adapterOverrides = {}) {
   const adapters = { ...defaultAdapters(), ...adapterOverrides };
   const project = path.resolve(projectPath);
+  // Inside a library (options.library, src/library.js) the project's drive is
+  // checked before anything is written.
+  if (options.library) await checkStorage(project, { minFreeGb: options.library.storage.min_free_gb, label: "project", source: options.library.file });
   const storyFile = path.join(project, "storyboard.json");
   if (!hasExactFile(project, "storyboard.json")) throw new Error(`launchclip finish needs ${storyFile}; author storyboard.json first`);
   // The style pack is merged into the working copy; storyboard.json stays as written.
@@ -660,6 +664,10 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     stages.push(entry);
     if (entry.status === "failed") failed = entry.name;
   }
+  // A drive unplugged mid-render: one clear line, and no report written to a
+  // folder that is gone. Finished stages are cached, so a rerun resumes.
+  const gone = failed ? interruptedByStorage(project, { command: "launchclip finish", stage: failed }) : null;
+  if (gone) throw gone;
   if (candidate && !failed && existsSync(out)) {
     const fps = Number(ctx.resolved?.resolved?.fps ?? ctx.resolved?.format?.fps ?? 30);
     const duration = Number(ctx.resolved?.resolved?.duration ?? ctx.resolved?.format?.duration);

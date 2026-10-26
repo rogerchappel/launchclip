@@ -99,12 +99,14 @@ export function projectRoot(library, ...segments) {
 }
 
 /**
- * The environment with the library's cache as LAUNCHCLIP_CACHE, unless the
- * shell already set one (the shell wins, as with .env).
+ * Point LAUNCHCLIP_CACHE at the library's cache for the length of one command,
+ * unless the shell already set one (the shell wins, as with .env).
+ * → a function that undoes it.
  */
-export function libraryEnv(library, env = process.env) {
-  if (!library?.cache || env.LAUNCHCLIP_CACHE) return env;
-  return { ...env, LAUNCHCLIP_CACHE: library.cache };
+export function useLibraryCache(library, env = process.env) {
+  if (!library?.cache || env.LAUNCHCLIP_CACHE) return () => {};
+  env.LAUNCHCLIP_CACHE = library.cache;
+  return () => { if (env.LAUNCHCLIP_CACHE === library.cache) delete env.LAUNCHCLIP_CACHE; };
 }
 
 /** "~" and "~/x" → the home folder. */

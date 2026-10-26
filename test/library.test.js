@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_MIN_FREE_GB, findLibrary, initLibrary, LIBRARY_FILE, LIBRARY_SCHEMA, libraryEnv, loadLibrary, projectRoot, readLibrary } from "../src/library.js";
+import { DEFAULT_MIN_FREE_GB, findLibrary, initLibrary, LIBRARY_FILE, LIBRARY_SCHEMA, loadLibrary, projectRoot, readLibrary, useLibraryCache } from "../src/library.js";
 
 const tempDir = () => mkdtemp(path.join(os.tmpdir(), "launchclip-library-"));
 
@@ -103,11 +103,18 @@ test("rejects a library with the wrong schema or bad storage values", async () =
 
 test("the library cache becomes LAUNCHCLIP_CACHE unless the shell set one", () => {
   const library = { cache: "/cache/here" };
-  assert.equal(libraryEnv(library, {}).LAUNCHCLIP_CACHE, "/cache/here");
-  assert.equal(libraryEnv(library, { LAUNCHCLIP_CACHE: "/mine" }).LAUNCHCLIP_CACHE, "/mine");
-  const env = { A: "1" };
-  assert.equal(libraryEnv({ cache: null }, env), env);
-  assert.equal(libraryEnv(null, env), env);
+  const env = {};
+  const restore = useLibraryCache(library, env);
+  assert.equal(env.LAUNCHCLIP_CACHE, "/cache/here");
+  restore();
+  assert.equal(Object.hasOwn(env, "LAUNCHCLIP_CACHE"), false);
+  const mine = { LAUNCHCLIP_CACHE: "/mine" };
+  useLibraryCache(library, mine)();
+  assert.equal(mine.LAUNCHCLIP_CACHE, "/mine");
+  const none = {};
+  useLibraryCache({ cache: null }, none);
+  useLibraryCache(null, none);
+  assert.deepEqual(none, {});
 });
 
 test("library init writes a valid library and refuses to overwrite one", async () => {
@@ -136,4 +143,13 @@ test("launchclip library init writes the file from the CLI", async () => {
   assert.equal(result.library.storage.min_free_gb, 25);
   await assert.rejects(runCli(["library", "nope"], { stdout: { write: () => {} } }), /Unknown library action: nope/);
   await assert.rejects(runCli(["library", "init"], { stdout: { write: () => {} } }), /needs a folder/);
+});
+
+test("make, finish and intake read --library", async () => {
+  const { runCli } = await import("../src/cli.js");
+  const empty = await tempDir();
+  const io = { stdout: { write: () => {} }, stderr: { write: () => {} } };
+  await assert.rejects(runCli(["finish", empty, "--library", empty], io), /--library .*no launchclip\.library\.json/);
+  await assert.rejects(runCli(["make", "a video", "--library", empty], io), /--library .*no launchclip\.library\.json/);
+  await assert.rejects(runCli(["intake", "owner/repo", "--library", empty], io), /--library .*no launchclip\.library\.json/);
 });

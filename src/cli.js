@@ -86,7 +86,8 @@ export async function runCli(argv, io = {}) {
       const { runCastCommand } = await import("./cast.js");
       result = await runCastCommand(castInvocation.action, castInvocation.name, flags);
     } else if (command === "intake") {
-      result = await writeIntake(required(firstArg, "source"), flags);
+      const { loadLibrary } = await import("./library.js");
+      result = await writeIntake(required(firstArg, "source"), flags, process.env, { library: await loadLibrary({ library: flags.library }) });
     } else if (command === "edit-recording") {
       result = await prepareRecording(required(firstArg, "recording media path"), recordingOptions(flags), productionAdapters.recording);
     } else if (command === "broll-plan") {
@@ -138,7 +139,11 @@ export async function runCli(argv, io = {}) {
       result = report;
     } else if (command === "finish") {
       const { runFinish, formatFinishSummary } = await import("./finish.js");
+      const { loadLibrary, useLibraryCache } = await import("./library.js");
+      const library = await loadLibrary({ library: flags.library });
+      const restoreCache = useLibraryCache(library);
       const report = await runFinish(required(firstArg, "story project path"), {
+        library,
         renderer: flags.renderer,
         quality: flags.quality,
         voice: flags.voice,
@@ -158,7 +163,7 @@ export async function runCli(argv, io = {}) {
         kind: flags.kind,
         boundary: flags.boundary,
         at: flags.at
-      }, productionAdapters.finish);
+      }, productionAdapters.finish).finally(restoreCache);
       throwIfCostLimited(tracker);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
@@ -188,7 +193,11 @@ export async function runCli(argv, io = {}) {
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
       if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");
+      const { loadLibrary, useLibraryCache } = await import("./library.js");
+      const library = await loadLibrary({ library: flags.library });
+      const restoreCache = useLibraryCache(library);
       const report = await runMake(firstArg, {
+        library,
         assets: flags.assets,
         aspect: flags.aspect,
         duration: flags.duration,
@@ -214,7 +223,7 @@ export async function runCli(argv, io = {}) {
         allowHost: flags["allow-host"],
         demoPlan: flags["demo-plan"],
         ...(flags["no-subject"] ? { subject: false } : {})
-      }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make }).finally(restoreCache);
       throwIfCostLimited(tracker);
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
