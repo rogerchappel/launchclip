@@ -7,6 +7,16 @@ import { adapterError, captureCommand, runCommand, structuredOk } from "./comman
 // HyperFrames renderer adapter (docs/KIT_CONTRACTS.md "Renderer adapter").
 // It wraps the same CLI invocations used by production_render.js,
 // temporal_evidence.js and cinematic_check.js.
+// HyperFrames kills an ffmpeg frame extraction after FFMPEG_PROCESS_TIMEOUT_MS
+// (5 minutes by default) and then renders that video as black, with no error.
+// A long 4K recording takes longer than that to decode, so renders give it
+// 30 minutes unless the caller set the variable.
+export const HYPERFRAMES_FFMPEG_TIMEOUT_MS = 30 * 60 * 1000;
+
+export function hyperframesRenderEnv(env = process.env) {
+  return env.FFMPEG_PROCESS_TIMEOUT_MS ? env : { ...env, FFMPEG_PROCESS_TIMEOUT_MS: String(HYPERFRAMES_FFMPEG_TIMEOUT_MS) };
+}
+
 export function createHyperframesRenderer(defaults = {}) {
   const runner = (opts) => opts.run ?? defaults.run ?? runCommand;
   const hf = (run, args, options) => {
@@ -28,7 +38,7 @@ export function createHyperframesRenderer(defaults = {}) {
     async render(projectDir, outFile, opts = {}) {
       const project = path.resolve(projectDir);
       await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
-      const result = await hf(runner(opts), this.renderArgs(project, outFile, opts), { cwd: project });
+      const result = await hf(runner(opts), this.renderArgs(project, outFile, opts), { cwd: project, env: hyperframesRenderEnv() });
       if (!result.ok) throw adapterError("HyperFrames render", result);
       return { renderer: "hyperframes", output: path.resolve(outFile), raw: result };
     },

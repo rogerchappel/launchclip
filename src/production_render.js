@@ -13,6 +13,7 @@ import { assessCinematicReadiness } from "./production_readiness.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 import { captureTemporalEvidence, TEMPORAL_EVIDENCE_VERSION } from "./temporal_evidence.js";
 import { runHyperframes } from "./toolchain.js";
+import { hyperframesRenderEnv } from "./renderers/hyperframes.js";
 
 const execFileAsync = promisify(execFile);
 const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
@@ -337,7 +338,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   ];
   if (!visionSupervisedDraft) renderArgs.push("--strict-all");
   renderArgs.push(project);
-  const render = await captureHyperframes(run, renderArgs, { cwd: project });
+  const render = await captureHyperframes(run, renderArgs, { cwd: project, env: hyperframesRenderEnv() });
   await writeFile(path.join(qaDir, profile.logName), `${JSON.stringify(render, null, 2)}\n`);
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);
 
