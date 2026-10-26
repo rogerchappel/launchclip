@@ -385,9 +385,35 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
       chip: role('chip')
     },
     band: captionBandFor(format),
-    bandTop: captionBandTop(format, position)
+    bandTop: captionBandTop(format, position),
+    // Legibility (docs/DIRECTION_GUARDRAILS.md §3): lines named in
+    // overlay.plates get a backing plate in the colour that holds the preset's
+    // own text best. finish fills it from what is behind each line; a style
+    // sets the look but never switches it off.
+    plates: captionPlateIds(overlay?.plates),
+    legiblePlate: captionLegiblePlate(idle, brandColors)
   };
 }
+
+/** overlay.plates → a Set of caption line ids, or "all". */
+export function captionPlateIds(value) {
+  if (value === 'all') return 'all';
+  return new Set(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
+}
+
+/**
+ * The backing plate for a caption line that would not read on what is behind
+ * it: of the brand's ink, background and paper, then near-black and white,
+ * the colour with the most contrast against the text (the preset's own
+ * idle colour, which the plate never changes). → hex
+ */
+export function captionLegiblePlate(idle, brandColors = {}) {
+  const options = [brandColors.ink, brandColors.bg, brandColors.paper, '#0b0d12', '#ffffff'].filter((value) => /^#[0-9a-f]{6}$/i.test(value ?? ''));
+  return options.reduce((best, color) => (captionContrast(idle, color) > captionContrast(idle, best) + 1e-9 ? color : best), options[0] ?? '#0b0d12');
+}
+
+/** Is this caption line plated (the preset's plate, or a legibility plate)? */
+export const captionLinePlated = (o, id) => Boolean(o.plate) || o.plates === 'all' || Boolean(o.plates?.has?.(id));
 
 /** Re-chunk words for a preset whose chunk size differs from the default chunking. */
 export function chunksForCaptions(chunks, options) {
@@ -510,11 +536,14 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
 
   for (const chunk of list) {
     const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
-    const tone = o.plate ? null : toneOf(...spoken(chunk));
+    // A legibility plate holds the preset's own colours, so it takes no world tone.
+    const legible = !o.plate && captionLinePlated(o, chunk.id);
+    const tone = o.plate || legible ? null : toneOf(...spoken(chunk));
     const toned = tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
     if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, swapped: toned.swapped };
+    if (legible) o.legible = true;
     const toneCls = toned ? ` lc-cap-on-${tone}` : '';
-    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}${toneCls}`, children: [] };
+    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : legible ? 'lc-cap lc-cap-legible' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}${toneCls}`, children: [] };
     nodes.push(line);
     const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
@@ -674,6 +703,8 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
     if (o.emphasis) lines.push(`.lc-cap-on-${tone} .lc-cap-em { color: ${colors.accent}; }`);
   }
   if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);
+  // A legibility plate: nearly opaque, so the line reads on anything behind it.
+  if (o.legible) lines.push(`.lc-cap-legible { background: ${o.legiblePlate}eb; padding: 0.18em 0.5em 0.22em; border-radius: 0.32em; }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
   switch (o.word) {
     case 'fill': lines.push(`.lc-cap-fill { position: absolute; left: 0; top: 0; width: 0%; overflow: hidden; white-space: nowrap; color: ${C.active}; }`); break;
     case 'pop': lines.push('.lc-cap { display: grid; place-items: center; }', '.lc-cap > .lc-cap-w { grid-area: 1 / 1; opacity: 0; transform-origin: 50% 50%; }'); break;

@@ -184,6 +184,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     profile: report.profile,
     canvas,
     elements: elements.length,
+    // Every element's rect and window (caption plates and the density gate read them).
+    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end })),
     errors: findings.filter((finding) => finding.severity === "error").length,
     drifted: ambient.drifted,
     warnings,

@@ -110,8 +110,8 @@ character's shirt or a card. No style can switch off the fix.
 
 - **Module default.**
   - Captions take `legibility: "auto"`.
-  - A line whose band crosses a character or a card at its time gets a backing
-    plate. Other lines over a world keep the tone colour and halo from #320.
+  - A line whose band crosses a character or a media window at its time gets a
+    backing plate. A card in the band is already a layout collision. Other lines over a world keep the tone colour and halo from #320.
 - **Finish (measured).**
   - After the render, `src/caption_legibility.js` samples each caption line at
     its midpoint from the video frames. It measures the text colour against

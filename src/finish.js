@@ -95,6 +95,7 @@ export const PATHS = Object.freeze({
   audioManifest: "AUDIO-MANIFEST.json",
   evidence: "qa/temporal-evidence/manifest.json",
   gates: "qa/finish/gates.json",
+  captionLegibility: "qa/finish/caption-legibility.json",
   motion: "qa/finish/motion.json",
   segments: SEGMENTS_DIR,
   sceneStills: "qa/finish/scenes",
@@ -505,6 +506,11 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
+    // Caption legibility on the rendered frames (src/caption_legibility.js).
+    async captionLegibility(video, story, options) {
+      const { measureCaptionLegibility } = await import("./caption_legibility.js");
+      return measureCaptionLegibility(video, story, options);
+    },
     async compileHyperFrames(resolved, options) {
       const { compileStoryToHyperFrames } = await import("../kit/hyperframes/story-compiler.mjs");
       return compileStoryToHyperFrames(resolved, options);
@@ -823,7 +829,7 @@ const STAGES = [
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject } = await import("./layout_check.js");
       const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
-      ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
+      ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
@@ -1057,6 +1063,9 @@ const STAGES = [
   {
     name: "render",
     async plan(ctx) {
+      // Caption plates (docs/DIRECTION_GUARDRAILS.md §3): lines over a
+      // character or a card, and lines a past render measured illegible.
+      await applyCaptionPlates(ctx);
       const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
@@ -1090,7 +1099,31 @@ const STAGES = [
       if (ctx.chapter) ctx.chapter.segments = segments ? { forced: segments.forced, reused: segments.reused, total: segments.segments } : null;
       const details = { renderer: ctx.rendererName, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
       if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
+      // Measure every caption line on the frames; plate the ones that do not
+      // read and render once more (a whole render only: a partial one keeps
+      // its plates for the next full pass).
+      const legibility = await measureCaptions(ctx);
+      if (legibility?.failed.length && !scenes.length && !ctx.chapter) {
+        const added = legibility.failed.filter((id) => !(ctx.captionPlates ?? []).includes(id));
+        if (added.length) {
+          await writeCaptionPlates(ctx, legibility, added);
+          await applyCaptionPlates(ctx);
+          ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+          await writeResolvedCopy(ctx);
+          details.segments_first_pass = segments ?? null;
+          await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
+          details.captions_replated = added;
+          ctx.captionLegibility = await measureCaptions(ctx);
+        }
+      }
+      if (ctx.captionLegibility) {
+        await writeCaptionPlates(ctx, ctx.captionLegibility, []);
+        details.captions = captionSummary(ctx);
+      }
       return details;
+    },
+    restore(ctx, details) {
+      if (details?.captions) ctx.captionLegibility = { lines: details.captions.lines ?? [], failed: details.captions.failed ?? [], plates: details.captions.plates ?? [] };
     }
   },
   {
@@ -1326,6 +1359,15 @@ async function runGates(ctx) {
   gates.layout = ctx.layout
     ? { status: ctx.layout.status === "failed" ? "failed" : "passed", profile: ctx.layout.profile, errors: ctx.layout.errors, findings: ctx.layout.findings.slice(0, 20) }
     : { status: "skipped", reason: "layout check did not run" };
+  // A caption line still illegible on the rendered frames, after its plate
+  // pass, is a layout error (docs/DIRECTION_GUARDRAILS.md §3).
+  const legibility = ctx.captionLegibility ?? ctx.state.stages?.render?.details?.captions ?? null;
+  if (legibility && gates.layout.status !== "skipped") {
+    const failed = (legibility.lines ?? []).filter((line) => (legibility.failed ?? []).includes(line.id));
+    const findings = failed.map((line) => ({ rule: "caption-illegible", severity: "error", ids: [line.id], at: line.time, detail: `"${line.text}" reads at ${line.contrast}:1 with ${Math.round((line.camouflage ?? 0) * 100)}% of its surround in the text colour${line.plated ? ", even on its plate" : ""} (needs 3:1 and at most 35%); move it off the busy area or simplify what is behind it` }));
+    gates.layout = { ...gates.layout, captions: { report: PATHS.captionLegibility, lines: (legibility.lines ?? []).length, plated: (legibility.plates ?? ctx.captionPlates ?? []).length, failed: failed.length } };
+    if (findings.length) gates.layout = { ...gates.layout, status: "failed", errors: (gates.layout.errors ?? 0) + findings.length, findings: [...findings, ...(gates.layout.findings ?? [])].slice(0, 20) };
+  }
   // The subject gate never fails the render: a failing matte range has
   // already fallen back (status "fallback", with the scene changes).
   const subjectGate = ctx.subjectGate ?? ctx.state.stages?.validate?.details?.subject;
@@ -1732,7 +1774,7 @@ async function beatSync(ctx, plan, track, { duration }) {
         ctx.copy = result.story;
         ctx.resolved = resolved;
         ctx.boundaries = deriveBoundaries(resolved);
-        ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
+        ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
         changed = true;
         await writeResolvedCopy(ctx);
       }
@@ -1799,6 +1841,62 @@ export async function prepareMusicTrack(input, output, { offset = 0, tempo = 1, 
 
 // ---------------------------------------------------------------------------
 // Helpers
+
+// ---------------------------------------------------------------------------
+// Caption legibility (src/caption_legibility.js)
+
+async function captionChunks(ctx) {
+  const overlay = captionsOverlay(ctx.copy);
+  if (!overlay) return null;
+  const file = overlay.src ? path.join(ctx.project, overlay.src) : path.join(ctx.project, PATHS.captions);
+  const data = await readOptionalJson(file);
+  const chunks = Array.isArray(data?.chunks) ? data.chunks : Array.isArray(data) ? data : null;
+  return chunks?.length ? chunks : null;
+}
+
+/**
+ * Plates on the captions overlay of ctx.copy: lines predicted to cross a
+ * character or a card (the layout check's elements), plus lines a render
+ * measured illegible (qa/finish/caption-legibility.json, kept for ids that
+ * still exist). A style never removes them.
+ */
+async function applyCaptionPlates(ctx) {
+  const overlay = captionsOverlay(ctx.copy);
+  const chunks = overlay ? await captionChunks(ctx) : null;
+  if (!overlay || !chunks) { ctx.captionPlates = []; return; }
+  const { predictCaptionPlates, captionLines, mergePlates } = await import("./caption_legibility.js");
+  const probe = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+  const predicted = predictCaptionPlates(probe, chunks, ctx.layout?.rects ?? []);
+  const saved = await readOptionalJson(path.join(ctx.project, PATHS.captionLegibility));
+  const ids = new Set(captionLines(probe, chunks).lines.map((line) => line.id));
+  const measured = (Array.isArray(saved?.measured_plates) ? saved.measured_plates : []).filter((id) => ids.has(id));
+  const plates = mergePlates(predicted, measured);
+  ctx.captionPlates = plates;
+  ctx.captionPredicted = predicted;
+  ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? { ...entry, plates } : entry)) };
+}
+
+async function measureCaptions(ctx) {
+  const chunks = await captionChunks(ctx);
+  if (!chunks || !existsSync(ctx.raw)) return null;
+  let result;
+  try { result = await ctx.adapters.captionLegibility(ctx.raw, ctx.resolved, { chunks }); }
+  catch (error) { ctx.warnings.push(`caption legibility was not measured: ${firstLine(error.message)}`); return null; }
+  ctx.captionLegibility = result;
+  return result;
+}
+
+async function writeCaptionPlates(ctx, legibility, added) {
+  const file = path.join(ctx.project, PATHS.captionLegibility);
+  const saved = await readOptionalJson(file);
+  const measured = [...new Set([...(Array.isArray(saved?.measured_plates) ? saved.measured_plates : []), ...added])].sort();
+  await writeJson(file, { schema: "launchclip.caption-legibility.v1", thresholds: (await import("./caption_legibility.js")).CAPTION_LEGIBILITY, predicted_plates: ctx.captionPredicted ?? [], measured_plates: measured, plates: ctx.captionPlates ?? [], lines: legibility?.lines ?? [], failed: legibility?.failed ?? [] });
+}
+
+function captionSummary(ctx) {
+  const result = ctx.captionLegibility;
+  return { report: PATHS.captionLegibility, plates: ctx.captionPlates ?? [], predicted: ctx.captionPredicted ?? [], failed: result.failed, lines: result.lines };
+}
 
 async function writeResolvedCopy(ctx) {
   await writeJson(path.join(ctx.project, PATHS.copy), ctx.copy);
