@@ -70,7 +70,7 @@ export function slugify(prompt) {
 }
 
 /**
- * options: {assets, aspect, duration, style, seed, model, voice, voiceId, music, renderer,
+ * options: {assets, aspect, duration, style, seed, profile, model, voice, voiceId, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
  *   subject (false: no presenter probe or subject effects), rules (a collection's
@@ -104,7 +104,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     prompt: text,
     project,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
     model: null,
     routing: null,
     stages: {},
@@ -472,7 +472,7 @@ async function stageStoryboard(ctx) {
   const subject = ctx.subject?.probe ?? null;
   // The cadence profile the plan aims at (RFC §5.5): the style's, else the
   // shipped one for the routed lane, aspect, duration and platform.
-  const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { style: style?.pack ?? null, projectDir: project });
+  const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
   const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
