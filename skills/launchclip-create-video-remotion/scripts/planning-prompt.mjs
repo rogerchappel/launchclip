@@ -58,13 +58,19 @@ const EDITORIAL_TUNING = 'rect, density ("fill" with a rect), accent (#rrggbb), 
 
 // RFC §5 phrase→module table, as data. `patterns` are case-insensitive regex
 // sources matched against one sentence of the brief or narration. A row whose
-// module is planned but not yet in the registry names a `fallback` that is.
+// module is planned but not yet in the registry names a `fallback` that is. A
+// row with `overlay` names a story-level overlay (frame.sources), not a scene
+// module.
 export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'hook-title', when: 'opens on a question or claim (frame 0 visible)', patterns: ['^(why|how|what|did you know|ever wonder|stop)\\b', '\\?\\s*$'] },
   { module: 'kinetic-words', when: 'lands 1–3 words per beat', patterns: ['\\b(fast|simple|instantly|never|always|zero)\\b'] },
   { module: 'function-chart', when: 'describes a quantity over time or a curve', patterns: ['\\bover time\\b', '\\bcurve\\b', '\\bexponential', '\\bdecay', '\\bcool(s|ing)?\\b', '\\brate of\\b', '\\bhalf-life\\b'] },
   { module: 'gauge-compare', when: 'contrasts two values or states', patterns: ['\\bversus\\b', '\\bvs\\.?\\s', '\\bcompared (to|with)\\b', '\\b(hotter|colder|higher|lower|bigger|smaller) than\\b'] },
   { module: 'flow-compare', when: 'says "big X → fast, small X → slow"', patterns: ['\\bbig(ger)?\\b.*\\bfast(er)?\\b', '\\bsmall(er)?\\b.*\\bslow(er)?\\b', '\\bthroughput\\b', '\\bflows?\\b'] },
+  // Data explainers ("the study says"): the people, the rule and the source.
+  { module: 'unit-grid', intents: ['number', 'proof'], when: 'counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up', patterns: ['\\b\\d{1,3} (people|participants|subjects|volunteers|users|adults|students|patients|lifters|men|women|athletes)\\b', '\\b(split|divided|randomi[sz]ed|assigned) (them )?(into|to) (two|three|2|3) groups\\b', '\\b(one|\\d+) (in|out of) (every )?(\\d+|five|ten|twenty|a hundred)\\b'] },
+  { module: 'number-line', intents: ['number', 'claim'], when: 'states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label', patterns: ['\\b\\d+\\s?(–|-|to)\\s?\\d+\\s?(reps|hours|minutes|grams|g|kg|percent|%|days|weeks|mph|km)\\b', '\\bbetween \\d+ and \\d+\\b', '\\b(above|below|over|under|more than|less than) \\d+\\b.*\\b(is|means|counts as|=)\\b', '\\b(the (gym )?rule|sweet spot|threshold)\\b'] },
+  { module: 'source-note', overlay: 'frame.sources', intents: ['proof'], when: 'cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim', patterns: ['\\baccording to\\b', '\\b(study|studies|survey|meta-analysis|trial|journal)\\b', '\\b(researchers?|scientists?) (found|showed|discovered|tested)\\b', '\\bet al\\.?'] },
   { module: 'count-up', when: 'gives a number, time, price or count', patterns: ['\\d', '\\b(percent|dollars?|minutes?|seconds?|hours?|times faster)\\b', '[$%×]'] },
   { module: 'metric', when: 'gives a sourced figure that should stay on screen with captions', patterns: ['\\b(according to|reported|survey|benchmark(ed)?|measured)\\b'] },
   { module: 'checklist', when: 'lists steps, features or duties', patterns: ['\\b(features?|includes?|checklist|requirements?|you get)\\b', '\\bfirst\\b.*\\bsecond\\b'] },
@@ -148,6 +154,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
 
 /** The registry module a phrase-table row maps to (its fallback when the module is planned). */
 export function phraseRowModule(row, modules = knownModules()) {
+  if (row.overlay) return row.overlay;
   if (modules.includes(row.module)) return row.module;
   if (row.fallback && modules.includes(row.fallback)) return row.fallback;
   return null;
@@ -373,6 +380,15 @@ function captionLines(lane) {
   ];
 }
 
+// Data explainers: the "the study says" format and its source rule.
+export function dataExplainerLines() {
+  return [
+    'Format "the study says": the question (a choice: "10 heavy reps or 25 light ones?") → what everyone believes (the rule) → the fair test (the study: who, how many, what each group did) → the result → what to do. One idea per beat.',
+    'Keep a near-empty stage and add or transform one element per beat rather than cutting to a new card: the belief is a number-line whose ranges light up on their words, the study is a unit-grid that counts in and then splits into its groups (split on the word that names them), the result lands on those groups (bar-chart, gauge-compare or stat-card), stacked fragments ("same program", "12 weeks", "every set to failure") are kinetic-words.',
+    'No source, no study claim: a study, survey or "researchers found" line needs its citation in the brief or assets. Show it as a source note that stays along the bottom across the data scenes: frame.sources [{text ≤ 90 ("Morton et al., 2016 · J Appl Physiol"), scene | start, until? | end?}] (keep any other frame fields; with no brand frame write frame: {kicker: false, sections: false, sources: [...]}). Every unit-grid or number-line scene sits under a note or sets params.source. Never invent an author, year or journal; without one, cut the claim.'
+  ];
+}
+
 function anchorLines() {
   return [
     'scene.start, scene.end and hits[].at accept: seconds (2.5); "word:<text>" (the first time that word is spoken); "word:<text>#<n>" (its n-th occurrence); an optional offset ("word:fast-0.2"); "beat:<n>" or "downbeat:<n>" (from BEATS.json).',
@@ -459,7 +475,7 @@ function phraseLines({ subject } = {}) {
     if (needs && subject === false) return null;
     const target = phraseRowModule(row, modules);
     if (!target) return null;
-    const planned = target !== row.module ? ` (planned module ${row.module}; use ${target})` : '';
+    const planned = row.overlay ? ' (story overlay, not a scene module)' : target !== row.module ? ` (planned module ${row.module}; use ${target})` : '';
     const lanes = row.lanes ? ` [${row.lanes.join(', ')}]` : '';
     const marker = needs && subject === undefined ? ' (needs the subject)' : '';
     return `| ${row.when}${lanes}${marker} | ${target}${planned} |`;
@@ -733,6 +749,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
+    ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
     ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines({ subject: lane === 'footage-led' ? Boolean(subject?.usable) : false })]),
@@ -826,6 +843,7 @@ export function storyboardModulesReference() {
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
+    ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
