@@ -1,0 +1,84 @@
+// Acting cues (docs/DIRECTION_GUARDRAILS.md §2): actions, targets, facing,
+// gaze, stand-up and walk-to on cast-scene and character-cameo.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { frameState } from "../kit/core/catalog-b-view.mjs";
+import { charactersTimeline, charactersView } from "../kit/core/catalog-characters.mjs";
+import { ACTIONS, gazeOffset, targetError, walkDuration } from "../kit/core/characters/actions.mjs";
+import { POSES } from "../kit/core/characters/rig.mjs";
+import { resolveModule } from "../kit/core/modules.mjs";
+import { worldFocus } from "../kit/core/worlds/index.mjs";
+
+const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" } };
+const story = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", brand, format: { width: 1080, height: 1920, fps: 30, duration: 8 }, cast: { characters: [{ id: "maya" }, { id: "theo" }] }, scenes });
+const plate = (params = {}) => ({ id: "w", module: "world", start: 0, end: 8, params: { kind: "city-street", camera: "still", ...params } });
+const bench = (cast, set = "park-bench") => ({ id: "c", module: "cast-scene", track: 1, start: 0, end: 8, params: { set, cast } });
+const resolve = (scenes) => { const s = story(scenes); return resolveModule(scenes.at(-1), s); };
+const ids = (node, out = []) => { if (node?.id) out.push(node.id); for (const child of node?.children ?? []) ids(child, out); return out; };
+
+test("the acting vocabulary: actions, look and stretch poses, target shapes", () => {
+  assert.deepEqual(ACTIONS, ["look-far", "turn-to-look", "gaze-at", "point-at", "walk-to", "stand-up", "stretch"]);
+  assert.ok(POSES.includes("look") && POSES.includes("stretch"));
+  for (const ok of ["far", "street", "left", { prop: "bench" }, { character: "maya" }, { x: 10, y: 20 }]) assert.equal(targetError(ok), null, JSON.stringify(ok));
+  for (const bad of ["moon", { prop: 3 }, { x: "a" }, 7]) assert.ok(targetError(bad), JSON.stringify(bad));
+  assert.ok(worldFocus("home-desk", { canvas: { width: 1080, height: 1920 } }).window, "an inside world has a window to look at");
+});
+
+test("a character with a target faces it and turns its face to it, not the camera", () => {
+  const model = resolve([plate(), bench([{ id: "maya", target: "right" }, { id: "theo", target: { character: "maya" } }])]);
+  const [maya, theo] = model.content.actors;
+  assert.equal(maya.facing, "right");
+  assert.ok(maya.states[0].gaze.x > 0);
+  assert.equal(theo.states[0].facing, "left", "theo, on the right, faces maya");
+  assert.ok(theo.states[0].gaze.x < 0);
+  assert.ok(ids(charactersView(model).front).includes("c-c0-gaze"), "the face is drawn on a gaze joint");
+  // Without a target nothing changes: no gaze joint, the slot's facing.
+  const plain = resolve([plate(), bench([{ id: "maya" }])]);
+  assert.equal(plain.content.actors[0].gaze, false);
+  assert.ok(!ids(charactersView(plain).front).includes("c-c0-gaze"));
+});
+
+test("look-far shades the eyes and looks at the world's far point; the face turns on the cue", () => {
+  const model = resolve([plate({ kind: "home-desk" }), bench([{ id: "maya", cues: [{ at: 2, action: "look-far" }] }], "desk-laptop")]);
+  const actor = model.content.actors[0];
+  assert.equal(actor.states[1].pose, "look");
+  assert.equal(actor.states[1].target, "far");
+  assert.ok(actor.states[1].gaze.y < 0, "a far look lifts the face");
+  const ops = charactersTimeline(model);
+  assert.deepEqual(frameState(ops, 1).get("c-c0-gaze"), { x: 0, y: 0 });
+  assert.deepEqual(frameState(ops, 3).get("c-c0-gaze"), actor.states[1].gaze);
+});
+
+test("stand-up then walk-to: the character rises, walks at a walking pace and stands", () => {
+  const model = resolve([plate({ props: ["lamp-post"] }), bench([{ id: "maya", cues: [{ at: 1, action: "stand-up" }, { at: 2, action: "walk-to", target: { prop: "lamp-post" } }] }])]);
+  const actor = model.content.actors[0];
+  const walk = actor.states.find((state) => state.walk);
+  assert.ok(walk && walk.walk.to < 0, "walks left to the lamp post");
+  assert.equal(walk.walk.duration, walkDuration(walk.walk.to, actor.scale));
+  const arrived = actor.states.at(-1);
+  assert.equal(arrived.pose, "stand");
+  assert.ok(arrived.standing && arrived.arrive);
+  const ops = charactersTimeline(model);
+  assert.equal(frameState(ops, 1.9).get("c-c0-walk").x, 0);
+  assert.ok(Math.abs(frameState(ops, 7).get("c-c0-walk").x - walk.walk.to) < 1e-6);
+  assert.ok(ids(charactersView(model).front).includes("c-c0-walk"));
+  assert.ok(actor.reach.left < actor.x + walk.walk.to, "the reach covers where the walk ends");
+});
+
+test("acting cues are validated with errors that name the fix", () => {
+  const fails = (cast, pattern, set) => assert.throws(() => resolve([plate(), bench(cast, set)]), pattern);
+  fails([{ id: "maya", cues: [{ at: 1, action: "point-at" }] }], /target is required for point-at/);
+  fails([{ id: "maya", cues: [{ at: 1, action: "walk-to", target: "left" }] }], /needs the character standing: add a stand-up cue/);
+  fails([{ id: "maya", cues: [{ at: 1, action: "stand-up" }] }], /stand-up needs a seated set/, "podium");
+  fails([{ id: "maya", cues: [{ at: 1, action: "gaze-at", target: { prop: "rocket" } }] }], /target prop "rocket" is not in the world beneath/);
+  fails([{ id: "maya", cues: [{ at: 1, action: "dance" }] }], /action must be one of/);
+});
+
+test("gaze offsets: toward the target's side, lifted for far points", () => {
+  const actor = { x: 300, floor: 1500, height: 1000, scale: 0.5 };
+  const canvas = { width: 1080, height: 1920 };
+  assert.ok(gazeOffset({ x: 900, y: 1200, far: false }, actor, canvas).x > 0);
+  assert.ok(gazeOffset({ x: 0, y: null, far: false }, actor, canvas).x < 0);
+  const far = gazeOffset({ x: null, y: 600, far: true }, actor, canvas);
+  assert.ok(far.x > 0 && far.y < 0, "a character left of centre looks out to the right and up");
+});

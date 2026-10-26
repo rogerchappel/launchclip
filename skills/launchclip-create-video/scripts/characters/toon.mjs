@@ -394,19 +394,17 @@ export function toonColors(colors) {
  *   makePen     (colors, {id}) → pen
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null}, makePen) {
+export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false}, makePen) {
   const g = rigGeometry(params);
   const c = toonColors(colors);
   const P = makePen(c, {id, light});
   const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing};
   const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
+  const features = [...facial(ctx), ...faceExtras(ctx), ...faceNodes, ...glasses(ctx)];
   const headKids = [
     ...ears(ctx),
     P.shape(headShape(g), 'skin'),
-    ...facial(ctx),
-    ...faceExtras(ctx),
-    ...faceNodes,
-    ...glasses(ctx),
+    ...gazeJoint(ctx, joints, gaze, features),
     ...(covers(params) ? [] : hairFront(ctx)),
     ...headwear(ctx)
   ];
@@ -434,6 +432,15 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   // Defs last: the pen gathers gradients while drawing every other part.
   const defs = P.defs ? P.defs() : [];
   return group([...defs, ...ground, ...chair, body]);
+}
+
+/**
+ * The face's features on a `gaze` joint (a character with a target): they
+ * slide toward what it looks at, which reads as the head turning. Without a
+ * gaze the features are drawn as before.
+ */
+export function gazeJoint(ctx, joints, on, features) {
+  return on ? [joint(ctx, 'gaze', 0, 0, {x: joints.gazeX ?? 0, y: joints.gazeY ?? 0}, features)] : features;
 }
 
 /**
