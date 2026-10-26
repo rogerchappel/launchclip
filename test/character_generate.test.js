@@ -44,7 +44,7 @@ test('every rig option draws in every style, inside its bounds', () => {
       const json = JSON.stringify(drawing);
       assert.ok(!/undefined|NaN/.test(json), `${style} ${JSON.stringify(variant)} draws cleanly`);
       const box = drawingBounds(drawing);
-      assert.ok(box.bottom >= -1 && box.top < -500 && box.right - box.left < 1400, `${style} ${JSON.stringify(variant)} bounds ${JSON.stringify(box)}`);
+      assert.ok(box.bottom >= -24 && box.top < -500 && box.right - box.left < 1400, `${style} ${JSON.stringify(variant)} bounds ${JSON.stringify(box)}`);
     }
   }
 });

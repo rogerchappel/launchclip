@@ -31,6 +31,7 @@ import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
+import {asShadow} from './bounds.mjs';
 import {NEW_LONG_SLEEVES, aidSide, backpackBack, bagStraps, covers, faceExtras, headwear, heldAid, longHem, neckwear, newGlasses, newHairBack, newHairFront, newTop, overLayer, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 
 const r1 = value => Math.round(value * 10) / 10;
@@ -428,7 +429,7 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const breath = joint(ctx, 'breath', 0, 0, {}, torsoKids);
   const torso = joint(ctx, 'torso', 0, g.hipY, {rotation: joints.lean, scaleY: joints.squash}, [breath]);
   const body = joint(ctx, 'body', 0, 0, {y: joints.bodyY}, [leg(ctx, 'l'), leg(ctx, 'r'), ...pelvis(ctx), ...skirt(ctx), torso]);
-  const ground = P.ground();
+  const ground = asShadow(P.ground());
   const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
   // Defs last: the pen gathers gradients while drawing every other part.
   const defs = P.defs ? P.defs() : [];
