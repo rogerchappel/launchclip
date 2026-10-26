@@ -22,6 +22,10 @@ import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
 import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
 import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
 import { WORLD_KINDS, WORLD_TIMES } from './worlds/index.mjs';
+import { physicsPromptLines } from './physics.mjs';
+import { actingPromptLines } from './characters/actions.mjs';
+import { compositionPromptLines } from './composition.mjs';
+import { ACTION_VERBS } from './direction.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -402,6 +406,19 @@ function worldLines() {
   ];
 }
 
+// Direction guardrails (docs/DIRECTION_GUARDRAILS.md): the rules the finish
+// gates (physics, acting, layout captions, ghosting, density, variety) check.
+export function guardrailLines() {
+  return [
+    ...physicsPromptLines(),
+    ...actingPromptLines(),
+    'No ghosting: one copy of a person on screen at a time. Never put a character in two scenes that overlap; the next shot\'s copy of a character appears by itself when the transition ends. Never fade a character in or out over a world that is already there.',
+    'Text reads or is gone: cards fade in and out fast (0.5 s at most, whatever the grammar) and stay fully shown for their reading time (about 0.22 s a word, at least 1.2 s).',
+    'Captions must read on what is behind them: finish measures every line on the render and adds a backing plate where it does not; keep captions out of a character\'s face and off busy props where you can.',
+    ...compositionPromptLines()
+  ];
+}
+
 // Ambient motion (kit/core/ambient.mjs): what the planner may set and what
 // the default already does.
 function ambientLines() {
@@ -554,7 +571,8 @@ function directionContractLines({ lane } = {}) {
     `intent: one of ${DIRECTION_INTENTS.join(', ')} (see the intent rules).`,
     `treatment: dress (a visual alongside the presenter), insert (a full-frame visual over the voice), face (hold on the presenter on purpose), camera (a punch-in or camera move only).${motion ? ' This story has no presenter: every line is dress or insert.' : ''}`,
     'dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").',
-    `Dress every line whose intent calls for a visual (${VISUAL_INTENTS.join(', ')}) unless it works better on the presenter, and then say why. A character story's lines may add cast cues ({id, pose, expression, at: "word:<text>"}) and a set.`
+    `Dress every line whose intent calls for a visual (${VISUAL_INTENTS.join(', ')}) unless it works better on the presenter, and then say why. A character story's lines may add cast cues ({id, pose, expression, at: "word:<text>"}) and a set.`,
+    `A character story's line with cast cues names its key action, and every beat (section) has at least one: action {verb: ${ACTION_VERBS.slice(0, 7).join(' | ')} | a pose, who, target?}. It is what a character does on screen to show the line (looking far away, standing up, pointing at the proof). The acting gate fails when no cast scene performs it on that line.`
   ];
 }
 
@@ -630,7 +648,8 @@ export function directionMapReference() {
     ...section('Contract', directionContractLines().map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
     ...section('Narrative maps', [
-      `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`
+      `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`,
+      'Each line with cast cues names its key action, `action: {verb, who, target?}` (an acting cue such as look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch, or a pose), and each beat names at least one. If the idea is an action, someone does it on screen, toward what it is about. `launchclip finish` fails the acting gate when no cast scene performs it on its line.'
     ]),
     ...section('Long form', [...longFormLines().map((line) => `- ${line}`), '- `launchclip story long-form <project>` then writes `chapters` into storyboard.json (and section titles into the map); `launchclip finish` writes `renders/chapters.txt` for the YouTube description and puts the chapters in the MP4 and the NLE exports.']),
     ...section('Required', [
@@ -709,6 +728,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
+    ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
@@ -802,6 +822,7 @@ export function storyboardModulesReference() {
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines().map((line) => `- ${line}`)),
+    ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
