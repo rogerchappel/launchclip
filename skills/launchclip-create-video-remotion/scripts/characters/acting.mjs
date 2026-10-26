@@ -17,7 +17,7 @@
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
 
-export const ACTING = Object.freeze({poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09});
+export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09});
 
 const rt = value => Math.round(value * 10000) / 10000;
 
@@ -39,7 +39,7 @@ export function jointTargets(cid, j) {
     [`${cid}-fingerwrap-l`]: {opacity: j.fingerL},
     [`${cid}-fingerwrap-r`]: {opacity: j.fingerR},
     // The face turned toward a target (drawn only for a character with one).
-    ...(j.gazeX !== undefined ? {[`${cid}-gaze`]: {x: j.gazeX, y: j.gazeY}} : {})
+    ...(j.gazeX !== undefined ? {[`${cid}-gaze`]: {x: j.gazeX, y: j.gazeY, scaleX: j.gazeScale ?? 1}} : {})
   };
 }
 
@@ -92,7 +92,7 @@ export function sceneJoints(pose, {facing, seated, geometry, holds = null, param
 export function stateJoints(state, actor) {
   const seated = actor.seated && !state.standing;
   const j = sceneJoints(state.pose, {...actor, facing: state.facing ?? actor.facing, seated});
-  if (actor.gaze) { j.gazeX = state.gaze?.x ?? 0; j.gazeY = state.gaze?.y ?? 0; }
+  if (actor.gaze) { j.gazeX = state.gaze?.x ?? 0; j.gazeY = state.gaze?.y ?? 0; j.gazeScale = state.gaze?.scale ?? 1; }
   return j;
 }
 
@@ -164,6 +164,21 @@ export function actingOps(ops, actor) {
     if (i === 0 || lookOf(state) !== lookOf(states[i - 1])) gestureOps(ops, cid, next, settle + (i === 0 ? 0.2 : 0), holdEnd - 0.05);
     current = next;
   });
+  // Views: turning away swaps the face for the back of the head and hides
+  // the front of the clothes, quickly (a head turn, not a dissolve).
+  if (actor.turns) {
+    const back = state => state.view === 'back';
+    set(ops, `${cid}-back`, start, {opacity: back(states[0]) ? 1 : 0});
+    set(ops, `${cid}-front`, start, {opacity: back(states[0]) ? 0 : 1});
+    set(ops, `${cid}-face-front`, start, {opacity: back(states[0]) ? 0 : 1});
+    states.forEach((state, i) => {
+      if (i === 0 || back(state) === back(states[i - 1])) return;
+      const at = rt(state.time + A.poseTween * 0.4);
+      tw(ops, `${cid}-back`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 0 : 1}, {opacity: back(state) ? 1 : 0});
+      tw(ops, `${cid}-front`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 1 : 0}, {opacity: back(state) ? 0 : 1});
+      tw(ops, `${cid}-face-front`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 1 : 0}, {opacity: back(state) ? 0 : 1});
+    });
+  }
   // Walks: the character crosses the floor on its own wrapper, at a steady pace.
   if (actor.walks) {
     set(ops, `${cid}-walk`, start, {x: states[0].x ?? 0});

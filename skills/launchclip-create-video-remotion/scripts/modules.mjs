@@ -510,6 +510,8 @@ function resolveModuleInner(scene, story, { track, end }) {
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
+  plateCuts(finished, story, scene);
+  keepCaptions(finished, story);
   if (track !== undefined) finished.track = track;
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
@@ -632,6 +634,56 @@ function clampTextFades(model) {
     m.exitDuration = TEXT_FADE.max;
     if (Number.isFinite(end)) m.exitStart = round(end - TEXT_FADE.max);
   }
+}
+
+// Cards and plate changes (docs/DIRECTION_GUARDRAILS.md §4): a text card on
+// a higher track that ends where the next plate starts leaves with the cut
+// (one frame) instead of fading over the change; one that starts with a
+// plate arriving by a camera move or a dissolve waits for the transition to
+// end, so it never shows half-transparent over the wrong place.
+const TEXT_ROLES = ['text', 'hero'];
+function plateCuts(model, story, scene) {
+  if ((scene?.track ?? 0) === 0 || !TEXT_ROLES.includes(model.layout?.role ?? (model.module === 'cta' || model.module === 'hook-title' ? 'hero' : null)) || !model.motion) return;
+  const plates = (Array.isArray(story?.scenes) ? story.scenes : []).filter((other) => (other?.track ?? 0) === 0 && Number.isFinite(Number(other?.start)));
+  const fps = Number(story?.format?.fps ?? 30);
+  const cut = round(1 / fps);
+  const m = model.motion;
+  const end = Number(m.end ?? model.end);
+  // Not the video's last moments: a final hold or a loop ending has its own rules.
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const next = plates.find((plate) => Math.abs(Number(plate.start) - Number(scene.end)) < 0.05 && Number(scene.end) < duration - 0.05);
+  if (next && Number.isFinite(end) && Number.isFinite(m.exitStart) && m.exitStart < end - cut) {
+    const exitStart = round(end - cut);
+    if (Array.isArray(model.animations)) {
+      for (const anim of model.animations) if (anim.node === 'root' && anim.start >= m.exitStart - 1e-6) { anim.start = exitStart; anim.duration = cut; }
+    }
+    m.exitStart = exitStart;
+    if (Number.isFinite(m.exitDuration)) m.exitDuration = cut;
+    if (Number.isFinite(m.exit)) m.exit = cut;
+    if (model.layout?.motion) model.layout.motion.exitStart = exitStart;
+    model.exitsWithCut = true;
+  }
+  const arriving = plates.find((plate) => Math.abs(Number(plate.start) - Number(scene.start)) < 0.05 && plate.in && typeof plate.in === 'object' && plate.in.type !== 'cut' && Number(plate.in.dur) > 0);
+  if (arriving && !Array.isArray(model.animations) && Number.isFinite(m.enterStart)) {
+    const wait = round(Number(arriving.in.dur));
+    m.enterStart = round(m.enterStart + wait);
+    if (Number.isFinite(m.enterEnd)) m.enterEnd = round(m.enterEnd + wait);
+    if (model.layout?.motion && Number.isFinite(model.layout.motion.enterEnd)) model.layout.motion.enterEnd = round(model.layout.motion.enterEnd + wait);
+    model.waitsForPlate = wait;
+  }
+}
+
+// A call to action set clear of the caption band keeps the captions on (the
+// narration goes on under it, often past the card's own words); one over the
+// band hides them.
+function keepCaptions(model, story) {
+  if (!model.hidesCaptions || model.module !== 'cta') return;
+  const rect = model.rect ?? model.layout?.rect;
+  const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
+  if (!rect || !(canvas.width > 0)) return;
+  let band;
+  try { band = profileGeometry(canvas).captionBand; } catch { return; }
+  if (band && rect.y + rect.height <= band.y) model.hidesCaptions = false;
 }
 
 function finishModel(model, { module, scene }) {

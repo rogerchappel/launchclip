@@ -1507,7 +1507,7 @@ async function runGates(ctx) {
     const direction = { ...read, map: scope.map };
     gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: scope.words, direction });
     // Acting (docs/DIRECTION_GUARDRAILS.md §2): each line's key action is performed on screen.
-    const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words });
+    const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words, rects: ctx.layout?.rects ?? [] });
     if (acting.status !== "skipped") gates.acting = acting;
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype });

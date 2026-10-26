@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "library", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "library", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -57,6 +57,9 @@ export async function runCli(argv, io = {}) {
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
   const scriptCheckFile = command === "script" && firstArg === "check" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const scriptCheckInvocation = command === "script" && firstArg === "check" ? { file: scriptCheckFile, flagArgs: scriptCheckFile ? rest.slice(1) : rest } : null;
+  // launchclip history check <dir> [flags]
+  const historyDir = command === "history" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const historyInvocation = command === "history" ? { action: firstArg, dir: historyDir, flagArgs: historyDir ? rest.slice(1) : rest } : null;
   // launchclip fx <video> <module> [flags]
   const fxInvocation = command === "fx" ? { video: firstArg && !firstArg.startsWith("--") ? firstArg : null, module: rest[0] && !rest[0].startsWith("--") ? rest[0] : null, flagArgs: rest[0] && !rest[0].startsWith("--") ? rest.slice(1) : rest } : null;
   // launchclip voice takes a project or only flags (--text "...").
@@ -64,7 +67,7 @@ export async function runCli(argv, io = {}) {
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -222,6 +225,9 @@ export async function runCli(argv, io = {}) {
         url: flags.url,
         allowHost: flags["allow-host"],
         demoPlan: flags["demo-plan"],
+        visualHistoryDir: flags["visual-history-dir"],
+        visualHistoryLimit: flags["visual-history-limit"],
+        visualSimilarityLimit: flags["visual-similarity-limit"],
         ...(flags["no-subject"] ? { subject: false } : {})
       }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make }).finally(restoreCache);
       throwIfCostLimited(tracker);
@@ -230,6 +236,14 @@ export async function runCli(argv, io = {}) {
       await (await import("node:fs/promises")).writeFile((await import("node:path")).join(report.project, "MAKE.json"), `${JSON.stringify(report, null, 2)}\n`);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatMakeSummary(report));
       if (report.status === "failed") throw new Error(`launchclip make failed at the ${report.failed_stage} stage: ${report.stages[report.failed_stage]?.error ?? ""}\nnext: ${report.next_steps[0] ?? ""}`.trim());
+      return;
+    } else if (command === "history") {
+      if (historyInvocation.action !== "check") throw new Error(`launchclip history needs an action: launchclip history check <dir> [--json]${historyInvocation.action ? ` (got ${historyInvocation.action})` : ""}`);
+      const { checkHistory, formatHistoryCheck } = await import("./visual_history.js");
+      const limit = (flag) => flags[flag] === undefined ? undefined : Number(flags[flag]);
+      const report = await checkHistory(required(historyInvocation.dir, "history dir"), { hookLimit: limit("hook-limit"), structureLimit: limit("structure-limit"), similarityLimit: limit("similarity-limit") });
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatHistoryCheck(report));
+      if (!report.ok) throw new Error(`launchclip history check: ${report.flagged.length} pair(s) too close in ${report.dir}`);
       return;
     } else if (command === "voice") {
       const { runVoiceCommand } = await import("./voice_cli.js");
