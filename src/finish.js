@@ -198,6 +198,7 @@ function modelEventFor(model, event) {
  * event it names, else a default from its event name; palette: true lets the
  * default reach the palette families) and to every module
  * event that carries a `cue`, plus a whoosh under push/whip/zoom transitions.
+ * A hit with cue "none" silences the event it names instead.
  * Risers end on their moment. Cues of the same kind closer than 0.12 s merge
  * (hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
  */
@@ -211,14 +212,22 @@ export function bindCues(story, { models, palette = false } = {}) {
   const raw = [];
   for (const scene of scenes) {
     const model = typeof modelFor === "function" ? modelFor(scene) : modelFor?.[scene.id] ?? null;
+    // A hit with cue "none" silences the module event it names (and adds no cue).
+    const silenced = new Set();
+    for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
+      if (hit?.cue !== "none") continue;
+      const event = model ? modelEventFor(model, hit.event) : null;
+      if (event) silenced.add(event);
+    }
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
       if (typeof hit?.at !== "number") throw new Error(`bindCues needs a resolved story; ${scene.id} has an unresolved hit`);
+      if (hit.cue === "none") continue;
       const event = model ? modelEventFor(model, hit.event) : null;
       const name = hit.cue ?? event?.cue ?? defaultCueFor(hit.event, { palette });
       raw.push({ name, at: hit.at, end: event?.endTime, source: "hit", shot: scene.id, event: hit.event, explicit: hit.cue !== undefined });
     }
     for (const event of Array.isArray(model?.events) ? model.events : []) {
-      if (!event?.cue || !Number.isFinite(Number(event.time))) continue;
+      if (!event?.cue || !Number.isFinite(Number(event.time)) || silenced.has(event)) continue;
       raw.push({ name: event.cue, at: Number(event.time), end: Number.isFinite(Number(event.endTime)) ? Number(event.endTime) : undefined, source: "module-event", shot: scene.id, event: eventName(model, event) || event.role || "event" });
     }
     if (scene.in && WHOOSH_TRANSITIONS.has(scene.in.type)) {
