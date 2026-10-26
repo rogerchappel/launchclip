@@ -408,7 +408,7 @@ export function kitArgs(kit) {
 }
 
 /**
- * audio.music → {kind: "synth"|"file"|"elevenlabs"|"none", file?, bpm?, key?}.
+ * audio.music → {kind: "synth"|"file"|"elevenlabs"|"none", file?, bpm?, key?, volume?}.
  * Absent means synth here; the run-time default (ElevenLabs when a key is
  * set) is resolveMusicChoice() in src/music/index.js.
  */
@@ -418,8 +418,10 @@ export function musicSpec(audio) {
   if (music === "none" || music === false) return { kind: "none" };
   if (typeof music === "string") return music === "elevenlabs" ? { kind: "elevenlabs" } : { kind: "file", file: music };
   const spec = parseMusicSpec(music);
-  if (spec.provider === "file") return { kind: "file", file: spec.file, bpm: music.bpm, key: music.key };
-  return { kind: spec.provider ?? "synth", bpm: music.bpm, key: music.key };
+  // The bed's gain (0–1) is the story's to set, as finish's own plan reads it (musicPlanSpec).
+  const volume = music.volume !== undefined ? { volume: music.volume } : {};
+  if (spec.provider === "file") return { kind: "file", file: spec.file, bpm: music.bpm, key: music.key, ...volume };
+  return { kind: spec.provider ?? "synth", bpm: music.bpm, key: music.key, ...volume };
 }
 
 // Loudness the generated or supplied music is brought to before mixing, so
