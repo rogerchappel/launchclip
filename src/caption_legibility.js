@@ -56,7 +56,9 @@ export function captionLines(story, chunks) {
     const start = chunk ? chunk.start : null, end = chunk ? Math.max(chunk.start, chunk.words?.at(-1)?.end ?? chunk.end) : null;
     if (start === null) continue;
     const time = round(Math.min(end - 0.15, Math.max(start + 0.35, (start + end) / 2)), 3);
-    lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated: /lc-cap-(plate|legible)/.test(node.cls) });
+    const plated = /lc-cap-(plate|legible)/.test(node.cls);
+    const plate = /lc-cap-legible/.test(node.cls) ? o.legiblePlate : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
+    lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated, plate });
   }
   return { plan, lines, options: o };
 }
@@ -73,12 +75,19 @@ export function captionBandRect(options, format) {
  * Legibility of one line in a decoded frame (canvas-sized RGBA image).
  * → {found, contrast, camouflage, legible}
  */
-export function lineLegibility(image, rect, colors, { size = 74, chars = 0 } = {}) {
+export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plate = null } = {}) {
   const L = CAPTION_LEGIBILITY;
-  const text = colors.map(hexRgb);
+  // On a plate, a preset colour close to the plate's own (a light active
+  // colour on a light plate) is the plate, not the text.
+  const plateRgb = plate ? hexRgb(plate) : null;
+  const text = colors.map(hexRgb).filter((color, i) => i === 0 || !plateRgb || distance(color, plateRgb) >= L.textDistance);
   const x0 = Math.max(0, rect.x), y0 = Math.max(0, rect.y), x1 = Math.min(image.width, rect.x + rect.width), y1 = Math.min(image.height, rect.y + rect.height);
   const at = (x, y) => { const o = (y * image.width + x) * 4; return [image.pixels[o], image.pixels[o + 1], image.pixels[o + 2]]; };
   const near = (p) => Math.min(...text.map((c) => distance(p, c)));
+  if (plateRgb) {
+    const onPlate = plateLegibility(image, { x0, y0, x1, y1 }, plateRgb, text, { at, near, size, chars });
+    if (onPlate) return onPlate;
+  }
   const xs = [], ys = [];
   let area = 0;
   for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) {
@@ -109,6 +118,33 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0 } = {
   return { found: true, contrast: round(worst), camouflage: round(camouflage, 3), legible: worst >= L.contrast && camouflage <= L.camouflage, box: { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 } };
 }
 
+/**
+ * A plated line: the text against its own plate. The plate is found by its
+ * colour inside the band; inside it, the glyphs must be there and reach the
+ * contrast floor against the plate. → result | null (no plate in the band:
+ * judge it like any other line).
+ */
+function plateLegibility(image, band, plateRgb, text, { at, near, size, chars }) {
+  const L = CAPTION_LEGIBILITY;
+  const xs = [], ys = [];
+  for (let y = band.y0; y < band.y1; y += 2) for (let x = band.x0; x < band.x1; x += 2) if (distance(at(x, y), plateRgb) < 40) { xs.push(x); ys.push(y); }
+  const expectedArea = chars * 0.55 * size * size * 0.6 / 4;
+  if (xs.length < expectedArea / 3) return null;
+  const pct = (list, q) => { const sorted = [...list].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]; };
+  const box = { x0: pct(xs, 0.03), x1: pct(xs, 0.97), y0: pct(ys, 0.03), y1: pct(ys, 0.97) };
+  const main = text[0];
+  let glyphs = 0;
+  const contrasts = [];
+  for (let y = box.y0; y <= box.y1; y += 2) for (let x = box.x0; x <= box.x1; x += 2) {
+    const p = at(x, y);
+    if (near(p) < L.textDistance) glyphs += 1;
+    else if (near(p) > L.backgroundDistance) contrasts.push(contrast(main, p));
+  }
+  if (glyphs < chars * 0.55 * size * size * 0.1 / 4 / 3) return { found: false, contrast: null, camouflage: null, legible: null };
+  const worst = contrasts.length ? pct(contrasts, 0.25) : 1;
+  return { found: true, contrast: round(worst), camouflage: 0, legible: worst >= L.contrast, onPlate: true, box: { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 } };
+}
+
 /** One frame of a video at t (s), decoded, scaled to the canvas. */
 export function videoFrame(video, t, { width, height }) {
   return new Promise((resolve, reject) => {
@@ -137,7 +173,7 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   const out = [];
   for (const line of lines) {
     const image = await frame(video, line.time, format);
-    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars }) });
+    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.plate }) });
   }
   return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
 }
