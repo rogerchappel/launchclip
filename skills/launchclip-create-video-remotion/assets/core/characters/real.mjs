@@ -20,7 +20,7 @@ import {el} from '../catalog-b-view.mjs';
 import {AGE_SHAPE, BUILD_SHAPE, HEIGHT_SCALE, expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
 import {asShadow} from './bounds.mjs';
-import {gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
+import {backOfHead, backView, frontView, gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
 import {aidSide, backpackBack, covers, has, headwear, heldAid, longHem, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 import {capsulePath, darken, ellipsePath, group, lighten, luma, mix, noise, pathNode, placedGroup, r1, radialGradient, strokeLine} from './pens.mjs';
 import {realPen} from './real-pen.mjs';
@@ -455,7 +455,7 @@ function hips(ctx) {
  * Draw one lifelike character (options as toon.mjs drawToon, plus light).
  * style options: {cinematic, falloff: {torso, legs}}.
  */
-export function drawReal(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false}, {cinematic = false, falloff = {torso: 0, legs: 0}} = {}) {
+export function drawReal(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false}, {cinematic = false, falloff = {torso: 0, legs: 0}} = {}) {
   const g = realGeometry(params);
   const toonG = rigGeometry(params);
   const c = toonColors(colors);
@@ -487,6 +487,7 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
     P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}),
     ...gazeJoint(ctx, joints, gaze, [...faceBase(ctx), ...facialHair(ctx), ...faces, ...eyewear(ctx)]),
     ...(covers(params) ? [] : [onHead(hairFront(toonCtx))]),
+    ...backView(ctx, turns, () => [P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}), ...(params.hair.style === 'bald' ? [] : [onHead(backOfHead(toonCtx).slice(1))])]),
     onHead(headwear(toonCtx), 1.02)
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
@@ -500,7 +501,7 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
     onTorso(backpackBack(toonCtx)),
     P.piece(torsoOutline(g, neckW), c.top),
     ...[-1, 1].map(sx => strokeLine(`M${r1(sx * (g.shoulder - g.armW * 0.25))} ${r1(-g.torso + 90)}Q${r1(sx * g.waist * 0.7)} ${r1(-g.torso * 0.62)} ${r1(sx * g.waist * 0.5)} ${r1(-g.torso * 0.5)}`, darken(c.top, 0.3), 1.6, {strokeOpacity: 0.38})),
-    onTorso([...longHem(toonCtx), ...outfit(toonCtx)]),
+    onTorso([...longHem(toonCtx), ...frontView(ctx, turns, outfit(toonCtx))]),
     joint(ctx, 'head', 0, g.neckY, tilt, [headIdle]),
     arm(ctx, 'l'),
     arm(ctx, 'r')
