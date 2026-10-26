@@ -21,7 +21,12 @@ export function emitParts(model, parts, timeline) {
   const {view, ops} = gsapOwnedTransforms(parts, timeline, model.start);
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}" data-module="${model.module}"${extra}`;
   const main = model.layer === 'behind' ? view.behind : view.front;
-  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+  // An exit that fades a part out exactly at the scene end gets a hard kill
+  // there, so a seek past the end never finds it half visible.
+  const end = Number(model.start) + Number(model.duration);
+  const kills = ops.filter((op) => op.type === 'tween' && Number(op.to?.opacity) === 0 && Math.abs(Number(op.start) + Number(op.duration) - end) < 0.02)
+    .map((op) => ({type: 'set', target: op.target, props: {opacity: 0}, time: end}));
+  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap([...ops, ...kills]).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
   let html = renderNode(main, timed(model.track));
   if (view.media?.tag === 'video') {
     html += renderNode(view.media, timed(model.track, ` data-media-start="${model.content.media?.sourceStart ?? model.content.backdrop?.sourceStart ?? 0}"`));
