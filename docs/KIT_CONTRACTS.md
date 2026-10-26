@@ -549,6 +549,19 @@ opposite top corner, each claiming a `78 × k` px band (k = short side / 1080).
   entry's `color` (role or hex) sets the text colour while that label shows.
   The plan adds colour tweens (`FRAME_COLOR_SWITCH`, 0.1 s from each cut) only
   when the colour changes, so a frame that never changes plans as before.
+- Source notes (`sources: [{text ≤ 90, scene | start, until? | end?}]`,
+  `frameSources(story)` → `[{start, end, text}]`): a citation line in the
+  meta font, centred along the bottom of the safe zone in a `48 × k` px band
+  (taken out of `brandFrameSafe`, so it sits under the 9:16 caption band). A
+  note shows from its start (seconds or a scene's start) to `end`, the end of
+  scene `until`, else the next note or the end. It is part of the frame, not
+  a module, because a study's source stays on screen while several data
+  scenes enter and exit under it; it fades in and out with its own tweens
+  and follows `frameColorSpans` like the labels. A frame used only for notes
+  is `{kicker: false, sections: false, sources: [...]}`. A style's
+  `brand_frame.sources` is ignored (a warning), like its labels.
+  `validateStory` warns when a `unit-grid` or `number-line` scene has neither
+  `params.source` nor a note on screen ("no source, no study claim").
 - `launchclip layout-check` warns (`brand-frame`) when key text or a hero
   overlaps the kicker or section label (`brandFrameFindings`).
 - Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,

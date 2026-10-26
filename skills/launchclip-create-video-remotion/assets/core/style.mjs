@@ -376,7 +376,7 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
   if (frame === false) return [];
   if (!isObject(frame)) return [`${where} must be an object (or false)`];
   const errors = [];
-  const keys = new Set(['enabled', 'logo', 'kicker', 'sections', 'progress', 'show', 'labels', 'color']);
+  const keys = new Set(['enabled', 'logo', 'kicker', 'sections', 'progress', 'show', 'labels', 'color', 'sources']);
   for (const key of Object.keys(frame)) if (!keys.has(key)) errors.push(`${where}.${key} is not a brand frame field (${[...keys].join(', ')})`);
   if (frame.enabled !== undefined && typeof frame.enabled !== 'boolean') errors.push(`${where}.enabled must be true or false`);
   if (frame.logo !== undefined && frame.logo !== null && !nonEmpty(frame.logo)) errors.push(`${where}.logo must be an image path in the project (assets/...)`);
@@ -486,6 +486,7 @@ function validateV3Fields(pack, { err, warn, modules }) {
   if (pack.brand_frame !== undefined) {
     for (const message of brandFrameErrors(pack.brand_frame)) err(message);
     if (isObject(pack.brand_frame) && pack.brand_frame.labels !== undefined) warn('brand_frame.labels belong to a story (story.frame.labels); a style\'s labels are ignored');
+    if (isObject(pack.brand_frame) && pack.brand_frame.sources !== undefined) warn('brand_frame.sources belong to a story (story.frame.sources); a style\'s source notes are ignored');
   }
   if (pack.segments !== undefined) for (const message of segmentErrors(pack.segments, { modules })) err(message);
   seededFieldErrors(pack, { err, warn, known });
@@ -703,7 +704,7 @@ export function applyStyle(story, pack, options = {}) {
   // Brand frame (v3): the story's frame, filled per key; a story with
   // "frame": false keeps none.
   if (isObject(pack.brand_frame) && pack.brand_frame.enabled !== false && out.frame !== false) {
-    const { labels, ...frame } = pack.brand_frame;
+    const { labels, sources, ...frame } = pack.brand_frame;
     if (out.frame === undefined) { out.frame = clone(frame); applied.push('frame'); }
     else if (isObject(out.frame)) fill(out.frame, frame, 'frame');
   }
