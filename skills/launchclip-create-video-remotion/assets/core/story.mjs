@@ -67,6 +67,10 @@ export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_B
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow"];
+// story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
+// kept in step by test/medium.test.js).
+export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink", "gouache"];
+export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -85,7 +89,8 @@ const EPS = 1e-6;
 // video (a style pack's variants; each module checks its own names).
 // background, panel: the plate's background kind and the card surface (a style pack's
 // background and layouts.panel; kit/core/backgrounds.mjs, kit/core/panels.mjs).
-const TOP_LEVEL = new Set(["variants", "background", "panel", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
+// medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
+const TOP_LEVEL = new Set(["variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -363,6 +368,8 @@ export function validateStory(story, { modules } = {}) {
   // background and panel: the plate's background kind and the card surface (kit/core/backgrounds.mjs, kit/core/panels.mjs).
   validateBackground(story.background, err);
   validatePanel(story.panel, err);
+  // medium: the whole-frame finishing pass (kit/core/medium.mjs).
+  validateMedium(story.medium, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -990,6 +997,22 @@ function validateBackground(value, err, path = "background") {
     const [min, max] = spec[key];
     if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }
+}
+
+// The same rules as kit/core/medium.mjs mediumErrors(), kept here so this
+// file stays import-free.
+function validateMedium(value, err, path = "medium") {
+  if (value === undefined || value === null) return;
+  const kindError = (kind, where) => {
+    const alias = /^water[- ]?color$/i.test(String(kind ?? "").trim()) ? "watercolour" : null;
+    return alias ? `${where} "${kind}" is spelled "${alias}" here; use "${alias}"` : `${where} must be one of ${STORY_MEDIUM_KINDS.join(", ")} (got ${JSON.stringify(kind)})`;
+  };
+  if (typeof value === "string") { if (!STORY_MEDIUM_KINDS.includes(value)) err(kindError(value, path)); return; }
+  if (!isObject(value)) { err(`${path} must be a medium name (${STORY_MEDIUM_KINDS.join(", ")}) or {kind, strength?, boil?, grain?}`); return; }
+  for (const key of Object.keys(value)) if (!STORY_MEDIUM_KEYS.includes(key)) err(`${path}.${key} is not supported (allowed: ${STORY_MEDIUM_KEYS.join(", ")})`);
+  if (!STORY_MEDIUM_KINDS.includes(value.kind)) err(kindError(value.kind, `${path}.kind`));
+  for (const key of ["strength", "grain"]) if (value[key] !== undefined && !(typeof value[key] === "number" && value[key] >= 0 && value[key] <= 1)) err(`${path}.${key} must be a number from 0 to 1`);
+  if (value.boil !== undefined && typeof value.boil !== "boolean") err(`${path}.boil must be true or false`);
 }
 
 function validatePanel(value, err) {

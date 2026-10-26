@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CONSTRAINT_KEYS, generateStyle, normalizeSeed, seedSummaryLine, styleSummary, toneFromText } from "../kit/core/style-seed.mjs";
+import { mediumFromText } from "../kit/core/medium.mjs";
 import { packCaptionsFor, validateStylePack } from "../kit/core/style.mjs";
 import { suggestWorld } from "../kit/core/worlds/index.mjs";
 import { homeStyleRoot, loadStyleV2 } from "./style_store.js";
@@ -50,7 +51,7 @@ export async function projectSeedStyle(projectDir, { storyFile = path.join(proje
 
 /**
  * The art-direction constraints from flags (--tone, --theme, --world,
- * --drawing-style, --character-set, --background, --panel). --world takes
+ * --drawing-style, --character-set, --background, --panel, --medium). --world takes
  * one world or several (repeated, or comma-separated) for the seed to pick
  * among.
  */
@@ -67,21 +68,33 @@ export function constraintFlags(flags = {}) {
   return out;
 }
 
-/** Tone for a prompt: an explicit tone wins, else the tone words in the text. */
+/**
+ * Tone for a prompt: an explicit tone wins, else the tone words in the text,
+ * else the tone of the medium it names ("inked, like a graphic novel" is
+ * serious; kit/core/medium.mjs MEDIUM_LOOKS).
+ */
 export function promptTone(text, tone = null) {
-  return tone ?? toneFromText(text);
+  return tone ?? toneFromText(text) ?? mediumFromText(text)?.tone ?? null;
 }
 
 /**
  * The constraints a prompt implies on top of the given ones: when the prompt
  * names a topic the worlds kit knows (suggestWorld matched a word), its
  * fitting worlds become the world constraint the seed picks within; with no
- * topic the seed keeps to its topic-neutral worlds.
+ * topic the seed keeps to its topic-neutral worlds. When it describes the
+ * look as a medium in plain words ("soft watercolour, dreamy", "crayon on
+ * paper, for kids"), that medium is painted over every frame, and the theme
+ * and background that go with it apply unless given.
  */
 export function promptConstraints(text, constraints = {}) {
-  if (constraints.world !== undefined) return constraints;
-  const fit = suggestWorld(String(text ?? ""));
-  return fit?.matched?.length && fit.worlds?.length ? { ...constraints, world: [...fit.worlds] } : constraints;
+  let out = constraints;
+  if (out.world === undefined) {
+    const fit = suggestWorld(String(text ?? ""));
+    if (fit?.matched?.length && fit.worlds?.length) out = { ...out, world: [...fit.worlds] };
+  }
+  const painted = out.medium === undefined ? mediumFromText(text) : null;
+  if (painted) out = { ...out, medium: painted.medium, ...(out.theme === undefined ? { theme: painted.theme } : {}), ...(out.background === undefined ? { background: painted.background } : {}) };
+  return out;
 }
 
 /**
