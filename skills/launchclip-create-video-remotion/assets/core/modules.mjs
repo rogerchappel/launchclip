@@ -506,7 +506,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
@@ -514,6 +514,31 @@ function resolveModuleInner(scene, story, { track, end }) {
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
   return finished;
+}
+
+// Characters in a scene: a cast-scene's cast, a cameo's character.
+export function sceneCharacters(scene) {
+  if (scene?.module === 'cast-scene') return (Array.isArray(scene.params?.cast) ? scene.params.cast : []).map((entry) => entry?.id).filter((id) => typeof id === 'string');
+  if (scene?.module === 'character-cameo') return typeof scene.params?.character === 'string' ? [scene.params.character] : [];
+  return [];
+}
+
+// The characters of the character scenes that touch a character scene's
+// start (ending there, or still on screen) and its end (starting there), so
+// one shared with a neighbour cuts rather than dissolves (no two copies).
+function castNeighbours(story, scene) {
+  if (!['cast-scene', 'character-cameo'].includes(scene?.module) || !Array.isArray(story?.scenes)) return null;
+  const start = Number(scene.start), end = Number(scene.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  const before = new Set(), after = new Set();
+  for (const other of story.scenes) {
+    if (other === scene || !['cast-scene', 'character-cameo'].includes(other?.module)) continue;
+    const a = Number(other.start), z = Number(other.end);
+    if (!Number.isFinite(a) || !Number.isFinite(z)) continue;
+    if (a < start - 1e-3 && z > start - 0.05) for (const id of sceneCharacters(other)) before.add(id);
+    if (a > start + 1e-3 && Math.abs(a - end) < 0.05) for (const id of sceneCharacters(other)) after.add(id);
+  }
+  return { before: [...before], after: [...after] };
 }
 
 // The world beneath a scene (catalog-world.mjs worldBeneath) plus the plate's
@@ -589,10 +614,31 @@ function panelChecklistRect(model, safe, format) {
   return { rect: { x: round(safe.x + (safe.width - width) / 2), y: round(safe.y + (safe.height - height) / 2), width, height }, where: 'panel' };
 }
 
+// Text reads or is gone (docs/DIRECTION_GUARDRAILS.md §4): a text or hero
+// module's fade in and out last at most TEXT_FADE.max seconds, so a slow
+// grammar never leaves a card half-transparent on screen.
+export const TEXT_FADE = Object.freeze({ max: 0.5, perWord: 0.22, minHold: 1.2 });
+
+function clampTextFades(model) {
+  const m = model.motion;
+  if (!m || !['text', 'hero'].includes(model.layout?.role)) return;
+  const fades = (from) => from && Number.isFinite(from.opacity) && from.opacity < 1;
+  if (fades(m.enterFrom) && Number.isFinite(m.enterDuration) && m.enterDuration > TEXT_FADE.max) {
+    m.enterDuration = TEXT_FADE.max;
+    if (Number.isFinite(m.enterStart)) m.enterEnd = round(m.enterStart + TEXT_FADE.max);
+  }
+  if (fades(m.exitTo) && Number.isFinite(m.exitDuration) && m.exitDuration > TEXT_FADE.max) {
+    const end = Number.isFinite(m.end) ? m.end : model.end;
+    m.exitDuration = TEXT_FADE.max;
+    if (Number.isFinite(end)) m.exitStart = round(end - TEXT_FADE.max);
+  }
+}
+
 function finishModel(model, { module, scene }) {
   model.module = model.module ?? module;
   model.sceneId = scene.id;
   if (typeof model.hidesCaptions !== 'boolean') model.hidesCaptions = false;
+  clampTextFades(model);
   return model;
 }
 
