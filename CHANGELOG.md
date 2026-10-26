@@ -4,6 +4,16 @@
 
 ### Added
 
+- `launchclip script check <file>` lints a voiceover script before anything
+  renders. It reports errors for a script that cannot fit its duration,
+  numbers, quotes, ratings or deadlines that are not in the `--brief`, a
+  greeting or overlong opener, no call to action or more than one, and
+  sentences over 25 words. It warns about reading grade, sentence length,
+  hype, number density, an unanswered hook and the narration rate. `make`
+  runs the same checks on the script it writes and asks the model for one
+  rewrite when they fail. The report is stored in `SCRIPT.json`. See
+  [Check a script](docs/guide/headless.md#check-a-script).
+
 - `launchclip fx <video> <module>` puts one effect on a clip: it cuts you out
   for that stretch when the effect needs it, renders the whole clip, and
   leaves an ordinary project you can keep editing. A new guide, [Effects

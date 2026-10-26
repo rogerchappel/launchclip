@@ -76,8 +76,9 @@ Useful flags:
 
    Screenshots and screen recordings are shown in product windows in every
    type.
-3. **Writes the script** (motion videos only), sized to your duration, and
-   records the voice.
+3. **Writes the script** (motion videos only), sized to your duration,
+   checks it (see [Check a script](#check-a-script)) and asks the model for one
+   rewrite if a check fails, then records the voice.
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
    for up to four repairs.
@@ -115,6 +116,52 @@ The command prints a short summary with the gate results and the next steps.
 A failed stage says what to fix. Run the same command again to resume: the
 script, storyboard, voice, music and rendered segments are reused.
 
+## Check a script
+
+`make` checks every script it writes before the voice is recorded, and you can
+run the same checks on any script:
+
+```bash
+launchclip script check SCRIPT.json --brief brief.md
+launchclip script check voiceover.txt --duration 30 --brief brief.md --format promo
+```
+
+The script can be plain text, `storyboard.json` (`audio.narration`),
+`NARRATION.json` or `SCRIPT.json`; the duration comes from the file when it
+has one. `--brief` takes the prompt, notes and transcripts the script was
+written from (repeat it for several files). It exits 1 when there are errors
+and prints the fix for each one.
+
+Errors are kept for rules that are arithmetic, legal or universal:
+
+- **The clock:** more words than the duration can hold at 2.75 words a second.
+- **Facts:** every number, percentage, price and multiple, every quote, every
+  "trusted by", rating, "#1" or award, and every deadline or "only N left"
+  must be in the brief. "40 per cent" matches "40%", "three times" matches
+  "3x", and a brief's 43.7% supports "44 per cent" or "about 4 in 10". Small
+  counts such as "two steps" are not checked; "3 clicks" and "five minutes"
+  are.
+- **The opener:** no greeting or filler ("hey guys", "in this video",
+  "today we're going to"), and a first sentence of 12 words or fewer (15 for
+  long-form and story).
+- **One call to action**, in the final quarter. Long-form may add one softer
+  call earlier to the same place. Pass `--cta "..."` to require a particular
+  one.
+- **No sentence over 25 words.**
+
+Warnings cover the house style: long sentences on average, a reading grade
+above 7 (9 for a B2B brief), too many sentences starting with "and" or
+"also", the product named in the first sentence for an `--awareness unaware`
+or `problem` audience (with `--product`), hype words with no number or
+mechanism behind them, two numbers in one sentence, figures too precise to
+hear, a hook question the ending never answers, and a narration rate outside
+the format's band. Most thresholds come from the research in
+`reports/`; the ones the evidence does not fix are LaunchClip defaults.
+
+In `make`, the check report is stored in `SCRIPT.json` (`check`) and
+summarised in `MAKE.json` (`script.check`). If errors survive the one rewrite,
+make keeps going and lists them as warnings.
+
 ## Cost
 
 - Every paid call is announced before it is made (`model: PAID call to …`),
@@ -124,7 +171,7 @@ script, storyboard, voice, music and rendered segments are reused.
   `none` to remove it. Calls already running finish, and a rerun starts a new
   $50 budget.
 - With `gpt-5.6-luna`, one run costs roughly $0.05–0.15 of model time: one
-  script pass, maybe one resize, one storyboard pass plus up to four repairs
+  script pass, maybe one repair and one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
   In testing, a 45 s motion video cost about $0.12 and a 17 s footage-led
   video about $0.08.

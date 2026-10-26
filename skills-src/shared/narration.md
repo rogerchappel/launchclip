@@ -35,7 +35,13 @@ twice.
 Work in this order:
 
 1. **Write the narration text first**, in `audio.narration`, before any
-   scenes (`"scenes": []` is fine at this point).
+   scenes (`"scenes": []` is fine at this point). Then run
+   `launchclip script check storyboard.json --brief brief.md` (the brief is
+   the prompt, notes and transcripts you wrote from) and fix every error: a
+   script longer than the duration allows, a figure, quote, rating or
+   deadline that is not in the brief, a greeting or long first sentence, no
+   single call to action at the end, a sentence over 25 words. Treat its
+   warnings as an editor's notes.
 2. **Measure it:** `launchclip voice <project>` (or
    `launchclip voice --text "..." --voice kokoro --speed 1.2` without a
    project). It synthesises the take (cached), writes `NARRATION.json`, and
