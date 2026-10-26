@@ -17,6 +17,7 @@ import {aidSide, covers, faceExtras, headwear, heldAid, wheelchair} from './toon
 import {flatPen} from './style-flat.mjs';
 import {linePen} from './style-line.mjs';
 import {caneLength} from './toon.mjs';
+import {asShadow} from './bounds.mjs';
 
 const r1 = value => Math.round(value * 10) / 10;
 const group = (children, attrs) => el('g', null, null, children, attrs);
@@ -130,7 +131,7 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   const body = joint(ctx, 'body', 0, 0, {y: j.bodyY}, [leg('l'), leg('r'), ...flare, torso]);
   const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
   const ground = mono ? line('M-90 4L90 4', ink, 4, {opacity: 0.35}) : el('ellipse', null, null, [], {cx: 0, cy: 4, rx: 110, ry: 14, fill: mixColor('#000000', c.skin, 1), opacity: 0.12});
-  return group([ground, ...chair, body]);
+  return group([...asShadow([ground]), ...chair, body]);
 }
 
 export function stickHeight(params) {

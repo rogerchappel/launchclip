@@ -19,6 +19,7 @@
 import {el} from '../catalog-b-view.mjs';
 import {AGE_SHAPE, BUILD_SHAPE, HEIGHT_SCALE, expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
+import {asShadow} from './bounds.mjs';
 import {hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
 import {aidSide, backpackBack, covers, has, headwear, heldAid, longHem, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 import {capsulePath, darken, ellipsePath, group, lighten, luma, mix, noise, pathNode, placedGroup, r1, radialGradient, strokeLine} from './pens.mjs';
@@ -510,7 +511,7 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
   const breath = joint(ctx, 'breath', 0, 0, {}, torsoKids);
   const torso = joint(ctx, 'torso', 0, g.hipY, {rotation: joints.lean, scaleY: joints.squash}, [breath]);
   const body = joint(ctx, 'body', 0, 0, {y: joints.bodyY}, [leg(ctx, 'l'), leg(ctx, 'r'), ...hips(ctx), torso]);
-  const ground = P.ground(g.hip * 1.6);
+  const ground = asShadow(P.ground(g.hip * 1.6));
   const chair = params.mobility === 'wheelchair' ? [group(wheelchair(ctx), {})] : [];
   const defs = P.defs();
   return group([...defs, ...ground, ...chair, body]);

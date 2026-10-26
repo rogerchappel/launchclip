@@ -139,3 +139,29 @@ test('cinematic is set well apart from lifelike: harder key, teal core shadow, b
   const rims = style => (json(style).match(/"transform":"translate\(/g) ?? []).length;
   assert.ok(rims('cinematic') > rims('lifelike') + 50, `${rims('cinematic')} vs ${rims('lifelike')}`);
 });
+
+test('a floor shadow is not part of a character\'s reach, and the mark never reaches the JSON', async () => {
+  const {drawingBounds, SHADOW} = await import('../kit/core/characters/bounds.mjs');
+  const {castPlacement} = await import('../kit/core/characters/placement.mjs');
+  const {sceneJoints} = await import('../kit/core/characters/acting.mjs');
+  const {DEFAULT_LIGHT: light} = await import('../kit/core/characters/light.mjs');
+  const params = starterCharacter('maya').params;
+  for (const style of DRAWING_STYLES) {
+    const colors = characterLook(params, {style}).colors;
+    const joints = sceneJoints('stand', {params, geometry: styleGeometry(style, params)});
+    const drawing = drawCharacter(style, params, colors, {id: 'c', joints, expression: 'neutral', expressions: ['neutral'], light: normalizeLight(light)});
+    const marked = [];
+    const walk = node => { if (node && typeof node === 'object') { if (node[SHADOW]) marked.push(node); (node.children ?? []).forEach(walk); } };
+    walk(drawing);
+    // Every style draws a floor shadow and marks it.
+    assert.ok(marked.length >= 1, `${style} marks its floor shadow`);
+    assert.equal(JSON.stringify(drawing), JSON.stringify(JSON.parse(JSON.stringify(drawing))));
+    // The body's own width bounds the reach: the soft-shade ground ellipse (±190) is wider than a standing body.
+    const b = drawingBounds(drawing);
+    assert.ok(b.right - b.left < 400, `${style} reach ${Math.round(b.right - b.left)} wide`);
+  }
+  // A soft-shade pair standing at rest in a 9:16 phone set stays inside the safe zone.
+  const scene = {id: 's', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast: [{id: 'maya'}, {id: 'theo'}]}};
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 4}, brand: {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}}, cast: {style: 'soft-shade', characters: [{id: 'maya'}, {id: 'theo'}]}, scenes: [scene]};
+  assert.deepEqual(castPlacement(story, [{...resolveModule(scene, story), sceneId: 's'}]), []);
+});

@@ -1,12 +1,22 @@
 // Where a drawn character reaches: the bounding box of every shape in a
 // drawing (drawFlat's tree, joints and all), with each joint's pivot,
 // mirror and transform applied as view.mjs applies them, in rig units (the
-// feet's centre at 0, 0). A path is bounded by its points and control
+// feet's centre at 0, 0; without a floor shadow a stick figure's feet end a few units above it). A path is bounded by its points and control
 // points, so the box can only be a little generous, never short. Scenes
 // scale and place it to check that a pointing hand, a raised arm or a held
 // phone stays on the canvas (cast-scene, the cast gate).
 //
+// A floor shadow (a pen's ground(), marked with SHADOW) lies on the floor
+// beside the feet; it is not part of the character's reach, so it is left out.
+//
 // Imports only sibling kit/core files.
+
+/**
+ * Marks a node as a floor shadow. The mark is a symbol, so it never reaches
+ * a model's JSON or a renderer: drawings stay byte-identical.
+ */
+export const SHADOW = Symbol('character-shadow');
+export const asShadow = nodes => nodes.map(node => (node && typeof node === 'object' ? Object.assign(node, {[SHADOW]: true}) : node));
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const multiply = ([a, b, c, d, e, f], [A, B, C, D, E, F]) => [a * A + c * B, b * A + d * B, a * C + c * D, b * C + d * D, a * E + c * F + e, b * E + d * F + f];
@@ -53,7 +63,7 @@ export function drawingBounds(drawing) {
   const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
   const walk = (node, m) => {
     if (!node || typeof node !== 'object') return;
-    if (node.style?.opacity === 0 || node.attrs?.opacity === 0) return;
+    if (node.style?.opacity === 0 || node.attrs?.opacity === 0 || node[SHADOW]) return;
     // Paint servers and clips draw nothing themselves.
     if (UNDRAWN.has(node.tag)) return;
     let here = m;
