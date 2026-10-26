@@ -54,3 +54,24 @@ test("text fades are capped and text holds long enough to be read", () => {
   const result = ghostingGate(rushed);
   assert.ok(result.findings.some((finding) => finding.rule === "text-hold"), JSON.stringify(result.findings));
 });
+
+test("a card ending at a plate change leaves with the cut; one arriving with a moving plate waits for it", () => {
+  const s = story([world("a", 0, 4, "city-street"), world("b", 4, 8, "park", { in: { type: "pan", dur: 0.6, direction: "left" } }),
+    { id: "k1", module: "concept-card", track: 2, start: 0, end: 4, params: { text: "Twenty feet", icon: "ruler" } },
+    { id: "k2", module: "concept-card", track: 2, start: 4, end: 8, params: { text: "20 ft+ counts", icon: "ruler" } }], { camera: { mode: "world" } });
+  const out = resolveModule(s.scenes[2], s), into = resolveModule(s.scenes[3], s);
+  assert.equal(out.exitsWithCut, true);
+  assert.ok(out.motion.end - out.motion.exitStart <= 1 / 30 + 1e-6, "one frame");
+  assert.equal(into.waitsForPlate, 0.6);
+  assert.ok(into.motion.enterStart >= 4.6 - 1e-6);
+  // The last card of the video keeps its fade (a final hold or loop has its own rules).
+  assert.equal(into.exitsWithCut, undefined);
+});
+
+test("a call to action clear of the caption band keeps the captions on", () => {
+  const cta = (rect) => ({ id: "c", module: "cta", track: 1, start: 0, end: 4, params: { action: "Set a 20-minute timer", detail: "Then look 20+ ft away", variant: "boxed", rect } });
+  const high = story([world("w", 0, 8, "park"), cta({ x: 80, y: 290, width: 860, height: 520 })]);
+  assert.equal(resolveModule(high.scenes[1], high).hidesCaptions, false);
+  const low = story([world("w", 0, 8, "park"), cta({ x: 80, y: 900, width: 860, height: 520 })]);
+  assert.equal(resolveModule(low.scenes[1], low).hidesCaptions, true);
+});

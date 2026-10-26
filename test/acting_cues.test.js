@@ -45,8 +45,11 @@ test("look-far shades the eyes and looks at the world's far point; the face turn
   assert.equal(actor.states[1].target, "far");
   assert.ok(actor.states[1].gaze.y < 0, "a far look lifts the face");
   const ops = charactersTimeline(model);
-  assert.deepEqual(frameState(ops, 1).get("c-c0-gaze"), { x: 0, y: 0 });
-  assert.deepEqual(frameState(ops, 3).get("c-c0-gaze"), actor.states[1].gaze);
+  assert.deepEqual(frameState(ops, 1).get("c-c0-gaze"), { x: 0, y: 0, scaleX: 1 });
+  // Seated, a far look turns three-quarters: the face swings and narrows.
+  assert.equal(actor.states[1].view, "three-quarter");
+  const { x, y, scale } = actor.states[1].gaze;
+  assert.deepEqual(frameState(ops, 3).get("c-c0-gaze"), { x, y, scaleX: scale });
 });
 
 test("stand-up then walk-to: the character rises, walks at a walking pace and stands", () => {
@@ -101,4 +104,51 @@ test("the acting gate: a line's key action is performed by its character on that
   const away = story([plate(), bench([{ id: "maya", facing: "left", target: "right", cues: [{ at: 1.5, action: "gaze-at", target: "right", facing: "left" }] }])]);
   assert.ok(actingGate(away, { map: map({ verb: "gaze-at", who: "maya" }), words }).findings.some((finding) => finding.rule === "faces-away"));
   assert.equal(actingGate(acted, {}).status, "skipped");
+});
+
+test("standing, a far look turns the character's back to the camera; the back of the head replaces the face", () => {
+  const model = resolve([plate({ kind: "park" }), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", target: "horizon" }, { at: 4, action: "gaze-at", target: "left" }] }], "standing")]);
+  const actor = model.content.actors[0];
+  assert.deepEqual(actor.states.map((state) => state.view), ["front", "back", "three-quarter"]);
+  assert.equal(actor.turns, true);
+  assert.ok(["c-c0-back", "c-c0-front", "c-c0-face-front"].every((id) => ids(charactersView(model).front).includes(id)));
+  const ops = charactersTimeline(model);
+  assert.equal(frameState(ops, 0.5).get("c-c0-back").opacity, 0);
+  assert.equal(frameState(ops, 2).get("c-c0-back").opacity, 1);
+  assert.equal(frameState(ops, 2).get("c-c0-front").opacity, 0);
+  assert.equal(frameState(ops, 2).get("c-c0-face-front").opacity, 0, "the face, beard and glasses hide from behind");
+  // Across a street is toward the camera: the character looks past the viewer, three-quarters.
+  const street = resolve([plate(), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", target: "street" }] }], "standing")]);
+  assert.equal(street.content.actors[0].states[1].view, "three-quarter");
+  assert.equal(frameState(ops, 5).get("c-c0-back").opacity, 0, "turning back to a side look shows the face again");
+  // The standing set has no furniture in a world, and nothing in hand.
+  assert.deepEqual(model.content.front, []);
+  assert.equal(actor.holds, null);
+  // A cue may name the view.
+  const named = resolve([plate(), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", view: "three-quarter" }] }], "standing")]);
+  assert.equal(named.content.actors[0].states[1].view, "three-quarter");
+});
+
+test("the acting gate fails a look that faces the camera, and a card over what a character looks at", async () => {
+  const { actingGate } = await import("../src/direction_guardrails.js");
+  const words = ["Look", "across", "the", "street", "now"].map((text, i) => ({ text, start: 1 + i * 0.4, end: 1.3 + i * 0.4 }));
+  const map = (action) => ({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", beat: "resolution", lines: [{ words: [0, 4], intent: "claim", treatment: "insert", scenes: ["c"], cast: [{ id: "maya" }], action }] }] });
+  const front = story([plate(), bench([{ id: "maya", cues: [{ at: 1.5, action: "look-far", view: "front" }] }], "standing")]);
+  assert.ok(actingGate(front, { map: map({ verb: "look-far", who: "maya" }), words }).findings.some((finding) => finding.rule === "look-unread"));
+  const s = story([plate(), bench([{ id: "maya", cues: [{ at: 1.5, action: "look-far", target: "street" }] }], "standing")]);
+  const actor = resolveModule(s.scenes[1], s).content.actors[0];
+  const point = actor.states[1].point;
+  const card = (y) => ({ id: "card", role: "text", rect: { x: 80, y, width: 860, height: 300 }, start: 0, end: 8 });
+  const hidden = actingGate(s, { map: map({ verb: "look-far", who: "maya" }), words, rects: [card(point.y - 100)] });
+  assert.ok(hidden.findings.some((finding) => finding.rule === "look-target-hidden"), JSON.stringify(hidden.findings));
+  assert.equal(actingGate(s, { map: map({ verb: "look-far", who: "maya" }), words, rects: [card(point.y - 600)] }).status, "passed");
+});
+
+test("look-target-hidden stops at the look's own scene: a card over the next place does not count", async () => {
+  const { actingGate } = await import("../src/direction_guardrails.js");
+  const s = story([plate({ kind: "home-desk" }), bench([{ id: "maya", cues: [{ at: 1, action: "stand-up" }, { at: 1.5, action: "look-far", target: "window" }] }], "desk-laptop")]);
+  s.scenes[1].end = 4; s.scenes[0].end = 4;
+  const map = { schema: "launchclip.direction-map.v1", sections: [{ id: "s", lines: [] }] };
+  const later = { id: "card", role: "text", rect: { x: 80, y: 290, width: 860, height: 600 }, start: 4.2, end: 8 };
+  assert.equal(actingGate(s, { map, words: [], rects: [later] }).findings.filter((finding) => finding.rule === "look-target-hidden").length, 0);
 });

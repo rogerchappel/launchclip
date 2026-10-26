@@ -72,3 +72,22 @@ test("in world-camera mode a riding cast still follows its plate through a pan b
   const result = physicsGate(s);
   assert.equal(result.status, "passed", JSON.stringify(result.findings));
 });
+
+test("in world mode the loop ending clones the cast riding its target plate, so the set never vanishes at the seam", async () => {
+  const { compileStoryToHyperFrames } = await import("../kit/hyperframes/story-compiler.mjs");
+  const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const s = story([world("street", 0, 4, { kind: "city-street", camera: "drift" }), bench("c1", 0, 4), world("park", 4, 8, {}, { in: { type: "pan", dur: 0.8, direction: "left" } }), bench("c2", 4, 8, { cast: [{ id: "theo" }] })], { brand: { ...brand, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } }, camera: { mode: "world" }, ending: { loop_to: "street", in: { type: "whip-pan", dur: 0.4 } } });
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-loop-riders-"));
+  try {
+    const { resolveStory } = await import("../kit/core/story.mjs");
+    await compileStoryToHyperFrames(resolveStory(s, { words: [] }), { projectDir: dir });
+    const html = await readFile(path.join(dir, "index.html"), "utf8");
+    assert.match(html, /id="lc-scene-street-loop"/);
+    assert.match(html, /id="lc-scene-c1-loop"/, "the street's bench and cast are in the loop ending");
+    assert.doesNotMatch(html, /id="lc-scene-c2-loop"/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

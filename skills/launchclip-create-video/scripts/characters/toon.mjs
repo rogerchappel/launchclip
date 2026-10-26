@@ -394,7 +394,7 @@ export function toonColors(colors) {
  *   makePen     (colors, {id}) → pen
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false}, makePen) {
+export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false}, makePen) {
   const g = rigGeometry(params);
   const c = toonColors(colors);
   const P = makePen(c, {id, light});
@@ -404,8 +404,9 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const headKids = [
     ...ears(ctx),
     P.shape(headShape(g), 'skin'),
-    ...gazeJoint(ctx, joints, gaze, features),
+    ...faceView(ctx, turns, gazeJoint(ctx, joints, gaze, features)),
     ...(covers(params) ? [] : hairFront(ctx)),
+    ...backView(ctx, turns, () => backOfHead(ctx)),
     ...headwear(ctx)
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
@@ -419,7 +420,7 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
     ...backpackBack(ctx),
     P.shape(torsoPath(g), 'top'),
     ...longHem(ctx),
-    ...outfit(ctx),
+    ...frontView(ctx, turns, outfit(ctx)),
     joint(ctx, 'head', 0, neckTop, tilt, [headIdle]),
     arm(ctx, 'l'),
     arm(ctx, 'r')
@@ -441,6 +442,49 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
  */
 export function gazeJoint(ctx, joints, on, features) {
   return on ? [joint(ctx, 'gaze', 0, 0, {x: joints.gazeX ?? 0, y: joints.gazeY ?? 0}, features)] : features;
+}
+
+/**
+ * The back of the head, for a character seen from behind (a look into the
+ * distance): the head in skin with the hair over it down to the nape, which
+ * covers the face. Bald heads stay skin.
+ */
+export function backOfHead(ctx) {
+  const {g, p, P} = ctx;
+  const {rx, ry, cy} = g.head;
+  const parts = [P.shape(headShape(g), 'skin')];
+  if (p.hair.style !== 'bald') {
+    // Hair over the whole back of the head down to a low nape, so no bare
+    // oval reads as a face; a balding crown keeps a skin patch on top.
+    const nape = r1(cy + ry * 0.72);
+    parts.push(P.shape(`M${-rx - 4} ${r1(cy + ry * 0.45)}C${-rx - 5} ${r1(cy - ry * 0.6)} ${r1(-rx * 0.62)} ${r1(cy - ry - 6)} 0 ${r1(cy - ry - 6)}C${r1(rx * 0.62)} ${r1(cy - ry - 6)} ${rx + 5} ${r1(cy - ry * 0.6)} ${rx + 4} ${r1(cy + ry * 0.45)}C${r1(rx * 0.7)} ${nape} ${r1(-rx * 0.7)} ${nape} ${-rx - 4} ${r1(cy + ry * 0.45)}Z`, 'hair'));
+    if (p.hair.style === 'balding') parts.push(P.ellipse(0, r1(cy - ry * 0.55), r1(rx * 0.5), r1(ry * 0.3), 'skin', {outline: false}));
+  }
+  // The nape's shadow line where the head meets the neck.
+  parts.push(P.line(`M${r1(-rx * 0.35)} ${r1(cy + ry * 0.86)}Q0 ${r1(cy + ry * 0.94)} ${r1(rx * 0.35)} ${r1(cy + ry * 0.86)}`, 'skinShade', 5));
+  return parts;
+}
+
+/**
+ * View groups for a character that turns away (actor.turns): the back of
+ * the head over the face, hidden until the turn ({id}-back), and the front
+ * details of the clothes (tie, buttons, pockets) shown until it ({id}-front).
+ * A character that never turns draws as before.
+ */
+export function backView(ctx, on, draw) {
+  if (!on || ctx.static) return [];
+  return [el('g', `${ctx.id}-back`, {opacity: 0}, draw())];
+}
+
+/** The face (features, beard, glasses) of a character that turns away: hidden from behind ({id}-face-front). */
+export function faceView(ctx, on, parts) {
+  if (!on || ctx.static) return parts;
+  return [el('g', `${ctx.id}-face-front`, {opacity: 1}, parts)];
+}
+
+export function frontView(ctx, on, parts) {
+  if (!on || ctx.static) return parts;
+  return [el('g', `${ctx.id}-front`, {opacity: 1}, parts)];
 }
 
 /**
