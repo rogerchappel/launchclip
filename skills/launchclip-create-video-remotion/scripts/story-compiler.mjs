@@ -586,7 +586,7 @@ function cameraCss(plan, W, H) {
     '.lc-cam-defs { position: absolute; left: 0; top: 0; width: 0; height: 0; }',
     `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`
   ];
-  if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }');
+  if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }', '.lc-scene.lc-world-plate { overflow: visible; }');
   if (plan.background) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }', `.lc-world-field, .lc-world-tile { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: visible; pointer-events: none; }`);
   return rules.join('\n    ');
 }
