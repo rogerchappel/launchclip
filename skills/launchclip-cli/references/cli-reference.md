@@ -1267,6 +1267,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]
   ```
 
+- `collection new`: Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.
+
+  ```text
+  launchclip collection new <id> [--kind product|channel|client|campaign|course] [--title "…"] [--style <name> | --seed <hex>] [--tone <tone>] [--root <dir>]
+  ```
+
+- `collection show`: List a collection's settings, its recipes and its videos, marking the stale ones: made with a recipe or style that has changed since.
+
+  ```text
+  launchclip collection show <id|dir> [--root <dir>] [--json] # recipes, videos and which are stale
+  ```
+
+- `recipe new`: Write <collection>/recipes/<id>.json: a saved set of make settings (aspect, duration, format, goal, awareness, style, profile, voice, music, renderer, quality, …). --from-video copies a finished video's settings from its MAKE.json, copying a style that lived only in the project to the collection's styles/; flags given win. Replacing a recipe (--force) marks the videos made with the old one stale.
+
+  ```text
+  launchclip recipe new <collection>/<id> [--from-video <project>] [--title "…"] [make setting flags] [--root <dir>] [--force]
+  ```
+
 - `intake`: Write a production workspace from a source (repository, product, topic or voiceover). Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the workspace goes under storage.projects unless --out.
 
   ```text
@@ -1486,10 +1504,11 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip publish-manifest <project> [--link <url>] [--utm <campaign>|auto] [--platforms app_store,product_hunt] # publish.json: titles, description, hashtags, CTA and platform fit
   ```
 
-- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --visual-history-dir points at a series' history: the planner is told what recent videos chose, a background or caption preset that repeats the last three is moved to an unused one (unless a chosen style pack sets it), the plan is linted against every earlier video (weighted towards recent ones; MAKE.json variety), and the finished video is recorded in the dir's launchclip-history.json. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written.
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 

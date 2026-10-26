@@ -43,7 +43,7 @@ export function findLibrary({ cwd = process.cwd(), library, env = process.env } 
 
 /**
  * Read and validate a library file.
- * → {file, root, name, storage: {projects, finals, archive, min_free_gb}, cache, collections}
+ * → {file, root, name, storage: {projects, finals, archive, min_free_gb}, cache, make, collections}
  * Every path is absolute; finals, archive and cache are null when unset.
  */
 export async function readLibrary(file, env = process.env) {
@@ -70,6 +70,8 @@ export function resolveLibrary(raw, file, env = process.env) {
   };
   const minFree = storage.min_free_gb ?? DEFAULT_MIN_FREE_GB;
   if (typeof minFree !== "number" || !Number.isFinite(minFree) || minFree < 0) fail("storage.min_free_gb must be a number of gigabytes, 0 or more");
+  // make settings every video in the library starts from (the first layer of src/collection.js).
+  if (raw.make != null && (typeof raw.make !== "object" || Array.isArray(raw.make))) fail("make must be an object of make settings");
   const collections = raw.collections ?? [];
   if (!Array.isArray(collections) || collections.some((entry) => typeof entry !== "string" || !entry)) fail("collections must be a list of folder names");
   return {
@@ -83,6 +85,7 @@ export function resolveLibrary(raw, file, env = process.env) {
       min_free_gb: minFree
     },
     cache: location(raw.cache, "cache"),
+    make: raw.make ?? null,
     collections
   };
 }

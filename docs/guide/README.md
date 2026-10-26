@@ -10,6 +10,7 @@
 | [Effects around you on camera](effects.md) | Graphics behind and around you in a talking-head recording, and `launchclip fx` for one effect on a clip |
 | [Raw footage](raw-footage.md) | The base edit: silences, bad takes and filler words removed, audio cleaned up |
 | [Long videos and chapters](long-form.md) | Chapters, section cards and a progress line for 5–30 minute videos |
+| [Collections and recipes](collections.md) | Many videos that share a style, voice, brand and rules; recipes for the kinds you make again; stale videos when a recipe changes |
 | [Headless CLI](headless.md) | One command from a prompt to a finished video, with your own API keys |
 | [Where your videos are stored](storage.md) | A library: projects on an external drive without `--out`, drive and free-space checks |
 | [Finish in your editor](editors.md) | Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO |

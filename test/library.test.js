@@ -70,6 +70,7 @@ test("resolves storage paths against the library folder and expands ~", async ()
   });
   assert.equal(library.cache, path.join(home, ".cache", "launchclip"));
   assert.deepEqual(library.collections, ["acme"]);
+  assert.equal(library.make, null);
   assert.equal(projectRoot(library, "acme", "launch"), "/Volumes/Footage/launchclip/acme/launch");
 });
 
@@ -91,6 +92,7 @@ test("rejects a library with the wrong schema or bad storage values", async () =
     [{ schema: LIBRARY_SCHEMA, storage: { min_free_gb: -1 } }, /min_free_gb must be a number/],
     [{ schema: LIBRARY_SCHEMA, storage: { min_free_gb: "40" } }, /min_free_gb must be a number/],
     [{ schema: LIBRARY_SCHEMA, collections: "acme" }, /collections must be a list/],
+    [{ schema: LIBRARY_SCHEMA, make: "fast" }, /make must be an object/],
     [[], /must be a JSON object/]
   ];
   for (const [document, pattern] of cases) {
