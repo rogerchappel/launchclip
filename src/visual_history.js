@@ -248,6 +248,9 @@ export function assessVariety(fingerprint, entries, { project = null, similarity
 export async function checkHistory(dir, { hookLimit = DEFAULT_HOOK_SIMILARITY_LIMIT, structureLimit = DEFAULT_STRUCTURE_SIMILARITY_LIMIT, similarityLimit = DEFAULT_VISUAL_SIMILARITY_LIMIT } = {}) {
   const root = path.resolve(dir);
   if (!existsSync(root)) throw new Error(`launchclip history check: ${root} does not exist`);
+  for (const [flag, value] of [["--hook-limit", hookLimit], ["--structure-limit", structureLimit], ["--similarity-limit", similarityLimit]]) {
+    if (!(Number(value) > 0 && Number(value) <= 1)) throw new Error(`${flag} must be above 0 and at most 1; got ${value}`);
+  }
   const index = await readHistoryIndex(root);
   const indexed = new Set(index.entries.map((entry) => entry.project).filter(Boolean));
   const scanned = (await projectFingerprints(root)).filter((entry) => !indexed.has(entry.project));

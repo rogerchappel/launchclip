@@ -149,3 +149,31 @@ test("checkHistory flags a near-duplicate pair across the index and scanned proj
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("launchclip history check prints the flagged pairs, exits non-zero on one, and --json reports them", async () => {
+  const { runCli } = await import("../src/cli.js");
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-history-cli-"));
+  try {
+    for (const name of ["one", "two"]) {
+      await mkdir(path.join(dir, name));
+      await writeFile(path.join(dir, name, "storyboard.json"), JSON.stringify(story()));
+    }
+    const out = [];
+    const io = { stdout: { write: (value) => out.push(value) }, stderr: { write: () => {} } };
+    await assert.rejects(runCli(["history", "check", dir], io), /1 pair\(s\) too close/);
+    assert.match(out.join(""), /2 videos in .* \(0 indexed, 2 scanned\), 1 pair too close/);
+    out.length = 0;
+    await assert.rejects(runCli(["history", "check", dir, "--json"], io), /too close/);
+    const report = JSON.parse(out.join(""));
+    assert.equal(report.schema_version, "launchclip.history-check.v1");
+    assert.equal(report.flagged[0].similarity, 1);
+    await rm(path.join(dir, "two"), { recursive: true });
+    out.length = 0;
+    await runCli(["history", "check", dir], io);
+    assert.match(out.join(""), /1 video in .*, 0 pairs too close/);
+    await assert.rejects(runCli(["history", "check", dir, "--hook-limit", "3"], io), /--hook-limit must be above 0 and at most 1/);
+    await assert.rejects(runCli(["history", "nope", dir], io), /launchclip history needs an action/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
