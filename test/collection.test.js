@@ -32,6 +32,7 @@ test("collection, recipe and video documents validate, with the field named in e
   assert.equal(bad.ok, false);
   for (const pattern of [/^id must be lowercase/, /^kind must be one of product/, /^isolation must be one of strict, shared/, /^brand_assets must be a path inside the collection folder/, /^voice\.engine/, /^recipes\[1\]/]) assert.ok(bad.errors.some((error) => pattern.test(error)), `${pattern} in ${bad.errors.join("; ")}`);
   assert.deepEqual(bad.warnings, ["unknown field extra (ignored)"]);
+  assert.match(validateCollection({ schema: COLLECTION_SCHEMA, id: "acme", style: 7 }).errors.join(), /style must be a string or null/);
 
   // A recipe's make block is checked by make's own validation.
   const recipe = (make, extra = {}) => validateRecipe({ schema: RECIPE_SCHEMA, id: "clip", make, ...extra }, { id: "clip" });

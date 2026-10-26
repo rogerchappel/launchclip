@@ -49,7 +49,7 @@ export function validateCollection(doc) {
   if (doc.kind !== undefined && !COLLECTION_KINDS.includes(doc.kind)) errors.push(`kind must be one of ${COLLECTION_KINDS.join(", ")}; got ${JSON.stringify(doc.kind)}`);
   optionalString(doc, "title", errors);
   optionalString(doc, "style", errors);
-  if (doc.style != null && doc.style.trim() === "") errors.push("style must name a style pack, or be null");
+  if (typeof doc.style === "string" && doc.style.trim() === "") errors.push("style must name a style pack, or be null");
   optionalRelativePath(doc, "brand_assets", errors);
   optionalRelativePath(doc, "rules", errors);
   if (doc.voice != null) {
