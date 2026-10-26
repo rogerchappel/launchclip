@@ -1,0 +1,61 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-number-line-track-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "number-line",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "from": 1,
+          "to": 25,
+          "unit": "reps",
+          "ranges": [
+            {
+              "from": 8,
+              "to": 12,
+              "label": "= SIZE",
+              "tone": "good"
+            },
+            {
+              "from": 15,
+              "to": 25,
+              "label": "= JUST CARDIO",
+              "tone": "bad"
+            }
+          ],
+          "variant": "track"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
