@@ -13,6 +13,8 @@
 // Imports only sibling kit/core files.
 
 export const ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at', 'point-at', 'walk-to', 'stand-up', 'stretch']);
+// Actions whose point is that the character looks at something.
+export const LOOK_ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at']);
 
 /** What each action does (planner vocabulary; the pose it takes, if any). */
 export const ACTION_INFO = Object.freeze({
@@ -30,8 +32,24 @@ export const TARGET_REQUIRED = Object.freeze(['gaze-at', 'point-at', 'walk-to'])
 export const NAMED_TARGETS = Object.freeze(['far', 'window', 'horizon', 'street', 'skyline', 'left', 'right']);
 
 // How far the face turns toward a target, in rig units (a head is about 200
-// across), and how far it lifts for a far target.
-export const GAZE = Object.freeze({x: 32, lift: -8, drop: 6});
+// across), and how far it lifts for a far target. A three-quarter turn
+// also narrows the features (scaleX), as a head turned away does.
+export const GAZE = Object.freeze({x: 32, lift: -8, drop: 6, quarter: 44, quarterScale: 0.84});
+
+// Views: front (the camera), three-quarter (the face turned well toward a
+// side target) and back (seen from behind, looking into the scene).
+export const VIEWS = Object.freeze(['front', 'three-quarter', 'back']);
+
+/**
+ * The view a character takes to look at a point: a far point is in the
+ * scene's depth (the window, the street, the horizon, the skyline), so a
+ * standing character turns its back to the camera to look at it; seated,
+ * or for anything nearer, it turns three-quarters. No point: front.
+ */
+export function viewFor(point, {seated = false} = {}) {
+  if (!point) return 'front';
+  return point.far && !seated ? 'back' : 'three-quarter';
+}
 // A walking pace, metres per second, and a rig of 1000 units ≈ 1.7 m.
 export const WALK = Object.freeze({speed: 1.25, metresPerRig: 1.7 / 1000, minDuration: 0.6});
 
@@ -107,7 +125,8 @@ export function walkDuration(dx, scale) {
 export function actingPromptLines() {
   return [
     `Acting cues (cast-scene cues[].action): ${ACTIONS.map(name => `${name} (${ACTION_INFO[name].describe})`).join('; ')}.`,
-    `Targets (cue or actor \`target\`): ${NAMED_TARGETS.join(', ')}, {prop: id} (a prop in the world beneath), {character: id} or {x, y}. A character with a target faces it and turns its head toward it, not the camera.`,
+    `Targets (cue or actor \`target\`): ${NAMED_TARGETS.join(', ')}, {prop: id} (a prop in the world beneath), {character: id} or {x, y}. A character with a target faces it and turns its head toward it, not the camera: a standing character looking at something far (window, street, horizon, skyline) turns its back to the camera; seated or for nearer things it turns three-quarters. A cue may set view: ${VIEWS.join(' | ')}.`,
+    'Never cover what a character looks at: a card must not sit over the window, street or skyline point while someone looks at it (the acting gate fails it). Put the card to one side, or bring it in after the look.',
     'If the idea is an action (look away, get up, walk over, point at the proof), a character performs it on screen on that line, toward what it is about: a bench sitter looking at the street turns toward the street.'
   ];
 }

@@ -4,7 +4,7 @@
 //
 //   cast-scene       one to three characters in a set (desk-laptop, phone,
 //                    meeting, screen, kitchen-counter, sofa, podium, stage,
-//                    car, park-bench, video-call, standing-desk), directed by cues: named poses and
+//                    car, park-bench, video-call, standing-desk, standing), directed by cues: named poses and
 //                    expressions at times or narration words, mouths moving
 //                    on their spoken words
 //   character-cameo  one character beside a card, or alone on a panel (for
@@ -31,7 +31,7 @@ import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, stateJoints, speechChanges} from './characters/acting.mjs';
 import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
-import {ACTIONS, ACTION_INFO, NAMED_TARGETS, TARGET_REQUIRED, gazeOffset, sideOf, targetError, targetPoint, walkDuration} from './characters/actions.mjs';
+import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDuration} from './characters/actions.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
 import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
@@ -48,7 +48,7 @@ const timingOf = id => ({...CHARACTER_TIMING[id], gaps: [], rules: [
 ]});
 
 const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 'says', 'holds', 'target'];
-const CUE_KEYS = ['at', 'pose', 'expression', 'action', 'target', 'facing'];
+const CUE_KEYS = ['at', 'pose', 'expression', 'action', 'target', 'facing', 'view'];
 
 // ---------------------------------------------------------------------------
 // Shared: actors
@@ -92,16 +92,17 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
     if (cue.pose !== undefined) { check.oneOf(cue.pose, `${where}.pose`, POSES); fitsSet(cue.pose, `${where}.pose`); }
     if (cue.expression !== undefined) check.oneOf(cue.expression, `${where}.expression`, EXPRESSIONS);
     if (cue.facing !== undefined) check.oneOf(cue.facing, `${where}.facing`, ['left', 'right']);
+    if (cue.view !== undefined) check.oneOf(cue.view, `${where}.view`, VIEWS);
     const action = cue.action === undefined ? null : check.oneOf(cue.action, `${where}.action`, ACTIONS);
     if (cue.target !== undefined) { const problem = targetError(cue.target); if (problem) check.fail(`${where}.target`, problem); }
     if (action && TARGET_REQUIRED.includes(action) && cue.target === undefined) check.fail(`${where}.target`, `is required for ${action}`);
     if (action === 'stand-up' && !seated) check.fail(`${where}.action`, `stand-up needs a seated set (${SEATED_SETS.join(', ')})`);
     // An action takes its pose unless the cue names one (walk-to in a seated set needs a stand-up first: checked when directed).
     const pose = cue.pose ?? (action ? ACTION_INFO[action].pose ?? undefined : undefined);
-    return {time: rt(b.start + at), pose, expression: cue.expression, action, target: cue.target, facing: cue.facing};
+    return {time: rt(b.start + at), pose, expression: cue.expression, action, target: cue.target, facing: cue.facing, view: cue.view};
   }).sort((a, c) => a.time - c.time).forEach(cue => {
     const prev = states[states.length - 1];
-    const next = {time: cue.time, pose: cue.pose ?? prev.pose, expression: cue.expression ?? prev.expression, ...(cue.action ? {action: cue.action} : {}), ...(cue.target !== undefined ? {target: cue.target} : {}), ...(cue.facing ? {facing: cue.facing} : {})};
+    const next = {time: cue.time, pose: cue.pose ?? prev.pose, expression: cue.expression ?? prev.expression, ...(cue.action ? {action: cue.action} : {}), ...(cue.target !== undefined ? {target: cue.target} : {}), ...(cue.facing ? {facing: cue.facing} : {}), ...(cue.view ? {view: cue.view} : {})};
     if (Math.abs(cue.time - prev.time) < 1e-6) Object.assign(prev, next, {time: prev.time});
     else if (cue.time - prev.time < ACTING.poseTween - 1e-6 && next.pose !== prev.pose && states.length > 1) check.fail(`${path}.cues`, `pose changes at ${r2(prev.time - b.start)} s and ${r2(cue.time - b.start)} s are closer than ${ACTING.poseTween} s; space them out`);
     else states.push(next);
@@ -145,7 +146,7 @@ function directActor(b, actor, path, scene) {
   const pointOf = value => { try { return targetPoint(value, scene); } catch (error) { check.fail(`${path}.target`, error.message); } return null; };
   if (target !== null && !actor.facingSet) facing = sideOf(pointOf(target), actor.x, scene.canvas);
   const out = [];
-  let gazeOn = false, walks = false;
+  let gazeOn = false, walks = false, turns = false;
   for (let i = 0; i < actor.states.length; i++) {
     const state = actor.states[i];
     const action = state.action ?? null;
@@ -157,9 +158,13 @@ function directActor(b, actor, path, scene) {
     if (state.facing) facing = state.facing;
     else if (point) facing = sideOf(point, here.x, scene.canvas);
     if ((state.pose === 'walk' || action === 'walk-to') && actor.seated && !standing) check.fail(`${path}.cues`, `${action ?? 'walk'} at ${r2(state.time - b.start)} s needs the character standing: add a stand-up cue before it`);
-    const gaze = point ? gazeOffset(point, here, scene.canvas) : {x: 0, y: 0};
+    const view = state.view ?? viewFor(point, {seated: actor.seated && !standing});
+    const turned = point ? gazeOffset(point, here, scene.canvas) : {x: 0, y: 0};
+    // A three-quarter turn swings the face further and narrows it.
+    const gaze = view === 'three-quarter' && point ? {x: Math.sign(turned.x || (facing === 'left' ? -1 : 1)) * GAZE.quarter, y: turned.y, scale: GAZE.quarterScale} : turned;
     if (gaze.x || gaze.y) gazeOn = true;
-    const directed = {...state, target, facing, standing, gaze, x};
+    if (view === 'back') turns = true;
+    const directed = {...state, target, facing, standing, gaze, view, x, ...(point ? {point: {x: point.x ?? null, y: point.y ?? null, far: Boolean(point.far)}} : {})};
     out.push(directed);
     if (action === 'walk-to' && point) {
       const to = Math.min(W - margin, Math.max(margin, point.x ?? (facing === 'left' ? margin : W - margin)));
@@ -173,10 +178,10 @@ function directActor(b, actor, path, scene) {
       walks = walks || Math.abs(dx) > 0.5;
       x = r2(x + dx);
       // Arrived: stand, facing the way the walk went.
-      out.push({time: arrive, pose: 'stand', expression: state.expression, facing, standing, gaze, x, arrive: true});
+      out.push({time: arrive, pose: 'stand', expression: state.expression, facing, standing, gaze, view, x, arrive: true});
     }
   }
-  return {...actor, states: out, gaze: gazeOn, walks};
+  return {...actor, states: out, gaze: gazeOn, walks, turns};
 }
 
 /**
@@ -207,7 +212,7 @@ function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = stateJoints(first, actor);
-  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze)});
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze), turns: Boolean(actor.turns)});
   const view = characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
   // A walking character moves on its own wrapper, so its scale stays on the view.
   return actor.walks ? el('div', `${cid}-walk`, abs(0, 0, 0, 0), [view]) : view;
@@ -629,8 +634,8 @@ function cameoTimeline(model, ops) {
 
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
-    describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
+    describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?, view?: ${VIEWS.join(' | ')}}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
