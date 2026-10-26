@@ -11,6 +11,7 @@
 | [Raw footage](raw-footage.md) | The base edit: silences, bad takes and filler words removed, audio cleaned up |
 | [Long videos and chapters](long-form.md) | Chapters, section cards and a progress line for 5–30 minute videos |
 | [Headless CLI](headless.md) | One command from a prompt to a finished video, with your own API keys |
+| [Where your videos are stored](storage.md) | A library: projects on an external drive without `--out`, drive and free-space checks |
 | [Finish in your editor](editors.md) | Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO |
 | [Advanced reference](advanced.md) | Every CLI lane and option, including legacy workflows |
 

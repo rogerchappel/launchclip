@@ -120,6 +120,10 @@ launchclip-<slug>/
   qa/                      contact sheets, evidence, gate reports, critic.json
 ```
 
+The project folder is `launchclip-<slug>` in the current folder, or `--out`.
+Inside a library it goes to the library's projects folder instead, which can be
+an external drive: see [Where your videos are stored](storage.md).
+
 The command prints a short summary with the gate results and the next steps.
 A failed stage says what to fix. Run the same command again to resume: the
 script, storyboard, voice, music and rendered segments are reused.
