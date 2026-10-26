@@ -549,6 +549,19 @@ opposite top corner, each claiming a `78 × k` px band (k = short side / 1080).
   entry's `color` (role or hex) sets the text colour while that label shows.
   The plan adds colour tweens (`FRAME_COLOR_SWITCH`, 0.1 s from each cut) only
   when the colour changes, so a frame that never changes plans as before.
+- Source notes (`sources: [{text ≤ 90, scene | start, until? | end?}]`,
+  `frameSources(story)` → `[{start, end, text}]`): a citation line in the
+  meta font, centred along the bottom of the safe zone in a `48 × k` px band
+  (taken out of `brandFrameSafe`, so it sits under the 9:16 caption band). A
+  note shows from its start (seconds or a scene's start) to `end`, the end of
+  scene `until`, else the next note or the end. It is part of the frame, not
+  a module, because a study's source stays on screen while several data
+  scenes enter and exit under it; it fades in and out with its own tweens
+  and follows `frameColorSpans` like the labels. A frame used only for notes
+  is `{kicker: false, sections: false, sources: [...]}`. A style's
+  `brand_frame.sources` is ignored (a warning), like its labels.
+  `validateStory` warns when a `unit-grid` or `number-line` scene has neither
+  `params.source` nor a note on screen ("no source, no study claim").
 - `launchclip layout-check` warns (`brand-frame`) when key text or a hero
   overlaps the kicker or section label (`brandFrameFindings`).
 - Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,
@@ -2851,6 +2864,19 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 | `speech-bubble` | rounded, comic, chat | `text` ≤ 120, `type` speech/thought, `tail` bottom-left/bottom-right/left/right, `name` | pop | Pops from its tail point with back.out(1.9); thought clouds trail three puffs toward the tail |
 | `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
 | `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
+
+### Data explainers (`catalog-h-data.mjs`)
+
+Built for the "the study says" format: a near-empty stage where each beat
+adds or transforms one element. Tones take `good` (the brand primary), `bad`
+(the first of a few reds with 3:1 on `bg`), `neutral` (muted text), a brand
+role or hex (`dataTone`). The study's citation is the frame's source note
+(`story.frame.sources`, above), not a param of either module.
+
+| Module | Variants | Params (beyond title, source, at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `unit-grid` | solid, stroke, dots | `count` 1–200, `icon` (`person`, the module's isotype silhouette, or any icon name), `tone`, `columns`, `groups` 2–3 `{count, label ≤ 24, tone?}` adding up to `count`, `splitAt`, or `highlight` `{count, label?, tone?}` and `highlightAt` (not both) | build, split, highlight | Units pop in reading order within about 1.1 s in the largest square cells that fit; on split each unit slides and scales (0.75 s, power3.inOut, a 12 ms ripple) into its group's own grid, side by side, recolouring as it moves, while each group's count rises and counts up over its label; a highlight lights the first `count` units with a pulse, dims the rest to 28% and raises the label |
+| `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value. Default cues follow the build up to 1 s apart |
 
 ### Motion titles (`catalog-h-text.mjs`)
 
