@@ -426,7 +426,8 @@ export function ambienceGraph(spec) {
     '[sum]asplit=3[a][b][c]',
     `[a]atrim=0:${X},asetpts=PTS-STARTPTS,afade=t=in:d=${X}:curve=qsin[head]`,
     `[b]atrim=${L}:${L + X},asetpts=PTS-STARTPTS,afade=t=out:d=${X}:curve=qsin[over]`,
-    '[head][over]amix=inputs=2:normalize=0[joined]',
+    // duration=first: both are X long, and FFmpeg 6 stalls the concat without it.
+    '[head][over]amix=inputs=2:normalize=0:duration=first[joined]',
     `[c]atrim=${X}:${L},asetpts=PTS-STARTPTS[body]`,
     '[joined][body]concat=n=2:v=0:a=1[out]'
   );
