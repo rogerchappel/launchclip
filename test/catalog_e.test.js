@@ -173,6 +173,17 @@ test('the story compiler draws feed-frame behind and in front of the subject', a
   assert.ok(behind < matte && matte < front, `behind ${behind} < subject ${matte} < front ${front}`);
 });
 
+test('a backdrop-swap with a video backdrop: the video takes its own track, and its exit ends in a hard kill', async () => {
+  const story = resolveStory({schema: 'launchclip.story.v1', lane: 'footage-led', format: {width: 1080, height: 1920, fps: 30, duration: 6}, brand,
+    base: {src: 'assets/recording.mp4', subject: {mattes: [{src: 'assets/subject/a.webm', in: 0, out: 6}]}},
+    scenes: [{id: 'swap', module: 'backdrop-swap', track: 1, start: 1, end: 5, params: {backdrop: {src: 'assets/broll.mp4'}, release: 0.3}}]});
+  const {html} = await compileStoryToHyperFrames(story, {write: false});
+  const track = (id) => html.match(new RegExp(`id="${id}"[^>]*data-track-index="(\\d+)"`))?.[1];
+  assert.ok(track('swap-backdrop') && track('swap-media'), 'both clips are on the page');
+  assert.notEqual(track('swap-media'), track('swap-backdrop'), 'the hoisted video does not share the backdrop clip\'s track');
+  for (const id of ['swap-backdrop', 'swap-media']) assert.match(html, new RegExp(`tl\\.set\\("#${id}", \\{"opacity":0\\}, 5\\);`), `${id} is hard-killed at the scene end`);
+});
+
 test('growth-line: draws behind the head, kicks up at the biggest rise, honest about data', () => {
   const model = resolve('growth-line', PARAMS['growth-line']);
   assert.equal(model.layer, 'behind');
