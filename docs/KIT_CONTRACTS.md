@@ -622,6 +622,18 @@ sentence case in the body face with no stroke, and colours at most one accent
 word per line (`accents: 1`): the line's first emphasis word, else its longest
 word of six letters or more.
 
+**Over worlds.** A line spoken mostly over a track-0 `world` scene sits on
+the world, not the brand background. Its tone is the world's time of day
+(`CAPTION_WORLD_TONES`: night deep, dusk mid, day light). If the preset's
+text does not reach 3:1 on that tone, the line takes a contrasting set
+(`captionToneColors`): the first brand colour (paper, ink, bg) reaching 4.5:1,
+else white or near-black, with the accent pulled toward it until it reads. Every
+line over a world also gets a halo in the contrasting tone (`CAPTION_HALO`;
+presets with an outline stroke keep their stroke). It is drawn as a
+`lc-cap-on-<tone>` class with its CSS and the matching tween colours, so both
+renderers draw it the same way. A story with no world scenes captions exactly
+as before.
+
 `captionPlan(chunks, overlay, {brand, format, story, hide, fonts?})` →
 `{preset, options, css, nodes, tweens}`. `nodes` is a DOM tree (div/span with
 id, class, text, children), `css` its static styles, and `tweens` a list of

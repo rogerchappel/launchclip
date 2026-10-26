@@ -31,7 +31,9 @@ const STORY_PARITY = Object.freeze([
   {id: 'explainer-9x16', times: [3.2, 9.5, 19.8]},
   {id: 'promo-16x9', times: [3.4, 12.6, 16.9]},
   // World mode: a cast-scene on track 1 over a track-0 world plate, then a pan.
-  {id: 'world-cast-16x9', times: [2.2, 6.5]}
+  {id: 'world-cast-16x9', times: [2.2, 6.5]},
+  // Captions over worlds: dark text with a light halo by day, the brand's light colour at night.
+  {id: 'world-captions-9x16', times: [2.2, 5.4]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {

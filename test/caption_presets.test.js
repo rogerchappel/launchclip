@@ -188,3 +188,27 @@ test('a caption line spoken into a hidden range ends where the range starts', as
   assert.deepEqual(line.words.map((word) => [word.text, word.end]), [['and', 9.3], ['get', 10]]);
   assert.deepEqual(visibleChunks([chunk], [[20, 21]]), [chunk], 'a line clear of every range is unchanged');
 });
+
+test("caption lines over a dark world switch to a colour that reads; over a light world they keep the preset's", async () => {
+  const { captionPlan, captionToneColors, captionContrast, CAPTION_WORLD_TONES } = await import("../kit/core/captions.mjs");
+  const brand = { colors: { bg: "#cee8ee", primary: "#89592c", accent: "#2a7180", ink: "#fbfeff", paper: "#1e282b" } };
+  const toned = captionToneColors({ idle: "#1e282b", accent: "#2a7180", spoken: "#1e282b", active: "#89592c" }, "night", brand.colors);
+  assert.equal(toned.idle, "#fbfeff");
+  assert.ok(captionContrast(toned.idle, CAPTION_WORLD_TONES.night) >= 4.5 && captionContrast(toned.accent, CAPTION_WORLD_TONES.night) >= 3);
+  assert.equal(captionToneColors({ idle: "#1e282b", accent: "#2a7180" }, "day", brand.colors).swapped, false);
+  const words = (start, texts) => texts.map((text, i) => ({ text, start: start + i * 0.3, end: start + i * 0.3 + 0.25 }));
+  const chunks = [{ id: "cap-001", start: 0.5, end: 1.4, words: words(0.5, ["by", "day"]) }, { id: "cap-002", start: 4.5, end: 5.4, words: words(4.5, ["at", "night"]) }];
+  const story = { format: { width: 1080, height: 1920 }, brand, scenes: [
+    { id: "day", module: "world", start: 0, end: 4, params: { kind: "city-street", time: "day" } },
+    { id: "night", module: "world", start: 4, end: 8, params: { kind: "skyline", time: "night" } }] };
+  const plan = captionPlan(chunks, { type: "captions", preset: "quiet-accent" }, { brand, format: story.format, story });
+  const line = (id) => plan.nodes.find((node) => node.id === id);
+  // By day the preset's dark text holds, with a light halo; at night it switches to the brand's light colour, with a dark halo.
+  assert.match(line("cap-001").cls, /lc-cap-on-day/);
+  assert.match(line("cap-002").cls, /lc-cap-on-night/);
+  assert.match(plan.css, /\.lc-cap-on-day \.lc-cap-w \{ color: #1e282b; text-shadow: 0 0 6px rgba\(255,255,255/);
+  assert.match(plan.css, /\.lc-cap-on-night \.lc-cap-w \{ color: #fbfeff; text-shadow: 0 0 6px rgba\(0,0,0/);
+  // A story with no worlds draws exactly as before.
+  const plain = captionPlan(chunks, { type: "captions", preset: "quiet-accent" }, { brand, format: story.format, story: { ...story, scenes: [] } });
+  assert.doesNotMatch(plain.css, /lc-cap-on-/);
+});
