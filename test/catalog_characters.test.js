@@ -211,3 +211,45 @@ test('HyperFrames: GSAP owns the rig transforms (no CSS transform for it to over
   assert.deepEqual(transformProps('scale(0.6)'), {x: 0, y: 0, rotation: 0, scaleX: 0.6, scaleY: 0.6});
   assert.throws(() => transformProps('skewX(4deg)'), /unsupported transform/);
 });
+
+test('cast-scene and character-cameo take the light of the world they play over', async () => {
+  const {normalizeLight, DEFAULT_LIGHT} = await import('../kit/core/characters/light.mjs');
+  const {worldLight} = await import('../kit/core/worlds/index.mjs');
+  const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'night'}};
+  const over = {...desk(), track: 1};
+  const s = story([world, over]);
+  const lit = resolveModule(over, s).content.actors[0].light;
+  assert.deepEqual(lit, normalizeLight(worldLight('city-street', 'night')));
+  assert.notEqual(lit.dir, DEFAULT_LIGHT.dir);
+  // The world's time comes from story.world when the world scene leaves it out.
+  const dusk = story([{...world, params: {kind: 'park'}}, over], {world: {kind: 'office', time: 'dusk'}});
+  assert.deepEqual(resolveModule(over, dusk).content.actors[0].light, normalizeLight(worldLight('park', 'dusk')));
+  // params.light wins; without a world beneath (same track, or none) the default key stays.
+  assert.equal(resolveModule({...over, params: {...over.params, light: {dir: 10}}}, s).content.actors[0].light.dir, 10);
+  assert.equal(resolve(desk()).content.actors[0].light.dir, DEFAULT_LIGHT.dir);
+  const cameo = {id: 'cameo', module: 'character-cameo', track: 1, start: 1, end: 5, params: {character: 'maya'}};
+  assert.deepEqual(resolveModule(cameo, story([world, cameo])).content.actors[0].light, lit);
+});
+
+test('characters in a world take half its time-of-day grade; outside one they keep their colours', async () => {
+  const {worldGrade} = await import('../kit/core/worlds/index.mjs');
+  const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'night'}};
+  const over = {...desk(), track: 1};
+  const plain = resolve(desk()).content.actors[0].colors;
+  const night = resolveModule(over, story([world, over])).content.actors[0].colors;
+  const g = worldGrade('city-street', 'night', 0.5);
+  for (const key of Object.keys(plain)) assert.equal(night[key], g(plain[key]), key);
+  assert.notEqual(night.top, plain.top);
+  // Day barely moves them.
+  const day = resolveModule(over, story([{...world, params: {kind: 'city-street', time: 'day'}}, over])).content.actors[0].colors;
+  assert.ok(Math.abs(parseInt(day.top.slice(1, 3), 16) - parseInt(plain.top.slice(1, 3), 16)) < 12);
+});
+
+test('params.world names the world a cast stands in, without a world scene beneath', async () => {
+  const {normalizeLight} = await import('../kit/core/characters/light.mjs');
+  const {worldLight} = await import('../kit/core/worlds/index.mjs');
+  const actor = resolve(desk({world: {kind: 'alley', time: 'dusk'}})).content.actors[0];
+  assert.deepEqual(actor.light, normalizeLight(worldLight('alley', 'dusk')));
+  assert.notDeepEqual(actor.colors, resolve(desk()).content.actors[0].colors);
+  assert.throws(() => resolve(desk({world: {kind: 'moon'}})), /params\.world\.kind/);
+});

@@ -63,6 +63,31 @@ function settings(b, ctx) {
   return {kind, time, props, detail};
 }
 
+/**
+ * The world a scene on a higher track plays over: the track-0 `world` scene
+ * that overlaps its window the longest, with that scene's settings (params
+ * over story.world). → {scene, kind, time, props, detail} | null. Character
+ * scenes read it to take the world's light and stand in it.
+ */
+export function worldBeneath(story, scene) {
+  if (!scene || (scene.track ?? 0) === 0 || !Array.isArray(story?.scenes)) return null;
+  const start = Number(scene.start), end = Number(scene.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  const base = isObject(story.world) ? story.world : {};
+  let best = null, bestOverlap = 0;
+  for (const other of story.scenes) {
+    if (other?.module !== 'world' || (other.track ?? 0) !== 0) continue;
+    const overlap = Math.min(end, Number(other.end)) - Math.max(start, Number(other.start));
+    if (overlap > bestOverlap + 1e-6) { best = other; bestOverlap = overlap; }
+  }
+  if (!best) return null;
+  const p = isObject(best.params) ? best.params : {};
+  const kind = p.kind ?? base.kind;
+  const time = p.time ?? base.time ?? 'day';
+  if (!WORLD_KINDS.includes(kind) || !WORLD_TIMES.includes(time)) return null;
+  return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null};
+}
+
 function cameraOf(b) {
   const {check} = b;
   const raw = b.params.camera;

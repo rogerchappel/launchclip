@@ -2066,8 +2066,13 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   light comes from: 0 right, 90 above, 180 left; default 125, a soft warm key
   high on the left; or a world's vector `{x, y}` from the light toward the
   subject, as `worldLight` returns it). Shaded styles follow it. `cast-scene` and
-  `character-cameo` take `params.light`, else the story's or world's
-  `ctx.light`; each actor carries the resolved light as `actors[i].light`.
+  `character-cameo` take `params.light`, else the light of the world the cast
+  stands in, else the story's `ctx.light`; each actor carries the resolved
+  light as `actors[i].light`. The world the cast stands in is `params.world`
+  (`{kind, time?}`), else the track-0 `world` scene the scene plays over the
+  longest (`worldBeneath` in catalog-world.mjs, passed as `ctx.beneath`).
+  In a world, characters also take half its time-of-day grade
+  (`worldGrade(kind, time, 0.5)`), so a night street darkens and cools them.
 - `view.mjs`: GSAP animates SVG transforms through the transform attribute
   with its own origin rules, so every joint is a zero-size HTML div (an outer
   div places the pivot, an inner div with the joint's id carries the CSS
