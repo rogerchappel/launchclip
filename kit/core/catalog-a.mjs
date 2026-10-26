@@ -436,6 +436,51 @@ function standardExit(anim, base, st, exit = .3) {
   return {exitStart, exitTo: {opacity: 0, y: round(-40 * st.k)}, exitEase: 'power2.in'};
 }
 
+// ---------------------------------------------------------------------------
+// Title variants (hook-title, cta): the same nodes, laid out four ways, so a
+// seeded style's opening and closing cards differ from seed to seed.
+//   centered  the original look: centred on the centre of mass, a soft glow
+//   flush     left-aligned, a solid accent bar down the block's left edge
+//   boxed     centred in a panel with an accent border, no glow
+//   low       left-aligned, anchored to the bottom of the safe zone, no glow
+// params.variant wins, then the style's variants[module], then centered.
+export const TITLE_VARIANTS = Object.freeze(['centered', 'flush', 'boxed', 'low']);
+
+function titleVariant(module, params, ctx, k) {
+  const style = isObject(ctx?.variants) ? ctx.variants[module] : undefined;
+  const name = params.variant ?? style ?? TITLE_VARIANTS[0];
+  if (!TITLE_VARIANTS.includes(name)) throw new Error(`${params.variant !== undefined ? 'params.variant' : `style variants.${module}`} must be one of ${TITLE_VARIANTS.join(', ')} (the ${module} variants); got ${JSON.stringify(name)}`);
+  // pad: inner padding on every side (boxed) or on the left (flush, for the bar).
+  return {name, align: name === 'flush' || name === 'low' ? 'left' : 'center', pad: name === 'boxed' ? Math.round(64 * k) : name === 'flush' ? Math.round(56 * k) : 0,
+    glow: name === 'centered', low: name === 'low'};
+}
+
+/** The variant's block: placed low or by placeBlock, its height grown by the boxed padding. */
+function placeVariant(st, height, rect, what, v) {
+  const tall = v.name === 'boxed' ? height + v.pad * 2 : height;
+  if (!v.low || rect) return placeBlock(st, tall, rect, what);
+  const z = st.zone;
+  if (tall > z.height + 1) throw new Error(`${what} needs ${Math.ceil(tall)} px but the safe zone is ${round(z.height)} px tall; shorten the copy`);
+  return {x: round(z.x), y: round(z.y + z.height - tall), width: round(z.width), height: round(tall)};
+}
+
+/** Root, glow and bar styles for a variant (centered keeps the originals). */
+function variantStyles(v, styles, theme, box, k) {
+  if (v.name === 'centered') return styles;
+  const out = {...styles};
+  out.root = {...styles.root, alignItems: v.align === 'center' ? 'center' : 'flex-start', textAlign: v.align};
+  const none = {position: 'absolute', left: '0', top: '0', width: '0', height: '0', background: 'none', pointerEvents: 'none'};
+  if (v.name === 'boxed') {
+    out.root = {...out.root, padding: px(v.pad), borderRadius: px(36 * k), background: mixHex(theme.emphasis, theme.bg, .12), border: `${px(5 * k)} solid ${theme.emphasis}`, boxShadow: `0 ${px(24 * k)} ${px(70 * k)} ${alpha('#000000', .35)}`};
+    out.glow = none;
+  } else if (v.name === 'flush') {
+    out.root = {...out.root, paddingLeft: px(v.pad)};
+    // The glow node becomes the bar.
+    out.glow = {position: 'absolute', left: '0', top: px(8 * k), width: px(14 * k), height: px(Math.max(0, box.height - 16 * k)), borderRadius: px(7 * k), background: theme.emphasis, pointerEvents: 'none'};
+  } else out.glow = none;
+  return out;
+}
+
 /** Words of `value` grouped so that each emphasis phrase stays one token. */
 function phraseTokens(value, phrases, path) {
   const words = splitWords(value).map(word => word.text);
@@ -462,14 +507,15 @@ function phraseTokens(value, phrases, path) {
 
 function resolveHookTitle(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
-  fields(params, 'params', ['headline', 'emphasis', 'kicker', 'kickerAt', 'eyebrow', 'color', 'align', 'rect'], ['headline']);
+  fields(params, 'params', ['headline', 'emphasis', 'kicker', 'kickerAt', 'eyebrow', 'color', 'align', 'rect', 'variant'], ['headline']);
   if (d < CATALOG_A_TIMING['hook-title'].minDuration) throw new Error(`hook-title needs a scene of at least ${CATALOG_A_TIMING['hook-title'].minDuration} s`);
   const headline = text(params.headline, 'params.headline', 90);
   const eyebrow = optional(params.eyebrow, null, value => text(value, 'params.eyebrow', 32));
   const kicker = optional(params.kicker, null, value => text(value, 'params.kicker', 18));
   if (params.kickerAt !== undefined && !kicker) throw new Error('params.kickerAt needs params.kicker');
   const kickerAt = kicker ? optional(params.kickerAt, Math.min(d * .55, d - .9), value => sceneTime(value, 'params.kickerAt', d, CATALOG_A_TIMING['hook-title'].kickerLeadOut)) : null;
-  const align = optional(params.align, 'center', value => oneOf(value, 'params.align', ['center', 'left']));
+  const variant = titleVariant('hook-title', params, ctx, Math.min(ctx.format.width, ctx.format.height) / 1080);
+  const align = optional(params.align, variant.align, value => oneOf(value, 'params.align', ['center', 'left']));
   const colorRole = optional(params.color, 'primary', value => value);
   const emphasisInput = optional(params.emphasis, [], value => {
     if (typeof value === 'string') value = [{text: value}];
@@ -491,14 +537,15 @@ function resolveHookTitle(params, ctx) {
   const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
-  const width = (rect ?? st.zone).width * .94;
+  const width = (rect ?? st.zone).width * .94 - (variant.name === 'boxed' ? variant.pad * 2 : variant.pad);
+  const inset = variant.name === 'boxed' ? variant.pad * 2 : 0;
 
   const tokens = phraseTokens(headline, emphasis.map(entry => entry.text), 'params.emphasis');
   const lineHeight = .98;
   const eyebrowSize = Math.ceil(44 * k), eyebrowGap = Math.round(30 * k), ruleGap = Math.ceil(44 * k);
   const kickerSize = Math.round(84 * k), kickerGap = Math.round(56 * k);
   const chrome = (eyebrow ? eyebrowSize * 1.2 + eyebrowGap + 6 * k + ruleGap : 0) + (kicker ? kickerGap + kickerSize * 1.36 : 0);
-  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: width, maxLines: 5, maxSize: (st.portrait ? 176 : 150) * k, minSize: 72 * k, lineHeight, maxHeight: (rect ?? st.zone).height - chrome});
+  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: width, maxLines: 5, maxSize: (st.portrait ? 176 : 150) * k, minSize: 72 * k, lineHeight, maxHeight: (rect ?? st.zone).height - chrome - inset});
   if (!fit) throw new Error('params.headline is too long to set at 72 px or more in five lines; shorten it');
   if (eyebrow && textWidth(eyebrow.toUpperCase(), eyebrowSize, fk.meta, .16) > width) throw new Error('params.eyebrow is too wide for the safe zone; shorten it');
   // Rebuild the lines from tokens (balance worked on upper-cased strings).
@@ -506,15 +553,17 @@ function resolveHookTitle(params, ctx) {
   const lines = fit.lines.map(line => line.map(() => tokens[cursor++]));
   const size = fit.size;
   const blockHeight = chrome + lines.length * size * lineHeight;
-  const box = placeBlock(st, blockHeight, rect, 'hook-title');
+  const box = placeVariant(st, blockHeight, rect, 'hook-title', variant);
 
   const anim = animator();
   const s = base.start, end = base.end;
   const enterEnd = s + Math.min(1.3, d * .45);
   anim.add('root', s, enterEnd - s, 'expo.out', {scale: 1.035}, {scale: 1});
   const exit = standardExit(anim, base, st);
-  anim.add('glow', s, Math.min(1.6, d * .4), 'sine.inOut', {opacity: .45}, {opacity: .9});
-  anim.add('glow', s + Math.min(1.6, d * .4), Math.max(.1, exit.exitStart - s - Math.min(1.6, d * .4)), 'sine.inOut', {opacity: .9}, {opacity: .6});
+  if (variant.glow) {
+    anim.add('glow', s, Math.min(1.6, d * .4), 'sine.inOut', {opacity: .45}, {opacity: .9});
+    anim.add('glow', s + Math.min(1.6, d * .4), Math.max(.1, exit.exitStart - s - Math.min(1.6, d * .4)), 'sine.inOut', {opacity: .9}, {opacity: .6});
+  } else if (variant.name === 'flush') anim.add('glow', s, .5, 'power2.out', {opacity: 0}, {opacity: 1});
   if (eyebrow) {
     anim.add('eyebrow', s + .1, .5, 'power2.out', {opacity: 0, y: 16 * k}, {opacity: 1, y: 0});
     anim.add('rule', s + .05, .6, 'power3.inOut', {scaleX: 0}, {scaleX: 1});
@@ -569,8 +618,9 @@ function resolveHookTitle(params, ctx) {
   }
   return assemble({module: 'hook-title', ctx, base, st, rect: box, theme, contrast, fonts, hidesCaptions: true,
     motion: {enterEnd, enterFrom: {opacity: 1, scale: 1.035}, enterEase: 'expo.out', ...exit},
-    content: {headline, eyebrow, kicker, kickerTime: kicker ? T(s + kickerAt) : null, align, size, lineHeight, lines: lineModels, emphasis: emphasisModels, keyTextPx: [size, ...(kicker ? [kickerSize] : []), ...(eyebrow ? [eyebrowSize] : [])]},
-    styles, anim, events});
+    styles: variantStyles(variant, styles, theme, box, k),
+    content: {...(variant.name === 'centered' ? {} : {variant: variant.name}), headline, eyebrow, kicker, kickerTime: kicker ? T(s + kickerAt) : null, align, size, lineHeight, lines: lineModels, emphasis: emphasisModels, keyTextPx: [size, ...(kicker ? [kickerSize] : []), ...(eyebrow ? [eyebrowSize] : [])]},
+    anim, events});
 }
 
 // ---------------------------------------------------------------------------
@@ -1038,7 +1088,7 @@ export const CTA_ICONS = Object.freeze({
 
 function resolveCta(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
-  fields(params, 'params', ['action', 'emphasis', 'detail', 'handle', 'icon', 'loop', 'color', 'rect'], ['action']);
+  fields(params, 'params', ['action', 'emphasis', 'detail', 'handle', 'icon', 'loop', 'color', 'rect', 'variant'], ['action']);
   if (d < CATALOG_A_TIMING.cta.minDuration) throw new Error(`cta needs a scene of at least ${CATALOG_A_TIMING.cta.minDuration} s`);
   const action = text(params.action, 'params.action', 40);
   const detail = optional(params.detail, null, value => text(value, 'params.detail', CTA_DETAIL_MAX));
@@ -1058,7 +1108,10 @@ function resolveCta(params, ctx) {
   const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
-  const area = rect ?? st.zone;
+  const variant = titleVariant('cta', params, ctx, k);
+  const zone = rect ?? st.zone;
+  // The text area inside the variant's padding.
+  const area = variant.name === 'centered' ? zone : {...zone, width: zone.width - (variant.name === 'boxed' ? variant.pad * 2 : variant.pad), height: zone.height - (variant.name === 'boxed' ? variant.pad * 2 : 0)};
   // Handle pill: 50 px type (at 1080), shrinking in 2 px steps to the 44 px
   // key-text floor before the handle is rejected; padding, icon and gap shrink
   // with it. The detail line keeps 52 px when its words fit two lines, else
@@ -1097,7 +1150,7 @@ function resolveCta(params, ctx) {
   const words = [];
   const lines = fit.lines.map((line, index) => ({index, words: line.map(() => { const token = tokens[cursor++]; const word = {index: words.length, text: token.text, emphasis: token.emphasis !== null}; words.push(word); return word; })}));
   const size = fit.size;
-  const box = placeBlock(st, lines.length * size * lineHeight + chrome, rect, 'cta');
+  const box = placeVariant(st, lines.length * size * lineHeight + chrome, rect, 'cta', variant);
 
   const anim = animator();
   const s = base.start, end = base.end;
@@ -1111,7 +1164,8 @@ function resolveCta(params, ctx) {
   for (const word of words) anim.add(`word-${word.index}`, s + .05 + word.index * .06, .55, 'expo.out', {opacity: 0, y: size * .5, blur: 10 * k}, {opacity: 1, y: 0, blur: 0});
   const actionSettle = s + .05 + (words.length - 1) * .06 + .55;
   if (detail) anim.add('detail', s + .4, .5, 'power3.out', {opacity: 0, y: 20 * k}, {opacity: 1, y: 0});
-  anim.add('glow', s, .8, 'power2.out', {opacity: 0}, {opacity: .8});
+  if (variant.glow) anim.add('glow', s, .8, 'power2.out', {opacity: 0}, {opacity: .8});
+  else if (variant.name === 'flush') anim.add('glow', s, .5, 'power2.out', {opacity: 0}, {opacity: 1});
   const events = [{id: `${base.id}-action`, time: s, role: 'action', cue: 'whoosh'}];
   const pulses = [];
   let pillTime = null;
@@ -1155,15 +1209,17 @@ function resolveCta(params, ctx) {
   if (detailFit) detailFit.lines.forEach((_, index) => { styles[`detail-line-${index}`] = {display: 'block'}; });
   return assemble({module: 'cta', ctx, base, st, rect: box, theme, contrast, fonts, hidesCaptions: true,
     motion: {enterEnd: handle ? Math.max(actionSettle, pillTime + .5) : actionSettle, enterFrom: {opacity: 0, y: round(size * .5)}, enterEase: 'expo.out', ...exit},
-    content: {action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
+    styles: variantStyles(variant, styles, theme, box, k),
+    content: {...(variant.name === 'centered' ? {} : {variant: variant.name}), action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
       pillTime: pillTime === null ? null : T(pillTime), pulses, keyTextPx: [size, ...(detail ? [detailSize] : []), ...(handle ? [handleSize] : [])]},
-    styles, anim, events});
+    anim, events});
 }
 
 // ---------------------------------------------------------------------------
 // Registry
 
 const COLOR = {type: 'string', enum: ['primary', 'accent'], default: 'primary', description: 'brand colour role for emphasis'};
+const VARIANT = {type: 'string', enum: TITLE_VARIANTS, optional: true, description: 'the layout: centered (glow), flush (left, accent bar), boxed (bordered panel) or low (left, bottom of the frame); default: the style\'s variants[module], else centered; usually leave it to the style'};
 const RECT = {type: 'object', optional: true, description: '{x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass'};
 
 export const MODULES = {
@@ -1175,8 +1231,9 @@ export const MODULES = {
       kicker: {type: 'string', max: 18, description: 'short sticker line that pops in, e.g. "Why?"'},
       kickerAt: {type: 'seconds', description: 'scene seconds for the kicker pop'},
       eyebrow: {type: 'string', max: 32, description: 'small mono label above the headline'},
-      color: COLOR, align: {type: 'string', enum: ['center', 'left'], default: 'center'}, rect: RECT
+      color: COLOR, align: {type: 'string', enum: ['center', 'left'], default: 'center (left for flush and low)'}, rect: RECT, variant: VARIANT
     },
+    variants: TITLE_VARIANTS,
     events: ['title', 'emphasis-<n>', 'kicker'],
     timing: {minDuration: CATALOG_A_TIMING['hook-title'].minDuration, leadIn: 0, leadOut: CATALOG_A_TIMING['hook-title'].leadOut, gaps: [],
       rules: [`emphasis[].at ≤ scene − ${CATALOG_A_TIMING['hook-title'].leadOut} s; kickerAt ≤ scene − ${CATALOG_A_TIMING['hook-title'].kickerLeadOut} s`]},
@@ -1235,8 +1292,9 @@ export const MODULES = {
       emphasis: {type: 'string', max: 30, description: 'whole words of the action to colour'},
       detail: {type: 'string', max: 80, description: 'two lines at most; shrinks to the 44 px floor, and a long URL may wrap after "/"'}, handle: {type: 'string', max: 64, description: '@handle or URL, no spaces (fits github.com/<owner>/<repo>; the pill shrinks to the 44 px floor before failing)'},
       icon: {type: 'string', enum: ['arrow', 'plus', 'loop', 'bell', 'none'], default: 'arrow (loop when loop is true)'},
-      loop: {type: 'boolean', default: false}, color: COLOR, rect: RECT
+      loop: {type: 'boolean', default: false}, color: COLOR, rect: RECT, variant: VARIANT
     },
+    variants: TITLE_VARIANTS,
     events: ['action', 'handle', 'loop'],
     timing: {minDuration: CATALOG_A_TIMING.cta.minDuration, leadIn: null, leadOut: null, gaps: [], rules: ['no timed params; the handle pops at 0.6 s']},
     resolve: resolveCta

@@ -651,3 +651,37 @@ test("HyperFrames: GSAP owns animated transforms (none in the stylesheet) and an
   assert.ok(exits.length > 0, "the sample exits at its clip end");
   for (const a of exits) assert.match(motion, new RegExp(`tl\\.set\\("#${a.node === "root" ? model.id : `${model.id}-${a.node}`}", \\{[^}]*"force3D":false\\}, ${end}\\);`));
 });
+
+test("hook-title and cta have four layout variants that seeds pick from", async () => {
+  const { TITLE_VARIANTS } = await import("../kit/core/catalog-a.mjs");
+  const { moduleVariants } = await import("../kit/core/modules.mjs");
+  const { SEED_MODULE_VARIANTS } = await import("../kit/core/style-seed.mjs");
+  assert.deepEqual(TITLE_VARIANTS, ["centered", "flush", "boxed", "low"]);
+  for (const id of ["hook-title", "cta"]) {
+    assert.deepEqual(moduleVariants()[id], TITLE_VARIANTS);
+    assert.deepEqual([...SEED_MODULE_VARIANTS[id]], TITLE_VARIANTS);
+  }
+  const brand = { colors: { bg: "#101218", primary: "#fdb022", accent: "#46d4ff", ink: "#101218", paper: "#f2eee6" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } };
+  const samples = { "hook-title": { headline: "Demos that rebuild themselves.", emphasis: "rebuild", eyebrow: "Launch week", kicker: "Meet Pulseboard" }, cta: { action: "Try Pulseboard", detail: "Free for open source", handle: "pulseboard.dev" } };
+  for (const format of [{ width: 1080, height: 1920, fps: 30 }, { width: 1920, height: 1080, fps: 30 }]) {
+    for (const [id, params] of Object.entries(samples)) {
+      const resolve = (extra = {}, variants = null) => MODULES[id].resolve({ ...params, ...extra }, { id: "s", start: 0, duration: 3, format, brand, variants });
+      const centered = resolve();
+      assert.equal(centered.content.variant, undefined);
+      assert.deepEqual(resolve({ variant: "centered" }), centered);
+      const flush = resolve({ variant: "flush" }), boxed = resolve({ variant: "boxed" }), low = resolve({ variant: "low" });
+      assert.equal(flush.styles.root.textAlign, "left");
+      assert.equal(flush.styles.glow.background, brand.colors.primary);
+      assert.match(boxed.styles.root.border, /solid #fdb022/);
+      assert.equal(boxed.styles.glow.background, "none");
+      // low sits on the bottom of the safe zone.
+      assert.ok(Math.abs(low.rect.y + low.rect.height - (low.safeZone.y + low.safeZone.height)) < 1.5, `${id} low`);
+      assert.ok(low.rect.y > centered.rect.y);
+      // The style's choice applies; params.variant wins over it; unknown names throw.
+      assert.equal(resolve({}, { [id]: "boxed" }).content.variant, "boxed");
+      assert.equal(resolve({ variant: "low" }, { [id]: "boxed" }).content.variant, "low");
+      assert.throws(() => resolve({ variant: "wide" }), /params\.variant must be one of centered, flush, boxed, low/);
+      assert.throws(() => resolve({}, { [id]: "wide" }), /style variants\.[a-z-]+ must be one of/);
+    }
+  }
+});
