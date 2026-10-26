@@ -1,0 +1,20 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Character parity: desk-laptop furniture standing in the story's world (a cafe at dusk, outlined, portrait)",
+    "lane": "motion",
+    "format": {"width": 1080, "height": 1920, "platform": "youtube-shorts", "fps": 30, "duration": 4},
+    "brand": {
+      "colors": {"bg": "#14122b", "primary": "#6d5dfc", "accent": "#ffb547", "ink": "#14122b", "paper": "#f6f3ee"},
+      "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+    },
+    "base": null,
+    "world": {"kind": "cafe", "time": "dusk"},
+    "cast": {"style": "outlined", "characters": [{"id": "maya"}, {"id": "theo"}]},
+    "scenes": [
+      {"id": "desk", "module": "cast-scene", "start": 0, "end": 4, "params": {"set": "desk-laptop", "cast": [{"id": "maya", "pose": "type", "expression": "focused", "cues": [{"at": 2, "pose": "cheer", "expression": "delighted"}]}, {"id": "theo", "pose": "point", "expression": "happy"}]}}
+    ]
+  },
+  "sceneId": "desk",
+  "threshold": {"ssim": 0.97}
+}
