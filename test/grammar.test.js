@@ -4,6 +4,7 @@ import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { TEXT_FADE } from "../kit/core/modules.mjs";
 import gsap from "gsap";
 import {
   calmEase, DEFAULT_GRAMMAR, easeOvershoot, easeRole, GRAMMAR_NAMES, GRAMMARS, grammarDuration, grammarEase, grammarErrors, grammarStagger,
@@ -205,7 +206,9 @@ test("grammars reach module enter/exit, pops, staggers and transitions", async (
     const chart = (grammar) => model(withGrammar(grammar), "s2");
     assert.equal(chart("editorial").motion.enterEase, "power3.out");
     assert.equal(chart("smooth").motion.enterEase, "power2.out");
-    assert.ok(chart("smooth").motion.enterDuration > chart("editorial").motion.enterDuration);
+    // A slow grammar's text fade is capped (docs/DIRECTION_GUARDRAILS.md §4): never slower than TEXT_FADE.max.
+    assert.ok(chart("smooth").motion.enterDuration >= chart("editorial").motion.enterDuration);
+    assert.ok(chart("smooth").motion.enterDuration <= TEXT_FADE.max && chart("cinematic").motion.enterDuration <= TEXT_FADE.max);
     assert.ok(chart("snappy").motion.exitDuration < chart("editorial").motion.exitDuration);
     // Transitions: the push into s2 and the morph follow the grammar.
     const tweens = (grammar) => sceneWindows(withGrammar(grammar)).scenes.find((entry) => entry.id === "s2").tweens.filter((tw) => tw.role === "in");
@@ -213,7 +216,8 @@ test("grammars reach module enter/exit, pops, staggers and transitions", async (
     assert.deepEqual(tweens("smooth").map((tw) => tw.ease), ["sine.inOut"]);
     assert.deepEqual(tweens("cinematic").map((tw) => tw.ease), ["power2.inOut"]);
     assert.equal(chart("cinematic").motion.enterEase, "power2.inOut");
-    assert.equal(chart("cinematic").motion.enterDuration, 0.7);
+    // Cinematic's 0.7 s panel entrance is capped for text (docs/DIRECTION_GUARDRAILS.md §4).
+    assert.equal(chart("cinematic").motion.enterDuration, TEXT_FADE.max);
     assert.deepEqual(transitionTweens({ type: "fade", dur: 0.4 }, { width: 1080, height: 1920, grammar: resolveGrammar({ motion: { grammar: "playful" } }) }).in.map((tw) => tw.ease), ["power2.inOut"], "a fade never overshoots");
     // Every grammar resolves every golden scene (no new param errors).
     for (const id of ["cooling", "minimal", "promo-16x9", "data-story-9x16", "footage"]) {
