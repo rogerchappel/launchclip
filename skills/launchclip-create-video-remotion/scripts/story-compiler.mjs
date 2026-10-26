@@ -243,6 +243,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
+    // A module whose own layer is a timed clip on its track and which also
+    // hoists a video (backdrop-swap, app-stage…) gives the video its own track,
+    // or the two clips overlap on one track.
+    const own = `data-track-index="${model.track}"`;
+    if (media.html.includes(own)) media.elements = media.elements.map((element) => (element.includes(own) ? element.replace(own, `data-track-index="${allocate(entry.start, entry.renderEnd)}"`) : element));
     for (const element of media.elements) hoisted.push(withZIndex(element, sceneZ + 5));
     // An emitter's `overlay` annotates its root media (product-demo), so it is
     // hoisted too, one z-index above the video.
