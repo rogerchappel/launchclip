@@ -39,13 +39,15 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // cooling, promo-16x9, explainer-9x16 and footage were re-pinned when GSAP
 // took over every catalogue's moved transforms from the inline CSS: renders
 // of the old and new HTML differ by no more than two renders of the old one.
+// cooling and footage were re-pinned by #316: a caption line spoken into a
+// hidden range (a scene that hides captions) now ends at the range start.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "13485746cdd3903f2e771888bb99c14ec960fb4830536922b65e2dce40dd6bc0",
+  cooling: "8bc7859b16b4274f74e7f476289344e6f6dc7d5eefdc2b51b0664ffc480b551f",
   minimal: "79747aab75134d50fa6c9dfe3f7152a13ab2031a8e2fa067ef32d61bdee1dc62",
   "promo-16x9": "671e18ec5bdbf3701f9cece5e8c92c73365940e7911a21f3f5aafbea0c4063d1",
   "explainer-9x16": "4f3e0efaa1828eeb7731b15e355acee1385dd26038cef0b6d0c5f7962052e936",
   "data-story-9x16": "728ce9ee594389a6e49f6574f094f84b17b5b94947e4d2d58cc44254d504f21f",
-  footage: "fcec4922e423409d87754e482de20ac463f1989cba99716ec9a6c3428dea27fb"
+  footage: "547417065ab1483124e958ec9d24bcdada47a80a94a11c6f3e2b37e168488652"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).
