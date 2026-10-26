@@ -306,6 +306,17 @@ function castStage(b, ctx, setName) {
   return {backdrop, world, draw: beneath ? null : {kind: world.kind, time: world.time, props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
 }
 
+/**
+ * The ground line the set stands on, in frame px: the world's own ground. A
+ * world plate beneath in world mode is drawn with a bleed (ctx.bleed) on a
+ * larger canvas, so its ground is measured there and shifted back.
+ */
+function worldFloor(stage, ctx, canvas) {
+  const bleed = !stage.draw && ctx.bleed ? {x: ctx.bleed.x ?? 0, y: ctx.bleed.y ?? 0} : {x: 0, y: 0};
+  const drawn = {width: canvas.width + 2 * bleed.x, height: canvas.height + 2 * bleed.y};
+  return worldAnchors(stage.world.kind, {canvas: drawn}).ground.y - bleed.y;
+}
+
 const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
 
 function resolveCastScene(params, ctx) {
@@ -329,7 +340,7 @@ function resolveCastScene(params, ctx) {
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
-    ...(inWorldSet ? {floor: worldAnchors(stage.world.kind, {canvas}).ground.y, grade: worldGrade(stage.world.kind, stage.world.time)} : {})});
+    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time)} : {})});
   const slotOf = castSlots(b, p.cast, cast);
   const world = stage.world;
   const light = sceneLight(b, p.light, ctx, world);

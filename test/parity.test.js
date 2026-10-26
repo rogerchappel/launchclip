@@ -33,7 +33,9 @@ const STORY_PARITY = Object.freeze([
   // World mode: a cast-scene on track 1 over a track-0 world plate, then a pan.
   {id: 'world-cast-16x9', times: [2.2, 6.5]},
   // Captions over worlds: dark text with a light halo by day, the brand's light colour at night.
-  {id: 'world-captions-9x16', times: [2.2, 5.4]}
+  {id: 'world-captions-9x16', times: [2.2, 5.4]},
+  // World camera: world plates bleed past their frame (at rest with drift, mid-pan, at rest).
+  {id: 'world-travel-9x16', times: [1.5, 3.5, 5.5]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {
