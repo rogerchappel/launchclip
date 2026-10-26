@@ -92,6 +92,7 @@ export function worldBeneath(story, scene) {
   const bestEnd = Number(best.end);
   const next = story.scenes.find(other => other !== best && (other?.track ?? 0) === 0 && Math.abs(Number(other.start) - bestEnd) < 1e-3);
   return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null,
+    camera: worldCameraOf(p.camera),
     start: Number(best.start), end: bestEnd, in: isObject(best.in) ? best.in : null, nextIn: next ? (isObject(next.in) ? next.in : {type: 'cut'}) : null};
 }
 
@@ -107,6 +108,19 @@ export function castStandsIn(story, scene) {
   return story.scenes.some(other => other?.module === 'cast-scene' && (other.track ?? 0) > 0
     && other.params?.backdrop !== 'room' && SET_INFO[other.params?.set]?.world && other.params?.world === undefined
     && worldBeneath(story, other)?.scene === scene.id);
+}
+
+/**
+ * A world scene's params.camera read leniently (no errors: the world module
+ * itself validates it): {move, amount}, defaulting to a 0.5 drift as the
+ * module does. Scenes anchored to a plate (a cast set) read it to move with
+ * the plate's front layer.
+ */
+export function worldCameraOf(raw) {
+  const value = typeof raw === 'string' ? {move: raw} : isObject(raw) ? raw : {};
+  const move = WORLD_CAMERA_MOVES.includes(value.move) ? value.move : 'drift';
+  const amount = Number.isFinite(value.amount) ? Math.min(1, Math.max(0, value.amount)) : 0.5;
+  return raw === undefined ? {move: 'drift', amount: 0.5} : {move, amount};
 }
 
 function cameraOf(b) {

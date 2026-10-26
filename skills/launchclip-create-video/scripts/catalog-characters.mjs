@@ -33,7 +33,8 @@ import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
-import {withoutForeground} from './catalog-world.mjs';
+import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
+import {OVERSCAN} from './worlds/index.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
@@ -320,6 +321,22 @@ function worldFloor(stage, ctx, canvas) {
   return worldAnchors(stage.world.kind, {canvas: drawn}).ground.y - bleed.y;
 }
 
+/**
+ * A set standing in the world plate beneath is anchored to it
+ * (kit/core/physics.mjs): its furniture and the cast on it move only with the
+ * plate's in-scene camera, by the same x and scale as the world's front layer
+ * frame for frame, so a desk never slides across the floor it stands on.
+ * → {plate, start, end, move, from, to} | null (no plate beneath, or the set
+ * draws its own room or world).
+ */
+function plateFollow(stage, ctx, canvas) {
+  const w = ctx.beneath;
+  if (stage.backdrop !== 'world' || stage.draw || !w?.camera) return null;
+  const bleedX = ctx.bleed?.x ?? 0;
+  const {from, to} = worldCameraStates(w.camera, {overscan: Math.round((canvas.width + 2 * bleedX) * OVERSCAN)}).front;
+  return {plate: w.scene, start: w.start, end: Number.isFinite(w.renderEnd) ? w.renderEnd : w.end, move: w.camera.move, from, to};
+}
+
 const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
 
 function resolveCastScene(params, ctx) {
@@ -361,14 +378,18 @@ function resolveCastScene(params, ctx) {
   rect.width = r2(Math.min(canvas.width, Math.max(...actors.map(a => a.x)) + 220 * actors[0].scale) - rect.x);
   rect.height = r2(Math.min(canvas.height, layout.floor) - rect.y);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
+  const content = {...castPassage(b, ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
-  model.layout = {...model.layout, rect, role: 'media', minTextPx: null};
+  // Anchored to a plate, the set never takes the ambient hold drift.
+  model.layout = {...model.layout, rect, role: 'media', minTextPx: null, ...(content.follow ? {drift: false} : {})};
   model.minTextPx = null;
   return model;
 }
+
+// The wrapper an anchored set moves on (content.follow), centred like the world's layers.
+const camWrap = (model, id, kids) => (model.content.follow ? [el('div', id, abs(0, 0, model.canvas.width, model.canvas.height, {transformOrigin: '50% 50%'}), kids)] : kids);
 
 function castSceneView(model) {
   const {id, canvas} = model;
@@ -384,11 +405,11 @@ function castSceneView(model) {
   const screen = c.media ? mediaNode(id, r, c.media, {origin: {x: r.x + r.width / 2, y: r.y + r.height / 2}}) : null;
   // An image screen stays inside the scene's one tree (both renderers nest it
   // the same way); only a video is split out, for HyperFrames to hoist.
-  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front]), media: null, overlay: null};
+  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), camWrap(model, `${id}-cam`, [...world, back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front])), media: null, overlay: null};
   return {
-    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back]),
+    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), camWrap(model, `${id}-cam`, [...world, back])),
     media: screen,
-    overlay: el('div', `${id}-overlay`, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', pointerEvents: 'none'}), [...actors, front])
+    overlay: el('div', `${id}-overlay`, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', pointerEvents: 'none'}), camWrap(model, `${id}-overlay-cam`, [...actors, front]))
   };
 }
 
@@ -396,7 +417,21 @@ function castSceneTimeline(model, ops) {
   const ids = [model.id];
   if (model.content.media?.kind === 'video') ids.push(`${model.id}-media`, `${model.id}-overlay`);
   rootFade(model, ops, ids);
+  followOps(model, ops);
   actorsOps(model, ops);
+}
+
+// An anchored set's camera: the plate's front-layer move, with the world
+// module's own timing (worldTimeline), so the two never part.
+function followOps(model, ops) {
+  const f = model.content.follow;
+  if (!f) return;
+  const a = {x: f.from.x, scaleX: f.from.scale, scaleY: f.from.scale}, z = {x: f.to.x, scaleX: f.to.scale, scaleY: f.to.scale};
+  const targets = [`${model.id}-cam`, ...(model.content.media?.kind === 'video' ? [`${model.id}-overlay-cam`] : [])];
+  for (const target of targets) {
+    set(ops, target, f.start, a);
+    if (f.move !== 'still') tw(ops, target, f.start, rt(f.end - f.start), 'sine.inOut', a, z);
+  }
 }
 
 // ---------------------------------------------------------------------------
