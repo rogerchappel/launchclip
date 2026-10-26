@@ -57,6 +57,14 @@ test('layout-check fails an overlay on the head outside any matted range', async
   assert.equal(report.status, 'failed');
 });
 
+test('an overlay on top of a full-frame insert does not cover the face', async (t) => {
+  const {dir, story} = await unmatted(t);
+  story.scenes.push({id: 'cover', module: 'concept-card', insert: true, track: 0, start: 2.5, end: 6, params: {text: 'Insert'}});
+  await writeFile(join(dir, 'storyboard.json'), JSON.stringify(story, null, 2));
+  const report = await checkLayoutProject(dir);
+  assert.deepEqual(report.findings.filter((finding) => finding.rule === 'subject-face'), [], JSON.stringify(report.findings));
+});
+
 test('without the track the same overlay is not seen', async (t) => {
   const {dir} = await unmatted(t, {track: false});
   const report = await checkLayoutProject(dir);
