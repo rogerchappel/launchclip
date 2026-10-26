@@ -27,6 +27,7 @@ import {WORLD_KINDS, WORLD_TIMES, DETAIL_LEVELS, PROP_IDS, renderWorld} from './
 import {propEntry} from './worlds/props.mjs';
 import {worldLayerNodes, WORLD_LAYERS} from './worlds/view.mjs';
 import {SCRIM_SIDES, scrimFor} from './worlds/readable.mjs';
+import {SET_INFO} from './characters/sets.mjs';
 
 export const WORLD_CAMERA_MOVES = Object.freeze(['still', 'drift', 'pan-left', 'pan-right', 'push', 'pull']);
 // Layer depths, from the world camera's parallax: back = background, front = plate.
@@ -88,6 +89,20 @@ export function worldBeneath(story, scene) {
   return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null};
 }
 
+/**
+ * Does a cast stand in this world scene: a cast-scene on a higher track over
+ * it whose set stands in the world (backdrop "world", the default over a
+ * world)? Then the cast and its furniture are the foreground, and the world
+ * leaves out its own front layer (a parked car or a desk would sit under
+ * their feet).
+ */
+export function castStandsIn(story, scene) {
+  if (!scene || scene.module !== 'world' || (scene.track ?? 0) !== 0 || !Array.isArray(story?.scenes)) return false;
+  return story.scenes.some(other => other?.module === 'cast-scene' && (other.track ?? 0) > 0
+    && other.params?.backdrop !== 'room' && SET_INFO[other.params?.set]?.world && other.params?.world === undefined
+    && worldBeneath(story, other)?.scene === scene.id);
+}
+
 function cameraOf(b) {
   const {check} = b;
   const raw = b.params.camera;
@@ -123,16 +138,17 @@ export function worldCameraStates(camera, {overscan}) {
 }
 
 function resolveWorld(params, ctx) {
-  const b = createBase('world', params, ctx, {allowed: ['kind', 'time', 'props', 'camera', 'detail', 'scrim'], required: [], hidesCaptions: false});
+  const b = createBase('world', params, ctx, {allowed: ['kind', 'time', 'props', 'camera', 'detail', 'scrim', 'foreground'], required: [], hidesCaptions: false});
   const {check, canvas, colors} = b;
   const {kind, time, props, detail} = settings(b, ctx);
+  const foreground = b.params.foreground === undefined ? !ctx.castAbove : check.bool(b.params.foreground, 'params.foreground');
   const camera = cameraOf(b);
   const scrimSide = b.params.scrim === undefined ? 'none' : (b.params.scrim === true ? 'auto' : b.params.scrim === false ? 'none' : check.oneOf(b.params.scrim, 'params.scrim', SCRIM_SIDES));
   const style = ctx.cast?.style ?? ctx.cast?.drawing_style ?? null;
   const world = renderWorld({id: b.id, kind, time, colors, canvas, style, detail, props, seed: `${kind}|${time}|${canvas.width}x${canvas.height}`});
   const scrim = scrimFor(world, {text: colors.paper, bg: colors.bg, side: scrimSide === 'none' ? 'auto' : scrimSide});
   const content = {
-    kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style,
+    kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style, foreground,
     camera, states: worldCameraStates(camera, {overscan: world.overscan}),
     light: world.light, anchors: world.anchors, quiet: world.quiet,
     // The scrim a caller can lay over the quiet area; drawn when params.scrim asks.
@@ -146,15 +162,21 @@ function resolveWorld(params, ctx) {
   model.minTextPx = null;
   // The drawing itself is rebuilt by the view from these inputs (pure), so
   // the model stays small and JSON-safe.
-  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${canvas.width}x${canvas.height}`};
+  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${canvas.width}x${canvas.height}`, foreground};
   return model;
 }
 
 /** The rendered world for a model (pure: the same model gives the same nodes). */
 export function worldOfModel(model) {
   const r = model.content.render;
-  return renderWorld({id: model.id, kind: r.kind, time: r.time, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas: model.canvas,
+  const world = renderWorld({id: model.id, kind: r.kind, time: r.time, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas: model.canvas,
     style: r.style, detail: r.detail, props: r.props, seed: r.seed});
+  return r.foreground === false ? withoutForeground(world) : world;
+}
+
+/** A world with an empty front layer (the layer stays, so the camera ops still find it). */
+export function withoutForeground(world) {
+  return {...world, layers: {...world.layers, front: []}, defs: {...world.defs, front: []}};
 }
 
 /** {front, media, overlay} element trees for a world model. */
@@ -199,7 +221,8 @@ export const MODULES = {
       props: `[id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: ${PROP_IDS.join(', ')}`,
       camera: `${WORLD_CAMERA_MOVES.join(' | ')} or {move, amount 0..1} (default drift)`,
       detail: `${DETAIL_LEVELS.join(' | ')} (default: from story.cast.style)`,
-      scrim: `${SCRIM_SIDES.join(' | ')} | true (darken the quiet area for text on top; default none)`
+      scrim: `${SCRIM_SIDES.join(' | ')} | true (darken the quiet area for text on top; default none)`,
+      foreground: 'boolean: draw the front layer (foreground furniture, parked cars); default true, false when a cast-scene stands in this world'
     },
     events: [],
     timing,
