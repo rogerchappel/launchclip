@@ -226,6 +226,9 @@ function castPassage(b, ctx) {
   const on = (a, c) => Number.isFinite(a) && Math.abs(a - c) < 1e-3;
   const dur = transition => Math.max(0.1, Number(transition?.dur) || 0.3);
   const passage = transition => (!transition || transition.type === 'cut' ? {type: 'cut'} : {type: 'fade', dur: dur(transition)});
+  // Riding a world plate in world mode (camera-world.mjs ridesPlate), the cast
+  // moves with the plate and its transition: it never fades on its own.
+  if (ctx.rides && p.enter === undefined && p.exit === undefined) return {entry: {type: 'cut'}, exit: {type: 'cut'}};
   const named = (value, path) => (value === undefined ? undefined : check.oneOf(value, path, PASSAGES) === 'cut' ? {type: 'cut'} : {type: 'fade', dur: b.motion?.enterDuration ?? 0.5});
   const entry = named(p.enter, 'params.enter') ?? (w && on(w.start, b.start) ? passage(w.in) : null);
   const exit = named(p.exit, 'params.exit') ?? (w && on(w.end, b.start + b.duration) && w.nextIn ? passage(w.nextIn) : null);

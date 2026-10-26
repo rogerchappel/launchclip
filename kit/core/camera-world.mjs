@@ -77,6 +77,43 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f; };
 const rad = (deg) => (deg * Math.PI) / 180;
 
+// Riders: in world mode a cast standing in a world plate travels with it.
+const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo']);
+const sameTime = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-3;
+
+/**
+ * The world plate a scene rides in world mode: a cast-scene or
+ * character-cameo on a higher track whose window is a track-0 `world`
+ * scene's window. It is drawn inside the camera at that plate's placement,
+ * so the camera carries it with the plate between plates instead of it
+ * fading over them. → the plate's scene id | null.
+ */
+export function ridesPlate(story, scene) {
+  if (resolveCamera(story).mode !== 'world' || !RIDER_MODULES.includes(scene?.module) || (scene.track ?? 0) === 0) return null;
+  const plate = (Array.isArray(story?.scenes) ? story.scenes : []).find((other) => other?.module === 'world' && (other.track ?? 0) === 0 && sameTime(other.start, scene.start) && sameTime(other.end, scene.end));
+  return plate?.id ?? null;
+}
+
+/**
+ * sceneWindows(story) with riders joined to their plates: a rider takes its
+ * plate's window (renderEnd, held through the next move) and transition
+ * tweens and carries `rides: <plate id>`. Both compilers place riders inside
+ * the camera at plan.placements[rides], with no overlay parallax.
+ */
+export function rideWorldPlates(story, windows) {
+  const byId = new Map(windows.scenes.map((entry) => [entry.id, entry]));
+  for (const entry of windows.scenes) {
+    const plateId = ridesPlate(story, entry.scene);
+    const plate = plateId ? byId.get(plateId) : null;
+    if (!plate) continue;
+    entry.rides = plate.id;
+    entry.start = plate.start;
+    entry.renderEnd = plate.renderEnd;
+    entry.tweens = plate.tweens.map((tween) => ({ ...tween }));
+  }
+  return windows;
+}
+
 /** story.camera with defaults → {mode, layout, spacing, parallax, blur} (blur null = the grammar default: whip-pans full, other moves at grammar.camera.moveBlur). */
 export function resolveCamera(story) {
   const own = isObject(story?.camera) ? story.camera : {};

@@ -19,6 +19,7 @@ import { MODULES as CATALOG_G } from './catalog-g.mjs';
 import { MODULES as CATALOG_H } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
 import { MODULES as WORLD, castStandsIn, worldBeneath } from './catalog-world.mjs';
+import { ridesPlate } from './camera-world.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -504,7 +505,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: worldBeneath(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0 }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: worldBeneath(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

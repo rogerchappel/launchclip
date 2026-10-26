@@ -23,7 +23,7 @@ import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
-import { CAMERA_STACK, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
+import { CAMERA_STACK, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from '../core/backgrounds.mjs';
@@ -96,7 +96,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const colors = story.brand?.colors ?? {};
   const bg = colors.bg ?? '#000000';
   const emitters = hyperframesEmitters();
-  const windows = sceneWindows(story);
+  // Casts riding world plates (world mode) take their plate's window and travel with it.
+  const windows = rideWorldPlates(story, sceneWindows(story));
   const layers = windows.scenes.filter((entry) => keep(entry.scene));
   if (isolate && !layers.length) throw new Error(`sceneFilter matched no scene (scenes: ${story.scenes.map((scene) => scene.id).join(', ')})`);
   if (isolate) for (const entry of layers) { entry.tweens = []; entry.renderEnd = entry.end; }
@@ -262,7 +263,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
     }
     const boundary = boundaryFor.get(entry.scene.id);
-    const inWorld = Boolean(plan && entry.plate);
+    const inWorld = Boolean(plan && (entry.plate || entry.rides));
     const worldMode = plan?.mode === 'world';
     const worldClass = inWorld && worldMode ? ' lc-world-plate' : '';
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
@@ -272,10 +273,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
-    const parallax = plan && !entry.plate ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
+    const parallax = plan && !entry.plate && !entry.rides ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
     const layer = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
     const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
-    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.id]) : ''}">${body}</div>`);
+    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.rides ?? entry.id]) : ''}">${body}</div>`);
     css.push(out.css ?? '');
     motion.push(`// ${entry.scene.id} (${entry.scene.module}) ${num(entry.start)}–${num(entry.renderEnd)}s`);
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
