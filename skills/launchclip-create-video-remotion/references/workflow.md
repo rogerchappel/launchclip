@@ -464,6 +464,46 @@ cadence profile ([references/profiles.md](profiles.md)): coverage
 near its target, no undressed run past its limit. Then author the storyboard
 against the map.
 
+### Direction guardrails
+
+The finish gates fail these, so plan for them from the first draft (design:
+`docs/DIRECTION_GUARDRAILS.md` in the LaunchClip repo):
+
+- **World physics.** Walls, furniture, parked things, props and a cast set's
+  desk or bench are anchored to the world. Only the camera moves them: a world
+  scene's `params.camera`, or a camera transition between places.
+  - Ambient things (clouds, water, flames) move in place. Mobile things
+    (characters, vehicles, birds) move by acting cues.
+  - Two world scenes of one place joined by a cut are an error. Make them one
+    scene with one camera move.
+  - A cast-scene over a world plate shares the plate's start and end.
+- **Acting shows the point.** Each map line with cast cues names its key
+  action: `action: {verb, who, target?}`.
+  - A cast scene on that line performs it with an acting cue: look-far,
+    turn-to-look, gaze-at, point-at, walk-to, stand-up or stretch. Each takes
+    a `target`: `far`, `window`, `horizon`, `street`, `skyline`, `left`,
+    `right`, `{prop}`, `{character}` or `{x, y}`.
+  - A character with a target faces it and turns its head to it. "Look 20 feet
+    away" is a character turning to look at the street, not someone smiling at
+    the camera.
+- **Legible captions.** Every caption line is measured on the render. Lines
+  that do not read get a backing plate in the style's own colours. Keep
+  captions off faces and busy props anyway.
+- **No ghosting.**
+  - One copy of a person at a time. Never put a character in two overlapping
+    scenes; in the next shot, a character appears by itself once the
+    transition ends.
+  - Text fades within 0.5 s and stays fully shown for its reading time (about
+    0.22 s a word).
+- **Density and variety.**
+  - No third of the frame holds only the plate for more than 4 s.
+  - No card sits alone over an empty set for more than 3 s. Keep the cast under
+    it, pointing up or reacting.
+  - No shot repeats back to back. Moving the same pair to a new background is
+    not a new shot.
+  - In 9:16: card in the top band, cast in the lower half on the world's
+    ground, captions between them, and at most two seated characters.
+
 Author `storyboard.json` from
 [references/storyboard-modules.md](storyboard-modules.md). It is
 generated from the module registry and lists every catalogue and editorial

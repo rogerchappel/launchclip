@@ -53,7 +53,13 @@ skill when they want the bespoke, reviewed path below.
    words (`word:<text>`). Pick one `motion.grammar` and, for travel, the world
    camera. Check with `launchclip story validate` (it checks the map too) and
    `launchclip layout-check`. Also write `STORYBOARD.md`, `DESIGN.md` and
-   `QUALITY.md`.
+   `QUALITY.md`. A story with characters follows the direction guardrails
+   ("Direction guardrails" in [references/workflow.md](references/workflow.md)):
+   - every map line with cast cues names its key `action`, and a cast scene
+     acts it with an acting cue toward a `target`;
+   - world furniture moves only with the camera;
+   - one copy of a person is on screen at a time;
+   - cards and the cast share the frame.
    Hand-authoring HyperFrames HTML instead? Put
    `data-launchclip-cinematic-contract="phase-2"` on the composition root and
    follow "Author and repair" in
@@ -70,7 +76,13 @@ skill when they want the bespoke, reviewed path below.
    to render `renders/draft.mp4` with voice, captions, music, SFX, the −14 LUFS
    master, `qa/temporal-evidence/manifest.json`, critic sheets and gates
    (`AUDIO-MANIFEST.json` included). Fix one scene with
-   `--preview-scene <id>`, then `--scene <id>`.
+   `--preview-scene <id>`, then `--scene <id>`. The gates include the
+   guardrails:
+   - physics, acting, ghosting, density and variety;
+   - caption legibility on the layout gate. Finish measures every caption line
+     on the frames, plates the ones that do not read and renders once more.
+
+   A failing guardrail names the fix; repair the storyboard, never the gate.
 7. **Critic.** A fresh-context critic reviews `qa/critic-sheets/` and the
    draft and writes `qa/critic.json`, citing every evidence ID it reviewed.
    Repair the smallest responsible scene, at most three passes.
