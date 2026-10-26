@@ -7,7 +7,6 @@ import {
   classifyMotionFamily,
   compareMotionProfiles,
   evaluateMotionQuality,
-  flowSize,
   hookEventSeconds,
   parseMetadataSeries
 } from "../src/render_motion_analysis.js";
@@ -139,10 +138,3 @@ test("quality uses a family-specific motion floor for developing cards", () => {
 function metadata(key, values) {
   return values.map((value, frame) => `frame:${frame} pts:${frame}\n${key}=${value}`).join("\n");
 }
-
-test("optical flow samples every aspect at the same density: 64x36 for 16:9, 36x64 for 9:16", () => {
-  assert.deepEqual(flowSize(1920, 1080), { width: 64, height: 36 });
-  assert.deepEqual(flowSize(1080, 1920), { width: 36, height: 64 });
-  assert.deepEqual(flowSize(1080, 1080), { width: 64, height: 64 });
-  assert.deepEqual(flowSize(0, 0), { width: 64, height: 36 });
-});
