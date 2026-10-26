@@ -26,6 +26,7 @@ import { physicsPromptLines } from './physics.mjs';
 import { actingPromptLines } from './characters/actions.mjs';
 import { compositionPromptLines } from './composition.mjs';
 import { ACTION_VERBS } from './direction.mjs';
+import { COVER_MAX_WORDS, COVER_SECONDS } from './story.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -733,6 +734,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
+    ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
     ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines({ subject: lane === 'footage-led' ? Boolean(subject?.usable) : false })]),
@@ -885,4 +887,22 @@ export function subjectEffectsReference() {
     ])
   ];
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// The cover (kit/core/story.mjs validateCover): for a Short, the first frame
+// is the cover in the profile grid, so it has to read on its own.
+
+/** A Short: 9:16 (portrait) and at most 60 s. */
+export function isShortFormat(format) {
+  return Boolean(format) && Number(format.height) > Number(format.width) && Number(format.duration) <= 60;
+}
+
+export function coverLines() {
+  return [
+    `Set cover: {text, number?, kicker?} (frame defaults to "first": the video opens on a ${COVER_SECONDS} s cover card, which is also the thumbnail). It is what the profile grid shows, so it must read on its own.`,
+    `cover.text echoes the hook in at most ${COVER_MAX_WORDS} words: one number or a short question ("100g PROTEIN. ALL AT ONCE?", "10 vs 25: WHICH BUILDS MORE MUSCLE?"). Name the concrete outcome; never tease and never lead with the brand or product name.`,
+    'cover.number: the one huge number when there is one ("100g"); it leads the headline unless the text already says it. cover.kicker: an optional sticker of at most 18 characters.',
+    `Every scene that starts in the first ${COVER_SECONDS} s starts when the cover ends, so the first scene must run past ${COVER_SECONDS + 0.5} s and its param times must fit what is left; or set cover.frame to the seconds of a frame that already reads as the cover.`
+  ];
 }
