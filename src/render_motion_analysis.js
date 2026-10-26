@@ -37,8 +37,9 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     ?? (duration > 0 && fps > 0 ? Math.round(duration * fps) : series.frame_count + 1);
   const cuts = cutFrames.map((frame) => frame / fps).filter((time) => time > 0.05 && time < duration - 0.05);
   const flowFps = Number(options.flowFps ?? 10);
-  const flowWidth = Number(options.flowWidth ?? 64);
-  const flowHeight = Number(options.flowHeight ?? 36);
+  const flow = flowSize(Number(video.width), Number(video.height));
+  const flowWidth = Number(options.flowWidth ?? flow.width);
+  const flowHeight = Number(options.flowHeight ?? flow.height);
   const rawFlow = await runRaw("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-i", resolved,
     "-vf", `fps=${flowFps},scale=${flowWidth}:${flowHeight},format=gray`,
@@ -65,6 +66,20 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     optical_flow: opticalFlow,
     family: classifyMotionFamily({ cut_rate_per_minute: rate(cuts.length, duration), hold_ratio: series.hold_ratio, motion_bursts_per_minute: rate(series.bursts.length, duration) })
   };
+}
+
+/**
+ * The optical-flow frame for a video: the long side FLOW_LONG_SIDE px and the
+ * short side in proportion (64x36 for 16:9, 36x64 for 9:16). Every aspect is
+ * sampled at the same density, so the velocity floors mean the same thing in
+ * portrait as in landscape (a fixed 64x36 squashed 9:16 frames about 3x
+ * across and stretched them along).
+ */
+export const FLOW_LONG_SIDE = 64;
+export function flowSize(width, height, long = FLOW_LONG_SIDE) {
+  if (!(width > 0 && height > 0)) return { width: long, height: Math.round(long * 9 / 16) };
+  const short = Math.max(8, Math.round(long * Math.min(width, height) / Math.max(width, height)));
+  return width >= height ? { width: long, height: short } : { width: short, height: long };
 }
 
 export function analyzeMotionSeries(values, fps, options = {}) {
