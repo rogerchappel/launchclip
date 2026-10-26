@@ -306,32 +306,38 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   }
 
   // Loop ending: the loop_to scene's first state, held over the final window.
+  // In world mode a cast riding that plate is part of it, so it is cloned too
+  // (a set never vanishes from its world at the loop seam).
   const loop = isolate ? null : windows.loop;
   if (loop) {
-    const entry = { ...windows.scenes.find((item) => item.id === loop.sceneId) };
-    const { out } = build(entry, { idSuffix: '-loop', clone: true });
-    const id = attr(`${loop.sceneId}-loop`);
-    const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
-    const media = hoistMedia(out.html ?? '');
-    const boundary = boundaries.find((item) => item.to_id === loop.sceneId && Math.abs(item.start_seconds - loop.start) < 1e-3);
-    // The clone holds the scene's first state, where its drift is identity;
-    // the field keeps moving with absolute time (in world mode it is the
-    // camera's depth layer instead).
-    const ambient = plan?.mode !== 'world' && sceneBackground(story, entry.scene) ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
-    (plan ? world : markup).push(`<div id="${outer}" class="lc-scene lc-plate lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
-    motion.push(...ambient.motion);
-    if (media.elements.length) warnings.push(`${loop.sceneId}: root media is not repeated in the loop ending`);
-    css.push(out.css ?? '');
-    motion.push(`// loop ending → ${loop.sceneId} at its first state, ${num(loop.start)}–${num(loop.end)}s`);
-    motion.push(...toggle(`#${outer}`, loop.start, loop.end + 1, D));
-    motion.push(...loop.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
-    if (out.motion) {
-      // The hold never moves loopTl's playhead, and GSAP does not render a
-      // tl.set at a playhead that has not moved (a scene at 0 s), so the
-      // clone's first state is rendered once here.
-      motion.push(`{\nconst loopTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(loopTl);\nloopTl.render(${num(entry.scene.start)}, true, true);\ntl.fromTo(loopTl, { time: ${num(entry.scene.start)} }, { time: ${num(entry.scene.start)}, duration: ${num(Math.max(0.001, loop.end - loop.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, loop.start - TOGGLE_LEAD))});\n}`);
+    const riders = plan?.mode === 'world' ? windows.scenes.filter((item) => item.rides === loop.sceneId) : [];
+    for (const target of [windows.scenes.find((item) => item.id === loop.sceneId), ...riders]) {
+      const entry = { ...target };
+      const plate = entry.id === loop.sceneId;
+      const { out } = build(entry, { idSuffix: '-loop', clone: true });
+      const id = attr(`${entry.id}-loop`);
+      const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
+      const media = hoistMedia(out.html ?? '');
+      const boundary = plate ? boundaries.find((item) => item.to_id === loop.sceneId && Math.abs(item.start_seconds - loop.start) < 1e-3) : null;
+      // The clone holds the scene's first state, where its drift is identity;
+      // the field keeps moving with absolute time (in world mode it is the
+      // camera's depth layer instead).
+      const ambient = plate && plan?.mode !== 'world' && sceneBackground(story, entry.scene) ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
+      (plan ? world : markup).push(`<div id="${outer}" class="lc-scene${plate ? ' lc-plate' : ''} lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
+      motion.push(...ambient.motion);
+      if (media.elements.length) warnings.push(`${entry.id}: root media is not repeated in the loop ending`);
+      css.push(out.css ?? '');
+      motion.push(`// loop ending → ${entry.id} at its first state, ${num(loop.start)}–${num(loop.end)}s`);
+      motion.push(...toggle(`#${outer}`, loop.start, loop.end + 1, D));
+      motion.push(...loop.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
+      if (out.motion) {
+        // The hold never moves loopTl's playhead, and GSAP does not render a
+        // tl.set at a playhead that has not moved (a scene at 0 s), so the
+        // clone's first state is rendered once here.
+        motion.push(`{\nconst loopTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(loopTl);\nloopTl.render(${num(entry.scene.start)}, true, true);\ntl.fromTo(loopTl, { time: ${num(entry.scene.start)} }, { time: ${num(entry.scene.start)}, duration: ${num(Math.max(0.001, loop.end - loop.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, loop.start - TOGGLE_LEAD))});\n}`);
+      }
+      z += 10;
     }
-    z += 10;
   }
 
   if (plan) {
