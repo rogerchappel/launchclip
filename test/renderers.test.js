@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRend
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt, remotionRoot } from "../src/renderers/remotion.js";
+import { pruneRemotionRoots } from "../src/renderers/remotion_segments.js";
 import * as storyModule from "./fixtures/story-stub.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -281,5 +282,35 @@ test("build-evidence contact sheets keep the frame's aspect (16:9 tiles in a wid
   for (const size of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
     const { tile } = contactSheetLayout(size);
     assert.ok(Math.abs(tile.width / tile.height - size.width / size.height) < 0.01);
+  }
+});
+
+test("old Remotion roots are pruned, keeping the recent few and any in use", async () => {
+  const roots = await mkdtemp(path.join(os.tmpdir(), "launchclip-roots-"));
+  try {
+    const hour = 60 * 60 * 1000;
+    const make = async (name, ageMs) => {
+      const dir = path.join(roots, name);
+      await mkdir(dir, { recursive: true });
+      const when = new Date(Date.now() - ageMs);
+      await utimes(dir, when, when);
+      return dir;
+    };
+    const old = [];
+    for (let i = 0; i < 8; i += 1) old.push(await make(`${String(i).padStart(2, "0")}`.padEnd(16, "a"), (i + 1) * hour));
+    const busy = await make("b".repeat(16), 5 * 60 * 1000);
+    const current = await make("c".repeat(16), 100 * hour);
+    const other = await make("not-a-root", 100 * hour);
+
+    pruneRemotionRoots(roots, current);
+
+    const left = new Set(await readdir(roots));
+    // The current root and anything else that isn't a root stay.
+    assert.ok(left.has(path.basename(current)) && left.has(path.basename(other)));
+    // Five more recent roots stay (six with the current one): the busy one and the four newest old ones.
+    assert.ok(left.has(path.basename(busy)));
+    assert.deepEqual(old.filter((dir) => left.has(path.basename(dir))), old.slice(0, 4));
+  } finally {
+    await rm(roots, { recursive: true, force: true });
   }
 });
