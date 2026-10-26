@@ -140,7 +140,13 @@ async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
   const { bundle } = await import("@remotion/bundler");
   await bundle({ entryPoint: path.resolve(entry), publicDir: path.resolve(project), symlinkPublicDir: true, outDir: temporary, enableCaching: true, rootDir: remotionRoot(project), onProgress: () => {} });
   await rm(dir, { recursive: true, force: true });
-  await rename(temporary, dir);
+  try {
+    await rename(temporary, dir);
+  } catch (error) {
+    // Another process finished the same bundle first: use theirs.
+    await rm(temporary, { recursive: true, force: true });
+    if (!existsSync(path.join(dir, "index.html"))) throw error;
+  }
   await pruneBundles(root, dir);
   return { serveUrl: dir, cached: false };
 }
