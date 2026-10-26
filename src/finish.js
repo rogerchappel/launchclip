@@ -33,6 +33,7 @@ import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
 import { renderShare } from "./capacity.js";
+import { withSlot } from "./queue.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
@@ -514,6 +515,7 @@ export function defaultAdapters() {
     renderer: (name) => getRenderer(name),
     // Cores for this render: the machine's cores split across the render slots.
     renderShare: () => renderShare(),
+    withSlot: (kind, options, fn) => withSlot(kind, options, fn),
     // Caption legibility on the rendered frames (src/caption_legibility.js).
     async captionLegibility(video, story, options) {
       const { measureCaptionLegibility } = await import("./caption_legibility.js");
@@ -1114,51 +1116,8 @@ const STAGES = [
       const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
     },
-    async run(ctx) {
-      const adapter = ctx.adapters.renderer(ctx.rendererName);
-      const tools = ctx.adapters.segmentTools;
-      if (ctx.options.previewScene) {
-        const output = path.join(ctx.project, previewPath(ctx.options.previewScene));
-        const segments = await renderStory(ctx, adapter, { output, previewScene: ctx.options.previewScene });
-        ctx.preview = { scene: ctx.options.previewScene, output };
-        ctx.halt = `--preview-scene ${ctx.options.previewScene}: only that scene was rendered; the final is untouched`;
-        return { renderer: ctx.rendererName, preview: rel(ctx.project, output), segments };
-      }
-      await mkdir(path.dirname(ctx.raw), { recursive: true });
-      const scenes = ctx.options.scenes;
-      const stillsDir = path.join(ctx.project, PATHS.sceneStills);
-      const before = scenes.length && existsSync(ctx.raw) ? await sceneStills(ctx.resolved, ctx.raw, scenes, stillsDir, { suffix: "before", tools }).catch(() => []) : [];
-      // --chapter: every segment inside the chapter re-renders; the rest come from the cache and the master is stitched from all of them.
-      if (ctx.options.chapter) ctx.chapter = chapterWindow(ctx.resolved, ctx.options.chapter);
-      const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: ctx.chapter?.frames ?? null });
-      if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
-      if (ctx.chapter && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --chapter ${ctx.chapter.id} re-rendered the whole ${ctx.rendererName} video`);
-      if (ctx.chapter) ctx.chapter.segments = segments ? { forced: segments.forced, reused: segments.reused, total: segments.segments } : null;
-      const details = { renderer: ctx.rendererName, concurrency: ctx.concurrency, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
-      if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
-      // Measure every caption line on the frames; plate the ones that do not
-      // read and render once more (a whole render only: a partial one keeps
-      // its plates for the next full pass).
-      const legibility = await measureCaptions(ctx);
-      if (legibility?.failed.length && !scenes.length && !ctx.chapter) {
-        const added = legibility.failed.filter((id) => !(ctx.captionPlates ?? []).includes(id));
-        if (added.length) {
-          await writeCaptionPlates(ctx, legibility, added);
-          await applyCaptionPlates(ctx);
-          ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
-          await writeResolvedCopy(ctx);
-          details.segments_first_pass = segments ?? null;
-          await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
-          details.captions_replated = added;
-          ctx.captionLegibility = await measureCaptions(ctx);
-        }
-      }
-      if (ctx.captionLegibility) {
-        await writeCaptionPlates(ctx, ctx.captionLegibility, []);
-        details.captions = captionSummary(ctx);
-      }
-      return details;
-    },
+    // One render slot of the machine queue (src/queue.js) for the whole stage.
+    run: (ctx) => ctx.adapters.withSlot("render", { project: ctx.project, log: ctx.adapters.notice }, () => runRender(ctx)),
     restore(ctx, details) {
       if (details?.captions) ctx.captionLegibility = { lines: details.captions.lines ?? [], failed: details.captions.failed ?? [], plates: details.captions.plates ?? [] };
     }
@@ -1325,6 +1284,52 @@ export function chapterWindow(resolved, id) {
   if (!chapter) throw new Error(`chapter "${id}" is not in the resolved story`);
   const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
   return { id: chapter.id, title: chapter.title, start: chapter.start, end: chapter.end, frames: [Math.round(chapter.start * fps), Math.round(chapter.end * fps)] };
+}
+
+async function runRender(ctx) {
+  const adapter = ctx.adapters.renderer(ctx.rendererName);
+  const tools = ctx.adapters.segmentTools;
+  if (ctx.options.previewScene) {
+    const output = path.join(ctx.project, previewPath(ctx.options.previewScene));
+    const segments = await renderStory(ctx, adapter, { output, previewScene: ctx.options.previewScene });
+    ctx.preview = { scene: ctx.options.previewScene, output };
+    ctx.halt = `--preview-scene ${ctx.options.previewScene}: only that scene was rendered; the final is untouched`;
+    return { renderer: ctx.rendererName, preview: rel(ctx.project, output), segments };
+  }
+  await mkdir(path.dirname(ctx.raw), { recursive: true });
+  const scenes = ctx.options.scenes;
+  const stillsDir = path.join(ctx.project, PATHS.sceneStills);
+  const before = scenes.length && existsSync(ctx.raw) ? await sceneStills(ctx.resolved, ctx.raw, scenes, stillsDir, { suffix: "before", tools }).catch(() => []) : [];
+  // --chapter: every segment inside the chapter re-renders; the rest come from the cache and the master is stitched from all of them.
+  if (ctx.options.chapter) ctx.chapter = chapterWindow(ctx.resolved, ctx.options.chapter);
+  const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: ctx.chapter?.frames ?? null });
+  if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
+  if (ctx.chapter && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --chapter ${ctx.chapter.id} re-rendered the whole ${ctx.rendererName} video`);
+  if (ctx.chapter) ctx.chapter.segments = segments ? { forced: segments.forced, reused: segments.reused, total: segments.segments } : null;
+  const details = { renderer: ctx.rendererName, concurrency: ctx.concurrency, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
+  if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
+  // Measure every caption line on the frames; plate the ones that do not
+  // read and render once more (a whole render only: a partial one keeps
+  // its plates for the next full pass).
+  const legibility = await measureCaptions(ctx);
+  if (legibility?.failed.length && !scenes.length && !ctx.chapter) {
+    const added = legibility.failed.filter((id) => !(ctx.captionPlates ?? []).includes(id));
+    if (added.length) {
+      await writeCaptionPlates(ctx, legibility, added);
+      await applyCaptionPlates(ctx);
+      ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+      await writeResolvedCopy(ctx);
+      details.segments_first_pass = segments ?? null;
+      await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
+      details.captions_replated = added;
+      ctx.captionLegibility = await measureCaptions(ctx);
+    }
+  }
+  if (ctx.captionLegibility) {
+    await writeCaptionPlates(ctx, ctx.captionLegibility, []);
+    details.captions = captionSummary(ctx);
+  }
+  return details;
 }
 
 /** Where --chapter writes the chapter on its own. */

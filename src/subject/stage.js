@@ -17,6 +17,7 @@ import { openMatteWriter, readFrames, withAlpha, writeImage } from "./frames.js"
 import { createPlateAccumulator } from "./plate.js";
 import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, sha256File, subjectPipeline } from "./models.js";
 import { createSubjectSegmenter } from "./segment.js";
+import { acquireSlot } from "../queue.js";
 
 // Probe: about one frame a second, at most this many, decoded this wide.
 const PROBE_MAX_SAMPLES = 60;
@@ -26,6 +27,23 @@ const STATS_WIDTH = 270;
 // Mattes are written with at most this short edge: the largest canvas is
 // 1080×1920, and a 9:16 crop of a landscape source needs its full height.
 const MATTE_MAX_SHORT_EDGE = 1920;
+
+// The segmenter holds a local-model slot of the machine queue from loading
+// the model until release().
+export async function openSegmenter(modelId, options, create = createSubjectSegmenter) {
+  const slot = await acquireSlot("local-model", { label: "subject matting", log: options.log });
+  try {
+    const segmenter = await create(modelId, options);
+    const release = segmenter.release.bind(segmenter);
+    segmenter.release = async () => {
+      try { await release(); } finally { await slot.release(); }
+    };
+    return segmenter;
+  } catch (error) {
+    await slot.release();
+    throw error;
+  }
+}
 
 export function defaultCacheDir(cwd = process.cwd()) {
   return path.join(cwd, ".launchclip", "subject");
@@ -68,7 +86,7 @@ export async function runSubjectProbe(src, options = {}) {
   }
   const rate = Math.min(1, PROBE_MAX_SAMPLES / source.duration);
   const size = evenSize(PROBE_WIDTH, source);
-  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
   const samples = [];
   try {
     let index = 0;
@@ -103,7 +121,7 @@ export async function runSubjectTrack(src, options = {}) {
   }
   const rate = Math.min(TRACK_FPS, source.fps);
   const size = evenSize(PROBE_WIDTH, source);
-  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
   const frames = [];
   try {
     let index = 0;
@@ -146,7 +164,7 @@ export async function runSubjectMatte(src, range, options = {}) {
   const { fps } = source;
   const { width, height } = matteSize(source);
   const stats = evenSize(Math.min(STATS_WIDTH, width), source);
-  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
   const partial = path.join(dir, "matte.partial.webm");
   const writer = openMatteWriter(partial, { width, height, fps, ffmpeg: options.ffmpeg });
   const frames = [];

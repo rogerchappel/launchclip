@@ -512,13 +512,16 @@ function segmentAdapters() {
   return adapters;
 }
 
-test("each render gets an explicit core share: the render slots' split by default, --concurrency when given", async () => {
+test("each render holds a render slot and an explicit core share: the render slots' split by default, --concurrency when given", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-share-"));
   try {
     await cp(MINIMAL, project, { recursive: true });
     const segments = segmentAdapters();
     segments.renderShare = () => 3;
+    const slots = [];
+    segments.withSlot = async (kind, options, fn) => { slots.push([kind, options.project]); return fn(); };
     const first = await runFinish(project, { renderer: "remotion" }, segments);
+    assert.deepEqual(slots, [["render", project]], "the render stage holds one render slot of the machine queue");
     assert.equal(segments.segmentOptions.concurrency, 3);
     assert.equal(first.stages.find((stage) => stage.name === "render").details.concurrency, 3);
     // Cached segments render nothing, so a cleared cache shows the flag.
