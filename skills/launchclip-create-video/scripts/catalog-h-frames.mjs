@@ -214,12 +214,14 @@ function windowResolve(params, ctx) {
   const family = terminal ? 'meta' : 'body';
   const longest = lines.reduce((a, l) => (l.length > a.length ? l : a), '');
   let size = u(terminal ? 40 : 46);
+  // A terminal keeps one more row for the blinking cursor on a fresh prompt.
+  const rowCount = lines.length + (terminal && lines.length ? 1 : 0);
   if (lines.length) {
-    while (size > b.min.meta && (textWidth(`${terminal ? '$ ' : ''}${longest}`, size, family) > W - pad * 2 || barH + pad * 2 + lines.length * size * 1.55 > room)) size -= 1;
+    while (size > b.min.meta && (textWidth(`${terminal ? '$ ' : ''}${longest}`, size, family) > W - pad * 2 || barH + pad * 2 + rowCount * size * 1.55 > room)) size -= 1;
     if (size < b.min.meta) check.fail('params.lines', 'do not fit the window; shorten them or use fewer');
   }
   size = r2(size);
-  const contentH = image ? r2(Math.min(room - barH, (W - 0) * 0.56)) : r2(pad * 2 + lines.length * size * 1.55);
+  const contentH = image ? r2(Math.min(room - barH, (W - 0) * 0.56)) : r2(pad * 2 + rowCount * size * 1.55);
   const height = r2(barH + contentH);
   const box = {x: 0, y: r2((room - height) / 2), width: W, height};
   const showAt = b.timeOf('show', p.at, 'params.at', 0.5);
