@@ -43,6 +43,18 @@ polish; 0-1, moving targets inside the profile band only).
   for a stretch, add `"color"` (a brand role or hex) to that `labels` entry.
 - Turn a dial for one video with `"style": {"name": "<name>", "dials":
   {"energy": 0.3}}`.
+- When the user describes the look as a material ("oil paint", "soft
+  watercolour, dreamy", "crayon on paper", "inked like a graphic novel",
+  "flat gouache storybook"), set `"medium"` in the pack or the storyboard:
+  `oil`, `watercolour`, `pastel`, `ink` or `gouache`, or `{"kind":
+  "watercolour", "strength": 0.4, "boil": true, "grain": 0.6}` (strength and
+  grain 0-1; boil redraws the lines every third frame). Every frame is
+  painted in it under the brand frame and the captions, in both renderers.
+  `"none"` (the default) leaves the render as it is. A medium makes each
+  frame slower to render, so leave it out unless the user asks for the look.
+  For a seeded style, pass it as the `medium` constraint (`--medium
+  watercolour`); `make` and `story plan` read these words from the prompt
+  themselves.
 - Check the merged result with `launchclip story validate storyboard.json`; its
   `style.applied` list shows every value the pack filled.
 

@@ -4,6 +4,13 @@
 
 ### Added
 
+- Style packs and storyboards take a `medium`: `oil`, `watercolour`,
+  `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
+  with wobbly edges, brush strokes or washes, paper grain and lines that boil
+  on threes. Captions and the brand frame stay crisp above it, both renderers
+  draw it, and `none` (the default) changes nothing. Describe it in plain
+  words ("soft watercolour, dreamy") and a generated style picks it up. See
+  [Make it look like you](docs/guide/styles.md#paint-every-frame).
 - `launchclip fx <video> <module>` puts one effect on a clip: it cuts you out
   for that stretch when the effect needs it, renders the whole clip, and
   leaves an ordinary project you can keep editing. A new guide, [Effects
