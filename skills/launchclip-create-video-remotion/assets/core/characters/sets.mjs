@@ -290,8 +290,10 @@ function newerSet(name, {canvas, c, count, s, floor, scenery, back, front, front
     const backTop = floor - 620 * scale, seat = floor - 230 * scale;
     back.push(rect(L, backTop, R - L, seat - backTop + 40 * scale, sofa, {rx: 40 * scale, stroke: c.outline, width: OUT * s}));
     for (const x of xs) back.push(rect(x - 150 * scale, backTop + 40 * scale, 300 * scale, seat - backTop - 40 * scale, mixColor('#ffffff', sofa, 0.12), {rx: 30 * scale, stroke: c.outline, width: OUT * s * 0.8}));
-    front.push(rect(L + 40 * scale, seat, R - L - 80 * scale, 120 * scale, mixColor('#ffffff', sofa, 0.08), {rx: 24 * scale, stroke: c.outline, width: OUT * s}));
-    front.push(rect(L, seat + 100 * scale, R - L, floor - seat - 140 * scale, sofa, {rx: 16 * scale, stroke: c.outline, width: OUT * s}));
+    // Cushion and base behind the sitters (knees over the cushion's edge,
+    // shins in front of the base); the arms stay in front of them.
+    back.push(rect(L + 40 * scale, seat, R - L - 80 * scale, 120 * scale, mixColor('#ffffff', sofa, 0.08), {rx: 24 * scale, stroke: c.outline, width: OUT * s}));
+    back.push(rect(L, seat + 100 * scale, R - L, floor - seat - 140 * scale, sofa, {rx: 16 * scale, stroke: c.outline, width: OUT * s}));
     for (const x of [L - 10 * scale, R - 110 * scale]) front.push(rect(x, seat - 140 * scale, 120 * scale, floor - seat + 100 * scale, sofa, {rx: 40 * scale, stroke: c.outline, width: OUT * s}));
     for (const x of [L + 40 * scale, R - 60 * scale]) front.push(rect(x, floor - 44 * scale, 20 * scale, 44 * scale, c.woodShade));
     return slotsAt(xs, scale);
@@ -362,7 +364,10 @@ function newerSet(name, {canvas, c, count, s, floor, scenery, back, front, front
     const seat = floor - 230 * scale;
     for (let k = 0; k < 3; k++) back.push(rect(L, seat - (420 - k * 110) * scale, R - L, 70 * scale, c.wood, {rx: 10 * scale, stroke: c.outline, width: OUT * s}));
     for (const x of [L + 40 * scale, R - 70 * scale]) back.push(rect(x, seat - 430 * scale, 30 * scale, 430 * scale, '#3a3d46'));
-    front.push(rect(L - 20 * scale, seat, R - L + 40 * scale, 60 * scale, c.woodTop, {rx: 10 * scale, stroke: c.outline, width: OUT * s}));
+    // The seat is behind the sitters: their thighs and knees come over its
+    // front edge and their shins hang in front of it. Only the end legs are
+    // in front of them.
+    back.push(rect(L - 20 * scale, seat, R - L + 40 * scale, 60 * scale, c.woodTop, {rx: 10 * scale, stroke: c.outline, width: OUT * s}));
     for (const x of [L + 30 * scale, R - 80 * scale]) front.push(path(`M${r1(x)} ${r1(seat + 60 * scale)}L${r1(x + 50 * scale)} ${r1(seat + 60 * scale)}L${r1(x + 60 * scale)} ${r1(floor)}L${r1(x - 10 * scale)} ${r1(floor)}Z`, '#3a3d46', {stroke: c.outline, width: OUT * s * 0.8}));
     return slotsAt(xs, scale);
   }

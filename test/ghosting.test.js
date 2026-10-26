@@ -64,6 +64,10 @@ test("a card ending at a plate change leaves with the cut; one arriving with a m
   assert.ok(out.motion.end - out.motion.exitStart <= 1 / 30 + 1e-6, "one frame");
   assert.equal(into.waitsForPlate, 0.6);
   assert.ok(into.motion.enterStart >= 4.6 - 1e-6);
+  // A card starting during the move waits for the rest of it.
+  const late = story([world("a", 0, 4, "city-street"), world("b", 4, 8, "park", { in: { type: "pan", dur: 0.6, direction: "left" } }),
+    { id: "k3", module: "concept-card", track: 2, start: 4.1, end: 8, params: { text: "20 ft+ counts", icon: "ruler" } }], { camera: { mode: "world" } });
+  assert.equal(resolveModule(late.scenes[2], late).waitsForPlate, 0.5);
   // The last card of the video keeps its fade (a final hold or loop has its own rules).
   assert.equal(into.exitsWithCut, undefined);
 });
