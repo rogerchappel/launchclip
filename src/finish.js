@@ -3,6 +3,9 @@
 //
 //   voice → validate → captions → sound → render → master → evidence → gates → report
 //
+// A finished video then gets its designed cover (story.cover → video/cover.png,
+// src/cover.js) and publish.json (src/publish_manifest.js); neither is a stage.
+//
 // The render stage goes through the segment cache (src/render_segments.js):
 // unchanged segments of the timeline are reused, so a second pass that edits
 // one scene re-renders only the seconds that scene is on screen.
@@ -54,6 +57,8 @@ import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music
 import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "./voice/dialogue.js";
 import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
+import { COVER_PATH, renderCover } from "./cover.js";
+import { writePublishManifest } from "./publish_manifest.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -664,9 +669,33 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
       video: out, fps, duration, source: path.relative(into, project).split(path.sep).join("/") || "."
     });
   }
+  // A finished video: the designed cover when the story has one (it becomes
+  // the thumbnail), then publish.json beside it.
+  const finished = !failed && !ctx.preview && !candidate && !prototype && existsSync(out);
+  if (finished && ctx.copy.cover) ctx.cover = await finishCover(ctx);
   const report = buildReport(ctx, stages, { seconds: round3((adapters.now() - started) / 1000), failed });
+  if (finished) report.publish = await finishPublish(ctx, report);
   await writeJson(path.join(project, PATHS.report), report);
   return report;
+}
+
+async function finishCover(ctx) {
+  try {
+    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force) });
+  } catch (error) {
+    ctx.warnings.push(`cover: ${COVER_PATH} was not rendered (${firstLine(error.message)})`);
+    return { file: null, status: "failed", error: firstLine(error.message) };
+  }
+}
+
+async function finishPublish(ctx, report) {
+  try {
+    const { file } = await writePublishManifest(ctx.project, { finish: report });
+    return rel(ctx.project, file);
+  } catch (error) {
+    report.warnings.push(`publish.json was not written (${firstLine(error.message)})`);
+    return null;
+  }
 }
 
 async function runStage(ctx, definition) {
@@ -1559,6 +1588,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     ...(ctx.chapters ? { chapters: ctx.chapters } : {}),
+    ...(ctx.cover ? { cover: ctx.cover, thumbnail: ctx.cover.file } : {}),
     ...(ctx.chapter ? { chapter: { id: ctx.chapter.id, title: ctx.chapter.title, start: ctx.chapter.start, end: ctx.chapter.end, output: ctx.chapter.output ?? null, segments: ctx.chapter.segments ?? null } } : {}),
     seconds,
     stages,
@@ -1597,6 +1627,8 @@ export function formatFinishSummary(report) {
     for (const [name, gate] of gates) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.error ? `  ${firstLine(gate.error)}` : ""}`);
   }
   if (report.final) lines.push(`final: ${report.final}`);
+  if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : ""}`);
+  if (report.publish) lines.push(`publish: ${report.publish}`);
   for (const warning of report.warnings ?? []) lines.push(`warning: ${warning}`);
   for (const step of report.next_steps ?? []) lines.push(`next: ${step}`);
   lines.push(`report: ${path.join(report.project, PATHS.report)}`);

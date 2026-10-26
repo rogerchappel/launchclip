@@ -15,7 +15,9 @@ the same numbers for the CLI lane.
 - [Build a sound bed even without a library](#build-a-sound-bed-even-without-a-library)
 - [Add material texture](#add-material-texture)
 - [Write the ending as a loop](#write-the-ending-as-a-loop)
+- [Design the cover](#design-the-cover)
 - [Export settings](#export-settings)
+- [Publish manifest](#publish-manifest)
 
 ## Captions are on by default
 
@@ -148,6 +150,31 @@ through an exit. `"final": "fade"` fades it fully to the background by the final
 frame instead, and `"final": "exit"` plays the module's own exit. Unknown ending
 keys are errors.
 
+## Design the cover
+
+The first frame is the cover in the profile grid, so it has to read on its own:
+one huge number or a short question that echoes the hook, never the brand
+first. Set it in `storyboard.json`:
+
+```json
+"cover": { "text": "Protein. All at once?", "number": "100g", "kicker": "Myth?" }
+```
+
+- `text` is required, at most six words. `number` leads the headline as its
+  lit-up emphasis unless the text already says it; `kicker` is an optional
+  sticker of up to 18 characters.
+- `frame` defaults to `"first"`: the video opens on a 1.5 s `hook-title` card
+  (a full-frame insert in the footage-led lane). Every scene that started in
+  those 1.5 s starts as the card ends, and a loop back to the opening scene
+  loops back to the card, so the first scene must run past 2 s and its param
+  times must fit what is left. Set `frame` to seconds instead to leave the
+  video as it is and name the frame a platform's cover picker should use.
+- `launchclip finish` renders the card alone, in the story's format and style,
+  to `video/cover.png` with either renderer and reports it as the thumbnail.
+  Without `cover` nothing changes.
+- Titles meant to sell name the concrete outcome ("10 vs 25 reps: which builds
+  more muscle?"), not a tease.
+
 ## Export settings
 
 - Render the composition at 1080×1920. For a 60 fps upload, render kinetic-type
@@ -157,3 +184,25 @@ keys are errors.
   user wants maximum upload quality.
 - H.264 High profile, `yuv420p`, AAC 48 kHz at 256 kbps or more, and
   `+faststart`.
+
+## Publish manifest
+
+`launchclip finish` (and `make`) writes `publish.json` next to the video after
+every finished render; `launchclip publish-manifest <project>` writes it again.
+It holds the title and title options (from `SCRIPT.json`, else the storyboard
+title), a description, hashtags, the CTA, aspect, duration, the video, the
+cover, any `.srt`/`.vtt` captions, and per platform whether the video fits:
+
+| Platform | Rule |
+|---|---|
+| `youtube_shorts` | vertical or square, at most 180 s |
+| `tiktok` | at most 10 minutes |
+| `reels` | vertical, at most 3 minutes |
+| `linkedin` | LinkedIn recommends 15–30 s for every placement |
+| `x` | at most 2 min 20 s without Premium |
+| `app_store` (`--platforms app_store`) | app previews run 15–30 s |
+| `product_hunt` (`--platforms product_hunt`) | a YouTube link only; the CTA must not ask for upvotes |
+
+A CTA that mentions upvotes is flagged in `warnings`. `--link <url>` attaches a
+URL and `--utm <campaign>` (or `auto`) tags it per platform with
+`utm_source=<platform>&utm_medium=video&utm_campaign=<campaign>`.

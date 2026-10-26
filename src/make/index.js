@@ -577,6 +577,8 @@ async function stageFinish(ctx) {
   report.gates = Object.fromEntries(Object.entries(finish.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}) }]));
   if (ctx.baseEditQa) report.gates.base_edit_qa = ctx.baseEditQa;
   report.final = finish.final ? path.relative(project, finish.final) : null;
+  // finish wrote publish.json (and the cover) with SCRIPT.json's titles.
+  if (finish.publish) report.publish = finish.publish;
   report.warnings.push(...(finish.warnings ?? []));
   const sound = finish.stages.find((stage) => stage.name === "sound");
   const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);

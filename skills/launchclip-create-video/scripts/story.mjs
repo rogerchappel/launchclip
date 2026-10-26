@@ -89,8 +89,10 @@ const EPS = 1e-6;
 // video (a style pack's variants; each module checks its own names).
 // background, panel: the plate's background kind and the card surface (a style pack's
 // background and layouts.panel; kit/core/backgrounds.mjs, kit/core/panels.mjs).
+// cover: the designed cover (the thumbnail and, with frame "first", the
+// opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
-const TOP_LEVEL = new Set(["variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
+const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -607,6 +609,7 @@ export function validateStory(story, { modules } = {}) {
   // Footage layouts (kit/core/footage-layout.mjs).
   validateSections(story, { err, warn });
   validateChapters(story, { err, warn });
+  validateCover(story, { err, warn, duration });
   // World physics (docs/DIRECTION_GUARDRAILS.md §1): a cut between two plates
   // of the same place makes every anchored thing in it jump.
   // No ghosting (docs/DIRECTION_GUARDRAILS.md §4): one copy of a person at a time.
@@ -725,6 +728,8 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   if (Array.isArray(copy.chapters)) copy.chapters.forEach((chapter, index) => {
     if (isObject(chapter) && chapter.start !== undefined) chapter.start = resolve(chapter.start, `chapters[${index}].start`);
   });
+  // cover.frame "first": the cover card opens the video (applyCover).
+  if (coverFrame(copy) === "first") applyCover(copy, scenes);
   copy.scenes = scenes
     .map((scene, index) => ({ scene, index }))
     .sort((a, b) => (Number(a.scene?.start) - Number(b.scene?.start)) || ((a.scene?.track ?? 0) - (b.scene?.track ?? 0)) || a.index - b.index)
@@ -1560,4 +1565,115 @@ export function storyChapters(story) {
     .filter((chapter) => !(duration > 0) || chapter.start < duration)
     .sort((a, b) => a.start - b.start);
   return sorted.map((chapter, index) => ({ index, ...chapter, end: round6(index + 1 < sorted.length ? sorted[index + 1].start : duration) }));
+}
+
+// ---------------------------------------------------------------------------
+// The cover: story.cover {text, kicker?, number?, frame?: "first" | seconds}.
+//
+// The designed first frame of a Short and its thumbnail: one huge number or a
+// short question that reads on its own in a profile grid ("100g PROTEIN. ALL
+// AT ONCE?"). hook-title draws it (a number leads the headline as its
+// emphasis). frame "first" (the default) opens the video on it: resolveStory
+// adds a COVER_SECONDS hook-title card at 0 (a full-frame insert in the
+// footage-led lane), and every scene that started under it starts as it
+// ends. A number of seconds leaves the video as it is and names the frame a
+// platform's cover picker should use. Either way launchclip finish renders
+// the card alone to video/cover.png (coverStory).
+
+export const COVER_SCENE_ID = "cover";
+export const COVER_SECONDS = 1.5;
+export const COVER_MAX_WORDS = 6;
+// The still: a card this long, captured once every part has settled.
+export const COVER_STILL = Object.freeze({ duration: 3, at: 2 });
+const COVER_KEYS = new Set(["text", "kicker", "number", "frame"]);
+const COVER_MIN_AFTER = 0.5;
+
+/** "first", seconds, or null when the story has no cover. */
+export function coverFrame(story) {
+  const cover = story?.cover;
+  if (!isObject(cover)) return null;
+  return cover.frame === undefined ? "first" : cover.frame;
+}
+
+/** Check story.cover (validateStory calls this). */
+export function validateCover(story, { err, warn = () => {}, duration = null } = {}) {
+  const cover = story?.cover;
+  if (cover === undefined || cover === null) return;
+  if (!isObject(cover)) { err("cover must be {text, kicker?, number?, frame?}"); return; }
+  for (const key of Object.keys(cover)) if (!COVER_KEYS.has(key)) err(`cover.${key} is not a cover field (allowed: ${[...COVER_KEYS].join(", ")})`);
+  if (!nonEmpty(cover.text)) err(`cover.text is required: a short question or claim of at most ${COVER_MAX_WORDS} words`);
+  else {
+    const words = cover.text.trim().split(/\s+/).length;
+    if (words > COVER_MAX_WORDS + 2 || cover.text.trim().length > 60) err(`cover.text must be at most ${COVER_MAX_WORDS} words (60 characters); got ${words} words`);
+    else if (words > COVER_MAX_WORDS) warn(`cover.text runs ${words} words; a cover reads at a glance at ${COVER_MAX_WORDS} or fewer`);
+  }
+  if (cover.kicker !== undefined && !(nonEmpty(cover.kicker) && cover.kicker.trim().length <= 18)) err("cover.kicker must be 1-18 characters");
+  if (cover.number !== undefined && !((typeof cover.number === "number" && Number.isFinite(cover.number)) || (nonEmpty(cover.number) && cover.number.trim().length <= 12))) err('cover.number must be a number or a short string such as "100g" (at most 12 characters)');
+  const frame = coverFrame(story);
+  if (frame !== "first" && !(typeof frame === "number" && Number.isFinite(frame) && frame >= 0)) { err('cover.frame must be "first" or the seconds of the frame a cover picker should use'); return; }
+  if (typeof frame === "number" && duration !== null && frame >= duration) err(`cover.frame (${frame}) is not within format.duration (${duration})`);
+  if (frame !== "first") return;
+  if (duration !== null && duration < COVER_SECONDS + COVER_MIN_AFTER) err(`cover.frame "first" holds the cover for the first ${COVER_SECONDS} s; the video is only ${duration} s`);
+  const scenes = Array.isArray(story.scenes) ? story.scenes : [];
+  scenes.forEach((scene, index) => {
+    if (!isObject(scene)) return;
+    if (scene.id === COVER_SCENE_ID && scene.cover !== true) err(`scenes[${index}].id "${COVER_SCENE_ID}" is the cover card's id while cover.frame is "first"; rename the scene`);
+    if (scene.cover === true || typeof scene.start !== "number" || typeof scene.end !== "number") return;
+    if (scene.start < COVER_SECONDS - EPS && scene.end < COVER_SECONDS + COVER_MIN_AFTER - EPS) err(`scenes[${index}] (${scene.id}) ends at ${scene.end} s, under the cover card (the first ${COVER_SECONDS} s with cover.frame "first"); end it after ${COVER_SECONDS + COVER_MIN_AFTER} s or set cover.frame to seconds`);
+  });
+}
+
+/** The cover's headline: the number leads the text unless the text already says it. */
+export function coverHeadline(cover) {
+  const text = String(cover.text).trim();
+  if (cover.number === undefined) return text;
+  const number = String(cover.number).trim();
+  return coverHasPhrase(text, number) ? text : `${number} ${text}`;
+}
+
+// Whole words, matched as hook-title matches emphasis (case and punctuation ignored).
+function coverHasPhrase(text, phrase) {
+  const clean = (value) => value.split(/\s+/).map((word) => word.toLowerCase().replace(/[^\p{L}\p{N}'’-]/gu, "")).filter(Boolean).join(" ");
+  return ` ${clean(text)} `.includes(` ${clean(phrase)} `);
+}
+
+/**
+ * The cover as a hook-title scene from 0 to `end`. still: the standalone card
+ * (its emphasis and kicker land early, so the captured frame has both).
+ */
+export function coverScene(story, { end = COVER_SECONDS, still = false } = {}) {
+  const cover = story.cover;
+  const params = { headline: coverHeadline(cover) };
+  if (cover.number !== undefined) params.emphasis = still ? [{ text: String(cover.number).trim(), at: 0.3 }] : String(cover.number).trim();
+  if (nonEmpty(cover.kicker)) {
+    params.kicker = cover.kicker.trim();
+    if (still) params.kickerAt = 0.5;
+  }
+  return { id: COVER_SCENE_ID, cover: true, module: "hook-title", start: 0, end, ...(story.lane === "footage-led" && !still ? { insert: true } : {}), params };
+}
+
+/**
+ * A one-scene story with only the cover card, in the story's format, brand
+ * and style: video/cover.png is its frame at COVER_STILL.at.
+ */
+export function coverStory(story) {
+  if (!isObject(story?.cover)) throw new Error("the story has no cover");
+  const out = { schema: STORY_SCHEMA, lane: "motion" };
+  for (const key of ["title", "brand", "style", "motion", "ambient", "variants", "background", "panel"]) if (story[key] !== undefined) out[key] = JSON.parse(JSON.stringify(story[key]));
+  out.format = { ...story.format, duration: COVER_STILL.duration };
+  out.cover = { ...story.cover, frame: 0 };
+  out.scenes = [coverScene(story, { end: COVER_STILL.duration, still: true })];
+  out.ending = { loop: false };
+  return out;
+}
+
+// cover.frame "first": the cover card at 0, and every scene that started
+// under it starts as it ends; a loop back to the opening scene loops back to
+// the card. A resolved story already has the card, so this runs once.
+function applyCover(copy, scenes) {
+  if (scenes.some((scene) => isObject(scene) && scene.cover === true)) return;
+  const opening = scenes.filter((scene) => isObject(scene) && (scene.track ?? 0) === 0 && typeof scene.start === "number" && scene.start < COVER_SECONDS - EPS).map((scene) => scene.id);
+  for (const scene of scenes) if (isObject(scene) && typeof scene.start === "number" && scene.start < COVER_SECONDS - EPS) scene.start = COVER_SECONDS;
+  if (isObject(copy.ending) && opening.includes(copy.ending.loop_to)) copy.ending.loop_to = COVER_SCENE_ID;
+  scenes.push(coverScene(copy));
 }
