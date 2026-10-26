@@ -13,6 +13,7 @@ import {
 } from "../kit/core/style-seed.mjs";
 import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "../kit/core/style.mjs";
 import { FONT_REGISTRY, registeredFamily } from "../kit/core/fonts.mjs";
+import { seededRandom } from "../kit/core/ambient.mjs";
 
 const STYLES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "kit", "styles");
 const seeds = Array.from({ length: 50 }, (_, i) => (Math.imul(i + 7, 2654435761) >>> 0).toString(16).padStart(8, "0"));
@@ -235,11 +236,14 @@ test("applyStyle hands the seeded fields to the story; the story's own values wi
   assert.deepEqual(own.panel, { treatment: "solid" });
 });
 
-test("50 consecutive seeds cover every option of every dimension", async () => {
+test("seed runs cover every option of every dimension: 50 from 0, or any 100 in a row", async () => {
   const { WORLD_KINDS } = await import("../kit/core/worlds/index.mjs");
   const { SEED_AMBIENCE, SEED_CHARACTER_SETS, SEED_DRAWING_STYLES, SEED_ICON_STYLES, SEED_ILLUSTRATIONS, SEED_MODULE_VARIANTS, SEED_MUSIC_GENRES, SEED_PANEL_TREATMENTS, SEED_SOUND_PALETTES, SEED_BACKGROUND_KINDS, THEMES, PALETTE_SCHEMES } = await import("../kit/core/style-seed.mjs");
-  for (const base of [0, 0x5eed0000, 0xfffffe00]) {
-    const run = Array.from({ length: 50 }, (_, i) => ((base + i) >>> 0).toString(16).padStart(8, "0"));
+  // Each dimension of n options shuffles its options afresh in every block
+  // of n seeds, so a run holding a whole block (50 seeds from 0, any 100 in a
+  // row, for n up to 50) sees every option.
+  for (const [base, length] of [[0, 50], [0x5eed0007, 100], [0xfffffe13, 100]]) {
+    const run = Array.from({ length }, (_, i) => ((base + i) >>> 0).toString(16).padStart(8, "0"));
     const packs = run.map((seed) => generateStyle({ seed }));
     const names = (list) => list.map((entry) => (Array.isArray(entry) ? entry[0] : entry));
     const dimensions = {
@@ -272,4 +276,33 @@ test("50 consecutive seeds cover every option of every dimension", async () => {
   // The catalogue's modules with designed variants, catalogue H included, are all drawn.
   const { moduleVariants } = await import("../kit/core/modules.mjs");
   assert.deepEqual(Object.keys(SEED_MODULE_VARIANTS).sort(), Object.keys(moduleVariants()).sort());
+});
+
+test("no two dimensions move in lockstep: random seeds reach their combinations", async () => {
+  const { SEED_MODULE_VARIANTS, randomSeed } = await import("../kit/core/style-seed.mjs");
+  const random = seededRandom(0x5eed);
+  const N = 600;
+  const packs = Array.from({ length: N }, () => generateStyle({ seed: randomSeed(random) }));
+  const dimensions = {
+    theme: (p) => p.generated.theme, scheme: (p) => p.generated.scheme, pairing: (p) => p.generated.pairing, grammar: (p) => p.motion.grammar,
+    panel: (p) => p.layouts.panel.treatment, background: (p) => p.background.kind, "icon style": (p) => p.vocabulary.icon_style,
+    illustration: (p) => p.vocabulary.illustration, "drawing style": (p) => p.cast.drawing_style, "character set": (p) => p.cast.set,
+    world: (p) => p.world.kind, "world time": (p) => p.world.time, "sound palette": (p) => p.sound.palette, genre: (p) => p.sound.music.genre,
+    ambience: (p) => p.sound.ambience
+  };
+  for (const id of Object.keys(SEED_MODULE_VARIANTS)) dimensions[`variant ${id}`] = (p) => p.variants[id];
+  const values = Object.fromEntries(Object.entries(dimensions).map(([name, get]) => [name, packs.map(get)]));
+  const shares = (list) => { const counts = new Map(); for (const value of list) counts.set(value, (counts.get(value) ?? 0) + 1); return [...counts.values()].map((count) => count / N); };
+  const names = Object.keys(dimensions);
+  // Observed combinations against what independent choices with the same
+  // marginals would show in N draws: a locked pair reaches about max(n, m).
+  for (let i = 0; i < names.length; i += 1) {
+    for (let j = i + 1; j < names.length; j += 1) {
+      const a = values[names[i]], b = values[names[j]];
+      const seen = new Set(a.map((value, k) => `${value}|${b[k]}`)).size;
+      let expected = 0;
+      for (const x of shares(a)) for (const y of shares(b)) expected += 1 - (1 - x * y) ** N;
+      assert.ok(seen >= 0.85 * expected, `${names[i]} × ${names[j]}: ${seen} combinations, ${Math.round(expected)} expected`);
+    }
+  }
 });

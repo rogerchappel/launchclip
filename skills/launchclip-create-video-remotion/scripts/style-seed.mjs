@@ -456,18 +456,22 @@ export function nearestStarter(pack) {
 // ---------------------------------------------------------------------------
 // The pack
 
-// Categorical choices step through their options: the option index is
-// (seed × a prime + an offset) mod the option count, the prime and offset
-// picked by the dimension's name. Every run of n consecutive seeds therefore
-// visits all n options of a dimension (weights repeat an option), different
-// dimensions step at different rates, and random seeds stay uniform.
-const STEP_PRIMES = [101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179];
-
-/** One option of `entries` ([value] or [[value, integer weight]]) for this seed and dimension. */
+// Categorical choices: each dimension cuts the seed line into blocks of n
+// (its option count, weights repeating an option) and gives every block its
+// own shuffled order, from an independent hash of (dimension, block). Inside
+// a block every option appears once, so any 2n consecutive seeds cover all n
+// options; across blocks the orders are unrelated, so two dimensions never
+// move in lockstep and every combination of them stays reachable. A plain
+// (seed × k) mod n would tie dimensions of the same n together.
 function spread(hex, name, entries) {
   const list = entries.flatMap((entry) => (Array.isArray(entry) ? Array(entry[1]).fill(entry[0]) : [entry]));
-  const h = hash32(name);
-  return list[(parseInt(hex, 16) * STEP_PRIMES[h % STEP_PRIMES.length] + h) % list.length];
+  const n = list.length;
+  const seed = parseInt(hex, 16);
+  const block = Math.floor(seed / n), slot = seed % n;
+  const random = seededRandom(hash32(`${name}:${block}`));
+  const order = list.map((_, i) => i);
+  for (let i = n - 1; i > 0; i -= 1) { const k = Math.floor(random() * (i + 1)); [order[i], order[k]] = [order[k], order[i]]; }
+  return list[order[slot]];
 }
 
 const asObject = (value, key) => (value == null ? null : typeof value === 'string' ? { [key]: value } : value);

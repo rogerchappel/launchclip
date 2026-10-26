@@ -462,12 +462,16 @@ saved pack is what renders, so a new version changes only rerolls.
   background kind but logo-pattern (a seeded style has no logo),
   `SEED_ICON_STYLES` and `SEED_ILLUSTRATIONS` the style's, and the sound lists
   `kit/core/sound/options.mjs`. Weighted lists are `[value, integer weight]`.
-- Categorical choices step through their options (`spread`): the index is
-  (seed × a prime + an offset) mod the option count, so every run of n
-  consecutive seeds visits all n options of a dimension, and random seeds stay
-  uniform. `test/style_seed.test.js` checks that 50 consecutive seeds cover
-  every option of every dimension. A starter-distance redraw redraws only
-  the palette.
+- Categorical choices (`spread`): each dimension cuts the seed line into
+  blocks of n seeds (n = its option count, weights repeating an option) and
+  shuffles its options afresh in every block, from an independent hash of
+  (dimension, block). Every option appears once per block, so any 2n
+  consecutive seeds (and the 50 seeds from 0) cover all n options; the
+  orders are unrelated across blocks and dimensions, so no two dimensions
+  move in lockstep. `test/style_seed.test.js` checks both: the runs cover
+  every option of every dimension, and on 600 random seeds every pair of
+  dimensions reaches at least 85% of the combinations independent choices
+  would. A starter-distance redraw redraws only the palette.
 - Sound: a tone narrows the palettes and genres (`TONE_SOUND`); the genre
   sets bpm, key and progression (`GENRE_SPECS`). Ambience is `auto` (the
   world's own bed) most of the time, else `none` or any bed (`SEED_AMBIENCE`).
