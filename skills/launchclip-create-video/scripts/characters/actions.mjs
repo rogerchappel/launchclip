@@ -42,12 +42,15 @@ export const VIEWS = Object.freeze(['front', 'three-quarter', 'back']);
 
 /**
  * The view a character takes to look at a point: a far point is in the
- * scene's depth (the window, the street, the horizon, the skyline), so a
- * standing character turns its back to the camera to look at it; seated,
- * or for anything nearer, it turns three-quarters. No point: front.
+ * scene's depth (the window, the horizon, the skyline), so a standing
+ * character turns its back to the camera to look at it; seated, for
+ * anything nearer, or for a far point toward the camera (across a street),
+ * it turns three-quarters. No point: front.
  */
 export function viewFor(point, {seated = false} = {}) {
   if (!point) return 'front';
+  // Toward the camera (across a street from its far pavement): look past the viewer.
+  if (point.toward === 'camera') return 'three-quarter';
   return point.far && !seated ? 'back' : 'three-quarter';
 }
 // A walking pace, metres per second, and a rig of 1000 units ≈ 1.7 m.

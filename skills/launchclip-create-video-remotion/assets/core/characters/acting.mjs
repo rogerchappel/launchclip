@@ -170,11 +170,13 @@ export function actingOps(ops, actor) {
     const back = state => state.view === 'back';
     set(ops, `${cid}-back`, start, {opacity: back(states[0]) ? 1 : 0});
     set(ops, `${cid}-front`, start, {opacity: back(states[0]) ? 0 : 1});
+    set(ops, `${cid}-face-front`, start, {opacity: back(states[0]) ? 0 : 1});
     states.forEach((state, i) => {
       if (i === 0 || back(state) === back(states[i - 1])) return;
       const at = rt(state.time + A.poseTween * 0.4);
       tw(ops, `${cid}-back`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 0 : 1}, {opacity: back(state) ? 1 : 0});
       tw(ops, `${cid}-front`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 1 : 0}, {opacity: back(state) ? 0 : 1});
+      tw(ops, `${cid}-face-front`, at, A.turn, 'power1.inOut', {opacity: back(state) ? 1 : 0}, {opacity: back(state) ? 0 : 1});
     });
   }
   // Walks: the character crosses the floor on its own wrapper, at a steady pace.

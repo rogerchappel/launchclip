@@ -107,15 +107,19 @@ test("the acting gate: a line's key action is performed by its character on that
 });
 
 test("standing, a far look turns the character's back to the camera; the back of the head replaces the face", () => {
-  const model = resolve([plate(), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", target: "street" }, { at: 4, action: "gaze-at", target: "left" }] }], "standing")]);
+  const model = resolve([plate({ kind: "park" }), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", target: "horizon" }, { at: 4, action: "gaze-at", target: "left" }] }], "standing")]);
   const actor = model.content.actors[0];
   assert.deepEqual(actor.states.map((state) => state.view), ["front", "back", "three-quarter"]);
   assert.equal(actor.turns, true);
-  assert.ok(ids(charactersView(model).front).includes("c-c0-back") && ids(charactersView(model).front).includes("c-c0-front"));
+  assert.ok(["c-c0-back", "c-c0-front", "c-c0-face-front"].every((id) => ids(charactersView(model).front).includes(id)));
   const ops = charactersTimeline(model);
   assert.equal(frameState(ops, 0.5).get("c-c0-back").opacity, 0);
   assert.equal(frameState(ops, 2).get("c-c0-back").opacity, 1);
   assert.equal(frameState(ops, 2).get("c-c0-front").opacity, 0);
+  assert.equal(frameState(ops, 2).get("c-c0-face-front").opacity, 0, "the face, beard and glasses hide from behind");
+  // Across a street is toward the camera: the character looks past the viewer, three-quarters.
+  const street = resolve([plate(), bench([{ id: "maya", cues: [{ at: 1, action: "look-far", target: "street" }] }], "standing")]);
+  assert.equal(street.content.actors[0].states[1].view, "three-quarter");
   assert.equal(frameState(ops, 5).get("c-c0-back").opacity, 0, "turning back to a side look shows the face again");
   // The standing set has no furniture in a world, and nothing in hand.
   assert.deepEqual(model.content.front, []);
