@@ -91,7 +91,7 @@ test("settings resolve library → collection → recipe → the video's flags, 
     assert.equal(options.duration, "45");
     assert.equal(options.voiceId, "af_heart");
     assert.equal(options.profile, "shorts");
-    assert.equal(options.rules, "Never promise a launch date.\n");
+    assert.equal(options.rules, "Never promise a launch date.");
     assert.equal(options.brandAssets, path.join(dir, "brand"));
 
     // An invalid value from any layer is refused with make's own message.

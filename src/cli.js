@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "profile", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -51,6 +51,7 @@ export async function runCli(argv, io = {}) {
   const profileTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const profileInvocation = command === "profile" ? { action: firstArg, target: profileTarget, flagArgs: profileTarget ? rest.slice(1) : rest } : null;
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
+  const collectionInvocation = command === "collection" || command === "recipe" ? parseCollectionInvocation(command, firstArg, rest) : null;
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
@@ -63,7 +64,7 @@ export async function runCli(argv, io = {}) {
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -81,6 +82,15 @@ export async function runCli(argv, io = {}) {
     } else if (command === "cast") {
       const { runCastCommand } = await import("./cast.js");
       result = await runCastCommand(castInvocation.action, castInvocation.name, flags);
+    } else if (command === "collection" || command === "recipe") {
+      const { collectionNewCommand, collectionShowCommand, formatCollectionShow, recipeNewCommand } = await import("./collection_cli.js");
+      if (command === "recipe") result = await recipeNewCommand(collectionInvocation.target, flags);
+      else if (collectionInvocation.action === "new") result = await collectionNewCommand(collectionInvocation.target, flags);
+      else {
+        const report = await collectionShowCommand(collectionInvocation.target, flags);
+        stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatCollectionShow(report));
+        return;
+      }
     } else if (command === "intake") {
       result = await writeIntake(required(firstArg, "source"), flags);
     } else if (command === "edit-recording") {
@@ -185,7 +195,11 @@ export async function runCli(argv, io = {}) {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
       const { makeOptionsFromFlags } = await import("./make/options.js");
       if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");
-      const report = await runMake(firstArg, makeOptionsFromFlags(flags), { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      if (flags.recipe && !flags.collection) throw new Error("--recipe needs --collection <dir>: launchclip make \"<prompt>\" --collection ./acme --recipe feature-clip");
+      const makeAdapters = { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make };
+      const report = flags.collection
+        ? await (await import("./collection_cli.js")).makeInCollection(firstArg, flags, makeAdapters)
+        : await runMake(firstArg, makeOptionsFromFlags(flags), makeAdapters);
       throwIfCostLimited(tracker);
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
@@ -313,6 +327,15 @@ function parseSkillsInvocation(action, rest) {
   if (!new Set(["list", "path", "install"]).has(action)) throw new Error(`Unknown skills action: ${action}`);
   const hasName = action === "path" && rest[0] && !rest[0].startsWith("--");
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+}
+
+// launchclip collection new|show <id> [flags]; launchclip recipe new <collection>/<id> [flags]
+function parseCollectionInvocation(command, action, rest) {
+  const actions = command === "collection" ? ["new", "show"] : ["new"];
+  if (!action) throw new Error(`Missing ${command} action; use ${actions.join(" or ")}`);
+  if (!actions.includes(action)) throw new Error(`Unknown ${command} action: ${action}; use ${actions.join(" or ")}`);
+  const target = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  return { action, target: required(target, command === "recipe" ? "<collection>/<recipe-id>" : "collection id"), flagArgs: rest.slice(1) };
 }
 
 function parseSfxInvocation(action, rest) {

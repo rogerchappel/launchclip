@@ -351,7 +351,9 @@ async function readRules(collection) {
   if (!collection.doc.rules) return null;
   const file = insideCollection(collection, collection.doc.rules, "rules");
   if (!existsSync(file)) throw new Error(`rules file ${file} does not exist; write it or set "rules": null in ${collection.file}`);
-  const text = await readFile(file, "utf8");
+  // HTML comments are notes to the writer (collection new's template); headings alone are no rules.
+  const text = (await readFile(file, "utf8")).replace(/<!--[\s\S]*?-->/g, "").trim();
+  if (!text.replace(/^#.*$/gm, "").trim()) return null;
   return { file, text, version: `sha256:${createHash("sha256").update(text).digest("hex")}` };
 }
 
