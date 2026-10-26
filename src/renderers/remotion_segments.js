@@ -19,7 +19,7 @@
 // shadows, glows) one level apart depending on what the tab drew before a
 // frame, so frames right where a segment starts can differ from a single-pass
 // render by that much (mezzanine SSIM ≥ 0.9999).
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -85,12 +85,40 @@ export function deliveryArgs(input, output, quality = "draft") {
 // renders share a warm cache and never clear another project's.
 export function remotionRoot(project) {
   const key = createHash("sha256").update(path.resolve(project)).digest("hex").slice(0, 16);
-  const root = path.join(os.tmpdir(), "launchclip-remotion-roots", key);
-  if (!existsSync(path.join(root, "package.json"))) {
+  const roots = path.join(os.tmpdir(), "launchclip-remotion-roots");
+  const root = path.join(roots, key);
+  if (existsSync(path.join(root, "package.json"))) {
+    const now = new Date();
+    try { utimesSync(root, now, now); } catch {}
+  } else {
     mkdirSync(root, { recursive: true });
     writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: `launchclip-remotion-${key}`, private: true })}\n`);
+    pruneRemotionRoots(roots, root);
   }
   return root;
+}
+
+// A root's webpack cache is ~0.5 GB and every project path gets its own, so
+// keep the most recently used few, and never one used in the last ten minutes
+// (another render may be bundling from it). Runs when a new root is made.
+const KEEP_ROOTS = 6;
+export function pruneRemotionRoots(roots, current) {
+  let names;
+  try { names = readdirSync(roots); } catch { return; }
+  const entries = [];
+  for (const name of names) {
+    const full = path.join(roots, name);
+    if (full === current || !/^[0-9a-f]{16}$/.test(name)) continue;
+    try {
+      const info = statSync(full);
+      if (info.isDirectory()) entries.push({ full, mtime: info.mtimeMs });
+    } catch {}
+  }
+  entries.sort((a, b) => b.mtime - a.mtime);
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const entry of entries.slice(KEEP_ROOTS - 1)) {
+    if (entry.mtime < cutoff) try { rmSync(entry.full, { recursive: true, force: true }); } catch {}
+  }
 }
 
 // Bundles are cached outside the project (the project is the bundle's public
