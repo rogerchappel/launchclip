@@ -210,6 +210,9 @@ test("chooseBed follows scene energy and musicSpec reads audio.music", () => {
   assert.deepEqual(musicSpec({ music: "none" }), { kind: "none" });
   assert.deepEqual(musicSpec({ music: "assets/audio/song.wav" }), { kind: "file", file: "assets/audio/song.wav" });
   assert.deepEqual(musicSpec({ music: { source: "synth", bpm: 100, key: "C" } }), { kind: "synth", bpm: 100, key: "C" });
+  // The bed's gain passes through, as finish's plan reads it.
+  assert.deepEqual(musicSpec({ music: { source: "synth", volume: 0.32 } }), { kind: "synth", bpm: undefined, key: undefined, volume: 0.32 });
+  assert.equal(musicSpec({ music: { file: "assets/audio/song.wav", volume: 0.2 } }).volume, 0.2);
 });
 
 test("buildFinishCopy fills a copy and never touches the user's story", () => {
