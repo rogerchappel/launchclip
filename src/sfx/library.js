@@ -13,9 +13,10 @@
 // fall through to the next source.
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { writeFileAtomic } from "../atomic_write.js";
 import { densityValue } from "../../kit/core/sound/options.mjs";
 
 export const LIBRARY_SCHEMA = "launchclip.sfx-library.v1";
@@ -58,10 +59,7 @@ export async function readLibrary(dir) {
 
 export async function writeLibrary(dir, manifest) {
   const file = path.join(path.resolve(dir), LIBRARY_FILE);
-  await mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.tmp`;
-  await writeFile(temp, `${JSON.stringify(manifest, null, 2)}\n`);
-  await rename(temp, file);
+  await writeFileAtomic(file, `${JSON.stringify(manifest, null, 2)}\n`);
   return file;
 }
 

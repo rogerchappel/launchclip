@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -44,6 +44,7 @@ export async function runCli(argv, io = {}) {
   }
 
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
+  const libraryInvocation = command === "library" ? parseLibraryInvocation(firstArg, rest) : null;
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const castInvocation = command === "cast" ? parseCastInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
@@ -51,6 +52,7 @@ export async function runCli(argv, io = {}) {
   const profileTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const profileInvocation = command === "profile" ? { action: firstArg, target: profileTarget, flagArgs: profileTarget ? rest.slice(1) : rest } : null;
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
+  const collectionInvocation = command === "collection" || command === "recipe" ? parseCollectionInvocation(command, firstArg, rest) : null;
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
@@ -66,7 +68,7 @@ export async function runCli(argv, io = {}) {
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -87,6 +89,9 @@ export async function runCli(argv, io = {}) {
       return;
     } else if (command === "doctor") {
       result = await doctor();
+    } else if (command === "library") {
+      const { initLibrary } = await import("./library.js");
+      result = await initLibrary(libraryInvocation.target, { projects: flags.projects, finals: flags.finals, cache: flags.cache, name: flags.name, minFreeGb: flags["min-free-gb"], force: Boolean(flags.force) });
     } else if (command === "skills") {
       result = await runSkillsCommand(skillsInvocation.action, skillsInvocation.name, flags, skillOptions);
     } else if (command === "style") {
@@ -97,8 +102,19 @@ export async function runCli(argv, io = {}) {
     } else if (command === "cast") {
       const { runCastCommand } = await import("./cast.js");
       result = await runCastCommand(castInvocation.action, castInvocation.name, flags);
+    } else if (command === "collection" || command === "recipe") {
+      const { collectionNewCommand, collectionShowCommand, formatCollectionShow, recipeNewCommand } = await import("./collection_cli.js");
+      if (command === "recipe") result = await recipeNewCommand(collectionInvocation.target, flags);
+      else if (collectionInvocation.action === "new") result = await collectionNewCommand(collectionInvocation.target, flags);
+      else {
+        const { loadLibrary } = await import("./library.js");
+        const report = await collectionShowCommand(collectionInvocation.target, flags, { library: await loadLibrary({ library: flags.library }) });
+        stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatCollectionShow(report));
+        return;
+      }
     } else if (command === "intake") {
-      result = await writeIntake(required(firstArg, "source"), flags);
+      const { loadLibrary } = await import("./library.js");
+      result = await writeIntake(required(firstArg, "source"), flags, process.env, { library: await loadLibrary({ library: flags.library }) });
     } else if (command === "edit-recording") {
       result = await prepareRecording(required(firstArg, "recording media path"), recordingOptions(flags), productionAdapters.recording);
     } else if (command === "broll-plan") {
@@ -150,7 +166,11 @@ export async function runCli(argv, io = {}) {
       result = report;
     } else if (command === "finish") {
       const { runFinish, formatFinishSummary } = await import("./finish.js");
+      const { loadLibrary, useLibraryCache } = await import("./library.js");
+      const library = await loadLibrary({ library: flags.library });
+      const restoreCache = useLibraryCache(library);
       const report = await runFinish(required(firstArg, "story project path"), {
+        library,
         renderer: flags.renderer,
         quality: flags.quality,
         voice: flags.voice,
@@ -171,7 +191,7 @@ export async function runCli(argv, io = {}) {
         kind: flags.kind,
         boundary: flags.boundary,
         at: flags.at
-      }, productionAdapters.finish);
+      }, productionAdapters.finish).finally(restoreCache);
       throwIfCostLimited(tracker);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
@@ -200,38 +220,16 @@ export async function runCli(argv, io = {}) {
       result = report;
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
+      const { makeOptionsFromFlags } = await import("./make/options.js");
       if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");
-      const report = await runMake(firstArg, {
-        assets: flags.assets,
-        aspect: flags.aspect,
-        duration: flags.duration,
-        style: flags.style,
-        seed: flags.seed,
-        model: flags.model,
-        voice: flags.voice,
-        music: flags.music,
-        renderer: flags.renderer,
-        quality: flags.quality,
-        concurrency: flags.concurrency,
-        goal: flags.goal,
-        format: flags.format,
-        awareness: flags.awareness,
-        out: flags.out,
-        replan: Boolean(flags.replan),
-        critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
-        maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
-        repo: flags.repo,
-        approveDemo: Boolean(flags["approve-demo"]),
-        redemo: Boolean(flags.redemo),
-        start: flags.start,
-        url: flags.url,
-        allowHost: flags["allow-host"],
-        demoPlan: flags["demo-plan"],
-        visualHistoryDir: flags["visual-history-dir"],
-        visualHistoryLimit: flags["visual-history-limit"],
-        visualSimilarityLimit: flags["visual-similarity-limit"],
-        ...(flags["no-subject"] ? { subject: false } : {})
-      }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      if (flags.recipe && !flags.collection) throw new Error("--recipe needs --collection <dir>: launchclip make \"<prompt>\" --collection ./acme --recipe feature-clip");
+      const { loadLibrary, useLibraryCache } = await import("./library.js");
+      const library = await loadLibrary({ library: flags.library });
+      const restoreCache = useLibraryCache(library);
+      const makeAdapters = { notice: (line) => stderr.write(`${line}\n`), library, ...productionAdapters.make };
+      const report = await (flags.collection
+        ? (await import("./collection_cli.js")).makeInCollection(firstArg, flags, makeAdapters)
+        : runMake(firstArg, { ...makeOptionsFromFlags(flags), library }, makeAdapters)).finally(restoreCache);
       throwIfCostLimited(tracker);
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
@@ -367,6 +365,21 @@ function parseSkillsInvocation(action, rest) {
   if (!new Set(["list", "path", "install"]).has(action)) throw new Error(`Unknown skills action: ${action}`);
   const hasName = action === "path" && rest[0] && !rest[0].startsWith("--");
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+}
+
+function parseLibraryInvocation(action, rest) {
+  if (action !== "init") throw new Error(action ? `Unknown library action: ${action}; use init` : "Missing library action; use init");
+  const hasTarget = rest[0] && !rest[0].startsWith("--");
+  return { action, target: hasTarget ? rest[0] : null, flagArgs: hasTarget ? rest.slice(1) : rest };
+}
+
+// launchclip collection new|show <id> [flags]; launchclip recipe new <collection>/<id> [flags]
+function parseCollectionInvocation(command, action, rest) {
+  const actions = command === "collection" ? ["new", "show"] : ["new"];
+  if (!action) throw new Error(`Missing ${command} action; use ${actions.join(" or ")}`);
+  if (!actions.includes(action)) throw new Error(`Unknown ${command} action: ${action}; use ${actions.join(" or ")}`);
+  const target = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  return { action, target: required(target, command === "recipe" ? "<collection>/<recipe-id>" : "collection id"), flagArgs: rest.slice(1) };
 }
 
 function parseSfxInvocation(action, rest) {

@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { projectRoot } from "./library.js";
 import { resolveProductionProfile } from "./production_profiles.js";
+import { checkStorage } from "./storage_check.js";
 import { resolveStylePack } from "./style_store.js";
 
 export const INTAKE_SCHEMA_VERSION = "launchclip.intake.v1";
@@ -41,8 +43,13 @@ const RESOURCE_EXTENSIONS = new Map([
   [".md", "text"], [".txt", "text"], [".json", "text"], [".csv", "text"], [".tsv", "text"]
 ]);
 
-export async function writeIntake(source, flags = {}, env = process.env) {
-  const intake = await buildIntake(source, flags, env);
+/**
+ * options: {library} (src/library.js): without --out the workspace goes under
+ * the library's storage.projects, after checking its drive.
+ */
+export async function writeIntake(source, flags = {}, env = process.env, { library = null } = {}) {
+  const intake = await buildIntake(source, flags, env, { library });
+  if (library) await checkStorage(intake.workspace, { minFreeGb: library.storage.min_free_gb, label: flags.out ? "--out" : "storage.projects", source: library.file });
   return writeIntakeManifest(intake);
 }
 
@@ -62,7 +69,7 @@ export async function writeIntakeManifest(intake) {
   };
 }
 
-export async function buildIntake(source, flags = {}, env = process.env) {
+export async function buildIntake(source, flags = {}, env = process.env, { library = null } = {}) {
   const value = String(source ?? "").trim();
   if (!value) throw new Error("Missing source");
   const heygenAvatar = resolveHeygenAvatarFlag(flags);
@@ -106,7 +113,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
     resources.push({ ...videoVoiceover, id: resourceId(videoVoiceover.location, resources.length), role: "presenter", source: videoVoiceover.source });
   }
   const slug = sourceSlug(value, sourceKind);
-  const workspace = path.resolve(flags.out ?? path.join(".launchclip", slug));
+  const workspace = path.resolve(flags.out ?? (library ? projectRoot(library, slug) : path.join(".launchclip", slug)));
   const style = await describeStyle(flags);
   return {
     schema_version: INTAKE_SCHEMA_VERSION,

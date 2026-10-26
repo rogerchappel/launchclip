@@ -38,6 +38,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { writeFileAtomic } from "./atomic_write.js";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { captionChunksFrom, chunkWords, narrationWords, visibleChunks } from "../kit/core/captions.mjs";
@@ -636,8 +637,7 @@ async function readIndex(dir) {
 }
 
 async function writeIndex(dir, index) {
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
+  await writeFileAtomic(path.join(dir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
 }
 
 const segmentFile = (dir, hash) => path.join(dir, `${hash}.mp4`);

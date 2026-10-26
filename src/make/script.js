@@ -66,15 +66,18 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 }
 
 /**
- * options: {client, model, provider, prompt, notes: [text], assets: [line], transcripts: [text],
+ * options: {client, model, provider, prompt, notes: [text], rules (a collection's RULES.md text), assets: [line], transcripts: [text],
  *   duration, words (target override), plan (a chooseScriptPlan() result, or its
  *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
  *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
  *   usage, cost_usd, model, response_id}
  */
+/** The heading a collection's RULES.md goes under, in the script pass, the brief and the critic. */
+export const RULES_HEADING = "## Rules (the collection's own rules for every video: audience, tone, claims it may and may not make, words to avoid, things it never shows; keep every one)";
+
 export async function writeScript(options = {}) {
-  const { client, model = null, provider = null, prompt, notes = [], assets = [], transcripts = [], duration, resize = null, repair = null } = options;
+  const { client, model = null, provider = null, prompt, notes = [], rules = null, assets = [], transcripts = [], duration, resize = null, repair = null } = options;
   if (!client) throw new Error("writeScript needs a model client");
   const given = options.plan ?? {};
   const plan = chooseScriptPlan({ prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, words: options.words });
@@ -87,6 +90,7 @@ export async function writeScript(options = {}) {
     String(prompt).trim()
   ];
   if (notes.length) lines.push("", "## Notes from the assets folder", "", ...notes.map((text) => String(text).trim().slice(0, 6000)));
+  if (rules && String(rules).trim()) lines.push("", RULES_HEADING, "", String(rules).trim().slice(0, 8000));
   if (assets.length) lines.push("", "## Assets the video can show", "", ...assets.map((line) => `- ${line}`));
   if (transcripts.length) lines.push("", "## Transcripts of supplied recordings", "", ...transcripts.map((text) => String(text).trim().slice(0, 4000)));
   if (resize?.previous) {

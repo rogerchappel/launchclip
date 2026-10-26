@@ -14,6 +14,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { RULES_HEADING } from "./script.js";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 
 // The rubric (VIDEO_QUALITY_RFC §11.3): the craft categories, plus
@@ -78,7 +79,7 @@ Return only the JSON object.`;
  * findings, each citing the evidence sample nearest its time.}
  * → {status: "written"|"skipped"|"failed", file, verdict, findings, reviewed, warnings, usage, cost_usd, reason?}
  */
-export async function runHeadlessCritic({ project, client, model = null, provider = null, maxSheets = 12, quality = [] } = {}) {
+export async function runHeadlessCritic({ project, client, model = null, provider = null, maxSheets = 12, quality = [], rules = null } = {}) {
   const manifestFile = path.join(project, "qa/temporal-evidence/manifest.json");
   const indexFile = path.join(project, "qa/critic-sheets/index.json");
   if (!existsSync(manifestFile) || !existsSync(indexFile)) return { status: "skipped", reason: "finish wrote no temporal evidence or critic sheets" };
@@ -109,6 +110,7 @@ export async function runHeadlessCritic({ project, client, model = null, provide
     lines.push("", "Measured from the direction map and the storyboard (already proven; look for more of the same, and do not repeat these):");
     for (const finding of quality) lines.push(`  ${finding.category} at ${finding.at} s: ${finding.message}`);
   }
+  if (rules && String(rules).trim()) lines.push("", `${RULES_HEADING.replace(/^## /, "")}. A breach you can see is a finding:`, "", String(rules).trim().slice(0, 8000));
   const shownSamples = new Set(sheets.flatMap((sheet) => sheet.samples ?? []));
   const reviewed = (manifest.entries ?? []).filter((entry) => shownSamples.has(entry.sample_id)).map((entry) => entry.evidence_id);
   const known = new Set((manifest.entries ?? []).map((entry) => entry.evidence_id));

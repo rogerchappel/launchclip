@@ -221,3 +221,17 @@ test("writes production/intake.json", async () => {
   assert.equal(written.workspace, out);
   assert.equal(written.brief.aspect.width, 1920);
 });
+
+test("inside a library the workspace goes under storage.projects unless --out", async () => {
+  const storage = await mkdtemp(path.join(os.tmpdir(), "launchclip-intake-storage-"));
+  const library = { file: path.join(storage, "launchclip.library.json"), storage: { projects: storage, min_free_gb: 0 } };
+  const result = await writeIntake("owner/repo", { aspect: "16:9" }, {}, { library });
+  assert.equal(path.dirname(result.workspace), storage);
+  const written = JSON.parse(await readFile(result.intake, "utf8"));
+  assert.equal(written.workspace, result.workspace);
+  const out = path.join(storage, "elsewhere");
+  assert.equal((await buildIntake("owner/repo", { out }, {}, { library })).workspace, out);
+  assert.match((await buildIntake("owner/repo", {}, {})).workspace, /\.launchclip\/[^/]+$/, "no library: .launchclip/<slug> as before");
+  const unmounted = { file: "lib.json", storage: { projects: `/Volumes/launchclip-missing-${process.pid}`, min_free_gb: 0 } };
+  await assert.rejects(writeIntake("owner/repo", {}, {}, { library: unmounted }), /storage\.projects: \/Volumes\/launchclip-missing-\d+ is not mounted/);
+});

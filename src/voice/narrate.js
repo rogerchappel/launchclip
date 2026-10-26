@@ -9,9 +9,10 @@
 // `launchclip voice` and then running finish synthesises once.
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { copyFileAtomic, writeFileAtomic } from "../atomic_write.js";
 
 export const DEFAULT_NARRATION_PROVIDER = "kokoro";
 // Provider defaults when audio.narration leaves voice or speed out.
@@ -90,9 +91,9 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
   const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
   const duration = round3(Number(result.duration ?? words.at(-1).end));
   if (cacheable) {
-    await mkdir(cacheDir, { recursive: true });
-    await copyFile(outFile, cachedWav);
-    await writeFile(cachedMeta, `${JSON.stringify({ schema_version: "launchclip.voice-cache.v1", request, words, duration_seconds: duration, sample_rate: result.sampleRate ?? null, loudness }, null, 2)}\n`);
+    // Other processes may read or write the same take: whole files only.
+    await copyFileAtomic(outFile, cachedWav);
+    await writeFileAtomic(cachedMeta, `${JSON.stringify({ schema_version: "launchclip.voice-cache.v1", request, words, duration_seconds: duration, sample_rate: result.sampleRate ?? null, loudness }, null, 2)}\n`);
   }
   return { file: outFile, words, duration, sampleRate: result.sampleRate ?? null, loudness, cached: false, cache_key: key };
 }

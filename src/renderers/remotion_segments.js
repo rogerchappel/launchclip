@@ -22,9 +22,9 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { systemTempDir } from "../render_temp.js";
 
 const require = createRequire(import.meta.url);
 const REMOTION_VERSION = require("@remotion/renderer/package.json").version;
@@ -85,7 +85,7 @@ export function deliveryArgs(input, output, quality = "draft") {
 // renders share a warm cache and never clear another project's.
 export function remotionRoot(project) {
   const key = createHash("sha256").update(path.resolve(project)).digest("hex").slice(0, 16);
-  const roots = path.join(os.tmpdir(), "launchclip-remotion-roots");
+  const roots = path.join(systemTempDir(), "launchclip-remotion-roots");
   const root = path.join(roots, key);
   if (existsSync(path.join(root, "package.json"))) {
     const now = new Date();
@@ -128,7 +128,7 @@ export function pruneRemotionRoots(roots, current) {
 async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
   const fonts = await listFonts(project);
   const key = createHash("sha256").update(JSON.stringify({ remotion: REMOTION_VERSION, entry: path.resolve(entry), project: path.resolve(project), kitHash, fonts })).digest("hex").slice(0, 24);
-  const root = bundleRoot ?? path.join(os.tmpdir(), "launchclip-remotion-bundles");
+  const root = bundleRoot ?? path.join(systemTempDir(), "launchclip-remotion-bundles");
   const dir = path.join(root, key);
   if (existsSync(path.join(dir, "index.html")) && existsSync(path.join(dir, "bundle.js"))) {
     const now = new Date();
@@ -140,7 +140,13 @@ async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
   const { bundle } = await import("@remotion/bundler");
   await bundle({ entryPoint: path.resolve(entry), publicDir: path.resolve(project), symlinkPublicDir: true, outDir: temporary, enableCaching: true, rootDir: remotionRoot(project), onProgress: () => {} });
   await rm(dir, { recursive: true, force: true });
-  await rename(temporary, dir);
+  try {
+    await rename(temporary, dir);
+  } catch (error) {
+    // Another process finished the same bundle first: use theirs.
+    await rm(temporary, { recursive: true, force: true });
+    if (!existsSync(path.join(dir, "index.html"))) throw error;
+  }
   await pruneBundles(root, dir);
   return { serveUrl: dir, cached: false };
 }

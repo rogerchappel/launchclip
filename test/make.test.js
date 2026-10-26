@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -13,98 +13,9 @@ import { assetErrors, audioEnhancementFeature, formatMakeSummary, runMake, slugi
 import { selectMakeModel } from "../src/make/models.js";
 import { testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
+import { NARRATION, PROMPT, assetsDir, fakeFinish, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
 
 const run = promisify(execFile);
-const PROMPT = "A 6-second launch video for a fictional SaaS called Ledgerly that reconciles Stripe payouts automatically";
-// Within the 6-second clock (16 words at 2.75 a second), so the script checks pass.
-const NARRATION = "Payouts never match your books. Ledgerly matches each payout to its invoice. Try Ledgerly free.";
-
-// The storyboard a model would return for NARRATION over the test voice.
-function storyboard({ duration, media = "assets/ui.mp4", width = 1920, height = 1080 }) {
-  return {
-    schema: "launchclip.story.v1",
-    title: "Ledgerly",
-    lane: "motion",
-    format: { width, height, fps: 30, duration },
-    brand: DEFAULT_BRAND,
-    audio: { words: "NARRATION.json" },
-    scenes: [
-      { id: "s1", module: "hook-title", start: 0, end: "word:ledgerly", energy: 1, params: { headline: "Payouts never match", emphasis: "never" }, hits: [{ at: "word:never", event: "emphasis-0" }] },
-      { id: "s2", module: "media-window", start: "word:ledgerly", end: "word:try", energy: 2, in: { type: "fade", dur: 0.3 }, params: { title: "Ledgerly matches every payout", media: { kind: "video", src: media } } },
-      { id: "s3", module: "cta", start: "word:try", end: duration, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Try Ledgerly free" } }
-    ],
-    overlays: [{ type: "captions", style: "word-highlight" }],
-    grammar: "editorial",
-    ending: { loop_to: "s1" }
-  };
-}
-
-// A fake model: the script pass returns NARRATION; the storyboard pass first
-// references a file that is not in the manifest (a repair), then a valid board.
-function fakeModel({ vision = false } = {}) {
-  const calls = [];
-  const directionCalls = [];
-  const usage = { input_tokens: 4000, output_tokens: 800, total_tokens: 4800 };
-  let boards = 0;
-  const client = {
-    provider: "openai",
-    async runStructured(request) {
-      // The direction-map call returns no map, so make drafts DIRECTION.json from the storyboard.
-      if (request.schemaName === "launchclip_direction") { directionCalls.push(request); return { model: "gpt-5.6-luna", value: { direction_json: "" }, usage }; }
-      calls.push(request);
-      if (request.schemaName === "launchclip_make_script") return { model: "gpt-5.6-luna", value: { title: "Ledgerly", narration: NARRATION }, usage };
-      if (request.schemaName === "launchclip_storyboard") {
-        boards += 1;
-        const duration = Number(/"duration":([\d.]+)/.exec(request.input)[1]);
-        const width = Number(/"width":(\d+)/.exec(request.input)[1]);
-        const height = Number(/"height":(\d+)/.exec(request.input)[1]);
-        const board = storyboard({ duration, width, height, media: boards === 1 ? "assets/missing.png" : "assets/ui.mp4" });
-        return { model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(board) }, usage };
-      }
-      throw new Error(`unexpected schema ${request.schemaName}`);
-    }
-  };
-  return { calls, directionCalls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision } };
-}
-
-async function assetsDir() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-in-"));
-  await writeFile(path.join(dir, "ui.mp4"), "not really a video");
-  await writeFile(path.join(dir, "logo.png"), "png");
-  await writeFile(path.join(dir, "notes.md"), "Ledgerly reconciles Stripe payouts against invoices.\n");
-  return dir;
-}
-
-// The inventory the classifier would produce for assetsDir() (the classifier
-// itself is covered by make_assets.test.js).
-const fakeInventory = async (dir) => ({
-  schema_version: "launchclip.make-assets.v1",
-  dir,
-  entries: [
-    { path: "logo.png", kind: "image", role: "logo", confidence: 0.95, signals: ["filename:logo"], description: "Logo image (512×512, transparent)", media: { kind: "image", width: 512, height: 512, alpha: true }, fingerprint: "1" },
-    { path: "notes.md", kind: "notes", role: "notes", confidence: 1, signals: ["extension"], description: "Brief notes", text: "Ledgerly reconciles Stripe payouts against invoices.", fingerprint: "2" },
-    { path: "ui.mp4", kind: "video", role: "screen-recording", confidence: 0.9, signals: ["ui-look", "no-audio"], description: "Screen recording / product demo (4s, 1280×720, silent)", media: { kind: "video", width: 1280, height: 720, duration: 4, orientation: "landscape", has_audio: false, mountable: true }, speech: { present: false }, fingerprint: "3" }
-  ],
-  counts: {},
-  summary: []
-});
-
-// finish stand-in: records its options and returns a report shaped like finish.json.
-function fakeFinish(calls) {
-  return async (project, options, adapters) => {
-    calls.push({ project, options, adapters });
-    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
-    assert.ok(story.audio.narration?.text || story.base, "finish gets a narrated or footage-led storyboard");
-    await mkdir(path.join(project, "renders"), { recursive: true });
-    await writeFile(path.join(project, "renders/draft.mp4"), "video");
-    return {
-      status: "ready-for-review", seconds: 1.5, final: path.join(project, "renders/draft.mp4"), warnings: [],
-      stages: ["voice", "validate", "captions", "sound", "render", "master", "evidence", "gates"].map((name) => ({ name, status: "done", seconds: 0.1 })),
-      gates: { layout: { status: "passed" }, loudness: { status: "passed" }, motion: { status: "passed" }, audio: { status: "passed" }, temporal_evidence: { status: "passed" }, critic: { status: "pending", reason: "finish does not produce critic receipts" } }
-    };
-  };
-}
-
 test("make runs the motion lane end to end with a fake model, the test voice and a stub finish; reruns reuse the plan", async () => {
   const assets = await assetsDir();
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-cwd-"));
@@ -155,6 +66,60 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, replan: true }, adapters);
     assert.equal(calls.filter((call) => call.schemaName === "launchclip_make_script").length, 1);
     assert.ok(calls.filter((call) => call.schemaName === "launchclip_storyboard").length > 2);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+// Collections RFC phase 1: inside a library, a project without --out goes
+// under storage.projects, and the library folder (the cwd) gets nothing.
+test("make inside a library puts the project under storage.projects and leaves the library folder alone", async () => {
+  const assets = await assetsDir();
+  const libraryDir = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-library-"));
+  const storage = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-storage-"));
+  try {
+    const { initLibrary, loadLibrary } = await import("../src/library.js");
+    await initLibrary(libraryDir, { projects: storage, minFreeGb: 0 });
+    const cwd = path.join(libraryDir, "acme");
+    await mkdir(cwd);
+    const library = await loadLibrary({ cwd, env: {} });
+    const { model } = fakeModel();
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, library }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice() {} });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.equal(report.project, path.join(storage, `launchclip-${slugify(PROMPT)}`));
+    assert.equal(report.library, library.file);
+    assert.ok(existsSync(path.join(report.project, "storyboard.json")));
+    assert.deepEqual((await readdir(libraryDir)).sort(), ["acme", "launchclip.library.json"]);
+    assert.deepEqual(await readdir(cwd), []);
+    // --out still wins.
+    const out = path.join(cwd, "here");
+    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, library, out }, { env: {}, client: fakeModel().model, inventory: fakeInventory, finish: fakeFinish([]), notice() {} });
+    assert.equal(again.project, out);
+  } finally {
+    for (const dir of [assets, libraryDir, storage]) await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("make inside a library refuses to start on an unmounted drive", async () => {
+  const library = { file: "/lib/launchclip.library.json", storage: { projects: `/Volumes/launchclip-missing-${process.pid}/projects`, min_free_gb: 0 } };
+  await assert.rejects(runMake(PROMPT, { voice: "test", library }, { env: {}, client: fakeModel().model, notice() {} }), (error) => {
+    assert.equal(error.code, "LAUNCHCLIP_STORAGE");
+    assert.match(error.message, /^storage\.projects: \/Volumes\/launchclip-missing-\d+ is not mounted/);
+    return true;
+  });
+});
+
+test("make stops with one clear line when its project folder disappears mid-job", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-cwd-"));
+  try {
+    const finish = async (project) => {
+      await rm(project, { recursive: true, force: true });
+      throw new Error(`ENOENT: no such file or directory, open '${project}/renders/draft.mp4'`);
+    };
+    await assert.rejects(runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: fakeModel().model, inventory: fakeInventory, finish, notice() {} }),
+      /StorageError: launchclip make stopped during finish: .* disappeared\. Reconnect it and run the same command again/);
   } finally {
     await rm(assets, { recursive: true, force: true });
     await rm(cwd, { recursive: true, force: true });
