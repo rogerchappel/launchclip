@@ -1153,6 +1153,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip doctor --capacity [--json]              # cores, RAM, GPU and the slots for plan, local-model, render and io
   ```
 
+- `queue`: List the jobs holding or waiting for a slot in the machine queue ($LAUNCHCLIP_HOME/queue).
+
+  ```text
+  launchclip queue [--json]                          # running and waiting jobs across the machine
+  ```
+
 - `skills list`: List the bundled agent skills.
 
   ```text

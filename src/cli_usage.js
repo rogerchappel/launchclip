@@ -14,6 +14,7 @@ export const USAGE = Object.freeze([
   ["--version", "--version"],
   ["doctor", "doctor"],
   ["doctor", "doctor --capacity [--json]", {comment: "cores, RAM, GPU and the slots for plan, local-model, render and io"}],
+  ["queue", "queue [--json]", {comment: "running and waiting jobs across the machine"}],
   ["skills list", "skills list"],
   ["skills path", "skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]"],
   ["skills install", "skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]"],
@@ -119,6 +120,7 @@ export const USAGE = Object.freeze([
 export const SUMMARIES = Object.freeze({
   "--version": "Print the LaunchClip version.",
   doctor: "Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only); --capacity measures cores and RAM and recommends job slots.",
+  queue: "List the jobs holding or waiting for a slot in the machine queue ($LAUNCHCLIP_HOME/queue).",
   skills: "List, locate or install the bundled agent skills.",
   "skills list": "List the bundled agent skills.",
   "skills path": "Print the path of a bundled skill.",

@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -69,8 +69,14 @@ export async function runCli(argv, io = {}) {
   globalThis.fetch = tracker.fetch;
   try {
     let result;
-    // doctor takes only flags, so its first argument is one of them.
-    const doctorFlags = command === "doctor" ? parseFlags(commandArgs) : null;
+    // doctor and queue take only flags, so their first argument is one of them.
+    const doctorFlags = command === "doctor" || command === "queue" ? parseFlags(commandArgs) : null;
+    if (command === "queue") {
+      const { readQueue, formatQueue } = await import("./queue.js");
+      const report = await readQueue();
+      stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatQueue(report));
+      return;
+    }
     if (doctorFlags?.capacity) {
       const { diagnoseCapacity, formatCapacity } = await import("./capacity.js");
       const report = await (productionAdapters.capacity ?? diagnoseCapacity)();

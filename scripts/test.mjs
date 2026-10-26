@@ -17,7 +17,8 @@ export function runTests(args, env = process.env) {
   try {
     const result = spawnSync(process.execPath, ['--test', ...args], {
       stdio: 'inherit',
-      env: {...env, TMPDIR: temporary, TMP: temporary, TEMP: temporary}
+      // The machine queue too, so tests never wait on (or block) real jobs.
+      env: {...env, TMPDIR: temporary, TMP: temporary, TEMP: temporary, LAUNCHCLIP_QUEUE_DIR: path.join(temporary, 'queue')}
     });
     return result.status ?? 1;
   } finally {
