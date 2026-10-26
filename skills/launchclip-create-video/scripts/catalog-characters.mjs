@@ -31,6 +31,7 @@ import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
 import {SEATED_SETS, SETS, SET_INFO, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
+import {WORLD_KINDS, WORLD_TIMES, worldGrade, worldLight} from './worlds/index.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
@@ -47,10 +48,12 @@ const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 's
 // Shared: actors
 
 /**
- * The scene's key light (characters/light.mjs): params.light, else the
- * story's or world's light (ctx.light), else the default soft key.
+ * The scene's key light (characters/light.mjs): params.light, else the light
+ * of the world the cast stands in (standingWorld), else the story's light
+ * (ctx.light), else the default soft key.
  */
-function sceneLight(b, value, fallback) {
+function sceneLight(b, value, ctx, world) {
+  const fallback = world ? worldLight(world.kind, world.time) : ctx.light;
   const errors = lightErrors(value, 'params.light');
   if (errors.length) b.check.fail('params.light', errors.join('; ').replace(/^params\.light /, ''));
   return normalizeLight(value ?? (lightErrors(fallback).length ? null : fallback ?? null));
@@ -108,6 +111,27 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   const geometry = styleGeometry(member.style, member.params);
   return {id: member.id, name: member.name, voice: member.voice, look: member.look, fingerprint: member.fingerprint, params: member.params, colors: member.colors, style: member.style,
     facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light};
+}
+
+/**
+ * The world the cast stands in: params.world ({kind, time?}), else the
+ * track-0 world scene the scene plays over (ctx.beneath). → {kind, time} | null.
+ */
+function standingWorld(b, ctx) {
+  const {check} = b;
+  const raw = b.params.world;
+  if (raw === undefined) return ctx.beneath ? {kind: ctx.beneath.kind, time: ctx.beneath.time} : null;
+  check.obj(raw, 'params.world', ['kind', 'time'], ['kind']);
+  return {kind: check.oneOf(raw.kind, 'params.world.kind', WORLD_KINDS), time: raw.time === undefined ? 'day' : check.oneOf(raw.time, 'params.world.time', WORLD_TIMES)};
+}
+
+// Characters standing in a world take half its time-of-day grade: a night
+// street darkens and cools them as it does its own materials, less deeply.
+export const WORLD_GRADE_STRENGTH = 0.5;
+function inWorld(actor, world) {
+  if (!world) return actor;
+  const g = worldGrade(world.kind, world.time, WORLD_GRADE_STRENGTH);
+  return {...actor, colors: Object.fromEntries(Object.entries(actor.colors).map(([key, hex]) => [key, g(hex)]))};
 }
 
 // A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
@@ -222,7 +246,7 @@ function castSlots(b, entries, cast) {
 }
 
 function resolveCastScene(params, ctx) {
-  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light'], required: ['set', 'cast'], hidesCaptions: false});
+  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
   const p = b.params;
   const setName = check.oneOf(p.set, 'params.set', SETS);
@@ -241,10 +265,11 @@ function resolveCastScene(params, ctx) {
   });
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit});
   const slotOf = castSlots(b, p.cast, cast);
-  const light = sceneLight(b, p.light, ctx.light);
+  const world = standingWorld(b, ctx);
+  const light = sceneLight(b, p.light, ctx, world);
   const actors = p.cast.map((raw, i) => {
     const slot = layout.slots[slotOf[i]];
-    const actor = resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light});
+    const actor = inWorld(resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light}), world);
     // The phone set: the first character holds the phone unless someone else is given it.
     if (setName === 'phone' && i === 0 && !p.cast.some(entry => entry?.holds !== undefined)) actor.holds = 'phone';
     const placed = {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale};
@@ -297,7 +322,7 @@ function castSceneTimeline(model, ops) {
 function resolveCameo(params, ctx) {
   // The cameo keeps inside a brand frame's safe area (its card kicker would
   // otherwise sit on the frame's kicker); params.rect places it within that.
-  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel', 'light'], required: ['character'], frameSafe: true});
+  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel', 'light', 'world'], required: ['character'], frameSafe: true});
   const {check, rect, u, portrait} = b;
   const p = b.params;
   let cast;
@@ -315,7 +340,8 @@ function resolveCameo(params, ctx) {
   const area = !card ? {...rect}
     : portrait ? {x: rect.x, y: r2(rect.y + rect.height * 0.34), width: rect.width, height: r2(rect.height * 0.66)}
       : {x: side === 'left' ? rect.x : r2(rect.x + rect.width * 0.64), y: rect.y, width: r2(rect.width * 0.36), height: rect.height};
-  const probe = resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start, light: sceneLight(b, p.light, ctx.light)});
+  const world = standingWorld(b, ctx);
+  const probe = inWorld(resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start, light: sceneLight(b, p.light, ctx, world)}), world);
   const pad = u(10);
   // Sized to its tallest pose: a wave or a cheer reaches above the head.
   const tallest = Math.max(probe.height, -actorReach({...probe, x: 0, floor: 0, scale: 1}).top);
@@ -375,11 +401,11 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it'},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
-    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)'},
+    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)'},
     events: ['<character>-cue-<i>']}
 };
 

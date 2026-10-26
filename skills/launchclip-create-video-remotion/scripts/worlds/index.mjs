@@ -21,7 +21,7 @@
 // Pure and deterministic: the same inputs give the same nodes.
 
 import {detailForStyle, detailSpec, DETAIL_LEVELS, STYLE_DETAIL} from './detail.mjs';
-import {WORLD_TIMES, worldPalette, timeLight} from './palette.mjs';
+import {WORLD_TIMES, worldPalette, timeLight, timeGrade} from './palette.mjs';
 import {makePen} from './pen.mjs';
 import {vignette, grade} from './common.mjs';
 import {INSIDE} from './inside.mjs';
@@ -46,6 +46,16 @@ export function worldLight(kind, time = 'day') {
   if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
   if (!WORLD_TIMES.includes(time)) throw new Error(`unknown world time ${JSON.stringify(time)} (${WORLD_TIMES.join(', ')})`);
   return timeLight(time, {inside: def.group === 'inside', ...(def.light?.[time] ?? {})});
+}
+
+/**
+ * The grade a world at a time puts on what stands in it, as hex → hex
+ * (palette.mjs timeGrade): its materials at strength 1, characters less.
+ */
+export function worldGrade(kind, time = 'day', strength = 1) {
+  const def = WORLDS[kind];
+  if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
+  return timeGrade(time, def.group === 'inside' ? 'inside' : 'outside', strength);
 }
 
 /** The world kit every drawing function receives. */
