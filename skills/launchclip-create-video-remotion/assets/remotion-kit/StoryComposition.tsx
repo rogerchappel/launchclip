@@ -39,7 +39,7 @@ import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narr
 // @ts-ignore plain ESM from kit/core
 import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
-import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
+import { CAMERA_STACK, backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -229,7 +229,7 @@ export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; 
           </defs>
         </svg>
       ) : null}
-      <div style={{ ...box, overflow: "hidden", zIndex: 5, ...(blurring ? { filter: "url(#lc-cam-blur)" } : {}) }}>
+      <div style={{ ...box, overflow: "hidden", zIndex: CAMERA_STACK.camera, ...(blurring ? { filter: "url(#lc-cam-blur)" } : {}) }}>
         <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "drift", t)) }}>
           <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "zoom", t)) }}>
             <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "pan", t)) }}>{children}</div>
@@ -397,11 +397,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
             </Sequence>
           ) : null}
         </CameraWorld>
-        {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
-        <BrandFrame story={story} />
-        {overlay && Array.isArray(__captions) && __captions.length ? (
-          <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
-        ) : null}
+        {/* Overlays, the frame and captions stack above the camera (CAMERA_STACK), as in HyperFrames. */}
+        <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
+          {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
+          <BrandFrame story={story} />
+          {overlay && Array.isArray(__captions) && __captions.length ? (
+            <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
+          ) : null}
+        </AbsoluteFill>
         {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
       </AbsoluteFill>
     );

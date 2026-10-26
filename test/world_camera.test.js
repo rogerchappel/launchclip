@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
 import {
+  CAMERA_STACK,
   blurAt, cameraActive, cameraOps, cameraPlan, cameraStateAt, containerState, layoutDirection, objectRectFromModel, opsStateAt,
   overlayOps, PARALLAX, placementCentre, resolveCamera, restState, sceneObjectLookup, screenPoint, worldLayout, worldPoint
 } from "../kit/core/camera-world.mjs";
@@ -259,4 +260,18 @@ test("compilers: world stories get one camera container, cuts stories without ca
   const minimal = resolveStory(JSON.parse(await readFile(path.join(ROOT, "examples/story/minimal/storyboard.json"), "utf8")), { words: JSON.parse(await readFile(path.join(ROOT, "examples/story/minimal/NARRATION.json"), "utf8")).words });
   assert.equal(planFor(minimal), null);
   assert.doesNotMatch((await compileStoryToHyperFrames(minimal, { write: false, sourceDir: path.join(ROOT, "examples/story/minimal") })).html, /lc-camera|lc-cam-/);
+});
+
+test("world mode stacks overlays above the camera: a cast on track 1 is never under a track-0 world plate", async () => {
+  assert.ok(CAMERA_STACK.scenes > CAMERA_STACK.camera);
+  const dir = path.join(ROOT, "examples/story/world-cast-16x9");
+  const story = resolveStory(JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8")));
+  const { html } = await compileStoryToHyperFrames(story, { write: false, sourceDir: dir });
+  assert.match(html, new RegExp(`\\.lc-camera \\{[^}]*z-index: ${CAMERA_STACK.camera};`));
+  const z = Number(html.match(/data-launchclip-scene="pair"[^>]*style="z-index:(\d+)/)[1]);
+  assert.ok(z >= CAMERA_STACK.scenes, `cast-scene z-index ${z}`);
+  // Remotion: overlays, the frame and the captions sit in one layer at CAMERA_STACK.scenes, after the camera.
+  const tsx = await readFile(path.join(ROOT, "kit/remotion/StoryComposition.tsx"), "utf8");
+  const world = tsx.slice(tsx.indexOf("<CameraWorld plan={plan}"));
+  assert.match(world, /<\/CameraWorld>\s*\{\/\*[^*]*\*\/\}\s*<AbsoluteFill style=\{\{ zIndex: CAMERA_STACK\.scenes \}\}>\s*\{layers\.filter\(\(layer: any\) => !layer\.entry\.plate\)/);
 });

@@ -23,7 +23,7 @@ import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
-import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
+import { CAMERA_STACK, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
@@ -180,7 +180,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     return { html: `<div id="lc-amb-field-world" class="lc-world-field" aria-hidden="true">${html}</div>`, motion: lines };
   };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
-  let z = 10;
+  let z = CAMERA_STACK.scenes;
   // With a subject, behind scenes stack from 10 under the matte layer and
   // every other scene from above it.
   let zBehind = 10;
@@ -576,7 +576,7 @@ function cameraMarkup(plan, brand, plates, field = '', glowing = true) {
 
 function cameraCss(plan, W, H) {
   const rules = [
-    `.lc-camera { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; z-index: 5; --lc-cam-filter: none; filter: var(--lc-cam-filter); }`,
+    `.lc-camera { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; z-index: ${CAMERA_STACK.camera}; --lc-cam-filter: none; filter: var(--lc-cam-filter); }`,
     `.lc-cam { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }`,
     '.lc-cam-defs { position: absolute; left: 0; top: 0; width: 0; height: 0; }',
     `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`

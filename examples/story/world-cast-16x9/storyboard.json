@@ -1,0 +1,18 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "World and cast: characters on track 1 over a world plate, world camera",
+  "lane": "motion",
+  "format": {"width": 1920, "height": 1080, "fps": 30, "duration": 8, "platform": "youtube"},
+  "brand": {
+    "colors": {"bg": "#14122b", "primary": "#6d5dfc", "accent": "#ffb547", "ink": "#14122b", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "camera": {"mode": "world"},
+  "world": {"kind": "city-street", "time": "dusk"},
+  "cast": {"style": "flat", "characters": [{"id": "maya"}, {"id": "theo"}]},
+  "scenes": [
+    {"id": "street", "module": "world", "start": 0, "end": 4.5, "params": {"camera": "still"}},
+    {"id": "pair", "module": "cast-scene", "track": 1, "start": 0, "end": 4.5, "params": {"set": "phone", "cast": [{"id": "maya", "pose": "point", "expression": "happy"}, {"id": "theo", "pose": "wave"}]}},
+    {"id": "idea", "module": "concept-card", "start": 4.5, "end": 8, "in": {"type": "pan", "dur": 0.6}, "params": {"text": "Meet outside", "icon": "map-pin", "tone": "primary"}}
+  ]
+}

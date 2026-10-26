@@ -53,6 +53,11 @@ import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
 
 export const CAMERA_MODES = Object.freeze(['cuts', 'world']);
 export const CAMERA_LAYOUTS = Object.freeze(['row', 'column', 'grid', 'path', 'auto']);
+// Stacking: the camera container (with the plates inside it) sits at
+// `camera`; overlays (track ≥ 1 scenes), the brand frame and the captions
+// stack from `scenes` up, so a character or card on track 1 is never hidden
+// under a track-0 plate. Both renderers use these.
+export const CAMERA_STACK = Object.freeze({ camera: 5, scenes: 10 });
 // background: ambient motion's FIELD_PARALLAX, so its field and the brand
 // glows share the depth layer's 0.3× (the layer translates and rolls only;
 // it never scales, see backgroundKeys). flat: the depth layer's speed when
