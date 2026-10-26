@@ -515,6 +515,7 @@ function segmentAdapters() {
     segmentEncoder: () => ({ fake: true }),
     async renderSegments(project, segments, options) {
       adapters.segmentCalls.push(segments.map((segment) => [segment.startFrame, segment.endFrame]));
+      adapters.segmentOptions = options;
       for (const segment of segments) await touch(segment.output, `${segment.startFrame}-${segment.endFrame} ${options.story.scenes.map((scene) => scene.params?.title).join("|")}\n`);
       return { segments: segments.map(() => ({ seconds: 2 })) };
     },
@@ -531,6 +532,33 @@ function segmentAdapters() {
   };
   return adapters;
 }
+
+test("each render holds a render slot and an explicit core share: the render slots' split by default, --concurrency when given", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-share-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const segments = segmentAdapters();
+    segments.renderShare = () => 3;
+    const slots = [];
+    segments.withSlot = async (kind, options, fn) => { slots.push([kind, options.project]); return fn(); };
+    const first = await runFinish(project, { renderer: "remotion" }, segments);
+    assert.deepEqual(slots, [["render", project]], "the render stage holds one render slot of the machine queue");
+    assert.equal(segments.segmentOptions.concurrency, 3);
+    assert.equal(first.stages.find((stage) => stage.name === "render").details.concurrency, 3);
+    // Cached segments render nothing, so a cleared cache shows the flag.
+    await rm(path.join(project, PATHS.segments), { recursive: true, force: true });
+    await runFinish(project, { renderer: "remotion", concurrency: "2", force: true }, segments);
+    assert.equal(segments.segmentOptions.concurrency, 2);
+
+    const whole = fakeAdapters();
+    whole.renderShare = () => 4;
+    await runFinish(project, { renderer: "hyperframes" }, whole);
+    assert.equal(whole.lastRender.options.workers, 4);
+    await assert.rejects(runFinish(project, { renderer: "hyperframes", concurrency: "0" }, whole), /--concurrency must be a whole number of at least 1/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
 
 test("--scene re-renders that scene's segments, re-runs master, evidence and gates, and shows before/after stills", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-scene-"));

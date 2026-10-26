@@ -28,6 +28,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["music", { setting: true }],
   ["renderer", { setting: true }],
   ["quality", { setting: true }],
+  // Cores per render: a property of the machine, not of a recipe.
+  ["concurrency", {}],
   ["out", {}],
   ["replan", { boolean: true }],
   ["critic", { boolean: true, setting: true }],
@@ -64,6 +66,7 @@ export function makeOptionsFromFlags(flags = {}) {
     music: flags.music,
     renderer: flags.renderer,
     quality: flags.quality,
+    concurrency: flags.concurrency,
     goal: flags.goal,
     format: flags.format,
     awareness: flags.awareness,

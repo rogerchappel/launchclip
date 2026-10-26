@@ -23,6 +23,7 @@
 import { access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { withSlot } from "../queue.js";
 import {
   detectOnsets, finalizeWords, normalizeWord, onsetError, proportionalAlign,
   rmsEnvelope, envelopeLevels, snapOnsets, tokenizeText, writeWav
@@ -68,7 +69,7 @@ export function create(options = {}) {
     return engine;
   }
 
-  return {
+  const provider = {
     name: "kokoro",
     async synthesize({ text, voice = options.voice ?? DEFAULT_KOKORO_VOICE, speed = options.speed ?? DEFAULT_KOKORO_SPEED, outFile, signal } = {}) {
       if (typeof text !== "string" || !text.trim()) throw new Error("Kokoro needs non-empty text");
@@ -121,6 +122,9 @@ export function create(options = {}) {
       };
     }
   };
+  // Loading and running the model takes a local-model slot of the machine queue.
+  const synthesize = provider.synthesize.bind(provider);
+  return { ...provider, synthesize: (request) => withSlot("local-model", { label: "kokoro voice", log }, () => synthesize(request)) };
 }
 
 /**

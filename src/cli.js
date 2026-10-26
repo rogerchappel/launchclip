@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "library", "skills", "style", "profile", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -74,7 +74,20 @@ export async function runCli(argv, io = {}) {
   globalThis.fetch = tracker.fetch;
   try {
     let result;
-    if (command === "doctor") {
+    // doctor and queue take only flags, so their first argument is one of them.
+    const doctorFlags = command === "doctor" || command === "queue" ? parseFlags(commandArgs) : null;
+    if (command === "queue") {
+      const { readQueue, formatQueue } = await import("./queue.js");
+      const report = await readQueue();
+      stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatQueue(report));
+      return;
+    }
+    if (doctorFlags?.capacity) {
+      const { diagnoseCapacity, formatCapacity } = await import("./capacity.js");
+      const report = await (productionAdapters.capacity ?? diagnoseCapacity)();
+      stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatCapacity(report));
+      return;
+    } else if (command === "doctor") {
       result = await doctor();
     } else if (command === "library") {
       const { initLibrary } = await import("./library.js");
@@ -163,6 +176,7 @@ export async function runCli(argv, io = {}) {
         voice: flags.voice,
         music: flags.music,
         out: flags.out,
+        concurrency: flags.concurrency,
         force: Boolean(flags.force),
         musicRegenerate: Boolean(flags["music-regenerate"]),
         scenes: flags.scene,
@@ -462,7 +476,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models" || name === "capacity") {
       flags[name] = true;
       continue;
     }

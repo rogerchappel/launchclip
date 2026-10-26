@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { checkRestart, normalizeRecordingTranscript, RESTART_GAP_SECONDS, RESTART_MAX_WORDS } from "./recording_edit.js";
+import { withSlot } from "./queue.js";
 
 const RESPONSE_SCHEMA = {
   type: "object", additionalProperties: false, required: ["retakes", "restarts"],
@@ -137,7 +138,7 @@ export function indexedPassages(words) {
 async function localInference({ prompt, schema, model, baseUrl = "http://127.0.0.1:11434", signal }) {
   const url = new URL(baseUrl);
   if (!["http:", "https:"].includes(url.protocol) || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Semantic retake inference requires a local Ollama base URL");
-  const response = await fetch(new URL("/api/generate", url), { method: "POST", redirect: "error", signal: signal ?? AbortSignal.timeout(120000), headers: { "content-type": "application/json" }, body: JSON.stringify({ model, prompt, format: schema, stream: false, options: { temperature: 0 } }) });
+  const response = await withSlot("local-model", { label: "semantic retakes (ollama)" }, () => fetch(new URL("/api/generate", url), { method: "POST", redirect: "error", signal: signal ?? AbortSignal.timeout(120000), headers: { "content-type": "application/json" }, body: JSON.stringify({ model, prompt, format: schema, stream: false, options: { temperature: 0 } }) }));
   if (!response.ok) throw new Error(`Local semantic retake model failed (${response.status}); no cuts applied`);
   const body = await response.json();
   if (typeof body.response !== "string") throw new Error("Local semantic retake model returned no JSON response; no cuts applied");

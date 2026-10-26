@@ -76,7 +76,7 @@ export function slugify(prompt) {
 
 /**
  * options: {assets, aspect, duration, style, seed, profile, model, voice, voiceId, music, renderer,
- *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
+ *   quality, concurrency (cores per render), out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
  *   subject (false: no presenter probe or subject effects), rules (a collection's
  *   RULES.md text: the script pass, the planner and the critic follow it),
@@ -651,7 +651,7 @@ async function stageSubject(ctx) {
 
 async function stageFinish(ctx) {
   const { project, report, adapters, options } = ctx;
-  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}) };
+  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
   ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}`);
   const finishAdapters = { env: ctx.env, notice: ctx.say, ...(adapters.finishAdapters ?? {}) };

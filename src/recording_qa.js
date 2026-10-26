@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { normalizeRecordingTranscript, REJECTED_SPEECH_REASONS } from "./recording_edit.js";
+import { withSlot } from "./queue.js";
 
 const KINDS = new Set(["broken-sentence", "missing-context", "orphan-fragment", "unintended-repetition", "unclear-audio", "transcription-variation", "source-delivery"]);
 
@@ -244,7 +245,7 @@ function canonical(value) { if (Array.isArray(value)) return value.map(canonical
 async function localInference({ prompt, model, baseUrl = "http://127.0.0.1:11434", signal }) {
   const url = new URL(baseUrl);
   if (!["http:", "https:"].includes(url.protocol) || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Recording coherence requires a local Ollama base URL");
-  const response = await fetch(new URL("/api/generate", url), { method: "POST", redirect: "error", signal: signal ?? AbortSignal.timeout(120000), headers: { "content-type": "application/json" }, body: JSON.stringify({ model, prompt, format: "json", stream: false, options: { temperature: 0 } }) });
+  const response = await withSlot("local-model", { label: "recording coherence (ollama)" }, () => fetch(new URL("/api/generate", url), { method: "POST", redirect: "error", signal: signal ?? AbortSignal.timeout(120000), headers: { "content-type": "application/json" }, body: JSON.stringify({ model, prompt, format: "json", stream: false, options: { temperature: 0 } }) }));
   if (!response.ok) throw new Error(`Local recording coherence model failed (${response.status})`);
   const result = await response.json();
   if (typeof result.response !== "string") throw new Error("Local recording coherence returned no JSON response");

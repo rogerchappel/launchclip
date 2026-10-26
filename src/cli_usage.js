@@ -13,6 +13,8 @@
 export const USAGE = Object.freeze([
   ["--version", "--version"],
   ["doctor", "doctor"],
+  ["doctor", "doctor --capacity [--json]", {comment: "cores, RAM, GPU and the slots for plan, local-model, render and io"}],
+  ["queue", "queue [--json]", {comment: "running and waiting jobs across the machine"}],
   ["library init", "library init <path> [--projects <dir>] [--finals <dir>] [--cache <dir>] [--min-free-gb 10] [--name \"…\"] [--force]", {comment: "launchclip.library.json: where projects go"}],
   ["skills list", "skills list"],
   ["skills path", "skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]"],
@@ -70,11 +72,11 @@ export const USAGE = Object.freeze([
   ["subject probe", "subject probe <video> [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json]", {comment: "framing summary: people, head, headroom, usable"}],
   ["subject track", "subject track <video> [--project <story-project>] [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json]", {comment: "head and body boxes at 10 fps over the whole recording"}],
   ["subject matte", "subject matte <video> --range <in>-<out> [--project <story-project>] [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json]", {comment: "alpha matte.webm + subject.json for one source range"}],
-  ["finish", "finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3 | --chapter c2] [--library <path>] [--force] [--json]"],
+  ["finish", "finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3 | --chapter c2] [--library <path>] [--force] [--json]"],
   ["finish", "finish <project> --prototype [--renderer remotion|hyperframes] [--quality draft|high]", {comment: "the opening 20–30 s only"}],
   ["finish", "finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes]", {comment: "cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json"}],
   ["publish-manifest", "publish-manifest <project> [--link <url>] [--utm <campaign>|auto] [--platforms app_store,product_hunt]", {comment: "publish.json: titles, description, hashtags, CTA and platform fit"}],
-  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]"],
+  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]"],
   ["make", "make \"<prompt>\" --collection <dir> [--recipe <id>] [make flags]", {comment: "inside a collection: its style, voice, brand, rules and the recipe's settings"}],
   ["make", "make \"<prompt>\" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start \"npm run dev\"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]"],
   ["fx", "fx <video> <module> [--at <seconds|word:text>] [--until <seconds|word:text> | --for <seconds>] [--params '{...}'|params.json] [--layer front|behind|split] [--captions <style>] [--style <name|path>] [--renderer remotion|hyperframes] [--quality draft|high] [--music none|synth] [--out <project-dir>] [--no-download] [--json]"],
@@ -123,7 +125,8 @@ export const USAGE = Object.freeze([
 // One line per command (and per group action) for `launchclip <command> --help`.
 export const SUMMARIES = Object.freeze({
   "--version": "Print the LaunchClip version.",
-  doctor: "Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only).",
+  doctor: "Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only); --capacity measures cores and RAM and recommends job slots.",
+  queue: "List the jobs holding or waiting for a slot in the machine queue ($LAUNCHCLIP_HOME/queue).",
   library: "Set up a library: one launchclip.library.json that says where video projects, finished files and caches go.",
   "library init": "Write <path>/launchclip.library.json. --projects is where make and intake put new projects when you run them inside the library (default the library folder; an external drive is fine), --finals where finished files collect, --cache where voice, music and isolation caches go (default ~/.cache/launchclip), --min-free-gb the free space a job needs before it starts (default 10). Relative paths resolve against the library folder.",
   skills: "List, locate or install the bundled agent skills.",

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { OpenAIResponsesClient } from "./openai_responses.js";
+import { withSlot } from "./queue.js";
 
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 const PROVIDER_ALIASES = new Map([["local", "ollama"], ["openai-compatible", "compatible"]]);
@@ -177,7 +178,9 @@ export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
     if (keepAlive != null && !((typeof keepAlive === "number" && Number.isFinite(keepAlive)) || (typeof keepAlive === "string" && keepAlive.trim()))) {
       throw new Error("Ollama keepAlive must be a finite number or non-empty duration string");
     }
-    const payload = await this.request("/api/chat", {
+    // A local Ollama takes a local-model slot of the machine queue; a remote one does not.
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(this.baseUrl).hostname);
+    const chat = () => this.request("/api/chat", {
       method: "POST",
       body: JSON.stringify({
         model,
@@ -189,6 +192,7 @@ export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
         options: generation
       })
     });
+    const payload = local ? await withSlot("local-model", { label: `ollama ${model}` }, chat) : await chat();
     const result = ollamaStructuredResult(payload, model);
     await options.onSubmitted?.({ id: result.response_id, status: result.status, model: result.model });
     return result;
