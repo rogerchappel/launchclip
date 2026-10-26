@@ -27,7 +27,8 @@
 //
 // references/storyboard-modules.md, subject-effects.md and direction-map.md are
 // generated from kit/core/planning-prompt.mjs, long-form.md from
-// kit/core/long-form.mjs, and profiles.md from the shipped
+// kit/core/long-form.mjs, script-formats.md from kit/core/script-formats.mjs,
+// and profiles.md from the shipped
 // profiles in kit/profiles/ (GENERATED_REFERENCES), into skills-src/references/
 // and both skills.
 //
@@ -44,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { directionMapReference, profilesReference, storyboardModulesReference, subjectEffectsReference } from '../kit/core/planning-prompt.mjs';
 import { shippedProfiles } from '../src/profile_store.js';
 import { longFormReference } from '../kit/core/long-form.mjs';
+import { scriptFormatsReference } from '../kit/core/script-formats.mjs';
 import { usageMarkdown } from '../src/cli_usage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,6 +73,7 @@ export const GENERATED_REFERENCES = {
   'subject-effects.md': subjectEffectsReference,
   'direction-map.md': directionMapReference,
   'long-form.md': longFormReference,
+  'script-formats.md': scriptFormatsReference,
   'profiles.md': () => profilesReference(shippedProfiles())
 };
 

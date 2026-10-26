@@ -24,7 +24,8 @@ skill when they want the bespoke, reviewed path below.
    style given" in [references/workflow.md](references/workflow.md)).
 2. **Concept and story.** Five distinct concepts judged in a fresh context →
    `CONCEPTS.json`; an independently edited retention story → `STORY.json`;
-   the exact narration → `SCRIPT.md`.
+   the narration on a [script format](references/script-formats.md) →
+   `SCRIPT.md`.
    `cinematic-check` requires both receipts. Details:
    [references/cinematic-production.md](references/cinematic-production.md).
 3. **Voice.** Put the script in `storyboard.json` `audio.narration`, run

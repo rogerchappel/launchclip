@@ -409,6 +409,19 @@ function worldLines() {
 
 // Direction guardrails (docs/DIRECTION_GUARDRAILS.md): the rules the finish
 // gates (physics, acting, layout captions, ghosting, density, variety) check.
+/**
+ * The script was planned first (kit/core/script-formats.mjs): its beats are
+ * the video's structure, so the storyboard follows them.
+ */
+export function scriptBeatLines() {
+  return [
+    'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
+    'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words.',
+    'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
+    'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.'
+  ];
+}
+
 export function guardrailLines() {
   return [
     ...physicsPromptLines(),
@@ -728,6 +741,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Lane rules', laneRules(lane, profile).map((line) => `- ${line}`)),
     ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
+    ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
