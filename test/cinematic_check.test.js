@@ -147,6 +147,37 @@ test("checks a HyperFrames storyboard project through the composition finish com
   assert.equal(verification.verified_project, path.join(".launchclip", "finish", "hyperframes"));
 });
 
+test("on a compiled storyboard the authoring lint warnings are waived; a hand-authored project keeps them", async () => {
+  const strictReport = {
+    ok: false, strict: true,
+    lint: { ok: true, errorCount: 0, warningCount: 2, findings: [{ code: "composition_file_too_large", severity: "warning" }, { code: "timeline_track_too_dense", severity: "warning" }] },
+    runtime: { ok: true, errorCount: 0, warningCount: 0 }, layout: { ok: true, errorCount: 0, warningCount: 0 }, motion: { ok: true, errorCount: 0, warningCount: 0 }, contrast: { ok: true, errorCount: 0, warningCount: 0 }
+  };
+  const run = async (_command, args) => ({ stdout: JSON.stringify(args[1] === "check" ? strictReport : { ok: true, errorCount: 0 }), stderr: "" });
+  const project = await fixture({ complete: false });
+  await rm(path.join(project, "index.html"));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyboard()));
+  const compiled = path.join(project, ".launchclip", "finish", "hyperframes");
+  await mkdir(compiled, { recursive: true });
+  await writeFile(path.join(compiled, "index.html"), "<div data-composition-id=\"main\"></div>");
+  const adapters = passingAdapters({ duration: 12, width: 720, height: 1280 });
+  delete adapters.verifyProject;
+  adapters.storyModule = storyModule;
+  adapters.run = run;
+  const result = await checkCinematicProject(project, { expectAudio: true, renderer: "hyperframes" }, adapters);
+  const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
+  assert.equal(verification.status, "passed");
+  assert.deepEqual(verification.checks.check.waived, ["composition_file_too_large", "timeline_track_too_dense"]);
+
+  const authored = await fixture({ complete: true });
+  const own = passingAdapters();
+  delete own.verifyProject;
+  own.run = run;
+  const handwritten = await checkCinematicProject(authored, { expectAudio: true }, own);
+  const strict = JSON.parse(await readFile(path.join(handwritten.qa, "verification.json"), "utf8"));
+  assert.deepEqual(strict.failed, ["check"], "a hand-authored composition can split itself, so the warnings still fail");
+});
+
 test("fails the HyperFrames adapter check on a blocking finding", async () => {
   const project = await fixture({ complete: true });
   const adapters = passingAdapters();
