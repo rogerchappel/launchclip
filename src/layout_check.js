@@ -306,7 +306,7 @@ async function subjectView(projectDir, resolved, warnings = []) {
 // or a whole-video track, a front-layer element may not cover the presenter's head for more than
 // 0.3 s. Behind-layer scenes, captions, decor (punch-in), modules that set
 // model.framesFace and inserts (they replace the whole picture, so no face is
-// on screen) are exempt.
+// on screen) are exempt, and so is any overlay while an insert is on screen.
 export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {
   const view = await subjectView(projectDir, resolved, warnings);
   if (!view) return [];
@@ -314,8 +314,11 @@ export async function subjectFaceFindings(projectDir, resolved, elements, warnin
     const model = view.models.get(scene.id) ?? null;
     return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
   }));
-  const inserts = new Set(resolved.scenes.filter((scene) => scene.insert === true).map((scene) => scene.id));
-  const headAt = (t) => view.at(t)?.head ?? null;
+  const insertScenes = resolved.scenes.filter((scene) => scene.insert === true);
+  const inserts = new Set(insertScenes.map((scene) => scene.id));
+  // While an insert covers the picture there is no face for an overlay on top of it to cover.
+  const covered = (t) => insertScenes.some((scene) => t >= Number(scene.start) && t < Number(scene.end));
+  const headAt = (t) => (covered(t) ? null : view.at(t)?.head ?? null);
   const candidates = elements
     .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor" && !inserts.has(element.id))
     .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
