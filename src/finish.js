@@ -23,6 +23,7 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
+import { physicsGate } from "./direction_guardrails.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -1331,6 +1332,12 @@ async function runGates(ctx) {
   if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
   const castGate = ctx.castGate ?? ctx.state.stages?.validate?.details?.cast;
   if (castGate && castGate.status !== "skipped") gates.cast = castGate;
+  // Direction guardrails (docs/DIRECTION_GUARDRAILS.md), on the resolved story.
+  try {
+    gates.physics = physicsGate(ctx.resolved);
+  } catch (error) {
+    gates.physics = { status: "failed", error: error.message };
+  }
 
   const master = ctx.state.stages?.master?.details;
   gates.loudness = !master
