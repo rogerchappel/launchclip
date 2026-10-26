@@ -956,6 +956,12 @@ export function stylePromptLines(pack, { lane, story } = {}) {
     for (const segment of pack.segments) lines.push(`- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}${segment.match?.length ? ` (a section titled like ${segment.match.map((phrase) => `"${phrase}"`).join(' or ')})` : ''}.`);
   }
   if (pack.cast?.characters?.length) lines.push(`Default cast: ${pack.cast.characters.join(', ')}${pack.cast.drawing_style ? ` (${pack.cast.drawing_style})` : ''}; reuse them rather than inventing characters.`);
+  // A seeded cast: its ids are generated, so the planner has to be told them.
+  const members = Array.isArray(pack.cast?.members) ? pack.cast.members.filter((member) => typeof member?.id === 'string') : [];
+  if (members.length) {
+    lines.push(`Cast: the style's people are ${members.map((member, i) => `"${member.id}"${member.name ? ` (${member.name})` : ''} = "@${i + 1}"`).join(', ')}${pack.cast.drawing_style ? `, drawn ${pack.cast.drawing_style}` : ''}. In cast-scene and character-cameo, name a character by its id or by its place in the cast ("@1" is the first); never invent ids. Do not write story.cast: the pack fills it.`);
+  }
+  if (isObject(pack.world) && typeof pack.world.kind === 'string') lines.push(`World: ${pack.world.kind}${pack.world.time ? ` at ${pack.world.time}` : ''} (story.world comes from the pack). A world scene on track 0 with a cast-scene on track 1 over it puts the cast in the world (the set keeps only its furniture); a cast-scene with no world beneath draws the world itself. Give a world scene its own kind or time when the story moves (inside, outside, day, night).`);
   if (isObject(pack.dials)) {
     const dials = styleDials(pack, story);
     const choices = dialChoices(dials);

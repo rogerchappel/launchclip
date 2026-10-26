@@ -648,7 +648,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (Array.isArray(scene.hits)) scene.hits.forEach((hit, h) => {
       if (isObject(hit) && hit.at !== undefined) hit.at = resolve(hit.at, `${path}.hits[${h}].at`);
     });
-    if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words);
+    if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
   });
   if (Array.isArray(copy.overlays)) copy.overlays.forEach((overlay, index) => {
     if (!isObject(overlay)) return;
@@ -687,18 +687,38 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
 // (`words: [[start, end], ...]`), so a mouth opens on the voice's words.
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
 
-/** A character scene's params with anchors resolved. resolve(anchor, path) → seconds. */
-export function resolveCastAnchors(scene, resolve, words = []) {
+// Cast references: a character scene may name a character by its place in
+// the story cast ("@1" is the first, "@2" the second), so a storyboard
+// written before the cast exists (a prompt-only plan over a seeded style)
+// works with any seed's people. They resolve to ids here.
+export const CAST_REF = /^@([1-9])$/;
+
+/** The story cast's ids in order (story.cast.characters). */
+export function storyCastIds(story) {
+  const list = Array.isArray(story?.cast?.characters) ? story.cast.characters : [];
+  return list.map((entry) => (typeof entry === "string" ? entry : isObject(entry) ? entry.id : null)).filter((id) => typeof id === "string");
+}
+
+/** A character id or cast reference → the id ("@n" → the nth story-cast id; unknown references stay as written, for the module to report). */
+export function castRefId(id, ids = []) {
+  const match = typeof id === "string" ? CAST_REF.exec(id) : null;
+  return match && ids[Number(match[1]) - 1] ? ids[Number(match[1]) - 1] : id;
+}
+
+/** A character scene's params with anchors (and cast references) resolved. resolve(anchor, path) → seconds. */
+export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
   if (!isObject(scene) || !isObject(scene.params)) return scene?.params;
   const start = Number(scene.start);
   const rel = (value, path) => (typeof value === "string" ? Math.round((resolve(value, path) - start) * 1000) / 1000 : value);
   const actor = (entry, path) => {
     if (!isObject(entry)) return entry;
     const out = { ...entry };
+    if (entry.id !== undefined) out.id = castRefId(entry.id, ids);
+    if (entry.character !== undefined) out.character = castRefId(entry.character, ids);
     if (Array.isArray(entry.cues)) out.cues = entry.cues.map((cue, i) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: rel(cue.at, `${path}.cues[${i}].at`) } : cue));
     // says "auto": the character's own words in a dialogue (words carry a speaker).
     if (entry.says === "auto") {
-      const id = entry.id ?? entry.character;
+      const id = out.id ?? out.character;
       const end = Number(scene.end);
       out.says = words.filter((word) => word.speaker === id && word.start >= start - EPS && word.start < end - EPS)
         .map((word) => ({ from: Math.round((word.start - start) * 1000) / 1000, to: Math.round((word.end - start) * 1000) / 1000, words: [[Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000]] }));

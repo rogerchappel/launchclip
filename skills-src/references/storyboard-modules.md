@@ -1398,14 +1398,15 @@ One to three animated characters in a set (desk-laptop, phone, meeting, screen, 
 params:
 - set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
-- cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
+- cast: [{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
+- world: {kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
 One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.
 params:
-- character: a cast or starter character id
+- character: a cast or starter character id, or "@1", "@2"… by place in the story cast
 - pose: stand | point | wave | slump | type | think | cheer | shrug | walk
 - expression: neutral | happy | delighted | frustrated | confused | surprised | focused
 - facing: left | right
@@ -1416,6 +1417,7 @@ params:
 - panel: boolean (default: true without a card)
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
 - light: {dir?, color?, intensity?} the key light (as cast-scene)
+- world: {kind, time?} the world the character stands in (as cast-scene)
 events: <character>-cue-<i>
 
 ### world (keeps captions)
