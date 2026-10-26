@@ -454,9 +454,14 @@ export function backOfHead(ctx) {
   const {rx, ry, cy} = g.head;
   const parts = [P.shape(headShape(g), 'skin')];
   if (p.hair.style !== 'bald') {
-    const nape = r1(cy + ry * (['balding'].includes(p.hair.style) ? -0.1 : 0.32));
-    parts.push(P.shape(`M${-rx - 3} ${nape}C${-rx - 4} ${r1(cy - ry * 0.6)} ${r1(-rx * 0.62)} ${r1(cy - ry - 5)} 0 ${r1(cy - ry - 5)}C${r1(rx * 0.62)} ${r1(cy - ry - 5)} ${rx + 4} ${r1(cy - ry * 0.6)} ${rx + 3} ${nape}Q0 ${r1(cy + ry * 0.48)} ${-rx - 3} ${nape}Z`, 'hair'));
+    // Hair over the whole back of the head down to a low nape, so no bare
+    // oval reads as a face; a balding crown keeps a skin patch on top.
+    const nape = r1(cy + ry * 0.72);
+    parts.push(P.shape(`M${-rx - 4} ${r1(cy + ry * 0.45)}C${-rx - 5} ${r1(cy - ry * 0.6)} ${r1(-rx * 0.62)} ${r1(cy - ry - 6)} 0 ${r1(cy - ry - 6)}C${r1(rx * 0.62)} ${r1(cy - ry - 6)} ${rx + 5} ${r1(cy - ry * 0.6)} ${rx + 4} ${r1(cy + ry * 0.45)}C${r1(rx * 0.7)} ${nape} ${r1(-rx * 0.7)} ${nape} ${-rx - 4} ${r1(cy + ry * 0.45)}Z`, 'hair'));
+    if (p.hair.style === 'balding') parts.push(P.ellipse(0, r1(cy - ry * 0.55), r1(rx * 0.5), r1(ry * 0.3), 'skin', {outline: false}));
   }
+  // The nape's shadow line where the head meets the neck.
+  parts.push(P.line(`M${r1(-rx * 0.35)} ${r1(cy + ry * 0.86)}Q0 ${r1(cy + ry * 0.94)} ${r1(rx * 0.35)} ${r1(cy + ry * 0.86)}`, 'skinShade', 5));
   return parts;
 }
 
