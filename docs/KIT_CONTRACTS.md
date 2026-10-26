@@ -2687,6 +2687,7 @@ existed.
 | `excerpt` | `window` (a panel, lines sliding in, a marker sweep); `terminal` (a window bar with three dots and the title, line numbers in a gutter, a cursor stepping down to a prompt row as the lines show; marked lines get a primary gutter arrow while the rest dim); `document` (no panel: the lines set large beside a primary rule that draws down, marked lines underlined by a sweep, the source as a footnote under a short rule); `stack` (each line on its own chip, dropping in turned; marked chips get a primary outline and edge bar while the rest dim) |
 | `compare` | `panels` (two panels with an arrow between); `split` (two tinted halves, across in 16:9 and over each other in 9:16, sliding in from their sides; a divider draws and a disc with an arrow, or VS in columns mode, pops on the seam); `table` (the two titles over aligned rows, a cross or tick per cell, rules drawing as each pair reveals; the after column tinted); `cards` (a title pill per side over a card per item, dealt in from the sides; the before side dashed and muted, the after side edged in primary; two columns in 16:9, one after the other in 9:16) |
 | `timeline` | `rail` (numbered nodes on a line); `milestones` (diamonds that spin in on a centre line that runs on, the labels alternating above and below in 16:9, left and right in 9:16); `cards` (a card per step with a number or icon badge, chevrons between, flipping in); `stairs` (solid blocks that rise a step at a time, growing up with the labels on top in 16:9 and out to the right with the labels inside in 9:16) |
+| `hook-title`, `cta` (catalogue A, `TITLE_VARIANTS`) | `centered` (centred on the centre of mass with a soft glow); `flush` (set left beside a solid primary bar that fades in down the block's left edge); `boxed` (centred in a panel with a primary border and a shadow, no glow); `low` (set left and anchored to the bottom of the safe zone, no glow). The same nodes in every variant: only the root, glow and placement change |
 
 `node scripts/variant-sheet.mjs [--modules …] [--gates]` builds a story per
 aspect with a scene per variant, writes a contact sheet of settled stills
@@ -2694,7 +2695,8 @@ aspect with a scene per variant, writes a contact sheet of settled stills
 `launchclip layout-check` and `hyperframes lint` and `check` on it (no errors,
 no `content_overlap` or `clipped_text`). `node scripts/variant-fixtures.mjs`
 writes a parity fixture per non-default variant
-(`test/fixtures/parity/g-<module>-<variant>.json`, alternating 9:16 and 16:9).
+(`test/fixtures/parity/g-<module>-<variant>.json`, `a-<module>-<variant>.json`
+for catalogue A, alternating 9:16 and 16:9).
 
 **Honesty rules.** `stat-card` and `excerpt` refuse a missing source, or a source that is a placeholder (`source`, `TBD`, `n/a`, `example`, `illustrative`, …). `quote-card` refuses a generic attribution (`Anonymous`, `a customer`, `our users`, …) and a highlight that is not in the quote. `excerpt` refuses placeholder text (`lorem ipsum`, `TODO`) and shows lines exactly as supplied.
 

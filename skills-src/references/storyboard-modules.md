@@ -399,9 +399,11 @@ params:
 - kickerAt: seconds — scene seconds for the kicker pop
 - eyebrow: string, max 32 — small mono label above the headline
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
-- align: string, one of "center" | "left", default "center"
+- align: string, one of "center" | "left", default "center (left for flush and low)"
 - rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+- variant: string, one of "centered" | "flush" | "boxed" | "low", optional — the layout: centered (glow), flush (left, accent bar), boxed (bordered panel) or low (left, bottom of the frame); default: the style's variants[module], else centered; usually leave it to the style
 events: title, emphasis-<n>, kicker
+variants: centered (default), flush, boxed, low
 
 ### kinetic-words (hides captions)
 Lands 1–3 words per beat, timed to the voice; each beat replaces the last (or stacks into a sentence). Hides captions.
@@ -457,7 +459,9 @@ params:
 - loop: boolean, default false
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
 - rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+- variant: string, one of "centered" | "flush" | "boxed" | "low", optional — the layout: centered (glow), flush (left, accent bar), boxed (bordered panel) or low (left, bottom of the frame); default: the style's variants[module], else centered; usually leave it to the style
 events: action, handle, loop
+variants: centered (default), flush, boxed, low
 
 ### function-chart (keeps captions)
 Plots a formula over time as a line that draws on, with a probe readout riding the tip, optional baseline, gap bars and a tail-zoom inset.
@@ -1400,6 +1404,7 @@ params:
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
+- world: {kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
@@ -1416,6 +1421,7 @@ params:
 - panel: boolean (default: true without a card)
 - rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
 - light: {dir?, color?, intensity?} the key light (as cast-scene)
+- world: {kind, time?} the world the character stands in (as cast-scene)
 events: <character>-cue-<i>
 
 ### world (keeps captions)

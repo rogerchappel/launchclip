@@ -15,8 +15,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const at = process.argv.indexOf('--modules');
 const all = moduleVariants();
 const modules = at >= 0 ? process.argv[at + 1].split(',') : Object.keys(all);
-// Catalogue G fixtures are g-<module>-<variant>; editorial ones <module>-<variant>.
-const name_ = (module, variant) => (['checklist', 'step-rail', 'metric', 'callout'].includes(module) ? `${module}-${variant}` : `g-${module}-${variant}`);
+// Catalogue G fixtures are g-<module>-<variant>; editorial ones <module>-<variant>; catalogue A a-<module>-<variant>.
+const name_ = (module, variant) => (['checklist', 'step-rail', 'metric', 'callout'].includes(module) ? `${module}-${variant}` : ['hook-title', 'cta'].includes(module) ? `a-${module}-${variant}` : `g-${module}-${variant}`);
 for (const module of modules) {
   for (const [i, variant] of all[module].slice(1).entries()) {
     const portrait = i % 2 === 0;
