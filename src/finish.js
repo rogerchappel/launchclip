@@ -32,6 +32,7 @@ import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
+import { renderShare } from "./capacity.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
@@ -511,6 +512,8 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
+    // Cores for this render: the machine's cores split across the render slots.
+    renderShare: () => renderShare(),
     // Caption legibility on the rendered frames (src/caption_legibility.js).
     async captionLegibility(video, story, options) {
       const { measureCaptionLegibility } = await import("./caption_legibility.js");
@@ -570,7 +573,9 @@ export function defaultAdapters() {
 // Pipeline
 
 /**
- * options: {renderer, quality: "draft"|"high", voice: provider name, music:
+ * options: {renderer, quality: "draft"|"high", concurrency (browser tabs or
+ * workers for the render; default: the cores split across render slots,
+ * src/capacity.js), voice: provider name, music:
  * "synth"|"elevenlabs"|"none", musicHints (style-pack sound.music hints for
  * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
  * and the cache: a new, paid ElevenLabs generation; --music-regenerate),
@@ -598,6 +603,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`Unknown --music ${options.music}. Use one of ${MUSIC_FLAG_VALUES.join(", ")}`);
   const rendererName = resolveRendererName(project, options.renderer);
+  const concurrency = options.concurrency == null ? adapters.renderShare() : Number(options.concurrency);
+  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error(`--concurrency must be a whole number of at least 1; got ${options.concurrency}`);
   // --candidate <id>: a cheap draft candidate with no paid calls (synth or no
   // music, a cached or free voice, else the test voice; no evidence or gates),
   // recorded into the rendered-candidate receipt (src/candidate_receipt.js).
@@ -634,6 +641,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     preview: null,
     rendererName,
     quality,
+    concurrency,
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${prototype ? "prototype-" : ""}${quality}.mp4`),
     prototype: prototype ? { requested: true } : null,
@@ -1126,7 +1134,7 @@ const STAGES = [
       if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
       if (ctx.chapter && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --chapter ${ctx.chapter.id} re-rendered the whole ${ctx.rendererName} video`);
       if (ctx.chapter) ctx.chapter.segments = segments ? { forced: segments.forced, reused: segments.reused, total: segments.segments } : null;
-      const details = { renderer: ctx.rendererName, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
+      const details = { renderer: ctx.rendererName, concurrency: ctx.concurrency, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
       if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
       // Measure every caption line on the frames; plate the ones that do not
       // read and render once more (a whole render only: a partial one keeps
@@ -1334,14 +1342,14 @@ export function previewPath(sceneId) {
 // renderSegments (a custom or injected Remotion adapter) renders the whole
 // story directly.
 async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
-  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
+  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, concurrency: ctx.concurrency, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
   if (ctx.rendererName === "hyperframes") {
     const compileAndRender = async (dir, file, extra = {}) => {
       const hfDir = path.join(ctx.project, dir);
       const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project, ...extra });
       ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
       ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-      await adapter.render(hfDir, file, { quality: ctx.quality });
+      await adapter.render(hfDir, file, { quality: ctx.quality, workers: ctx.concurrency });
     };
     return renderWithSegments({
       ...common,
@@ -1351,7 +1359,7 @@ async function renderStory(ctx, adapter, { output, scenes = [], previewScene = n
   }
   if (PARTIAL_RENDERERS.includes(ctx.rendererName) && typeof adapter.renderSegments === "function") return renderWithSegments(common);
   if (previewScene) throw new Error(`--preview-scene needs a renderer adapter that renders frame ranges; the ${ctx.rendererName} adapter in use has no renderSegments`);
-  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved });
+  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved, concurrency: ctx.concurrency });
   return null;
 }
 

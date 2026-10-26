@@ -649,6 +649,7 @@ const short = (hash) => hash.slice(0, 12);
  * options:
  *   project, story (resolved), renderer (name), adapter (renderer adapter),
  *   quality, output (where the joined, muxed video goes),
+ *   concurrency: browser tabs for this render (Remotion --concurrency),
  *   scenes: scene ids whose segments re-render even when cached,
  *   range: [startFrame, endFrame) whose segments re-render even when cached
  *     (finish --chapter: every segment in the chapter, with scenes or not),
@@ -662,7 +663,7 @@ const short = (hash) => hash.slice(0, 12);
  * forced, frames, seconds, seconds_saved, cache, plan}.
  */
 export async function renderWithSegments(options) {
-  const { project, story, renderer, adapter, quality = "draft" } = options;
+  const { project, story, renderer, adapter, quality = "draft", concurrency } = options;
   const tools = { ...defaultSegmentTools(), ...(options.tools ?? {}) };
   const now = options.now ?? (() => performance.now());
   const cacheRoot = options.cacheRoot ?? path.join(project, SEGMENTS_DIR);
@@ -708,7 +709,7 @@ export async function renderWithSegments(options) {
   const renderStarted = now();
   const timings = new Map();
   if (work.length) {
-    const results = await renderVerifiedSegments({ project, adapter, tools, work, story, kitHash: inputs.kit, quality });
+    const results = await renderVerifiedSegments({ project, adapter, tools, work, story, kitHash: inputs.kit, quality, concurrency });
     for (const entry of work) {
       await rename(`${entry.file}.partial.mp4`, entry.file);
       const { seconds: took, retried } = results.get(entry);
@@ -791,10 +792,10 @@ export async function renderWithSegments(options) {
  * work: [{segment, file}] (each renders to `${file}.partial.mp4`).
  * → Map(entry → {seconds, retried: null | "had N frames"})
  */
-export async function renderVerifiedSegments({ project, adapter, tools, work, story, kitHash, quality }) {
+export async function renderVerifiedSegments({ project, adapter, tools, work, story, kitHash, quality, concurrency }) {
   const results = new Map();
   const render = async (list) => {
-    const result = await adapter.renderSegments(project, list.map((entry) => ({ startFrame: entry.segment.startFrame, endFrame: entry.segment.endFrame, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash, quality });
+    const result = await adapter.renderSegments(project, list.map((entry) => ({ startFrame: entry.segment.startFrame, endFrame: entry.segment.endFrame, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash, quality, concurrency });
     list.forEach((entry, i) => results.set(entry, { seconds: Number(result?.segments?.[i]?.seconds), retried: results.get(entry)?.retried ?? null }));
   };
   const problem = async (entry) => {
