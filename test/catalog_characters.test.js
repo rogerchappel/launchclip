@@ -254,6 +254,28 @@ test('params.world names the world a cast stands in, without a world scene benea
   assert.throws(() => resolve(desk({world: {kind: 'moon'}})), /params\.world\.kind/);
 });
 
+test('cast references: "@1" and "@2" name the story cast by place', async () => {
+  const s = story([{id: 'desk', module: 'cast-scene', start: 0, end: 6, params: {set: 'desk-laptop', cast: [{id: '@2', pose: 'type', says: 'auto'}, {id: '@1'}]}},
+    {id: 'cameo', module: 'character-cameo', start: 6, end: 8, params: {character: '@1'}}]);
+  const resolved = resolveStory(s);
+  assert.deepEqual(resolved.scenes[0].params.cast.map(entry => entry.id), ['theo', 'maya']);
+  assert.equal(resolved.scenes[1].params.character, 'maya');
+  assert.deepEqual(resolveModule(resolved.scenes[0], resolved).content.actors.map(actor => actor.id), ['theo', 'maya']);
+  // A place the cast does not have stays as written, and the module says why.
+  const missing = resolveStory(story([{id: 'desk', module: 'cast-scene', start: 0, end: 6, params: {set: 'phone', cast: [{id: '@3'}]}}]));
+  assert.equal(missing.scenes[0].params.cast[0].id, '@3');
+  assert.throws(() => resolveModule(missing.scenes[0], missing), /"@3" refers to character 3 of the story cast, which has 2 characters \(maya, theo\)/);
+});
+
+test('a seeded style tells the planner its cast ids, their places and its world', async () => {
+  const {generateStyle} = await import('../kit/core/style-seed.mjs');
+  const {stylePromptLines} = await import('../kit/core/style.mjs');
+  const pack = generateStyle({seed: '00000001'});
+  const lines = stylePromptLines({name: 'seed-00000001', ...pack}).join('\n');
+  for (const [i, member] of pack.cast.members.entries()) assert.match(lines, new RegExp(`"${member.id}"[^,]*= "@${i + 1}"`));
+  assert.match(lines, new RegExp(`World: ${pack.world.kind}`));
+});
+
 test('a set stands in a world with its furniture alone (backdrop world); its room only on backdrop room', async () => {
   const {layoutSet, WORLD_SETS} = await import('../kit/core/characters/sets.mjs');
   const {worldAnchors} = await import('../kit/core/worlds/index.mjs');

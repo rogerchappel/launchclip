@@ -2103,6 +2103,10 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   `content.world` and `content.drawWorld` (render inputs, or null over a
   plate).
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
+  A character scene may name a character by place: `"@1"` is the first
+  story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
+  `resolveStory` turns them into ids), so a storyboard planned before a
+  seeded cast exists works with any seed's people.
 - `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
   joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
   over every pose an actor takes in a scene, each gesture's far swing and a
