@@ -16,7 +16,8 @@ import { mediaSkip } from "./helpers/media.js";
 
 const run = promisify(execFile);
 const PROMPT = "A 6-second launch video for a fictional SaaS called Ledgerly that reconciles Stripe payouts automatically";
-const NARRATION = "Stripe payouts never match your books. Ledgerly matches every payout to its invoices automatically. Try Ledgerly free today.";
+// Within the 6-second clock (16 words at 2.75 a second), so the script checks pass.
+const NARRATION = "Payouts never match your books. Ledgerly matches each payout to its invoice. Try Ledgerly free.";
 
 // The storyboard a model would return for NARRATION over the test voice.
 function storyboard({ duration, media = "assets/ui.mp4", width = 1920, height = 1080 }) {
@@ -154,6 +155,74 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, replan: true }, adapters);
     assert.equal(calls.filter((call) => call.schemaName === "launchclip_make_script").length, 1);
     assert.ok(calls.filter((call) => call.schemaName === "launchclip_storyboard").length > 2);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+// The script pass first returns a script that fails the checks (a greeting,
+// an invented user count); the repair pass returns NARRATION unless `stuck`.
+function scriptRepairModel({ stuck = false } = {}) {
+  const fake = fakeModel();
+  const inner = fake.model.client.runStructured.bind(fake.model.client);
+  const scriptRequests = [];
+  fake.model.client.runStructured = async (request) => {
+    if (request.schemaName !== "launchclip_make_script") return inner(request);
+    scriptRequests.push(request);
+    const narration = scriptRequests.length === 1 || stuck ? "Hey there, Ledgerly is trusted by 10,000 teams. Try Ledgerly free." : NARRATION;
+    return { model: "gpt-5.6-luna", value: { title: "Ledgerly", narration }, usage: { input_tokens: 4000, output_tokens: 800 } };
+  };
+  return { ...fake, scriptRequests };
+}
+
+test("make runs the script checks after the script pass and repairs errors once", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-check-"));
+  try {
+    const { model, scriptRequests } = scriptRepairModel();
+    const notices = [];
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice: (line) => notices.push(line) });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.equal(scriptRequests.length, 2, "one write and one repair");
+    assert.deepEqual(report.costs.items.slice(0, 2).map((item) => item.stage), ["script", "script-repair"]);
+    const repair = scriptRequests[1].input;
+    assert.match(repair, /## Repair/);
+    assert.match(repair, /\[opener-filler\]/);
+    assert.match(repair, /\[fact-trace\] "10,000" is not in the brief/);
+    assert.match(repair, /\[social-proof\]/);
+    assert.match(repair, /Previous narration:\n\nHey there, Ledgerly is trusted by 10,000 teams/);
+    assert.equal(scriptRequests[1].instructions, scriptRequests[0].instructions, "the repair writes against the same plan");
+    assert.deepEqual(scriptRequests[1].schema.required, ["title", "narration", "title_options", "beats"]);
+    assert.ok(notices.some((line) => /script check error\(s\) \(fact-trace, social-proof, opener-filler\); one repair pass/.test(line)), notices.join("\n"));
+    const script = JSON.parse(await readFile(path.join(report.project, "SCRIPT.json"), "utf8"));
+    assert.deepEqual(script.passes.map((pass) => pass.kind), ["write", "repair"]);
+    assert.deepEqual(script.passes[1].errors, ["fact-trace", "social-proof", "opener-filler"]);
+    assert.equal(script.narration, NARRATION);
+    assert.equal(script.check.schema_version, "launchclip.script-check.v1");
+    assert.equal(script.plan.format, "promo");
+    assert.equal(script.check.stats.format, script.plan.format, "the check uses the plan's format");
+    assert.equal(report.script.plan.format, "promo");
+    assert.equal(script.check.ok, true);
+    assert.equal(report.script.check.ok, true);
+    assert.deepEqual(report.script.check.errors, []);
+    assert.ok(!report.warnings.some((line) => /script check/.test(line)));
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("errors left after the one repair pass are a warning, not a failure", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-check-"));
+  try {
+    const { model, scriptRequests } = scriptRepairModel({ stuck: true });
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice() {} });
+    assert.equal(scriptRequests.filter((request) => request.input.includes("## Repair")).length, 1, "never more than one repair pass");
+    assert.equal(report.script.check.ok, false);
+    assert.deepEqual(report.script.check.errors, ["fact-trace", "social-proof", "opener-filler"]);
+    assert.ok(report.warnings.some((line) => /^the script still fails 3 script check\(s\): fact-trace: "10,000" is not in the brief/.test(line)), report.warnings.join("\n"));
   } finally {
     await rm(assets, { recursive: true, force: true });
     await rm(cwd, { recursive: true, force: true });
