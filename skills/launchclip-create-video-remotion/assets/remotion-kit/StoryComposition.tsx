@@ -363,6 +363,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const windows = React.useMemo(() => rideWorldPlates(story, sceneWindows(story)), [story]);
   const layers = React.useMemo(() => windows.scenes.map((entry: any) => ({ entry, ...resolveSceneElement(entry.scene, story, { end: entry.renderEnd, customModules }) })), [windows, story, customModules]);
   const loop = windows.loop ? { ...windows.loop, ...resolveSceneElement({ ...windows.loop.scene, id: `${windows.loop.scene.id}-loop` }, story, { customModules }) } : null;
+  // World mode: a cast riding the loop target is cloned with it, as the HyperFrames compiler does.
+  const loopRiders = loop ? windows.scenes.filter((entry: any) => entry.rides === loop.sceneId).map((entry: any) => ({ entry, ...resolveSceneElement({ ...entry.scene, id: `${entry.scene.id}-loop` }, story, { customModules }) })) : [];
   const overlay = captionOverlay(story);
   const hide: Array<[number, number]> = [
     ...((overlay?.hide ?? []) as Array<[number, number]>),
@@ -417,6 +419,11 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
               <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={world ? null : fieldFor(loop.scene)} backdrop={world ? null : backdropFor(loop.scene)} placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>
             </Sequence>
           ) : null}
+          {loop && world ? loopRiders.map((rider: any) => (
+            <Sequence key={`loop-${rider.entry.id}`} name={`loop → ${rider.entry.id}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
+              <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate={false} background={background} freeze placement={plan.loop ?? undefined} transparent>{rider.render()}</SceneLayer>
+            </Sequence>
+          )) : null}
         </CameraWorld>
         {/* Overlays, the frame and captions stack above the camera (CAMERA_STACK), as in HyperFrames. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
