@@ -9,6 +9,8 @@ import {drawFlat} from '../kit/core/characters/style-flat.mjs';
 import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '../kit/core/characters/styles.mjs';
 import {DEFAULT_LIGHT, lightErrors, normalizeLight} from '../kit/core/characters/light.mjs';
 import {resolveModule} from '../kit/core/modules.mjs';
+import {charactersView} from '../kit/core/catalog-characters.mjs';
+import {resolveStory} from '../kit/core/story.mjs';
 
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 
@@ -104,4 +106,36 @@ test('stick-classic: black and white only (ink lines, paper head), coloured stic
       assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 16, `${id}: ${hex} is a grey, not a colour`);
     }
   }
+});
+
+// Cast-scene renders per drawing style (catalog-characters.mjs): the style
+// reaches the drawn tree, and the styles stay apart.
+test('a seeded drawing style reaches the rendered cast-scene, and the eight styles all look different', async () => {
+  const {generateStyle} = await import('../kit/core/style-seed.mjs');
+  const {applyStyle} = await import('../kit/core/style.mjs');
+  const {DRAWING_STYLES} = await import('../kit/core/characters/styles.mjs');
+  const trees = new Map();
+  for (const style of DRAWING_STYLES) {
+    const pack = {name: `seed-${style}`, ...generateStyle({seed: '0badf00d', constraints: {drawing_style: style}})};
+    const [a, b] = pack.cast.members.map(member => member.id);
+    const scene = {id: 'pair', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', backdrop: 'room', cast: [{id: a, pose: 'point'}, {id: b, pose: 'wave'}]}};
+    const base = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 4}, style: pack.name, scenes: [scene]};
+    const styled = resolveStory(applyStyle(base, pack).story);
+    const model = resolveModule(styled.scenes[0], styled);
+    assert.deepEqual(model.content.actors.map(actor => actor.style), [style, style], style);
+    // The actors' drawings, without ids, so only the look is compared.
+    trees.set(style, JSON.stringify(charactersView(model).front.children.slice(1, 3)).replace(/"id":"[^"]*"|url\(#[^)]*\)|"[a-z]+-[0-9a-z-]+"/g, ''));
+  }
+  assert.equal(new Set(trees.values()).size, DRAWING_STYLES.length);
+});
+
+test('cinematic is set well apart from lifelike: harder key, teal core shadow, brighter rim', async () => {
+  const {CINEMATIC} = await import('../kit/core/characters/real-pen.mjs');
+  assert.ok(CINEMATIC.key > 1.2 && CINEMATIC.rim > 1.5 && CINEMATIC.shade >= 0.45);
+  const scene = {id: 'desk', module: 'cast-scene', start: 0, end: 6, params: {set: 'desk-laptop', backdrop: 'room', cast: [{id: 'maya', pose: 'type'}, {id: 'theo', pose: 'point'}]}};
+  const m = style => { const s = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand: {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}}, cast: {style, characters: [{id: 'maya'}, {id: 'theo'}]}, scenes: [scene]}; return resolveModule(scene, s); };
+  const json = style => JSON.stringify(charactersView(m(style)).front);
+  // The rim: every lit piece gets bands of its outline shifted toward the light.
+  const rims = style => (json(style).match(/"transform":"translate\(/g) ?? []).length;
+  assert.ok(rims('cinematic') > rims('lifelike') + 50, `${rims('cinematic')} vs ${rims('lifelike')}`);
 });
