@@ -663,9 +663,11 @@ function plateCuts(model, story, scene) {
     if (model.layout?.motion) model.layout.motion.exitStart = exitStart;
     model.exitsWithCut = true;
   }
-  const arriving = plates.find((plate) => Math.abs(Number(plate.start) - Number(scene.start)) < 0.05 && plate.in && typeof plate.in === 'object' && plate.in.type !== 'cut' && Number(plate.in.dur) > 0);
+  // Starting while a plate arrives (at its start or during its transition).
+  const arriving = plates.find((plate) => plate.in && typeof plate.in === 'object' && plate.in.type !== 'cut' && Number(plate.in.dur) > 0
+    && Number(scene.start) > Number(plate.start) - 0.05 && Number(scene.start) < Number(plate.start) + Number(plate.in.dur) - 1e-6);
   if (arriving && !Array.isArray(model.animations) && Number.isFinite(m.enterStart)) {
-    const wait = round(Number(arriving.in.dur));
+    const wait = round(Math.max(0, Number(arriving.start) + Number(arriving.in.dur) - Number(scene.start)));
     m.enterStart = round(m.enterStart + wait);
     if (Number.isFinite(m.enterEnd)) m.enterEnd = round(m.enterEnd + wait);
     if (model.layout?.motion && Number.isFinite(model.layout.motion.enterEnd)) model.layout.motion.enterEnd = round(model.layout.motion.enterEnd + wait);
