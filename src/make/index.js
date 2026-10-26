@@ -27,7 +27,7 @@ import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
 import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
-import { needsResize, writeScript } from "./script.js";
+import { needsResize, RULES_HEADING, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
 import { runHeadlessCritic } from "./critic.js";
@@ -52,6 +52,7 @@ export const MAKE_PATHS = Object.freeze({
   transcripts: ".launchclip/make/transcripts",
   take: ".launchclip/make/narration.wav",
   voiceover: "assets/audio/voiceover.wav",
+  brandAssets: ".launchclip/make/brand-assets.json",
   base: "assets/base-edit.mp4",
   recording: "recording"
 });
@@ -72,7 +73,10 @@ export function slugify(prompt) {
  * options: {assets, aspect, duration, style, seed, model, voice, voiceId, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
- *   subject (false: no presenter probe or subject effects)}
+ *   subject (false: no presenter probe or subject effects), rules (a collection's
+ *   RULES.md text: the script pass, the planner and the critic follow it),
+ *   brandAssets (a collection's brand folder: its images, notes and brand.json join
+ *   the assets under assets/collection-brand/)}
  * adapters: {env, client ({client, provider, model, vision}), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
@@ -175,10 +179,14 @@ async function stageModel(ctx) {
 
 async function stageInventory(ctx) {
   const { project, report, adapters, state, assetsDir } = ctx;
+  const brandDir = ctx.options.brandAssets ? path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.brandAssets)) : null;
+  const brand = brandDir ? await brandEntries(ctx, brandDir) : [];
   if (!assetsDir) {
-    ctx.inventory = { schema_version: "launchclip.make-assets.v1", dir: null, entries: [], counts: {}, summary: [] };
+    ctx.inventory = { schema_version: "launchclip.make-assets.v1", dir: null, entries: brand, counts: {}, summary: [] };
+    state.inventory = brand.map((entry) => [entry.path, entry.fingerprint]);
     await writeJson(path.join(project, MAKE_PATHS.assets), ctx.inventory);
-    return { status: "skipped", reason: "no --assets folder" };
+    if (brand.length) report.assets = { file: MAKE_PATHS.assets, counts: {}, brand_assets: brand.length };
+    return brand.length ? { status: "done", reason: `no --assets folder; ${brand.length} brand asset(s)` } : { status: "skipped", reason: "no --assets folder" };
   }
   const cache = await readJson(path.join(project, MAKE_PATHS.assets));
   const inventory = await (adapters.inventory ?? inventoryAssets)(assetsDir, {
@@ -202,11 +210,27 @@ async function stageInventory(ctx) {
     if (entry.kind === "other") continue;
     await linkOrCopy(path.join(assetsDir, entry.path), path.join(project, "assets", entry.path));
   }
+  inventory.entries.push(...brand);
   ctx.inventory = inventory;
   state.inventory = inventory.entries.map((entry) => [entry.path, entry.fingerprint]);
   await writeJson(path.join(project, MAKE_PATHS.assets), inventory);
-  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts };
+  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}) };
   return { status: "done" };
+}
+
+// A collection's brand folder (docs/COLLECTIONS_RFC.md §3.2): its logos,
+// images, notes and brand.json join the inventory as collection-brand/<path>.
+// Its videos and audio do not, so a brand folder never decides the lane.
+const BRAND_KINDS = new Set(["image", "notes", "brand"]);
+
+async function brandEntries(ctx, dir) {
+  const cacheFile = path.join(ctx.project, MAKE_PATHS.brandAssets);
+  const cache = await readJson(cacheFile);
+  const inventory = await (ctx.adapters.inventory ?? inventoryAssets)(dir, { cache: cache?.dir === dir ? cache : null });
+  await writeJson(cacheFile, inventory);
+  const entries = inventory.entries.filter((entry) => BRAND_KINDS.has(entry.kind));
+  for (const entry of entries) if (entry.kind !== "notes") await linkOrCopy(path.join(dir, entry.path), path.join(ctx.project, "assets", "collection-brand", entry.path));
+  return entries.map((entry) => ({ ...entry, path: `collection-brand/${entry.path}`, source: "brand-assets" }));
 }
 
 async function stageRoute(ctx) {
@@ -375,21 +399,22 @@ async function prepareMotion(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
   const notes = await notesText(ctx);
+  const rules = rulesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
   // The planning pass: format, goal and awareness (flags, else the brief's defaults).
   const plan = chooseScriptPlan({ prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options) });
-  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness], v: 2 });
+  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness], ...(rules ? { rules } : {}), v: 2 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = script && state.script?.hash === scriptHash && script.narration;
   if (!reuse) {
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, ${plan.format}, about ${plan.word_target} words)`);
-    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan });
+    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
     const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan, repair: { previous: script.narration, errors: first.errors } });
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, repair: { previous: script.narration, errors: first.errors } });
       addCost(report, "script-repair", ctx.model, repaired);
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
@@ -399,7 +424,7 @@ async function prepareMotion(ctx) {
   if (!reuse && needsResize(take.duration, target)) {
     ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
-    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
+    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
     script = { ...resized, passes: [...(script.passes ?? []), { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
     take = await synthesize(ctx, script.narration);
@@ -595,7 +620,7 @@ async function stageCritic(ctx) {
   if (!ctx.model.vision) return pending(`${ctx.model.spec} cannot take images`);
   ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (headless critic over qa/critic-sheets/)`);
   const quality = ctx.finish?.gates?.coverage?.findings ?? [];
-  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality });
+  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, rules: rulesText(ctx) });
   if (result.cost_usd !== undefined) addCost(report, "critic", ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
   if (result.status !== "written") return pending(result.reason ?? "the critic did not run");
   report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
@@ -637,6 +662,8 @@ async function composeBrief(ctx, manifest) {
   if (lane === "voiceover-motion") lines.push("## Voiceover transcript (the supplied voiceover; time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "footage-led") lines.push("## Recording transcript (the edited base recording; its words are the narration)", "", ctx.narrationText, "", "Dress the recording: overlays and inserts on the strong lines only (10–40% of the runtime); gaps show the speaker.", "");
   if (notes.length) lines.push("## Notes", "", ...notes, "");
+  const rules = rulesText(ctx);
+  if (rules) lines.push(RULES_HEADING, "", rules, "");
   lines.push("## Asset manifest", "");
   if (manifest.length) {
     lines.push("These are the only files you may reference, by exact path. Do not invent other assets/ paths.", "", ...manifest.map((item) => `- ${item.line}`), "");
@@ -659,6 +686,12 @@ export function assetErrors(story, allowed) {
   };
   visit({ scenes: story?.scenes, overlays: story?.overlays, ending: story?.ending }, "");
   return [...new Set(errors)].slice(0, 12);
+}
+
+/** The collection's RULES.md text (options.rules), trimmed, or null. */
+function rulesText(ctx) {
+  const rules = String(ctx.options.rules ?? "").trim();
+  return rules ? rules.slice(0, 8000) : null;
 }
 
 async function notesText(ctx) {
