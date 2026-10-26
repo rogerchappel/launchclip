@@ -155,6 +155,9 @@ function resolveWorld(params, ctx) {
   const scrim = scrimFor(world, {text: colors.paper, bg: colors.bg, side: scrimSide === 'none' ? 'auto' : scrimSide});
   const content = {
     kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style, foreground,
+    // A plate (track 0) arrives and leaves by its scene transition alone (its
+    // `in`, or a cut); a world on a higher track fades in place like a card.
+    plate: (ctx.layer ?? 0) === 0,
     camera, states: worldCameraStates(camera, {overscan: world.overscan}),
     light: world.light, anchors: world.anchors, quiet: world.quiet,
     // The scrim a caller can lay over the quiet area; drawn when params.scrim asks.
@@ -195,17 +198,20 @@ export function worldView(model) {
   return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', background: world.palette.skyLow}), kids), media: null, overlay: null};
 }
 
-/** Renderer-neutral ops: the plate's fade and the layers' camera move. */
+/** Renderer-neutral ops: the fade (a world on a higher track only) and the layers' camera move. */
 export function worldTimeline(model) {
   const ops = [];
   const m = model.motion;
-  const settled = model.start <= 1 / model.fps + 1e-6;
+  // A plate never fades itself: its transition (or a cut) carries it, so a cut
+  // between two plates is a cut, not a dip through the background.
+  const plate = model.content.plate !== false;
+  const settled = plate || model.start <= 1 / model.fps + 1e-6;
   if (settled) set(ops, model.id, model.start, {opacity: 1});
   else {
     set(ops, model.id, model.start, {opacity: 0});
     tw(ops, model.id, m.enterStart, m.enterDuration, 'power1.out', {opacity: 0}, {opacity: 1});
   }
-  tw(ops, model.id, m.exitStart, m.exitDuration, 'power1.in', {opacity: 1}, {opacity: 0});
+  if (!plate) tw(ops, model.id, m.exitStart, m.exitDuration, 'power1.in', {opacity: 1}, {opacity: 0});
   set(ops, model.id, model.end, {opacity: 0});
   const {states, camera} = model.content;
   for (const layer of ['back', 'mid', 'front']) {

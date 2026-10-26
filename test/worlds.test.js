@@ -207,3 +207,17 @@ test('the op list renders the same through GSAP as through frameState', () => {
   }
   assert.equal(frameState(worldTimeline(model), 0).get('w').opacity, 1, 'a world on frame 0 is shown on frame 0');
 });
+
+test('a world plate never fades itself: a cut between plates is a cut; on a higher track it fades like a card', async () => {
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {worldTimeline} = await import('../kit/core/catalog-world.mjs');
+  const {frameState} = await import('../kit/core/catalog-b-view.mjs');
+  const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}};
+  const scenes = [{id: 'a', module: 'world', start: 0, end: 3, params: {kind: 'park'}}, {id: 'b', module: 'world', start: 3, end: 6, params: {kind: 'skyline', time: 'night'}},
+    {id: 'over', module: 'world', track: 1, start: 3, end: 6, params: {kind: 'park'}}];
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6}, brand, scenes};
+  const opacity = (id, t) => frameState(worldTimeline(resolveModule(scenes.find(s => s.id === id), story)), t).get(id)?.opacity;
+  assert.equal(opacity('b', 3), 1);
+  assert.equal(opacity('a', 2.95), 1);
+  assert.ok(opacity('over', 3.1) < 1);
+});
