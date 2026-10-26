@@ -12,7 +12,7 @@
 import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {rigGeometry} from './rig.mjs';
-import {face, facial, gazeJoint, glasses, hairBack, hairFront, joint, toonColors} from './toon.mjs';
+import {backOfHead, backView, face, faceView, facial, gazeJoint, glasses, hairBack, hairFront, joint, toonColors} from './toon.mjs';
 import {aidSide, covers, faceExtras, headwear, heldAid, wheelchair} from './toon-wear.mjs';
 import {flatPen} from './style-flat.mjs';
 import {linePen} from './style-line.mjs';
@@ -49,7 +49,7 @@ const PAPER = '#fbf9f4';
  * line for every limb and the spine, a white head, no hands or colour, and
  * the hair, face and headwear in line art.
  */
-export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false}, {mono = false} = {}) {
+export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}, {mono = false} = {}) {
   const g = stickGeometry(params);
   const c = toonColors(colors);
   const P = mono ? linePen(c, {id}) : flatPen(c);
@@ -112,7 +112,7 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
   const headKids = [
     el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: mono ? PAPER : skin, stroke: ink, strokeWidth: 6}),
-    onHead([...gazeJoint(ctx, j, gaze, [...facial(ctx), ...faceExtras(ctx), ...faceNodes, ...glasses(ctx)]), ...(covers(params) ? [] : hairFront(ctx)), ...headwear(ctx)])
+    onHead([...faceView(ctx, turns, gazeJoint(ctx, j, gaze, [...facial(ctx), ...faceExtras(ctx), ...faceNodes, ...glasses(ctx)])), ...(covers(params) ? [] : hairFront(ctx)), ...backView(ctx, turns, () => backOfHead(ctx)), ...headwear(ctx)])
   ];
   const tilt = {rotation: j.head, y: j.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);

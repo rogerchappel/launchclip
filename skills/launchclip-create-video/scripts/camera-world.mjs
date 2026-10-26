@@ -272,12 +272,21 @@ export function worldLayout(story, windows, { objects = () => null } = {}) {
     placements.set(entry.id, placement);
     previous = entry;
   }
-  // Loop ending: a camera ending travels home to the loop scene's placement;
-  // any other ending shows the clone where the camera already rests.
+  // Loop ending: a pan, whip-pan or orbit places the clone of the loop scene
+  // beside the last plate, so the camera makes one short move (a trip back
+  // across the whole world in a fraction of a second shows only empty
+  // frames); a dolly travels home to the loop scene's placement; any other
+  // ending shows the clone where the camera already rests.
   let loop = null;
   if (windows.loop) {
     const last = plates.reduce((best, entry) => (!best || entry.end >= best.end ? entry : best), null);
-    loop = windows.loop.transitionIn?.camera ? { ...(placements.get(windows.loop.sceneId) ?? ORIGIN) } : { ...(last ? placements.get(last.id) : ORIGIN) };
+    const lastPlacement = last ? placements.get(last.id) : ORIGIN;
+    const type = windows.loop.transitionIn?.type;
+    const direction = windows.loop.transitionIn?.direction ?? layoutDirection(camera.layout, moves, plates.length);
+    if (!windows.loop.transitionIn?.camera) loop = { ...lastPlacement };
+    else if (type === 'pan' || type === 'whip-pan') loop = besidePlacement(lastPlacement, direction, { spacing: camera.spacing }, size);
+    else if (type === 'orbit') loop = besidePlacement(lastPlacement, direction, { spacing: camera.spacing, rotate: direction === 'left' || direction === 'up' ? -ORBIT_DEGREES : ORBIT_DEGREES }, size);
+    else loop = { ...(placements.get(windows.loop.sceneId) ?? ORIGIN) };
   }
   return { placements, loop, order: plates.map((entry) => entry.id) };
 }

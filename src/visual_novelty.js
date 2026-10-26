@@ -163,7 +163,7 @@ function compactFingerprint(fingerprint) {
   };
 }
 
-function tokenSimilarity(left = [], right = []) {
+export function tokenSimilarity(left = [], right = []) {
   return setSimilarity(tokenize(left), tokenize(right));
 }
 
@@ -171,7 +171,7 @@ function tokenize(values) {
   return unique((values ?? []).flatMap((value) => String(value ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? []));
 }
 
-function setSimilarity(left = [], right = []) {
+export function setSimilarity(left = [], right = []) {
   const a = new Set((left ?? []).filter(Boolean).map(String));
   const b = new Set((right ?? []).filter(Boolean).map(String));
   if (!a.size && !b.size) return 1;
@@ -179,7 +179,7 @@ function setSimilarity(left = [], right = []) {
   return intersection / new Set([...a, ...b]).size;
 }
 
-function sequenceSimilarity(left = [], right = []) {
+export function sequenceSimilarity(left = [], right = []) {
   const length = Math.max(left.length, right.length);
   if (!length) return 1;
   let matches = 0;
@@ -209,7 +209,7 @@ async function readJsonIfPresent(filePath) {
   }
 }
 
-async function writeAtomic(filePath, content) {
+export async function writeAtomic(filePath, content) {
   await mkdir(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(tempPath, content);

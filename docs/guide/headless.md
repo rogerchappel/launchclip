@@ -195,6 +195,47 @@ launchclip publish-manifest launchclip-ledgerly --link https://ledgerly.dev --ut
 `--platforms app_store,product_hunt` adds the App Store (previews run 15–30 s)
 and Product Hunt (a YouTube link, and a CTA that does not ask for upvotes).
 
+## A series that doesn't repeat itself
+
+When you make several videos for one product or channel, point every run at
+the same history folder:
+
+```bash
+launchclip make "A 30-second video on Ledgerly's payout matching" --visual-history-dir ~/videos/ledgerly-history
+launchclip make "A 30-second video on Ledgerly's month-end close" --visual-history-dir ~/videos/ledgerly-history
+```
+
+Each finished video (`ready` or `ready-for-review`) is recorded in
+`launchclip-history.json` in that folder: its hook, opening shot, module
+sequence, background, caption preset, palette and cover. The next run then:
+
+- **tells the planner** what the last 8 videos chose (`--visual-history-limit`
+  changes how many), so it opens on a new hook and picks a different module
+  sequence;
+- **moves a repeated look**: if the background or caption preset matches one
+  of the last three videos, make switches it to one they did not use. A style
+  you chose with `--style` keeps its own background and captions; only
+  generated looks move;
+- **lints the plan** against every video in the history, weighting recent
+  ones more, so a near-copy of last week's video is flagged sooner than one
+  from a year ago. Findings appear as `variety:` warnings and in `MAKE.json`
+  (`variety`) and `.launchclip/variety.json`. They never stop the render;
+  `--replan` plans again. `--visual-similarity-limit` (default 0.6) sets how
+  alike is too alike.
+
+A rerun of the same project keeps its storyboard and replaces its own entry
+in the history.
+
+To compare a whole set before you render, run:
+
+```bash
+launchclip history check ~/videos/ledgerly-history
+```
+
+It reads the history and any project folder inside it that has a
+`storyboard.json`, and lists every pair whose hooks or structure are too
+close. It exits 1 when it finds one; `--json` gives the full report.
+
 ## Cost
 
 - Every paid call is announced before it is made (`model: PAID call to …`),
