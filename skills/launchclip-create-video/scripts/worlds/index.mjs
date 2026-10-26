@@ -105,6 +105,17 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
 }
 
 /**
+ * Where things stand in a world, without drawing it: its anchors ({ground:
+ * {y, x0, x1, ppm}, floor?, wall?, surface?}) on a canvas.
+ */
+export function worldAnchors(kind, {canvas = {width: 1920, height: 1080}, time = 'day', colors = {}} = {}) {
+  const def = WORLDS[kind];
+  if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
+  const k = worldKit({id: 'anchors', kind, time, colors, canvas, detail: detailSpec(detailForStyle(null), null)});
+  return def.geo(k).anchors;
+}
+
+/**
  * One prop on its own, fitted into box {x, y, width, height} (canvas px):
  * for prop sheets and previews. → {nodes, defs}.
  */

@@ -29,9 +29,11 @@ import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
-import {SEATED_SETS, SETS, SET_INFO, layoutSet, phoneProp} from './characters/sets.mjs';
+import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
-import {WORLD_KINDS, WORLD_TIMES, worldGrade, worldLight} from './worlds/index.mjs';
+import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldGrade, worldLight} from './worlds/index.mjs';
+import {worldLayerNodes} from './worlds/view.mjs';
+import {withoutForeground} from './catalog-world.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
@@ -245,11 +247,42 @@ function castSlots(b, entries, cast) {
   return slots.map(slot => slot ?? free.shift());
 }
 
+/**
+ * Where a cast-scene's set stands. backdrop "room" is the set's own room;
+ * "world" is its furniture alone, recoloured by the world's time-of-day grade
+ * and standing on the world's ground: over the track-0 world scene beneath,
+ * else in a world the scene draws behind itself (params.world, else
+ * story.world), so a seeded style's world is the room. The default is
+ * "world" whenever there is a world and the set has a furniture-only form.
+ * → {backdrop, world: {kind, time} | null (the world the cast stands in),
+ *    draw: render inputs for a world drawn in the scene | null}
+ */
+function castStage(b, ctx, setName) {
+  const {check} = b;
+  const p = b.params;
+  const named = standingWorld(b, ctx);
+  const story = isStoryWorld(ctx.world) ? {kind: ctx.world.kind, time: ctx.world.time ?? 'day'} : null;
+  const fits = SET_INFO[setName].world;
+  const backdrop = p.backdrop === undefined ? (fits && (named || story) ? 'world' : 'room') : check.oneOf(p.backdrop, 'params.backdrop', BACKDROPS);
+  if (backdrop === 'room') return {backdrop, world: named, draw: null};
+  if (!fits) check.fail('params.backdrop', `"world" does not fit the ${setName} set (sets with a furniture-only form: ${WORLD_SETS.join(', ')})`);
+  const world = named ?? story;
+  if (!world) check.fail('params.backdrop', '"world" needs a world: a track-0 world scene beneath, params.world or story.world');
+  // Over a world scene the plate shows through; otherwise the scene draws the world itself.
+  const beneath = p.world === undefined && ctx.beneath;
+  const props = p.world === undefined && !beneath ? (Array.isArray(ctx.world?.props) ? ctx.world.props : []) : [];
+  const detail = p.world === undefined && !beneath ? (ctx.world?.detail ?? null) : null;
+  return {backdrop, world, draw: beneath ? null : {kind: world.kind, time: world.time, props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
+}
+
+const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
+
 function resolveCastScene(params, ctx) {
-  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world'], required: ['set', 'cast'], hidesCaptions: false});
+  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world', 'backdrop'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
   const p = b.params;
   const setName = check.oneOf(p.set, 'params.set', SETS);
+  const stage = castStage(b, ctx, setName);
   const info = SET_INFO[setName];
   const screen = p.screen === undefined ? null : media(check, p.screen, 'params.screen');
   if (info.screen === 'required' && !screen) check.fail('params.screen', `is required for the ${setName} set: a real capture (an assets/ image or video, or a demo-autopilot recording); the set never invents a UI`);
@@ -263,9 +296,11 @@ function resolveCastScene(params, ctx) {
   const heights = p.cast.map((entry, i) => {
     try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return styleHeight(member.style, member.params); } catch { return 1000; }
   });
-  const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit});
+  const inWorldSet = stage.backdrop === 'world';
+  const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
+    ...(inWorldSet ? {floor: worldAnchors(stage.world.kind, {canvas}).ground.y, grade: worldGrade(stage.world.kind, stage.world.time)} : {})});
   const slotOf = castSlots(b, p.cast, cast);
-  const world = standingWorld(b, ctx);
+  const world = stage.world;
   const light = sceneLight(b, p.light, ctx, world);
   const actors = p.cast.map((raw, i) => {
     const slot = layout.slots[slotOf[i]];
@@ -281,7 +316,7 @@ function resolveCastScene(params, ctx) {
   rect.width = r2(Math.min(canvas.width, Math.max(...actors.map(a => a.x)) + 220 * actors[0].scale) - rect.x);
   rect.height = r2(Math.min(canvas.height, layout.floor) - rect.y);
   b.model.layer = 'front';
-  const content = {set: setName, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
+  const content = {set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
@@ -294,6 +329,9 @@ function castSceneView(model) {
   const {id, canvas} = model;
   const c = model.content;
   const W = canvas.width, H = canvas.height;
+  // A world the scene draws itself (no world scene beneath): its layers, still,
+  // behind the furniture; the cast is the foreground, so its front layer is left out.
+  const world = c.drawWorld ? worldLayerNodes(withoutForeground(renderWorld({id: `${id}-world`, ...c.drawWorld, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas, seed: `${c.drawWorld.kind}|${c.drawWorld.time}|${W}x${H}`})), `${id}-world`) : [];
   const back = svgRoot(W, H, c.back);
   const actors = c.actors.map((actor, i) => actorNode(model, actor, i));
   const front = svgRoot(W, H, c.front);
@@ -301,9 +339,9 @@ function castSceneView(model) {
   const screen = c.media ? mediaNode(id, r, c.media, {origin: {x: r.x + r.width / 2, y: r.y + r.height / 2}}) : null;
   // An image screen stays inside the scene's one tree (both renderers nest it
   // the same way); only a video is split out, for HyperFrames to hoist.
-  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front]), media: null, overlay: null};
+  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front]), media: null, overlay: null};
   return {
-    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [back]),
+    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back]),
     media: screen,
     overlay: el('div', `${id}-overlay`, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', pointerEvents: 'none'}), [...actors, front])
   };
@@ -401,7 +439,7 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',

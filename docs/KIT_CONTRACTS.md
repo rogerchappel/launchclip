@@ -2086,7 +2086,22 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 - `sets.mjs`: the room, furniture and slots for each set (left to right; a
   slot faces the middle of the frame): desk-laptop, phone, meeting, screen,
   kitchen-counter, sofa, podium, stage, car, park-bench, video-call and
-  standing-desk.
+  standing-desk. `layoutSet(name, {…, backdrop, floor, grade})`: backdrop
+  `room` (default) draws the set's own scenery (walls, windows, pictures,
+  sky, trees, curtains) with its furniture; `world` draws the furniture and
+  props alone, on `floor` (a world's ground line), every colour passed
+  through `grade` (the world's time-of-day grade). Every set but video-call
+  has a furniture-only form (`WORLD_SETS`).
+- **cast-scene in a world.** `params.backdrop` room | world picks the form.
+  It defaults to `world` whenever there is a world and the set has a
+  furniture-only form: the track-0 world scene beneath (the plate shows
+  through), else `params.world`, else `story.world` (the scene draws that
+  world behind its furniture, without the world's front layer, so a seeded
+  style's world is the room). The furniture stands on the world's ground
+  (`worldAnchors(kind).ground.y`) and takes its full grade; the cast takes
+  its light and half its grade. The model carries `content.backdrop`,
+  `content.world` and `content.drawWorld` (render inputs, or null over a
+  plate).
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
@@ -2199,7 +2214,7 @@ E's `emitParts` and `PartsModule`.
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none) | none | Fades in place like a set (shown on frame 0 when it starts the video). Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
+| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none), `foreground?` boolean (default true; false when a cast-scene stands in this world, `castStandsIn`, so a parked car or a desk never sits under the cast's feet) | none | Fades in place like a set (shown on frame 0 when it starts the video). Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
 
 **story.world** `{kind, time?, props?, detail?}` is the video-wide world:
 every world scene without its own `kind`, `time` or `props` takes them from
@@ -2214,7 +2229,9 @@ scene fails to resolve on an unknown one.
   `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?})` →
   `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
-  sheets; `storyWorldErrors`; `worldCatalogue()`.
+  sheets; `storyWorldErrors`; `worldCatalogue()`; `worldAnchors(kind,
+  {canvas})` (anchors without drawing); `worldGrade(kind, time, strength)`
+  (the time-of-day grade as hex → hex).
 - 22 worlds in three groups. Inside: office, home-desk, kitchen,
   living-room, classroom, cafe, workshop, server-room, studio, gym. Street:
   city-street, shopfronts, crossing, alley, rooftop, skyline. Outside: park,
