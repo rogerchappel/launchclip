@@ -26,7 +26,9 @@ export function layerNode(world, layer, id, extra = {}) {
   const filter = layerFilter(world, layer);
   const defs = world.defs[layer]?.length ? [el('defs', null, null, world.defs[layer])] : [];
   const svg = el('svg', null, {position: 'absolute', left: -ov, top: 0, overflow: 'visible'}, [...defs, ...world.layers[layer]], {width: W + 2 * ov, height: H, viewBox: `${-ov} 0 ${W + 2 * ov} ${H}`, fill: 'none'});
-  return el('div', `${id}-${layer}`, {position: 'absolute', left: 0, top: 0, width: W, height: H, transformOrigin: '50% 50%', ...(filter ? {filter} : {}), ...(layer === 'fx' ? {pointerEvents: 'none'} : {}), ...extra}, [svg]);
+  // The SVG is drawn past the edges on purpose (overscan for the camera move),
+  // so the layer tells layout audits that its overflow is intended.
+  return el('div', `${id}-${layer}`, {position: 'absolute', left: 0, top: 0, width: W, height: H, transformOrigin: '50% 50%', ...(filter ? {filter} : {}), ...(layer === 'fx' ? {pointerEvents: 'none'} : {}), ...extra}, [svg], {'data-layout-allow-overflow': 'true'});
 }
 
 /** Every layer, back to front. */

@@ -199,7 +199,8 @@ export function cardSurface(model) {
     const {treatment, radius, fill} = model.panel;
     const surface = panelSurfaceStyle(treatment, {colors: theme, unit: u, border: theme.border, radius: radius ?? 32});
     // A panel fill (model.panel.fill, kit/core/backgrounds.mjs cardFillStyles): still pattern layers clipped to the card.
-    const inner = fill ? [el('div', null, abs(0, 0, rect.width, rect.height, {overflow: 'hidden', borderRadius: surface.borderRadius, ...fill.mask}), fill.styles.map(style => el('div', null, style)))] : [];
+    // The pattern layers are larger than the card and clipped to it on purpose.
+    const inner = fill ? [el('div', null, abs(0, 0, rect.width, rect.height, {overflow: 'hidden', borderRadius: surface.borderRadius, ...fill.mask}), fill.styles.map(style => el('div', null, style)), {'data-layout-allow-overflow': 'true'})] : [];
     return el('div', null, abs(0, 0, rect.width, rect.height, surface), inner);
   }
   return el('div', null, abs(0, 0, rect.width, rect.height, {boxSizing: 'border-box', borderRadius: r2(32 * u), background: theme.bg,
