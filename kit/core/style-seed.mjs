@@ -31,6 +31,7 @@ import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } 
 import { BACKGROUND_MOTIFS } from './backgrounds.mjs';
 import { PANEL_TREATMENTS } from './panels.mjs';
 import { WORLD_KINDS } from './worlds/index.mjs';
+import { mediumErrors } from './medium.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
 import { STYLE_FRAME_POSITIONS, STYLE_ICON_STYLES, STYLE_ILLUSTRATIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
@@ -116,7 +117,9 @@ const NIGHT_TONES = new Set(['premium', 'energetic']);
 // Modules with designed variants → their names, default first
 // (kit/core/modules.mjs moduleVariants: catalogue G, editorial and the rest).
 export const SEED_MODULE_VARIANTS = Object.freeze(Object.fromEntries(Object.entries(moduleVariants()).map(([id, names]) => [id, Object.freeze(names)])));
-export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel']);
+// medium is never drawn by the seed: a generated style is painted only when
+// art direction asks for it (kit/core/medium.mjs mediumFromText reads the words).
+export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel', 'medium']);
 
 /**
  * Curated type pairings over the bundled fonts (kit/core/fonts.mjs): display
@@ -490,6 +493,11 @@ export function normalizeConstraints(constraints = {}) {
   const worlds = out.world === undefined ? [] : Array.isArray(out.world) ? out.world : [typeof out.world === 'string' ? out.world : out.world?.kind];
   for (const kind of worlds) if (!WORLD_KINDS.includes(kind)) throw new Error(`world must be one of ${WORLD_KINDS.join(', ')}`);
   if (Array.isArray(out.world) && !out.world.length) delete out.world;
+  if (out.medium !== undefined) {
+    const problems = mediumErrors(out.medium);
+    if (problems.length) throw new Error(problems[0]);
+    if (out.medium === 'none' || out.medium.kind === 'none') delete out.medium;
+  }
   return out;
 }
 
@@ -523,7 +531,7 @@ export function generateStyle({ seed, tone = null, constraints = {}, at } = {}) 
     ...(Object.keys(fixed).length ? { constraints: fixed } : {}),
     ...pack.generated, ...(redraws ? { redraws } : {})
   };
-  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
+  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'medium', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
   const sorted = Object.fromEntries(order.filter((key) => pack[key] !== undefined).map((key) => [key, pack[key]]));
   const validation = validateStylePack(sorted);
   if (!validation.ok) throw new Error(`generated style ${sorted.name} is invalid:\n- ${validation.errors.join('\n- ')}`);
@@ -635,6 +643,7 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     variants,
     cast,
     ...(world ? { world } : {}),
+    ...(fixed.medium ? { medium: JSON.parse(JSON.stringify(fixed.medium)) } : {}),
     brand_frame,
     dials,
     generated: { theme, scheme, pairing: pairing.id }
@@ -645,11 +654,12 @@ function buildPack(hex, toneName, t, fixed, attempt) {
 
 const familyName = (value) => registeredFamily(value) ?? value;
 
-/** "dark, playful, Unbounded / Inter" — or, with seed (the default), "seed 7f3a91c2 (dark, playful, Unbounded / Inter)". */
+/** "dark, playful, Unbounded / Inter" (", watercolour" when it is painted) — or, with seed (the default), "seed 7f3a91c2 (dark, playful, Unbounded / Inter)". */
 export function styleSummary(pack, { seed = true } = {}) {
   const theme = pack?.generated?.theme ?? styleFingerprint(pack).theme;
   const fonts = pack?.brand?.fonts ?? {};
-  const inner = `${theme}, ${grammarOf(pack)}, ${familyName(fonts.display ?? 'anton')} / ${familyName(fonts.body ?? 'inter')}`;
+  const medium = typeof pack?.medium === 'string' ? pack.medium : pack?.medium?.kind;
+  const inner = `${theme}, ${grammarOf(pack)}, ${familyName(fonts.display ?? 'anton')} / ${familyName(fonts.body ?? 'inter')}${medium && medium !== 'none' ? `, ${medium}` : ''}`;
   return seed && pack?.generated?.seed ? `seed ${pack.generated.seed} (${inner})` : inner;
 }
 

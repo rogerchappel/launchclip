@@ -21,6 +21,7 @@ import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
 import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
 import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
+import { MEDIUM_KINDS, mediumErrors } from './medium.mjs';
 import { PANEL_RADIUS, PANEL_TREATMENTS } from './panels.mjs';
 import { soundProblems } from './sound/options.mjs';
 import { WORLD_TIMES, storyWorldErrors } from './worlds/index.mjs';
@@ -36,7 +37,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -52,6 +53,9 @@ export const STYLE_BACKGROUND_FADES = BACKGROUND_FADES;
 // checked by kit/core/sound/options.mjs soundProblems, the same check finish uses.
 export const STYLE_ICON_STYLES = Object.freeze(['outline', 'duotone']);
 export const STYLE_ILLUSTRATIONS = Object.freeze(['flat', 'flat-shadow', 'line']);
+// The material every frame is painted in (kit/core/medium.mjs): a name or
+// {kind, strength, boil, grain}; "none" (the default) leaves the render as it is.
+export const STYLE_MEDIUMS = MEDIUM_KINDS;
 // The worlds kit's times (kit/core/worlds/); a pack's world is checked like a story's.
 export const STYLE_WORLD_TIMES = WORLD_TIMES;
 export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 'at', 'constraints', 'theme', 'scheme', 'pairing', 'redraws']);
@@ -524,6 +528,7 @@ function seededFieldErrors(pack, { err, warn, known }) {
     }
   }
   if (pack.world !== undefined) for (const message of storyWorldErrors(pack.world, 'world')) err(message);
+  for (const message of mediumErrors(pack.medium, 'medium')) err(message);
 }
 
 // Recurring segment formats (long form, RFC §10.2): named chapter templates a
@@ -653,6 +658,9 @@ export function applyStyle(story, pack, options = {}) {
   for (const [key, source] of [['background', pack.background], ['panel', panel], ['world', pack.world]]) {
     if (isObject(source) && out[key] === undefined) { out[key] = clone(source); applied.push(key); }
   }
+  // Medium (kit/core/medium.mjs): the pack's material when the story names
+  // none; "none" adds nothing, so the story renders as before.
+  if (pack.medium != null && pack.medium !== 'none' && pack.medium.kind !== 'none' && out.medium === undefined) { out.medium = clone(pack.medium); applied.push('medium'); }
   // Cast (the characters kit's castFromStyle): the pack's people and drawing
   // style when the story has no cast; only the drawing style when it lists
   // characters but names no style.

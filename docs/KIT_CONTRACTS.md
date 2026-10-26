@@ -1191,6 +1191,40 @@ colour, at the canvas's px scale.
   writes split-layout panel fills (an icon pattern and a linen texture, on
   both palettes) to `panels.png`.
 
+## Medium (`kit/core/medium.mjs`)
+
+`story.medium` (a style pack's `medium`, filled by `applyStyle` when the story
+has none) is the material every frame is painted in: `none` (the default),
+`oil`, `watercolour`, `pastel`, `ink` or `gouache`, or
+`{kind, strength?, boil?, grain?}` with `strength` and `grain` 0–1 and `boil`
+true or false (each medium's defaults are `MEDIUM_DEFAULTS`).
+`mediumErrors()` and `validateStory` check it; a misspelling such as
+`watercolor` names the fix.
+
+- **One finishing pass, both renderers.** `mediumPlan(story)` is null without
+  a medium, and then neither renderer adds anything (the HyperFrames compile
+  is byte for byte today's). With one, both draw a full-canvas layer with
+  `backdrop-filter: url(#lc-medium-<n>)` over every scene, the camera and the
+  footage, and under the brand frame and the captions (HyperFrames z-index
+  80000, under the frame's 90000 and the captions' 100000; Remotion 49, under
+  the captions' 50). `mediumDefs(plan)` is the `<svg>` of filters: feTurbulence
+  noise, feDisplacementMap wobble and smear, feDiffuseLighting impasto (oil),
+  blends and colour matrices, in canvas pixels (`userSpaceOnUse`) and sRGB.
+- **Boil on threes.** The wobble and strokes come in `MEDIUM_BOIL.variants`
+  (3) drawings that change every `MEDIUM_BOIL.every` (3) frames from the
+  story's frame 0; the paper is the same in every drawing. Remotion picks
+  `mediumFilterAt(plan, frame)` from the absolute frame; the HyperFrames
+  compiler sets `--lc-medium-filter` with `tl.set` at `mediumSteps(plan,
+  duration)`, half a frame before each change. Partial renders and preview
+  windows therefore match a full render. `boil: false` keeps one drawing.
+- A module review (`sceneFilter`, `ModuleReview`) has no medium.
+- Plain words: `mediumFromText(text)` reads a medium from a description
+  ("soft watercolour, dreamy" → `{kind: "watercolour", strength: 0.4}`) with
+  the tone, theme and background that suit it (`MEDIUM_LOOKS`). `make` and
+  `story plan` pass it to the seeded style as the `medium` constraint
+  (`src/style_seed_store.js promptConstraints`); the seed never draws a medium
+  on its own.
+
 ## World camera (`kit/core/camera-world.mjs`)
 
 ```json

@@ -24,6 +24,10 @@
 //   inside pan / zoom / drift containers evaluated per frame from the same op
 //   list the HyperFrames compiler turns into GSAP, with the parallax
 //   background, overlay parallax and the velocity-shaped motion blur;
+// - the medium (kit/core/medium.mjs): a full-canvas backdrop-filter layer
+//   over everything but the brand frame and the captions, that paints the
+//   frame in oil, watercolour, pastel, ink or gouache, its drawing picked from
+//   the absolute frame as the HyperFrames compiler steps it on its timeline;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
@@ -52,6 +56,8 @@ import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCamera
 import { propsToStyle } from "../core/catalog-b-view.mjs";
 // @ts-ignore plain ESM from kit/core
 import { layoutPlan, layoutStateAt, withLayoutCameras } from "../core/footage-layout.mjs";
+// @ts-ignore plain ESM from kit/core
+import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "../core/medium.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -329,6 +335,19 @@ function subjectPlan(story: any, base: any, layers: any[], layout: any = null) {
   };
 }
 
+// The medium layer: the filters once, and a layer whose backdrop-filter
+// takes the drawing for the absolute frame (on threes, when it boils).
+const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
+  const frame = useCurrentFrame();
+  const defs = React.useMemo(() => ({ __html: mediumDefs(plan) }), [plan]);
+  return (
+    <>
+      <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} />
+      <div id={MEDIUM_LAYER_ID} data-launchclip-medium={plan.kind} style={{ ...mediumLayerStyle(plan, frame), zIndex: MEDIUM_Z.remotion } as React.CSSProperties} aria-hidden />
+    </>
+  );
+};
+
 function captionOverlay(story: any) {
   return captionsOverlayOf(story);
 }
@@ -374,6 +393,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
   const subject = React.useMemo(() => subjectPlan(story, base, layers, layout), [story, base, layers, layout]);
+  const medium = React.useMemo(() => mediumPlan(story), [story]);
   if (plan) {
     const world = plan.mode === "world";
     // World mode: one ambient field, in the camera's parallax depth layer.
@@ -401,6 +421,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         {/* Overlays, the frame and captions stack above the camera (CAMERA_STACK), as in HyperFrames. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
+          {medium ? <MediumLayer plan={medium} /> : null}
           <BrandFrame story={story} />
           {overlay && Array.isArray(__captions) && __captions.length ? (
             <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
@@ -432,6 +453,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
+      {medium ? <MediumLayer plan={medium} /> : null}
       <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
         <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
