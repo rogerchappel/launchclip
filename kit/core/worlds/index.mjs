@@ -28,6 +28,7 @@ import {INSIDE} from './inside.mjs';
 import {STREET} from './street.mjs';
 import {OUTSIDE} from './outside.mjs';
 import {PROPS, PROP_IDS, placeProps, propEntry} from './props.mjs';
+import {propMotion} from '../physics.mjs';
 
 export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, worldPalette};
 export {TOPIC_FIT, suggestWorld} from './fit.mjs';
@@ -100,7 +101,7 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
   return {
     kind, group: def.group, label: def.label, time, detail: spec, canvas: {width: k.W, height: k.H}, overscan: k.ov,
     layers, defs, anchors: geo.anchors, quiet: geo.quiet, light: worldLight(kind, time), palette: k.pal,
-    props: placed.map(({id: pid, anchor, x, y, scale, layer, rect}) => ({id: pid, anchor, x, y, scale, layer, rect}))
+    props: placed.map(({id: pid, anchor, x, y, scale, layer, rect}) => ({id: pid, anchor, x, y, scale, layer, rect, motion: propMotion(pid)}))
   };
 }
 
