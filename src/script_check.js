@@ -236,7 +236,8 @@ export function checkScript(input = {}) {
     }
     const cutoff = 1 - CTA_FINAL_SHARE;
     ctas.forEach((cta, index) => {
-      if (cta.at >= cutoff) return;
+      // The last sentence is the end, however short the script.
+      if (cta.at >= cutoff || cta.sentence === sentences.length - 1) return;
       // Long-form: one soft CTA (the earlier of a pair) after 15%, if the last is at the end.
       if (longForm && index === 0 && ctas.length === 2 && ctas[1].at >= cutoff && cta.at >= 0.15) return;
       add(errors, "cta-early", `"${cta.phrase}" asks for the action ${Math.round(cta.at * 100)}% of the way in.`, `Move the call to action into the final ${Math.round(CTA_FINAL_SHARE * 100)}%, after the hook's promise is paid.`, spanOf(sentences[cta.sentence]));

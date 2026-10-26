@@ -152,6 +152,7 @@ test("cta: exactly one, at the end; tutorial imperatives are not CTAs", () => {
   assert.ok(ids(check(GOOD.replace("Try Ledgerly free today.", "Download Ledgerly free today. Subscribe for more."))).includes("cta-multiple"));
   const early = check(GOOD.replace("Your books stay clean without a single spreadsheet.", "Sign up at ledgerly.com."));
   assert.ok(ids(early).includes("cta-early"));
+  assert.ok(!ids(checkScript({ narration: "Payouts never match. Ledgerly fixes it. Try Ledgerly free.", duration: 6, brief: BRIEF })).includes("cta-early"), "the last sentence is the end, however short the script");
   // Instructions inside an explainer are not calls to action.
   const tutorial = check(GOOD.replace("Your books stay clean without a single spreadsheet.", "Then click Export and open the report."));
   assert.ok(!ids(tutorial).some((id) => id.startsWith("cta-")), formatCheckErrors(tutorial.errors));
