@@ -115,8 +115,8 @@ export function visibleChunks(chunks, hide = []) {
     const cut = Math.min(...hide.map(([from]) => Number(from)).filter((from) => from > chunk.start && from < chunk.end));
     if (!Number.isFinite(cut)) return chunk;
     const words = (chunk.words ?? []).filter((word) => word.start < cut).map((word) => (word.end > cut ? { ...word, end: cut } : word));
-    return { ...chunk, end: cut, words };
-  });
+    return words.length ? { ...chunk, end: cut, words } : null;
+  }).filter(Boolean);
 }
 
 export function captionRuntime(chunks) {

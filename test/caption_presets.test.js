@@ -187,4 +187,5 @@ test('a caption line spoken into a hidden range ends where the range starts', as
   assert.equal(line.end, 10);
   assert.deepEqual(line.words.map((word) => [word.text, word.end]), [['and', 9.3], ['get', 10]]);
   assert.deepEqual(visibleChunks([chunk], [[20, 21]]), [chunk], 'a line clear of every range is unchanged');
+  assert.deepEqual(visibleChunks([{ ...later, start: 10.25 }], [[10.28, 12]]), [], 'a line with no word before the range is dropped');
 });
