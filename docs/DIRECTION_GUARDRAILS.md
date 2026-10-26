@@ -146,9 +146,10 @@ emphasis. Plates appear only where they are needed.
   - When consecutive cast scenes share a character across a non-cut
     transition (a camera move or a dissolve), the incoming cast cuts in when
     the transition ends.
-  - Card and text entrances clamp their fade to `TEXT_FADE.max` (0.45 s).
-  - Every text module holds fully opaque for at least
-    `TEXT_FADE.minHold(words)` (0.3 s a word, at least 1.2 s).
+  - Card and text entrances clamp their fade to `TEXT_FADE.max` (0.5 s); a
+    cast's own fade takes at most 0.3 s.
+  - Every text module holds fully opaque for its reading time (0.22 s a
+    word, at least 1.2 s; source and role lines do not count).
 - **Validation.** A character in two scenes whose render windows overlap is an
   error (two copies at once).
 - **Finish gate `ghosting`** (op lists sampled at 10 Hz):

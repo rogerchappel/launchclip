@@ -4,6 +4,7 @@
 //
 //   physicsGate(story)   anchored world elements move only with the camera
 //   actingGate(story, {map, words})  each line's key action is performed
+//   ghostingGate(story)  one copy of a person; nothing half-transparent held
 //
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
@@ -13,9 +14,9 @@ import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
 import { worldTimeline } from "../kit/core/catalog-world.mjs";
 import { rideWorldPlates } from "../kit/core/camera-world.mjs";
 import { driftEligible } from "../kit/core/ambient.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { TEXT_FADE, resolveModule } from "../kit/core/modules.mjs";
 import { TRANSFORM_KEYS } from "../kit/core/physics.mjs";
-import { samePlaceCuts } from "../kit/core/story.mjs";
+import { samePlaceCuts, twoCopies } from "../kit/core/story.mjs";
 import { sceneWindows } from "../kit/core/transitions.mjs";
 import { ACTION_INFO } from "../kit/core/characters/actions.mjs";
 import { narrationWords } from "../kit/core/direction.mjs";
@@ -187,4 +188,114 @@ export function actingGate(story, { map, words } = {}) {
     }
   }
   return gateResult(findings, { actions: named });
+}
+
+// Ghosting thresholds (docs/DIRECTION_GUARDRAILS.md §4).
+export const GHOSTING = Object.freeze({ step: 0.1, visible: 0.05, solid: 0.95, characterHalf: 0.25, textHalf: 0.5 });
+
+// Opacity a scene's transition tweens (transitions.mjs: {prop, from, to, at,
+// duration}) give its layer at t: 1 outside them.
+function tweenOpacity(entry, t) {
+  let value = 1;
+  for (const tween of entry.tweens ?? []) {
+    if (tween.prop !== "opacity") continue;
+    const a = Number(tween.at), d = Number(tween.duration) || 0;
+    if (t < a - 1e-9) { if (tween.role === "in" || tween.role === "hold") value = Math.min(value, Number(tween.from)); continue; }
+    const p = d > 0 ? Math.min(1, (t - a) / d) : 1;
+    if (p >= 1 && tween.role !== "out") continue;
+    value = Math.min(value, Number(tween.from) + (Number(tween.to) - Number(tween.from)) * p);
+  }
+  return value;
+}
+
+// Words in a text module's params (headline, text, quote, labels…), for its reading time.
+function paramWords(params) {
+  // Meta lines (a source, a role) are glanced at, not read: they do not count.
+  const skip = new Set(["icon", "tone", "surface", "variant", "layout", "src", "kind", "set", "id", "emphasis", "highlight", "at", "rect", "source", "role", "author", "kicker"]);
+  let count = 0;
+  const walk = (value, key) => {
+    if (skip.has(key)) return;
+    if (typeof value === "string") count += value.split(/\s+/).filter(Boolean).length;
+    else if (Array.isArray(value)) value.forEach((item) => walk(item, null));
+    else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) walk(v, k);
+  };
+  walk(params ?? {}, null);
+  return count;
+}
+
+/** The minimum fully-opaque hold for a text module of `words` words (s). */
+export const textHold = (words) => Math.max(TEXT_FADE.minHold, Math.round(words * TEXT_FADE.perWord * 100) / 100);
+
+/**
+ * Ghosting (docs/DIRECTION_GUARDRAILS.md §4), sampled at 10 Hz on the op
+ * lists both renderers play:
+ * - two-copies: one character visible in two scenes at once;
+ * - ghost-character: a character between 5% and 95% opacity for more than
+ *   0.25 s in a row (a see-through person);
+ * - slow-text-fade: a text module fading in or out over more than
+ *   TEXT_FADE.max, or a fading transition on it longer than 0.5 s;
+ * - text-hold: a text module fully shown for less than its reading time.
+ */
+export function ghostingGate(story) {
+  const findings = [];
+  for (const pair of twoCopies(story)) findings.push({ rule: "two-copies", severity: "error", at: pair.from, ids: [pair.a, pair.b], detail: `${pair.character} is in ${pair.a} and ${pair.b} at once (${pair.from}–${pair.to} s); end one where the other starts` });
+  const { entries } = renderedModels(story);
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
+  const people = [];
+  for (const [id, { entry, model }] of entries) {
+    if (!CHARACTER_MODULES.includes(model.module)) continue;
+    const ops = charactersTimeline(model);
+    model.content.actors.forEach((actor, index) => {
+      const cid = `${id}-c${index}`;
+      people.push({ id, entry, character: actor.id, opacity: (t) => {
+        if (t < entry.start - 1e-6 || t >= entry.renderEnd - 1e-6) return 0;
+        const state = frameState(ops, t);
+        const root = state.get(id)?.opacity ?? 1;
+        const own = Math.min(state.get(cid)?.opacity ?? 1, state.get(`${cid}-walk`)?.opacity ?? 1);
+        return root * own * tweenOpacity(entry, t);
+      } });
+    });
+  }
+  const reported = new Set();
+  const half = new Map();
+  for (const t of times(0, Math.max(0, duration - 1e-3), GHOSTING.step)) {
+    const visible = new Map();
+    for (const person of people) {
+      const value = person.opacity(t);
+      if (value > GHOSTING.visible) visible.set(person.character, [...(visible.get(person.character) ?? []), person.id]);
+      const key = `${person.id}|${person.character}`;
+      if (value > GHOSTING.visible && value < GHOSTING.solid) {
+        const run = half.get(key) ?? { from: t, to: t };
+        run.to = t;
+        half.set(key, run);
+        if (run.to - run.from > GHOSTING.characterHalf + 1e-6 && !reported.has(`half|${key}`)) {
+          reported.add(`half|${key}`);
+          findings.push({ rule: "ghost-character", severity: "error", at: run.from, ids: [person.id], detail: `${person.character} in ${person.id} is see-through (${round(value, 2)} opacity) for more than ${GHOSTING.characterHalf} s from ${run.from} s; cut the cast with its world, or move it in at full opacity` });
+        }
+      } else half.delete(key);
+    }
+    for (const [character, scenes] of visible) {
+      const key = `copies|${character}|${scenes.join(",")}`;
+      if (scenes.length > 1 && !reported.has(key)) {
+        reported.add(key);
+        findings.push({ rule: "two-copies", severity: "error", at: t, ids: scenes, detail: `two copies of ${character} on screen at ${t} s (${scenes.join(", ")}); the cast changes with a cut, or the next copy appears when the move ends` });
+      }
+    }
+  }
+  for (const [id, { entry, model }] of entries) {
+    if (!["text", "hero"].includes(model.layout?.role) || !model.motion) continue;
+    const m = model.motion;
+    const fadeIn = m.enterFrom?.opacity < 1 ? m.enterDuration : 0, fadeOut = m.exitTo?.opacity < 1 ? m.exitDuration : 0;
+    const slow = Math.max(fadeIn || 0, fadeOut || 0);
+    if (slow > TEXT_FADE.max + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} fades over ${round(slow, 2)} s; text fades take at most ${TEXT_FADE.max} s` });
+    const transition = entry.transitionIn;
+    if (transition && ["fade", "dissolve", "crossfade"].includes(transition.type) && transition.dur > GHOSTING.textHalf + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} dissolves in over ${transition.dur} s; a text scene's fade takes at most ${GHOSTING.textHalf} s` });
+    const words = paramWords(entry.scene.params);
+    const enterEnd = Number.isFinite(m.enterEnd) ? m.enterEnd : entry.start + (fadeIn || 0);
+    const exitStart = Number.isFinite(m.exitStart) ? m.exitStart : model.end;
+    const hold = round(exitStart - enterEnd, 2);
+    const need = textHold(words);
+    if (words && hold < need - 1e-6) findings.push({ rule: "text-hold", severity: "error", at: enterEnd, ids: [id], detail: `${id} (${words} words) is fully shown for ${hold} s; it needs ${need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
+  }
+  return gateResult(findings);
 }
