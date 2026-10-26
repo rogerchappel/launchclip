@@ -20,7 +20,7 @@ import {el} from '../catalog-b-view.mjs';
 import {AGE_SHAPE, BUILD_SHAPE, HEIGHT_SCALE, expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
 import {asShadow} from './bounds.mjs';
-import {hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
+import {gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
 import {aidSide, backpackBack, covers, has, headwear, heldAid, longHem, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 import {capsulePath, darken, ellipsePath, group, lighten, luma, mix, noise, pathNode, placedGroup, r1, radialGradient, strokeLine} from './pens.mjs';
 import {realPen} from './real-pen.mjs';
@@ -455,7 +455,7 @@ function hips(ctx) {
  * Draw one lifelike character (options as toon.mjs drawToon, plus light).
  * style options: {cinematic, falloff: {torso, legs}}.
  */
-export function drawReal(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null}, {cinematic = false, falloff = {torso: 0, legs: 0}} = {}) {
+export function drawReal(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false}, {cinematic = false, falloff = {torso: 0, legs: 0}} = {}) {
   const g = realGeometry(params);
   const toonG = rigGeometry(params);
   const c = toonColors(colors);
@@ -485,10 +485,7 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
   const headKids = [
     ...ears(ctx),
     P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}),
-    ...faceBase(ctx),
-    ...facialHair(ctx),
-    ...faces,
-    ...eyewear(ctx),
+    ...gazeJoint(ctx, joints, gaze, [...faceBase(ctx), ...facialHair(ctx), ...faces, ...eyewear(ctx)]),
     ...(covers(params) ? [] : [onHead(hairFront(toonCtx))]),
     onHead(headwear(toonCtx), 1.02)
   ];

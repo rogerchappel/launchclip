@@ -1402,7 +1402,7 @@ One to three animated characters in a set (desk-laptop, phone, meeting, screen, 
 params:
 - set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
-- cast: [{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
+- cast: [{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (far | window | horizon | street | skyline | left | right | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: look-far | turn-to-look | gaze-at | point-at | walk-to | stand-up | stretch, target?, facing?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit, look, stretch; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 - world: {kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)
 - backdrop: room | world: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)
@@ -1414,10 +1414,11 @@ events: <character>-cue-<i>
 One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.
 params:
 - character: a cast or starter character id, or "@1", "@2"… by place in the story cast
-- pose: stand | point | wave | slump | type | think | cheer | shrug | walk
+- pose: stand | point | wave | slump | type | think | cheer | shrug | walk | look | stretch
 - expression: neutral | happy | delighted | frustrated | confused | surprised | focused
 - facing: left | right
-- cues: [{at, pose?, expression?}]
+- target: what the character attends to (as cast-scene)
+- cues: [{at, pose?, expression?, action?: look-far | turn-to-look | gaze-at | point-at | walk-to | stand-up | stretch, target?, facing?}]
 - says: [{from, to}] | "auto"
 - side: left | right (where the character stands)
 - card: {kicker?, title ≤ 64, body? ≤ 140}
@@ -1535,8 +1536,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
-| cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
-| character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
 
 ## Example

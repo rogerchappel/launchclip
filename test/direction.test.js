@@ -115,3 +115,16 @@ test("draftDirectionMap drafts a valid map from a storyboard", async () => {
   assert.equal(draft.profile, "short-talking-head");
   assert.deepEqual(validateDirection(draft, { words: await words(), story }).errors, []);
 });
+
+test("a narrative map names the key action of every line with cast cues, and of each section", async () => {
+  const { validateDirection } = await import("../kit/core/direction.mjs");
+  const words = Array.from({ length: 4 }, (_, i) => ({ text: `w${i}`, start: i, end: i + 0.5 }));
+  const line = (extra) => ({ words: [0, 3], intent: "claim", treatment: "insert", scenes: ["c"], ...extra });
+  const map = (lines) => ({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", beat: "resolution", lines }] });
+  assert.match(validateDirection(map([line({ cast: [{ id: "maya", pose: "sit" }] })]), { words, deferScenes: true }).errors.join("\n"), /has cast cues but no key action/);
+  assert.match(validateDirection(map([line({})]), { words, deferScenes: true }).errors.join("\n"), /names no key action/);
+  assert.deepEqual(validateDirection(map([line({ cast: [{ id: "maya" }], action: { verb: "look-far", who: "maya", target: "street" } })]), { words, deferScenes: true }).errors, []);
+  assert.match(validateDirection(map([line({ action: { verb: "teleport", who: "maya" } })]), { words, deferScenes: true }).errors.join("\n"), /action.verb must be one of look-far/);
+  // A map without beats (not narrative) needs no action.
+  assert.deepEqual(validateDirection({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", lines: [line({})] }] }, { words, deferScenes: true }).errors, []);
+});

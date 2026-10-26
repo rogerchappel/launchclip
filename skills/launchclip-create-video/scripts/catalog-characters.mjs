@@ -28,12 +28,14 @@ import {drawCharacter, styleGeometry, styleHeight} from './characters/styles.mjs
 import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
-import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
+import {ACTING, actingOps, stateJoints, speechChanges} from './characters/acting.mjs';
 import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
-import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldGrade, worldLight} from './worlds/index.mjs';
+import {ACTIONS, ACTION_INFO, NAMED_TARGETS, TARGET_REQUIRED, gazeOffset, sideOf, targetError, targetPoint, walkDuration} from './characters/actions.mjs';
+import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
-import {withoutForeground} from './catalog-world.mjs';
+import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
+import {OVERSCAN} from './worlds/index.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
@@ -41,10 +43,12 @@ export const CHARACTER_TIMING = Object.freeze({
 });
 const timingOf = id => ({...CHARACTER_TIMING[id], gaps: [], rules: [
   `a pose change tweens over ${ACTING.poseTween} s; cues may sit anywhere from the scene start to ${ACTING.poseTween} s before its end`,
+  'an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it',
   'gestures (wave, type, walk, cheer, think) loop while the pose holds'
 ]});
 
-const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 'says', 'holds'];
+const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 'says', 'holds', 'target'];
+const CUE_KEYS = ['at', 'pose', 'expression', 'action', 'target', 'facing'];
 
 // ---------------------------------------------------------------------------
 // Shared: actors
@@ -69,6 +73,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   const pose = raw.pose === undefined ? (seated ? 'sit' : 'stand') : check.oneOf(raw.pose, `${path}.pose`, POSES);
   const expression = raw.expression === undefined ? 'neutral' : check.oneOf(raw.expression, `${path}.expression`, EXPRESSIONS);
   const facing = raw.facing === undefined ? slot.facing : check.oneOf(raw.facing, `${path}.facing`, ['left', 'right']);
+  if (raw.target !== undefined) { const problem = targetError(raw.target); if (problem) check.fail(`${path}.target`, problem); }
   const holds = raw.holds === undefined ? null : check.oneOf(raw.holds, `${path}.holds`, ['phone']);
   const states = [{time: b.start, pose, expression}];
   const lastCue = b.duration - ACTING.poseTween;
@@ -80,17 +85,24 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   fitsSet(pose, `${path}.pose`);
   cues.map((cue, i) => {
     const where = `${path}.cues[${i}]`;
-    check.obj(cue, where, ['at', 'pose', 'expression'], ['at']);
-    if (cue.pose === undefined && cue.expression === undefined) check.fail(where, 'needs a pose or an expression');
+    check.obj(cue, where, CUE_KEYS, ['at']);
+    if (!CUE_KEYS.slice(1).some(key => cue[key] !== undefined)) check.fail(where, 'needs a pose, an expression, an action, a target or a facing');
     if (typeof cue.at === 'string') check.fail(`${where}.at`, `${JSON.stringify(cue.at)} is a word anchor that was not resolved; pass narration words to the story resolver or give seconds`);
     const at = check.num(cue.at, `${where}.at`, 0, lastCue);
     if (cue.pose !== undefined) { check.oneOf(cue.pose, `${where}.pose`, POSES); fitsSet(cue.pose, `${where}.pose`); }
     if (cue.expression !== undefined) check.oneOf(cue.expression, `${where}.expression`, EXPRESSIONS);
-    return {time: rt(b.start + at), pose: cue.pose, expression: cue.expression};
+    if (cue.facing !== undefined) check.oneOf(cue.facing, `${where}.facing`, ['left', 'right']);
+    const action = cue.action === undefined ? null : check.oneOf(cue.action, `${where}.action`, ACTIONS);
+    if (cue.target !== undefined) { const problem = targetError(cue.target); if (problem) check.fail(`${where}.target`, problem); }
+    if (action && TARGET_REQUIRED.includes(action) && cue.target === undefined) check.fail(`${where}.target`, `is required for ${action}`);
+    if (action === 'stand-up' && !seated) check.fail(`${where}.action`, `stand-up needs a seated set (${SEATED_SETS.join(', ')})`);
+    // An action takes its pose unless the cue names one (walk-to in a seated set needs a stand-up first: checked when directed).
+    const pose = cue.pose ?? (action ? ACTION_INFO[action].pose ?? undefined : undefined);
+    return {time: rt(b.start + at), pose, expression: cue.expression, action, target: cue.target, facing: cue.facing};
   }).sort((a, c) => a.time - c.time).forEach(cue => {
     const prev = states[states.length - 1];
-    const next = {time: cue.time, pose: cue.pose ?? prev.pose, expression: cue.expression ?? prev.expression};
-    if (Math.abs(cue.time - prev.time) < 1e-6) Object.assign(prev, {pose: next.pose, expression: next.expression});
+    const next = {time: cue.time, pose: cue.pose ?? prev.pose, expression: cue.expression ?? prev.expression, ...(cue.action ? {action: cue.action} : {}), ...(cue.target !== undefined ? {target: cue.target} : {}), ...(cue.facing ? {facing: cue.facing} : {})};
+    if (Math.abs(cue.time - prev.time) < 1e-6) Object.assign(prev, next, {time: prev.time});
     else if (cue.time - prev.time < ACTING.poseTween - 1e-6 && next.pose !== prev.pose && states.length > 1) check.fail(`${path}.cues`, `pose changes at ${r2(prev.time - b.start)} s and ${r2(cue.time - b.start)} s are closer than ${ACTING.poseTween} s; space them out`);
     else states.push(next);
   });
@@ -112,7 +124,59 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   const expressions = [...new Set(states.map(state => state.expression))];
   const geometry = styleGeometry(member.style, member.params);
   return {id: member.id, name: member.name, voice: member.voice, look: member.look, fingerprint: member.fingerprint, params: member.params, colors: member.colors, style: member.style,
-    facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light};
+    facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light,
+    target: raw.target ?? null, facingSet: raw.facing !== undefined};
+}
+
+/**
+ * Direct a placed actor (characters/actions.mjs): each state's facing, gaze,
+ * standing and walk offset, now that every actor in the scene has its place.
+ * A target (the actor's, then each cue's) turns the actor toward it and its
+ * face toward it; look-far without a target looks at the world's far point;
+ * walk-to walks there at a walking pace and stands; stand-up stands from the
+ * seat. → the actor with directed states and `gaze` (any face turn) and
+ * `walks` (any walk) flags.
+ */
+function directActor(b, actor, path, scene) {
+  const {check} = b;
+  const W = scene.canvas.width;
+  const margin = W * 0.12;
+  let target = actor.target, facing = actor.facing, standing = false, x = 0;
+  const pointOf = value => { try { return targetPoint(value, scene); } catch (error) { check.fail(`${path}.target`, error.message); } return null; };
+  if (target !== null && !actor.facingSet) facing = sideOf(pointOf(target), actor.x, scene.canvas);
+  const out = [];
+  let gazeOn = false, walks = false;
+  for (let i = 0; i < actor.states.length; i++) {
+    const state = actor.states[i];
+    const action = state.action ?? null;
+    if (action === 'stand-up') standing = true;
+    if (state.target !== undefined) target = state.target;
+    else if (action && ACTION_INFO[action].gaze && ACTION_INFO[action].target) target = ACTION_INFO[action].target;
+    const here = {...actor, x: actor.x + x};
+    const point = target === null ? null : pointOf(target);
+    if (state.facing) facing = state.facing;
+    else if (point) facing = sideOf(point, here.x, scene.canvas);
+    if ((state.pose === 'walk' || action === 'walk-to') && actor.seated && !standing) check.fail(`${path}.cues`, `${action ?? 'walk'} at ${r2(state.time - b.start)} s needs the character standing: add a stand-up cue before it`);
+    const gaze = point ? gazeOffset(point, here, scene.canvas) : {x: 0, y: 0};
+    if (gaze.x || gaze.y) gazeOn = true;
+    const directed = {...state, target, facing, standing, gaze, x};
+    out.push(directed);
+    if (action === 'walk-to' && point) {
+      const to = Math.min(W - margin, Math.max(margin, point.x ?? (facing === 'left' ? margin : W - margin)));
+      const dx = r2(to - actor.x - x);
+      const dur = walkDuration(dx, actor.scale);
+      const arrive = rt(state.time + dur);
+      const nextCue = actor.states[i + 1]?.time ?? Infinity;
+      if (arrive > b.start + b.duration - ACTING.poseTween + 1e-6) check.fail(`${path}.cues`, `walk-to at ${r2(state.time - b.start)} s takes ${dur} s and would not arrive before the scene ends`);
+      if (nextCue < arrive - 1e-6) check.fail(`${path}.cues`, `walk-to at ${r2(state.time - b.start)} s arrives at ${r2(arrive - b.start)} s; the next cue at ${r2(nextCue - b.start)} s comes before it`);
+      directed.walk = {from: x, to: r2(x + dx), duration: dur};
+      walks = walks || Math.abs(dx) > 0.5;
+      x = r2(x + dx);
+      // Arrived: stand, facing the way the walk went.
+      out.push({time: arrive, pose: 'stand', expression: state.expression, facing, standing, gaze, x, arrive: true});
+    }
+  }
+  return {...actor, states: out, gaze: gazeOn, walks};
 }
 
 /**
@@ -142,9 +206,11 @@ const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left'
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
-  const joints = sceneJoints(first.pose, {...actor, geometry: actor.geometry});
-  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing});
-  return characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
+  const joints = stateJoints(first, actor);
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze)});
+  const view = characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
+  // A walking character moves on its own wrapper, so its scale stays on the view.
+  return actor.walks ? el('div', `${cid}-walk`, abs(0, 0, 0, 0), [view]) : view;
 }
 
 // A gesture's far swing (acting.mjs gestureOps) as joint values.
@@ -165,12 +231,15 @@ function gesturePeak(j) {
  */
 export function actorReach(actor) {
   const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
-  for (const pose of new Set(actor.states.map(state => state.pose))) {
-    const joints = sceneJoints(pose, {...actor, geometry: actor.geometry});
+  const seen = new Map();
+  for (const state of actor.states) seen.set(`${state.pose}|${state.facing ?? actor.facing}|${state.standing ? 1 : 0}|${state.x ?? 0}`, state);
+  for (const state of seen.values()) {
+    const joints = stateJoints({...state, gaze: null}, actor);
+    const x = actor.x + (state.x ?? 0);
     for (const j of [joints, gesturePeak(joints)].filter(Boolean)) {
       const b = drawingBounds(drawCharacter(actor.style, actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor), light: actor.light, facing: actor.facing}));
-      out.left = Math.min(out.left, actor.x + b.left * actor.scale);
-      out.right = Math.max(out.right, actor.x + b.right * actor.scale);
+      out.left = Math.min(out.left, x + b.left * actor.scale);
+      out.right = Math.max(out.right, x + b.right * actor.scale);
       out.top = Math.min(out.top, actor.floor + b.top * actor.scale);
       out.bottom = Math.max(out.bottom, actor.floor + b.bottom * actor.scale);
     }
@@ -320,6 +389,37 @@ function worldFloor(stage, ctx, canvas) {
   return worldAnchors(stage.world.kind, {canvas: drawn}).ground.y - bleed.y;
 }
 
+/**
+ * A set standing in the world plate beneath is anchored to it
+ * (kit/core/physics.mjs): its furniture and the cast on it move only with the
+ * plate's in-scene camera, by the same x and scale as the world's front layer
+ * frame for frame, so a desk never slides across the floor it stands on.
+ * → {plate, start, end, move, from, to} | null (no plate beneath, or the set
+ * draws its own room or world).
+ */
+function plateFollow(stage, ctx, canvas) {
+  const w = ctx.beneath;
+  if (stage.backdrop !== 'world' || stage.draw || !w?.camera) return null;
+  const bleedX = ctx.bleed?.x ?? 0;
+  const {from, to} = worldCameraStates(w.camera, {overscan: Math.round((canvas.width + 2 * bleedX) * OVERSCAN)}).front;
+  return {plate: w.scene, start: w.start, end: Number.isFinite(w.renderEnd) ? w.renderEnd : w.end, move: w.camera.move, from, to};
+}
+
+/**
+ * Where characters can look (worlds/index.mjs worldFocus) in the world they
+ * stand in, in frame px: a plate beneath in world mode is measured on its
+ * bleed canvas and shifted back, as worldFloor does. → focus | null
+ */
+function sceneFocus(world, ctx, canvas, draw) {
+  if (!world) return null;
+  const bleed = !draw && ctx.bleed ? {x: ctx.bleed.x ?? 0, y: ctx.bleed.y ?? 0} : {x: 0, y: 0};
+  const props = draw ? draw.props ?? [] : ctx.beneath?.props ?? [];
+  let focus;
+  try { focus = worldFocus(world.kind, {canvas: {width: canvas.width + 2 * bleed.x, height: canvas.height + 2 * bleed.y}, time: world.time, props}); } catch { return null; }
+  const shift = point => (point ? {...point, x: point.x === null ? null : point.x - bleed.x, y: point.y - bleed.y} : point);
+  return {...Object.fromEntries(['far', 'window', 'horizon', 'street', 'skyline'].map(name => [name, shift(focus[name])])), props: focus.props.map(shift)};
+}
+
 const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
 
 function resolveCastScene(params, ctx) {
@@ -352,8 +452,10 @@ function resolveCastScene(params, ctx) {
     const actor = inWorld(resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light}), world);
     // The phone set: the first character holds the phone unless someone else is given it.
     if (setName === 'phone' && i === 0 && !p.cast.some(entry => entry?.holds !== undefined)) actor.holds = 'phone';
-    const placed = {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale};
-    return {...placed, reach: actorReach(placed)};
+    return {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale};
+  }).map((placed, i, all) => {
+    const directed = directActor(b, placed, `params.cast[${i}]`, {focus: sceneFocus(stage.world, ctx, canvas, stage.draw), actors: all, canvas});
+    return {...directed, reach: actorReach(directed)};
   });
   castEvents(b, actors);
   const tops = actors.map(actor => actor.floor - (actor.height + (layout.seated ? -actor.geometry.sitDrop : 0)) * actor.scale);
@@ -361,14 +463,18 @@ function resolveCastScene(params, ctx) {
   rect.width = r2(Math.min(canvas.width, Math.max(...actors.map(a => a.x)) + 220 * actors[0].scale) - rect.x);
   rect.height = r2(Math.min(canvas.height, layout.floor) - rect.y);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
+  const content = {...castPassage(b, ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect: layout.screenRect, media: screen, actors, colors: layout.colors};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
-  model.layout = {...model.layout, rect, role: 'media', minTextPx: null};
+  // Anchored to a plate, the set never takes the ambient hold drift.
+  model.layout = {...model.layout, rect, role: 'media', minTextPx: null, ...(content.follow ? {drift: false} : {})};
   model.minTextPx = null;
   return model;
 }
+
+// The wrapper an anchored set moves on (content.follow), centred like the world's layers.
+const camWrap = (model, id, kids) => (model.content.follow ? [el('div', id, abs(0, 0, model.canvas.width, model.canvas.height, {transformOrigin: '50% 50%'}), kids)] : kids);
 
 function castSceneView(model) {
   const {id, canvas} = model;
@@ -384,11 +490,11 @@ function castSceneView(model) {
   const screen = c.media ? mediaNode(id, r, c.media, {origin: {x: r.x + r.width / 2, y: r.y + r.height / 2}}) : null;
   // An image screen stays inside the scene's one tree (both renderers nest it
   // the same way); only a video is split out, for HyperFrames to hoist.
-  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front]), media: null, overlay: null};
+  if (!c.media || c.media.kind !== 'video') return {front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), camWrap(model, `${id}-cam`, [...world, back, ...(screen ? [{...screen, style: {...screen.style, opacity: 1}}] : []), ...actors, front])), media: null, overlay: null};
   return {
-    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), [...world, back]),
+    front: el('div', id, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden'}), camWrap(model, `${id}-cam`, [...world, back])),
     media: screen,
-    overlay: el('div', `${id}-overlay`, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', pointerEvents: 'none'}), [...actors, front])
+    overlay: el('div', `${id}-overlay`, abs(0, 0, W, H, {opacity: 0, overflow: 'hidden', pointerEvents: 'none'}), camWrap(model, `${id}-overlay-cam`, [...actors, front]))
   };
 }
 
@@ -396,7 +502,21 @@ function castSceneTimeline(model, ops) {
   const ids = [model.id];
   if (model.content.media?.kind === 'video') ids.push(`${model.id}-media`, `${model.id}-overlay`);
   rootFade(model, ops, ids);
+  followOps(model, ops);
   actorsOps(model, ops);
+}
+
+// An anchored set's camera: the plate's front-layer move, with the world
+// module's own timing (worldTimeline), so the two never part.
+function followOps(model, ops) {
+  const f = model.content.follow;
+  if (!f) return;
+  const a = {x: f.from.x, scaleX: f.from.scale, scaleY: f.from.scale}, z = {x: f.to.x, scaleX: f.to.scale, scaleY: f.to.scale};
+  const targets = [`${model.id}-cam`, ...(model.content.media?.kind === 'video' ? [`${model.id}-overlay-cam`] : [])];
+  for (const target of targets) {
+    set(ops, target, f.start, a);
+    if (f.move !== 'still') tw(ops, target, f.start, rt(f.end - f.start), 'sine.inOut', a, z);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +551,7 @@ function resolveCameo(params, ctx) {
   const scale = r2(Math.min((area.height - pad * 2) / tallest, (area.width - pad * 2) / 620) * 1000) / 1000;
   const x = r2(card && portrait ? (side === 'left' ? area.x + area.width * 0.28 : area.x + area.width * 0.72) : area.x + area.width / 2);
   const floor = r2(area.y + area.height - pad);
-  const placed = {...probe, x, floor, scale};
+  const placed = directActor(b, {...probe, x, floor, scale}, 'params', {focus: sceneFocus(world, ctx, b.canvas, null), actors: [{...probe, x, floor, scale}], canvas: b.canvas});
   const actor = {...placed, reach: actorReach(placed)};
   let cardBox = null;
   if (card) {
@@ -484,11 +604,11 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
-    params: {character: 'a cast or starter character id, or "@1", "@2"… by place in the story cast', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)', enter: 'fade | cut (as cast-scene)', exit: 'fade | cut (as cast-scene)'},
+    params: {character: 'a cast or starter character id, or "@1", "@2"… by place in the story cast', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', target: 'what the character attends to (as cast-scene)', cues: `[{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?}]`, says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)', enter: 'fade | cut (as cast-scene)', exit: 'fade | cut (as cast-scene)'},
     events: ['<character>-cue-<i>']}
 };
 

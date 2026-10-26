@@ -20,6 +20,7 @@ import { MODULES as CATALOG_H } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
 import { MODULES as WORLD, castStandsIn, worldBeneath } from './catalog-world.mjs';
 import { plateBleed, ridesPlate } from './camera-world.mjs';
+import { sceneWindows } from './transitions.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -505,7 +506,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: worldBeneath(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
@@ -513,6 +514,29 @@ function resolveModuleInner(scene, story, { track, end }) {
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
   return finished;
+}
+
+// The world beneath a scene (catalog-world.mjs worldBeneath) plus the plate's
+// render end (transitions.mjs sceneWindows: held through the next
+// transition), so a scene anchored to the plate moves with its camera for as
+// long as the plate is drawn. Windows are cached per story, keyed by the
+// scene timing they depend on (callers may edit a story between calls).
+const WINDOW_ENDS = new WeakMap();
+function beneathWithWindow(story, scene) {
+  const beneath = worldBeneath(story, scene);
+  if (!beneath) return null;
+  const key = story.scenes.map((s) => `${s?.id}|${s?.start}|${s?.end}|${s?.track ?? 0}|${s?.in?.type ?? ''}|${s?.in?.dur ?? ''}`).join(';') + `|${story?.camera?.mode ?? ''}|${story?.resolved?.duration ?? story?.format?.duration}`;
+  let cached = WINDOW_ENDS.get(story);
+  if (!cached || cached.key !== key) {
+    const ends = new Map();
+    try { for (const entry of sceneWindows(story).scenes) ends.set(entry.id, entry.renderEnd); } catch { /* unresolved story: no render ends */ }
+    cached = { key, ends };
+    WINDOW_ENDS.set(story, cached);
+  }
+  const plate = story.scenes.find((s) => s?.id === beneath.scene);
+  // The plate's model end, as the compilers resolve it (a final hold extends the last scene).
+  const renderEnd = endingEnd(plate, story, cached.ends.get(beneath.scene) ?? beneath.end) ?? beneath.end;
+  return { ...beneath, renderEnd };
 }
 
 // Where a footage-led checklist card goes beside the measured head:

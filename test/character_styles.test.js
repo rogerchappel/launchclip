@@ -26,7 +26,8 @@ test('flat draws exactly as it did before the drawing styles', () => {
     const {params} = starterCharacter(entry.id);
     const {colors} = characterLook(params, {});
     const geometry = rigGeometry(params);
-    for (const pose of POSES) for (const facing of ['left', 'right']) for (const isStatic of [true, false]) {
+    // The poses that shipped with flat (look and stretch came later).
+    for (const pose of POSES.slice(0, 10)) for (const facing of ['left', 'right']) for (const isStatic of [true, false]) {
       const joints = poseJoints(pose, {facing, seated: pose === 'sit', geometry});
       trees.push(drawFlat(params, colors, {id: 'x', joints, expression: 'happy', expressions: EXPRESSIONS, static: isStatic}));
     }

@@ -37,7 +37,9 @@ export function jointTargets(cid, j) {
     [`${cid}-leg-r`]: {rotation: j.legR, scaleY: j.legScale},
     [`${cid}-shin-r`]: {rotation: j.shinR},
     [`${cid}-fingerwrap-l`]: {opacity: j.fingerL},
-    [`${cid}-fingerwrap-r`]: {opacity: j.fingerR}
+    [`${cid}-fingerwrap-r`]: {opacity: j.fingerR},
+    // The face turned toward a target (drawn only for a character with one).
+    ...(j.gazeX !== undefined ? {[`${cid}-gaze`]: {x: j.gazeX, y: j.gazeY}} : {})
   };
 }
 
@@ -79,6 +81,18 @@ export function sceneJoints(pose, {facing, seated, geometry, holds = null, param
       if (j.gesture && j.gesture.joint === 'fore') j.gesture = null;
     }
   }
+  return j;
+}
+
+/**
+ * Joint values for one directed state (catalog-characters.mjs directActor):
+ * its pose at its facing, seated unless it has stood up, with the face
+ * turned by its gaze when the character has one (actor.gaze).
+ */
+export function stateJoints(state, actor) {
+  const seated = actor.seated && !state.standing;
+  const j = sceneJoints(state.pose, {...actor, facing: state.facing ?? actor.facing, seated});
+  if (actor.gaze) { j.gazeX = state.gaze?.x ?? 0; j.gazeY = state.gaze?.y ?? 0; }
   return j;
 }
 
@@ -131,7 +145,9 @@ function gestureOps(ops, cid, j, t0, t1) {
 export function actingOps(ops, actor) {
   const {cid, start, end, states} = actor;
   const A = ACTING;
-  const jointsAt = state => sceneJoints(state.pose, actor);
+  const jointsAt = state => stateJoints(state, actor);
+  // A state's look: its pose, facing and seat (a new look restarts the gesture loop).
+  const lookOf = state => `${state.pose}|${state.facing ?? actor.facing}|${state.standing ? 1 : 0}`;
   // Poses
   let current = jointsAt(states[0]);
   for (const [target, props] of Object.entries(jointTargets(cid, current))) set(ops, target, start, props);
@@ -139,14 +155,20 @@ export function actingOps(ops, actor) {
     const next = jointsAt(state);
     const holdEnd = i + 1 < states.length ? states[i + 1].time : end;
     let settle = state.time;
-    if (i > 0 && state.pose !== states[i - 1].pose) {
-      const from = jointTargets(cid, current), to = jointTargets(cid, next);
+    const from = jointTargets(cid, current), to = jointTargets(cid, next);
+    const changed = i > 0 && Object.keys(to).some(target => !same(from[target], to[target]));
+    if (changed) {
       for (const target of Object.keys(to)) if (!same(from[target], to[target])) tw(ops, target, rt(state.time), A.poseTween, A.poseEase, from[target], to[target]);
       settle = rt(state.time + A.poseTween);
     }
-    if (state.pose !== states[i - 1]?.pose || i === 0) gestureOps(ops, cid, next, settle + (i === 0 ? 0.2 : 0), holdEnd - 0.05);
+    if (i === 0 || lookOf(state) !== lookOf(states[i - 1])) gestureOps(ops, cid, next, settle + (i === 0 ? 0.2 : 0), holdEnd - 0.05);
     current = next;
   });
+  // Walks: the character crosses the floor on its own wrapper, at a steady pace.
+  if (actor.walks) {
+    set(ops, `${cid}-walk`, start, {x: states[0].x ?? 0});
+    for (const state of states) if (state.walk) tw(ops, `${cid}-walk`, rt(state.time), state.walk.duration, 'none', {x: state.walk.from}, {x: state.walk.to});
+  }
   // Faces: the first expression shows; each change crossfades.
   for (const name of actor.expressions) set(ops, `${cid}-face-${name}`, start, {opacity: name === states[0].expression ? 1 : 0});
   states.forEach((state, i) => {

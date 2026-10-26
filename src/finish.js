@@ -23,6 +23,7 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
+import { actingGate, physicsGate } from "./direction_guardrails.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -1331,6 +1332,12 @@ async function runGates(ctx) {
   if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
   const castGate = ctx.castGate ?? ctx.state.stages?.validate?.details?.cast;
   if (castGate && castGate.status !== "skipped") gates.cast = castGate;
+  // Direction guardrails (docs/DIRECTION_GUARDRAILS.md), on the resolved story.
+  try {
+    gates.physics = physicsGate(ctx.resolved);
+  } catch (error) {
+    gates.physics = { status: "failed", error: error.message };
+  }
 
   const master = ctx.state.stages?.master?.details;
   gates.loudness = !master
@@ -1400,6 +1407,9 @@ async function runGates(ctx) {
     const scope = prototype ? prototypeScope({ map: read.map, words: ctx.words ?? [], cut: ctx.prototype.cut, story: ctx.resolved, full: ctx.fullResolved }) : { map: read.map, words: ctx.words ?? [] };
     const direction = { ...read, map: scope.map };
     gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: scope.words, direction });
+    // Acting (docs/DIRECTION_GUARDRAILS.md §2): each line's key action is performed on screen.
+    const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words });
+    if (acting.status !== "skipped") gates.acting = acting;
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype });
     if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });

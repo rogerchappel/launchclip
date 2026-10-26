@@ -16,6 +16,12 @@
 
 import { storyBase } from './story.mjs';
 import { CAMERA_ONLY_MODULES, isGraphicScene, storyboardMeasures } from './cadence.mjs';
+import { ACTIONS } from './characters/actions.mjs';
+import { POSES } from './characters/rig.mjs';
+
+// A line's key action (docs/DIRECTION_GUARDRAILS.md §2): what a character does
+// on screen to show the line: an acting cue or a pose.
+export const ACTION_VERBS = Object.freeze([...ACTIONS, ...POSES.filter((pose) => !['stand', 'sit'].includes(pose))]);
 
 export const DIRECTION_SCHEMA = 'launchclip.direction-map.v1';
 export const DIRECTION_FILE = 'DIRECTION.json';
@@ -157,12 +163,23 @@ export function validateDirection(map, options = {}) {
   });
   for (const { line, where } of lines) checkLine(line, where, { err, warnings, words, footage, scenes, story, options });
   checkWordCoverage(lines, words, err);
+  // A narrative (character) map names the key action of every line with cast
+  // cues, and of at least one line in each section: an idea that is an action
+  // is acted (docs/DIRECTION_GUARDRAILS.md §2).
+  map.sections.forEach((section, s) => {
+    if (!isObject(section) || section.beat === undefined || !Array.isArray(section.lines)) return;
+    const where = `sections[${s}]${section.id ? ` (${section.id})` : ''}`;
+    section.lines.forEach((line, l) => {
+      if (isObject(line) && Array.isArray(line.cast) && line.cast.length && line.action === undefined) err(`${where}.lines[${l}] has cast cues but no key action; name what a character does on screen to show this line: action {verb: ${ACTION_VERBS.slice(0, 7).join(' | ')} | a pose, who, target?}`);
+    });
+    if (!section.lines.some((line) => isObject(line) && line.action !== undefined)) err(`${where} (beat ${section.beat}) names no key action; give at least one of its lines an action {verb, who, target?} that a cast scene performs`);
+  });
   return { ok: errors.length === 0, errors, warnings };
 }
 
 function checkLine(line, where, { err, warnings, words, footage, scenes, story, options }) {
   if (!isObject(line)) { err(`${where} must be an object`); return; }
-  for (const key of Object.keys(line)) if (!['words', 'intent', 'treatment', 'scenes', 'why', 'cast', 'set', 'text'].includes(key)) err(`${where} has unknown field "${key}"`);
+  for (const key of Object.keys(line)) if (!['words', 'intent', 'treatment', 'scenes', 'why', 'cast', 'set', 'text', 'action'].includes(key)) err(`${where} has unknown field "${key}"`);
   const range = line.words;
   const rangeOk = Array.isArray(range) && range.length === 2 && range.every(Number.isInteger) && range[0] >= 0 && range[1] >= range[0];
   if (!rangeOk) err(`${where}.words must be [first, last] word indexes (inclusive, first ≤ last)`);
@@ -177,6 +194,15 @@ function checkLine(line, where, { err, warnings, words, footage, scenes, story, 
   if (line.treatment === 'face' && !footage) err(`${where} is "face", but this story has no presenter; dress or insert it`);
   if (line.cast !== undefined && !Array.isArray(line.cast)) err(`${where}.cast must be a list of cues`);
   if (line.set !== undefined && !nonEmpty(line.set)) err(`${where}.set must be a set name`);
+  if (line.action !== undefined) {
+    const action = line.action;
+    if (!isObject(action)) err(`${where}.action must be {verb, who, target?}`);
+    else {
+      for (const key of Object.keys(action)) if (!['verb', 'who', 'target'].includes(key)) err(`${where}.action has unknown field "${key}"`);
+      if (!ACTION_VERBS.includes(action.verb)) err(`${where}.action.verb must be one of ${ACTION_VERBS.join(', ')}`);
+      if (!nonEmpty(action.who)) err(`${where}.action.who must name the character who does it`);
+    }
+  }
   if ((line.cast !== undefined || line.set !== undefined) && typeof options.validateCast === 'function') {
     const result = options.validateCast(line, options.cast ?? null);
     const found = Array.isArray(result) ? { errors: result, warnings: [] } : { errors: result?.errors ?? [], warnings: result?.warnings ?? [] };
