@@ -48,10 +48,10 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
-  "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
-  "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.02, 0.12], stroke: [1, 3], speed: BG_SPEED },
-  "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.02, 0.12], speed: BG_SPEED },
-  motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.02, 0.2], angle: [0, 180], speed: BG_SPEED },
+  "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
+  "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
+  "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
+  motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
   texture: { amount: BG_UNIT, scale: BG_SCALE }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);

@@ -319,3 +319,25 @@ test("the HyperFrames compiler draws a layout panel fill clipped on the layout's
   assert.match(filled.html, /tl\.set\("#lc-layout-fill", \{"clipPath":"path\(evenodd/);
   assert.ok(base.sections?.length, "the example has sections");
 });
+
+test("seeded patterns are visible: the strongest pattern tone stands off bg, and text keeps its floor", async () => {
+  const { generateStyle, SEED_BACKGROUND_PARAMS } = await import("../kit/core/style-seed.mjs");
+  const { applyStyle } = await import("../kit/core/style.mjs");
+  const { resolveStory } = await import("../kit/core/story.mjs");
+  const { backgroundPlan } = await import("../kit/core/backgrounds.mjs");
+  const { contrast } = await import("../kit/core/panels.mjs");
+  // Line and dot patterns need a stronger tone than area patterns to read; a texture is a quiet surface.
+  const floor = { "dot-grid": 1.6, topographic: 1.6, halftone: 1.6, stripes: 1.3, texture: 1.15, geometric: 1.3 };
+  for (const kind of Object.keys(floor)) {
+    for (const seed of ["00000001", "c0ffee00", "31415926", "abcdef01", "deadbeef"]) {
+      const lo = Object.fromEntries(Object.entries(SEED_BACKGROUND_PARAMS[kind]).map(([key, [min]]) => [key, min]));
+      const pack = { name: `seed-${seed}`, ...generateStyle({ seed, constraints: { background: { kind, params: { ...lo, fade: "none" } } } }) };
+      const story = resolveStory(applyStyle({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 4 }, style: pack.name, scenes: [{ id: "a", module: "hook-title", start: 0, end: 4, params: { headline: "Hello" } }] }, pack).story);
+      const plan = backgroundPlan(story);
+      const { bg, paper } = story.brand.colors;
+      const best = Math.max(...plan.tones.map((tone) => contrast(tone, bg)));
+      assert.ok(best >= floor[kind], `${kind} ${seed}: pattern ${best.toFixed(2)}:1 against bg (needs ${floor[kind]})`);
+      for (const tone of plan.tones) assert.ok(contrast(paper, tone) >= Math.min(4.5, contrast(paper, bg) - 0.01), `${kind} ${seed}: text on ${tone}`);
+    }
+  }
+});

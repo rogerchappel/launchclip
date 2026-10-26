@@ -56,7 +56,7 @@ export const DEFAULT_BACKGROUND_KIND = 'blobs';
 // palette role the pattern takes.
 const range = (min, max, value) => Object.freeze({ min, max, default: value });
 const ANGLE = range(0, 360, 160), SCALE = range(0.5, 2, 1), DENSITY = range(0, 1, 0.5), INTENSITY = range(0, 1, 0.5), GRAIN = range(0, 1, 0.4), SPEED = range(0, 2, 1);
-const OPACITY = range(0.02, 0.12, 0.06), STROKE = range(1, 3, 1.75);
+const OPACITY = range(0.04, 0.2, 0.1), STROKE = range(1, 3, 1.75);
 export const BACKGROUND_COLORS = Object.freeze(['primary', 'accent', 'paper']);
 export const BACKGROUND_PARAMS = Object.freeze({
   flat: Object.freeze({}),
@@ -74,7 +74,7 @@ export const BACKGROUND_PARAMS = Object.freeze({
   'icon-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, rotation: range(-45, 45, 0), offset: range(0, 1, 0.5), opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'icon-scatter': Object.freeze({ scale: SCALE, density: DENSITY, jitter: DENSITY, opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'logo-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, offset: range(0, 1, 0.5), opacity: OPACITY, speed: SPEED }),
-  motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.02, 0.2, 0.08), angle: range(0, 180, 45), speed: SPEED }),
+  motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.04, 0.3, 0.14), angle: range(0, 180, 45), speed: SPEED }),
   texture: Object.freeze({ amount: DENSITY, scale: SCALE })
 });
 // Kinds whose pattern takes a palette role (params.color).
@@ -295,7 +295,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
   const grain = (amount, frequency, size, id = 'grain', type = 'fractalNoise') => {
     if (!(amount > 0)) return;
     // Grain greys a pixel toward black or white by up to half its opacity; both extremes are tones.
-    const want = 0.16 * amount;
+    const want = 0.3 * amount;
     const under = [...tones];
     let alpha = want;
     for (const tone of under) alpha = Math.min(alpha, 2 * safeAlpha(colors, '#ffffff', want / 2, tone), 2 * safeAlpha(colors, '#000000', want / 2, tone));
@@ -326,7 +326,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'geometric': {
       // Two depths of outlined shapes, the far one smaller and slower.
       const count = Math.round(6 + 14 * params.density);
-      const strokeAlpha = lay(tint, 0.1 + 0.3 * params.intensity);
+      const strokeAlpha = lay(tint, 0.18 + 0.4 * params.intensity);
       const margin = 60 * u;
       for (const [depth, share, motion] of [['far', 0.55, 0.6], ['near', 0.45, 1]]) {
         const n = Math.max(1, Math.round(count * share));
@@ -351,8 +351,8 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     }
     case 'dot-grid': {
       const cell = round(40 * u * params.scale, 2);
-      const radius = round(cell * (0.05 + 0.08 * params.density), 2);
-      const alpha = lay(tint, 0.14 + 0.3 * params.intensity);
+      const radius = round(cell * (0.07 + 0.1 * params.density), 2);
+      const alpha = lay(tint, 0.3 + 0.45 * params.intensity);
       layers.push({ id: 'dots', box: over(cell), svg: null,
         style: { backgroundImage: `radial-gradient(circle at ${round(cell / 2, 2)}px ${round(cell / 2, 2)}px, ${rgba(tint, alpha)} ${radius}px, ${rgba(tint, 0)} ${round(radius + 1.2 * u, 2)}px)`, backgroundSize: `${cell}px ${cell}px` },
         axes: { x: wave(cell * 0.5, period(18), 0), y: wave(cell * 0.5, period(23), 1) } });
@@ -373,7 +373,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'stripes': {
       const periodPx = round(64 * u * params.scale, 2);
       const band = round(periodPx * params.density, 2);
-      const alpha = lay(tint, 0.06 + 0.24 * params.intensity);
+      const alpha = lay(tint, 0.14 + 0.36 * params.intensity);
       const size = diag + 2 * periodPx;
       layers.push({ id: 'stripes', box: box((W - size) / 2, (H - size) / 2, size, size), svg: null,
         style: { backgroundImage: `repeating-linear-gradient(${round(params.angle, 2)}deg, ${rgba(tint, alpha)} 0px, ${rgba(tint, alpha)} ${band}px, ${rgba(tint, 0)} ${band}px, ${rgba(tint, 0)} ${periodPx}px)` },
@@ -383,7 +383,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'topographic': {
       // Contour rings around two summits, each ring a wobbled closed curve.
       const rings = Math.round(6 + 10 * params.density);
-      const alpha = lay(tint, 0.12 + 0.3 * params.intensity);
+      const alpha = lay(tint, 0.22 + 0.45 * params.intensity);
       const margin = 80 * u;
       const b = over(margin);
       const paths = [];
@@ -410,7 +410,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'halftone': {
       // A dot screen whose dots grow toward one corner (params.angle points at it).
       const cell = 30 * u * params.scale;
-      const alpha = lay(tint, 0.16 + 0.4 * params.intensity);
+      const alpha = lay(tint, 0.26 + 0.5 * params.intensity);
       const margin = cell * 2;
       const b = over(margin);
       const a = (params.angle * Math.PI) / 180;
@@ -435,7 +435,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'light-rays': {
       // Rays fan from a point above the frame, fading with distance.
       const rays = Math.round(8 + 10 * params.density);
-      const alpha = lay(tint, 0.06 + 0.2 * params.intensity);
+      const alpha = lay(tint, 0.1 + 0.3 * params.intensity);
       const size = diag * 2.2;
       const cx = W / 2 + Math.tan((params.angle * Math.PI) / 180) * H * 0.5, cy = -H * 0.12;
       const slice = round(360 / rays, 4), lit = round(slice * 0.42, 4);
@@ -545,7 +545,7 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
       else {
         // canvas: a fine weave of light and dark threads over grain.
         const step = round(6 * u * s, 2);
-        const light = lay('#ffffff', 0.05 * amount), dark = lay('#000000', 0.06 * amount);
+        const light = lay('#ffffff', 0.12 * amount), dark = lay('#000000', 0.14 * amount);
         layers.push({ id: 'weave', box: box(0, 0, W, H), svg: null, axes: {},
           style: { backgroundImage: `repeating-linear-gradient(0deg, ${rgba('#ffffff', light)} 0px, ${rgba('#ffffff', light)} ${round(step / 2, 2)}px, ${rgba('#000000', dark)} ${round(step / 2, 2)}px, ${rgba('#000000', dark)} ${step}px), repeating-linear-gradient(90deg, ${rgba('#ffffff', light)} 0px, ${rgba('#ffffff', light)} ${round(step / 2, 2)}px, ${rgba('#000000', dark)} ${round(step / 2, 2)}px, ${rgba('#000000', dark)} ${step}px)` } });
         grain(amount * 0.6, 0.8, 220, 'grain');
