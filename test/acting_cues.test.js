@@ -152,3 +152,18 @@ test("look-target-hidden stops at the look's own scene: a card over the next pla
   const later = { id: "card", role: "text", rect: { x: 80, y: 290, width: 860, height: 600 }, start: 4.2, end: 8 };
   assert.equal(actingGate(s, { map, words: [], rects: [later] }).findings.filter((finding) => finding.rule === "look-target-hidden").length, 0);
 });
+
+test("sitters sit on the bench and the sofa, not inside them: the seat is behind their legs", async () => {
+  const { layoutSet } = await import("../kit/core/characters/sets.mjs");
+  const brand = { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" };
+  const canvas = { width: 1080, height: 1920 };
+  const bench = layoutSet("park-bench", { canvas, colors: brand, count: 2, heights: [1000, 1000], backdrop: "world", floor: 1500 });
+  // In front of the cast: only the bench's two end legs.
+  assert.equal(bench.front.length, 2);
+  assert.ok(bench.front.every((node) => node.tag === "path"));
+  const seat = bench.slots[0].floor - 230 * bench.slots[0].scale;
+  assert.ok(bench.back.some((node) => node.tag === "rect" && Math.abs(Number(node.attrs.y) - Math.round(seat * 10) / 10) < 1), "the seat plank is behind the sitters");
+  const sofa = layoutSet("sofa", { canvas, colors: brand, count: 2, heights: [1000, 1000], backdrop: "world", floor: 1500 });
+  // In front: the two arms and the two feet; the cushion and base are behind the legs.
+  assert.equal(sofa.front.length, 4);
+});
