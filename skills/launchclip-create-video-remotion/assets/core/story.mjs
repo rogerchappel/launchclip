@@ -184,6 +184,32 @@ function ms(value) {
  * Validate a story.json v1 document (resolved or not).
  * modules: optional Set or array of known module ids; unknown ids are errors when given.
  */
+/**
+ * Adjacent track-0 world plates of the same place (kind, time and props,
+ * params over story.world) joined by a cut: the room would jump between
+ * camera moves. Only resolved (numeric) timings are compared.
+ * → [{from, to, place}]
+ */
+export function samePlaceCuts(story) {
+  const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
+  const base = isObject(story?.world) ? story.world : {};
+  const plates = scenes.filter((scene) => scene?.module === "world" && (scene.track ?? 0) === 0 && typeof scene.start === "number" && typeof scene.end === "number")
+    .sort((a, b) => a.start - b.start);
+  const place = (scene) => {
+    const p = isObject(scene.params) ? scene.params : {};
+    return JSON.stringify([p.kind ?? base.kind ?? null, p.time ?? base.time ?? "day", p.props ?? base.props ?? []]);
+  };
+  const out = [];
+  for (let i = 1; i < plates.length; i += 1) {
+    const a = plates[i - 1], b = plates[i];
+    const cut = !isObject(b.in) || b.in.type === "cut";
+    if (!cut || Math.abs(b.start - a.end) > 0.05 || place(a) !== place(b)) continue;
+    const [kind, time] = JSON.parse(place(a));
+    out.push({ from: a.id, to: b.id, place: `${kind} at ${time}` });
+  }
+  return out;
+}
+
 export function validateStory(story, { modules } = {}) {
   const errors = [];
   const warnings = [];
@@ -553,6 +579,9 @@ export function validateStory(story, { modules } = {}) {
   // Footage layouts (kit/core/footage-layout.mjs).
   validateSections(story, { err, warn });
   validateChapters(story, { err, warn });
+  // World physics (docs/DIRECTION_GUARDRAILS.md §1): a cut between two plates
+  // of the same place makes every anchored thing in it jump.
+  for (const pair of samePlaceCuts(story)) err(`scenes "${pair.from}" and "${pair.to}" cut between two world plates of the same place (${pair.place}): its furniture and props would jump. Make them one world scene (one camera move), or cut to a different place, time or props`);
 
   return { ok: errors.length === 0, errors, warnings };
 }
