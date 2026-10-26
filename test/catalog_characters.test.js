@@ -253,3 +253,32 @@ test('params.world names the world a cast stands in, without a world scene benea
   assert.notDeepEqual(actor.colors, resolve(desk()).content.actors[0].colors);
   assert.throws(() => resolve(desk({world: {kind: 'moon'}})), /params\.world\.kind/);
 });
+
+test('a seeded drawing style reaches the rendered cast-scene, and the eight styles all look different', async () => {
+  const {generateStyle} = await import('../kit/core/style-seed.mjs');
+  const {applyStyle} = await import('../kit/core/style.mjs');
+  const {DRAWING_STYLES} = await import('../kit/core/characters/styles.mjs');
+  const trees = new Map();
+  for (const style of DRAWING_STYLES) {
+    const pack = {name: `seed-${style}`, ...generateStyle({seed: '0badf00d', constraints: {drawing_style: style}})};
+    const [a, b] = pack.cast.members.map(member => member.id);
+    const scene = {id: 'pair', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast: [{id: a, pose: 'point'}, {id: b, pose: 'wave'}]}};
+    const base = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 4}, style: pack.name, scenes: [scene]};
+    const styled = resolveStory(applyStyle(base, pack).story);
+    const model = resolveModule(styled.scenes[0], styled);
+    assert.deepEqual(model.content.actors.map(actor => actor.style), [style, style], style);
+    // The actors' drawings, without ids, so only the look is compared.
+    trees.set(style, JSON.stringify(charactersView(model).front.children.slice(1, 3)).replace(/"id":"[^"]*"|url\(#[^)]*\)|"[a-z]+-[0-9a-z-]+"/g, ''));
+  }
+  assert.equal(new Set(trees.values()).size, DRAWING_STYLES.length);
+});
+
+test('cinematic is set well apart from lifelike: harder key, teal core shadow, brighter rim', async () => {
+  const {CINEMATIC} = await import('../kit/core/characters/real-pen.mjs');
+  assert.ok(CINEMATIC.key > 1.2 && CINEMATIC.rim > 1.5 && CINEMATIC.shade >= 0.45);
+  const m = style => resolve(desk(), {cast: {style, characters: [{id: 'maya'}, {id: 'theo'}]}});
+  const json = style => JSON.stringify(charactersView(m(style)).front);
+  // The rim: every lit piece gets bands of its outline shifted toward the light.
+  const rims = style => (json(style).match(/"transform":"translate\(/g) ?? []).length;
+  assert.ok(rims('cinematic') > rims('lifelike') + 50, `${rims('cinematic')} vs ${rims('lifelike')}`);
+});

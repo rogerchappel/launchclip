@@ -25,10 +25,16 @@ import {capsulePath, darken, ellipsePath, group, isHex, lighten, linearGradient,
 /** Shading strength from the light: flat ambient at 0, hard key at 1. */
 const contrast = light => 0.55 + 0.9 * (light?.intensity ?? 0.55);
 
+// The cinematic look, set well apart from lifelike so the two read as
+// different styles even small in a frame: a harder key (contrast × key),
+// warmer highlights (warm), a deep teal core shadow (shadowInk, shade), a
+// brighter and wider rim (rim) and a darker cast shadow (cast).
+export const CINEMATIC = Object.freeze({key: 1.35, warm: 0.34, shadowInk: '#0b2430', shade: 0.52, reflect: 0.3, highlight: 0.3, rim: 1.7, rimWidth: 1.4, cast: 1.5});
+
 export function realPen(c, {id, light, cinematic = false}) {
   const col = resolver(c);
   const S = penState(id, light);
-  const k = contrast(light);
+  const k = contrast(light) * (cinematic ? CINEMATIC.key : 1);
   const lightColor = light?.color ?? '#fff1dc';
   const state = {falloff: 0};
   const within = (next, draw) => {
@@ -49,15 +55,15 @@ export function realPen(c, {id, light, cinematic = false}) {
     const raw = S.lightDir();
     const dir = form === 'cyl' ? norm({x: raw.x >= 0 ? 1 : -1, y: raw.y * 0.25}) : norm({x: raw.x, y: raw.y * 0.85});
     const key = `g${form}${base}${dir.x.toFixed(2)}${dir.y.toFixed(2)}`;
-    const warm = mix(lightColor, base, cinematic ? 0.2 : 0.12);
-    // Cinematic light: warmer highlights, cooler and deeper shadows.
-    const shadowInk = cinematic ? '#141a2c' : '#1c1820';
+    const warm = mix(lightColor, base, cinematic ? CINEMATIC.warm : 0.12);
+    // Cinematic light: warmer highlights, teal and much deeper shadows.
+    const shadowInk = cinematic ? CINEMATIC.shadowInk : '#1c1820';
     const id2 = S.def(key, defId => linearGradient(defId, dir, [
-      [0, lighten(warm, (cinematic ? 0.26 : 0.2) * k)],
+      [0, lighten(warm, (cinematic ? CINEMATIC.highlight : 0.2) * k)],
       [0.2, lighten(warm, 0.07 * k)],
-      [0.52, base],
-      [0.82, darken(base, (cinematic ? 0.34 : 0.24) * k, shadowInk)],
-      [1, darken(base, (cinematic ? 0.2 : 0.13) * k, shadowInk)]
+      [cinematic ? 0.46 : 0.52, base],
+      [cinematic ? 0.74 : 0.82, darken(base, Math.min(0.85, (cinematic ? CINEMATIC.shade : 0.24) * k), shadowInk)],
+      [1, darken(base, Math.min(0.85, (cinematic ? CINEMATIC.reflect : 0.13) * k), shadowInk)]
     ]));
     return `url(#${id2})`;
   };
@@ -74,8 +80,8 @@ export function realPen(c, {id, light, cinematic = false}) {
     const clip = S.uid('rc');
     const box = pathBox(d);
     const size = Math.min(box.x1 - box.x0, box.y1 - box.y0);
-    const w = Math.max(1.2, Math.min(width, size * 0.09));
-    const strength = light?.intensity ?? 0.55;
+    const w = Math.max(1.2, Math.min(width * CINEMATIC.rimWidth, size * 0.12));
+    const strength = Math.min(1, (light?.intensity ?? 0.55) * CINEMATIC.rim);
     const tone = mix('#ffffff', lightColor, 0.25);
     const shifted = (k, sw, op) => pathNode(d, {fill: 'none', stroke: tone, strokeWidth: r1(sw), strokeOpacity: r3(op), transform: `translate(${r1(-dir.x * k)} ${r1(-dir.y * k)})`, ...(rule ? {fillRule: rule} : {})});
     return [el('clipPath', clip, null, [pathNode(d, rule ? {clipRule: rule} : {})]), group([
@@ -190,7 +196,8 @@ export function realPen(c, {id, light, cinematic = false}) {
         const lx = light?.x ?? -0.57, ly = light?.y ?? -0.82;
         // Lower light throws a longer shadow; the shadow falls away from the light.
         const length = r1(feetWidth * (1.2 + 2.2 * (1 - Math.min(1, Math.abs(ly)))));
-        const cast = S.def('rcast', defId => radialGradient(defId, {cx: 0.5, cy: 0.5, r: 0.5}, [[0, '#000000', r3(0.18 + 0.3 * (light?.intensity ?? 0.55))], [0.55, '#000000', r3(0.08 + 0.12 * (light?.intensity ?? 0.55))], [1, '#000000', 0]]));
+        const dark = Math.min(1, (light?.intensity ?? 0.55) * CINEMATIC.cast);
+        const cast = S.def('rcast', defId => radialGradient(defId, {cx: 0.5, cy: 0.5, r: 0.5}, [[0, '#000000', r3(0.18 + 0.3 * dark)], [0.55, '#000000', r3(0.08 + 0.12 * dark)], [1, '#000000', 0]]));
         out.unshift(el('ellipse', null, null, [], {cx: r1(-Math.sign(lx || -1) * length * 0.55), cy: 6, rx: length, ry: r1(18 + 10 * Math.abs(lx)), fill: `url(#${cast})`}));
       }
       return out;
