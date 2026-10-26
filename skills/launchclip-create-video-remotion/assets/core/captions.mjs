@@ -403,13 +403,18 @@ export function captionPlateIds(value) {
 
 /**
  * The backing plate for a caption line that would not read on what is behind
- * it: of the brand's ink, background and paper, then near-black and white,
- * the colour with the most contrast against the text (the preset's own
- * idle colour, which the plate never changes). → hex
+ * it, against the text (the preset's own idle colour, which the plate never
+ * changes): the first brand colour (ink, background, paper) that reaches
+ * 7:1, so the plate stays in the style's palette; else whichever of those,
+ * near-black or white contrasts most. → hex
  */
 export function captionLegiblePlate(idle, brandColors = {}) {
-  const options = [brandColors.ink, brandColors.bg, brandColors.paper, '#0b0d12', '#ffffff'].filter((value) => /^#[0-9a-f]{6}$/i.test(value ?? ''));
-  return options.reduce((best, color) => (captionContrast(idle, color) > captionContrast(idle, best) + 1e-9 ? color : best), options[0] ?? '#0b0d12');
+  const hex = (value) => /^#[0-9a-f]{6}$/i.test(value ?? '');
+  const brand = [brandColors.ink, brandColors.bg, brandColors.paper].filter(hex);
+  const strong = brand.find((color) => captionContrast(idle, color) >= 7);
+  if (strong) return strong;
+  const options = [...brand, '#0b0d12', '#ffffff'];
+  return options.reduce((best, color) => (captionContrast(idle, color) > captionContrast(idle, best) + 1e-9 ? color : best), options[0]);
 }
 
 /** Is this caption line plated (the preset's plate, or a legibility plate)? */

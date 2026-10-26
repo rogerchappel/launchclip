@@ -29,8 +29,10 @@ test("plates: named lines get a legibility plate that holds the preset's own tex
   const plan = captionPlan(chunks, { type: "captions", plates: ["cap-002"] }, { brand, format: { width: 1080, height: 1920 } });
   assert.deepEqual(plan.nodes.map((node) => node.cls), ["lc-cap", "lc-cap lc-cap-legible"]);
   assert.match(plan.css, /\.lc-cap-legible \{ background: #[0-9a-f]{6}eb;/);
-  assert.equal(captionLegiblePlate("#f4f1ea", brand.colors), "#0b0d12");
-  assert.equal(captionLegiblePlate("#101820", brand.colors), "#ffffff");
+  // The first brand colour that reaches 7:1, so the plate stays in the palette.
+  assert.equal(captionLegiblePlate("#f4f1ea", brand.colors), "#101820");
+  assert.equal(captionLegiblePlate("#101820", brand.colors), "#f4f1ea");
+  assert.equal(captionLegiblePlate("#808080", brand.colors), "#0b0d12", "no brand colour reaches 7:1: the most contrast wins");
   const all = captionPlan(chunks, { type: "captions", plates: "all" }, { brand, format: { width: 1080, height: 1920 } });
   assert.ok(all.nodes.every((node) => node.cls.includes("lc-cap-legible")));
 });
