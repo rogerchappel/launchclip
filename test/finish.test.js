@@ -1086,3 +1086,37 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("finish plates caption lines that do not read on the render, renders once more, and the layout gate fails one that still does not", async () => {
+  for (const stubborn of [false, true]) {
+    const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-captions-"));
+    try {
+      await cp(MINIMAL, project, { recursive: true });
+      const adapters = fakeAdapters();
+      const seen = [];
+      adapters.captionLegibility = async (_video, story, { chunks }) => {
+        const overlay = story.overlays.find((entry) => entry.type === "captions");
+        seen.push(overlay.plates ?? []);
+        const id = chunks[0].id;
+        const bad = stubborn || !(overlay.plates ?? []).includes(id);
+        return { lines: [{ id, text: "first line", time: 0.5, plated: (overlay.plates ?? []).includes(id), found: true, contrast: bad ? 1.4 : 7, camouflage: 0.1, legible: !bad }], failed: bad ? [id] : [] };
+      };
+      const report = await runFinish(project, {}, adapters);
+      assert.equal(adapters.calls["render:remotion"], 2, `one re-render with the plate (${JSON.stringify({ seen, warnings: report.warnings, render: report.stages.find((stage) => stage.name === "render") })})`);
+      assert.deepEqual(seen.at(-1), ["cap-001"]);
+      const saved = JSON.parse(await readFile(path.join(project, PATHS.captionLegibility), "utf8"));
+      assert.deepEqual(saved.measured_plates, ["cap-001"]);
+      const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+      assert.deepEqual(resolved.overlays.find((entry) => entry.type === "captions").plates, ["cap-001"]);
+      if (stubborn) {
+        assert.equal(report.gates.layout.status, "failed");
+        assert.match(report.gates.layout.findings[0].detail, /reads at 1.4:1.*even on its plate/);
+      } else {
+        assert.equal(report.gates.layout.status, "passed");
+        assert.deepEqual(report.gates.layout.captions, { report: PATHS.captionLegibility, lines: 1, plated: 1, failed: 0 });
+      }
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  }
+});
