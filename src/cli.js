@@ -69,7 +69,14 @@ export async function runCli(argv, io = {}) {
   globalThis.fetch = tracker.fetch;
   try {
     let result;
-    if (command === "doctor") {
+    // doctor takes only flags, so its first argument is one of them.
+    const doctorFlags = command === "doctor" ? parseFlags(commandArgs) : null;
+    if (doctorFlags?.capacity) {
+      const { diagnoseCapacity, formatCapacity } = await import("./capacity.js");
+      const report = await (productionAdapters.capacity ?? diagnoseCapacity)();
+      stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatCapacity(report));
+      return;
+    } else if (command === "doctor") {
       result = await doctor();
     } else if (command === "skills") {
       result = await runSkillsCommand(skillsInvocation.action, skillsInvocation.name, flags, skillOptions);
@@ -434,7 +441,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models" || name === "capacity") {
       flags[name] = true;
       continue;
     }

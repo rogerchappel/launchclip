@@ -1146,10 +1146,11 @@ speech. Filler-word and noise removal are not part of this step yet.
 
 Every command answers `--help` or `-h` with its own usage (`launchclip finish --help`, `launchclip story validate --help`).
 
-- `doctor`: Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only).
+- `doctor`: Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only); --capacity measures cores and RAM and recommends job slots.
 
   ```text
   launchclip doctor
+  launchclip doctor --capacity [--json]              # cores, RAM, GPU and the slots for plan, local-model, render and io
   ```
 
 - `skills list`: List the bundled agent skills.
