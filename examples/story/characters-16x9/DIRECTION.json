@@ -5,33 +5,40 @@
     { "id": "setup", "title": "Maya at the desk", "beat": "setup", "set": "desk-laptop",
       "lines": [
         { "words": [0, 8], "intent": "personal", "treatment": "insert", "scenes": ["desk-fail"], "set": "desk-laptop",
+          "action": { "verb": "type", "who": "maya" },
           "cast": [{ "id": "maya", "pose": "type", "expression": "focused", "at": "start" }],
           "why": "meet her doing the work by hand" }
       ] },
     { "id": "problem", "title": "It breaks", "beat": "problem",
       "lines": [
         { "words": [9, 13], "intent": "problem", "treatment": "insert", "scenes": ["desk-fail"], "set": "desk-laptop",
+          "action": { "verb": "slump", "who": "maya" },
           "cast": [{ "id": "maya", "pose": "slump", "expression": "frustrated", "at": "word:breaks." }],
           "why": "the problem lands on her reaction" },
         { "words": [14, 18], "intent": "problem", "treatment": "insert", "scenes": ["phone-turn"], "set": "phone",
+          "action": { "verb": "shrug", "who": "maya" },
           "cast": [{ "id": "maya", "pose": "shrug", "expression": "confused", "at": "word:Three" }] }
       ] },
     { "id": "turn", "title": "Theo's way", "beat": "turn",
       "lines": [
         { "words": [19, 20], "intent": "turn", "treatment": "insert", "scenes": ["phone-turn"], "set": "phone",
+          "action": { "verb": "wave", "who": "theo" },
           "cast": [{ "id": "theo", "pose": "wave", "expression": "happy", "at": "word:Try" }, { "id": "maya", "pose": "stand", "expression": "surprised", "at": "word:Pulseboard." }] },
         { "words": [21, 27], "intent": "product", "treatment": "insert", "scenes": ["screen-fix"], "set": "screen",
+          "action": { "verb": "point", "who": "theo" },
           "cast": [{ "id": "theo", "pose": "point", "expression": "happy", "at": "start" }, { "id": "maya", "pose": "point", "expression": "delighted", "at": "word:flow" }],
           "why": "the real recording of the product plays on the screen" }
       ] },
     { "id": "resolution", "title": "Fresh demos", "beat": "resolution",
       "lines": [
         { "words": [28, 35], "intent": "proof", "treatment": "insert", "scenes": ["desk-win"], "set": "desk-laptop",
+          "action": { "verb": "shrug", "who": "theo" },
           "cast": [{ "id": "theo", "pose": "shrug", "at": "word:demo#2" }, { "id": "maya", "pose": "cheer", "expression": "delighted", "at": "word:rebuilds#2" }] }
       ] },
     { "id": "cta", "title": "Ship it", "beat": "cta",
       "lines": [
         { "words": [36, 41], "intent": "cta", "treatment": "insert", "scenes": ["close"],
+          "action": { "verb": "cheer", "who": "maya" },
           "cast": [{ "id": "maya", "pose": "cheer", "at": "word:launch#2" }] }
       ] }
   ]
