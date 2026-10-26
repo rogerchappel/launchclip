@@ -139,3 +139,12 @@ test("the acting gate fails a look that faces the camera, and a card over what a
   assert.ok(hidden.findings.some((finding) => finding.rule === "look-target-hidden"), JSON.stringify(hidden.findings));
   assert.equal(actingGate(s, { map: map({ verb: "look-far", who: "maya" }), words, rects: [card(point.y - 600)] }).status, "passed");
 });
+
+test("look-target-hidden stops at the look's own scene: a card over the next place does not count", async () => {
+  const { actingGate } = await import("../src/direction_guardrails.js");
+  const s = story([plate({ kind: "home-desk" }), bench([{ id: "maya", cues: [{ at: 1, action: "stand-up" }, { at: 1.5, action: "look-far", target: "window" }] }], "desk-laptop")]);
+  s.scenes[1].end = 4; s.scenes[0].end = 4;
+  const map = { schema: "launchclip.direction-map.v1", sections: [{ id: "s", lines: [] }] };
+  const later = { id: "card", role: "text", rect: { x: 80, y: 290, width: 860, height: 600 }, start: 4.2, end: 8 };
+  assert.equal(actingGate(s, { map, words: [], rects: [later] }).findings.filter((finding) => finding.rule === "look-target-hidden").length, 0);
+});

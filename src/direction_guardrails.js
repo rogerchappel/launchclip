@@ -203,7 +203,8 @@ export function actingGate(story, { map, words, rects = [] } = {}) {
     for (const actor of model.content.actors) {
       actor.states.forEach((state, i) => {
         if (!state.point || !(LOOK_ACTIONS.includes(state.action) || state.view === "back") || (state.target && typeof state.target === "object" && "x" in state.target)) return;
-        const holdEnd = actor.states[i + 1]?.time ?? model.end;
+        // Its own scene's window: a riding cast is held through the move out, over the next place.
+        const holdEnd = Math.min(actor.states[i + 1]?.time ?? model.end, entry.scene.end);
         const px = state.point.x ?? actor.x, py = state.point.y;
         if (!Number.isFinite(py)) return;
         const cover = cards.find((card) => card.start < holdEnd - 1e-6 && card.end > state.time + 1e-6 && px >= card.rect.x && px <= card.rect.x + card.rect.width && py >= card.rect.y && py <= card.rect.y + card.rect.height);
