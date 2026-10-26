@@ -67,7 +67,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Captions must read on what is behind them: finish measures every line on the render and adds a backing plate where it does not; keep captions out of a character's face and off busy props where you can.
 - Density: every third of the frame (top, middle, bottom in 9:16) has something in it within 4 s; a card never sits alone over an empty set for more than 3 s. Keep a character in the shot under a card, reacting to it or pointing at it.
 - Variety: never repeat a shot back to back. Two cast scenes in a row need a different set, a different cast or different poses and actions; moving the same pair to a new background is not a new shot.
-- 9:16 composition: a card takes the top band (about 12–45% of the height, rect y ≈ 230–860 at 1080x1920), the cast stands in the lower half on the world's ground, and captions sit in the band between them. Use at most two seated characters in 9:16.
+- 9:16 composition: a card takes the top band (about 15–41% of the height: rect {x: 80, y: 290, width: 860, height: about 480} at 1080x1920, inside the Shorts safe zone), the cast stands in the lower half on the world's ground, and captions sit in the band between them. Use at most two seated characters in 9:16.
 - A proof or quote beat keeps the cast on screen: the speaker points up at the card (point-at {x, y} of the card) or reacts to it, rather than leaving the set empty.
 
 ## Time anchors
