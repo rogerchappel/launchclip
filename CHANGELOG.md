@@ -4,6 +4,16 @@
 
 ### Added
 
+- The script decides what kind of video it is. `launchclip make` now plans
+  the script first, picking a format (`short-form`, `long-form`, `explainer`,
+  `data-explainer`, `story`, `promo`), a goal (`reach` or `convert`) and the
+  viewer's awareness, then writes against that format's beats and word budget
+  (never more than 2.75 words a second). Choose them with `--format`, `--goal`
+  and `--awareness`, or let the prompt decide. `SCRIPT.json` records the plan,
+  the beats and three title options, and the storyboard follows the beats.
+  The agent skills plan the same way (`references/script-formats.md`). See
+  [Script formats](docs/guide/prompts.md#script-formats-goal-and-awareness).
+
 - `launchclip script check <file>` lints a voiceover script before anything
   renders. It reports errors for a script that cannot fit its duration,
   numbers, quotes, ratings or deadlines that are not in the `--brief`, a

@@ -27,8 +27,9 @@ import { MUSIC_FLAG_VALUES } from "../music/index.js";
 import { inventoryAssets } from "./assets.js";
 import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
-import { needsResize, targetWords, writeScript } from "./script.js";
-import { AWARENESS_LEVELS, checkScript, SCRIPT_FORMATS, SCRIPT_GOALS } from "../script_check.js";
+import { needsResize, writeScript } from "./script.js";
+import { checkScript } from "../script_check.js";
+import { chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
 import { runHeadlessCritic } from "./critic.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
@@ -95,6 +96,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   if (!RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
+  const scriptOptions = scriptPlanOptions(options);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const project = path.resolve(cwd, options.out ?? `launchclip-${slugify(text)}`);
   await mkdir(project, { recursive: true });
@@ -107,7 +109,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     prompt: text,
     project,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto" },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, voice: voiceProvider, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", ...scriptOptions },
     model: null,
     routing: null,
     stages: {},
@@ -383,18 +385,20 @@ async function prepareMotion(ctx) {
   const target = routing.format.duration;
   const notes = await notesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
-  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, v: 1 });
+  // The planning pass: format, goal and awareness (flags, else the brief's defaults).
+  const plan = chooseScriptPlan({ prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options) });
+  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, plan: [plan.format, plan.goal, plan.awareness], v: 2 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = script && state.script?.hash === scriptHash && script.narration;
   if (!reuse) {
-    ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, about ${targetWords(target)} words)`);
-    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target });
+    ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, ${plan.format}, about ${plan.word_target} words)`);
+    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
-    const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...scriptCheckContext(options) });
+    const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, repair: { previous: script.narration, errors: first.errors } });
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan, repair: { previous: script.narration, errors: first.errors } });
       addCost(report, "script-repair", ctx.model, repaired);
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
@@ -404,14 +408,14 @@ async function prepareMotion(ctx) {
   if (!reuse && needsResize(take.duration, target)) {
     ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
-    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
+    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, assets: assetLines, duration: target, plan, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
     script = { ...resized, passes: [...(script.passes ?? []), { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
     take = await synthesize(ctx, script.narration);
   }
   script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) };
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
-  script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...scriptCheckContext(options) });
+  script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
   state.script = { hash: scriptHash };
@@ -422,15 +426,9 @@ async function prepareMotion(ctx) {
   if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, provider: voiceProvider };
-  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: targetWords(target), passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
-}
-
-// The script-check ids among make's options (the planning flags), if any.
-function scriptCheckContext(options) {
-  const pick = (value, allowed) => (allowed.includes(value) ? value : undefined);
-  return { format: pick(options.scriptFormat ?? options.format, SCRIPT_FORMATS), goal: pick(options.goal, SCRIPT_GOALS), awareness: pick(options.awareness, AWARENESS_LEVELS) };
 }
 
 async function synthesize(ctx, text) {
@@ -642,6 +640,7 @@ async function composeBrief(ctx, manifest) {
   const lines = [`# ${ctx.script?.title ?? "Video brief"}`, "", ctx.text, ""];
   const lane = ctx.routing.lane;
   if (lane === "motion") lines.push("## Narration (already synthesised; the word timings are given, so time scenes to its words)", "", ctx.narrationText, "");
+  if (lane === "motion" && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}: ${entry.text}`), "");
   if (lane === "voiceover-motion") lines.push("## Voiceover transcript (the supplied voiceover; time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "footage-led") lines.push("## Recording transcript (the edited base recording; its words are the narration)", "", ctx.narrationText, "", "Dress the recording: overlays and inserts on the strong lines only (10–40% of the runtime); gaps show the speaker.", "");
   if (notes.length) lines.push("## Notes", "", ...notes, "");

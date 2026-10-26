@@ -53,6 +53,9 @@ Useful flags:
 | `--assets <dir>` | none | Logos, screenshots, screen recordings, a talking-head clip, a voiceover, `brand.json`, a `style.json`, notes (`.md`/`.txt`). |
 | `--aspect` | the recording's shape, else `16:9` | `16:9`, `9:16` or `1:1`. |
 | `--duration` | from the prompt, else 30 | Target length in seconds. The video is sized to the real narration. |
+| `--format` | from the prompt | The kind of script: `short-form`, `long-form`, `explainer`, `data-explainer`, `story` or `promo`. See [Script formats](prompts.md#script-formats-goal-and-awareness). |
+| `--goal` | `convert` for a promo, else `reach` | `reach` (views and watch time) or `convert` (an action: sign-ups, sales). |
+| `--awareness` | depends on the format | What the viewer already knows: `unaware`, `problem`, `solution`, `product` or `most`. It decides the opening line. |
 | `--voice` | `kokoro` | `elevenlabs` is paid. |
 | `--music` | finish's default | `synth` (free), `elevenlabs` (paid) or `none`. |
 | `--renderer` | `remotion` | Or `hyperframes`. |
@@ -76,9 +79,12 @@ Useful flags:
 
    Screenshots and screen recordings are shown in product windows in every
    type.
-3. **Writes the script** (motion videos only), sized to your duration,
-   checks it (see [Check a script](#check-a-script)) and asks the model for one
-   rewrite if a check fails, then records the voice.
+3. **Plans and writes the script** (motion videos only). It first decides
+   what kind of video this is (format, goal and viewer awareness), then
+   writes to that format's beats, sized to your duration. It checks the
+   script (see [Check a script](#check-a-script)) and asks the model for one
+   rewrite if a check fails, then records the voice. `SCRIPT.json` keeps the
+   plan, the beats, three title options and the check report.
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
    for up to four repairs.

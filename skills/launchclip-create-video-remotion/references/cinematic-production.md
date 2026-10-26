@@ -117,6 +117,13 @@ need a rehook and escalation; videos at least 30 seconds need six or more real
 narrative beats. Every beat must change the viewer's question or answer and
 name a concrete visual noun.
 
+Write against the script plan from
+[script-formats.md](script-formats.md): the story's beats follow the chosen
+format's skeleton, and the goal shapes the hook. To convert, a concrete
+outcome beats curiosity bait and fit to the audience matters more than
+stopping the scroll; the concept judge weighs it the same way. Never invent a
+fact, number, customer, quote, deadline or guarantee.
+
 Target 165–180 WPM for portrait short-form, 150–170 for landscape short-form,
 and 145–165 for longer work. Put the promise by one second in portrait or two
 seconds in landscape. Put grounded proof by three seconds in portrait, six in

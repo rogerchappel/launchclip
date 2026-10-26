@@ -192,12 +192,17 @@ test("make runs the script checks after the script pass and repairs errors once"
     assert.match(repair, /\[fact-trace\] "10,000" is not in the brief/);
     assert.match(repair, /\[social-proof\]/);
     assert.match(repair, /Previous narration:\n\nHey there, Ledgerly is trusted by 10,000 teams/);
+    assert.equal(scriptRequests[1].instructions, scriptRequests[0].instructions, "the repair writes against the same plan");
+    assert.deepEqual(scriptRequests[1].schema.required, ["title", "narration", "title_options", "beats"]);
     assert.ok(notices.some((line) => /script check error\(s\) \(fact-trace, social-proof, opener-filler\); one repair pass/.test(line)), notices.join("\n"));
     const script = JSON.parse(await readFile(path.join(report.project, "SCRIPT.json"), "utf8"));
     assert.deepEqual(script.passes.map((pass) => pass.kind), ["write", "repair"]);
     assert.deepEqual(script.passes[1].errors, ["fact-trace", "social-proof", "opener-filler"]);
     assert.equal(script.narration, NARRATION);
     assert.equal(script.check.schema_version, "launchclip.script-check.v1");
+    assert.equal(script.plan.format, "promo");
+    assert.equal(script.check.stats.format, script.plan.format, "the check uses the plan's format");
+    assert.equal(report.script.plan.format, "promo");
     assert.equal(script.check.ok, true);
     assert.equal(report.script.check.ok, true);
     assert.deepEqual(report.script.check.errors, []);
