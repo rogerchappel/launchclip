@@ -2122,6 +2122,13 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   plate that is already there. `params.enter` / `params.exit` (fade | cut)
   override it; anything else keeps the default fade. The model carries
   `content.entry` / `content.exit` ({type, dur?} or null).
+- **Riding a world plate (world-camera mode).** A cast-scene or
+  character-cameo on a higher track whose window is a track-0 `world`
+  scene's window rides it (`ridesPlate`, `rideWorldPlates` in
+  camera-world.mjs). Both compilers draw it inside the camera at that plate's
+  placement, just above it, with the plate's window (held through the next
+  move) and transition tweens, and no overlay parallax. Its entry and exit
+  are cuts, so the camera carries the cast between plates.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;

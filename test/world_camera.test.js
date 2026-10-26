@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
 import {
-  CAMERA_STACK,
+  CAMERA_STACK, ridesPlate, rideWorldPlates,
   blurAt, cameraActive, cameraOps, cameraPlan, cameraStateAt, containerState, layoutDirection, objectRectFromModel, opsStateAt,
   overlayOps, PARALLAX, placementCentre, resolveCamera, restState, sceneObjectLookup, screenPoint, worldLayout, worldPoint
 } from "../kit/core/camera-world.mjs";
@@ -273,5 +273,31 @@ test("world mode stacks overlays above the camera: a cast on track 1 is never un
   // Remotion: overlays, the frame and the captions sit in one layer at CAMERA_STACK.scenes, after the camera.
   const tsx = await readFile(path.join(ROOT, "kit/remotion/StoryComposition.tsx"), "utf8");
   const world = tsx.slice(tsx.indexOf("<CameraWorld plan={plan}"));
-  assert.match(world, /<\/CameraWorld>\s*\{\/\*[^*]*\*\/\}\s*<AbsoluteFill style=\{\{ zIndex: CAMERA_STACK\.scenes \}\}>\s*\{layers\.filter\(\(layer: any\) => !layer\.entry\.plate\)/);
+  assert.match(world, /<\/CameraWorld>\s*\{\/\*[^*]*\*\/\}\s*<AbsoluteFill style=\{\{ zIndex: CAMERA_STACK\.scenes \}\}>\s*\{layers\.filter\(\(layer: any\) => !layer\.entry\.plate && !layer\.entry\.rides\)/);
+});
+
+test("world mode: a cast standing in a world plate rides it inside the camera, with cut entry and exit", async () => {
+  const { sceneWindows } = await import("../kit/core/transitions.mjs");
+  const dir = path.join(ROOT, "examples/story/world-ride-9x16");
+  const story = resolveStory(JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8")));
+  assert.equal(ridesPlate(story, story.scenes.find((s) => s.id === "pair")), "street");
+  assert.equal(ridesPlate(story, story.scenes.find((s) => s.id === "bench")), "park");
+  assert.equal(ridesPlate({ ...story, camera: { mode: "cuts" } }, story.scenes.find((s) => s.id === "pair")), null);
+  const windows = rideWorldPlates(story, sceneWindows(story));
+  const byId = Object.fromEntries(windows.scenes.map((e) => [e.id, e]));
+  // The street's rider is held through the pan into the park, like its plate.
+  assert.equal(byId.pair.rides, "street");
+  assert.equal(byId.pair.renderEnd, byId.street.renderEnd);
+  assert.ok(byId.street.renderEnd > 3.2);
+  const model = resolveModule(story.scenes.find((s) => s.id === "pair"), story, { end: byId.pair.renderEnd });
+  assert.deepEqual([model.content.entry, model.content.exit], [{ type: "cut" }, { type: "cut" }]);
+  // HyperFrames: riders sit inside the camera at their plate's placement, with no parallax wrapper.
+  const { html } = await compileStoryToHyperFrames(story, { write: false, sourceDir: dir });
+  const camera = html.slice(html.indexOf('id="lc-cam-pan"'));
+  assert.match(camera, /data-launchclip-scene="pair"/);
+  assert.match(camera, /data-launchclip-scene="bench"/);
+  assert.doesNotMatch(html, /id="lc-par-pair"/);
+  // Remotion: riders render with the plates inside CameraWorld.
+  const tsx = await readFile(path.join(ROOT, "kit/remotion/StoryComposition.tsx"), "utf8");
+  assert.match(tsx, /layers\.filter\(\(layer: any\) => layer\.entry\.plate \|\| layer\.entry\.rides\)/);
 });

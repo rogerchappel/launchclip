@@ -39,7 +39,7 @@ import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narr
 // @ts-ignore plain ESM from kit/core
 import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
-import { CAMERA_STACK, backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
+import { CAMERA_STACK, rideWorldPlates, backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -340,7 +340,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const fonts = ensureFonts(story.brand);
   const colors = story.brand?.colors ?? {};
   const background = colors.bg ?? "#000000";
-  const windows = React.useMemo(() => sceneWindows(story), [story]);
+  // Casts riding world plates (world mode) take their plate's window and travel with it.
+  const windows = React.useMemo(() => rideWorldPlates(story, sceneWindows(story)), [story]);
   const layers = React.useMemo(() => windows.scenes.map((entry: any) => ({ entry, ...resolveSceneElement(entry.scene, story, { end: entry.renderEnd, customModules }) })), [windows, story, customModules]);
   const loop = windows.loop ? { ...windows.loop, ...resolveSceneElement({ ...windows.loop.scene, id: `${windows.loop.scene.id}-loop` }, story, { customModules }) } : null;
   const overlay = captionOverlay(story);
@@ -380,8 +381,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
           field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}
-          placement={entry.plate ? plan.placements[entry.id] : undefined} transparent={world && entry.plate}
-          parallax={entry.plate ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
+          placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
+          parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
         </SceneLayer>
       </Sequence>
@@ -390,7 +391,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
         {world && backdrop ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
         <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && backdrop)}>
-          {layers.filter((layer: any) => layer.entry.plate).map(sceneLayer)}
+          {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
           {loop ? (
             <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
               <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={world ? null : fieldFor(loop.scene)} backdrop={world ? null : backdropFor(loop.scene)} placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>
@@ -399,7 +400,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </CameraWorld>
         {/* Overlays, the frame and captions stack above the camera (CAMERA_STACK), as in HyperFrames. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
-          {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
+          {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
           <BrandFrame story={story} />
           {overlay && Array.isArray(__captions) && __captions.length ? (
             <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
