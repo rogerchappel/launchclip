@@ -49,7 +49,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     ? missingCompiledVerification(project, rendererName)
     : adapters.verifyProject
       ? await adapters.verifyProject(verifyDir, qaDir, { ...options, renderer: rendererName })
-      : await verifyProject(verifyDir, qaDir, rendererAdapter(rendererName, adapters, storyModule));
+      : await verifyProject(verifyDir, qaDir, rendererAdapter(rendererName, adapters, storyModule), { compiled: verifyDir !== project });
   if (verifyDir !== project) verification = { ...verification, verified_project: path.relative(project, verifyDir) };
   await writeJson(path.join(qaDir, "verification.json"), verification);
 
@@ -467,10 +467,32 @@ function missingCompiledVerification(project, rendererName) {
   };
 }
 
+// Lint warnings that are advice to a person hand-writing one composition
+// (split it into sub-compositions). finish compiles a storyboard into one
+// file, so on that compiled composition they say nothing about the video and
+// are waived; every other warning still fails the strict check.
+export const COMPILED_AUTHORING_LINT = Object.freeze(["composition_file_too_large", "timeline_track_too_dense"]);
+
+/**
+ * A strict HyperFrames check report whose only failures are the authoring
+ * lint warnings → {ok: true, waived: [codes]}; anything else → null.
+ */
+export function waiveAuthoringLint(report) {
+  if (!report || typeof report !== "object" || report.ok === true) return null;
+  const sections = ["lint", "runtime", "layout", "motion", "contrast"].map((name) => report[name]).filter((section) => section && typeof section === "object");
+  if (!report.lint || sections.some((section) => Number(section.errorCount ?? 0) > 0)) return null;
+  if (sections.some((section) => section !== report.lint && Number(section.warningCount ?? 0) > 0)) return null;
+  const warnings = (report.lint.findings ?? []).filter((finding) => finding?.severity === "warning");
+  if (warnings.length !== Number(report.lint.warningCount ?? warnings.length)) return null;
+  if (warnings.some((finding) => !COMPILED_AUTHORING_LINT.includes(finding.code))) return null;
+  return { ok: true, waived: [...new Set(warnings.map((finding) => finding.code))] };
+}
+
 // Runs the renderer adapter's check and records each sub-check as
 // <qaDir>/<name>.json (lint.json and check.json for HyperFrames;
 // storyboard.json, compositions.json and layout.json for Remotion).
-async function verifyProject(project, qaDir, renderer) {
+// compiled: the project is the composition finish compiled from a storyboard.
+async function verifyProject(project, qaDir, renderer, { compiled = false } = {}) {
   let result;
   try {
     result = await renderer.check(project, { strict: true });
@@ -478,16 +500,21 @@ async function verifyProject(project, qaDir, renderer) {
     result = { status: "failed", findings: [{ source: renderer.name, severity: "error", message: error.message }], raw: { checks: { [`${renderer.name}-check`]: { ok: false, error: error.message } } } };
   }
   const checks = result?.raw?.checks && typeof result.raw.checks === "object" ? result.raw.checks : {};
+  const waived = {};
+  if (compiled && renderer.name === "hyperframes" && checks.check?.ok === false) {
+    const waiver = waiveAuthoringLint(checks.check.stdout);
+    if (waiver) { checks.check = { ...checks.check, ok: true, waived: waiver.waived }; waived.check = waiver.waived; }
+  }
   for (const [name, value] of Object.entries(checks)) await writeJson(path.join(qaDir, `${name}.json`), value);
   const failed = Object.entries(checks).filter(([, value]) => value?.ok !== true).map(([name]) => name);
-  if (result?.status !== "passed" && !failed.length) failed.push(`${renderer.name}-check`);
+  if (result?.status !== "passed" && !failed.length && !Object.keys(waived).length) failed.push(`${renderer.name}-check`);
   return {
     schema_version: "launchclip.subscription-verification.v1",
     status: failed.length ? "failed" : "passed",
     renderer: renderer.name,
     created_at: new Date().toISOString(),
-    checks: Object.fromEntries(Object.entries(checks).map(([name, value]) => [name, { ok: value?.ok === true, ...(value?.exit_code != null ? { exit_code: value.exit_code } : {}) }])),
-    findings: Array.isArray(result?.findings) ? result.findings : [],
+    checks: Object.fromEntries(Object.entries(checks).map(([name, value]) => [name, { ok: value?.ok === true, ...(value?.exit_code != null ? { exit_code: value.exit_code } : {}), ...(waived[name] ? { waived: waived[name] } : {}) }])),
+    findings: (Array.isArray(result?.findings) ? result.findings : []).filter((finding) => !(waived.check && finding?.source === "hyperframes-check")),
     failed
   };
 }
