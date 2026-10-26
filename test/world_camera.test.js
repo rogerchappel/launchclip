@@ -64,7 +64,7 @@ test("resolveCamera defaults and cameraActive", () => {
   assert.equal(cameraActive(worldStory({ camera: { mode: "cuts" }, mutate: (s) => { for (const scene of s.scenes) if (scene.in?.type !== "pan") delete scene.in; s.scenes[2].in = { type: "push", dur: 0.5 }; delete s.ending.in; return s; } })), true);
 });
 
-test("world layout places plates by direction, turns orbits, nests pushes inside the named object and returns home for the loop", () => {
+test("world layout places plates by direction, turns orbits, nests pushes inside the named object and puts the loop beside the last plate", () => {
   const story = worldStory();
   const windows = sceneWindows(story);
   const objects = lookup(story);
@@ -85,7 +85,12 @@ test("world layout places plates by direction, turns orbits, nests pushes inside
   const s5 = placements.get("s5");
   assert.equal(s5.rotation, 9);
   assert.equal(s5.scale, s4.scale);
-  assert.deepEqual(loop, placements.get("s1"), "a camera ending travels home to the loop scene");
+  // A whip-pan ending puts the loop clone beside the last plate: one short
+  // move, not a trip back across the whole world.
+  const last = [...placements.values()].at(-1);
+  assert.equal(loop.scale, last.scale);
+  const gap = Math.hypot(placementCentre(loop, size).x - placementCentre(last, size).x, placementCentre(loop, size).y - placementCentre(last, size).y);
+  assert.ok(Math.abs(gap - (1 + 0.12) * Math.max(size.width, size.height) * last.scale) < 1 || Math.abs(gap - (1 + 0.12) * Math.min(size.width, size.height) * last.scale) < 1, `beside: ${gap}`);
   // A plain fade stacks the incoming plate on the outgoing one.
   const faded = worldStory({ mutate: (s) => { s.scenes[1].in = { type: "fade", dur: 0.4 }; return s; } });
   assert.deepEqual(worldLayout(faded, sceneWindows(faded), { objects: lookup(faded) }).placements.get("s2"), placements.get("s1"));
