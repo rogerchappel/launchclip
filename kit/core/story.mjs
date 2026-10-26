@@ -210,6 +210,26 @@ export function samePlaceCuts(story) {
   return out;
 }
 
+/**
+ * Characters in two character scenes whose windows overlap (resolved,
+ * numeric timings; more than one frame). → [{character, a, b, from, to}]
+ */
+export function twoCopies(story) {
+  const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
+  const frame = 1 / Number(story?.format?.fps ?? 30);
+  const cast = (scene) => scene?.module === "cast-scene" ? (Array.isArray(scene.params?.cast) ? scene.params.cast.map((entry) => entry?.id) : [])
+    : scene?.module === "character-cameo" ? [scene.params?.character] : [];
+  const timed = scenes.filter((scene) => typeof scene?.start === "number" && typeof scene?.end === "number" && cast(scene).length);
+  const out = [];
+  for (let i = 0; i < timed.length; i += 1) for (let j = i + 1; j < timed.length; j += 1) {
+    const a = timed[i], b = timed[j];
+    const from = Math.max(a.start, b.start), to = Math.min(a.end, b.end);
+    if (to - from <= frame + 1e-6) continue;
+    for (const character of cast(a)) if (typeof character === "string" && cast(b).includes(character)) out.push({ character, a: a.id, b: b.id, from: Math.round(from * 100) / 100, to: Math.round(to * 100) / 100 });
+  }
+  return out;
+}
+
 export function validateStory(story, { modules } = {}) {
   const errors = [];
   const warnings = [];
@@ -581,6 +601,8 @@ export function validateStory(story, { modules } = {}) {
   validateChapters(story, { err, warn });
   // World physics (docs/DIRECTION_GUARDRAILS.md §1): a cut between two plates
   // of the same place makes every anchored thing in it jump.
+  // No ghosting (docs/DIRECTION_GUARDRAILS.md §4): one copy of a person at a time.
+  for (const pair of twoCopies(story)) err(`"${pair.character}" is in scenes "${pair.a}" and "${pair.b}" at once (${pair.from}–${pair.to} s): two copies of one person on screen. End one scene where the other starts, or leave the character out of one`);
   for (const pair of samePlaceCuts(story)) err(`scenes "${pair.from}" and "${pair.to}" cut between two world plates of the same place (${pair.place}): its furniture and props would jump. Make them one world scene (one camera move), or cut to a different place, time or props`);
 
   return { ok: errors.length === 0, errors, warnings };

@@ -66,10 +66,11 @@ test("snap: cuts move to downbeats (or beats) within the tolerance and hits to b
 test("snap: overlays aligned to a cut move with it (a cast over a world plate stays on the plate)", () => {
   const story = motionStory();
   story.scenes[1].params.countAt = 0.9;
-  story.cast = { characters: [{ id: "maya" }] };
+  story.cast = { characters: [{ id: "maya" }, { id: "theo" }] };
   // Starts and ends on the s2 cuts (3.9 and 7.1); a second overlay sits off the cuts and stays.
   story.scenes.push({ id: "cast", module: "cast-scene", track: 1, start: 3.9, end: 7.1, params: { set: "phone", cast: [{ id: "maya" }] }, hits: [{ at: 4.4, event: "whoosh-accent" }] });
-  story.scenes.push({ id: "late", module: "cast-scene", track: 2, start: 5, end: 7.5, params: { set: "phone", cast: [{ id: "maya" }] } });
+  // (Someone else: one person is never in two scenes at once.)
+  story.scenes.push({ id: "late", module: "cast-scene", track: 2, start: 5, end: 7.5, params: { set: "phone", cast: [{ id: "theo" }] } });
   const result = snapStory(story, gridFromBpm(120, 12));
   const cast = result.story.scenes.find((scene) => scene.id === "cast");
   assert.deepEqual([cast.start, cast.end], [4, 7]);
