@@ -4,7 +4,8 @@
 import { withSlot } from "../../../src/queue.js";
 
 const [kind, label, hold] = process.argv.slice(2);
-await withSlot(kind, { label, log: (line) => process.stderr.write(`${line}\n`) }, async () => {
+// node --test also runs this file, with no arguments: nothing to do then.
+if (kind) await withSlot(kind, { label, log: (line) => process.stderr.write(`${line}\n`) }, async () => {
   process.stdout.write(`acquired ${Date.now()}\n`);
   await new Promise((resolve) => setTimeout(resolve, Number(hold)));
   process.stdout.write(`released ${Date.now()}\n`);
