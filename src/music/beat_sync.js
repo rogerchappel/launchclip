@@ -174,7 +174,8 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
     const count = baseScenes(resolved).length;
     for (let index = 1; index < count; index += 1) {
       // Re-resolve each time: an earlier move changes the previous scene.
-      const scenes = baseScenes(resolvedNow());
+      const current = resolvedNow();
+      const scenes = baseScenes(current);
       const scene = scenes[index];
       const previous = scenes[index - 1];
       if (!scene || !previous) break;
@@ -198,7 +199,10 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
         reverted.push({ kind: "cut", scene: scene.id, from: at, to, grid: target.grid, reason: "a scene would become too short" });
         continue;
       }
-      attempt({ kind: "cut", scene: scene.id, previous: before ? previous.id : null, from: at, to, delta: round3(to - at), grid: target.grid }, (candidate) => {
+      // Overlays (track >= 1) that start or end on this cut, in seconds, move
+      // with it: a cast-scene over a world plate stays aligned to the plate.
+      const aligned = overlaysOn(current, working, at, [scene.id, previous.id]);
+      attempt({ kind: "cut", scene: scene.id, previous: before ? previous.id : null, from: at, to, delta: round3(to - at), grid: target.grid, ...(aligned.length ? { overlays: aligned.map((entry) => entry.id) } : {}) }, (candidate) => {
         const moved = findScene(candidate, scene.id);
         moved.start = to;
         if (before) findScene(candidate, previous.id).end = to;
@@ -212,7 +216,21 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
         for (const hit of Array.isArray(prior?.hits) ? prior.hits : []) {
           if (anchorKind(hit.at) === "seconds" && Number(hit.at) > to) hit.at = to;
         }
-      }, [scene.id, previous.id]);
+        for (const { id, edge } of aligned) {
+          const overlay = findScene(candidate, id);
+          if (edge === "start") {
+            overlay.start = to;
+            for (const hit of Array.isArray(overlay.hits) ? overlay.hits : []) {
+              if (anchorKind(hit.at) === "seconds") hit.at = round3(Math.min(Number(overlay.end) || Infinity, Math.max(to, Number(hit.at) + (to - at))));
+            }
+          } else {
+            overlay.end = to;
+            for (const hit of Array.isArray(overlay.hits) ? overlay.hits : []) {
+              if (anchorKind(hit.at) === "seconds" && Number(hit.at) > to) hit.at = to;
+            }
+          }
+        }
+      }, [scene.id, previous.id, ...aligned.map((entry) => entry.id)]);
     }
   }
 
@@ -297,6 +315,22 @@ export function summarizeMoments(report) {
 
 function anchorKind(value) {
   return parseAnchor(value)?.kind ?? null;
+}
+
+/**
+ * Overlay scenes (track >= 1) with a seconds-anchored start or end on a cut
+ * at `at` (resolved times, within a millisecond). → [{id, edge: start|end}]
+ */
+function overlaysOn(resolved, raw, at, skip) {
+  const out = [];
+  for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
+    if ((scene.track ?? 0) === 0 || skip.includes(scene.id)) continue;
+    const original = findScene(raw, scene.id);
+    if (!original) continue;
+    if (Math.abs(scene.start - at) < 1e-3 && anchorKind(original.start) === "seconds") out.push({ id: scene.id, edge: "start" });
+    else if (Math.abs(scene.end - at) < 1e-3 && anchorKind(original.end) === "seconds") out.push({ id: scene.id, edge: "end" });
+  }
+  return out;
 }
 
 function findScene(story, id) {
