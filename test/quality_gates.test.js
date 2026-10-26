@@ -166,6 +166,15 @@ test("the prototype cut lands between 20 and 30 s at a sentence end", async () =
   assert.equal(prototypeCut(story, await words()), null, "a 20 s story needs no prototype");
 });
 
+test("a prototype with no sentence end in its window never cuts a word in half", async () => {
+  const story = await resolved();
+  const long = { ...story, format: { ...story.format, duration: 90 }, resolved: { ...story.resolved, duration: 90 } };
+  const sentence = [{ text: "One.", start: 1, end: 1.4 }, { text: "the", start: 29.6, end: 29.9 }, { text: "part.", start: 30.1, end: 30.5 }];
+  assert.equal(prototypeCut(long, sentence).cut, 30.7, "a sentence ending just past 30 s finishes, plus a breath");
+  const running = [{ text: "One.", start: 1, end: 1.4 }, { text: "and", start: 29.4, end: 29.7 }, { text: "then", start: 29.8, end: 30.4 }, { text: "more.", start: 35, end: 35.5 }];
+  assert.equal(prototypeCut(long, running).cut, 29.8, "else the cut falls between the last two words inside the window");
+});
+
 test("prototypeScope keeps the lines and scenes inside the prototype window", () => {
   const list = Array.from({ length: 10 }, (_, i) => ({ text: `w${i}.`, start: i * 4, end: i * 4 + 1 }));
   const full = { scenes: [{ id: "a", start: 0, end: 8 }, { id: "b", start: 8, end: 20 }, { id: "c", start: 24, end: 30 }, { id: "d", start: 30, end: 36 }] };
