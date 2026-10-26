@@ -28,6 +28,8 @@ import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
 // The measures the coverage gate fails on; the rest of the band is reported.
 export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds", "longest_without_reset_seconds"]);
 export const PROTOTYPE_WINDOW = Object.freeze({ min: 20, max: 30 });
+// How far past max a prototype may run to let its last sentence finish.
+const PROTOTYPE_OVERRUN = 2;
 // Whole-video shares: in a prototype they describe the opening only, so their
 // bands are reported (advisory) but do not fail a gate. Run lengths and the
 // face rule are local and still do.
@@ -215,7 +217,9 @@ export function toTimeline(intervals, resolved) {
 
 /**
  * The opening cut for `finish --prototype`: a cut between min and max seconds
- * at the end of a narration sentence (else a scene end, else max), and the
+ * at the end of a narration sentence (else a sentence ending up to
+ * PROTOTYPE_OVERRUN s past max, else a scene end, else between two words,
+ * else max), and the
  * resolved story trimmed to it: later scenes dropped, the rest clamped, no
  * loop ending. A story no longer than max needs no prototype (null).
  */
@@ -224,8 +228,21 @@ export function prototypeCut(resolved, words = [], { min = PROTOTYPE_WINDOW.min,
   if (!(duration > max)) return null;
   const target = (min + max) / 2;
   const candidates = [];
-  for (const word of words ?? []) if (/[.!?]["”']?$/.test(String(word?.text ?? "")) && Number(word.end) >= min && Number(word.end) <= max) candidates.push(Number(word.end) + 0.2);
+  const sentenceEnd = (word) => /[.!?]["”']?$/.test(String(word?.text ?? ""));
+  for (const word of words ?? []) if (sentenceEnd(word) && Number(word.end) >= min && Number(word.end) <= max) candidates.push(Number(word.end) + 0.2);
+  // No sentence ends inside the window: let a sentence that ends just past it
+  // finish rather than cutting it off mid-word.
+  if (!candidates.length) {
+    const late = (words ?? []).find((word) => sentenceEnd(word) && Number(word.end) > max && Number(word.end) <= max + PROTOTYPE_OVERRUN);
+    if (late) candidates.push(Number(late.end) + 0.2);
+  }
   if (!candidates.length) for (const scene of resolved.scenes ?? []) if ((scene.track ?? 0) === 0 && Number(scene.end) >= min && Number(scene.end) <= max) candidates.push(Number(scene.end));
+  // Else the last word that ends inside the window, so the cut falls between words.
+  if (!candidates.length) {
+    const list = words ?? [];
+    const index = list.findLastIndex((word) => Number(word.end) >= min && Number(word.end) <= max);
+    if (index >= 0) candidates.push(Math.min(Number(list[index].end) + 0.2, Number(list[index + 1]?.start ?? Infinity), max));
+  }
   const cut = round(candidates.length ? candidates.sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0] : max);
   const story = JSON.parse(JSON.stringify(resolved));
   story.scenes = story.scenes.filter((scene) => Number(scene.start) < cut - 0.05).map((scene) => {
