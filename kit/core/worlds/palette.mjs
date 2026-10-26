@@ -59,17 +59,28 @@ const light = (hex, amount) => mixColor('#ffffff', hex, amount);
 export const isDark = hex => luminance(hex) < 0.2;
 
 /**
+ * The grade a world group (inside | outside) at a time puts on its materials,
+ * as hex → hex. `strength` 0..1 blends it with the original (1 = as the
+ * world's own materials; characters standing in a world take less).
+ */
+export function timeGrade(time = 'day', group = 'outside', strength = 1) {
+  const grade = GRADE[group === 'inside' ? 'inside' : 'outside'][time] ?? GRADE.outside.day;
+  return hex => {
+    if (!hexOk(hex)) return hex;
+    const tinted = mixColor(grade.tint, hex, grade.amount);
+    const full = grade.bright >= 1 ? tinted : dark(tinted, 1 - grade.bright);
+    return strength >= 1 ? full : mixColor(full, hex.toLowerCase(), strength);
+  };
+}
+
+/**
  * The palette for a world group (inside | outside) at a time, from the
  * brand colours {bg, primary, accent, ink, paper}. Every value is #rrggbb.
  * `g(hex)` grades any extra colour the same way (props use it).
  */
 export function worldPalette(colors, time = 'day', group = 'outside') {
   const brand = {primary: '#3d7cff', accent: '#ff7a59', bg: '#101218', paper: '#f4f1ea', ink: '#101218', ...Object.fromEntries(Object.entries(colors ?? {}).filter(([, v]) => hexOk(v)).map(([k, v]) => [k, v.toLowerCase()]))};
-  const grade = GRADE[group === 'inside' ? 'inside' : 'outside'][time] ?? GRADE.outside.day;
-  const g = hex => {
-    const tinted = mixColor(grade.tint, hex, grade.amount);
-    return grade.bright >= 1 ? tinted : dark(tinted, 1 - grade.bright);
-  };
+  const g = timeGrade(time, group);
   const sky = SKY[time] ?? SKY.day;
   // The brand tints the sky a little: primary by day and night, accent at dusk.
   const skyTint = time === 'dusk' ? brand.accent : brand.primary;
