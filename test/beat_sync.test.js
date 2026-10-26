@@ -63,6 +63,23 @@ test("snap: cuts move to downbeats (or beats) within the tolerance and hits to b
   assert.ok(snapStory(free, grid).changes.some((change) => change.kind === "hit" && change.scene === "s2" && change.to === 5.5));
 });
 
+test("snap: overlays aligned to a cut move with it (a cast over a world plate stays on the plate)", () => {
+  const story = motionStory();
+  story.scenes[1].params.countAt = 0.9;
+  story.cast = { characters: [{ id: "maya" }] };
+  // Starts and ends on the s2 cuts (3.9 and 7.1); a second overlay sits off the cuts and stays.
+  story.scenes.push({ id: "cast", module: "cast-scene", track: 1, start: 3.9, end: 7.1, params: { set: "phone", cast: [{ id: "maya" }] }, hits: [{ at: 4.4, event: "whoosh-accent" }] });
+  story.scenes.push({ id: "late", module: "cast-scene", track: 2, start: 5, end: 7.5, params: { set: "phone", cast: [{ id: "maya" }] } });
+  const result = snapStory(story, gridFromBpm(120, 12));
+  const cast = result.story.scenes.find((scene) => scene.id === "cast");
+  assert.deepEqual([cast.start, cast.end], [4, 7]);
+  assert.equal(cast.hits[0].at, 4.5);
+  const late = result.story.scenes.find((scene) => scene.id === "late");
+  assert.deepEqual([late.start, late.end], [5, 7.5]);
+  assert.deepEqual(result.changes.filter((change) => change.kind === "cut").map((change) => change.overlays), [["cast"], ["cast"]]);
+  assert.ok(validateStory(resolveStory(result.story)).ok);
+});
+
 test("snap: a move that breaks a module's params falls back and is recorded", () => {
   const result = snapStory(motionStory(), gridFromBpm(120, 12));
   const reverted = result.reverted.find((entry) => entry.scene === "s3");

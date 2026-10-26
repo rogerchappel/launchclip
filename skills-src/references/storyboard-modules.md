@@ -1401,6 +1401,7 @@ params:
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 - world: {kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)
+- backdrop: room | world: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)
@@ -1429,6 +1430,7 @@ params:
 - camera: still | drift | pan-left | pan-right | push | pull or {move, amount 0..1} (default drift)
 - detail: simple | standard | rich (default: from story.cast.style)
 - scrim: auto | top | bottom | left | right | centre | none | true (darken the quiet area for text on top; default none)
+- foreground: boolean: draw the front layer (foreground furniture, parked cars); default true, false when a cast-scene stands in this world
 
 ## Timing rules
 

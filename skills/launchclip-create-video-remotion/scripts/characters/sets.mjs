@@ -24,20 +24,24 @@ import {OUTLINE} from './palette.mjs';
 export const SETS = Object.freeze(['desk-laptop', 'phone', 'meeting', 'screen', 'kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk']);
 export const SEATED_SETS = Object.freeze(['desk-laptop', 'meeting', 'sofa', 'car', 'park-bench', 'video-call']);
 export const SCREEN_SETS = Object.freeze(['screen', 'meeting']);
+// Backdrops: the set's own room, or its furniture alone in a world.
+export const BACKDROPS = Object.freeze(['room', 'world']);
 export const SET_INFO = Object.freeze({
-  'desk-laptop': {seated: true, screen: 'none', describe: 'a desk with a laptop per character; the cast sits behind it'},
-  'phone': {seated: false, screen: 'none', describe: 'the cast stands in a room; the first character holds a phone'},
-  'meeting': {seated: true, screen: 'optional', describe: 'a meeting table the cast sits behind; a wall screen plays a supplied capture'},
-  'screen': {seated: false, screen: 'required', describe: 'a big screen playing a real capture (image, video or demo-autopilot recording) with the cast beside it'},
-  'kitchen-counter': {seated: false, screen: 'none', describe: 'a kitchen: the cast stands behind a counter with a chopping board and a pot, cabinets and a hood behind'},
-  'sofa': {seated: true, screen: 'none', describe: 'a living room: the cast sits on a sofa, a lamp and a picture behind'},
-  'podium': {seated: false, screen: 'none', describe: 'a talk: the first character speaks at a lectern with a microphone, a banner behind; the rest stand beside'},
-  'stage': {seated: false, screen: 'none', describe: 'a stage: curtains, spotlights and footlights, the cast standing in the light'},
-  'car': {seated: true, screen: 'none', describe: 'a car seen through the windscreen: the first character drives, the rest ride beside'},
-  'park-bench': {seated: true, screen: 'none', describe: 'a park: the cast sits on a bench under trees and sky'},
-  'video-call': {seated: true, screen: 'none', describe: 'a video call: each character in their own tile at home, with call controls below'},
-  'standing-desk': {seated: false, screen: 'none', describe: 'an office: the cast stands at a standing desk with monitors seen from behind'}
+  'desk-laptop': {seated: true, screen: 'none', world: true, describe: 'a desk with a laptop per character; the cast sits behind it'},
+  'phone': {seated: false, screen: 'none', world: true, describe: 'the cast stands in a room; the first character holds a phone'},
+  'meeting': {seated: true, screen: 'optional', world: true, describe: 'a meeting table the cast sits behind; a wall screen plays a supplied capture'},
+  'screen': {seated: false, screen: 'required', world: true, describe: 'a big screen playing a real capture (image, video or demo-autopilot recording) with the cast beside it'},
+  'kitchen-counter': {seated: false, screen: 'none', world: true, describe: 'a kitchen: the cast stands behind a counter with a chopping board and a pot, cabinets and a hood behind'},
+  'sofa': {seated: true, screen: 'none', world: true, describe: 'a living room: the cast sits on a sofa, a lamp and a picture behind'},
+  'podium': {seated: false, screen: 'none', world: true, describe: 'a talk: the first character speaks at a lectern with a microphone, a banner behind; the rest stand beside'},
+  'stage': {seated: false, screen: 'none', world: true, describe: 'a stage: curtains, spotlights and footlights, the cast standing in the light'},
+  'car': {seated: true, screen: 'none', world: true, describe: 'a car seen through the windscreen: the first character drives, the rest ride beside'},
+  'park-bench': {seated: true, screen: 'none', world: true, describe: 'a park: the cast sits on a bench under trees and sky'},
+  'video-call': {seated: true, screen: 'none', world: false, describe: 'a video call: each character in their own tile at home, with call controls below'},
+  'standing-desk': {seated: false, screen: 'none', world: true, describe: 'an office: the cast stands at a standing desk with monitors seen from behind'}
 });
+// Sets with a furniture-only form (backdrop "world"); a video call is its own room.
+export const WORLD_SETS = Object.freeze(SETS.filter(name => SET_INFO[name].world));
 
 const r1 = value => Math.round(value * 10) / 10;
 const OUT = 7;
@@ -156,18 +160,30 @@ function callRoom(t, s, c, i) {
  * Lay out a set. canvas {width, height}; colors: brand colours; count: 1–3
  * characters; heights: drawn heights (rig units) per character; screen:
  * true when a capture is supplied.
+ * backdrop: "room" draws the set's own room (walls, windows, sky, trees);
+ * "world" draws only its furniture and props, to stand in a world drawn
+ * behind it. floor: the floor line in canvas px (a world's ground; default
+ * the set's own). grade: hex → hex, recolouring every set colour (a world's
+ * time-of-day grade).
  * → {back, front, screenRect | null, slots: [{x, floor, scale, facing}], seated, floor}
  */
-export function layoutSet(name, {canvas, colors, count, heights, screen = false, unit = 1}) {
-  const c = setColors(colors);
+export function layoutSet(name, {canvas, colors, count, heights, screen = false, unit = 1, backdrop = 'room', floor: floorAt = null, grade = null}) {
+  if (!BACKDROPS.includes(backdrop)) throw new Error(`unknown set backdrop ${JSON.stringify(backdrop)} (${BACKDROPS.join(', ')})`);
+  if (backdrop === 'world' && !SET_INFO[name]?.world) throw new Error(`the ${name} set has no furniture-only form; it cannot stand in a world (sets that can: ${WORLD_SETS.join(', ')})`);
+  const own = setColors(colors);
+  const c = grade ? Object.fromEntries(Object.entries(own).map(([key, hex]) => [key, grade(hex)])) : own;
   const portrait = canvas.height > canvas.width;
   const W = canvas.width, H = canvas.height;
   const info = SET_INFO[name];
   if (!info) throw new Error(`unknown set ${JSON.stringify(name)} (sets: ${SETS.join(', ')})`);
   const s = unit;
-  const floor = r1(H * (portrait ? 0.74 : 0.8));
-  const back = room(canvas, floor, c, s);
+  const floor = floorAt ?? r1(H * (portrait ? 0.74 : 0.8));
+  // Scenery (walls, windows, pictures, sky, trees, curtains) stays apart from
+  // the furniture, so a set can stand in a world with its furniture alone.
+  const scenery = room(canvas, floor, c, s);
+  const back = [];
   const front = [];
+  const frontScenery = [];
   const tallest = Math.max(...heights);
   let screenRect = null;
   let slots = [];
@@ -180,8 +196,8 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
     const scale = scaleFor(portrait ? 0.5 : 0.8);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.31 : 0.3), W * (portrait ? 0.69 : 0.7));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
-    if (portrait) back.push(...windowFrame(W * 0.18, H * 0.16, W * 0.3, H * 0.17, s, c), ...frameArt(W * 0.62, H * 0.19, W * 0.2, H * 0.1, s, c));
-    else back.push(...windowFrame(W * 0.08, H * 0.12, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.76, H * 0.16, W * 0.12, H * 0.16, s, c), ...plant(W * 0.9, floor, s * 1.1, c));
+    if (portrait) scenery.push(...windowFrame(W * 0.18, H * 0.16, W * 0.3, H * 0.17, s, c), ...frameArt(W * 0.62, H * 0.19, W * 0.2, H * 0.1, s, c));
+    else scenery.push(...windowFrame(W * 0.08, H * 0.12, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.76, H * 0.16, W * 0.12, H * 0.16, s, c)), back.push(...plant(W * 0.9, floor, s * 1.1, c));
     const top = r1(floor - 262 * scale);
     const deskL = Math.min(...xs) - 360 * scale, deskR = Math.max(...xs) + 360 * scale;
     front.push(rect(deskL, top, deskR - deskL, 34 * scale, c.woodTop, {rx: 8 * scale, stroke: c.outline, width: OUT * s}));
@@ -201,7 +217,7 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
         ? {x: r1(W * 0.14), y: r1(H * 0.12), width: r1(W * 0.72), height: r1(W * 0.72 * 9 / 16)}
         : {x: r1(W * 0.36), y: r1(H * 0.06), width: r1(W * 0.28), height: r1(W * 0.28 * 9 / 16)};
       back.push(...screenFrame(screenRect, s, c, {stand: false}));
-    } else back.push(...windowFrame(W * (portrait ? 0.3 : 0.38), H * (portrait ? 0.14 : 0.1), W * (portrait ? 0.4 : 0.24), H * (portrait ? 0.15 : 0.26), s, c));
+    } else scenery.push(...windowFrame(W * (portrait ? 0.3 : 0.38), H * (portrait ? 0.14 : 0.1), W * (portrait ? 0.4 : 0.24), H * (portrait ? 0.15 : 0.26), s, c));
     const xs = spread(W * (portrait ? 0.29 : 0.28), W * (portrait ? 0.71 : 0.72));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
     const top = r1(floor - 250 * scale);
@@ -225,15 +241,16 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
     const scale = scaleFor(standShare);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.32), W * (portrait ? 0.7 : 0.68));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
-    if (portrait) back.push(...windowFrame(W * 0.26, H * 0.12, W * 0.48, H * 0.18, s, c));
-    else back.push(...windowFrame(W * 0.4, H * 0.1, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.12, H * 0.14, W * 0.12, H * 0.16, s, c), ...plant(W * 0.88, floor, s * 1.1, c));
+    if (portrait) scenery.push(...windowFrame(W * 0.26, H * 0.12, W * 0.48, H * 0.18, s, c));
+    else scenery.push(...windowFrame(W * 0.4, H * 0.1, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.12, H * 0.14, W * 0.12, H * 0.16, s, c)), back.push(...plant(W * 0.88, floor, s * 1.1, c));
   }
-  else slots = newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scaleFor, spread, standShare, W, H, tallest});
-  return {back, front, screenRect, slots, seated: info.seated, floor, colors: c};
+  else slots = newerSet(name, {canvas, c, count, s, floor, scenery, back, front, frontScenery, portrait, scaleFor, spread, standShare, W, H, tallest});
+  const inRoom = backdrop === 'room';
+  return {back: inRoom ? [...scenery, ...back] : back, front: inRoom ? [...frontScenery, ...front] : front, screenRect, slots, seated: info.seated, floor, colors: c};
 }
 
 /** The newer sets: draws their scenery into back and front, returns their slots. */
-function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scaleFor, spread, standShare, W, H, tallest}) {
+function newerSet(name, {canvas, c, count, s, floor, scenery, back, front, frontScenery, portrait, scaleFor, spread, standShare, W, H, tallest}) {
   const facingOf = x => (x < W / 2 ? 'right' : 'left');
   const slotsAt = (xs, scale, y = floor) => xs.map((x, i) => ({x, floor: y, scale, facing: facingOf(x), index: i}));
   if (name === 'kitchen-counter') {
@@ -243,12 +260,12 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
     const cabTop = floor - 900 * scale, cabBottom = floor - 640 * scale;
     for (let x = W * 0.04; x < W * 0.96 - 10; x += W * 0.15) {
       if (Math.abs(x + W * 0.075 - W / 2) < W * 0.09) continue;
-      back.push(rect(x, cabTop, W * 0.14, cabBottom - cabTop, mixColor(c.primary, '#ffffff', 0.78), {rx: 6 * s, stroke: c.outline, width: OUT * s}));
-      back.push(circle(x + W * 0.12, cabBottom - 26 * s, 6 * s, c.metalShade));
+      scenery.push(rect(x, cabTop, W * 0.14, cabBottom - cabTop, mixColor(c.primary, '#ffffff', 0.78), {rx: 6 * s, stroke: c.outline, width: OUT * s}));
+      scenery.push(circle(x + W * 0.12, cabBottom - 26 * s, 6 * s, c.metalShade));
     }
-    back.push(path(`M${r1(W * 0.42)} ${r1(cabBottom - 40 * s)}L${r1(W * 0.58)} ${r1(cabBottom - 40 * s)}L${r1(W * 0.62)} ${r1(cabBottom + 40 * s)}L${r1(W * 0.38)} ${r1(cabBottom + 40 * s)}Z`, c.metal, {stroke: c.outline, width: OUT * s}));
-    back.push(rect(W * 0.47, cabTop, W * 0.06, cabBottom - cabTop - 40 * s, c.metalShade, {stroke: c.outline, width: OUT * s}));
-    for (let y = cabBottom + 70 * s; y < floor - 340 * scale; y += 46 * s) back.push(path(`M0 ${r1(y)}L${W} ${r1(y)}`, 'none', {stroke: c.wallShade, width: 3 * s}));
+    scenery.push(path(`M${r1(W * 0.42)} ${r1(cabBottom - 40 * s)}L${r1(W * 0.58)} ${r1(cabBottom - 40 * s)}L${r1(W * 0.62)} ${r1(cabBottom + 40 * s)}L${r1(W * 0.38)} ${r1(cabBottom + 40 * s)}Z`, c.metal, {stroke: c.outline, width: OUT * s}));
+    scenery.push(rect(W * 0.47, cabTop, W * 0.06, cabBottom - cabTop - 40 * s, c.metalShade, {stroke: c.outline, width: OUT * s}));
+    for (let y = cabBottom + 70 * s; y < floor - 340 * scale; y += 46 * s) scenery.push(path(`M0 ${r1(y)}L${W} ${r1(y)}`, 'none', {stroke: c.wallShade, width: 3 * s}));
     const top = r1(floor - 340 * scale);
     front.push(rect(W * 0.04, top, W * 0.92, 30 * scale, mixColor('#ffffff', c.metal, 0.5), {rx: 6 * scale, stroke: c.outline, width: OUT * s}));
     front.push(rect(W * 0.05, top + 30 * scale, W * 0.9, floor - top - 30 * scale + 4, mixColor(c.primary, c.wood, 0.25), {stroke: c.outline, width: OUT * s}));
@@ -264,8 +281,8 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
   if (name === 'sofa') {
     const scale = scaleFor(portrait ? 0.48 : 0.74);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.34), W * (portrait ? 0.7 : 0.66));
-    if (portrait) back.push(...frameArt(W * 0.3, H * 0.14, W * 0.4, H * 0.12, s, c));
-    else back.push(...frameArt(W * 0.38, H * 0.1, W * 0.24, H * 0.2, s, c), ...lamp(W * 0.1, floor, s * 1.2, c), ...plant(W * 0.9, floor, s * 1.1, c));
+    if (portrait) scenery.push(...frameArt(W * 0.3, H * 0.14, W * 0.4, H * 0.12, s, c));
+    else scenery.push(...frameArt(W * 0.38, H * 0.1, W * 0.24, H * 0.2, s, c)), back.push(...lamp(W * 0.1, floor, s * 1.2, c), ...plant(W * 0.9, floor, s * 1.1, c));
     const L = Math.min(...xs) - 300 * scale, R = Math.max(...xs) + 300 * scale;
     const sofa = mixColor(c.primary, '#5c5a66', 0.35);
     const backTop = floor - 620 * scale, seat = floor - 230 * scale;
@@ -281,9 +298,9 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
     const scale = scaleFor(standShare);
     const xs = count === 1 ? [r1(W * 0.5)] : spread(W * (portrait ? 0.32 : 0.36), W * (portrait ? 0.7 : 0.66));
     // A banner behind the speaker.
-    back.push(rect(W * 0.18, H * 0.08, W * 0.64, floor - H * 0.08 - 200 * scale, c.primary, {rx: 12 * s, stroke: c.outline, width: OUT * s}));
-    back.push(rect(W * 0.18, H * 0.08 + (floor - H * 0.08 - 200 * scale) * 0.78, W * 0.64, 22 * s, c.accent));
-    back.push(circle(W * 0.5, H * 0.08 + (floor - H * 0.08) * 0.3, Math.min(W, H) * 0.06, mixColor('#ffffff', c.primary, 0.3)));
+    scenery.push(rect(W * 0.18, H * 0.08, W * 0.64, floor - H * 0.08 - 200 * scale, c.primary, {rx: 12 * s, stroke: c.outline, width: OUT * s}));
+    scenery.push(rect(W * 0.18, H * 0.08 + (floor - H * 0.08 - 200 * scale) * 0.78, W * 0.64, 22 * s, c.accent));
+    scenery.push(circle(W * 0.5, H * 0.08 + (floor - H * 0.08) * 0.3, Math.min(W, H) * 0.06, mixColor('#ffffff', c.primary, 0.3)));
     // The lectern in front of the first character, with a microphone.
     const x = xs[0], top = floor - 520 * scale;
     front.push(path(`M${r1(x - 170 * scale)} ${r1(top)}L${r1(x + 170 * scale)} ${r1(top)}L${r1(x + 130 * scale)} ${r1(floor)}L${r1(x - 130 * scale)} ${r1(floor)}Z`, c.wood, {stroke: c.outline, width: OUT * s}));
@@ -297,12 +314,12 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
     const scale = scaleFor(standShare * 0.94);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.32), W * (portrait ? 0.7 : 0.68));
     const curtain = mixColor('#14101a', c.primary, 0.35);
-    back.push(rect(0, 0, W, H, mixColor('#0d0b12', c.primary, 0.12)));
-    for (let x = 0; x < W; x += W / 14) back.push(path(`M${r1(x)} 0Q${r1(x + W / 28)} ${r1(floor * 0.5)} ${r1(x)} ${r1(floor)}`, 'none', {stroke: mixColor('#000000', curtain, 0.3), width: 6 * s, opacity: 0.6}));
-    back.push(path(`M0 0L${r1(W * 0.16)} 0Q${r1(W * 0.1)} ${r1(floor * 0.6)} ${r1(W * 0.12)} ${r1(floor)}L0 ${r1(floor)}Z`, curtain, {stroke: c.outline, width: OUT * s}));
-    back.push(path(`M${W} 0L${r1(W * 0.84)} 0Q${r1(W * 0.9)} ${r1(floor * 0.6)} ${r1(W * 0.88)} ${r1(floor)}L${W} ${r1(floor)}Z`, curtain, {stroke: c.outline, width: OUT * s}));
-    back.push(rect(0, 0, W, H * 0.07, curtain, {stroke: c.outline, width: OUT * s}));
-    back.push(rect(0, floor, W, H - floor, mixColor('#2a1f18', c.wood, 0.45)));
+    scenery.push(rect(0, 0, W, H, mixColor('#0d0b12', c.primary, 0.12)));
+    for (let x = 0; x < W; x += W / 14) scenery.push(path(`M${r1(x)} 0Q${r1(x + W / 28)} ${r1(floor * 0.5)} ${r1(x)} ${r1(floor)}`, 'none', {stroke: mixColor('#000000', curtain, 0.3), width: 6 * s, opacity: 0.6}));
+    scenery.push(path(`M0 0L${r1(W * 0.16)} 0Q${r1(W * 0.1)} ${r1(floor * 0.6)} ${r1(W * 0.12)} ${r1(floor)}L0 ${r1(floor)}Z`, curtain, {stroke: c.outline, width: OUT * s}));
+    scenery.push(path(`M${W} 0L${r1(W * 0.84)} 0Q${r1(W * 0.9)} ${r1(floor * 0.6)} ${r1(W * 0.88)} ${r1(floor)}L${W} ${r1(floor)}Z`, curtain, {stroke: c.outline, width: OUT * s}));
+    scenery.push(rect(0, 0, W, H * 0.07, curtain, {stroke: c.outline, width: OUT * s}));
+    scenery.push(rect(0, floor, W, H - floor, mixColor('#2a1f18', c.wood, 0.45)));
     // Spotlights on each character.
     for (const x of xs) back.push(path(`M${r1(x - 30 * s)} 0L${r1(x + 30 * s)} 0L${r1(x + 240 * scale)} ${r1(floor)}L${r1(x - 240 * scale)} ${r1(floor)}Z`, '#fff6d8', {opacity: 0.13}), path(`M${r1(x - 240 * scale)} ${r1(floor - 20 * scale)}Q${r1(x)} ${r1(floor - 60 * scale)} ${r1(x + 240 * scale)} ${r1(floor - 20 * scale)}Q${r1(x)} ${r1(floor + 40 * scale)} ${r1(x - 240 * scale)} ${r1(floor - 20 * scale)}Z`, '#fff6d8', {opacity: 0.22}));
     front.push(rect(0, floor + 30 * s, W, 26 * s, mixColor('#000000', c.wood, 0.5)));
@@ -315,15 +332,15 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
     const xs = spread(W * (n === 1 ? 0.4 : portrait ? 0.32 : 0.36), W * (portrait ? 0.68 : 0.64));
     const body = c.primary, glass = mixColor('#ffffff', c.sky, 0.3);
     // Outside: sky and road; inside the car: the rear window and seats.
-    back.push(rect(0, 0, W, H, mixColor('#ffffff', c.sky, 0.2)));
-    back.push(rect(0, H * 0.58, W, H * 0.42, '#6d6f78'));
+    scenery.push(rect(0, 0, W, H, mixColor('#ffffff', c.sky, 0.2)));
+    scenery.push(rect(0, H * 0.58, W, H * 0.42, '#6d6f78'));
     const roof = floor - 880 * scale, belt = floor - 330 * scale;
     const L = W * (portrait ? 0.04 : 0.14), R = W * (portrait ? 0.96 : 0.86);
     back.push(path(`M${r1(L + 60 * s)} ${r1(roof + 40 * s)}L${r1(R - 60 * s)} ${r1(roof + 40 * s)}L${r1(R)} ${r1(belt)}L${r1(L)} ${r1(belt)}Z`, mixColor('#1d1f26', '#3a3d46', 0.5)));
     back.push(path(`M${r1(L + 120 * s)} ${r1(roof + 80 * s)}L${r1(R - 120 * s)} ${r1(roof + 80 * s)}L${r1(R - 160 * s)} ${r1(roof + 240 * s)}L${r1(L + 160 * s)} ${r1(roof + 240 * s)}Z`, glass, {opacity: 0.7}));
     for (const x of xs) back.push(rect(x - 150 * scale, belt - 560 * scale, 300 * scale, 600 * scale, '#2c2e36', {rx: 50 * scale}), rect(x - 80 * scale, belt - 660 * scale, 160 * scale, 110 * scale, '#2c2e36', {rx: 30 * scale}));
     // The car around them: roof, pillars, the windscreen's glare, the bonnet, the wheel.
-    front.push(path(`M0 0L${W} 0L${W} ${r1(roof)}L0 ${r1(roof)}Z`, mixColor('#ffffff', c.sky, 0.2)));
+    frontScenery.push(path(`M0 0L${W} 0L${W} ${r1(roof)}L0 ${r1(roof)}Z`, mixColor('#ffffff', c.sky, 0.2)));
     front.push(path(`M${r1(L - 40 * s)} ${r1(roof - 30 * s)}L${r1(R + 40 * s)} ${r1(roof - 30 * s)}L${r1(R - 30 * s)} ${r1(roof + 40 * s)}L${r1(L + 30 * s)} ${r1(roof + 40 * s)}Z`, body, {stroke: c.outline, width: OUT * s}));
     for (const [a, b] of [[L - 40 * s, L + 50 * s], [R + 40 * s, R - 50 * s]]) front.push(path(`M${r1(a)} ${r1(roof - 30 * s)}L${r1(b)} ${r1(roof + 40 * s)}L${r1(b + (a < b ? 60 : -60) * s)} ${r1(belt)}L${r1(a + (a < b ? -30 : 30) * s)} ${r1(belt)}Z`, body, {stroke: c.outline, width: OUT * s}));
     front.push(path(`M${r1(L + 200 * s)} ${r1(roof + 60 * s)}L${r1(L + 300 * s)} ${r1(roof + 60 * s)}L${r1(L + 120 * s)} ${r1(belt - 40 * s)}L${r1(L + 60 * s)} ${r1(belt - 40 * s)}Z`, '#ffffff', {opacity: 0.16}));
@@ -334,11 +351,11 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
     return slotsAt(xs, scale);
   }
   if (name === 'park-bench') {
-    back.push(...outdoor(canvas, floor, c, s));
+    scenery.push(...outdoor(canvas, floor, c, s));
     const scale = scaleFor(portrait ? 0.5 : 0.76);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.34), W * (portrait ? 0.7 : 0.66));
-    if (!portrait) back.push(...tree(W * 0.1, floor, s * 1.2, c), ...tree(W * 0.9, floor, s * 1.1, c));
-    else back.push(...tree(W * 0.15, floor, s * 0.9, c));
+    if (!portrait) scenery.push(...tree(W * 0.1, floor, s * 1.2, c), ...tree(W * 0.9, floor, s * 1.1, c));
+    else scenery.push(...tree(W * 0.15, floor, s * 0.9, c));
     const L = Math.min(...xs) - 280 * scale, R = Math.max(...xs) + 280 * scale;
     const seat = floor - 230 * scale;
     for (let k = 0; k < 3; k++) back.push(rect(L, seat - (420 - k * 110) * scale, R - L, 70 * scale, c.wood, {rx: 10 * scale, stroke: c.outline, width: OUT * s}));
@@ -389,8 +406,8 @@ function newerSet(name, {canvas, c, count, s, floor, back, front, portrait, scal
   if (name === 'standing-desk') {
     const scale = scaleFor(standShare);
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.32), W * (portrait ? 0.7 : 0.68));
-    if (portrait) back.push(...windowFrame(W * 0.26, H * 0.12, W * 0.48, H * 0.16, s, c));
-    else back.push(...windowFrame(W * 0.08, H * 0.12, W * 0.2, H * 0.3, s, c), ...plant(W * 0.92, floor, s * 1.1, c));
+    if (portrait) scenery.push(...windowFrame(W * 0.26, H * 0.12, W * 0.48, H * 0.16, s, c));
+    else scenery.push(...windowFrame(W * 0.08, H * 0.12, W * 0.2, H * 0.3, s, c)), back.push(...plant(W * 0.92, floor, s * 1.1, c));
     const top = floor - 480 * scale;
     const L = Math.min(...xs) - 330 * scale, R = Math.max(...xs) + 330 * scale;
     for (const x of xs) {

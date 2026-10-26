@@ -262,7 +262,7 @@ test('a seeded drawing style reaches the rendered cast-scene, and the eight styl
   for (const style of DRAWING_STYLES) {
     const pack = {name: `seed-${style}`, ...generateStyle({seed: '0badf00d', constraints: {drawing_style: style}})};
     const [a, b] = pack.cast.members.map(member => member.id);
-    const scene = {id: 'pair', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast: [{id: a, pose: 'point'}, {id: b, pose: 'wave'}]}};
+    const scene = {id: 'pair', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', backdrop: 'room', cast: [{id: a, pose: 'point'}, {id: b, pose: 'wave'}]}};
     const base = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 4}, style: pack.name, scenes: [scene]};
     const styled = resolveStory(applyStyle(base, pack).story);
     const model = resolveModule(styled.scenes[0], styled);
@@ -281,4 +281,57 @@ test('cinematic is set well apart from lifelike: harder key, teal core shadow, b
   // The rim: every lit piece gets bands of its outline shifted toward the light.
   const rims = style => (json(style).match(/"transform":"translate\(/g) ?? []).length;
   assert.ok(rims('cinematic') > rims('lifelike') + 50, `${rims('cinematic')} vs ${rims('lifelike')}`);
+});
+
+test('a set stands in a world with its furniture alone (backdrop world); its room only on backdrop room', async () => {
+  const {layoutSet, WORLD_SETS} = await import('../kit/core/characters/sets.mjs');
+  const {worldAnchors} = await import('../kit/core/worlds/index.mjs');
+  const opts = {canvas: {width: 1920, height: 1080}, colors: brand.colors, count: 2, heights: [1000, 1000]};
+  const room = layoutSet('desk-laptop', opts);
+  const bare = layoutSet('desk-laptop', {...opts, backdrop: 'world', floor: 900, grade: hex => hex === '#c99a6b' ? '#123456' : hex});
+  const fills = nodes => JSON.stringify(nodes);
+  // The room's full-canvas wall is gone; the plant (furniture) and the desk stay.
+  assert.match(fills(room.back), /"width":1920,"height":1080/);
+  assert.doesNotMatch(fills(bare.back), /"width":1920,"height":1080/);
+  assert.ok(bare.back.length > 0 && bare.front.length === room.front.length);
+  assert.equal(bare.floor, 900);
+  assert.match(fills(bare.front), /#123456/);
+  assert.ok(!WORLD_SETS.includes('video-call'));
+  assert.throws(() => layoutSet('video-call', {...opts, backdrop: 'world'}), /no furniture-only form/);
+
+  // cast-scene: the default backdrop follows the world.
+  const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'dusk'}};
+  const over = {...desk(), track: 1};
+  const onPlate = resolveModule(over, story([world, over])).content;
+  assert.equal(onPlate.backdrop, 'world');
+  assert.equal(onPlate.drawWorld, null);
+  assert.equal(onPlate.actors[0].floor, worldAnchors('city-street').ground.y);
+  const inStory = resolve(desk(), {world: {kind: 'cafe', time: 'night', props: ['mug']}}).content;
+  assert.equal(inStory.backdrop, 'world');
+  assert.deepEqual({kind: inStory.drawWorld.kind, time: inStory.drawWorld.time, props: inStory.drawWorld.props}, {kind: 'cafe', time: 'night', props: ['mug']});
+  assert.equal(resolve(desk()).content.backdrop, 'room');
+  assert.equal(resolve(desk({backdrop: 'room'}), {world: {kind: 'cafe'}}).content.backdrop, 'room');
+  assert.throws(() => resolve(desk({backdrop: 'world'})), /needs a world/);
+  const call = {id: 'call', module: 'cast-scene', start: 0, end: 4, params: {set: 'video-call', cast: [{id: 'maya'}, {id: 'theo'}]}};
+  assert.equal(resolve(call, {world: {kind: 'cafe'}}).content.backdrop, 'room');
+  // The view draws the story's world behind the furniture when no world scene is beneath.
+  const view = charactersView(resolve(desk(), {world: {kind: 'cafe', time: 'night'}}));
+  assert.ok(view.front.children.some(node => node.id === 'desk-world-back'));
+  assert.ok(!charactersView(resolveModule(over, story([world, over]))).front.children.some(node => /-world-/.test(node.id ?? '')));
+});
+
+test('a world leaves out its front layer when a cast stands in it', async () => {
+  const {worldView} = await import('../kit/core/catalog-world.mjs');
+  const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'day'}};
+  const over = {...desk(), track: 1};
+  const front = model => worldView(model).front.children.find(node => node.id === 'street-front').children[0].children.length;
+  const alone = resolveModule(world, story([world]));
+  const withCast = resolveModule(world, story([world, over]));
+  assert.equal(alone.content.foreground, true);
+  assert.equal(withCast.content.foreground, false);
+  assert.ok(front(alone) > 0);
+  assert.equal(front(withCast), 0);
+  // A room set, or params.foreground, keeps it.
+  assert.equal(resolveModule(world, story([world, {...over, params: {...over.params, backdrop: 'room'}}])).content.foreground, true);
+  assert.equal(resolveModule({...world, params: {...world.params, foreground: true}}, story([world, over])).content.foreground, true);
 });
