@@ -56,6 +56,10 @@ test('window-chrome: terminal lines type on in order and the cursor blinks after
   assert.ok(mid.clipR > 0 && mid.clipR < 100);
   const blinks = ops.filter(op => op.target === 'scene-cursor' && op.type === 'set' && op.time > model.start);
   assert.ok(blinks.length >= 2 && blinks.some(op => op.props.opacity === 0));
+  // The cursor's fresh prompt row fits inside the window, so it is never clipped.
+  const c = model.content;
+  const cursorBottom = c.rows.at(-1).y + c.size * 1.55 + c.size * 0.1 + c.size * 1.05;
+  assert.ok(cursorBottom <= c.box.height + 1e-6, `cursor bottom ${cursorBottom} inside window height ${c.box.height}`);
   assert.throws(() => resolve('window-chrome', {title: 'Empty'}), /needs lines or an image/);
 });
 
