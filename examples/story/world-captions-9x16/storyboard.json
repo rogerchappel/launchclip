@@ -1,0 +1,59 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Captions over worlds: dark text by day, a light set at night",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 6.4,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#cee8ee",
+      "primary": "#89592c",
+      "accent": "#2a7180",
+      "ink": "#fbfeff",
+      "paper": "#1e282b"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "words": "NARRATION.json"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "preset": "quiet-accent"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "street",
+      "module": "world",
+      "start": 0,
+      "end": 3.2,
+      "params": {
+        "kind": "city-street",
+        "time": "day",
+        "camera": "still"
+      }
+    },
+    {
+      "id": "sky",
+      "module": "world",
+      "start": 3.2,
+      "end": 6.4,
+      "params": {
+        "kind": "skyline",
+        "time": "night",
+        "camera": "still"
+      }
+    }
+  ]
+}

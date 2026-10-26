@@ -411,6 +411,57 @@ export function captionZoneIndex(zones = [], start, end) {
   return best >= 0 && most >= span / 2 - 1e-6 ? best : -1;
 }
 
+// --- captions over worlds ------------------------------------------------------
+// A preset's colours suit the brand background. Over a world plate (a track-0
+// `world` scene) the band sits on the world instead, so a line spoken over a
+// world whose tone its text cannot hold switches to a contrasting colour set:
+// the first brand colour (paper, ink, bg) that reads on the world's tone,
+// else white or near-black, and the accent pulled toward it until it reads. The tone is the world's light at its time of day, as it lies under
+// the band (night skies and rooms are deep, dusk is mid, day is light).
+
+export const CAPTION_WORLD_TONES = Object.freeze({ night: '#111a33', dusk: '#8d6a74', day: '#c9d6de' });
+// Captions are large text: 3:1 is the floor (WCAG large text).
+export const CAPTION_TONE_CONTRAST = 3;
+// The halo behind a line over a world: light behind dark text, dark behind light text.
+export const CAPTION_HALO = Object.freeze({ light: '0 0 6px rgba(255,255,255,.85), 0 0 18px rgba(255,255,255,.6)', dark: '0 0 6px rgba(0,0,0,.75), 0 0 18px rgba(0,0,0,.55)' });
+
+const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+const lum = (hex) => { const [r, g, b] = hexRgb(hex).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+/** Contrast ratio of two #rrggbb colours (1–21). */
+export function captionContrast(a, b) {
+  const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+const mixHex = (a, b, t) => `#${hexRgb(a).map((c, i) => Math.round((c * (1 - t) + hexRgb(b)[i] * t) * 255).toString(16).padStart(2, '0')).join('')}`;
+
+/** Track-0 world scenes of a (resolved) story as [{start, end, tone}] (tone: night | dusk | day). */
+export function captionWorldSpans(story) {
+  const base = story?.world && typeof story.world === 'object' ? story.world : {};
+  return (Array.isArray(story?.scenes) ? story.scenes : [])
+    .filter((scene) => scene?.module === 'world' && (scene.track ?? 0) === 0 && Number.isFinite(Number(scene.start)) && Number.isFinite(Number(scene.end)))
+    .map((scene) => ({ start: Number(scene.start), end: Number(scene.end), tone: scene.params?.time ?? base.time ?? 'day' }))
+    .filter((span) => Object.hasOwn(CAPTION_WORLD_TONES, span.tone));
+}
+
+/**
+ * The colours a caption line uses over a world tone: the preset's own when
+ * its text holds CAPTION_TONE_CONTRAST on the tone, else a contrasting set.
+ * → {idle, accent, spoken, swapped}
+ */
+export function captionToneColors(colors, tone, brandColors = {}) {
+  const under = CAPTION_WORLD_TONES[tone];
+  if (!under || !isHex(colors.idle) || captionContrast(colors.idle, under) >= CAPTION_TONE_CONTRAST) return { ...colors, swapped: false };
+  // A brand colour that reads (4.5:1) first, else whichever stands furthest from the tone.
+  const brand = [brandColors.paper, brandColors.ink, brandColors.bg].filter(isHex);
+  const idle = brand.find((hex) => captionContrast(hex, under) >= 4.5)
+    ?? [...brand, '#ffffff', '#0b0b0f'].reduce((best, hex) => (captionContrast(hex, under) > captionContrast(best, under) ? hex : best));
+  let accent = isHex(colors.accent) ? colors.accent : idle;
+  for (let t = 0.15; captionContrast(accent, under) < CAPTION_TONE_CONTRAST && t <= 1.0001; t += 0.15) accent = mixHex(colors.accent, idle, Math.min(1, t));
+  const spoken = colors.spoken === colors.idle ? idle : colors.spoken;
+  return { ...colors, idle, accent, spoken, swapped: true };
+}
+
 /**
  * The caption plan for chunks under a captions overlay.
  * ctx: {brand, format, story (auto emphasis), hide: [[from, to]], zones}.
@@ -433,6 +484,10 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
   const tweens = [];
   const tw = (id, at, dur, ease, to, from, ir) => tweens.push({ id, at: r4(Math.max(0, at)), dur, ease, to, ...(from ? { from } : {}), ...(from && ir ? { ir: true } : {}) });
   const C = o.colors;
+  // Lines over a world plate whose tone the preset's text cannot hold get a contrasting set.
+  const worlds = captionWorldSpans(ctx.story);
+  const toneOf = (start, end) => { const span = Math.max(end - start, 1e-3); const hit = worlds.find((w) => Math.min(end, w.end) - Math.max(start, w.start) >= span / 2 - 1e-6); return hit?.tone ?? null; };
+  o.tones = {};
   const entrance = CAPTION_ENTRANCES[o.entrance];
   const exit = CAPTION_EXITS[o.exit];
 
@@ -455,8 +510,13 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
 
   for (const chunk of list) {
     const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
-    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}`, children: [] };
+    const tone = o.plate ? null : toneOf(...spoken(chunk));
+    const toned = tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
+    if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, swapped: toned.swapped };
+    const toneCls = toned ? ` lc-cap-on-${tone}` : '';
+    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}${toneCls}`, children: [] };
     nodes.push(line);
+    const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
     tw(chunk.id, chunk.start, entrance.dur, entrance.ease, inTo, { ...entrance.from }, true);
     chunk.words.forEach((word, i) => {
@@ -605,6 +665,14 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
     `.lc-cap-w { display: inline-block; position: relative;${stroke}${shadow} transform-origin: 50% 70%; color: ${C.idle}; }`
   ];
   if (o.emphasis) lines.push(`.lc-cap-em { color: ${C.accent}; }`);
+  // Lines over a world tone the preset's text cannot hold (captionToneColors).
+  // Over any world a halo in the contrasting tone lifts the line off the
+  // drawing behind it (presets with an outline keep their stroke).
+  for (const [tone, colors] of Object.entries(o.tones ?? {})) {
+    const halo = o.stroke > 0 ? '' : ` text-shadow: ${captionContrast(colors.idle, '#000000') < captionContrast(colors.idle, '#ffffff') ? CAPTION_HALO.light : CAPTION_HALO.dark};`;
+    lines.push(`.lc-cap-on-${tone} .lc-cap-w { color: ${colors.idle};${halo} }`);
+    if (o.emphasis) lines.push(`.lc-cap-on-${tone} .lc-cap-em { color: ${colors.accent}; }`);
+  }
   if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);
   switch (o.word) {
     case 'fill': lines.push(`.lc-cap-fill { position: absolute; left: 0; top: 0; width: 0%; overflow: hidden; white-space: nowrap; color: ${C.active}; }`); break;

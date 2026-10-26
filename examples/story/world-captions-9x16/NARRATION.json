@@ -1,0 +1,79 @@
+{
+ "words": [
+  {
+   "text": "Twenty",
+   "start": 0.3,
+   "end": 0.62
+  },
+  {
+   "text": "feet",
+   "start": 0.7,
+   "end": 1.02
+  },
+  {
+   "text": "is",
+   "start": 1.1,
+   "end": 1.42
+  },
+  {
+   "text": "just",
+   "start": 1.5,
+   "end": 1.82
+  },
+  {
+   "text": "across",
+   "start": 1.9,
+   "end": 2.22
+  },
+  {
+   "text": "the",
+   "start": 2.3,
+   "end": 2.62
+  },
+  {
+   "text": "street.",
+   "start": 2.7,
+   "end": 3.02
+  },
+  {
+   "text": "The",
+   "start": 3.1,
+   "end": 3.42
+  },
+  {
+   "text": "night",
+   "start": 3.5,
+   "end": 3.82
+  },
+  {
+   "text": "skyline",
+   "start": 3.9,
+   "end": 4.22
+  },
+  {
+   "text": "counts",
+   "start": 4.3,
+   "end": 4.62
+  },
+  {
+   "text": "too,",
+   "start": 4.7,
+   "end": 5.02
+  },
+  {
+   "text": "and",
+   "start": 5.1,
+   "end": 5.42
+  },
+  {
+   "text": "it",
+   "start": 5.5,
+   "end": 5.82
+  },
+  {
+   "text": "reads.",
+   "start": 5.9,
+   "end": 6.22
+  }
+ ]
+}
