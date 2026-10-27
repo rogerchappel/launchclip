@@ -77,6 +77,13 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'social-stack', intents: ['proof', 'quote'], when: 'gathers a few reactions to one thing ("people were quick to respond", "the replies poured in"): 2–5 posts cascade in, one in front', patterns: ['\\b(the )?(replies|reactions|comments|responses) (poured|flooded|came) in\\b', '\\b(people|users|fans|developers) (were quick to|reacted|responded)\\b'] },
   { module: 'social-sort', intents: ['proof', 'quote'], when: 'splits reactions into camps ("some can\'t wait, others are tired of it"): posts fly into labelled columns', patterns: ['\\b(some|half( of)?( the)?) (people|users|fans|developers|of them)\\b.*\\b(others|the rest|the other half)\\b', '\\b(divided|split) (opinion|reactions|the internet|the community)\\b'] },
   { module: 'social-wall', intents: ['proof'], when: 'says a topic took over the feeds ("the internet exploded", "everyone was talking about it"): a drifting wall of posts, one or two pulled forward', patterns: ['\\b(went viral|the internet (exploded|lost it)|everyone (was|is) talking|flooded (the )?(feeds?|timeline))\\b', '\\bthousands of (posts|tweets|comments)\\b'] },
+  // Code evidence: the receipt is a real PR, commit, diff or terminal run.
+  { module: 'repo-pr-card', intents: ['proof'], when: 'names a pull request or a change merged into a repo ("a PR in dotnet/efcore", "merged on Oct 16", "pull request #39217"): the PR rebuilt as a card, the token boxed on its word', patterns: ['\\bpull request\\b', '\\bPR\\s?#?\\d+', '\\bmerged\\b', '\\b[\\w-]+\\/[\\w.-]+#\\d+\\b'] },
+  { module: 'commit-card', intents: ['proof'], when: 'names a commit, a sha or who committed what ("a commit by Copilot", "commit cc44805", "co-authored by"): the commit card with sha, Verified, co-authors and the hunk', patterns: ['\\bcommit(ted)?\\b', '\\bco-authored\\b', '\\b[0-9a-f]{7,12}\\b'] },
+  { module: 'diff-view', intents: ['proof', 'process'], when: 'walks through what a change did line by line ("they swapped sol for terra", "the diff shows", "this line changed"): a Files-changed diff whose focus ring steps through the rows', patterns: ['\\bdiff\\b', '\\b(swapp|replac|chang)ed\\b.*\\b(line|model|config|flag)\\b', '\\bfiles? changed\\b'] },
+  { module: 'evidence-chain', intents: ['proof'], when: 'finds the same name in several places ("the same model name shows up in three repos", "and again here"): the sources side by side, the token joined by a dashed connector', patterns: ['\\b(same|that) (name|token|string|model)\\b.*\\b(again|also|too|places|repos)\\b', '\\b(two|three|four) (places|repos|sources|leaks|clues)\\b'] },
+  { module: 'date-pinned-timeline', intents: ['proof', 'number'], when: 'dates the clues ("on Oct 16 … then Oct 24", "three clues in nine days", "why now?"): a day axis that scrubs while each source pins to its date, or the why-now summary', patterns: ['\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \\d{1,2}\\b.*\\b(then|and|by)\\b', '\\bclues? in \\d+ days\\b', '\\bwhy now\\b'] },
+  { module: 'terminal-session', intents: ['proof', 'process'], when: 'runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs', patterns: ['\\b(git clone|pip install|npm (i|install|ci|test)|python3?|run_all|terminal|command line)\\b', '\\b(tests?|scripts?) (pass|passed|fail|failed)\\b'] },
   { module: 'count-up', when: 'gives a number, time, price or count', patterns: ['\\d', '\\b(percent|dollars?|minutes?|seconds?|hours?|times faster)\\b', '[$%×]'] },
   { module: 'metric', when: 'gives a sourced figure that should stay on screen with captions', patterns: ['\\b(according to|reported|survey|benchmark(ed)?|measured)\\b'] },
   { module: 'checklist', when: 'lists steps, features or duties', patterns: ['\\b(features?|includes?|checklist|requirements?|you get)\\b', '\\bfirst\\b.*\\bsecond\\b'] },
@@ -396,6 +403,15 @@ export function glassLookLines() {
     'Backdrop plates: plate {kind: hex-shell | silk | strands | bokeh, params?: {focus, intensity, speed, depth 0–1 (speed 0–2), tint: neutral | primary | accent}, cycle?} sets a dark, out-of-focus plate that drifts under every scene; it holds across a chapter and changes at the next (cycle: true walks the kinds per chapter, or set chapters[j].plate). scenes[i].plate overrides one scene ("none" for the story background). Build a chapter as several states over one plate rather than cutting to new backgrounds.',
     'Glass: panel {treatment: "rim-glass"} turns every card (stat-card, excerpt, quote-card, …), window-chrome and comparison-table into translucent glass with a cyan (primary) rim and glow. Type stays paper and primary; the accent is for the one brand being discussed.',
     'Channel furniture: logo-sting opens and closes (rain, particles or clear); subscribe-cta goes on track 1+ over a card scene for 5–6 s, two or three times in a long video, never over a key figure; channel-watermark goes on the highest track across the main body (decor: scenes pass under it).'
+  ];
+}
+
+// Code evidence: the receipt beat, rebuilt from real GitHub data.
+export function codeEvidenceLines() {
+  return [
+    'A claim about code ("they are already testing it", "it shipped") lands on its receipt: repo-pr-card (a PR), commit-card (a commit), diff-view (what changed, row by row) or terminal-session (a run). Box the token (a model name, a flag) with highlight and time highlightAt to its word: "highlightAt": "word:terra".',
+    'Real data only: map a public PR or commit with `node src/evidence/github.js <url> --token <text>` (cached under assets/evidence/, avatars too) and paste its params; never type or invent repo names, numbers, shas, authors or lines. Lines stay verbatim (cropping round the token is the module\'s job).',
+    'Several sources for one name: evidence-chain (2–4 cards, one per beat, the token joined by a dashed connector) or date-pinned-timeline (cards pinned to their dates on a scrubbing day axis; the summary variant is the "why now? N clues in N days" recap). Keep one shot and build it source by source rather than cutting card to card.'
   ];
 }
 
@@ -803,6 +819,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
     ...section('Social posts', socialPostLines().map((line) => `- ${line}`)),
+    ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
@@ -901,6 +918,7 @@ export function storyboardModulesReference() {
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
     ...section('Social posts', socialPostLines().map((line) => `- ${line}`)),
+    ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),

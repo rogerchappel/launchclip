@@ -1,0 +1,92 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-evidence-chain-glass-landscape",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "evidence-chain",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "token": "openrouter/free",
+          "sources": [
+            {
+              "kind": "pr",
+              "repo": "rogerchappel/launchclip",
+              "number": 82,
+              "state": "merged",
+              "date": "2026-07-16",
+              "file": "src/model_provider.js",
+              "lines": [
+                "-      body.provider = { require_parameters: true, allow_fallbacks: false };",
+                "+      body.provider = { require_parameters: true, allow_fallbacks: model === \"openrouter/free\" };"
+              ],
+              "startLine": {
+                "old": 87,
+                "new": 87
+              }
+            },
+            {
+              "kind": "commit",
+              "repo": "rogerchappel/launchclip",
+              "sha": "4bb5d3b42fd3",
+              "date": "2026-07-18",
+              "file": "src/production_cli.js",
+              "lines": [
+                "+  const repairRoutes = [...selection.routes];",
+                "+  if (!repairRoutes.some((route) => /^openrouter:openrouter\\/free(?:@|$)/i.test(route))) repairRoutes.push(\"openrouter:openrouter/free@none\");"
+              ],
+              "startLine": {
+                "old": 81,
+                "new": 81
+              },
+              "highlight": {
+                "token": "openrouter/free",
+                "row": 1
+              }
+            },
+            {
+              "kind": "excerpt",
+              "file": "docs/guide/advanced.md",
+              "sub": "rogerchappel/launchclip · main",
+              "lines": [
+                "  --critic-route openrouter:openrouter/free@none \\",
+                "  --repair-route openrouter:openrouter/free@none"
+              ],
+              "startLine": 333
+            }
+          ],
+          "variant": "glass"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

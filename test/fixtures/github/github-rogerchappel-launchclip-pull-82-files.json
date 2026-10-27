@@ -1,0 +1,36 @@
+{
+  "url": "https://api.github.com/repos/rogerchappel/launchclip/pulls/82/files?per_page=100",
+  "fetchedAt": "2026-10-27T05:07:34.023Z",
+  "data": [
+    {
+      "filename": "src/cli.js",
+      "additions": 2,
+      "deletions": 2,
+      "patch": "@@ -92,7 +92,7 @@ export function parseFlags(args) {\n       throw new Error(`Unexpected argument: ${token}`);\n     }\n     const name = token.slice(2);\n-    if (name === \"dry-run\" || name === \"submit\" || name === \"no-render\" || name === \"force\" || name === \"approve\" || name === \"critic-pro\" || name === \"transcribe-all\" || name === \"allow-placeholder-sfx\" || name === \"allow-frame-fallback\" || name === \"no-music\" || name === \"no-voice\" || name === \"no-sfx\" || name === \"no-audio\" || name === \"no-open\" || name === \"allow-timing-drift\" || name === \"foreground\" || name === \"fast-eval\" || name === \"no-trim-silence\" || name === \"skip-quality-gates\" || name === \"skip-hyperframes-quality\" || name === \"strict\" || name === \"strict-all\" || name === \"pro\") {\n+    if (name === \"dry-run\" || name === \"submit\" || name === \"no-render\" || name === \"force\" || name === \"approve\" || name === \"critic-pro\" || name === \"transcribe-all\" || name === \"allow-placeholder-sfx\" || name === \"allow-frame-fallback\" || name === \"repair-text-only\" || name === \"no-music\" || name === \"no-voice\" || name === \"no-sfx\" || name === \"no-audio\" || name === \"no-open\" || name === \"allow-timing-drift\" || name === \"foreground\" || name === \"fast-eval\" || name === \"no-trim-silence\" || name === \"skip-quality-gates\" || name === \"skip-hyperframes-quality\" || name === \"strict\" || name === \"strict-all\" || name === \"pro\") {\n       flags[name] = true;\n       continue;\n     }\n@@ -135,7 +135,7 @@ Usage:\n   launchclip production-draft <workspace> [--draft-quality draft] [--shot-inspect-concurrency 2] [--reference-video local.mp4]\n   launchclip production-preview <workspace> [--port 3002] [--no-open]\n   launchclip production-critique <workspace> [--critic-reasoning xhigh] [--critic-pro]\n-  launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality] [--repair-route provider:model@reasoning] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]\n+  launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]\n   launchclip production-render <workspace> --approve [--quality high] [--shot-inspect-concurrency 2] [--reference-video local.mp4]\n   launchclip init <repo> --out <workspace>\n   launchclip demo <repo> --out <workspace> --demo-cmd \"npm run smoke\" --capture terminal [--demo-media path/to/screenshot.png]"
+    },
+    {
+      "filename": "src/model_provider.js",
+      "additions": 1,
+      "deletions": 1,
+      "patch": "@@ -84,7 +84,7 @@ export class ChatCompletionsStructuredClient {\n     };\n     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, \"maxOutputTokens\");\n     if (this.provider === \"openrouter\") {\n-      body.provider = { require_parameters: true, allow_fallbacks: false };\n+      body.provider = { require_parameters: true, allow_fallbacks: model === \"openrouter/free\" };\n       if (options.reasoningEffort && options.reasoningEffort !== \"none\") body.reasoning = { effort: options.reasoningEffort };\n     }\n     const payload = await this.request(\"/chat/completions\", { method: \"POST\", body: JSON.stringify(body) });"
+    },
+    {
+      "filename": "src/production_cli.js",
+      "additions": 1,
+      "deletions": 0,
+      "patch": "@@ -329,6 +329,7 @@ function repairOptions(flags) {\n     maxOutputTokens: numberOr(flags[\"repair-max-output-tokens\"], 8_000),\n     maxPatchRatio: ratioOr(flags[\"max-patch-ratio\"], .35),\n     maxIssuesPerShot: numberOr(flags[\"repair-issues-per-shot\"], 4),\n+    supportsImages: flags[\"repair-text-only\"] ? false : undefined,\n     background: !flags.foreground\n   };\n }"
+    },
+    {
+      "filename": "test/model_provider.test.js",
+      "additions": 13,
+      "deletions": 0,
+      "patch": "@@ -69,6 +69,19 @@ test(\"pins OpenRouter parameters and disables provider fallback\", async () => {\n   assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: false });\n });\n \n+test(\"allows provider fallback for the dynamic OpenRouter free route\", async () => {\n+  let body;\n+  const client = createStructuredClient({ provider: \"openrouter\", model: \"openrouter/free\", reasoning: \"none\", apiKey: \"router-test\" }, {\n+    fetch: async (_url, init) => {\n+      body = JSON.parse(init.body);\n+      return new Response(JSON.stringify({ model: \"example/free-model:free\", choices: [{ message: { content: \"{\\\"ok\\\":true}\" } }] }), { status: 200 });\n+    }\n+  });\n+  const result = await client.runStructured({ schema: { type: \"object\" }, schemaName: \"result\", input: \"go\" });\n+  assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: true });\n+  assert.equal(result.model, \"example/free-model:free\");\n+});\n+\n test(\"rejects unsupported providers before a request\", () => {\n   assert.throws(() => parseModelRoute(\"mystery:model@low\"), /Unsupported model provider/);\n });"
+    },
+    {
+      "filename": "test/production_cli.test.js",
+      "additions": 2,
+      "deletions": 1,
+      "patch": "@@ -299,7 +299,7 @@ test(\"blocks assembly when measured narration timing requires a replan\", async (\n \n test(\"routes production repair with scoped model controls\", async () => {\n   let received;\n-  const result = await runProductionStage(\"production-repair\", \"/tmp/workspace\", { \"repair-model\": \"gpt-5.6\", \"repair-reasoning\": \"xhigh\", \"repair-semantic-attempts\": \"3\", \"repair-snapshots\": \"6\", concurrency: \"2\" }, {\n+  const result = await runProductionStage(\"production-repair\", \"/tmp/workspace\", { \"repair-model\": \"gpt-5.6\", \"repair-reasoning\": \"xhigh\", \"repair-semantic-attempts\": \"3\", \"repair-snapshots\": \"6\", \"repair-text-only\": true, concurrency: \"2\" }, {\n     withProductionLease: async (_workspace, operation) => operation(),\n     repairProduction: async (workspace, options) => { received = { workspace, options }; return { status: \"repaired\" }; }\n   });\n@@ -312,6 +312,7 @@ test(\"routes production repair with scoped model controls\", async () => {\n   assert.deepEqual(received.options.routes, [\"openai:gpt-5.6@xhigh\"]);\n   assert.equal(received.options.maxPatchRatio, .35);\n   assert.equal(received.options.maxIssuesPerShot, 4);\n+  assert.equal(received.options.supportsImages, false);\n });\n \n test(\"routes local-first generation and bounded local patch repair explicitly\", async () => {"
+    }
+  ]
+}

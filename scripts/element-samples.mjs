@@ -45,6 +45,30 @@ export const SAMPLES = Object.freeze({
   'logo-sting': {name: 'Signal Lab', tagline: 'AI, explained weekly'},
   'subscribe-cta': {name: 'Signal Lab'},
   'channel-watermark': {name: 'Signal Lab'},
+  // Code evidence: real public changes in rogerchappel/launchclip, mapped by src/evidence/github.js.
+  'repo-pr-card': {repo: 'rogerchappel/launchclip', number: 88, title: 'feat: select and rotate fit-for-purpose free OpenRouter models', state: 'merged', author: {login: 'rogerchappel', avatar: 'assets/evidence/avatars/rogerchappel.jpg'}, date: '2026-07-17', file: 'src/intake.js', additions: 6, deletions: 5,
+    lines: ['-  const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra")).trim();', '+  const modelProvider = modelPolicy === "free" ? "openrouter" : "openai";', '+  const model = String(flags.model ?? (modelPolicy === "free" ? "openrouter/free" : env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"))).trim();', '   const resources = [];'],
+    startLine: {old: 70, new: 70}, highlight: 'openrouter/free'},
+  'commit-card': {repo: 'rogerchappel/launchclip', sha: 'c3ec4a1198b8', authors: [{login: 'rogerchappel', avatar: 'assets/evidence/avatars/rogerchappel.jpg'}, 'Claude Fable 5'], message: 'direct: default OpenAI model to gpt-5.5', date: '2026-06-13', file: 'src/director.js', additions: 4, deletions: 3,
+    lines: ['-    // --model or OPENAI_MODEL.', '-    const model = flags.model || process.env.OPENAI_MODEL || "o4-mini";', '+    // fallback. Override via --model or OPENAI_MODEL.', '+    const model = flags.model || process.env.OPENAI_MODEL || "gpt-5.5";'], startLine: {old: 92, new: 93}, highlight: 'gpt-5.5'},
+  'diff-view': {file: 'src/director.js', additions: 4, deletions: 3, startLine: {old: 90, new: 90}, highlight: 'gpt-5.5',
+    lines: ['     // Default to a reasoning model: the strict density/word-grounding linter', '-    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). Override via', '-    // --model or OPENAI_MODEL.', '-    const model = flags.model || process.env.OPENAI_MODEL || "o4-mini";', '+    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). gpt-5.5', '+    // lands valid, lint-clean AND gap-free; o4-mini works as a cheaper', '+    // fallback. Override via --model or OPENAI_MODEL.', '+    const model = flags.model || process.env.OPENAI_MODEL || "gpt-5.5";', '     log(`provider: openai (${model})`);'],
+    focus: [{row: 3}, {rows: [4, 6]}, {row: 7}]},
+  'evidence-chain': {token: 'openrouter/free', sources: [
+    {kind: 'pr', repo: 'rogerchappel/launchclip', number: 82, state: 'merged', date: '2026-07-16', file: 'src/model_provider.js', lines: ['-      body.provider = { require_parameters: true, allow_fallbacks: false };', '+      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };'], startLine: {old: 87, new: 87}},
+    {kind: 'commit', repo: 'rogerchappel/launchclip', sha: '4bb5d3b42fd3', date: '2026-07-18', file: 'src/production_cli.js', lines: ['+  const repairRoutes = [...selection.routes];', '+  if (!repairRoutes.some((route) => /^openrouter:openrouter\\/free(?:@|$)/i.test(route))) repairRoutes.push("openrouter:openrouter/free@none");'], startLine: {old: 81, new: 81}, highlight: {token: 'openrouter/free', row: 1}},
+    {kind: 'excerpt', file: 'docs/guide/advanced.md', sub: 'rogerchappel/launchclip · main', lines: ['  --critic-route openrouter:openrouter/free@none \\', '  --repair-route openrouter:openrouter/free@none'], startLine: 333}]},
+  'date-pinned-timeline': {from: '2026-07-14', to: '2026-07-20', cards: [
+    {date: '2026-07-16', label: 'Free repairs', kind: 'pr', repo: 'rogerchappel/launchclip', number: 82, state: 'merged', lines: ['+      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };'], startLine: {old: 87, new: 87}, highlight: 'openrouter/free'},
+    {date: '2026-07-17', label: 'Model rotation', kind: 'pr', repo: 'rogerchappel/launchclip', number: 89, state: 'merged', lines: ['+  return route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free"));'], startLine: {old: 324, new: 345}, highlight: 'openrouter/free'},
+    {date: '2026-07-18', label: 'Repair fallback', kind: 'commit', repo: 'rogerchappel/launchclip', sha: '4bb5d3b42fd3', lines: ['+  if (!repairRoutes.some((route) => /^openrouter:openrouter\\/free(?:@|$)/i.test(route))) repairRoutes.push("openrouter:openrouter/free@none");'], startLine: {old: 82, new: 82}, highlight: {token: 'openrouter/free', row: 0}}]},
+  // A real session in this repo: the commit behind the commit-card sample, the helper's tests, and a full npm test run on this branch (its real totals).
+  'terminal-session': {title: 'launchclip — zsh', steps: [
+    {cmd: 'git show --stat c3ec4a11 --format=%s', output: ['direct: default OpenAI model to gpt-5.5', ' src/director.js | 7 ++++---', ' 1 file changed, 4 insertions(+), 3 deletions(-)']},
+    {cmd: 'node --test test/evidence_github.test.js', output: [{status: 'PASS', time: '9.0 ms', text: 'parseGithubRef reads URLs and short forms'}, {status: 'PASS', time: '17.1 ms', text: 'githubGet caches responses and explains the rate limit'},
+      {status: 'PASS', time: '9.7 ms', text: 'a real PR maps to repo-pr-card params that resolve'}, {status: 'PASS', time: '4.0 ms', text: 'a real commit maps to commit-card and diff-view params'}]},
+    {cmd: 'npm test', output: [{text: 'ℹ tests 2515', tone: 'muted'}, {text: 'ℹ pass 2053', tone: 'add'}, {text: 'ℹ fail 4', tone: 'del'}, {text: 'ℹ duration_ms 219907.9', tone: 'muted'}]}],
+    timer: {to: 220}, highlight: 'c3ec4a11'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 
@@ -54,6 +78,13 @@ export const EXTRA_SAMPLES = Object.freeze([
   {name: 'map-highlight-world', module: 'map-highlight', variant: 'pins', shape: 'landscape', params: {highlight: [{country: 'USA', value: '41%'}, {country: 'Brazil', value: '12%'}, {country: 'India', value: '19%'}, {country: 'Australia', value: '7%'}], focus: 'world'}},
   {name: 'unit-grid-highlight', module: 'unit-grid', variant: 'solid', shape: 'portrait', params: {count: 10, highlight: {count: 1, label: '1 IN 10'}}},
   {name: 'number-line-marker', module: 'number-line', variant: 'ruler', shape: 'landscape', params: {from: 0, to: 100, format: {style: 'percent'}, ranges: [{from: 60, to: 80, label: 'The sweet spot', tone: 'good'}], marker: {value: 72, label: 'You'}}},
+  {name: 'date-pinned-timeline-summary', module: 'date-pinned-timeline', variant: 'summary', shape: 'landscape', params: {from: '2026-07-14', to: '2026-07-20', subtitle: '3 clues in 3 days', cards: [
+    {date: '2026-07-16', label: 'Free repairs', kind: 'pr', repo: 'rogerchappel/launchclip', number: 82, state: 'merged', lines: ['+      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };'], startLine: {old: 87, new: 87}, highlight: 'openrouter/free'},
+    {date: '2026-07-17', label: 'Model rotation', kind: 'pr', repo: 'rogerchappel/launchclip', number: 89, state: 'merged', lines: ['+  return route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free"));'], startLine: {old: 324, new: 345}, highlight: 'openrouter/free'},
+    {date: '2026-07-18', label: 'Repair fallback', kind: 'commit', repo: 'rogerchappel/launchclip', sha: '4bb5d3b42fd3', lines: ['+  if (!repairRoutes.some((route) => /^openrouter:openrouter\\/free(?:@|$)/i.test(route))) repairRoutes.push("openrouter:openrouter/free@none");'], startLine: {old: 82, new: 82}, highlight: {token: 'openrouter/free', row: 0}}]}},
+  {name: 'evidence-chain-announcement', module: 'evidence-chain', variant: 'glass', shape: 'landscape', params: {token: 'openrouter/free', sources: [
+    {kind: 'excerpt', file: 'docs/guide/advanced.md', sub: 'rogerchappel/launchclip · main', lines: ['  --critic-route openrouter:openrouter/free@none \\', '  --repair-route openrouter:openrouter/free@none'], startLine: 333},
+    {kind: 'announcement', site: 'github.com/rogerchappel/launchclip', title: 'Visual Review and Repair', text: 'To use OpenRouter\'s current free pool without maintaining a model list, pass openrouter:openrouter/free@none for both routes.'}]}},
   {name: 'speech-bubble-thought', module: 'speech-bubble', variant: 'comic', shape: 'portrait', params: {text: 'What if the video made itself?', type: 'thought', tail: 'bottom-right'}}
 ]);
 

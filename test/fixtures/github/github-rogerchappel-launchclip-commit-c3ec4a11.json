@@ -1,0 +1,40 @@
+{
+  "url": "https://api.github.com/repos/rogerchappel/launchclip/commits/c3ec4a11",
+  "fetchedAt": "2026-10-27T05:07:32.922Z",
+  "data": {
+    "sha": "c3ec4a1198b821b9fdf162763e8ec9556db9fe7b",
+    "url": "https://api.github.com/repos/rogerchappel/launchclip/commits/c3ec4a1198b821b9fdf162763e8ec9556db9fe7b",
+    "commit": {
+      "author": {
+        "name": "Roger Chappel",
+        "email": "miscanalysis@gmail.com",
+        "date": "2026-06-13T21:04:08Z"
+      },
+      "committer": {
+        "name": "Roger Chappel",
+        "email": "miscanalysis@gmail.com",
+        "date": "2026-06-13T22:55:55Z"
+      },
+      "message": "direct: default OpenAI model to gpt-5.5\n\ngpt-5.5 (latest) lands valid + lint-clean in fewer attempts than o4-mini and\nwith zero advisories (gap-free, butt-joined scenes) on the 18s test. It routes\nthrough the existing reasoning-model path (gpt-5* prefix). o4-mini remains a\ncheaper fallback via --model / OPENAI_MODEL.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>",
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "author": {
+      "login": "rogerchappel",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2165615?v=4"
+    },
+    "files": [
+      {
+        "filename": "src/director.js",
+        "additions": 4,
+        "deletions": 3,
+        "patch": "@@ -88,9 +88,10 @@ async function makeDirectorClient(flags = {}, log = () => {}) {\n   if (choice === \"openai\") {\n     if (!process.env.OPENAI_API_KEY) throw new Error(\"OPENAI_API_KEY is not set.\");\n     // Default to a reasoning model: the strict density/word-grounding linter\n-    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). Override via\n-    // --model or OPENAI_MODEL.\n-    const model = flags.model || process.env.OPENAI_MODEL || \"o4-mini\";\n+    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). gpt-5.5\n+    // lands valid, lint-clean AND gap-free; o4-mini works as a cheaper\n+    // fallback. Override via --model or OPENAI_MODEL.\n+    const model = flags.model || process.env.OPENAI_MODEL || \"gpt-5.5\";\n     log(`provider: openai (${model})`);\n     return openAiMessagesShim({ apiKey: process.env.OPENAI_API_KEY, model });\n   }"
+      }
+    ]
+  }
+}
