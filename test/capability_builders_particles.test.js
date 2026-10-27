@@ -33,6 +33,12 @@ test("dot-field: the clause's own count, one dot per unit, and what a dot is", (
   assert.equal(million.count, 2000000);
   assert.equal(million.legend, "1 dot = 1 user");
   resolves("dot-field", million);
+  // The counted words, cut before a clause that runs on; the largest count, borrowing a sibling's noun.
+  assert.equal(capabilityParams("dot-field", beat("Developers pushed over four thousand projects that called the model.")).label, "projects");
+  assert.deepEqual(capabilityParams("dot-field", beat("The window doubled, from 200 thousand tokens to 400 thousand.")), { count: 400000, label: "tokens", legend: "1 dot = 1 token", variant: "pull-back" });
+  // A measure is not a count of things.
+  assert.equal(capabilityParams("dot-field", beat("The post was shared ninety thousand times.")), null);
+  assert.equal(capabilityParams("dot-field", beat("The run used 120 gigawatt hours of electricity.")), null);
   // Never a count it was not given: money, shares, multiples, too small or too big, or nothing counted.
   for (const text of ["It raised $1,050,000 last week.", "It scored 60% on the hard set.", "Costs fell 9x per task.", "Only 40 people came.", "It cost 3.2 billion dollars.", "The launch landed without warning."]) assert.equal(capabilityParams("dot-field", beat(text)), null, text);
 });

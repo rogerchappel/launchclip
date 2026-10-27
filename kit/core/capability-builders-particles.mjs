@@ -32,6 +32,11 @@ const FIELD = { min: 100, max: 2_000_000 };
 // particle-text needs 140 px tall LEDs: in a 9:16 rect (860 px wide) that is
 // at most 43 dot-matrix columns, so about seven letters.
 const MAX_COLUMNS = 43;
+// Count labels: a clause that runs on after the counted noun, trailing filler,
+// and measures that are not countable things.
+const RUNS_ON = new Set(['that', 'which', 'who', 'to', 'into', 'over', 'from', 'by', 'across', 'per', 'than', 'is', 'are', 'was', 'were', 'has', 'had', 'uses', 'used', 'called']);
+const FILLER = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'for', 'with']);
+const MEASURES = new Set(['times', 'dollars', 'euros', 'pounds', 'hours', 'minutes', 'seconds', 'days', 'weeks', 'months', 'years', 'percent', 'gigawatt', 'megawatt', 'kilowatt', 'miles', 'kilometres', 'kilometers', 'pages']);
 // The fact extractor's scale words, written compact.
 const COMPACT = { thousand: 'K', k: 'K', million: 'M', m: 'M', billion: 'B', bn: 'B', b: 'B', trillion: 'T', t: 'T' };
 
@@ -63,17 +68,32 @@ export function particlesBuilders(h) {
     return at < 0 || !/^[\p{L}]/u.test(beat.text.slice(at + raw.length));
   };
 
-  // The clause's own count of things: a whole number of units (1,050,000 tokens;
-  // 2 million users), not money, a share or a multiple, with the words that say
-  // what is counted. null when there is none.
+  // What a count counts: the words after it, cut before a clause that runs on
+  // ("projects that called the …" → "projects") and without trailing filler.
+  const countedOf = (label) => {
+    const words = String(label ?? '').split(/\s+/).filter(Boolean);
+    const cut = words.findIndex((word, i) => i > 0 && RUNS_ON.has(word.toLowerCase()));
+    const kept = cut < 0 ? words : words.slice(0, cut);
+    while (kept.length && FILLER.has(kept.at(-1).toLowerCase())) kept.pop();
+    return kept.length && !MEASURES.has(kept[0].toLowerCase()) ? kept.join(' ') : null;
+  };
+
+  // The clause's own count of things: the largest whole number of units
+  // (1,050,000 tokens; 2 million users), not money, a share, a multiple or a
+  // measure (hours, dollars), with the words that say what is counted, its
+  // own or a sibling's ("from 200 thousand tokens to 400 thousand").
+  // null when there is none.
   const countOf = (beat) => {
-    for (const entry of h.numbersOf(beat)) {
+    const numbers = h.numbersOf(beat).filter((entry) => !entry.prefix && entry.unit !== '%' && entry.unit !== '×' && whole(beat, entry));
+    const named = numbers.map((entry) => countedOf(entry.label)).find(Boolean);
+    let best = null;
+    for (const entry of numbers) {
       const value = entry.scaled ?? entry.value;
-      if (entry.prefix || entry.unit === '%' || entry.unit === '×' || !Number.isInteger(value)) continue;
-      if (value < FIELD.min || value > FIELD.max || !entry.label) continue;
-      return { value, label: entry.label };
+      if (!Number.isInteger(value) || value < FIELD.min || value > FIELD.max) continue;
+      const label = entry.label ? countedOf(entry.label) : named;
+      if (label && (!best || value > best.value)) best = { value, label };
     }
-    return null;
+    return best;
   };
 
   // The tokenizer's split: {text, tokens, models} that joins back to its text.
