@@ -216,6 +216,32 @@ function besidePlacement(from, direction, { spacing, rotate = 0 }, size) {
   return placeAt({ x: centre.x + ox * Math.cos(r) - oy * Math.sin(r), y: centre.y + ox * Math.sin(r) + oy * Math.cos(r) }, next, from.rotation + rotate, size);
 }
 
+// Axis-aligned world box of a placement's corners.
+function placementBox(placement, size) {
+  const points = [[0, 0], [size.width, 0], [0, size.height], [size.width, size.height]].map(([x, y]) => worldPoint(placement, { x, y }));
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+
+function overviewPlacement(from, direction, span, others, { spacing }, size) {
+  const list = span.length ? span : [from];
+  const scale = Math.max(...list.map((placement) => placement.scale));
+  const boxes = list.map((placement) => placementBox(placement, size));
+  const box = { x0: Math.min(...boxes.map((b) => b.x0)), y0: Math.min(...boxes.map((b) => b.y0)), x1: Math.max(...boxes.map((b) => b.x1)), y1: Math.max(...boxes.map((b) => b.y1)) };
+  const w = size.width * scale, h = size.height * scale, at = placementCentre(from, size);
+  const across = (lo, hi, value, half) => (hi - lo >= 2 * half ? Math.min(hi - half, Math.max(lo + half, value)) : (lo + hi) / 2);
+  const centreFor = (side) => {
+    if (side === 'right') return { x: box.x1 + spacing * w + w / 2, y: across(box.y0, box.y1, at.y, h / 2) };
+    if (side === 'left') return { x: box.x0 - spacing * w - w / 2, y: across(box.y0, box.y1, at.y, h / 2) };
+    if (side === 'down') return { x: across(box.x0, box.x1, at.x, w / 2), y: box.y1 + spacing * h + h / 2 };
+    return { x: across(box.x0, box.x1, at.x, w / 2), y: box.y0 - spacing * h - h / 2 };
+  };
+  const sides = [direction, ...['right', 'down', 'left', 'up'].filter((side) => side !== direction)];
+  const candidates = sides.map((side) => placeAt(centreFor(side), scale, 0, size));
+  const clear = (candidate) => { const c = placementBox(candidate, size); return others.every((other) => { const b = placementBox(other, size); return c.x1 <= b.x0 + 1e-6 || c.x0 >= b.x1 - 1e-6 || c.y1 <= b.y0 + 1e-6 || c.y0 >= b.y1 - 1e-6; }); };
+  return candidates.find(clear) ?? candidates[0];
+}
+
 function dollyFactor(rect, { width, height }) {
   if (!rect || !(rect.width > 0 && rect.height > 0)) return DOLLY.min;
   return Math.min(DOLLY.max, Math.max(DOLLY.min, Math.min(width / rect.width, height / rect.height)));
@@ -277,14 +303,11 @@ export function worldLayout(story, windows, { objects = () => null } = {}) {
         const direction = transition.direction ?? layoutDirection(camera.layout, moves, plates.length);
         const type = transition.type;
         if (type === 'pan' || type === 'whip-pan') placement = besidePlacement(from, direction, { spacing: camera.spacing }, size);
-        // An overview lands on a shot beside the last one, like a pan, on a
-        // side no earlier shot takes: the camera shows them all at once.
-        else if (type === 'overview') {
-          const sides = [direction, ...['right', 'down', 'left', 'up'].filter((side) => side !== direction)];
-          const taken = [...placements.values()].map((other) => placementCentre(other, size));
-          const free = (candidate) => { const c = placementCentre(candidate, size); return taken.every((other) => Math.hypot(other.x - c.x, other.y - c.y) > Math.min(size.width, size.height) * candidate.scale * 0.5); };
-          placement = sides.map((side) => besidePlacement(from, side, { spacing: camera.spacing }, size)).find(free) ?? besidePlacement(from, direction, { spacing: camera.spacing }, size);
-        }
+        // An overview lands beside the whole span it frames (outside its
+        // bounding box, at the span's largest scale), on the first side no
+        // earlier shot takes, so the map never stacks two shots and a shot
+        // pushed deep inside another does not shrink the incoming one.
+        else if (type === 'overview') placement = overviewPlacement(from, direction, (entry.transitionIn?.span ?? [previous.id]).map((id) => placements.get(id)).filter(Boolean), [...placements.values()], { spacing: camera.spacing }, size);
         else if (type === 'orbit') placement = besidePlacement(from, direction, { spacing: camera.spacing, rotate: direction === 'left' || direction === 'up' ? -ORBIT_DEGREES : ORBIT_DEGREES }, size);
         else if (type === 'push' || type === 'pull') {
           const [sceneId, name] = typeof transition.from_object === 'string' ? transition.from_object.split('.') : [previous.id, null];

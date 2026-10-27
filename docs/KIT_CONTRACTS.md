@@ -1770,10 +1770,12 @@ beat, then dives into the incoming shot. World mode only.
 - `hold`: seconds at the wide frame (default 0.6, at most `dur − 1`). The rest
   of `dur` splits evenly into the move out and the move in, both with the
   grammar's camera ease.
-- Placement: the incoming shot sits beside the outgoing one like a pan (its
-  `direction`, else the layout's), on the first side (`direction`, right,
-  down, left, up) that no earlier shot takes, so the map never stacks two
-  shots.
+- Placement: the incoming shot sits beside the whole span, just outside its
+  bounding box (`camera.spacing` away) at the span's largest scale, level with
+  the outgoing shot, on the first side (its `direction`, else the layout's,
+  then right, down, left, up) whose box no earlier shot overlaps. So the map
+  never stacks two shots, and a shot pushed deep inside another does not
+  shrink the incoming one.
 - Framing (`overviewFrame`, `kit/core/camera-world.mjs`): the bounding box of
   the span's placements plus the incoming one, with `OVERVIEW.margin` (8 %)
   around it. The zoom-out is capped at `OVERVIEW.cap` (6×) past the incoming
