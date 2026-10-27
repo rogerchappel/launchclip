@@ -38,6 +38,9 @@ export const SAMPLES = Object.freeze({
   'map-highlight': {title: 'Where LaunchClip renders most', highlight: [{country: 'France', value: '18%'}, {country: 'Germany', value: '24%'}, {country: 'Spain', value: '9%'}, {country: 'UK', label: 'UK', value: '14%'}], source: 'Render logs, Oct 2026'},
   'unit-grid': {title: '49 trained lifters', count: 49, groups: [{count: 24, label: 'Heavy: 8–12 reps', tone: 'primary'}, {count: 25, label: 'Light: 20–25 reps', tone: 'accent'}]},
   'number-line': {from: 1, to: 25, unit: 'reps', ranges: [{from: 8, to: 12, label: '= SIZE', tone: 'good'}, {from: 15, to: 25, label: '= JUST CARDIO', tone: 'bad'}]},
+  'logo-sting': {name: 'Signal Lab', tagline: 'AI, explained weekly'},
+  'subscribe-cta': {name: 'Signal Lab'},
+  'channel-watermark': {name: 'Signal Lab'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 
