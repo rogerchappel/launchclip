@@ -197,3 +197,20 @@ test('a whole launchclip.capture.v1 record can be the source; its other fields a
   assert.equal(model.content.post.source.screenshot, 'assets/captures/ada.png');
   assert.throws(() => resolve('social-post', {name: 'Ada', handle: 'ada', text: 'Hello', source: 'https://x.com'}), /source must be an object/);
 });
+
+test('a hero post fills its rect: 90% of the safe width in 16:9, all of a given rect, type in proportion', () => {
+  const wide = resolve('social-post', DEMO_POSTS.kai, '16:9');
+  assert.ok(wide.content.width >= wide.rect.width * 0.89, `card ${wide.content.width} of ${wide.rect.width}`);
+  assert.ok(wide.content.s.bs > 60, `body ${wide.content.s.bs}`);
+  assert.equal(wide.content.s.avatar, Math.round(wide.content.s.bs * 1.8 * 100) / 100, 'the initials avatar scales with the type');
+  const rect = {x: 330, y: 200, width: 1260, height: 560};
+  const inRect = resolve('social-post', {...DEMO_POSTS.kai, rect}, '16:9');
+  assert.equal(inRect.content.width, 1260);
+  assert.equal(resolve('social-post', DEMO_POSTS.kai, '9:16').content.width, resolve('social-post', DEMO_POSTS.kai, '9:16').rect.width);
+  // An image below the text narrows the card instead of failing.
+  const media = resolve('social-post', {...DEMO_POSTS.kai, media: {image: 'assets/screens/dashboard.png'}}, '16:9');
+  assert.ok(media.content.width < media.rect.width * 0.9 && media.content.s.height <= media.rect.height);
+  // The stack's front card follows the same rule.
+  const stack = resolve('social-stack', SAMPLES['social-stack'], '16:9');
+  assert.ok(stack.content.width >= stack.rect.width * 0.89 && stack.content.metrics[stack.content.focus].bs > 60);
+});

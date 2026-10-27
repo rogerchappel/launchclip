@@ -280,6 +280,27 @@ export function fitCard(b, post, width, maxH, preferred, path) {
   return b.check.fail(path, `does not fit: the card needs more than ${Math.round(maxH)} px at ${Math.ceil(b.min.key)} px text; quote a shorter excerpt (mark cuts with …), drop media or give fewer posts`);
 }
 
+/**
+ * A hero card fills its rect: the full width of params.rect, else 90% of the
+ * safe area in 16:9 (all of it in 9:16), with body text in proportion to that
+ * width (4.2%, at most 72 px, never below the module's old default), shrunk
+ * only as far as the height needs; a card still too tall narrows, keeping
+ * its proportions, down to 40% of the rect.
+ */
+export function heroCard(b, post, maxH, path, {preferred = b.u(b.portrait ? 54 : 50), fill = 0.9} = {}) {
+  const W = b.rect.width;
+  const full = r2(b.portrait || b.params.rect !== undefined ? W : W * fill);
+  // A tall post (an image below the text) narrows until it fits, down to 40% of the rect.
+  for (let width = full; width >= Math.min(full, W * 0.4) - 1e-6; width = r2(width - W * 0.05)) {
+    const size = Math.max(preferred, Math.min(b.u(72), width * 0.042));
+    for (let bs = Math.floor(size); bs >= Math.ceil(b.min.key); bs -= 2) {
+      const s = cardMetrics(b, post, width, bs);
+      if (s.height <= maxH) return s;
+    }
+  }
+  return fitCard(b, post, full, maxH, preferred, path);
+}
+
 // ---------------------------------------------------------------------------
 // Card view
 
@@ -541,10 +562,11 @@ function postResolve(params, ctx) {
   const focus = b.params.focus === undefined ? b.params.focusAt !== undefined : check.bool(b.params.focus, 'params.focus');
 
   const W = rect.width;
-  const width = r2(b.portrait ? W : Math.min(W, u(1240)));
+
   const sourceSize = r2(Math.max(b.min.meta, u(26)));
   const sourceH = r2(sourceSize * 1.3 + u(22));
-  const s = fitCard(b, post, width, rect.height - sourceH - u(40), u(b.portrait ? 54 : 50), 'params.text');
+  const s = heroCard(b, post, rect.height - sourceH - u(40), 'params.text');
+  const width = s.width;
 
   const buildAt = b.timeOf('build', b.params.at, 'params.at', 0.2, {min: 0});
   const buildEnd = rt(buildAt + 0.9);
@@ -661,12 +683,14 @@ function stackResolve(params, ctx) {
   const src = sourceBlock(b);
   const W = rect.width, H = rect.height - src.h;
   const cascade = b.variant === 'cascade';
-  const width = r2(b.portrait ? W : Math.min(W, u(cascade ? 1180 : 1080)));
+  let width = r2(b.portrait ? W : Math.min(W, u(1080)));
   const peek = r2(u(b.portrait ? 64 : 52));
   const gap = r2(u(28));
   let metrics;
   if (cascade) {
-    const front = fitCard(b, posts[focus], width, H - (n - 1) * peek, u(b.portrait ? 52 : 48), `params.posts[${focus}].text`);
+    // The front card is the hero: it fills the rect as a single post does.
+    const front = heroCard(b, posts[focus], H - (n - 1) * peek, `params.posts[${focus}].text`, {preferred: u(b.portrait ? 52 : 48)});
+    width = front.width;
     metrics = posts.map((post, i) => (i === focus ? front : cardMetrics(b, post, width, front.bs)));
   } else {
     // The focused card keeps key-size text; the others are compact and shrink
