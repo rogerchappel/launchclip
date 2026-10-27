@@ -100,7 +100,7 @@
          "until": 10.94,
          "word": "keynote",
          "element": "step Keynote",
-         "target": 0
+         "target": "node-0"
         }
        ]
       },
@@ -558,7 +558,7 @@
          "until": 90.765,
          "word": "expensive",
          "element": "step Expensive",
-         "target": 1
+         "target": "node-1"
         }
        ]
       }
@@ -944,7 +944,7 @@
          "until": 155.455,
          "word": "remember more",
          "element": "step Remember more",
-         "target": 1
+         "target": "node-1"
         }
        ]
       }
@@ -2152,7 +2152,7 @@
          "until": 337.397,
          "word": "wait",
          "element": "step They wait",
-         "target": 1
+         "target": "node-1"
         }
        ]
       }
@@ -3206,7 +3206,7 @@
          "until": 520.37,
          "word": "hardware",
          "element": "step Hardware",
-         "target": 0
+         "target": "node-0"
         }
        ]
       },
@@ -4944,7 +4944,7 @@
          "until": 811.673,
          "word": "benchmark chart second",
          "element": "step Benchmark chart second",
-         "target": 1
+         "target": "node-1"
         }
        ]
       }
