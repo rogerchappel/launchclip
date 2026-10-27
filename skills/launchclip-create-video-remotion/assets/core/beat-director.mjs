@@ -33,6 +33,7 @@ import { cadenceGate, cadenceTarget, eventStats } from './cadence.mjs';
 import { DIRECTION_SCHEMA, classifyIntent, narrationWords } from './direction.mjs';
 import { longFormChunks } from './long-form.mjs';
 import { TRANSITION_TYPES } from './transitions.mjs';
+import { ZOOM as STORY_ZOOM } from './zooms.mjs';
 import { catalogModules, knownModules, moduleVariants, resolveModule } from './modules.mjs';
 import { MAX_SHOT_STATES, stateSpec } from './shot-states.mjs';
 import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, isPlanned, keyTerms, resolveCapability } from './visual-capabilities.mjs';
@@ -1470,8 +1471,8 @@ export function beatMapToStory(map, options = {}) {
     for (const [scene, zooms] of pendingZooms) {
       if (scene.end - scene.start < 3) continue;
       const after = scene.start + (scene.in?.dur ?? 0) + 0.3;
-      const kept = zooms.map((zoom) => ({ at: round(zoom.at - from), until: round(zoom.until - from), ...(zoom.target !== undefined ? { target: zoom.target } : { box: zoom.box }) }))
-        .filter((zoom) => zoom.at >= after && zoom.until <= scene.end - 0.2);
+      const kept = zooms.map((zoom) => ({ at: round(zoom.at - from), until: round(zoom.until - from), ...(zoom.target !== undefined ? { target: zoom.target } : { box: zoom.box }), ...(zoom.scale !== undefined ? { scale: zoom.scale } : {}) }))
+        .filter((zoom) => zoom.at >= after && zoom.until <= scene.end - STORY_ZOOM.move.max + 1e-6);
       if (kept.length) scene.zooms = kept;
     }
   }

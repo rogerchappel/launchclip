@@ -146,16 +146,16 @@ The director shows what the research supports, says what the narration says, and
   - a token;
   - a word on the focused diff line.
 
-  A value match beats a label match. A label made only of filler words ("Of them") never matches. The 7 state-target modules (`shot-states.mjs` `STATE_MODULES`) get `target` (the item index). The rest get a `box`: the union of the element rects in the resolved view, padded, inside the card. A box that covers more than half the card is dropped. So is a card with only one bar, row or group, because that zoom would be the whole card.
+  A value match beats a label match. A label made only of filler words ("Of them") never matches. The 7 state-target modules (`shot-states.mjs` `STATE_MODULES`) get `target` (the item index), as long as the rect the kit measures for it (`modules.mjs` `zoomRects`) lands in the safe area. The rest, and those targets, get a `box`: the union of the element rects in the resolved view, padded, inside the card, cropped from the left when it is wider than the safe area takes at the least zoom. It carries a lower `scale` when the kit's default would leave the safe area (`zooms.mjs` `zoomFrame`, `zoomFitError`). A box that covers more than half the card is dropped. So is a card with only one bar, row or group, because that zoom would be the whole card.
 
-  Rules:
+  Rules, on the kit's zoom timing (`zooms.mjs` `ZOOM`: a move of up to 0.8 s, then a hold of at least 1.2 s):
   - The zoom starts 0.6 s after the card's entry move.
-  - It eases out (`until`) after 2.2 s, at least 0.5 s before the card ends.
-  - Two zooms on one card have a zoom-out of at least 0.6 s between them, and a card takes at most two.
+  - It eases out (`until`) 2.4 s later, and at least 0.8 s before the card ends, so it needs at least 2.0 s.
+  - Two zooms on one card have a 0.8 s zoom-out between them, and a card takes at most two.
   - No card under 3 s gets one.
   - Zooms are at least 12 s apart, and at most 3 fall in any minute.
 
-  The rate is capped at 3 a minute, but the real rate depends on how many cards show items. The 16-minute fixture, mostly title cards, gets 0.74 a minute.
+  The rate is capped at 3 a minute, but the real rate depends on how many cards show items. The 16-minute fixture, mostly title cards, gets 0.68 a minute.
 - **Overviews.** Each chapter of 4 or more shots gets one, except the cold open (chapter 1 of several). It sits on the shot that a recap line ("Either way…", "So…", "That is…") in the chapter's back half opens, or on the chapter's next shot after that line. With no recap line, it goes on the first shot of the next chapter. Its shape is `shot.camera = {type: 'overview', dur: 2.6, span: 'chapter', hold: 0.6, chapter}`. There is at most one a minute, and never one into the story's first shot.
 - **Report.** The summary line counts zooms and overviews. A `camera:` line gives the entry mix, the longest push-in run and the zoom rate, followed by one line per zoom and per overview (`map.report.camera`).
 - **Stories.** On a long-form map, `beatMapToStory` writes `camera: {mode: 'world', layout: 'path', spacing: 0.14, parallax: true}`:

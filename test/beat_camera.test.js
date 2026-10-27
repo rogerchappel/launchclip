@@ -11,6 +11,7 @@ import { resolveModule } from "../kit/core/modules.mjs";
 import { STATE_MODULES } from "../kit/core/shot-states.mjs";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
 import { TRANSITION_TYPES } from "../kit/core/transitions.mjs";
+import { shotZooms } from "../kit/core/zooms.mjs";
 
 const script = readFileSync(path.resolve("test/fixtures/beat-camera-script.md"), "utf8");
 const timed = dryRunWords(script, { wpm: 155 });
@@ -99,8 +100,8 @@ test("zooms: a line naming a value or label on screen zooms to that element, tim
     assert.ok(spot, `${card.state.module}: ${zoom.element}`);
     const said = spoken(word.text);
     assert.ok(spot.values.includes(said.value) || spot.labels.some((label) => label.toLowerCase().split(/\s+/).some((part) => spoken(part).text === said.text)), `${zoom.word} names ${zoom.element}`);
-    // target on a state module, a box inside the card's rect elsewhere.
-    if (STATE_MODULES[card.state.module]) assert.ok(Number.isInteger(zoom.target), card.state.module);
+    // target on a state module (unless the kit's rect for it cannot fit the safe area), a box inside the card's rect elsewhere.
+    if (zoom.target !== undefined) assert.ok(STATE_MODULES[card.state.module] && Number.isInteger(zoom.target), card.state.module);
     else {
       assert.equal(zoom.target, undefined);
       assert.ok(zoom.box.x >= 0 && zoom.box.y >= 0 && zoom.box.x + zoom.box.width <= 1920 && zoom.box.y + zoom.box.height <= 1080, JSON.stringify(zoom.box));
@@ -109,6 +110,14 @@ test("zooms: a line naming a value or label on screen zooms to that element, tim
   const named = zooms.map(({ zoom, card }) => `${card.state.module}:${zoom.word}`);
   assert.ok(named.includes("number-line:49.8%"), named.join(", "));
   assert.ok(named.includes("bar-chart:Lyra"), named.join(", "));
+  // Every zoom lands in the kit's safe area, so none is dropped at render.
+  const story = beatMapToStory(map, { captions: false });
+  const resolved = resolveStory(story, { words: windowWords(timed.words, 0, map.duration) });
+  for (const scene of resolved.scenes.filter((entry) => entry.zooms)) {
+    const out = shotZooms(resolved, { id: scene.id, scene }, resolveModule(scene, resolved).zoomRects);
+    assert.deepEqual(out.warnings, []);
+    assert.equal(out.zooms.length, scene.zooms.length);
+  }
 });
 
 test("zooms: clear of the entry move, eased out before the next, none on cards under 3 s, at most 3 a minute", () => {
@@ -193,7 +202,7 @@ test("camera: beatMapToStory writes a valid world-camera story with each shot's 
     assert.ok(scene.end - scene.start >= 3);
     for (const zoom of scene.zooms) {
       assert.ok(zoom.at >= scene.start + (scene.in?.dur ?? 0) && zoom.until <= scene.end, `${scene.id} ${JSON.stringify(zoom)}`);
-      assert.deepEqual(Object.keys(zoom).sort(), ["at", "until", "target" in zoom ? "target" : "box"].sort());
+      assert.deepEqual(Object.keys(zoom).filter((key) => key !== "scale").sort(), ["at", "until", "target" in zoom ? "target" : "box"].sort());
     }
   }
   // A window shifts the zooms onto its own clock and drops the overviews it cannot map.

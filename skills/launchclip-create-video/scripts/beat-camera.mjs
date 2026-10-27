@@ -14,7 +14,8 @@
 // never a third (a pull, a whip-pan or an orbit), so the world zoom stays in
 // range.
 //
-// Zooms (state.zooms on the first state of a card, absolute seconds): a
+// Zooms (state.zooms on the first state of a card, absolute seconds, on the
+// kit's zoom timing and safe area, kit/core/zooms.mjs): a
 // word that names a bar's label or value, a table row, a grid's count, a
 // token or the focused diff line, while the card that shows it is up. A
 // state-target module (shot-states.mjs STATE_MODULES) gets `target`, the rest
@@ -32,13 +33,18 @@
 
 import { catalogBView } from './catalog-b.mjs';
 import { catalogHView } from './catalog-h.mjs';
-import { resolveModule } from './modules.mjs';
+import { resolveModule, zoomRects } from './modules.mjs';
 import { STATE_MODULES, indexView } from './shot-states.mjs';
+import { ZOOM as STORY_ZOOM, zoomFitError, zoomFrame } from './zooms.mjs';
 
 // Entry moves and their durations (the reference cut's).
+const round = (value, places = 3) => { const f = 10 ** places; return Math.round(value * f) / f; };
+
 export const ENTRY = Object.freeze({ push: 0.55, pull: 0.6, 'whip-pan': 0.45, orbit: 0.6 });
 export const OVERVIEW = Object.freeze({ dur: 2.6, hold: 0.6, minShots: 4, gap: 60 });
-export const ZOOM = Object.freeze({ perMinute: 3, gap: 12, minCard: 3, settle: 0.6, hold: 2.2, minHold: 1.8, tail: 0.5, between: 0.6, perCard: 2, maxArea: 0.5, pad: 24 });
+// Zoom timing on the kit's terms (zooms.mjs): its longest move, the hold after it, and that move again to ease out.
+const MOVE = STORY_ZOOM.move.max;
+export const ZOOM = Object.freeze({ perMinute: 3, gap: 12, minCard: 3, settle: 0.6, hold: round(MOVE + STORY_ZOOM.hold + 0.4), minHold: round(MOVE + STORY_ZOOM.hold), tail: MOVE, between: MOVE, perCard: 2, maxArea: 0.5, pad: 24 });
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
 const EXTENDS = new Set(['focus', 'hold', 'guide']);
 const STRUCTURE = new Set(['cta', 'sting']);
@@ -48,7 +54,6 @@ const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'in', 'on', 'to', 'fo
 // The director's default brand (beat-director.mjs DEFAULT_BRAND): element rects do not depend on colours.
 const BRAND = Object.freeze({ colors: { bg: '#070b14', primary: '#5ee6ff', accent: '#ffb347', ink: '#070b14', paper: '#eef4ff' }, fonts: { display: 'space-grotesk', body: 'space-grotesk', meta: 'jetbrains-mono' } });
 
-const round = (value, places = 3) => { const f = 10 ** places; return Math.round(value * f) / f; };
 
 function familyOf(kind) {
   if (['list', 'process', 'concept', 'chain', 'lineage', 'family', 'grid'].includes(kind)) return 'idea';
@@ -113,12 +118,26 @@ function boxOf(found, ids) {
   const rects = ids.map((id) => found.index.byId.get(`z-${id}`)).filter((entry) => entry && Number.isFinite(entry.width) && Number.isFinite(entry.height) && entry.width > 0 && entry.height > 0);
   if (!rects.length) return null;
   const { rect } = found.model;
-  const x0 = Math.max(rect.x, Math.min(...rects.map((r) => r.ax)) - ZOOM.pad), y0 = Math.max(rect.y, Math.min(...rects.map((r) => r.ay)) - ZOOM.pad);
-  const x1 = Math.min(rect.x + rect.width, Math.max(...rects.map((r) => r.ax + r.width)) + ZOOM.pad), y1 = Math.min(rect.y + rect.height, Math.max(...rects.map((r) => r.ay + r.height)) + ZOOM.pad);
+  let x0 = Math.max(rect.x, Math.min(...rects.map((r) => r.ax)) - ZOOM.pad), y0 = Math.max(rect.y, Math.min(...rects.map((r) => r.ay)) - ZOOM.pad);
+  let x1 = Math.min(rect.x + rect.width, Math.max(...rects.map((r) => r.ax + r.width)) + ZOOM.pad);
+  let y1 = Math.min(rect.y + rect.height, Math.max(...rects.map((r) => r.ay + r.height)) + ZOOM.pad);
   if (x1 - x0 < 8 || y1 - y0 < 8) return null;
+  // Wider or taller than the safe area takes at the least zoom: keep its left (where a line or label starts) and its middle.
+  const room = (side) => ((1 - 2 * STORY_ZOOM.safe) * side) / (STORY_ZOOM.min + 0.05);
+  const { width: W, height: H } = found.model.canvas ?? { width: rect.x * 2 + rect.width, height: rect.y * 2 + rect.height };
+  x1 = Math.min(x1, x0 + room(W));
+  if (y1 - y0 > room(H)) { const mid = (y0 + y1) / 2; y0 = mid - room(H) / 2; y1 = mid + room(H) / 2; }
   // A box that is most of the card is no zoom at all.
   if (((x1 - x0) * (y1 - y0)) / (rect.width * rect.height) > ZOOM.maxArea) return null;
   return { x: round(x0, 1), y: round(y0, 1), width: round(x1 - x0, 1), height: round(y1 - y0, 1) };
+}
+
+/** The scale a box zooms at: undefined (the kit's default) when that lands in the safe area, else the largest that does, else null. */
+function fitScale(box, size) {
+  const auto = zoomFrame(box, undefined, size);
+  if (!zoomFitError(auto, size)) return undefined;
+  for (let s = Math.floor(auto.scale * 20) / 20; s >= STORY_ZOOM.min - 1e-9; s = round(s - 0.05, 2)) if (!zoomFitError(zoomFrame(box, s, size), size)) return s;
+  return null;
 }
 
 /**
@@ -133,9 +152,13 @@ export function zoomSpots(state, { format = { width: 1920, height: 1080 }, brand
   const spots = [];
   const found = () => (found.cache ??= viewIndex(module, p, { format, brand, seconds }));
   const add = (spot, ids) => {
-    const box = boxOf(found(), ids);
-    if (spot.target !== undefined && state0) spots.push({ ...spot, ...(box ? { box } : {}) });
-    else if (box) spots.push({ ...spot, box });
+    let box = boxOf(found(), ids);
+    // A box that cannot land in the safe area at any scale is no zoom; one that fits only lower carries its scale.
+    const scale = box ? fitScale(box, format) : null;
+    if (scale === null) box = null;
+    const fit = box && scale !== undefined ? { scale } : {};
+    if (spot.target !== undefined && state0) spots.push({ ...spot, ...(box ? { box, ...fit } : {}) });
+    else if (box) spots.push({ ...spot, box, ...fit });
   };
   if (module === 'bar-chart' && Array.isArray(p.data) && p.data.length >= 2) {
     p.data.forEach((bar, i) => add({ name: `bar ${bar.label}`, labels: [bar.label], values: [numberIn(bar.value)], target: i }, [`bar-${i}`, `label-${i}`, `value-${i}`]));
@@ -166,7 +189,20 @@ export function zoomSpots(state, { format = { width: 1920, height: 1080 }, brand
       add({ name: `line ${focus.row + 1}`, labels: distinctive(text), values: [] }, [`card-row-${focus.row}`]);
     }
   }
-  return spots.filter((spot) => spot.labels.some(Boolean) || spot.values.some((v) => v !== null));
+  // A target zooms on the rect the kit measures for it (modules.mjs zoomRects): one that cannot land in the
+  // safe area zooms on the spot's own box instead, or not at all.
+  const named = spots.filter((spot) => spot.labels.some(Boolean) || spot.values.some((v) => v !== null));
+  if (!named.some((spot) => spot.target !== undefined) || !found()?.model) return named;
+  let rects = null;
+  try { rects = zoomRects({ module, zooms: named.map((spot) => (spot.target !== undefined ? { at: 1, target: spot.target } : { at: 1, box: spot.box })) }, found().model); } catch { rects = null; }
+  return named.flatMap((spot, i) => {
+    if (spot.target === undefined) return [spot];
+    const rect = rects?.[i]?.rect;
+    if (rect && rect.width > 0 && rect.height > 0 && !zoomFitError(zoomFrame(rect, undefined, format), format)) { const { box, scale, ...rest } = spot; return [rest]; }
+    if (!spot.box) return [];
+    const { target, ...rest } = spot;
+    return [rest];
+  });
 }
 
 /** Where the words in [a, b] name a spot: [{at, word, spot, value: boolean}]. */
@@ -279,9 +315,10 @@ export function planCamera(map, words, { format = map.format ?? { width: 1920, h
     if (taken.filter((zoom) => candidate.at - zoom.at < 60).length >= ZOOM.perMinute) continue;
     const mine = onCard.get(card) ?? [];
     if (mine.length >= ZOOM.perCard || mine.some((zoom) => zoom.spot === spot) || (mine.length && candidate.at < mine.at(-1).until + ZOOM.between)) continue;
-    const until = round(Math.min(candidate.at + ZOOM.hold, card.end - ZOOM.tail));
+    // Rounded down, so it never runs into the ease-out the kit keeps before the card ends.
+    const until = Math.floor(Math.min(candidate.at + ZOOM.hold, card.end - ZOOM.tail) * 1000) / 1000;
     if (until - candidate.at < ZOOM.minHold) continue;
-    const zoom = { at: round(candidate.at), until, word: candidate.word, element: spot.name, ...(spot.target !== undefined ? { target: spot.target } : { box: spot.box }) };
+    const zoom = { at: round(candidate.at), until, word: candidate.word, element: spot.name, ...(spot.target !== undefined ? { target: spot.target } : { box: spot.box }), ...(spot.scale !== undefined ? { scale: spot.scale } : {}) };
     taken.push({ ...zoom, spot, card });
     onCard.set(card, [...mine, { ...zoom, spot }]);
     (card.state.zooms ??= []).push(zoom);
