@@ -45,7 +45,32 @@ export class EvidenceBlockedError extends Error {
 }
 
 const SHOT_SCALE = 2;
-const MAX_PAGE_HEIGHT = 7600; // CSS px: 2× stays inside Chromium's 16k texture limit
+const TILE = 4000;          // CSS px per screenshot tile: 2× stays inside Chromium's 16k texture limit
+const MAX_REGION = 16000;   // CSS px of page one clip may cover (beats further apart belong in two captures)
+const MAX_DEPTH = 120000;   // CSS px down the page a target may sit
+const TOP_REACH = 9000;     // beats that all end above this play from the page top
+
+/**
+ * The slice of the page a clip needs, {y0, y1} in CSS px. Beats near the top
+ * play from the top, as before. Deeper beats open just above the first target,
+ * as if the reader had followed an anchor there, so a target 30,000 px down
+ * needs no 30,000 px scroll. `start` forces "top" or "target".
+ */
+export function captureRegion(rects, { docHeight, win, start = "auto" }) {
+  const tops = rects.map((r) => r.y), bottoms = rects.map((r) => r.y + r.height);
+  const lowest = Math.max(0, ...bottoms), highest = tops.length ? Math.min(...tops) : 0;
+  const fromTop = start === "top" || (start === "auto" && lowest + win.height * 1.2 <= TOP_REACH);
+  const y0 = fromTop ? 0 : Math.max(0, Math.round(highest - win.height * 0.3));
+  const y1 = Math.round(Math.min(docHeight, Math.max(y0 + win.height, lowest + win.height * 1.2)));
+  return { y0, y1: Math.max(y1, Math.min(docHeight, y0 + win.height)) };
+}
+
+/** A region cut into screenshot tiles of at most TILE px: [{y, height}]. */
+export function regionTiles({ y0, y1 }, tile = TILE) {
+  const out = [];
+  for (let y = y0; y < y1; y += tile) out.push({ y, height: Math.min(tile, y1 - y) });
+  return out;
+}
 
 /** Throw unless `url` is a public http(s) page (evidence never points at a local or private host). */
 export function assertPublicUrl(url) {
@@ -173,19 +198,21 @@ async function pageSummary(page, { requested, status }) {
 
 const FREEZE_CSS = "*,*::before,*::after{animation-play-state:paused!important;animation-delay:-0.0001s!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}::-webkit-scrollbar{display:none!important}";
 
-/** Freeze the page and scroll through `height` px once so lazy content loads. */
-async function freeze(page, height) {
+/** Freeze the page (animations, transitions, carets, media) and scroll through from..to once so lazy content loads. */
+async function freeze(page, to, from = 0) {
   await page.addStyleTag({ content: FREEZE_CSS }).catch(() => {});
-  await page.evaluate(async (until) => {
+  await page.evaluate(async ([start, until]) => {
     for (const media of document.querySelectorAll("video, audio")) { try { media.pause(); } catch {} }
     const step = Math.max(400, innerHeight * 0.8);
-    for (let y = 0; y < until; y += step) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
+    for (let y = start; y < until; y += step) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
     scrollTo(0, 0);
     await new Promise((r) => setTimeout(r, 300));
     await document.fonts?.ready;
-  }, height);
+  }, [from, to]);
   await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
 }
+
+const docHeightOf = (page) => page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
 
 // In the page: a target → [{x, y, width, height}] in page CSS px (scroll 0),
 // with the text a text target matched. Text search runs over the visible text
@@ -320,23 +347,43 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
   const browser = await launch(available);
   try {
     const { context, page, status, consent, title, hidden } = await openEvidencePage(browser, request, { viewport: windowSize, log });
-    let measured, pageSize, html, finalUrl;
+    let measured, pageSize, html, finalUrl, tiles, pageRegion;
     try {
-      const docHeight = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
-      await freeze(page, Math.min(docHeight, MAX_PAGE_HEIGHT));
-      measured = [];
-      for (const beat of request.beats) {
-        if (!beat.target) { measured.push({ ...beat, rects: [] }); continue; }
-        const result = await measureTarget(page, beat.target, `beats[${beat.index}] (${beat.action})`);
-        measured.push({ ...beat, rects: result.rects, text: result.text });
-      }
-      const lowest = Math.max(0, ...measured.flatMap((beat) => beat.rects.map((r) => r.y + r.height)));
-      if (lowest > MAX_PAGE_HEIGHT) throw new Error(`a beat target sits ${Math.round(lowest)} px down the page; evidence capture reaches ${MAX_PAGE_HEIGHT} px. Link to an anchor nearer the target`);
-      const fullHeight = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
-      const height = Math.round(Math.min(MAX_PAGE_HEIGHT, fullHeight, Math.max(windowSize.height, lowest + windowSize.height * 1.2)));
-      pageSize = { width: windowSize.width, height };
+      // Measure, load the slice the beats need, measure again (lazy content above a target can move it).
+      await freeze(page, Math.min(await docHeightOf(page), TOP_REACH));
+      const measureAll = async () => {
+        const out = [];
+        for (const beat of request.beats) {
+          if (!beat.target) { out.push({ ...beat, rects: [] }); continue; }
+          const result = await measureTarget(page, beat.target, `beats[${beat.index}] (${beat.action})`);
+          out.push({ ...beat, rects: result.rects, text: result.text });
+        }
+        return out;
+      };
+      measured = await measureAll().catch(async () => {
+        // A target deeper than the first pass: load the rest of the page, then measure (and fail) for real.
+        await freeze(page, Math.min(await docHeightOf(page), MAX_DEPTH), TOP_REACH);
+        return measureAll();
+      });
+      const rectsOf = (list) => list.flatMap((beat) => beat.rects);
+      const deepest = Math.max(0, ...rectsOf(measured).map((r) => r.y + r.height));
+      if (deepest > MAX_DEPTH) throw new Error(`a beat target sits ${Math.round(deepest)} px down the page; evidence capture reaches ${MAX_DEPTH} px. Link to an anchor nearer the target`);
+      let region = captureRegion(rectsOf(measured), { docHeight: await docHeightOf(page), win: windowSize, start: request.start });
+      await freeze(page, region.y1, region.y0);
+      measured = await measureAll();
+      region = captureRegion(rectsOf(measured), { docHeight: await docHeightOf(page), win: windowSize, start: request.start });
+      if (region.y1 - region.y0 > MAX_REGION) throw new Error(`the beats span ${region.y1 - region.y0} px of page; one clip covers ${MAX_REGION} px. Split them into two capture requests`);
+      // The timeline works in region px: the region's top is the clip's page top.
+      measured = measured.map((beat) => ({ ...beat, pageRects: beat.rects, rects: beat.rects.map((r) => ({ ...r, y: Math.round((r.y - region.y0) * 10) / 10 })) }));
+      pageSize = { width: windowSize.width, height: region.y1 - region.y0 };
       html = await page.content();
-      await page.screenshot({ path: path.join(workDir, "page.png"), clip: { x: 0, y: 0, width: pageSize.width, height }, fullPage: true, animations: "disabled", caret: "hide" });
+      tiles = regionTiles(region);
+      for (const [i, tile] of tiles.entries()) {
+        tile.file = `page-${i}.png`;
+        await page.screenshot({ path: path.join(workDir, tile.file), clip: { x: 0, y: tile.y, width: pageSize.width, height: tile.height }, fullPage: true, animations: "disabled", caret: "hide" });
+        tile.y -= region.y0;
+      }
+      pageRegion = region;
       finalUrl = page.url();
     } finally {
       await context.close().catch(() => {});
@@ -344,9 +391,11 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
     const timeline = buildTimeline({ viewport: request.viewport, chrome, page: pageSize, beats: measured, duration });
     const poster = `${base}.poster.png`;
     log(`rendering ${request.id} (${duration} s)`);
-    const clip = await renderClip(browser, { timeline, workDir, image: "page.png", url: finalUrl, theme: request.theme, out, poster, fps: request.fps, log });
-    const fullpage = `${base}.fullpage.png`, snapshot = `${base}.snapshot.html`;
-    await copyFile(path.join(workDir, "page.png"), fullpage);
+    const clip = await renderClip(browser, { timeline, workDir, images: tiles.map(({ file, y, height }) => ({ src: file, y, height })), url: finalUrl, theme: request.theme, out, poster, fps: request.fps, log });
+    // The shot the clip was drawn from: <id>.fullpage.png, or <id>.fullpage-<n>.png per tile on a tall region.
+    const shots = tiles.map((tile, i) => ({ ...tile, path: tiles.length === 1 ? `${base}.fullpage.png` : `${base}.fullpage-${i}.png` }));
+    for (const shot of shots) await copyFile(path.join(workDir, shot.file), shot.path);
+    const fullpage = shots[0].path, snapshot = `${base}.snapshot.html`;
     await writeFile(snapshot, html);
     const record = {
       schema: SIDECAR_SCHEMA,
@@ -362,17 +411,19 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
       hidden,
       video: rel(dir, out),
       poster: rel(dir, poster),
-      fullpage: { path: rel(dir, fullpage), width: pageSize.width, height: pageSize.height, scale: SHOT_SCALE },
+      fullpage: { path: rel(dir, fullpage), width: pageSize.width, height: pageSize.height, scale: SHOT_SCALE, region: pageRegion,
+        ...(shots.length > 1 ? { tiles: shots.map((shot) => ({ path: rel(dir, shot.path), y: shot.y, height: shot.height })) } : {}) },
       snapshot: { path: rel(dir, snapshot), sha256: sha256(html), bytes: Buffer.byteLength(html) },
       viewport: request.viewport,
       chrome,
       fps: request.fps,
       duration: clip.duration,
       frames: clip.frames,
-      spans: measured.filter((beat) => beat.action === "select" || beat.action === "highlight").map((beat) => ({ beat: beat.index, action: beat.action, text: beat.text, rects: beat.rects })),
+      spans: measured.filter((beat) => beat.action === "select" || beat.action === "highlight").map((beat) => ({ beat: beat.index, action: beat.action, text: beat.text, rects: beat.pageRects })),
       beats: timeline.effects.map((effect) => {
         const beat = measured.find((entry) => entry.index === effect.index);
-        return { index: effect.index, action: effect.action, at: beat.at, dur: beat.dur, target: targetLabel(beat.target), ...(beat.label ? { label: beat.label } : {}), ...(beat.text ? { matched: beat.text } : {}), start: effect.start, end: effect.end, box: effect.box };
+        const box = effect.box ? { ...effect.box, y: Math.round((effect.box.y + pageRegion.y0) * 10) / 10 } : null;
+        return { index: effect.index, action: effect.action, at: beat.at, dur: beat.dur, target: targetLabel(beat.target), ...(beat.label ? { label: beat.label } : {}), ...(beat.text ? { matched: beat.text } : {}), start: effect.start, end: effect.end, box };
       })
     };
     const sidecar = `${base}.evidence.json`;

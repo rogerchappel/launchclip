@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CAPTURE_SCHEMA, normalizeTarget, requestDuration, validateCaptureRequest } from "../src/evidence/request.js";
 import { buildTimeline, cameraAt, clampCamera, stateAt, toWindow, viewOf } from "../src/evidence/timeline.js";
-import { assertPublicUrl, blockReason, isRejectLabel } from "../src/evidence/capture.js";
+import { assertPublicUrl, blockReason, captureRegion, isRejectLabel, regionTiles } from "../src/evidence/capture.js";
 import { chromeHeight, playerHtml, urlParts } from "../src/evidence/player.js";
 
 const request = (extra = {}) => ({
@@ -161,6 +161,20 @@ test("the timeline survives the JSON trip into the player page unchanged", () =>
   assert.equal(stateAt(tripped, 2.4).selection.length, 1, "a finished selection stays until the next one");
 });
 
+test("a long page is shot as the slice the beats need, in tiles", () => {
+  const win = { width: 1600, height: 948 };
+  // Near the top: from the page top, as before.
+  assert.deepEqual(captureRegion([{ x: 0, y: 2000, width: 10, height: 20 }], { docHeight: 9000, win }), { y0: 0, y1: 3158 });
+  // Deep: open just above the first target, as if arriving by anchor.
+  const deep = captureRegion([{ x: 0, y: 10410, width: 10, height: 20 }, { x: 0, y: 11000, width: 10, height: 20 }], { docHeight: 14000, win });
+  assert.deepEqual(deep, { y0: 10126, y1: 12158 });
+  assert.equal(captureRegion([{ x: 0, y: 10410, width: 10, height: 20 }], { docHeight: 14000, win, start: "top" }).y0, 0);
+  assert.equal(captureRegion([{ x: 0, y: 900, width: 10, height: 20 }], { docHeight: 14000, win, start: "target" }).y0, 616);
+  // Never past the page's end, never shorter than a window.
+  assert.deepEqual(captureRegion([], { docHeight: 500, win }), { y0: 0, y1: 500 });
+  assert.deepEqual(regionTiles({ y0: 100, y1: 9100 }), [{ y: 100, height: 4000 }, { y: 4100, height: 4000 }, { y: 8100, height: 1000 }]);
+});
+
 test("the player draws the URL in the chrome and inlines the timeline", async () => {
   assert.deepEqual(urlParts("https://www.example.com/a/b/?q=1"), { host: "example.com", rest: "/a/b/?q=1" });
   assert.equal(chromeHeight({ width: 1600, height: 1000 }), 52);
@@ -170,6 +184,9 @@ test("the player draws the URL in the chrome and inlines the timeline", async ()
   assert.match(html, /<span class="host">github\.com<\/span><span class="rest">\/dotnet\/efcore\/pull\/39217\/files<\/span>/);
   assert.match(html, /function stateAt\(/);
   assert.doesNotMatch(html, /^export /m);
+  const tiled = await playerHtml({ timeline: tl, images: [{ src: "page-0.png", y: 0, height: 4000 }, { src: "page-1.png", y: 4000, height: 1200 }], url: "https://example.com/" });
+  assert.match(tiled, /id="shot-0" src="page-0\.png".*id="shot-1" src="page-1\.png"/s);
+  assert.match(tiled, /const TILES = \[\{"y":0,"height":4000\},\{"y":4000,"height":1200\}\]/);
 });
 
 test("the CLI checks a request, runs a capture or a still, and prints scene params from a sidecar", async () => {

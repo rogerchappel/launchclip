@@ -20,7 +20,8 @@
 // ("dark" | "none", the browser chrome drawn round the page), request.fps,
 // request.tail (seconds held after the last beat), request.still
 // ({target, pad?, scale?}, the default crop for --still), request.wait_for
-// (a selector the page must show before capture) and request.hide (CSS
+// (a selector the page must show before capture), request.start ("auto",
+// "top" or "target": where the clip opens on a long page) and request.hide (CSS
 // selectors of page furniture to hide before capture, such as a promo
 // popover; recorded in the sidecar, never used on the evidence itself).
 //
@@ -33,6 +34,7 @@ export const KINDS = ["page", "post", "repo", "pr", "diff", "commit", "model-car
 export const ACTIONS = ["scroll", "zoom", "cursor", "select", "highlight", "focus-ring", "pin", "wait"];
 export const THEMES = ["dark", "light"];
 export const CHROMES = ["dark", "none"];
+export const STARTS = ["auto", "top", "target"];
 export const DEFAULT_VIEWPORT = Object.freeze({ width: 1600, height: 1000 });
 
 // Beats that point at something on the page; wait and pin may not.
@@ -91,6 +93,8 @@ export function validateCaptureRequest(input) {
   const tail = input.tail ?? 1.2;
   if (typeof tail !== "number" || tail < 0 || tail > 10) errors.push("tail must be 0–10 seconds");
   if (input.wait_for !== undefined && typeof input.wait_for !== "string") errors.push("wait_for must be a CSS selector");
+  const start = input.start ?? "auto";
+  if (!STARTS.includes(start)) errors.push(`start must be ${STARTS.join(", ")}`);
   if (input.hide !== undefined && (!Array.isArray(input.hide) || input.hide.length > 12 || input.hide.some((item) => typeof item !== "string" || !item.trim()))) errors.push("hide must be an array of at most 12 CSS selectors");
 
   if (!Array.isArray(input.beats)) errors.push("beats must be an array");
@@ -141,7 +145,7 @@ export function validateCaptureRequest(input) {
     }
   }
 
-  const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, beats, out,
+  const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, start, beats, out,
     provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(still ? { still } : {}) };
   return { errors, warnings, request };
 }
