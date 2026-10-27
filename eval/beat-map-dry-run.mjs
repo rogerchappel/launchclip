@@ -25,25 +25,28 @@
 // words, history and settings are unchanged are reused (--fresh plans all).
 // Exits 1 when the plan misses its cadence gate.
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beatMapReportText, beatMapToDirection, directLongForm, dryRunWords } from '../kit/core/beat-director.mjs';
 import { cutShorts } from '../kit/core/cutdown.mjs';
 import { directionJson, validateDirection } from '../kit/core/direction.mjs';
+import { loadResearchEvidence } from '../src/research/evidence_data.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const DEFAULT_FIXTURE = path.join(ROOT, 'eval', 'fixtures', 'long-form-16min');
 
-/** Load SCRIPT.md, research/evidence.json and research/captures/*.json from a folder. */
-export async function loadFixture(folder) {
+/**
+ * Load SCRIPT.md, research/evidence.json and research/captures/*.json from a
+ * folder, with the module-ready evidence data attached in memory
+ * (src/research/evidence_data.js: GitHub cards from assets/evidence/github-*.json,
+ * posts from capture sidecars, series from research/data/, people, tokens).
+ */
+export async function loadFixture(folder, adapters = {}) {
   const script = await readFile(path.join(folder, 'SCRIPT.md'), 'utf8');
-  const ledgerFile = path.join(folder, 'research', 'evidence.json');
-  const ledger = existsSync(ledgerFile) ? JSON.parse(await readFile(ledgerFile, 'utf8')) : null;
-  const captureDir = path.join(folder, 'research', 'captures');
-  const captures = existsSync(captureDir) ? await Promise.all(readdirSync(captureDir).filter((name) => name.endsWith('.json')).sort().map(async (name) => JSON.parse(await readFile(path.join(captureDir, name), 'utf8')))) : [];
-  return { script, ledger, captures };
+  const { ledger, captures, report } = await loadResearchEvidence(path.join(folder, 'research'), { root: folder }, adapters);
+  return { script, ledger, captures, evidenceData: report };
 }
 
 export const DEFAULT_CTAS = Object.freeze([210, 580, 900]);

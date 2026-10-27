@@ -72,7 +72,8 @@ response body. Remote text is data and is never followed as an instruction.
     }],
     "flag": { "action": "fix|cut|soften-or-cite", "message": "…" },   // every claim that is not verified
     "capture": "hf-…",                              // the capture request showing it, if any
-    "data": ["hf-…-benchmark-1"]                    // the data files holding its table, if any
+    "tables": ["hf-…-benchmark-1"],                 // the data files holding its table, if any
+    "data": { "series": [], "panels": [], "source": "…" }   // module-ready data (Evidence data below), verified claims only
   }],
   "excerpts": [{ "text", "url", "publisher" }]     // what primary sources state, for a script pass
 }
@@ -89,6 +90,15 @@ The rules, all enforced by `validateLedger`:
   shares enough of its words; a quote must appear verbatim (case and
   punctuation aside). That passage is the quote span. A date may match the
   source's own publish date. A verified claim always has a supporting quote.
+- **The passage must name what the claim names**: every benchmark it
+  mentions, and every other entity but one when it names three or more
+  (one-word fragments such as "Flash" aside). In a table row a model counts
+  when a column is headed by it. A release date on a page about the model
+  does not verify a launch date on another product.
+- **Units must agree**: a multiple or a currency needs the same unit in the
+  source ("9x" is not the 9 in "July 9", "$1" is not a bare 1); a percentage
+  may match a bare table figure. Versions inside model and benchmark names
+  ("Claude Opus 5.5", "Terminal-Bench 4.0") are never quantities.
 - **In a table, a number belongs to a model**: the model named right before it
   with "at", "'s", "(" or ":", else the sentence's subject. The number must sit
   in that model's column. "X beats Y with 51.8", where 51.8 is Y's score, is
@@ -127,6 +137,30 @@ label, then a highlight on the exact cell. A sentence gets the stretch of up
 to 14 words around its first number or name, so the page can find it word
 for word. A cell value can repeat on a page; the focus ring on the row comes
 first, so the capture should highlight the match nearest the ringed row.
+
+## Evidence data: what the builders get
+
+`matchEvidence()` (kit/core/beat-director.mjs) passes `capture.data`, else
+`claim.data`, to the evidence builders as `beat.evidence.data`; the
+`kit/core/capability-builders-*.mjs` headers are the contract.
+`src/research/evidence_data.js` fills it from sources only, for verified
+claims and their captures:
+
+| Field | From | Shape |
+| --- | --- | --- |
+| `capture.data` (pr, commit, diff) | `src/evidence/github.js` over its cached API JSON (`assets/evidence/github-*.json`) | `{module, params}` for repo-pr-card, commit-card or diff-view, the capture's highlight as the token when the patch holds it |
+| `capture.data` (post) | the capture's sidecar (`assets/evidence/<id>.evidence.json`) | `{platform, name, handle, text, date?, source: {url, captured_at, screenshot}}` from the page title or the highlighted span |
+| `claim.data.series`, `.panels`, `.source` | `research/data/*.json`, the row the claim quotes | `[{label, value}]`, up to six panels `{title, series}` |
+| `claim.data.people` | `assets.json` people | `[{name, role?, photo?, photo_credit?, links?}]`, photo only from a licence-clear portrait |
+| `claim.data.text`, `.tokens`, `.encoding` | `src/tokenizer.js` (gpt-tokenizer) on a quote claim | the BPE split |
+| `claim.data.tex`, `.svg` | TeX in the claim (`$…$`, `\(…\)`) | SVG precomputed when `mathjax-full` is installed |
+| `claim.data.sources` | two or more GitHub PR or commit sources | `[{module, params, token}]`, compact `sourceParams`, in date order |
+
+`runResearch` attaches what it can at once. Post data needs the clip's
+sidecar, so after `launchclip evidence capture` run
+`launchclip research attach research/ [--root .]`, which rewrites the
+ledger and capture requests with the data. `eval/beat-map-dry-run.mjs`
+attaches in memory when it loads a folder.
 
 ## Data: `research/data/<id>.json` (`launchclip.research-data.v1`)
 

@@ -93,7 +93,8 @@ export function classifyUrl(url, orgs = []) {
   // "Nimbus AI" owns nimbus.ai and nimbusai.com: the org's name without its suffix word.
   const orgWords = orgs.flatMap((org) => [org, org.replace(/\b(?:AI|Labs?|Inc|Corp|Research|Technologies|Systems|Group)\b/gi, "")]).map((org) => org.toLowerCase().replace(/[^a-z0-9]/g, "")).filter((word) => word.length >= 3);
   const hostWord = host.replace(/^www\./, "").split(".").slice(0, -1).join("");
-  const official = orgWords.some((word) => hostWord.includes(word));
+  // The org's own domain: nimbus.ai for "Nimbus AI", but not openrouter.ai for "OpenAI" (a stripped name must keep five letters).
+  const official = orgWords.some((word) => hostWord === word || (word.length >= 5 && hostWord.startsWith(word)));
   const primary = PRIMARY_HOSTS.some((primaryHost) => host === primaryHost || host.endsWith(`.${primaryHost}`)) || official;
   return { kind, primary };
 }
@@ -191,7 +192,8 @@ export async function githubRepository(http, full) {
 export async function githubPull(http, full, number) {
   const pull = await http.json(`https://api.github.com/repos/${full}/pulls/${number}`);
   if (!pull?.html_url) return null;
-  const text = `${pull.title}\n\n${pull.body ?? ""}\n\nState: ${pull.state}${pull.merged_at ? `\nMerged: ${pull.merged_at}` : ""}\nChanged files: ${pull.changed_files}\nAdditions: ${pull.additions}\nDeletions: ${pull.deletions}`;
+  // The facts line names the repo and number, so "pull request 39217" can be checked against the PR itself.
+  const text = `${pull.title}\n\n${pull.body ?? ""}\n\nGitHub API: Pull request ${full}#${number} (pull request ${number}) by ${pull.user?.login ?? "unknown"}; State: ${pull.state}${pull.merged_at ? `; Merged: ${pull.merged_at}` : ""}; Changed files: ${pull.changed_files}; Additions: ${pull.additions}; Deletions: ${pull.deletions}.`;
   return http.keep({ url: pull.html_url, title: `${full}#${number}: ${pull.title}`, publisher: `GitHub · ${full.split("/")[0]}`, published_at: pull.merged_at ?? pull.created_at, text, kind: "pr" });
 }
 

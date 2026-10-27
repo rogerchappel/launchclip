@@ -24,6 +24,12 @@ const ROLE_WORDS = new Set(["CEO", "CTO", "CFO", "COO", "Founder", "Co-founder",
 const PERSON_CUES = /\b(?:CEO|CTO|founder|co-founder|researcher|scientist|engineer|professor|director|lead|head of|chief|author|said|says|wrote|writes|posted|tweeted|told|according to|announced)\b/i;
 const ORG_SUFFIX = /\b(?:AI|Labs?|Inc|Corp|Research|University|Institute|Foundation|Technologies|Systems|DeepMind|Group)\b/;
 
+/** "Claude Opus 5.5": a name with a version after it is a model, never a person. */
+function versionFollows(text, name) {
+  const at = text.indexOf(name);
+  return at >= 0 && /^[\s-]*v?\d/.test(text.slice(at + name.length));
+}
+
 /** Markdown or plain text → sentences, keeping headings as context. */
 export function splitSentences(text) {
   const sentences = [];
@@ -59,6 +65,8 @@ export function extractNumbers(sentence) {
   // Identifiers and dates hold digits that are not quantities.
   let masked = sentence.replace(/https?:\/\/[^\s)"”]+|\barXiv:?\s?\d{4}\.\d{4,5}(?:v\d+)?|\b[\w.-]+\/[\w.-]+/gi, (span) => " ".repeat(span.length));
   for (const date of extractDates(sentence)) masked = masked.split(date).join(" ".repeat(date.length));
+  // So do the versions in model and benchmark names ("Claude Opus 5.5", "Terminal-Bench 4.0").
+  for (const entity of extractEntities(sentence)) if (entity.kind === "model" || entity.kind === "benchmark") masked = masked.split(entity.name).join(" ".repeat(entity.name.length));
   for (const match of masked.matchAll(NUMBER_PATTERN)) {
     const [raw, currency, digits, scale, unit] = match;
     if (!digits) continue;
@@ -123,14 +131,15 @@ export function extractEntities(sentence) {
     // "HumanEval Nimbus-7B": a benchmark word run into the model after it.
     if (words.length > 1 && BENCHMARK_NAME.test(words[0]) && !/\d/.test(words[0]) && /^[A-Z][a-z]/.test(words[1])) add(words.shift(), "benchmark");
     const name = words.join(" ");
-    if (!/\d/.test(name) || /^(?:19|20)\d{2}$/.test(name) || new RegExp(`^(?:${MONTHS})\\b`).test(name)) continue;
+    if (!/^[A-Za-z]/.test(name) || !/\d/.test(name) || /^(?:19|20)\d{2}$/.test(name) || new RegExp(`^(?:${MONTHS})\\b`).test(name)) continue;
     // "On Terminal-Bench 4.0", "MMLU-Pro", "DeepSWE v1.1": a benchmark is what a model is measured on, not a model.
     const measuredOn = /\b(?:on|in)\s*$/i.test(withoutUrls.slice(0, match.index + match[1].indexOf(name)));
     add(name, BENCHMARK_NAME.test(name) || measuredOn ? "benchmark" : "model");
   }
   // Capitalised runs: people and organisations.
   for (const match of withoutUrls.matchAll(/\b([A-Z][a-zA-Z&'’-]+(?:\s+(?:[A-Z][a-zA-Z&'’-]+|of|de|van|von|der|la)){0,4})/g)) {
-    const words = match[1].split(/\s+/).filter((word, index, all) => !(index === all.length - 1 && /^(?:of|de|van|von|der|la)$/.test(word)));
+    // A last word ending in "-" runs on into a model name ("Nimbus-" of "Nimbus-7B"); it belongs to that entity.
+    const words = match[1].split(/\s+/).filter((word, index, all) => !(index === all.length - 1 && (/^(?:of|de|van|von|der|la)$/.test(word) || /-$/.test(word))));
     while (words.length && (STOP_ENTITIES.has(words[0]) || ROLE_WORDS.has(words[0]) || /^[a-z]/.test(words[0]))) words.shift();
     if (!words.length) continue;
     const name = words.join(" ").replace(/['’]s$/, "");
@@ -143,7 +152,7 @@ export function extractEntities(sentence) {
     if (words.length === 1 && name.length < 3) continue;
     const kind = BENCHMARK_NAME.test(name) ? "benchmark"
       : ORG_SUFFIX.test(name) || /[A-Z].*[A-Z]/.test(words[0]) && words.length === 1 ? "org"
-      : words.length >= 2 && words.length <= 3 && words.every((word) => /^[A-Z][a-z'’-]+$/.test(word)) && PERSON_CUES.test(sentence) ? "person"
+      : words.length >= 2 && words.length <= 3 && words.every((word) => /^[A-Z][a-z'’-]+$/.test(word)) && PERSON_CUES.test(sentence) && !versionFollows(withoutUrls, name) ? "person"
       : "name";
     add(name, kind);
   }

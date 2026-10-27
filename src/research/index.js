@@ -20,6 +20,7 @@ import { buildCaptureRequests } from "./capture.js";
 import { extractData } from "./data.js";
 import { findMedia, metaphorQueries } from "./media.js";
 import { findPeople } from "./people.js";
+import { attachEvidenceData } from "./evidence_data.js";
 import { ASSETS_SCHEMA, RESEARCH_PATHS, validateAssets, validateCapture, validateLedger } from "./schema.js";
 
 export { RESEARCH_PATHS } from "./schema.js";
@@ -63,18 +64,18 @@ export async function runResearch(input, options = {}, adapters = {}) {
   log(`research: ${snapshots.length} source(s) fetched (${snapshots.filter((entry) => entry.primary).length} primary)`);
 
   // 3. Ledger.
-  const ledger = buildLedger({ claims, snapshots, entities, now, search, input: { kind: source.kind, ...(source.file ? { file: path.relative(cwd, source.file) } : { topic: source.text }) } });
+  let ledger = buildLedger({ claims, snapshots, entities, now, search, input: { kind: source.kind, ...(source.file ? { file: path.relative(cwd, source.file) } : { topic: source.text }) } });
   // What the primary sources state, for a script pass to write from and the audit to check against.
   ledger.excerpts = keyExcerpts(snapshots);
 
   // 4. Captures, 5. data.
-  const { requests, byClaim } = buildCaptureRequests(ledger, { maxCaptures: options.maxCaptures, theme: options.theme });
+  let { requests, byClaim } = buildCaptureRequests(ledger, { maxCaptures: options.maxCaptures, theme: options.theme });
   const subject = entities.find((entity) => entity.kind === "model" || entity.kind === "repo")?.name?.split("/").pop() ?? null;
   const data = extractData(snapshots, ledger, { subject, maxTables: options.maxTables });
   for (const claim of ledger.claims) {
     if (byClaim[claim.id]) claim.capture = byClaim[claim.id];
     const tables = data.filter((file) => file.claims.includes(claim.id)).map((file) => file.id);
-    if (tables.length) claim.data = tables;
+    if (tables.length) claim.tables = tables;
   }
 
   // 6. Media, 7. people.
@@ -103,6 +104,11 @@ export async function runResearch(input, options = {}, adapters = {}) {
   const problems = [...validateLedger(ledger), ...requests.flatMap(validateCapture), ...validateAssets(assets)];
   if (problems.length) throw new Error(`research contract failed: ${problems.join("; ")}`);
 
+  // Module-ready data for the evidence builders (src/research/evidence_data.js); post captures get theirs once captured (research attach).
+  const attached = await attachEvidenceData({ ledger, captures: requests, tables: data, assets }, { root: path.dirname(outDir) }, { fetch: adapters.fetch, tokenize: adapters.tokenize, tex: adapters.tex });
+  ledger = attached.ledger;
+  requests = attached.captures;
+
   await writeJson(path.join(outDir, RESEARCH_PATHS.ledger), ledger);
   await rm(path.join(outDir, RESEARCH_PATHS.captures), { recursive: true, force: true });
   for (const request of requests) await writeJson(path.join(outDir, RESEARCH_PATHS.captures, `${request.id}.json`), request);
@@ -126,6 +132,7 @@ export async function runResearch(input, options = {}, adapters = {}) {
     summary: { ...ledger.summary, captures: requests.length, tables: data.length, assets: media.assets.length, people: people.length, portraits: portraits.length },
     flagged: flagged.map((claim) => ({ id: claim.id, status: claim.status, text: claim.text, action: claim.flag?.action, message: claim.flag?.message })),
     requests: http.calls.length,
+    evidence_data: attached.report,
     ...(usage ? { usage } : {})
   };
 }
