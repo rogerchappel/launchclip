@@ -45,6 +45,9 @@ const STRUCTURE = new Set(['cta', 'sting']);
 export const RECAP = /^(either way|so\b|that is\b|that's\b|in short\b|put together\b|all of which\b|which is why\b)/i;
 const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'in', 'on', 'to', 'for', 'at', 'by', 'from', 'rest', 'other', 'others', 'more', 'less', 'all', 'it', 'its', 'is', 'was', 'per', 'vs', 'with', 'them', 'they', 'these', 'those', 'this', 'that', 'there', 'here', 'we', 'you']);
 
+// The director's default brand (beat-director.mjs DEFAULT_BRAND): element rects do not depend on colours.
+const BRAND = Object.freeze({ colors: { bg: '#070b14', primary: '#5ee6ff', accent: '#ffb347', ink: '#070b14', paper: '#eef4ff' }, fonts: { display: 'space-grotesk', body: 'space-grotesk', meta: 'jetbrains-mono' } });
+
 const round = (value, places = 3) => { const f = 10 ** places; return Math.round(value * f) / f; };
 
 function familyOf(kind) {
@@ -123,7 +126,7 @@ function boxOf(found, ids) {
  * [{name (what it is called in the report), labels: [string], values: [number], target?, box?}].
  * Bars, rows and grid counts with fewer than two items are the whole card, so they have none.
  */
-export function zoomSpots(state, { format = { width: 1920, height: 1080 }, brand, seconds = 6 } = {}) {
+export function zoomSpots(state, { format = { width: 1920, height: 1080 }, brand = BRAND, seconds = 6 } = {}) {
   const p = state.params ?? {};
   const module = state.module;
   const state0 = Boolean(STATE_MODULES[module]);
@@ -199,7 +202,7 @@ export function mapCards(map) {
  * first, state.zooms on the cards the narration points into. words: the
  * narration words (NARRATION.json shape). → map
  */
-export function planCamera(map, words, { format = map.format ?? { width: 1920, height: 1080 }, brand } = {}) {
+export function planCamera(map, words, { format = map.format ?? { width: 1920, height: 1080 }, brand = BRAND } = {}) {
   const said = (words ?? []).map((word) => ({ ...spoken(word.text), raw: String(word.text ?? '').replace(/^[^\p{L}\p{N}$€£]+|[^\p{L}\p{N}%×]+$/gu, ''), start: word.start, end: word.end }));
   const shots = (map.chapters ?? []).flatMap((chapter, c) => chapter.shots.map((shot, s) => ({ shot, chapter, c, s })));
   for (const { shot } of shots) { delete shot.camera; for (const state of shot.states) delete state.zooms; }
