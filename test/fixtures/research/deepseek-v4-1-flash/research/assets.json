@@ -1,0 +1,179 @@
+{
+  "schema": "launchclip.research-assets.v1",
+  "created_at": "2026-10-27T05:11:45.950Z",
+  "policy": {
+    "licences": "public domain, CC0, CC BY, CC BY-SA, Pexels and Pixabay licences, NASA media; NC, ND, fair use and unlabelled items are dropped",
+    "never": "YouTube, streaming services, film or TV releases, or a photo scraped from a page",
+    "icons_logos_audio": "resolve through the media-use skill, not here"
+  },
+  "providers": [
+    "wikimedia-commons",
+    "nasa",
+    "internet-archive",
+    "library-of-congress"
+  ],
+  "queries": [
+    {
+      "query": "server room",
+      "beat": null
+    },
+    {
+      "query": "stack of papers",
+      "beat": null
+    }
+  ],
+  "assets": [
+    {
+      "id": "wikimedia-commons-pdc-server-room",
+      "type": "image",
+      "title": "PDC server room",
+      "author": "Esquilo",
+      "licence": {
+        "id": "cc-by-sa",
+        "name": "CC BY-SA 3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:PDC_server_room.jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/1/11/PDC_server_room.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/PDC_server_room.jpg/1920px-PDC_server_room.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 2400,
+      "height": 1800,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "server room",
+      "beat": null,
+      "attribution": "“PDC server room” by Esquilo, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    },
+    {
+      "id": "wikimedia-commons-server-room-22397102849",
+      "type": "image",
+      "title": "Server Room (22397102849)",
+      "author": "Carl Lender from Sunrise, USA",
+      "licence": {
+        "id": "cc-by",
+        "name": "CC BY 2.0",
+        "url": "https://creativecommons.org/licenses/by/2.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:Server_Room_(22397102849).jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/4/4d/Server_Room_%2822397102849%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Server_Room_%2822397102849%29.jpg/1920px-Server_Room_%2822397102849%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 6000,
+      "height": 4000,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "server room",
+      "beat": null,
+      "attribution": "“Server Room (22397102849)” by Carl Lender from Sunrise, USA, CC BY 2.0 (https://creativecommons.org/licenses/by/2.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    },
+    {
+      "id": "wikimedia-commons-139-server-room-01",
+      "type": "image",
+      "title": "139 Server Room 01",
+      "author": "Indrajit Das",
+      "licence": {
+        "id": "cc-by-sa",
+        "name": "CC BY-SA 3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:139_Server_Room_01.jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/139_Server_Room_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/139_Server_Room_01.jpg/1920px-139_Server_Room_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 3264,
+      "height": 2448,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "server room",
+      "beat": null,
+      "attribution": "“139 Server Room 01” by Indrajit Das, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    },
+    {
+      "id": "wikimedia-commons-a-stack-of-economist-papers",
+      "type": "image",
+      "title": "A stack of Economist papers",
+      "author": "DonSpencer1",
+      "licence": {
+        "id": "cc-by-sa",
+        "name": "CC BY-SA 4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:A_stack_of_Economist_papers.jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/A_stack_of_Economist_papers.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/A_stack_of_Economist_papers.jpg/1280px-A_stack_of_Economist_papers.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 1512,
+      "height": 2016,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "stack of papers",
+      "beat": null,
+      "attribution": "“A stack of Economist papers” by DonSpencer1, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    },
+    {
+      "id": "wikimedia-commons-wright-js-a-stack-of-papers-scua-artists-books",
+      "type": "image",
+      "title": "Wright JS A Stack of Papers SCUA artists books back",
+      "author": "ThaoTrin",
+      "licence": {
+        "id": "cc-by-sa",
+        "name": "CC BY-SA 4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:Wright_JS_A_Stack_of_Papers_SCUA_artists_books_back.jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Wright_JS_A_Stack_of_Papers_SCUA_artists_books_back.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Wright_JS_A_Stack_of_Papers_SCUA_artists_books_back.jpg/1920px-Wright_JS_A_Stack_of_Papers_SCUA_artists_books_back.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 3024,
+      "height": 4032,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "stack of papers",
+      "beat": null,
+      "attribution": "“Wright JS A Stack of Papers SCUA artists books back” by ThaoTrin, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    },
+    {
+      "id": "wikimedia-commons-wright-js-a-stack-of-papers-scua-artists-books-2",
+      "type": "image",
+      "title": "Wright JS A Stack of Papers SCUA artists books front",
+      "author": "ThaoTrin",
+      "licence": {
+        "id": "cc-by-sa",
+        "name": "CC BY-SA 4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "source_url": "https://commons.wikimedia.org/wiki/File:Wright_JS_A_Stack_of_Papers_SCUA_artists_books_front.jpg",
+      "media_url": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Wright_JS_A_Stack_of_Papers_SCUA_artists_books_front.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "preview_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Wright_JS_A_Stack_of_Papers_SCUA_artists_books_front.jpg/1920px-Wright_JS_A_Stack_of_Papers_SCUA_artists_books_front.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 3024,
+      "height": 4032,
+      "provider": "wikimedia-commons",
+      "provider_name": "Wikimedia Commons",
+      "query": "stack of papers",
+      "beat": null,
+      "attribution": "“Wright JS A Stack of Papers SCUA artists books front” by ThaoTrin, CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons",
+      "fetched_at": "2026-10-27T05:11:45.950Z"
+    }
+  ],
+  "people": [
+    {
+      "name": "Liang Wenfeng",
+      "claims": [
+        "c008"
+      ],
+      "role": "entrepreneur",
+      "affiliation": "DeepSeek",
+      "role_in_script": "founder",
+      "wikidata": {
+        "id": "Q131847088",
+        "url": "https://www.wikidata.org/wiki/Q131847088",
+        "description": "Chinese businessman (born 1985)",
+        "match": "employer or description names an organisation in the script"
+      },
+      "portrait": null,
+      "portrait_note": "no image on the Wikidata item; no portrait"
+    }
+  ],
+  "rejected": 0
+}

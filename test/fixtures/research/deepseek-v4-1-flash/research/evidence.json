@@ -1,0 +1,753 @@
+{
+  "schema": "launchclip.evidence.v1",
+  "created_at": "2026-10-27T05:11:45.950Z",
+  "input": {
+    "kind": "script",
+    "file": "script.md"
+  },
+  "summary": {
+    "claims": 8,
+    "verified": 5,
+    "contradicted": 2,
+    "unverified": 1,
+    "sources_checked": 4,
+    "primary_sources": 4,
+    "web_search": null
+  },
+  "policy": {
+    "verified": "a fetched source holds every number, date, quote and named entity of the claim in one passage; that passage is the quote span",
+    "contradicted": "a primary source states a different value for the same measure and no source supports the claim",
+    "unverified": "flagged for the script: cut it, soften it, or add a source; never kept silently",
+    "remote_content_is_untrusted": true
+  },
+  "entities": [
+    {
+      "name": "DeepSeek-V4.1-Flash-1017",
+      "kind": "model",
+      "claims": [
+        "c001",
+        "c004",
+        "c005",
+        "c007"
+      ]
+    },
+    {
+      "name": "DeepSeek",
+      "kind": "org",
+      "claims": [
+        "c001",
+        "c002",
+        "c008"
+      ]
+    },
+    {
+      "name": "Hugging Face",
+      "kind": "name",
+      "claims": [
+        "c001"
+      ]
+    },
+    {
+      "name": "MIT License",
+      "kind": "name",
+      "claims": [
+        "c001"
+      ]
+    },
+    {
+      "name": "DeepSeek-V4.1-Flash",
+      "kind": "model",
+      "claims": [
+        "c002"
+      ]
+    },
+    {
+      "name": "Terminal-Bench 4.0",
+      "kind": "benchmark",
+      "claims": [
+        "c003",
+        "c005"
+      ]
+    },
+    {
+      "name": "Terminal-Bench",
+      "kind": "benchmark",
+      "claims": [
+        "c003",
+        "c005"
+      ]
+    },
+    {
+      "name": "Flash",
+      "kind": "name",
+      "claims": [
+        "c003"
+      ]
+    },
+    {
+      "name": "DeepSWE v1.1",
+      "kind": "benchmark",
+      "claims": [
+        "c004"
+      ]
+    },
+    {
+      "name": "GPT-5.6",
+      "kind": "model",
+      "claims": [
+        "c004"
+      ]
+    },
+    {
+      "name": "DeepSWE",
+      "kind": "benchmark",
+      "claims": [
+        "c004"
+      ]
+    },
+    {
+      "name": "Sol",
+      "kind": "name",
+      "claims": [
+        "c004"
+      ]
+    },
+    {
+      "name": "Opus 5",
+      "kind": "model",
+      "claims": [
+        "c005"
+      ]
+    },
+    {
+      "name": "Opus",
+      "kind": "name",
+      "claims": [
+        "c005"
+      ]
+    },
+    {
+      "name": "Liang Wenfeng",
+      "kind": "person",
+      "claims": [
+        "c008"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "c001",
+      "text": "DeepSeek released DeepSeek-V4.1-Flash-1017 on Hugging Face on October 17, 2026, and the weights are free to download under the MIT License.",
+      "kind": "date",
+      "section": "Hook",
+      "values": [],
+      "dates": [
+        "October 17, 2026"
+      ],
+      "quote": null,
+      "entities": [
+        {
+          "name": "DeepSeek-V4.1-Flash-1017",
+          "kind": "model"
+        },
+        {
+          "name": "DeepSeek",
+          "kind": "org"
+        },
+        {
+          "name": "Hugging Face",
+          "kind": "name"
+        },
+        {
+          "name": "MIT License",
+          "kind": "name"
+        }
+      ],
+      "origin": "pattern",
+      "status": "verified",
+      "confidence": 0.95,
+      "primary_support": true,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.95,
+          "quote": {
+            "text": "Hugging Face API: Model: deepseek-ai/DeepSeek-V4.1-Flash-1017; Created: 2026-10-17T02:40:38.000Z; Last modified: 2026-10-17T05:46:55.000Z; License: mit; Parameters (safetensors total): 763205315794; Pipeline: image-text-to-text; Downloads (last 30 days): 95889; Likes: 3218.",
+            "start": 5205,
+            "end": 5479
+          }
+        }
+      ]
+    },
+    {
+      "id": "c002",
+      "text": "DeepSeek calls it a minor update to DeepSeek-V4.1-Flash, \"delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.\"",
+      "kind": "quote",
+      "section": "What changed",
+      "values": [],
+      "dates": [],
+      "quote": "delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.",
+      "entities": [
+        {
+          "name": "DeepSeek-V4.1-Flash",
+          "kind": "model"
+        },
+        {
+          "name": "DeepSeek",
+          "kind": "org"
+        }
+      ],
+      "origin": "pattern",
+      "status": "verified",
+      "confidence": 0.95,
+      "primary_support": true,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.95,
+          "quote": {
+            "text": "**DeepSeek-V4.1-Flash-1017** is a minor update to [**DeepSeek-V4.1-Flash**](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash), delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.",
+            "start": 1994,
+            "end": 2226
+          }
+        }
+      ],
+      "capture": "hf-deepseek-v4-1-flash-1017"
+    },
+    {
+      "id": "c003",
+      "text": "On Terminal-Bench 4.0 the new checkpoint scores 42.3, up from 31.2 for the previous Flash release.",
+      "kind": "number",
+      "section": "What changed",
+      "values": [
+        {
+          "raw": "42.3",
+          "value": 42.3,
+          "unit": null
+        },
+        {
+          "raw": "31.2",
+          "value": 31.2,
+          "unit": null
+        }
+      ],
+      "dates": [],
+      "quote": null,
+      "entities": [
+        {
+          "name": "Terminal-Bench 4.0",
+          "kind": "benchmark"
+        },
+        {
+          "name": "Terminal-Bench",
+          "kind": "benchmark"
+        },
+        {
+          "name": "Flash",
+          "kind": "name"
+        }
+      ],
+      "origin": "pattern",
+      "status": "verified",
+      "confidence": 0.78,
+      "primary_support": true,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.78,
+          "quote": {
+            "text": "| Terminal-Bench 4.0 | 42.3 | 31.2 | 12.6 | 37.9 | 39.9 | 51.8 |",
+            "start": 2695,
+            "end": 2759,
+            "row": {
+              "label": "Terminal-Bench 4.0",
+              "cell": "42.3",
+              "column": "DS-V4.1-Flash-1017"
+            }
+          }
+        }
+      ],
+      "capture": "hf-deepseek-v4-1-flash-1017",
+      "data": [
+        "hf-deepseek-v4-1-flash-1017-benchmark-1"
+      ]
+    },
+    {
+      "id": "c004",
+      "text": "On DeepSWE v1.1 DeepSeek-V4.1-Flash-1017 scores 77.0, ahead of GPT-5.6 Sol at 73.0.",
+      "kind": "number",
+      "section": "What changed",
+      "values": [
+        {
+          "raw": "77.0",
+          "value": 77,
+          "unit": null
+        },
+        {
+          "raw": "73.0",
+          "value": 73,
+          "unit": null
+        }
+      ],
+      "dates": [],
+      "quote": null,
+      "entities": [
+        {
+          "name": "DeepSWE v1.1",
+          "kind": "benchmark"
+        },
+        {
+          "name": "DeepSeek-V4.1-Flash-1017",
+          "kind": "model"
+        },
+        {
+          "name": "GPT-5.6",
+          "kind": "model"
+        },
+        {
+          "name": "DeepSWE",
+          "kind": "benchmark"
+        },
+        {
+          "name": "Sol",
+          "kind": "name"
+        }
+      ],
+      "origin": "pattern",
+      "status": "verified",
+      "confidence": 0.84,
+      "primary_support": true,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.84,
+          "quote": {
+            "text": "| DeepSWE v1.1 | 77.0 | 74.2 | 67.5 | 66.9 | 73.0 | 74.0 |",
+            "start": 2760,
+            "end": 2818,
+            "row": {
+              "label": "DeepSWE v1.1",
+              "cell": "77.0",
+              "column": "DS-V4.1-Flash-1017"
+            }
+          }
+        }
+      ],
+      "capture": "hf-deepseek-v4-1-flash-1017",
+      "data": [
+        "hf-deepseek-v4-1-flash-1017-benchmark-1"
+      ]
+    },
+    {
+      "id": "c005",
+      "text": "On Terminal-Bench 4.0 DeepSeek-V4.1-Flash-1017 also beats Opus 5 with 51.8.",
+      "kind": "number",
+      "section": "What changed",
+      "values": [
+        {
+          "raw": "51.8",
+          "value": 51.8,
+          "unit": null
+        }
+      ],
+      "dates": [],
+      "quote": null,
+      "entities": [
+        {
+          "name": "Terminal-Bench 4.0",
+          "kind": "benchmark"
+        },
+        {
+          "name": "DeepSeek-V4.1-Flash-1017",
+          "kind": "model"
+        },
+        {
+          "name": "Opus 5",
+          "kind": "model"
+        },
+        {
+          "name": "Terminal-Bench",
+          "kind": "benchmark"
+        },
+        {
+          "name": "Opus",
+          "kind": "name"
+        }
+      ],
+      "origin": "pattern",
+      "status": "contradicted",
+      "confidence": 0.7,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": false,
+          "confidence": 0.7,
+          "quote": {
+            "text": "| Terminal-Bench 4.0 | 42.3 | 31.2 | 12.6 | 37.9 | 39.9 | 51.8 |",
+            "start": 2695,
+            "end": 2759,
+            "row": {
+              "label": "Terminal-Bench 4.0",
+              "cell": "42.3",
+              "column": "DS-V4.1-Flash-1017"
+            }
+          },
+          "conflict": {
+            "claimed": "51.8",
+            "found": "42.3 (DS-V4.1-Flash-1017; 51.8 is Opus 5)"
+          }
+        },
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-09-10T02:17:58.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": false,
+          "confidence": 0.7,
+          "quote": {
+            "text": "| Terminal-Bench 4.0 (Pass@1) | **51.8** | 39.9 | 12.6 | 37.9 | 12.4 | 7.0 | 31.2 |",
+            "start": 9111,
+            "end": 9194,
+            "row": {
+              "label": "Terminal-Bench 4.0 (Pass@1)",
+              "cell": "31.2",
+              "column": "DS-V4.1-Flash"
+            }
+          },
+          "conflict": {
+            "claimed": "51.8",
+            "found": "31.2 (DS-V4.1-Flash; **51.8** is Opus-5.0)"
+          }
+        }
+      ],
+      "flag": {
+        "action": "fix",
+        "message": "Hugging Face · deepseek-ai says 42.3 (DS-V4.1-Flash-1017; 51.8 is Opus 5) where the script says 51.8"
+      }
+    },
+    {
+      "id": "c006",
+      "text": "It keeps a 1M tokens context window.",
+      "kind": "number",
+      "section": "What changed",
+      "values": [
+        {
+          "raw": "1M tokens",
+          "value": 1000000,
+          "unit": "token"
+        }
+      ],
+      "dates": [],
+      "quote": null,
+      "entities": [],
+      "origin": "pattern",
+      "status": "verified",
+      "confidence": 0.99,
+      "primary_support": true,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-10-17T02:40:38.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.95,
+          "quote": {
+            "text": "| `context_window` | 1M tokens |",
+            "start": 4720,
+            "end": 4752,
+            "row": {
+              "label": "`context_window`",
+              "cell": "1M tokens",
+              "column": "Value"
+            }
+          }
+        },
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-09-10T02:17:58.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": true,
+          "confidence": 0.95,
+          "quote": {
+            "text": "| `context_window` | 1M tokens |",
+            "start": 12153,
+            "end": 12185,
+            "row": {
+              "label": "`context_window`",
+              "cell": "1M tokens",
+              "column": "Value"
+            }
+          }
+        }
+      ],
+      "capture": "hf-deepseek-v4-1-flash-1017-2",
+      "data": [
+        "hf-deepseek-v4-1-flash-1017-table-2",
+        "hf-deepseek-v4-1-flash-table-4"
+      ]
+    },
+    {
+      "id": "c007",
+      "text": "DeepSeek-V4.1-Flash-1017 was trained on 40 trillion tokens.",
+      "kind": "number",
+      "section": "What changed",
+      "values": [
+        {
+          "raw": "40 trillion tokens",
+          "value": 40000000000000,
+          "unit": "token"
+        }
+      ],
+      "dates": [],
+      "quote": null,
+      "entities": [
+        {
+          "name": "DeepSeek-V4.1-Flash-1017",
+          "kind": "model"
+        }
+      ],
+      "origin": "pattern",
+      "status": "contradicted",
+      "confidence": 0.6,
+      "sources": [
+        {
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+          "title": "deepseek-ai/DeepSeek-V4.1-Flash · model card",
+          "publisher": "Hugging Face · deepseek-ai",
+          "published_at": "2026-09-10T02:17:58.000Z",
+          "fetched_at": "2026-10-27T05:11:45.950Z",
+          "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+          "kind": "model-card",
+          "primary": true,
+          "finder": "huggingface",
+          "supports": false,
+          "confidence": 0.6,
+          "quote": {
+            "text": "**Pre-training.** DeepSeek-V4.1-Flash is trained from scratch on a multimodal corpus comprising **45T tokens**, with sparse attention trained at a sequence length of 64K and context extended to 1M tokens at 34T tokens.",
+            "start": 4465,
+            "end": 4683
+          },
+          "conflict": {
+            "claimed": "40 trillion tokens",
+            "found": "45T tokens"
+          }
+        }
+      ],
+      "flag": {
+        "action": "fix",
+        "message": "Hugging Face · deepseek-ai says 45T tokens where the script says 40 trillion tokens"
+      }
+    },
+    {
+      "id": "c008",
+      "text": "DeepSeek's founder and CEO Liang Wenfeng has built the lab around releasing open weights.",
+      "kind": "entity",
+      "section": "Why it matters",
+      "values": [],
+      "dates": [],
+      "quote": null,
+      "entities": [
+        {
+          "name": "DeepSeek",
+          "kind": "org"
+        },
+        {
+          "name": "Liang Wenfeng",
+          "kind": "person"
+        }
+      ],
+      "origin": "pattern",
+      "status": "unverified",
+      "confidence": 0,
+      "sources": [],
+      "flag": {
+        "action": "soften-or-cite",
+        "message": "no fetched source states this; soften it, or add the source with --url"
+      }
+    }
+  ],
+  "notes": [],
+  "excerpts": [
+    {
+      "text": "# DeepSeek-V4.1-Flash-1017",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "**DeepSeek-V4.1-Flash-1017** is a minor update to [**DeepSeek-V4.1-Flash**](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash), delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| Benchmark | DS-V4.1-Flash-1017 | DS-V4.1-Flash | K3 | GLM-5.3 | GPT-5.6 Sol | Opus 5 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| HLE w/o tools | 42.6 (44.0†) | 36.8 (39.1†) | 43.5 | 42.0† | 44.5 | 56.3 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| Terminal-Bench 4.0 | 42.3 | 31.2 | 12.6 | 37.9 | 39.9 | 51.8 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| DeepSWE v1.1 | 77.0 | 74.2 | 67.5 | 66.9 | 73.0 | 74.0 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| ProgramBench | 29.1 | 20.3 | 17.5 | 19.0 | 23.0 | 37.0 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "| NL2Repo-Bench | 68.2 | 65.4 | 58.0 | 58.0 | 56.8 | 75.3 |",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "# DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "We introduce **DeepSeek-V4.1-Flash**, a multimodal Mixture-of-Experts (MoE) model with 552B backbone parameters and support for contexts of up to one million tokens.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "**Architecture.** DeepSeek-V4.1-Flash adopts a **Causal Encoder-Decoder (CED)** architecture: a 40-layer Transformer organized as a 20-layer causal encoder followed by a 20-layer decoder.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "This allows the model to activate only **8B parameters per token during prefill** and **16B during decode**, substantially improving cost efficiency for input-heavy agentic workloads.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "**SWA Bounded Replay** reconstructs missing SWA KV states by replaying only the most recent *n*_win tokens, avoiding the need to persist SWA KV to SSD and reducing the persistent KV cache footprint to roughly **1/8** of that of DeepSeek-V4-Flash.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "**Compressed Sparse Attention 2 (CSA2).** DeepSeek-V4.1-Flash uses CSA2, which assigns each attention layer one of three static modes — **Full**, **Reindex**, or **Reuse** — to share main KV and indexer K across layers and reuse Top-K sparse-attention indices.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "Combined with **FP4 main KV caching** (E2M1 format, one E4M3 scale per 16 channels), these designs reduce the global KV cache footprint to **890 bytes per token** — roughly **1/4** of DeepSeek-V4-Flash.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "The model uses 1 shared expert and 384 routed experts per MoE layer, activating 6 routed experts per token.",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "publisher": "Hugging Face · deepseek-ai"
+    },
+    {
+      "text": "Evaluating DeepSeek V4.1 Flash-1017 for loss of control and harmful manipulation risks",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "To address this gap, we present an independent safety evaluation of DeepSeek V4.1 Flash-1017, the latest version of V4.1 Flash that departs from V4 with a new architecture, scaled-up training, and strong agentic capabilities.",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "Drawing on the EU General-Purpose AI Code of Practice, we evaluate the model across 34 benchmarks, including 5 in-house suites, spanning evaluation integrity, loss of control, and harmful manipulation.",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "Conforming to the AEF-1 standard, we compare V4.1 Flash-1017 against V4.1 Flash, earlier DeepSeek V4 models, and leading closed-source systems (GPT-6 Astra, GPT-5.6 Sol, and Gemini 3.8 Flash).",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "Overall, V4.1 Flash-1017 shows substantial safety improvements over the V4 generation and approaches or matches leading closed-source baselines on several dimensions, while still exhibiting notable behaviors that warrant continued attention.",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "Published: 2026-10-26T16:14:17Z",
+      "url": "https://arxiv.org/abs/2610.35671",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression",
+      "url": "https://arxiv.org/abs/2609.19969",
+      "publisher": "arXiv"
+    },
+    {
+      "text": "To address this challenge, we introduce DeepSeek-V4.1-Flash, a multimodal Mixture-of-Experts (MoE) model with 552B backbone parameters and support for contexts of up to one million tokens.",
+      "url": "https://arxiv.org/abs/2609.19969",
+      "publisher": "arXiv"
+    }
+  ]
+}

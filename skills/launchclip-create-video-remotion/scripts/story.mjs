@@ -7,7 +7,7 @@
 export const STORY_SCHEMA = "launchclip.story.v1";
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -496,6 +496,23 @@ export function validateStory(story, { modules } = {}) {
         if (hit.cue !== undefined && !nonEmpty(hit.cue)) err(`${hitPath}.cue must be a non-empty string`);
       }
     }
+    // Shot states (kit/core/shot-states.mjs checks the set and the module side).
+    if (scene.states !== undefined) {
+      if (!Array.isArray(scene.states) || scene.states.length < 1 || scene.states.length > 5) err(`${path}.states must be an array of 1–5 states (the scene itself is state 0)`);
+      else {
+        let last = null;
+        for (const [s, state] of scene.states.entries()) {
+          const statePath = `${path}.states[${s}]`;
+          if (!isObject(state) || !isObject(state.set)) { err(`${statePath} must be {at, set: {...}}`); continue; }
+          if (state.at === undefined) { err(`${statePath}.at is required`); continue; }
+          const at = anchorField(state.at, `${statePath}.at`);
+          if (at === null) continue;
+          if (start !== null && end !== null && (at <= start + EPS || at >= end - EPS)) err(`${statePath}.at (${at}) must fall inside ${label} (${start}, ${end})`);
+          if (last !== null && at <= last + EPS) err(`${statePath}.at (${at}) must come after the state before it (${last})`);
+          last = at;
+        }
+      }
+    }
     timing.push({ index, id: scene.id, label, start, end, track: Number.isInteger(track) ? track : 0 });
   }
 
@@ -716,6 +733,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (scene.end !== undefined) scene.end = resolve(scene.end, `${path}.end`);
     if (Array.isArray(scene.hits)) scene.hits.forEach((hit, h) => {
       if (isObject(hit) && hit.at !== undefined) hit.at = resolve(hit.at, `${path}.hits[${h}].at`);
+    });
+    if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
+      if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);
     });
     if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
   });
@@ -1615,6 +1635,8 @@ export function storyChapters(story) {
 export const COVER_SCENE_ID = "cover";
 export const COVER_SECONDS = 1.5;
 export const COVER_MAX_WORDS = 6;
+// A video this short takes its cover from its own frame (script-formats.mjs SHORT_VIDEO_SECONDS).
+export const SHORT_COVER_SECONDS = 90;
 // The still: a card this long, captured once every part has settled.
 export const COVER_STILL = Object.freeze({ duration: 3, at: 2 });
 const COVER_KEYS = new Set(["text", "kicker", "number", "frame"]);
@@ -1643,6 +1665,8 @@ export function validateCover(story, { err, warn = () => {}, duration = null } =
   if (cover.number !== undefined && !((typeof cover.number === "number" && Number.isFinite(cover.number)) || (nonEmpty(cover.number) && cover.number.trim().length <= 12))) err('cover.number must be a number or a short string such as "100g" (at most 12 characters)');
   const frame = coverFrame(story);
   if (frame !== "first" && !(typeof frame === "number" && Number.isFinite(frame) && frame >= 0)) { err('cover.frame must be "first" or the seconds of the frame a cover picker should use'); return; }
+  // A short video opens on its image; its cover is a frame of the video (src/cover.js).
+  if (frame === "first" && duration !== null && duration <= SHORT_COVER_SECONDS && !storyBase(story)) warn(`cover.frame is "first" (the default): a video of ${SHORT_COVER_SECONDS} s or less would open on a text card. Set cover.frame to the seconds of the strongest image (the key shot); finish takes the cover from that frame`);
   if (typeof frame === "number" && duration !== null && frame >= duration) err(`cover.frame (${frame}) is not within format.duration (${duration})`);
   if (frame !== "first") return;
   if (duration !== null && duration < COVER_SECONDS + COVER_MIN_AFTER) err(`cover.frame "first" holds the cover for the first ${COVER_SECONDS} s; the video is only ${duration} s`);
