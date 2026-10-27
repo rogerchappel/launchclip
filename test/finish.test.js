@@ -180,7 +180,7 @@ test("bindCues binds every hit and cue-carrying module event to a kit cue", () =
     ["whoosh", 2, "hit", "burst"],
     ["pop", 3, "hit", "mystery-moment"],
     ["riser", 2.87, "module-event", "count"],
-    ["riser", 5.16, "module-event", "fill"],
+    // The fill's riser (5.16 s) is dropped: a riser repeats at most every 3 s.
     ["whoosh", 4.783, "transition", "whip-in"]
   ].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])));
   // The hit and the module event at t=1 merge; the hit wins.

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { bindCues, defaultCueFor } from "../src/finish.js";
+import { bindCues, defaultCueFor, resolveCueFiles } from "../src/finish.js";
 import { guardCueTimbre, measureTimbre, timbreProblem } from "../src/sfx/timbre.js";
 import { TALLY_LANDS_AT } from "../kit/core/sound/options.mjs";
 import { mediaSkip } from "./helpers/media.js";
@@ -73,10 +73,10 @@ test("counts and builds get a tonal tally that lands on the moment", () => {
   const models = { s1: { id: "s1", events: [
     { id: "s1-count", name: "count", time: 2, endTime: 4, cue: "tally" },
     // A short count: the tally starts with it, skipping its first blips.
-    { id: "s1-fill", name: "fill", time: 6, endTime: 6.5, cue: "tally" }
+    { id: "s1-fill", name: "fill", time: 8, endTime: 8.5, cue: "tally" }
   ] } };
   const { cues } = bindCues(story, { models });
-  assert.deepEqual(cues.map((cue) => [cue.cue, cue.at, cue.offset]), [["tally", 4 - TALLY_LANDS_AT, undefined], ["tally", 6, Number((TALLY_LANDS_AT - 0.5).toFixed(3))]]);
+  assert.deepEqual(cues.map((cue) => [cue.cue, cue.at, cue.offset]), [["tally", 4 - TALLY_LANDS_AT, undefined], ["tally", 8, Number((TALLY_LANDS_AT - 0.5).toFixed(3))]]);
 });
 
 test("rendered: the kit's tonal families pass the timbre guard in every palette", { skip: mediaSkip(), timeout: 600_000 }, async () => {
@@ -96,4 +96,26 @@ test("rendered: the kit's tonal families pass the timbre guard in every palette"
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("a count cues once, repeats keep their distance and take the variants in turn", () => {
+  const story = { format: { width: 1080, height: 1920, fps: 30, duration: 20 }, resolved: { duration: 20, fps: 30, frames: 600 }, scenes: [
+    // The hit names the module's count: one tally, timed by the hit.
+    { id: "s1", module: "x", start: 0, end: 6, hits: [{ at: 1.2, event: "count" }] },
+    { id: "s2", module: "x", start: 6, end: 20, hits: [] }
+  ] };
+  const models = {
+    s1: { id: "s1", events: [{ id: "s1-count", name: "count", time: 0.8, endTime: 2, cue: "tally" }, { id: "s1-bar", name: "build", time: 2.5, endTime: 3.5, cue: "tally" }] },
+    s2: { id: "s2", events: [6, 8, 11, 15].map((time, i) => ({ id: `s2-c${i}`, name: "count", time, endTime: time + 1, cue: "tally" })) }
+  };
+  const { cues } = bindCues(story, { models });
+  // s1's build is too soon after the count, so is the count at 8 s; a 20 s
+  // video affords three tallies, so the one at 15 s goes.
+  assert.deepEqual(cues.map((cue) => [cue.source, cue.at]), [["hit", 1.2], ["module-event", 6], ["module-event", 11]]);
+  const kit = { dir: "/kit", families: { tally: ["tally.wav", "tally-2.wav", "tally-3.wav"] } };
+  const files = resolveCueFiles(cues, { kit, storyId: "story" }).map((cue) => cue.file);
+  assert.equal(new Set(files).size, 3, "each tally is a different variant");
+  // Short cues are not rationed: ticks a quarter-second apart all play.
+  const ticks = bindCues({ ...story, scenes: [{ id: "s1", module: "x", start: 0, end: 20, hits: [0.5, 0.75, 1, 1.25].map((at) => ({ at, event: `t${at}`, cue: "tick" })) }] }, { models: {} }).cues;
+  assert.equal(ticks.length, 4);
 });

@@ -133,6 +133,12 @@ export const CUE_DURATIONS = Object.freeze({
   "pen-scribble": 0.9, "camera-shutter": 0.42, cash: 1.3, notification: 0.9, "error-buzz": 0.6, success: 1.4, boing: 0.8, sparkle: 1.2, footstep: 0.32, door: 1
 });
 const CUE_SPACING = 0.12;
+// Short, quiet cues (clicks, keys, ticks, pops) may repeat freely; a long,
+// tonal one heard again soon sounds like a loop. So a long family starts at
+// most once per gap (seconds, start to start) and at most once per budget
+// seconds of video (at least once). Hits are bound first, so they win.
+const CUE_REPEAT_GAPS = Object.freeze({ tally: 4, riser: 8, shimmer: 4, subdrop: 8, impact: 0.6 });
+const CUE_BUDGETS = Object.freeze({ tally: 8, riser: 15, shimmer: 10, subdrop: 15 });
 // Ambience beds are normalised to -26 LUFS; this puts them about 6 dB lower
 // in the mix, under the music, and the mix ducks them further under speech.
 export const AMBIENCE_VOLUME = 0.5;
@@ -213,9 +219,10 @@ function modelEventFor(model, event) {
  * event it names, else a default from its event name; palette: true lets the
  * default reach the palette families) and to every module
  * event that carries a `cue`, plus a whoosh under push/whip/zoom transitions.
- * A hit with cue "none" silences the event it names instead.
- * Risers end on their moment. Cues of the same kind closer than 0.12 s merge
- * (hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
+ * A hit replaces the module event it names (cue "none" silences it).
+ * Risers end on their moment. Cues of the same kind closer than 0.12 s merge,
+ * and a long cue repeats no sooner than its gap and no more than its budget
+ * allows (CUE_REPEAT_GAPS, CUE_BUDGETS; hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
  */
 export function bindCues(story, { models, palette = false } = {}) {
   const warnings = [];
@@ -227,11 +234,11 @@ export function bindCues(story, { models, palette = false } = {}) {
   const raw = [];
   for (const scene of scenes) {
     const model = typeof modelFor === "function" ? modelFor(scene) : modelFor?.[scene.id] ?? null;
-    // A hit with cue "none" silences the module event it names (and adds no cue).
+    // A hit that names a module event takes its place: its cue replaces the
+    // event's own (cue "none" silences it), so one moment never cues twice.
     const silenced = new Set();
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
-      if (hit?.cue !== "none") continue;
-      const event = model ? modelEventFor(model, hit.event) : null;
+      const event = model && hit?.event ? modelEventFor(model, hit.event) : null;
       if (event) silenced.add(event);
     }
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
@@ -270,7 +277,10 @@ export function bindCues(story, { models, palette = false } = {}) {
       warnings.push(`${entry.shot}: cue ${kit.cue} at ${at}s falls after the end of the video; skipped`);
       continue;
     }
-    if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < CUE_SPACING)) continue;
+    const gap = CUE_REPEAT_GAPS[kit.cue] ?? CUE_SPACING;
+    if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < gap)) continue;
+    const budget = CUE_BUDGETS[kit.cue] && Number.isFinite(duration) ? Math.max(1, Math.ceil(duration / CUE_BUDGETS[kit.cue])) : Infinity;
+    if (cues.filter((cue) => cue.cue === kit.cue).length >= budget) continue;
     const cue = { cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event, optional: entry.source !== "hit" };
     // A riser lands on its moment; library risers are re-anchored on their measured peak.
     if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
@@ -289,8 +299,16 @@ export function bindCues(story, { models, palette = false } = {}) {
  * re-anchored so its measured peak lands on its moment.
  */
 export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = "" } = {}) {
+  // Repeats of a family take its variants in turn, in time order, so the same
+  // file never plays twice running.
+  const turns = new Map();
+  const turnOf = new Map([...cues].map((cue, index) => [cue, index]).sort(([a], [b]) => a.at - b.at).map(([cue]) => {
+    const turn = turns.get(cue.cue) ?? 0;
+    turns.set(cue.cue, turn + 1);
+    return [cue, turn];
+  }));
   return cues.map((cue) => {
-    const resolved = resolveCueFile(cue, { libraries, kit, key: eventKey(storyId, cue) });
+    const resolved = resolveCueFile(cue, { libraries, kit, key: `${storyId}|${cue.cue}`, turn: turnOf.get(cue) });
     if (!resolved) return cue;
     const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
     const peak = Number(resolved.measurements?.peak_at_ms);
