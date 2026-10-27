@@ -328,7 +328,8 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
  */
 // patch: top-level storyboard.json keys to replace in the copy (a background
 // fixture's background, panel or brand, say).
-// files: {relative path: text} written into the copy (a fixture's logo, say).
+// files: {relative path: text | {from}} written into the copy (a fixture's
+// logo, say); {from} copies a binary file from the repository (a still).
 export async function runStoryParity(projectDir, {times = [1, 3.2], out, threshold = DEFAULT_THRESHOLD.ssim, keep = false, patch = null, files = null} = {}) {
   const {getRenderer} = await import(pathToFileURL(path.join(ROOT, 'src', 'renderers', 'index.js')).href);
   const {compileStoryToHyperFrames} = await import(pathToFileURL(STORY_COMPILER).href);
@@ -346,7 +347,8 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
       const file = path.join(project, name);
       if (!file.startsWith(project + path.sep)) throw new Error(`fixture file ${name} is outside the project`);
       await mkdir(path.dirname(file), {recursive: true});
-      await writeFile(file, text);
+      if (text && typeof text === 'object') await copyFile(path.join(ROOT, text.from), file);
+      else await writeFile(file, text);
     }
     if (patch) {
       const file = path.join(project, 'storyboard.json');

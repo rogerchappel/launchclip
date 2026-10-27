@@ -376,7 +376,12 @@ export function validateStory(story, { modules } = {}) {
   // plate: the blurred backdrop plate, per story, chapter or scene (kit/core/plates.mjs).
   validatePlate(story.plate, err, "plate", { cycle: true });
   if (Array.isArray(story.chapters)) story.chapters.forEach((chapter, j) => { if (isObject(chapter)) validatePlate(chapter.plate, err, `chapters[${j}].plate`, { none: true }); });
-  if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => { if (isObject(scene)) validatePlate(scene.plate, err, `scenes[${i}].plate`, { none: true }); });
+  if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => {
+    if (!isObject(scene)) return;
+    validatePlate(scene.plate, err, `scenes[${i}].plate`, { none: true });
+    // backdrop: the same value under the name world-mode stories use.
+    validatePlate(scene.backdrop, err, `scenes[${i}].backdrop`, { none: true });
+  });
   // medium: the whole-frame finishing pass (kit/core/medium.mjs).
   validateMedium(story.medium, err);
 
@@ -1096,11 +1101,14 @@ function validateBackground(value, err, path = "background") {
 
 // The same rules as kit/core/plates.mjs plateErrors(), kept here so this
 // file stays import-free (kept in step by test/plates.test.js).
-export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh"]);
+export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh", "starfield", "smoke", "wash", "image"]);
 const PLATE_UNIT = { focus: [0, 1], intensity: [0, 1], speed: [0, 2], depth: [0, 1] };
+const PLATE_KIND_UNIT = { image: { blur: [0, 80], dim: [0, 1] } };
+const PLATE_IMAGE_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(png|jpe?g|webp|avif)$/i;
 function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
   if (value === undefined || value === null) return;
   if (typeof value === "string") {
+    if (value === "image") { err(`${path}: an image plate needs its file: {kind: "image", params: {src: "assets/…"}}`); return; }
     if (!(STORY_PLATE_KINDS.includes(value) || (none && value === "none"))) err(`${path} must be one of ${STORY_PLATE_KINDS.join(", ")}${none ? ", none" : ""} (or {kind, params?})`);
     return;
   }
@@ -1108,15 +1116,33 @@ function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
   const keys = ["kind", "params", ...(cycle ? ["cycle"] : [])];
   for (const key of Object.keys(value)) if (!keys.includes(key)) err(`${path}.${key} is not supported (allowed: ${keys.join(", ")})`);
   if (!STORY_PLATE_KINDS.includes(value.kind)) { err(`${path}.kind must be one of ${STORY_PLATE_KINDS.join(", ")}`); return; }
-  if (value.cycle !== undefined && typeof value.cycle !== "boolean") err(`${path}.cycle must be true or false`);
+  if (value.cycle !== undefined) validatePlateCycle(value.cycle, err, `${path}.cycle`);
+  const own = PLATE_KIND_UNIT[value.kind] ?? {};
+  const srcRequired = `${path}.params.src is required for an image plate (a still under the project, e.g. assets/backdrop.jpg)`;
+  if (value.kind === "image" && !isObject(value.params)) { err(srcRequired); return; }
   if (value.params === undefined) return;
   if (!isObject(value.params)) { err(`${path}.params must be an object`); return; }
+  if (value.kind === "image" && value.params.src === undefined) err(srcRequired);
   for (const [key, given] of Object.entries(value.params)) {
     if (key === "tint") { if (!["neutral", "primary", "accent"].includes(given)) err(`${path}.params.tint must be one of neutral, primary, accent`); continue; }
-    if (!PLATE_UNIT[key]) { err(`${path}.params.${key} is not supported (allowed: focus, intensity, speed, depth, tint)`); continue; }
-    const [min, max] = PLATE_UNIT[key];
+    if (key === "src" && value.kind === "image") {
+      if (!(typeof given === "string" && PLATE_IMAGE_SRC.test(given) && !given.split("/").includes(".."))) err(`${path}.params.src must be a project-relative .png, .jpg, .webp or .avif path (no URL, no leading /, no ..)`);
+      continue;
+    }
+    const unit = PLATE_UNIT[key] ?? own[key];
+    if (!unit) { err(`${path}.params.${key} is not supported (allowed: ${[...Object.keys(PLATE_UNIT), ...(value.kind === "image" ? ["src"] : []), ...Object.keys(own), "tint"].join(", ")})`); continue; }
+    const [min, max] = unit;
     if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }
+}
+function validatePlateCycle(cycle, err, path) {
+  if (typeof cycle === "boolean") return;
+  if (!isObject(cycle)) { err(`${path} must be true, false or {every, plates?}`); return; }
+  for (const key of Object.keys(cycle)) if (!["every", "plates"].includes(key)) err(`${path}.${key} is not supported (allowed: every, plates)`);
+  if (!(Number.isInteger(cycle.every) && cycle.every >= 1 && cycle.every <= 50)) err(`${path}.every must be a whole number of shots from 1 to 50`);
+  if (cycle.plates === undefined) return;
+  if (!Array.isArray(cycle.plates) || !cycle.plates.length || cycle.plates.length > 12) { err(`${path}.plates must be a list of 1 to 12 plates`); return; }
+  cycle.plates.forEach((plate, i) => validatePlate(plate, err, `${path}.plates[${i}]`));
 }
 
 // The same rules as kit/core/medium.mjs mediumErrors(), kept here so this
