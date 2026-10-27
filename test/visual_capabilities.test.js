@@ -8,10 +8,11 @@ const BEAT = {
   id: "b1",
   text: "Training compute grew from 40 percent to 3.2 billion dollars across France, Japan and Brazil in 2024 and 2025.",
   headline: "Compute grew tenfold",
+  line: "Compute grew tenfold",
   label: "of the budget",
   brand: { mark: "assets/brand/mark.png", wordmark: { src: "assets/brand/wordmark.png", ratio: 7.5 } },
   facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent", "energy"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },
-  evidence: { claim: "c1", status: "verified", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" } }
+  evidence: { claim: "c1", status: "verified", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" }, data: { lines: ["$ launchclip eval --formats long-form", "long-form  passed"] } }
 };
 
 test("capabilities: every kind has a module and every planned module falls back to a registered one", () => {

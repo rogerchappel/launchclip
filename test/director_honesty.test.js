@@ -70,3 +70,53 @@ test("honesty: on a real script's clauses, reported figures are attributed claim
   assert.match(at("9 times cheaper").params.sub, /OpenAI's claim, not verified$/);
   assert.notEqual(at("not found").module, "quote-card");
 });
+
+import { GENERIC_MODULES, beatMapToStory, verbatimHeadline } from "../kit/core/beat-director.mjs";
+import { resolveModule } from "../kit/core/modules.mjs";
+
+test("honesty: a generic card says a line the narration says, never its stripped key words", () => {
+  // The clauses behind "Surface routine updated", "Mid October Microsoft", "Showed commit GitHub", "Model tested real", "Numbers" vs "Anything".
+  assert.equal(verbatimHeadline("On the surface it was routine. It updated the evaluation harness,"), "On the surface it was routine");
+  assert.equal(verbatimHeadline("So by mid October, Microsoft engineers were already trusting Terra to mark Sol's homework."), "mark Sol's homework");
+  assert.equal(verbatimHeadline("Andrew Curran wrote that the number of people on his feed switching to Anthropic"), "Andrew Curran");
+  assert.equal(verbatimHeadline("Start with dotnet/efcore, the open source repository behind Entity Framework, Microsoft's data library for .NET."), "Entity Framework");
+  assert.equal(verbatimHeadline("We could not check those two numbers against anything outside OpenAI"), "outside OpenAI");
+  // Nothing worth setting: the card on screen holds, unless a static run would outlast its limit.
+  assert.equal(verbatimHeadline("and that is what it is,"), null);
+  assert.equal(verbatimHeadline("and it is, as it was before,", { loose: true }), null);
+  assert.equal(capabilityParams("compare", { ...beat("We could not check those two numbers against anything outside OpenAI."), headline: "Numbers" }), null);
+  assert.equal(capabilityParams("code-snippet", { ...beat("Then, according to a screenshot on X, it turned up in code reviews."), headline: "Screenshot" }), null);
+  assert.equal(capabilityParams("kinetic-words", { ...beat("And they are not choosing one model."), headline: "Choosing model" }), null);
+});
+
+test("honesty: on a real script's clauses, every generic card's words are said in its clause, or the card before holds", () => {
+  const sentences = [
+    "On the surface it was routine. It updated the evaluation harness,",
+    "the setup that tests how well AI agents handle real coding work in that codebase.",
+    "So by mid October, Microsoft engineers were already trusting Terra to mark Sol's homework.",
+    "It showed a commit by a GitHub engineer that switched Copilot's production code reviews.",
+    "We could not check those two numbers against anything outside OpenAI.",
+    "Anyone can rerun it. Either way, the leak trail tells you something on its own.",
+    "The model was being tested on real work, in real repositories, a week before the launch."
+  ];
+  const map = directLongForm({ words: timedWords(sentences), chapters: [{ id: "trail", title: "The leak trail", start: 0 }], ledger: LEDGER, captures: [], title: "Terra" });
+  const states = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
+  const said = (state) => [state.params?.text, state.params?.word, ...(state.params?.words ?? []).map((entry) => entry.text)].filter(Boolean);
+  for (const state of states) {
+    if (!GENERIC_MODULES.has(state.module) && state.module !== "particle-text") continue;
+    if (state.change === "hold" || state.kind === "title") continue;
+    for (const text of said(state)) assert.ok(state.text.includes(text), `${state.module} "${text}" is not said in "${state.text}"`);
+  }
+  assert.ok(!states.some((state) => state.module === "compare"), states.map((state) => state.module).join(", "));
+});
+
+test("honesty: a focus step carries the card on as one of its shot states", () => {
+  const params = { title: "Price per million", data: [{ label: "Terra", value: 5 }, { label: "Sol", value: 10 }] };
+  const state = (id, start, change, extra = {}) => ({ id, words: [0, 0], start, end: start + 4, text: "x", intent: "claim", kind: "series", capability: "bar-chart", module: "bar-chart", change, params, why: "", ...extra });
+  const map = { schema: "launchclip.beat-map.v1", format: { width: 1920, height: 1080 }, duration: 12, chapters: [{ id: "c", title: "Prices", start: 0, end: 12, background: "mesh", shots: [{ id: "s", start: 0, end: 12, states: [state("a", 0, "enter"), state("b", 4, "focus", { focus: 1 }), state("c", 8, "hold")] }] }] };
+  const story = beatMapToStory(map, { captions: false });
+  assert.equal(story.scenes.length, 1);
+  assert.deepEqual([story.scenes[0].start, story.scenes[0].end], [0, 12]);
+  assert.deepEqual(story.scenes[0].states, [{ at: 4, set: { focus: 1 } }]);
+  assert.doesNotThrow(() => resolveModule(story.scenes[0], { ...story, resolved: { duration: 12, fps: 30 } }));
+});

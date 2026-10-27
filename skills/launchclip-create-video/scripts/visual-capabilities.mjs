@@ -212,7 +212,8 @@ const BUILDERS = {
   'glass-word': (beat) => ({ word: clip(keyTerms(beat.headline)[0] ?? beat.headline, 12) }),
   'object-card': (beat) => ({ object: 'box', caption: clip(beat.headline, 30), label: clip(keyTerms(beat.text)[0] ?? 'Note', 12) }),
   'motion-title': (beat) => ({ text: clip(beat.headline, 34), ...(beat.kicker ? { kicker: clip(beat.kicker, 24) } : {}), highlight: keyTerms(beat.headline)[0] }),
-  'kinetic-words': (beat) => ({ words: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ text: clip(text, 14), at: round(0.2 + i * 0.7), ...(i === 2 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' }),
+  // Kinetic type sets a line the narration says, in its own order (beat.line), never the clause's key words.
+  'kinetic-words': (beat) => { const groups = lineGroups(beat.line); return groups ? { words: groups.map((text, i) => ({ text, at: round(0.2 + i * 0.6), ...(i === groups.length - 1 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' } : null; },
   // Number modules show only the clause's own numbers: no number, no params (null), never a placeholder figure.
   'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.headline, 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
   'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
@@ -238,8 +239,9 @@ const BUILDERS = {
   'feed-frame': (beat) => (beat.facts?.handle ? { handle: clip(beat.facts.handle, 20), caption: clip(beat.headline, 26) } : null),
   'proof-wall': (beat) => !itemsOf(beat, 3, 4) || !sourceOf(beat) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
   'excerpt': (beat) => (quoteOf(beat) && sourceOf(beat) ? { type: 'text', title: clip(beat.evidence.source.title ?? beat.headline, 40), source: clip(sourceOf(beat), 40), lines: excerptLines(beat) } : null),
-  'code-snippet': (beat) => ({ title: clip(beat.headline, 32), code: { language: 'text', typing: true, lines: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 24), type: i ? 'string' : 'keyword' }] })) } }),
-  'window-chrome': (beat) => ({ title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: excerptLines(beat).map((line) => (typeof line === 'string' ? line : line.text)), caption: clip(beat.headline, 36), variant: 'mac' }),
+  // Code and terminals show only lines the evidence holds (evidence.data.lines): never the clause's words typed as code.
+  'code-snippet': (beat) => { const lines = codeLines(beat); return lines ? { title: clip(beat.evidence?.data?.file ?? beat.evidence?.source?.title ?? 'Source', 32), code: { language: 'text', typing: true, lines: lines.slice(0, 4).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 60), type: 'string' }] })) } } : null; },
+  'window-chrome': (beat) => { const lines = codeLines(beat); return lines ? { title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: lines.slice(0, 4).map((line) => clip(line, 80)), variant: 'mac' } : null; },
   'media-window': (beat) => ({ title: clip(beat.evidence?.source?.title ?? beat.headline, 54), media: { kind: 'video', src: beat.evidence?.capture?.out } }),
   'cta': (beat) => ({ action: clip(beat.cta?.action ?? 'Subscribe for the next one', 40), ...(beat.cta?.detail ? { detail: clip(beat.cta.detail, 80) } : {}), ...(beat.cta?.handle ? { handle: beat.cta.handle, icon: 'bell' } : {}) }),
   // A sting needs the brand's own mark and wordmark (beat.brand); without them the title carries the open.
@@ -269,9 +271,27 @@ function seriesOf(beat, least = 2) {
 
 // The two sides of a comparison: named sides ("A versus B") or two numbers.
 // numeric: both sides need a number of the clause (null otherwise).
+// A verbatim line as 2–3 groups of consecutive words, each ≤ 14 characters; null when it does not split that way.
+function lineGroups(line) {
+  const words = String(line ?? '').split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  const count = words.length <= 3 ? words.length : Math.min(3, Math.ceil(words.length / 2));
+  const size = Math.ceil(words.length / count);
+  const groups = [];
+  for (let i = 0; i < words.length; i += size) groups.push(words.slice(i, i + size).join(' '));
+  return groups.length >= 2 && groups.every((group) => group.length <= 14) ? groups : null;
+}
+
+// A verified source's code or terminal lines (evidence.data.lines as strings or {text}), else null.
+function codeLines(beat) {
+  const lines = beat.evidence?.status === 'verified' && Array.isArray(beat.evidence?.data?.lines) ? beat.evidence.data.lines.map((line) => (typeof line === 'string' ? line : line?.text)).filter((line) => typeof line === 'string' && line.trim()) : [];
+  return lines.length ? lines : null;
+}
+
 function sidesOf(beat, numeric = false) {
   const numbers = numbersOf(beat);
-  const named = beat.facts?.sides ?? [];
+  // Named sides are names ("Terra versus Sol", "GPT-5"), not the clause's words ("numbers against anything").
+  const named = (beat.facts?.sides ?? []).filter((side) => /^\p{Lu}|\d/u.test(side)).length === 2 ? beat.facts.sides : [];
   if (numeric && numbers.length < 2) return null;
   if (!named.length && numbers.length < 2) return null;
   const side = (i) => ({ label: cap1(clip(named[i] ?? numbers[i]?.label ?? (i ? 'After' : 'Before'), 16)), value: numbers[i]?.value, unit: numbers[i]?.unit, detail: clip(numbers[i] ? formatValue(numbers[i]) : named[i], 22) });
