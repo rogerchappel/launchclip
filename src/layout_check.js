@@ -240,7 +240,9 @@ export function cameraSweepFindings(resolved, elements, words = [], band = null)
   });
   const step = 1 / plan.fps;
   const frames = [];
-  for (const move of plan.moves) {
+  // Zooms inside a shot (kit/core/zooms.mjs) are framed by their own safe-area
+  // check; only the moves between shots sweep the plates.
+  for (const move of plan.moves.filter((item) => !item.zoom)) {
     const entry = byId.get(move.sceneId);
     const info = { sceneId: move.sceneId, type: move.type, start: move.start, duration: move.duration, direction: entry?.transitionIn?.direction ?? null };
     for (let f = Math.ceil(move.start * plan.fps - 1e-6); f <= Math.floor((move.start + move.duration) * plan.fps + 1e-6); f += 1) {
