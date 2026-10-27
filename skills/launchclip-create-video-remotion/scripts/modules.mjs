@@ -30,6 +30,7 @@ import { panelFill, storyPanel } from './panels.mjs';
 import { cardFillStyles, fieldStyle, panelFillPlan } from './backgrounds.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
+import { resolveShotStates, stateSpec } from './shot-states.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -200,6 +201,12 @@ export function resolveModule(scene, story, { track, end } = {}) {
     if (frameSafe) {
       const panel = Number.isFinite(Number(scene?.start)) ? sceneLayoutAt(story, Number(scene.start), Number.isFinite(Number(scene?.end)) ? Number(scene.end) : Number(scene.start))?.safe ?? null : null;
       model.frame = { ...(model.frame && typeof model.frame === 'object' ? model.frame : {}), safe: intersectRects(panel ?? model.frame?.safe, frameSafe) };
+    }
+    // Shot states (kit/core/shot-states.mjs): one model per param change, for the states engine to morph between.
+    if (Array.isArray(scene?.states) && scene.states.length) {
+      const spec = stateSpec(scene.module, isEditorialKind(scene.module) ? null : catalogModules()[scene.module]);
+      model.shotStates = resolveShotStates(scene, model, { spec, resolveWith: (params) => resolveModuleInner({ ...scene, params, states: undefined }, story, { track, end: finalEnd }) });
+      if (Array.isArray(model.events)) model.events.push(...model.shotStates.events);
     }
     return model;
   } catch (error) {
