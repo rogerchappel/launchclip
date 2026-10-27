@@ -26,7 +26,7 @@
     "level": "subtle"
   },
   "captions": {
-    "preset": "minimal-line",
+    "preset": "box-highlight",
     "position": "bottom",
     "lanes": {
       "footage-led": {
@@ -91,8 +91,24 @@
     "icon_tint": "primary",
     "illustration": false
   },
+  "cast": {
+    "drawing_style": "flat",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
   "brand_frame": {
-    "enabled": false
+    "enabled": true,
+    "kicker": {
+      "underline": false,
+      "position": "top-left",
+      "logo": false
+    },
+    "sections": true,
+    "progress": true,
+    "show": "always"
   },
   "dials": {
     "energy": 0.45,
