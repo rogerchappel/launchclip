@@ -93,3 +93,13 @@ test("social-sort: only posts that say which camp they are in, three at most so 
   assert.deepEqual(indexed.columns, ["For", "Against"]);
   resolves("social-sort", indexed);
 });
+
+test("social builders: the family's sample beats build every social module", async () => {
+  const { socialBuilders } = await import("../kit/core/capability-builders-social.mjs");
+  const [sample] = socialBuilders({}).samples;
+  for (const id of ["social-post", "social-stack", "social-wall", "social-sort"]) {
+    const params = capabilityParams(id, sample);
+    assert.ok(params, id);
+    resolves(id, params);
+  }
+});
