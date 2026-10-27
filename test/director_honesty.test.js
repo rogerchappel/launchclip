@@ -120,3 +120,28 @@ test("honesty: a focus step carries the card on as one of its shot states", () =
   assert.deepEqual(story.scenes[0].states, [{ at: 4, set: { focus: 1 } }]);
   assert.doesNotThrow(() => resolveModule(story.scenes[0], { ...story, resolved: { duration: 12, fps: 30 } }));
 });
+
+import { pairSeries } from "../kit/core/beat-director.mjs";
+
+const clauses = (texts) => texts.map((text, i) => ({ text, start: i * 5, end: i * 5 + 5, kind: "concept", headline: "x", facts: extractFacts(text) }));
+
+test("data: what the same $10 buys on each model is a race of the tokens bought, never 10 against 10", () => {
+  const states = pairSeries(clauses(["So Terra is exactly half the price of Sol, on both sides. Picture $10 of output.", "On Sol, that buys 1 million tokens. On Terra, the same $10 buys 2 million."]));
+  const race = states.at(-1);
+  assert.equal(race.kind, "race");
+  assert.deepEqual(race.evidence.data.race, { spend: 10, suffix: "tokens", rows: [{ label: "Sol", total: 1e6 }, { label: "Terra", total: 2e6 }] });
+  const params = capabilityParams("grid-race", { ...race, headline: "x" });
+  assert.deepEqual(params.racers.map((racer) => [racer.label, racer.total, racer.spend.total]), [["Sol", 1e6, 10], ["Terra", 2e6, 10]]);
+  assert.equal(params.title, "Tokens for $10");
+});
+
+test("data: a chart is titled by what it measures, never by a fragment of the clause", () => {
+  const prices = pairSeries(clauses(["The price is $1 per million input tokens and $5 per million output tokens.", "Cached input drops to $0.05 per million.", "GPT-6.1 Sol costs $2 in and $10 out."]));
+  for (const state of prices.filter((entry) => entry.kind === "series")) assert.equal(state.evidence.data.title, "Price per million tokens");
+  const bars = capabilityParams("glass-bars-3d", { ...prices.at(-1), headline: "GPT-6.1 Sol costs" });
+  assert.equal(bars.title, "Price per million tokens");
+  const scores = pairSeries(clauses(["On Terminal-Bench 4.0, which measures agents working in a command line, Terra scores 50.3%.", "GPT-5.6 Terra scored 21.5%. That is more than double in one generation."]));
+  assert.equal(scores[1].evidence.data.title, "Terminal-Bench 4.0");
+  // With no title of its own, a chart has none.
+  assert.equal(capabilityParams("bar-chart", { text: "x", headline: "Cached input drops", facts: { numbers: [] }, evidence: { status: "verified", data: { series: [{ label: "A", value: 1 }, { label: "B", value: 2 }] } } }).title, undefined);
+});

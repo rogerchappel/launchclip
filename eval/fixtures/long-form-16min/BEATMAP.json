@@ -1029,14 +1029,27 @@
        "text": "arranged in racks of 64, linked by a network that moves data between them at enormous speed.",
        "intent": "number",
        "kind": "stat",
-       "capability": "count-up",
-       "module": "count-up",
+       "capability": "number-line",
+       "module": "number-line",
        "change": "swap",
        "params": {
-        "value": 64,
-        "label": "Arranged racks linked"
+        "from": 0,
+        "to": 100,
+        "ranges": [
+         {
+          "from": 0,
+          "to": 64,
+          "label": "Here",
+          "tone": "good"
+         }
+        ],
+        "marker": {
+         "value": 64,
+         "label": "64"
+        },
+        "variant": "ruler"
        },
-       "why": "stat: count-up"
+       "why": "stat: number-line"
       },
       {
        "id": "inside-the-training-run-1-sh1-4",
@@ -1095,7 +1108,6 @@
        "module": "bar-chart",
        "change": "enter",
        "params": {
-        "title": "Training run alone",
         "data": [
          {
           "label": "Training",
@@ -1533,7 +1545,6 @@
        "module": "bar-chart",
        "change": "swap",
        "params": {
-        "title": "Answering typical request",
         "data": [
          {
           "label": "Seconds inste…",
@@ -2119,7 +2130,6 @@
        "module": "bar-chart",
        "change": "swap",
        "params": {
-        "title": "Northlight's own chart",
         "data": [
          {
           "label": "Seconds",
@@ -2911,7 +2921,6 @@
        "module": "bar-chart",
        "change": "swap",
        "params": {
-        "title": "Small team running",
         "data": [
          {
           "label": "Dollars into…",
@@ -3189,7 +3198,7 @@
        "change": "enter",
        "params": {
         "value": 40,
-        "label": "Competitors noticed Within",
+        "label": "Within",
         "variant": "bar"
        },
        "evidence": {
@@ -3477,13 +3486,25 @@
        "text": "On a long document reading test, it scored 71 percent, which does lead, by about four points.",
        "intent": "number",
        "kind": "share",
-       "capability": "percent-fill",
-       "module": "percent-fill",
+       "capability": "unit-grid",
+       "module": "unit-grid",
        "change": "swap",
        "params": {
-        "value": 71,
-        "label": "Long document reading",
-        "variant": "bar"
+        "title": "Long document reading",
+        "count": 100,
+        "groups": [
+         {
+          "count": 71,
+          "label": "71 in 100",
+          "tone": "primary"
+         },
+         {
+          "count": 29,
+          "label": "The rest",
+          "tone": "accent"
+         }
+        ],
+        "variant": "dots"
        },
        "evidence": {
         "claim": "c-long-doc",
@@ -3497,7 +3518,7 @@
         },
         "quote": "71% on long-document QA"
        },
-       "why": "share (evidence c-long-doc): percent-fill"
+       "why": "share (evidence c-long-doc): unit-grid"
       }
      ]
     },
@@ -3550,25 +3571,13 @@
        "text": "it scored lower than the previous version, falling from 58 percent to 55 percent.",
        "intent": "number",
        "kind": "share",
-       "capability": "unit-grid",
-       "module": "unit-grid",
+       "capability": "percent-fill",
+       "module": "percent-fill",
        "change": "swap",
        "params": {
-        "title": "Scored lower previous",
-        "count": 100,
-        "groups": [
-         {
-          "count": 58,
-          "label": "58 in 100",
-          "tone": "primary"
-         },
-         {
-          "count": 42,
-          "label": "The rest",
-          "tone": "accent"
-         }
-        ],
-        "variant": "dots"
+        "value": 58,
+        "label": "to",
+        "variant": "bar"
        },
        "evidence": {
         "claim": "c-maths",
@@ -3582,7 +3591,7 @@
         },
         "quote": "competition maths: 55% (previous 58%)"
        },
-       "why": "share (evidence c-maths): unit-grid"
+       "why": "share (evidence c-maths): percent-fill"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh3-3",
@@ -4313,7 +4322,6 @@
        "change": "enter",
        "params": {
         "variant": "bars",
-        "title": "Next arithmetic long",
         "data": [
          {
           "label": "Time",
@@ -4694,13 +4702,25 @@
        "text": "the largest rival lab cut its prices by 40 percent and published a blog post comparing its own model favourably on maths.",
        "intent": "number",
        "kind": "share",
-       "capability": "percent-fill",
-       "module": "percent-fill",
+       "capability": "unit-grid",
+       "module": "unit-grid",
        "change": "swap",
        "params": {
-        "value": 40,
-        "label": "Largest rival lab",
-        "variant": "bar"
+        "title": "Largest rival lab",
+        "count": 100,
+        "groups": [
+         {
+          "count": 40,
+          "label": "40 in 100",
+          "tone": "primary"
+         },
+         {
+          "count": 60,
+          "label": "The rest",
+          "tone": "accent"
+         }
+        ],
+        "variant": "dots"
        },
        "evidence": {
         "claim": "c-rival-cuts",
@@ -4714,7 +4734,7 @@
         },
         "quote": "cuts of 40% and 50% within ten days"
        },
-       "why": "share (evidence c-rival-cuts): percent-fill"
+       "why": "share (evidence c-rival-cuts): unit-grid"
       },
       {
        "id": "how-the-rivals-answered-1-sh1-3",
@@ -5582,7 +5602,7 @@
      "map-highlight": 1,
      "media-window": 1,
      "stat-card": 1,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 1,
      "cta": 1,
      "percent-fill": 1
@@ -5622,7 +5642,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "1c44db91c6f3608b",
+   "key": "57c4623658d716a0",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5652,7 +5672,7 @@
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 1,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 2,
      "cta": 1,
      "percent-fill": 1,
@@ -5699,7 +5719,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "86b30843fb83b7a5",
+   "key": "7b030c4c9e7287d6",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -5729,7 +5749,7 @@
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 2,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 3,
      "cta": 1,
      "percent-fill": 1,
@@ -5783,7 +5803,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "802707b28d3f8f98",
+   "key": "6b2b7217604aa85d",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -5813,7 +5833,7 @@
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 2,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 3,
      "cta": 1,
      "percent-fill": 2,
@@ -5873,7 +5893,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "cd590c003e6e1e06",
+   "key": "f4489ad924d438b7",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -5903,7 +5923,7 @@
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 2,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 1,
      "percent-fill": 3,
@@ -5968,7 +5988,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "12b0fae05e23203e",
+   "key": "e07895d941d69627",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -5979,9 +5999,9 @@
     "recent": [
      "motion-title",
      "kinetic-words",
-     "percent-fill",
-     "quote-card",
      "unit-grid",
+     "quote-card",
+     "percent-fill",
      "motion-title",
      "stat-card",
      "motion-title"
@@ -5998,7 +6018,7 @@
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 3,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 2,
      "percent-fill": 4,
@@ -6068,7 +6088,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "25d41abd9b98d32f",
+   "key": "485cf6422f547964",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6098,7 +6118,7 @@
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 4,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 2,
      "percent-fill": 4,
@@ -6175,7 +6195,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "2f122570a73a085a",
+   "key": "e2c019a7157439d1",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6205,7 +6225,7 @@
      "map-highlight": 1,
      "media-window": 4,
      "stat-card": 4,
-     "count-up": 1,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 2,
      "percent-fill": 5,
@@ -6288,7 +6308,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "3076e17085c4824e",
+   "key": "c74a717f0255598d",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6318,16 +6338,17 @@
      "map-highlight": 1,
      "media-window": 5,
      "stat-card": 5,
-     "count-up": 2,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 2,
-     "percent-fill": 6,
-     "unit-grid": 3,
+     "percent-fill": 5,
+     "unit-grid": 4,
      "compare": 1,
      "odometer": 2,
      "excerpt": 3,
      "commit-card": 1,
-     "glass-bars-3d": 1
+     "glass-bars-3d": 1,
+     "count-up": 1
     },
     "plates": [
      {
@@ -6406,7 +6427,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "5c35bf9767ddaab9",
+   "key": "b99687e94bf3e97b",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6436,16 +6457,17 @@
      "map-highlight": 1,
      "media-window": 5,
      "stat-card": 5,
-     "count-up": 2,
+     "number-line": 1,
      "bar-chart": 4,
      "cta": 3,
-     "percent-fill": 6,
-     "unit-grid": 3,
+     "percent-fill": 5,
+     "unit-grid": 4,
      "compare": 1,
      "odometer": 2,
      "excerpt": 3,
      "commit-card": 1,
-     "glass-bars-3d": 1
+     "glass-bars-3d": 1,
+     "count-up": 1
     },
     "plates": [
      {
@@ -6619,7 +6641,7 @@
    }
   },
   "variety": {
-   "modules": 21,
+   "modules": 22,
    "top": [
     {
      "id": "motion-title",

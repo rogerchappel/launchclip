@@ -49,7 +49,7 @@
       "lines": [
         { "words": [364, 374], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-1"], "why": "title: the chapter title" },
         { "words": [375, 382], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-2"], "why": "compute (evidence c-cluster): stat-card" },
-        { "words": [383, 399], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-3"], "why": "stat: count-up" },
+        { "words": [383, 399], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-3"], "why": "stat: number-line" },
         { "words": [400, 408], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-4"], "why": "concept: nothing specific draws it; the line itself (\"Running it costs real money\")" },
         { "words": [409, 419], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-1"], "why": "compare (evidence c-training-cost): bar-chart" },
         { "words": [420, 429], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-2"], "why": "list: checklist, ahead of icon-row" },
@@ -156,9 +156,9 @@
         { "words": [1367, 1376], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-1"], "why": "documents: nothing specific draws it; the line itself (\"most labs report\")" },
         { "words": [1377, 1396], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-2"], "why": "series: nothing specific draws it; the line itself (\"Halcyon 2\")" },
         { "words": [1397, 1407], "intent": "turn", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-3"], "why": "ranking: nothing specific draws it; the line itself (\"take the top spot\")" },
-        { "words": [1408, 1424], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-4"], "why": "share (evidence c-long-doc): percent-fill" },
+        { "words": [1408, 1424], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-4"], "why": "share (evidence c-long-doc): unit-grid" },
         { "words": [1425, 1433], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-1"], "why": "concept (evidence c-maths): quote-card, ahead of glass-word" },
-        { "words": [1434, 1447], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-2"], "why": "share (evidence c-maths): unit-grid" },
+        { "words": [1434, 1447], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-2"], "why": "share (evidence c-maths): percent-fill" },
         { "words": [1448, 1459], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-3"], "why": "concept: nothing specific draws it; the line itself (\"The honest summary is this\")" },
         { "words": [1460, 1484], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh4-1"], "why": "stat (evidence c-swe): stat-card" },
         { "words": [1485, 1506], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh4-2"], "why": "concept: nothing specific draws it; the line itself (\"That is a normal, healthy release\")" }
@@ -210,7 +210,7 @@
       "layout": "full",
       "lines": [
         { "words": [1867, 1878], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-1"], "why": "title: the chapter title" },
-        { "words": [1879, 1900], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-2"], "why": "share (evidence c-rival-cuts): percent-fill" },
+        { "words": [1879, 1900], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-2"], "why": "share (evidence c-rival-cuts): unit-grid" },
         { "words": [1901, 1921], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-3"], "why": "stat: count-up" },
         { "words": [1922, 1934], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
         { "words": [1935, 1949], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-2"], "why": "concept: nothing specific draws it; the line itself (\"Halcyon 1.5\")" },

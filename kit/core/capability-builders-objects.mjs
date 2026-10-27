@@ -168,7 +168,9 @@ export function objectsBuilders(h) {
       // A guide the clause draws over the bars ("exactly half", "more than double"): evidence.data.reference from the director's series.
       const guide = beat.evidence?.data?.reference;
       const reference = !stairs && guide && Number.isFinite(guide.value) && guide.value > 0 && guide.value <= Math.max(...data.map((entry) => entry.value)) ? { value: guide.value, ...(guide.label ? { label: h.clip(guide.label, 12) } : {}) } : null;
-      return { variant: stairs ? 'staircase' : 'bars', title: h.clip(beat.headline, 28), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: subject >= 0 ? subject : data.length - 1 }), ...(reference ? { reference } : {}), ...source(beat) };
+      // The title says what the bars measure (the series' own title), never a fragment of the clause.
+      const title = beat.evidence?.data?.title;
+      return { variant: stairs ? 'staircase' : 'bars', ...(title ? { title: h.clip(title, 28) } : {}), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: subject >= 0 ? subject : data.length - 1 }), ...(reference ? { reference } : {}), ...source(beat) };
     },
     // Two (to four) money figures in one currency: stacks sized by value, with the ratio beside the larger.
     'coin-stack': (beat) => {

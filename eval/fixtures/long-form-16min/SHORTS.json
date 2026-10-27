@@ -79,7 +79,7 @@
    {
     "shot": "short-1-sh2",
     "start": 15.224,
-    "module": "percent-fill",
+    "module": "number-line",
     "change": "swap",
     "text": "it scored 71 percent, which does lead, by about four points."
    },
@@ -107,7 +107,7 @@
    {
     "shot": "short-1-sh4",
     "start": 26.845,
-    "module": "unit-grid",
+    "module": "percent-fill",
     "change": "enter",
     "text": "falling from 58 percent to 55 percent."
    },
@@ -295,7 +295,7 @@
    {
     "shot": "short-3-sh1",
     "start": 3.609,
-    "module": "count-up",
+    "module": "number-line",
     "change": "swap",
     "text": "arranged in racks of 64,"
    },
@@ -517,7 +517,7 @@
    {
     "shot": "short-4-sh4",
     "start": 33.718,
-    "module": "percent-fill",
+    "module": "unit-grid",
     "change": "swap",
     "text": "of 40 percent and 50 percent."
    }

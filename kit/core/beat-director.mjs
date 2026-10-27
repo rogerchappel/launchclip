@@ -532,8 +532,10 @@ export function directChunk(chunk, options) {
     draft.headline ??= headlineOf(beat.text);
     draft.chapterTitle = chunk.chapter.title ?? null;
     if (opener) draft.kicker = `Chapter ${chunk.chapter.index + 1}`;
+    // A figure's label is what the narration says it measures, else who it belongs to ("Terra scores 50.3%"), never key words.
     const n = facts.numbers[0];
-    if (n?.label) draft.label = n.label;
+    const label = n ? n.label || figureSubject(beat.text, n) : null;
+    if (label) draft.label = label;
     return draft;
   });
   if (beats.length && beats.at(-1).words[1] === total - 1 && states.at(-1).intent !== 'cta') states.at(-1).closing = true;
@@ -712,7 +714,7 @@ function figureSubject(text, entry) {
 /**
  * Figures that belong together across neighbouring clauses become one series
  * ("$1 in and $5 out … Sol costs $2 in and $10 out … exactly half"): up to
- * three clauses in a row with figures of one family (money in one currency,
+ * four clauses in a row with figures of one family (money in one currency,
  * shares, or a count of one thing), or a clause that compares them (half,
  * double, N times) right after. Each clause then carries the series so far
  * (evidence.data.series, the rows labelled by the name each figure belongs
@@ -727,11 +729,14 @@ export function pairSeries(states) {
   const close = () => { if (run) runs.push(run); run = null; };
   for (const state of states) {
     if (STRUCTURE_KINDS.has(state.kind) || state.kind === 'title') { close(); continue; }
-    // A run takes at most three clauses in 25 s.
-    if (run && (run.states.length >= 3 || state.end - run.states[0].state.start > 25)) close();
-    const all = (state.facts?.numbers ?? []).map((entry) => ({ entry, family: figureFamily(entry, run?.family) })).filter((figure) => figure.family);
-    // One family per clause: the run's when the clause has it, else its last figure's ("$10 … buys 1 million tokens" counts tokens).
-    const family = run && all.some((figure) => figure.family === run.family) ? run.family : all.at(-1)?.family ?? null;
+    // A run takes at most four clauses (a shot's states) in 25 s.
+    if (run && (run.states.length >= 4 || state.end - run.states[0].state.start > 25)) close();
+    // A scaled figure with no noun ("2 million") counts what the clause or run counted last ("1 million tokens").
+    let counting = run?.family?.startsWith('count:') ? run.family : null;
+    const all = (state.facts?.numbers ?? []).map((entry) => { const family = figureFamily(entry, counting); if (family?.startsWith('count:')) counting = family; return { entry, family }; }).filter((figure) => figure.family);
+    // One family per clause: a count wins over the money spent on it ("the same $10 buys 2 million"), then the run's, then the last figure's.
+    const count = all.find((figure) => figure.family.startsWith('count:'))?.family;
+    const family = count ?? (run && all.some((figure) => figure.family === run.family) ? run.family : all.at(-1)?.family ?? null);
     const figures = all.filter((figure) => figure.family === family);
     const ratio = RATIO.map(([regex, guide]) => ({ match: state.text.match(regex), guide })).find((entry) => entry.match);
     if (run && (figures.length ? family === run.family : ratio)) { run.states.push({ state, figures, ratio }); continue; }
@@ -783,9 +788,12 @@ export function pairSeries(states) {
       const evidence = { ...(step.state.evidence ?? {}) };
       // The series is the visual: a capture of the page it came from waits for another clause.
       delete evidence.capture;
-      evidence.data = { ...(isPlain(evidence.data) ? evidence.data : {}), series, ...(reference ? { reference } : {}) };
+      const title = seriesTitle(entry);
+      // What one budget buys from two options ("$10 buys 1 million … the same $10 buys 2 million") is a race of unit grids.
+      const race = raceOf(entry, series);
+      evidence.data = { ...(isPlain(evidence.data) ? evidence.data : {}), series, ...(reference ? { reference } : {}), ...(title ? { title } : {}), ...(race ? { race } : {}) };
       step.state.evidence = evidence;
-      step.state.kind = 'series';
+      step.state.kind = race ? 'race' : 'series';
       step.state.paired = entry.states.indexOf(step);
     }
   }
@@ -793,6 +801,50 @@ export function pairSeries(states) {
 }
 
 const isPlain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const SCALE_OF = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 };
+
+/**
+ * A chart title from what the run measures, never a clause fragment: money
+ * per a unit ("Price per million tokens"), a count bought with one budget
+ * ("Tokens for $10"), or the benchmark a share is on ("Terminal-Bench 4.0");
+ * null when the run does not say.
+ */
+export function seriesTitle(run) {
+  const figures = run.states.flatMap((step) => step.figures.map((figure) => figure.entry));
+  if (run.family.startsWith('money:')) {
+    const per = figures.map((entry) => String(entry.label ?? '').match(/^per\s+((?:million|thousand|billion)\s+)?(?:input\s+|output\s+|cached\s+)?([a-z]+)/i)).find(Boolean);
+    return per ? `Price per ${per[1] ?? ''}${per[2]}`.replace(/\s+/g, ' ').trim() : 'Price';
+  }
+  if (run.family.startsWith('count:')) {
+    const noun = run.family.slice('count:'.length);
+    const spend = spendOf(run);
+    return `${noun.charAt(0).toUpperCase()}${noun.slice(1)}s${spend ? ` for ${spend.raw}` : ''}`;
+  }
+  // A share is on a test: the name the run says that is not one of its rows.
+  const rows = new Set(figures.map((entry) => String(entry.label ?? '').toLowerCase()));
+  for (const step of run.states) {
+    const name = String(step.state.text).match(/\b((?:[A-Z][\w'’-]*\s){0,3}[A-Z][\w'’-]*(?:\s\d[\d.]*)?)(?=,|\s(?:which|a test|measures))/)?.[1];
+    const clean = name?.split(/\s+/).filter((word, i, all) => !(i < all.length - 1 && NOT_NAME_START.has(word))).join(' ');
+    if (clean && !rows.has(clean.toLowerCase()) && /\p{Lu}.*(?:\d|[A-Z].*[A-Z]|-)/u.test(clean)) return clean.length <= 28 ? clean : null;
+  }
+  return null;
+}
+
+// The budget a count run spends on each side ("$10 of output … the same $10"): a money figure every mention shares.
+function spendOf(run) {
+  const money = run.states.flatMap((step) => (step.state.facts?.numbers ?? []).filter((entry) => entry.prefix));
+  if (!money.length || new Set(money.map((entry) => entry.value)).size !== 1) return null;
+  return { value: money[0].value, raw: money[0].raw ?? `${money[0].prefix}${money[0].value}` };
+}
+
+/** Two counts bought with the same budget → {spend, suffix, rows: [{label, total}]} for a grid race, else null. */
+function raceOf(run, series) {
+  if (!run.family.startsWith('count:') || series.length !== 2) return null;
+  const spend = spendOf(run);
+  if (!spend) return null;
+  const rows = series.map((row) => ({ label: row.label, total: row.value * (SCALE_OF[row.unit] ?? 1) }));
+  return rows.every((row) => row.total > 0) ? { spend: spend.value, suffix: run.family.slice('count:'.length) + 's', rows } : null;
+}
 
 // ---------------------------------------------------------------------------
 // Story-shaped evidence: a running timeline, a model's tokens

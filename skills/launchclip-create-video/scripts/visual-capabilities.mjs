@@ -24,7 +24,7 @@ import { channelBuilders } from './capability-builders-channel.mjs';
 export const VISUAL_KINDS = Object.freeze([
   'title', 'concept', 'stat', 'money', 'compute', 'compare', 'share', 'series', 'ranking', 'list', 'process',
   'timeline', 'date', 'month', 'quote', 'social', 'code', 'terminal', 'pr', 'commit', 'diff', 'chain', 'lineage',
-  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting', 'claim'
+  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting', 'claim', 'race'
 ]);
 
 // Capture kinds (launchclip.capture.v1) and the visual kind that shows each.
@@ -53,7 +53,8 @@ export const CAPABILITIES = Object.freeze([
   cap('stat-card', ['stat', 'money', 'compute'], ['concept-card']),
   cap('count-up', ['stat', 'money'], ['stat-card']),
   cap('odometer', ['stat', 'compute', 'money'], ['count-up', 'stat-card']),
-  cap('glass-bars-3d', ['compare', 'series'], ['bar-chart']),
+  cap('grid-race', ['race'], ['glass-bars-3d', 'bar-chart']),
+  cap('glass-bars-3d', ['compare', 'series', 'race'], ['bar-chart']),
   cap('coin-stack', ['money'], ['stat-card']),
   cap('rack-shelf', ['compute'], ['stat-card']),
   cap('percent-fill', ['share'], ['stat-card']),
@@ -215,14 +216,24 @@ const BUILDERS = {
   // Kinetic type sets a line the narration says, in its own order (beat.line), never the clause's key words.
   'kinetic-words': (beat) => { const groups = lineGroups(beat.line); return groups ? { words: groups.map((text, i) => ({ text, at: round(0.2 + i * 0.6), ...(i === groups.length - 1 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' } : null; },
   // Number modules show only the clause's own numbers: no number, no params (null), never a placeholder figure.
-  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.headline, 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
-  'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
-  'odometer': (beat) => { const n = numbersOf(beat).find((entry) => Number.isInteger(entry.scaled ?? entry.value)); return n ? { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' } : null; },
-  'percent-fill': (beat) => { const n = percentOf(beat); return n ? { value: Math.round(n.value), label: clip(beat.label ?? beat.headline, 36), variant: 'bar' } : null; },
+  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
+  'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
+  'odometer': (beat) => { const n = numbersOf(beat).find((entry) => Number.isInteger(entry.scaled ?? entry.value)); return n ? { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' } : null; },
+  'percent-fill': (beat) => { const n = percentOf(beat); return n ? { value: Math.round(n.value), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 36), variant: 'bar' } : null; },
   'unit-grid': (beat) => { const n = percentOf(beat); if (!n) return null; const lit = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), count: 100, groups: [{ count: lit, label: clip(`${lit} in 100`, 24), tone: 'primary' }, { count: 100 - lit, label: 'The rest', tone: 'accent' }], variant: 'dots' }; },
   'pie-chart': (beat) => { const n = percentOf(beat); if (!n) return null; const v = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), data: [{ label: clip(beat.label ?? 'This', 18), value: v }, { label: 'The rest', value: 100 - v }], variant: 'donut' }; },
   'number-line': (beat) => { const n = numbersOf(beat)[0]; if (!n) return null; const v = n.value; const to = v <= 100 ? 100 : 10 ** Math.ceil(Math.log10(v)); return { from: 0, to, ranges: [{ from: 0, to: Math.max(1, Math.round(v)), label: clip(beat.label ?? 'Here', 18), tone: 'good' }], marker: { value: v, label: clip(formatValue(n), 12) }, variant: 'ruler' }; },
-  'bar-chart': (beat) => { const data = seriesOf(beat, 2); return data ? { title: clip(beat.headline, 40), data, highlight: data.length - 1, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' } : null; },
+  // Two unit grids filling as one budget buys from each side (the director's evidence.data.race).
+  'grid-race': (beat) => {
+    const race = beat.evidence?.data?.race;
+    if (!race || !Array.isArray(race.rows) || race.rows.length !== 2) return null;
+    const max = Math.max(...race.rows.map((row) => row.total));
+    const unit = 10 ** Math.ceil(Math.log10(max / 300));
+    return { ...(beat.evidence.data.title ? { title: clip(beat.evidence.data.title, 40) } : {}), unit, legend: clip(`1 cell = ${unit.toLocaleString('en-US')} ${race.suffix}`, 40), suffix: clip(race.suffix, 16), format: { compact: true },
+      racers: race.rows.map((row) => ({ label: clip(row.label, 28), total: row.total, ...(Number.isFinite(race.spend) ? { spend: { total: race.spend } } : {}) })), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) };
+  },
+  // A chart's title says what it measures (the series' own title), never a fragment of the clause.
+  'bar-chart': (beat) => { const data = seriesOf(beat, 2); return data ? { ...(beat.evidence?.data?.title ? { title: clip(beat.evidence.data.title, 40) } : {}), data, highlight: data.length - 1, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' } : null; },
   'leaderboard': (beat) => { const data = seriesOf(beat, 3); return data ? { title: clip(beat.headline, 40), entries: data, variant: 'bars' } : null; },
   'compare': (beat) => { const sides = sidesOf(beat); return sides ? { left: { title: sides[0].label, items: [sides[0].detail] }, right: { title: sides[1].label, items: [sides[1].detail] } } : null; },
   'gauge-compare': (beat) => { const sides = sidesOf(beat, true); if (!sides || sides[0].unit !== sides[1].unit || !sides[0].unit) return null; return { left: { label: sides[0].label, value: sides[0].value, unit: clip(sides[0].unit, 8), color: 'primary' }, right: { label: sides[1].label, value: sides[1].value, unit: clip(sides[1].unit, 8), color: 'accent' } }; },
@@ -324,8 +335,12 @@ for (const family of FAMILIES) Object.assign(BUILDERS, family.builders);
 
 /** The family files' sample beats (with evidence.data), for tests and sample sheets. */
 export function capabilitySamples() {
-  return FAMILIES.flatMap((family) => family.samples ?? []);
+  return [...FAMILIES.flatMap((family) => family.samples ?? []), ...SAMPLES];
 }
+
+// Beats for the builders here that need director data: a grid race (pairSeries' evidence.data.race).
+const SAMPLES = [{ id: 'race-sample', text: 'On Terra, the same $10 buys 2 million.', headline: 'Tokens for $10', facts: { numbers: [], items: [], dates: [] },
+  evidence: { claim: 'c-sample', status: 'verified', source: { url: 'https://example.com/pricing', title: 'Pricing' }, data: { title: 'Tokens for $10', race: { spend: 10, suffix: 'tokens', rows: [{ label: 'Sol', total: 1e6 }, { label: 'Terra', total: 2e6 }] } } } }];
 
 /**
  * Params for a module from a beat ({id, text, headline, label?, sub?, kicker?,
