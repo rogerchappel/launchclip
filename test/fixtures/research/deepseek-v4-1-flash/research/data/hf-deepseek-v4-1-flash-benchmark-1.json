@@ -1,0 +1,712 @@
+{
+  "schema": "launchclip.research-data.v1",
+  "id": "hf-deepseek-v4-1-flash-benchmark-1",
+  "kind": "benchmark",
+  "title": "Base Model",
+  "source": {
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+    "title": "deepseek-ai/DeepSeek-V4.1-Flash · model card",
+    "publisher": "Hugging Face · deepseek-ai",
+    "published_at": "2026-09-10T02:17:58.000Z",
+    "fetched_at": "2026-10-27T05:11:45.950Z",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251"
+  },
+  "columns": [
+    "Benchmark (Metric)",
+    "# Shots",
+    "DeepSeek-V4-Flash-Base",
+    "DeepSeek-V4-Pro-Base",
+    "DeepSeek-V4.1-Flash-Base"
+  ],
+  "rows": [
+    {
+      "label": "Architecture",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "Architecture",
+        "—",
+        "MoE",
+        "MoE",
+        "MoE"
+      ]
+    },
+    {
+      "label": "# Backbone Params",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": 284,
+        "DeepSeek-V4-Pro-Base": 1,
+        "DeepSeek-V4.1-Flash-Base": 552
+      },
+      "raw": [
+        "# Backbone Params",
+        "—",
+        "284B",
+        "1.6T",
+        "552B"
+      ]
+    },
+    {
+      "label": "# Activated Params",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": 13,
+        "DeepSeek-V4-Pro-Base": 49,
+        "DeepSeek-V4.1-Flash-Base": 8
+      },
+      "raw": [
+        "# Activated Params",
+        "—",
+        "13B",
+        "49B",
+        "8B / 16B"
+      ]
+    },
+    {
+      "label": "World Knowledge",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "World Knowledge",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "label": "AGIEval (EM)",
+      "values": {
+        "# Shots": 3,
+        "DeepSeek-V4-Flash-Base": 83.9,
+        "DeepSeek-V4-Pro-Base": 84.4,
+        "DeepSeek-V4.1-Flash-Base": 83.4
+      },
+      "raw": [
+        "AGIEval (EM)",
+        "3–5-shot",
+        "83.9",
+        "84.4",
+        "83.4"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "MMLU-Pro (EM)",
+      "values": {
+        "# Shots": 5,
+        "DeepSeek-V4-Flash-Base": 68.3,
+        "DeepSeek-V4-Pro-Base": 73.5,
+        "DeepSeek-V4.1-Flash-Base": 74.1
+      },
+      "raw": [
+        "MMLU-Pro (EM)",
+        "5-shot",
+        "68.3",
+        "73.5",
+        "74.1"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "C-Eval (EM)",
+      "values": {
+        "# Shots": 5,
+        "DeepSeek-V4-Flash-Base": 92.1,
+        "DeepSeek-V4-Pro-Base": 93.1,
+        "DeepSeek-V4.1-Flash-Base": 92.1
+      },
+      "raw": [
+        "C-Eval (EM)",
+        "5-shot",
+        "92.1",
+        "93.1",
+        "92.1"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "MultiLoKo (LLM-Judge)",
+      "values": {
+        "# Shots": 5,
+        "DeepSeek-V4-Flash-Base": 42.6,
+        "DeepSeek-V4-Pro-Base": 50.9,
+        "DeepSeek-V4.1-Flash-Base": 45.5
+      },
+      "raw": [
+        "MultiLoKo (LLM-Judge)",
+        "5-shot",
+        "42.6",
+        "50.9",
+        "45.5"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "SimpleQA-Verified (EM)",
+      "values": {
+        "# Shots": 25,
+        "DeepSeek-V4-Flash-Base": 30.1,
+        "DeepSeek-V4-Pro-Base": 55.2,
+        "DeepSeek-V4.1-Flash-Base": 42.3
+      },
+      "raw": [
+        "SimpleQA-Verified (EM)",
+        "25-shot",
+        "30.1",
+        "55.2",
+        "42.3"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "SuperGPQA (EM)",
+      "values": {
+        "# Shots": 5,
+        "DeepSeek-V4-Flash-Base": 46.5,
+        "DeepSeek-V4-Pro-Base": 53.9,
+        "DeepSeek-V4.1-Flash-Base": 53.1
+      },
+      "raw": [
+        "SuperGPQA (EM)",
+        "5-shot",
+        "46.5",
+        "53.9",
+        "53.1"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "Language & Reasoning",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "Language & Reasoning",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "label": "BBH (EM)",
+      "values": {
+        "# Shots": 3,
+        "DeepSeek-V4-Flash-Base": 86.9,
+        "DeepSeek-V4-Pro-Base": 87.5,
+        "DeepSeek-V4.1-Flash-Base": 86.1
+      },
+      "raw": [
+        "BBH (EM)",
+        "3-shot",
+        "86.9",
+        "87.5",
+        "86.1"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "BBEH (EM)",
+      "values": {
+        "# Shots": 1,
+        "DeepSeek-V4-Flash-Base": 25.4,
+        "DeepSeek-V4-Pro-Base": 29.8,
+        "DeepSeek-V4.1-Flash-Base": 27.2
+      },
+      "raw": [
+        "BBEH (EM)",
+        "1-shot",
+        "25.4",
+        "29.8",
+        "27.2"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "DROP (F1)",
+      "values": {
+        "# Shots": 1,
+        "DeepSeek-V4-Flash-Base": 88.6,
+        "DeepSeek-V4-Pro-Base": 88.7,
+        "DeepSeek-V4.1-Flash-Base": 87.9
+      },
+      "raw": [
+        "DROP (F1)",
+        "1-shot",
+        "88.6",
+        "88.7",
+        "87.9"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "HellaSwag (EM)",
+      "values": {
+        "# Shots": 0,
+        "DeepSeek-V4-Flash-Base": 85.7,
+        "DeepSeek-V4-Pro-Base": 88,
+        "DeepSeek-V4.1-Flash-Base": 87.2
+      },
+      "raw": [
+        "HellaSwag (EM)",
+        "0-shot",
+        "85.7",
+        "88.0",
+        "87.2"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "Code & Math",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "Code & Math",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "label": "BigCodeBench (Pass@1)",
+      "values": {
+        "# Shots": 3,
+        "DeepSeek-V4-Flash-Base": 56.8,
+        "DeepSeek-V4-Pro-Base": 59.2,
+        "DeepSeek-V4.1-Flash-Base": 60.6
+      },
+      "raw": [
+        "BigCodeBench (Pass@1)",
+        "3-shot",
+        "56.8",
+        "59.2",
+        "60.6"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "HumanEval (Pass@1)",
+      "values": {
+        "# Shots": 0,
+        "DeepSeek-V4-Flash-Base": 69.5,
+        "DeepSeek-V4-Pro-Base": 76.8,
+        "DeepSeek-V4.1-Flash-Base": 79.4
+      },
+      "raw": [
+        "HumanEval (Pass@1)",
+        "0-shot",
+        "69.5",
+        "76.8",
+        "79.4"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "GSM8K (EM)",
+      "values": {
+        "# Shots": 8,
+        "DeepSeek-V4-Flash-Base": 90.8,
+        "DeepSeek-V4-Pro-Base": 92.6,
+        "DeepSeek-V4.1-Flash-Base": 93
+      },
+      "raw": [
+        "GSM8K (EM)",
+        "8-shot",
+        "90.8",
+        "92.6",
+        "93.0"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "MATH (EM)",
+      "values": {
+        "# Shots": 4,
+        "DeepSeek-V4-Flash-Base": 57.4,
+        "DeepSeek-V4-Pro-Base": 64.5,
+        "DeepSeek-V4.1-Flash-Base": 61.1
+      },
+      "raw": [
+        "MATH (EM)",
+        "4-shot",
+        "57.4",
+        "64.5",
+        "61.1"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "MGSM (EM)",
+      "values": {
+        "# Shots": 8,
+        "DeepSeek-V4-Flash-Base": 85.7,
+        "DeepSeek-V4-Pro-Base": 84.4,
+        "DeepSeek-V4.1-Flash-Base": 80.2
+      },
+      "raw": [
+        "MGSM (EM)",
+        "8-shot",
+        "85.7",
+        "84.4",
+        "80.2"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "Long Context",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "Long Context",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "label": "LongBench-V2 (EM)",
+      "values": {
+        "# Shots": 1,
+        "DeepSeek-V4-Flash-Base": 44.7,
+        "DeepSeek-V4-Pro-Base": 51.5,
+        "DeepSeek-V4.1-Flash-Base": 45.2
+      },
+      "raw": [
+        "LongBench-V2 (EM)",
+        "1-shot",
+        "44.7",
+        "51.5",
+        "45.2"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "Multimodal",
+      "values": {
+        "# Shots": null,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": null
+      },
+      "raw": [
+        "Multimodal",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "label": "MMMU-Pro (EM)",
+      "values": {
+        "# Shots": 4,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": 56.5
+      },
+      "raw": [
+        "MMMU-Pro (EM)",
+        "4-shot",
+        "—",
+        "—",
+        "56.5"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "CVBench (EM)",
+      "values": {
+        "# Shots": 4,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": 77.9
+      },
+      "raw": [
+        "CVBench (EM)",
+        "4-shot",
+        "—",
+        "—",
+        "77.9"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "DocVQA (LLM-Judge)",
+      "values": {
+        "# Shots": 4,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": 95.6
+      },
+      "raw": [
+        "DocVQA (LLM-Judge)",
+        "4-shot",
+        "—",
+        "—",
+        "95.6"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "RefCOCO-avg (Acc@0.5)",
+      "values": {
+        "# Shots": 0,
+        "DeepSeek-V4-Flash-Base": null,
+        "DeepSeek-V4-Pro-Base": null,
+        "DeepSeek-V4.1-Flash-Base": 86
+      },
+      "raw": [
+        "RefCOCO-avg (Acc@0.5)",
+        "0-shot",
+        "—",
+        "—",
+        "86.0"
+      ],
+      "notes": {}
+    }
+  ],
+  "notes": [],
+  "claims": [],
+  "views": [
+    {
+      "module": "bar-chart",
+      "title": "# Backbone Params",
+      "props": {
+        "data": [
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 284
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 1
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 552
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "# Activated Params",
+      "props": {
+        "data": [
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 13
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 49
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 8
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "AGIEval (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 3
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 83.9
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 84.4
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 83.4
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "MMLU-Pro (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 5
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 68.3
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 73.5
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 74.1
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "C-Eval (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 5
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 92.1
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 93.1
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 92.1
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "MultiLoKo (LLM-Judge)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 5
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 42.6
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 50.9
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 45.5
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "SimpleQA-Verified (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 25
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 30.1
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 55.2
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 42.3
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "SuperGPQA (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 5
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 46.5
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 53.9
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 53.1
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "BBH (EM)",
+      "props": {
+        "data": [
+          {
+            "label": "# Shots",
+            "value": 3
+          },
+          {
+            "label": "DeepSeek-V4-Flash-Base",
+            "value": 86.9
+          },
+          {
+            "label": "DeepSeek-V4-Pro-Base",
+            "value": 87.5
+          },
+          {
+            "label": "DeepSeek-V4.1-Flash-Base",
+            "value": 86.1
+          }
+        ],
+        "highlight": "DeepSeek-V4.1-Flash-Base"
+      }
+    }
+  ]
+}

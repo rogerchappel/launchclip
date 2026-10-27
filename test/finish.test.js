@@ -251,7 +251,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "critic"]);
     assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");

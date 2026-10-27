@@ -391,6 +391,16 @@ export function dataExplainerLines() {
   ];
 }
 
+// Movement grammar: builds inside a shot, the focus ring, the depth transitions.
+export function buildLines() {
+  return [
+    'Builds, not cuts: a data or proof shot runs 2–4 states timed to the clauses on one plate (scene.states [{at: <anchor>, set: {...}}], 1–5 after the scene itself), so each line gets a new visual without a cut. Nothing holds one state longer than about 10 s, and nothing stands still over 3 s (the holds and states gates).',
+    'A state sets any of: params (the module\'s state params, merged; arrays keep their length, so list every item and hold the later ones back with reveal), reveal [item], focus item | "<element id>" | null (a ring in the focus colour travels there and the rest dims to 30 %), glow item, guide {value, label} (bar-chart) or {target, edge, label}, note {text ≤ 32, target}, clear true. Items are indexes (bar 0, row 2); element ids drop the scene prefix ("cell-1-2", "line-3").',
+    'States run on bar-chart (data, max, highlight), scatter-plot (points, highlight), comparison-table (rows, highlight), leaderboard (entries, highlight), unit-grid (highlight), process-steps (steps) and excerpt (lines). Example on bar-chart: the first bar ($1) → the second grows in (reveal [1]) → a dashed "half" guide → focus and glow on the winner.',
+    'Between shots: "rack-focus" (the card blurs back while the next sharpens forward) is the default between builds; "card-to-card" when one card becomes the next; "glow-wipe" only for chapter breaks.'
+  ];
+}
+
 function anchorLines() {
   return [
     'scene.start, scene.end and hits[].at accept: seconds (2.5); "word:<text>" (the first time that word is spoken); "word:<text>#<n>" (its n-th occurrence); an optional offset ("word:fast-0.2"); "beat:<n>" or "downbeat:<n>" (from BEATS.json).',
@@ -768,6 +778,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -863,6 +874,7 @@ export function storyboardModulesReference() {
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

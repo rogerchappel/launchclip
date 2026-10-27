@@ -30,6 +30,7 @@ import { panelFill, storyPanel } from './panels.mjs';
 import { cardFillStyles, fieldStyle, panelFillPlan } from './backgrounds.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
+import { resolveShotStates, stateSpec } from './shot-states.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -200,6 +201,12 @@ export function resolveModule(scene, story, { track, end } = {}) {
     if (frameSafe) {
       const panel = Number.isFinite(Number(scene?.start)) ? sceneLayoutAt(story, Number(scene.start), Number.isFinite(Number(scene?.end)) ? Number(scene.end) : Number(scene.start))?.safe ?? null : null;
       model.frame = { ...(model.frame && typeof model.frame === 'object' ? model.frame : {}), safe: intersectRects(panel ?? model.frame?.safe, frameSafe) };
+    }
+    // Shot states (kit/core/shot-states.mjs): one model per param change, for the states engine to morph between.
+    if (Array.isArray(scene?.states) && scene.states.length) {
+      const spec = stateSpec(scene.module, isEditorialKind(scene.module) ? null : catalogModules()[scene.module]);
+      model.shotStates = resolveShotStates(scene, model, { spec, resolveWith: (params) => resolveModuleInner({ ...scene, params, states: undefined }, story, { track, end: finalEnd }) });
+      if (Array.isArray(model.events)) model.events.push(...model.shotStates.events);
     }
     return model;
   } catch (error) {
@@ -499,7 +506,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     if (placement) model.subjectPlacement = placement.where;
     // Footage checklist rows type in on their at word (RFC §6.2).
     if (module === 'checklist' && story?.lane === 'footage-led') model = checklistTypeIn(model, { fps: Number(format.fps) || 30 });
-    return finishModel(model, { module, scene });
+    return openingSettled(finishModel(model, { module, scene }), story, scene);
   }
 
   const definition = catalogModules()[module];
@@ -511,6 +518,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
   plateCuts(finished, story, scene);
+  openingSettled(finished, story, scene);
   keepCaptions(finished, story);
   if (track !== undefined) finished.track = track;
   // Catalogue B/C timelines remap their pop eases from model.grammar.
@@ -614,6 +622,27 @@ function panelChecklistRect(model, safe, format) {
   if (!(scale >= least - 1e-6)) return { where: 'none' };
   const width = round(layout.width * scale), height = round(layout.height * scale);
   return { rect: { x: round(safe.x + (safe.width - width) / 2), y: round(safe.y + (safe.height - height) / 2), width, height }, where: 'panel' };
+}
+
+// The opening image (docs/VIRAL_FORMATS_RFC.md, the short-video rules): the
+// plate that opens a story with no transition is drawn on frame 0, so its
+// root enters fully visible and sharp, as hook-title and an opening cast
+// already are. Its moves (a slide, a scale settle) and what happens inside it
+// (a count, a flip, a bar growing) still play. A story over a recording opens
+// on the recording.
+const SETTLED = Object.freeze({ opacity: 1, blur: 0 });
+function openingSettled(model, story, scene) {
+  const fps = Number(story?.format?.fps) || 30;
+  const start = Number(scene?.start);
+  if (!model || (scene?.track ?? 0) !== 0 || scene?.insert === true || scene?.in || !(Number.isFinite(start) && start <= 1 / fps + 1e-6) || storyBase(story)) return model;
+  const rest = (from) => Object.fromEntries(Object.entries(from).map(([key, value]) => [key, key in SETTLED ? SETTLED[key] : value]));
+  const m = model.motion;
+  if (m?.enterFrom && typeof m.enterFrom === 'object') m.enterFrom = rest(m.enterFrom);
+  if (Array.isArray(model.animations)) {
+    for (const anim of model.animations) if (anim.node === 'root' && Number(anim.start) <= Number(model.start ?? start) + 1 / fps + 1e-6 && anim.from) anim.from = rest(anim.from);
+  }
+  model.openingSettled = true;
+  return model;
 }
 
 // Text reads or is gone (docs/DIRECTION_GUARDRAILS.md §4): a text or hero

@@ -22,6 +22,7 @@
 
 import {rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
+import {applyShotStates, shotStateView} from './shot-states.mjs';
 import {cardSurface} from './catalog-g-base.mjs';
 import {conceptCard, iconRow, objectCard, sectionCard} from './catalog-g-cards.mjs';
 import {excerpt, quoteCard, statCard} from './catalog-g-proof.mjs';
@@ -30,10 +31,13 @@ import {compare, timeline} from './catalog-g-sequence.mjs';
 const ASPECTS = ['9:16', '16:9'];
 const DEFINITIONS = [conceptCard, iconRow, sectionCard, objectCard, statCard, quoteCard, excerpt, compare, timeline];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, mood: def.mood, variants: def.variants}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, mood: def.mood, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
 export const VARIANTS = Object.freeze(Object.fromEntries(DEFINITIONS.map(def => [def.id, def.variants])));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
+
+// The module's own view and op list, for the states engine to re-run with a state's params.
+const stateHooks = def => ({view: model => def.view(model), timeline: model => { const ops = []; rootOps(model, ops); def.timeline(model, ops); return ops; }});
 
 function definition(model) {
   const def = model && BY_ID[model.module];
@@ -43,14 +47,18 @@ function definition(model) {
 
 /** Static element tree for a catalogue G model (initial state at scene start). */
 export function catalogGView(model) {
-  return rootNode(model, [cardSurface(model), ...definition(model).view(model)].filter(Boolean));
+  const def = definition(model);
+  return rootNode(model, [cardSurface(model), ...shotStateView(model, def.view(model), stateHooks(def))].filter(Boolean));
 }
 
 /** Renderer-neutral animation ops for a catalogue G model, root first. */
 export function catalogGTimeline(model) {
   const ops = [];
   rootOps(model, ops);
-  definition(model).timeline(model, ops);
+  const def = definition(model);
+  def.timeline(model, ops);
+  // Shot states (kit/core/shot-states.mjs): param changes, reveals, the focus ring.
+  if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
 }

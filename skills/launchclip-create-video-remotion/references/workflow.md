@@ -333,7 +333,12 @@ tournament receipts:
   constraints, and the style: the named pack or brand, or the seed and the
   art-direction constraints it was generated from
 - `EVIDENCE.md`: factual claims and their source locations; label inference,
-  opinion, and unverified claims explicitly
+  opinion, and unverified claims explicitly. For a video that states facts
+  about the world (a release, a benchmark, a paper, a person), run
+  `launchclip research SCRIPT.md --out research` (no model calls) and build it
+  from `research/RESEARCH.md`; fix or cut every flagged claim. See
+  `references/research.md` for the capture requests, cited data and
+  licence-clear media it also writes
 - `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
   complete fresh-context scorecard, deterministic winner (`chosen: true`), and
   required improvements
