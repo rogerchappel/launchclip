@@ -1536,6 +1536,21 @@ params:
 events: build, readout
 variants: server (default), appliance
 
+### paper-stack (keeps captions)
+Paper in 3D: a stack of labelled document sections ("Chapter 3 · pp. 41–77") landing one on another, then a check or a red flag per row on its cue; the books variant stacks books with their titles on the spines; the folder variant lands a glass folder whose front swings open on its hinge and its files rise out, labelled, each with its check or flag.
+params:
+- items: [{label ≤ 28, detail? ≤ 14 ("pp. 41–77"), status? ok | flag | none, size? 0.5–4 (relative thickness), at? (the status cue)}] 2–7 (folder: 1–5 files); the first is the top of the stack (or the front file)
+- openAt: folder only: the front opens: seconds from scene start (optional; else a matching hit, else a default)
+- tone: glow tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the stack starts landing: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, open, status-0, status-1, status-2, status-3, status-4, status-5, status-6
+variants: sections (default), books, folder
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1681,6 +1696,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | coin-stack | 2 s | 0.5 s | scene − 0.65 s | coins drop one per stack level, all stacks together, within about 2 s from at; the callout follows the build |
 | rack-shelf | 2 s | 0.5 s | scene − 0.65 s | trays stack in bottom first (cubes glide in) within about 1.7 s from at; focus follows the build; the camera dollies in over the whole scene |
 | device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
+| paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

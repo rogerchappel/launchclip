@@ -166,3 +166,21 @@ test('device-box: the readout counts to its value, the clock ticks on whole seco
   assert.ok(frameState(ops, 3).get('scene-fan0a').rotation > frameState(ops, 2).get('scene-fan0a').rotation);
   assert.ok(model.events.some(e => e.name === 'readout'));
 });
+
+test('paper-stack: statuses pop on their cues, portrait sections label the edges, the folder opens', () => {
+  const r = (params, aspect) => resolve('paper-stack', params, aspect);
+  assert.throws(() => r({items: [{label: 'A', status: 'maybe'}, {label: 'B'}]}), /params\.items\[0\]\.status/);
+  assert.throws(() => r({items: [{label: 'A'}, {label: 'B'}], openAt: 2}), /params\.openAt opens the folder variant/);
+  const model = r(SAMPLES['paper-stack'], '16:9');
+  const names = model.events.map(e => e.name);
+  for (const i of [0, 1, 2, 3]) assert.ok(names.includes(`status-${i}`), `status-${i}`);
+  const e = model.content.items.map(item => item.e);
+  assert.deepEqual([...e].sort((a, c) => c - a), e, 'the first item is the top of the stack');
+  assert.equal(model.content.onFace, false);
+  assert.equal(r(SAMPLES['paper-stack'], '9:16').content.onFace, true);
+  const folder = r({...SAMPLES['paper-stack'], variant: 'folder'}, '16:9');
+  const end = frameState(catalogHTimeline(folder), folder.motion.exitStart - 0.01);
+  assert.equal(end.get('scene-flap').rotation, -78, 'the front swung open');
+  folder.content.items.forEach((item, i) => assert.equal(end.get(`scene-f${i}`).y, -item.lift));
+});
+

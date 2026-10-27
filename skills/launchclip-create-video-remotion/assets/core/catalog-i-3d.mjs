@@ -12,5 +12,6 @@ import {BAR_MODULES} from './catalog-i-3d-bars.mjs';
 import {STACK_MODULES} from './catalog-i-3d-stacks.mjs';
 import {RACK_MODULES} from './catalog-i-3d-rack.mjs';
 import {DEVICE_MODULES} from './catalog-i-3d-device.mjs';
+import {PAPER_MODULES} from './catalog-i-3d-paper.mjs';
 
-export const OBJECT_MODULES = [...BAR_MODULES, ...STACK_MODULES, ...RACK_MODULES, ...DEVICE_MODULES];
+export const OBJECT_MODULES = [...BAR_MODULES, ...STACK_MODULES, ...RACK_MODULES, ...DEVICE_MODULES, ...PAPER_MODULES];

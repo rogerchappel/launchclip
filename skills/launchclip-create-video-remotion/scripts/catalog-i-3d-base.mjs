@@ -323,6 +323,18 @@ export function fitSize(check, path, text, opts) {
   return fitText(check, path, text, {...opts, preferred: Math.max(opts.preferred, Math.ceil(opts.min))});
 }
 
+/**
+ * A hinge in stand coords: `kids` turn about the stand's x axis through
+ * (0, y, z) by the `rotation` of target `${id}` (degrees; negative tips the
+ * top toward the viewer). The turn is an in-plane rotation conjugated by
+ * rotateY(±90deg), so it needs only the op props catalogue B has.
+ */
+export function hinge(id, [y, z], kids) {
+  const back = el('div', null, POINT(0, 0, {transform: 'rotateY(-90deg)', transformOrigin: '0px 0px'}), kids);
+  const spin = el('div', id, POINT(0, 0, {transformOrigin: '0px 0px'}), [back]);
+  return el('div', null, POINT(0, r2(y), {transform: `translateZ(${r2(z)}px) rotateY(90deg)`, transformOrigin: '0px 0px'}), [spin]);
+}
+
 /** Hidden (a point) until `t`, then it falls `dropH` px onto its place. */
 export function dropIn(ops, target, start, t, dropH, {duration = 0.6, ease = 'power3.out'} = {}) {
   set(ops, target, start, {x: 0, y: 0, scaleX: 0.001, scaleY: 0.001});
