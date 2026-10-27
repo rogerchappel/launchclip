@@ -48,7 +48,7 @@ function fakeModel() {
       if (!params.callouts.length) delete params.callouts;
       const board = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration }, brand: DEFAULT_BRAND, audio: { words: "NARRATION.json" },
         scenes: [
-          { id: "s1", module: "hook-title", start: 0, end: 2, params: { headline: "One place for every launch" } },
+          { id: "s1", module: "object-card", start: 0, end: 2, params: { object: "rocket", caption: "One place for every launch" } },
           { id: "s2", module: "product-demo", start: 2, end, in: { type: "fade", dur: 0.3 }, params },
           { id: "s3", module: "cta", start: end, end: duration, in: { type: "fade", dur: 0.3 }, params: { action: "Try Pulseboard free" } }
         ], overlays: [{ type: "captions", style: "word-highlight" }] };

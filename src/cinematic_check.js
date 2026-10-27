@@ -10,6 +10,7 @@ import {
   validateTemporalEvidenceManifest
 } from "./cinematic_evidence.js";
 import { assessCinematicReadiness } from "./production_readiness.js";
+import { structureGate } from "./skeletons.js";
 import { validateConceptsReceipt, validateStoryReceipt } from "./cinematic_receipts.js";
 import { resolveProductionProfile } from "./production_profiles.js";
 import { profileForStory } from "./profile_store.js";
@@ -105,6 +106,10 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   // launchclip.story-receipt.v1): missing required fields fail the gate.
   const conceptsCheck = concepts ? validateConceptsReceipt(concepts) : null;
   const storyCheck = story ? validateStoryReceipt(story, { conceptsChosenId: conceptsCheck?.chosen_id ?? null, duration }) : null;
+  // The structure gate: the short-video rules (opening image, share line,
+  // concrete visuals, title options) and a library skeleton's key shot.
+  const structure = storyboard ? await structureGate({ project, story: storyboard.story, words: Array.isArray(narration?.words) ? narration.words : [], duration }) : null;
+  if (structure) await writeJson(path.join(qaDir, "structure.json"), structure);
   const readinessPath = projectFile(project, options.output ?? "CINEMATIC-READINESS.json");
   const readiness = {
     ...assessCinematicReadiness({
@@ -117,6 +122,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
       audio,
       critique,
       assembly: { fallback_count: 0, fallbacks: [], provenance: "subscription-agent-authored" },
+      structure,
       receipts: { concepts: conceptsCheck, story: storyCheck }
     }, { creativeReceipts: !recordedStory(storyboard?.story) }),
     profile: { id: profile.id, lane: profile.lane },

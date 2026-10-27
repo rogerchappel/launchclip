@@ -29,6 +29,9 @@ export const HARD_MAX_SENTENCE_WORDS = 25;
 export const HOOK_MAX_WORDS = 12;
 // A portrait video this short is short-form unless the brief says otherwise.
 export const SHORT_FORM_MAX_SECONDS = 90;
+// Every video this short meets the short-video rules (a share line, concrete
+// visuals; kit/core/skeleton-library.mjs checks the rest), whatever its format.
+export const SHORT_VIDEO_SECONDS = SHORT_FORM_MAX_SECONDS;
 // Long form re-engages the viewer about this often.
 export const REENGAGE_SECONDS = 180;
 
@@ -298,8 +301,11 @@ export function chooseScriptPlan(options = {}) {
     reasons.push(`awareness ${awareness}: ${awareness === 'most' && MOST_AWARE_WORDS.test(text) ? 'the brief targets people who already know the offer' : `the default for ${format}`}`);
   }
   const spec = SCRIPT_FORMATS[format];
-  // Short-form for a viewer who already wants the result reads better as before-after-bridge.
-  const skeletonId = format === 'short-form' && ['solution', 'product'].includes(awareness) ? 'before-after-bridge' : spec.skeleton;
+  // An explicit skeleton (--skeleton call-out-pas) wins; short-form for a viewer
+  // who already wants the result reads better as before-after-bridge.
+  const pinned = options.skeleton && SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : null;
+  const skeletonId = pinned ?? (format === 'short-form' && ['solution', 'product'].includes(awareness) ? 'before-after-bridge' : spec.skeleton);
+  if (pinned) reasons.push(`skeleton ${pinned}: --skeleton`);
   const skeleton = SCRIPT_SKELETONS[skeletonId];
   const budget = wordBudget(duration, format);
   const target = options.words != null ? Math.min(budget.ceiling, Math.max(8, Math.round(Number(options.words)))) : budget.target;
@@ -334,27 +340,37 @@ const mmss = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(secon
 /** The plan as prompt lines: format, goal, awareness, skeleton and budget. */
 export function scriptPlanLines(plan) {
   const spec = SCRIPT_FORMATS[plan.format];
-  const skeleton = SCRIPT_SKELETONS[plan.skeleton];
+  // A library skeleton's plan (kit/core/skeleton-library.mjs skeletonScriptPlan) brings its own beats.
+  const skeleton = SCRIPT_SKELETONS[plan.skeleton] ?? { name: plan.structure ? `${plan.structure.title} (the skeleton library)` : plan.skeleton };
   const lines = [
     `Format: ${plan.format}, ${spec.label}.`,
     GOAL_RULES[plan.goal],
     `Awareness: ${AWARENESS_OPENINGS[plan.awareness]}`,
     `Word budget: about ${plan.word_target} words (${plan.wpm} words a minute over ${plan.duration} s${spec.coverage ? `, narration over about ${Math.round(spec.coverage * 100)}% of the runtime so wordless beats can land` : ''}); never more than ${plan.word_ceiling}.`,
     `Hook: ${spec.hook}`,
-    `Call to action: ${spec.cta}`,
+    `Call to action: ${plan.structure ? 'as the skeleton\'s last beat says: a loop back into the hook, or one action with one destination.' : spec.cta}`,
     ...(spec.note ? [spec.note] : []),
     '',
     `Skeleton: ${skeleton.name}. Write the beats in this order (about this many words each):`,
     ...plan.beats.map((entry, index) => `${index + 1}. ${entry.id} — ${entry.label}, ~${entry.words} words: ${entry.rule}`)
   ];
   if (plan.reengage_at?.length) lines.push('', `Re-engage near ${plan.reengage_at.map(mmss).join(', ')} with a reveal, an escalation, a demo result or a new stake, not a recap.`);
+  if (plan.structure?.lines?.length) lines.push('', ...plan.structure.lines);
   return lines;
 }
 
-/** The writing rules every format shares, specialised for the plan's sentence lengths. */
+// The short-video rules for the script (every video of SHORT_VIDEO_SECONDS or less).
+export const SHORT_VIDEO_RULES = Object.freeze([
+  'Share line: in the last 40% of the script, one spoken line that gives a viewer a reason to send the video or comment (a surprise they can repeat, a line they recognise themselves in, one small act, a claim the brief supports that people will argue with, or a takeaway worth saving). When the plan has a share beat, this is it.',
+  'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.'
+]);
+
+/** The writing rules every format shares, specialised for the plan's sentence lengths (and the short-video rules for a short plan). */
 export function scriptRuleLines(plan = null) {
   const sentences = (plan && SCRIPT_FORMATS[plan.format]?.sentences) ?? SENTENCES.default;
+  const short = plan && Number(plan.duration) <= SHORT_VIDEO_SECONDS;
   return [
+    ...(short ? SHORT_VIDEO_RULES : []),
     `Hook: the first sentence is ${HOOK_MAX_WORDS} words or fewer and names the topic or the viewer's problem. Never open with a greeting, "in this video", "today we're going to" or the brand name (unless the awareness rule puts the offer first).`,
     'Join beats with "but", "so" or "therefore", never "and then": each beat changes what the next one means.',
     'Close every question you open. The hook\'s promise is paid off in the final quarter, before the call to action.',
@@ -385,7 +401,8 @@ export function scriptFormatsReference() {
     '3. **Awareness.** How much the viewer already knows (table below). Cold Shorts traffic is usually `problem` or `unaware`; launch announcements `solution` or `product`; retargeting `most`.',
     `4. **Budget.** Target words = duration × the format's words a minute ÷ 60; ceiling = duration × ${MAX_WORDS_PER_SECOND}. Write to the target, measure with \`launchclip voice\`, never exceed the ceiling.`,
     '5. **Write the beats** in the skeleton\'s order, then record `format`, `goal`, `awareness` and the beat each sentence belongs to in `SCRIPT.md` so the storyboard follows the same beats (one scene group per beat; the hook beat\'s scene shows the hook\'s subject at 0 s; the CTA beat gets the end card with the spoken wording).',
-    '6. **Titles.** Write three publish-ready title options. For `convert`, put the concrete outcome in the title; no curiosity bait.',
+    `6. **Titles.** Write three publish-ready title options (five, best first, for a video of ${SHORT_VIDEO_SECONDS} s or less). For \`convert\`, put the concrete outcome in the title; no curiosity bait.`,
+    `7. **Short videos.** A video of ${SHORT_VIDEO_SECONDS} s or less may be built on a skeleton from the skeleton library (references/skeleton-library.md), chosen when the brief fits one, and always meets the short-video rules there.`,
     '',
     '## Formats',
     '',

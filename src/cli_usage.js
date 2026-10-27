@@ -29,6 +29,9 @@ export const USAGE = Object.freeze([
   ["style generate", "style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>[,<id>...]] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--medium oil|watercolour|pastel|ink|gouache] [--out <dir|style.json> | --project <dir>] [--force]"],
   ["style reroll", "style reroll [<project>] [--tone <tone>] [--seed <hex>] [--undo]"],
   ["style keep", "style keep <project> --as <name> [--force]"],
+  ["skeletons list", "skeletons list [--medium motion|character|footage|demo] [--fits \"<prompt>\"]", {comment: "the skeleton library and whether the kit can draw each one's key shot"}],
+  ["skeletons show", "skeletons show <id>"],
+  ["skeletons choose", "skeletons choose \"<prompt>\" [--medium motion|character|footage|demo] [--aspect 9:16] [--duration 30] [--skeleton <id>|auto|none]", {comment: "the skeleton make would pick for a brief, and why"}],
   ["profile list", "profile list", {comment: "the shipped cadence profiles"}],
   ["profile show", "profile show <id|profile.json>"],
   ["profile measure", "profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title \"…\"] [--fps 1]"],
@@ -76,7 +79,7 @@ export const USAGE = Object.freeze([
   ["finish", "finish <project> --prototype [--renderer remotion|hyperframes] [--quality draft|high]", {comment: "the opening 20–30 s only"}],
   ["finish", "finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes]", {comment: "cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json"}],
   ["publish-manifest", "publish-manifest <project> [--link <url>] [--utm <campaign>|auto] [--platforms app_store,product_hunt]", {comment: "publish.json: titles, description, hashtags, CTA and platform fit"}],
-  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]"],
+  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]"],
   ["make", "make \"<prompt>\" --collection <dir> [--recipe <id>] [make flags]", {comment: "inside a collection: its style, voice, brand, rules and the recipe's settings"}],
   ["make", "make \"<prompt>\" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start \"npm run dev\"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]"],
   ["fx", "fx <video> <module> [--at <seconds|word:text>] [--until <seconds|word:text> | --for <seconds>] [--params '{...}'|params.json] [--layer front|behind|split] [--captions <style>] [--style <name|path>] [--renderer remotion|hyperframes] [--quality draft|high] [--music none|synth] [--out <project-dir>] [--no-download] [--json]"],
@@ -143,6 +146,10 @@ export const SUMMARIES = Object.freeze({
   "style generate": "Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints.",
   "style reroll": "Give a project with a generated style a new seed (its constraints kept); --undo goes back once.",
   "style keep": "Copy a project's generated style to ~/.launchclip/styles/<name> as a personal style.",
+  skeletons: "List, show or choose skeletons from the skeleton library (docs/VIRAL_FORMATS_RFC.md): proven short-form structures with a hook, beats with a share line, a key shot the kit must be able to draw, an opening image, a voice tier and packaging. make builds a video of 90 s or less on one when the brief fits (--skeleton <id> pins one, --skeleton none keeps the script format's own), and finish's structure gate checks the result. Your own skeletons go in ~/.launchclip/skeletons or <project>/.launchclip/skeletons.",
+  "skeletons list": "List the library skeletons (built-in, then yours) with their media, aspects, length, share kind, voice tier, and status: ready, or blocked with what the kit is missing to draw the key shot. A skeleton past its six-month review is marked stale. Also lists the script formats' own skeletons.",
+  "skeletons show": "Print one skeleton in full (a library skeleton, with its status and any problems in its definition, or a script format's skeleton).",
+  "skeletons choose": "Show which library skeleton make would pick for a brief (or why none fits), with the other candidates and the blocked skeletons.",
   profile: "List, show or measure cadence profiles: what a strong video of one format measures like (coverage, face time, pacing, motion), as ranges the planner plans to and the gates check.",
   "profile list": "List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).",
   "profile show": "Show one cadence profile (a shipped id or a profile file), validated.",
@@ -229,7 +236,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "cast", "story", "sfx", "module", "subject", "demo", "script", "history"]);
+export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "story", "sfx", "module", "subject", "demo", "script", "history"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 

@@ -14,13 +14,18 @@ export const STORY_RECEIPT_SCHEMA = "launchclip.story-receipt.v1";
 export const CONCEPT_COUNT = 5;
 
 // The tournament criteria (0-10 each) and their weights.
+// Weights sum to 100. angle_freshness (how far the angle is from the crowded
+// version, ANGLE.json) and share_strength (whether the share line gives a
+// viewer a reason to send it) came with the skeleton library.
 export const CONCEPT_CRITERIA = Object.freeze({
-  scroll_stop: 16, promise_clarity: 11, audience_fit: 10, causality: 10, grounded_proof: 12,
-  visual_originality: 16, motion_potential: 10, sound_potential: 5, feasibility: 10
+  scroll_stop: 14, promise_clarity: 7, audience_fit: 6, causality: 8, grounded_proof: 10,
+  visual_originality: 14, motion_potential: 8, sound_potential: 4, feasibility: 7,
+  angle_freshness: 12, share_strength: 10
 });
 export const CONCEPT_PENALTIES = Object.freeze({ genericism: 0.8, slideshow_risk: 1.0, unsupported_clickbait: 1.5 });
 
-export const STORY_ROLES = Object.freeze(["hook", "promise", "mechanism", "proof", "rehook", "escalation", "payoff", "closing_reframe", "cta_or_loop"]);
+// share: the line a viewer would send or comment on (the short-video rules, kit/core/skeleton-library.mjs).
+export const STORY_ROLES = Object.freeze(["hook", "promise", "mechanism", "proof", "rehook", "escalation", "payoff", "share", "closing_reframe", "cta_or_loop"]);
 // The retention edit's score floors.
 export const STORY_SCORE_FLOORS = Object.freeze({ hook: 8, compression: 7, curiosity: 8, clarity: 8, proof: 8, payoff: 8, speakability: 7, visuality: 8 });
 export const NARRATION_SOURCES = Object.freeze(["synthesised", "supplied", "generated", "none"]);

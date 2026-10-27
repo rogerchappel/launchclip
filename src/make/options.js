@@ -19,6 +19,7 @@ export const MAKE_FLAGS = Object.freeze([
   ["format", { setting: true }],
   ["goal", { setting: true }],
   ["awareness", { setting: true }],
+  ["skeleton", { setting: true }],
   ["style", { setting: true }],
   ["seed", { setting: true }],
   ["profile", { setting: true }],
@@ -70,6 +71,7 @@ export function makeOptionsFromFlags(flags = {}) {
     goal: flags.goal,
     format: flags.format,
     awareness: flags.awareness,
+    skeleton: flags.skeleton,
     out: flags.out,
     replan: Boolean(flags.replan),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
@@ -105,6 +107,7 @@ export function validateMakeOptions(options = {}) {
   if (options.duration != null) resolveDuration({ duration: options.duration }, {});
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   return { voice, renderer, quality, script: scriptPlanOptions(options) };
 }
@@ -127,6 +130,8 @@ export function settingsFromMakeReport(report) {
   set("format", plan.format ?? options.format);
   set("goal", plan.goal ?? options.goal);
   set("awareness", plan.awareness ?? options.awareness);
+  // The skeleton the video was built on, so a recipe makes more of the same series.
+  set("skeleton", report?.skeleton?.library ? report.skeleton.id : options.skeleton && options.skeleton !== "auto" ? options.skeleton : undefined);
   set("voice", options.voice);
   set("voice-id", options.voice_id);
   set("music", options.music);
