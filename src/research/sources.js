@@ -191,7 +191,8 @@ export async function githubRepository(http, full) {
 export async function githubPull(http, full, number) {
   const pull = await http.json(`https://api.github.com/repos/${full}/pulls/${number}`);
   if (!pull?.html_url) return null;
-  const text = `${pull.title}\n\n${pull.body ?? ""}\n\nState: ${pull.state}${pull.merged_at ? `\nMerged: ${pull.merged_at}` : ""}\nChanged files: ${pull.changed_files}\nAdditions: ${pull.additions}\nDeletions: ${pull.deletions}`;
+  // The facts line names the repo and number, so "pull request 39217" can be checked against the PR itself.
+  const text = `${pull.title}\n\n${pull.body ?? ""}\n\nGitHub API: Pull request ${full}#${number} (pull request ${number}) by ${pull.user?.login ?? "unknown"}; State: ${pull.state}${pull.merged_at ? `; Merged: ${pull.merged_at}` : ""}; Changed files: ${pull.changed_files}; Additions: ${pull.additions}; Deletions: ${pull.deletions}.`;
   return http.keep({ url: pull.html_url, title: `${full}#${number}: ${pull.title}`, publisher: `GitHub · ${full.split("/")[0]}`, published_at: pull.merged_at ?? pull.created_at, text, kind: "pr" });
 }
 

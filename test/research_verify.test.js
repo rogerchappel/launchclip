@@ -117,3 +117,13 @@ test("each number is checked in the column of the model it belongs to", () => {
   assert.equal(verdict.status, "contradicted");
   assert.match(verdict.flag.message, /72\.5 \(Nimbus-7B; 80\.4 is Titan 2\)/);
 });
+
+test("a PR snapshot names its repo and number, so a claim citing the number verifies against it", async () => {
+  const { githubPull } = await import("../src/research/sources.js");
+  const pull = { html_url: "https://github.com/dotnet/efcore/pull/39217", title: "Make the evals more realistic", body: "Judge model update.", state: "closed", merged_at: "2026-10-16T17:45:34Z", created_at: "2026-10-10T00:00:00Z", changed_files: 112, additions: 10, deletions: 5, user: { login: "AndriySvyryd" } };
+  const fetch = async (url) => ({ ok: true, status: 200, url, headers: new Map(), text: async () => JSON.stringify(pull) });
+  const http = createHttp({ fetch, env: {}, now: () => "2026-10-27T00:00:00.000Z" });
+  const snap = await githubPull(http, "dotnet/efcore", 39217);
+  const [claim] = extractClaims("On October 16, 2026, the Entity Framework Core team merged pull request 39217 in dotnet/efcore.");
+  assert.equal(verifyClaim(claim, [{ ...snap, primary: true }]).status, "verified");
+});
