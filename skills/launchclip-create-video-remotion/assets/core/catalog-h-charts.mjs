@@ -1,6 +1,7 @@
 // Catalogue H charts: bar-chart, stacked-bar, pie-chart, area-chart,
-// scatter-plot, radar-chart, sparkline and progress-ring. Each animates its
-// build from params data; registered in kit/core/catalog-h.mjs.
+// radar-chart, sparkline and progress-ring. Each animates its build from
+// params data; registered in kit/core/catalog-h.mjs. scatter-plot is in
+// catalog-h-scatter.mjs.
 
 import {decimalsOf, timingRules} from './catalog-b-base.mjs';
 import {svgRoot, transformString} from './catalog-b-view.mjs';
@@ -567,134 +568,6 @@ export const areaChart = {
 };
 
 // ---------------------------------------------------------------------------
-// scatter-plot
-
-const SCATTER_VARIANTS = Object.freeze(['dots', 'bubbles', 'rings']);
-
-function scatterResolve(params, ctx) {
-  const b = createHBase('scatter-plot', params, ctx, {allowed: ['points', 'xLabel', 'yLabel', 'title', 'source', 'at', 'highlight', 'highlightAt', 'trend', 'x', 'y', 'tone'], required: ['points'], variants: SCATTER_VARIANTS});
-  const {check, u, rect} = b;
-  const p = b.params;
-  check.arr(p.points, 'params.points', 3, 60);
-  const base = toneColor(b, p.tone, 'params.tone');
-  const points = p.points.map((pt, i) => {
-    check.obj(pt, `params.points[${i}]`, ['x', 'y', 'size', 'label', 'color'], ['x', 'y']);
-    return {x: check.num(pt.x, `params.points[${i}].x`, -1e12, 1e12), y: check.num(pt.y, `params.points[${i}].y`, -1e12, 1e12), size: pt.size === undefined ? 1 : check.num(pt.size, `params.points[${i}].size`, 0, 1e12),
-      label: pt.label === undefined ? null : check.str(pt.label, `params.points[${i}].label`, 22), color: pt.color === undefined ? base : toneColor(b, pt.color, `params.points[${i}].color`)};
-  });
-  const range = (key, raw) => {
-    const vals = points.map(pt => pt[key]);
-    let lo = Math.min(...vals), hi = Math.max(...vals);
-    const pad = (hi - lo || Math.abs(hi) || 1) * 0.08;
-    lo -= pad; hi += pad;
-    if (raw !== undefined) {
-      check.obj(raw, `params.${key}`, ['min', 'max'], ['min', 'max']);
-      lo = check.num(raw.min, `params.${key}.min`, -1e12, Math.min(...vals));
-      hi = check.num(raw.max, `params.${key}.max`, Math.max(...vals), 1e12);
-      if (!(hi > lo)) check.fail(`params.${key}`, 'max must be greater than min');
-    }
-    return [lo, hi];
-  };
-  const [x0, x1] = range('x', p.x), [y0, y1] = range('y', p.y);
-  const highlight = highlightIndex(b, p.highlight, points.length);
-  const trend = p.trend === undefined ? false : check.bool(p.trend, 'params.trend');
-  const xLabel = p.xLabel === undefined ? null : check.str(p.xLabel, 'params.xLabel', 32);
-  const yLabel = p.yLabel === undefined ? null : check.str(p.yLabel, 'params.yLabel', 32);
-  const tb = titleBlock(b, {title: p.title, source: p.source});
-  const axisSize = r2(Math.max(b.min.meta, u(28)));
-  const W = rect.width;
-  const plot = {x: r2(u(8)), y: r2(tb.top + (yLabel ? axisSize * 1.4 + u(8) : u(8))), width: r2(W - u(16)), height: 0};
-  plot.height = r2(rect.height - tb.bottom - plot.y - (xLabel ? axisSize * 1.4 + u(16) : u(16)));
-  if (plot.height < u(260)) check.fail('params', 'leaves too little height for the plot; drop the title or enlarge rect');
-  const maxSize = Math.max(...points.map(pt => pt.size)) || 1;
-  const dotBase = u(Math.max(18, Math.min(30, 300 / Math.sqrt(points.length))));
-  const bubbles = b.variant === 'bubbles';
-  const {buildAt, buildEnd, highlightAt} = buildTimes(b, p, 1.5, {highlight: highlight !== null});
-  const order = points.map((pt, i) => i).sort((a, c) => points[a].x - points[c].x);
-  const span = Math.min(0.9, 0.03 * points.length + 0.3);
-  const marks = points.map((pt, i) => {
-    const d = r2(bubbles ? dotBase * (0.8 + 2.6 * Math.sqrt(pt.size / maxSize)) : dotBase);
-    return {x: r2(plot.x + plot.width * (pt.x - x0) / (x1 - x0)), y: r2(plot.y + plot.height * (1 - (pt.y - y0) / (y1 - y0))), d, color: pt.color, label: pt.label,
-      time: rt(buildAt + 0.35 + span * order.indexOf(i) / Math.max(1, points.length - 1))};
-  });
-  let trendLine = null;
-  if (trend) {
-    const n = points.length, mx = points.reduce((s, pt) => s + pt.x, 0) / n, my = points.reduce((s, pt) => s + pt.y, 0) / n;
-    const sxx = points.reduce((s, pt) => s + (pt.x - mx) ** 2, 0), sxy = points.reduce((s, pt) => s + (pt.x - mx) * (pt.y - my), 0);
-    const slope = sxx ? sxy / sxx : 0;
-    const yAt = x => my + slope * (x - mx);
-    const P = x => [r2(plot.x + plot.width * (x - x0) / (x1 - x0)), r2(plot.y + plot.height * (1 - (yAt(x) - y0) / (y1 - y0)))];
-    const [ax, ay] = P(x0), [bx, by] = P(x1);
-    trendLine = {d: `M${ax} ${Math.min(Math.max(ay, plot.y), plot.y + plot.height)} L${bx} ${Math.min(Math.max(by, plot.y), plot.y + plot.height)}`, time: rt(buildAt + 0.35 + span + 0.1)};
-  }
-  const callout = highlight === null ? null : (() => {
-    const m = marks[highlight];
-    const text = m.label ?? `(${points[highlight].x}, ${points[highlight].y})`;
-    const size = r2(Math.max(b.min.meta, u(34)));
-    const w = r2(textWidth(text, size, 'body') + u(36));
-    const right = m.x + w + m.d < W;
-    return {text, size, width: w, x: r2(right ? m.x + m.d / 2 + u(14) : m.x - m.d / 2 - u(14) - w), y: r2(Math.max(plot.y, m.y - size * 0.75 - u(9))), height: r2(size * 1.25 + u(18))};
-  })();
-  const content = {variant: b.variant, title: tb.title, source: tb.source, plot, marks, trendLine, highlight, highlightAt, callout, xLabel, yLabel, axisSize, buildAt, buildEnd,
-    axis: b.theme.muted, gridColor: b.theme.border, ink: b.theme.foreground, panel: b.theme.bg};
-  return b.finish(content, {minTextPx: tb.title ? tb.title.size : b.min.key});
-}
-
-function scatterView(model) {
-  const {id, fonts, unit: u} = model;
-  const c = model.content;
-  const P = c.plot;
-  const kids = chromeNodes(model);
-  kids.push(...gridNodes(id, P, [0.25, 0.5, 0.75], c.gridColor, u));
-  kids.push(el('div', `${id}-xaxis`, abs(P.x, r2(P.y + P.height - 1.5 * u), P.width, r2(3 * u), {background: c.axis, transformOrigin: '0% 50%', transform: transformString({scaleX: 0})})));
-  kids.push(el('div', `${id}-yaxis`, abs(r2(P.x - 1.5 * u), P.y, r2(3 * u), P.height, {background: c.axis, transformOrigin: '50% 100%', transform: transformString({scaleY: 0})})));
-  if (c.xLabel) kids.push(label(`${id}-xlabel`, P.x, r2(P.y + P.height + 14 * u), P.width, c.xLabel, {size: c.axisSize, family: fonts.meta, color: c.axis, align: 'right', spacing: '0.06em', extra: {opacity: 0}}));
-  if (c.yLabel) kids.push(label(`${id}-ylabel`, P.x, r2(P.y - c.axisSize * 1.4 - 4 * u), P.width, c.yLabel, {size: c.axisSize, family: fonts.meta, color: c.axis, spacing: '0.06em', extra: {opacity: 0}}));
-  if (c.trendLine) kids.push(svgRoot(model.rect.width, model.rect.height, [strokePath(`${id}-trend`, c.trendLine.d, c.ink, r2(4 * u), {opacity: 0.7})]));
-  c.marks.forEach((m, i) => {
-    const rings = c.variant === 'rings';
-    kids.push(el('div', `${id}-dot-${i}`, abs(r2(m.x - m.d / 2), r2(m.y - m.d / 2), m.d, m.d, {boxSizing: 'border-box', borderRadius: '50%',
-      background: rings ? 'transparent' : c.variant === 'bubbles' ? `${m.color}b3` : m.color, border: rings ? `${r2(5 * u)}px solid ${m.color}` : c.variant === 'bubbles' ? `${r2(3 * u)}px solid ${m.color}` : 'none', opacity: 0})));
-  });
-  if (c.callout) {
-    const C = c.callout;
-    kids.push(el('div', `${id}-callout`, abs(C.x, C.y, C.width, C.height, {boxSizing: 'border-box', borderRadius: r2(14 * u), background: c.ink, opacity: 0}), [
-      label(null, 0, r2(9 * u), C.width, C.text, {size: C.size, family: fonts.body, color: c.panel, align: 'center', weight: 650, lineHeight: 1.25})
-    ]));
-  }
-  return kids;
-}
-
-function scatterTimeline(model, ops) {
-  const {id, start} = model;
-  const c = model.content;
-  chromeOps(model, ops);
-  gridOps(ops, id, 3, start, rt(c.buildAt + 0.1));
-  set(ops, `${id}-xaxis`, start, {x: 0, y: 0, scaleX: 0, scaleY: 1});
-  tw(ops, `${id}-xaxis`, c.buildAt, 0.5, 'power3.out', {scaleX: 0}, {scaleX: 1});
-  set(ops, `${id}-yaxis`, start, {x: 0, y: 0, scaleX: 1, scaleY: 0});
-  tw(ops, `${id}-yaxis`, c.buildAt, 0.5, 'power3.out', {scaleY: 0}, {scaleY: 1});
-  if (c.xLabel) riseOps(ops, `${id}-xlabel`, start, rt(c.buildAt + 0.3), 0);
-  if (c.yLabel) riseOps(ops, `${id}-ylabel`, start, rt(c.buildAt + 0.3), 0);
-  c.marks.forEach((m, i) => popOps(ops, `${id}-dot-${i}`, start, m.time, {from: 0, duration: 0.4, ease: 'back.out(2.2)', fade: 0.1}));
-  if (c.trendLine) drawOps(ops, `${id}-trend`, start, c.trendLine.time, 0.6, 'power2.inOut');
-  if (c.highlight !== null) {
-    c.marks.forEach((_, i) => { if (i !== c.highlight) fadeOps(ops, `${id}-dot-${i}`, c.highlightAt, 1, 0.3); });
-    tw(ops, `${id}-dot-${c.highlight}`, c.highlightAt, 0.45, 'back.out(2)', {scaleX: 1, scaleY: 1}, {scaleX: 1.5, scaleY: 1.5});
-    popOps(ops, `${id}-callout`, start, rt(c.highlightAt + 0.1), {from: 0.7});
-  }
-}
-
-export const scatterPlot = {
-  id: 'scatter-plot',
-  describe: 'Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.',
-  params: {points: `[{x, y, size? (bubbles), label? ≤ 22, color? (${tone})}] 3–60`, xLabel: 'string ≤ 32', yLabel: 'string ≤ 32', x: '{min, max} (optional)', y: '{min, max} (optional)',
-    trend: 'boolean: draw the least-squares line (default false)', tone: `dot colour (${tone})`, highlight: 'point index to call out (optional)', highlightAt: at, ...COMMON},
-  events: ['build', 'highlight'], timing: TIMING, variants: SCATTER_VARIANTS,
-  resolve: scatterResolve, view: scatterView, timeline: scatterTimeline
-};
-
-// ---------------------------------------------------------------------------
 // radar-chart
 
 const RADAR_VARIANTS = Object.freeze(['polygon', 'circles', 'dots']);
@@ -987,4 +860,4 @@ export const progressRing = {
   resolve: ringResolve, view: ringView, timeline: ringTimeline
 };
 
-export const CHARTS = [barChart, stackedBar, pieChart, areaChart, scatterPlot, radarChart, sparkline, progressRing];
+export const CHARTS = [barChart, stackedBar, pieChart, areaChart, radarChart, sparkline, progressRing];

@@ -11,7 +11,7 @@ import {catalogGTimeline, catalogGView} from '../kit/core/catalog-g.mjs';
 import {frameState} from '../kit/core/catalog-b-view.mjs';
 import {EMITTERS as H_EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {FOCUS_DIM, STATE_MODULES, STATE_MOVE, countText, focusDevice, indexView, shotStateErrors} from '../kit/core/shot-states.mjs';
-import {SAMPLES} from '../scripts/element-samples.mjs';
+import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const story = (scene, format = {width: 1920, height: 1080, fps: 30, duration: 12}) => ({schema: 'launchclip.story.v1', lane: 'motion', brand, format, scenes: [scene]});
@@ -100,9 +100,17 @@ test('reveal holds an item back until its state; guide, glow and note persist un
   assert.ok(Math.abs(guide.y + 1.5 - (plot.y + plot.height / 2)) < 1);
 });
 
+test('scatter-plot states work on its points form too', () => {
+  const params = EXTRA_SAMPLES.find(entry => entry.name === 'scatter-plot-points').params;
+  const m = model({id: 's', module: 'scatter-plot', start: 0, end: 10, params, states: [{at: 5, set: {params: {points: params.points.map(p => ({...p, y: p.y - 5}))}, focus: 3}}]}, {width: 1920, height: 1080, fps: 30, duration: 12});
+  const all = ids(catalogHView(m));
+  assert.ok(all.includes('s-ss-ring-0'));
+  for (const target of new Set(catalogHTimeline(m).map(op => op.target))) assert.ok(all.includes(target), target);
+});
+
 const STATE_CASES = {
   'bar-chart': {params: SAMPLES['bar-chart'], set: {params: {data: SAMPLES['bar-chart'].data.map((row, i) => ({...row, value: row.value + i * 100}))}, focus: 2}},
-  'scatter-plot': {params: SAMPLES['scatter-plot'], set: {params: {points: SAMPLES['scatter-plot'].points.map(p => ({...p, y: p.y - 5}))}, focus: 3}},
+  'scatter-plot': {params: SAMPLES['scatter-plot'], set: {params: {series: SAMPLES['scatter-plot'].series.map(s => ({...s, points: s.points.map(p => ({...p, y: p.y + 4}))}))}, focus: 3}},
   'comparison-table': {params: SAMPLES['comparison-table'], set: {focus: 'row-3'}},
   leaderboard: {params: SAMPLES.leaderboard, set: {params: {entries: SAMPLES.leaderboard.entries.map((e, i) => ({...e, value: e.value + (i === 4 ? 2000 : 0)}))}, focus: 1}},
   'unit-grid': {params: SAMPLES['unit-grid'], set: {focus: [0, 1, 2]}},

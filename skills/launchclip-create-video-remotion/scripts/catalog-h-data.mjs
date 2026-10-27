@@ -1,14 +1,15 @@
 // Catalogue H data-explainer modules: unit-grid (an isotype of 1–200 units
 // that count in, then split into 2–3 labelled groups or light up K of them)
 // and number-line (a ruler whose 1–3 ranges light up one at a time on cue,
-// with an optional marker). Made for the "the study says" explainer: one
+// with an optional marker, value points and a zoom inset that re-plots a
+// slice of the line at a finer scale: "wins by less than 1 point"). Made for the "the study says" explainer: one
 // element added or transformed per beat on a near-empty stage. The citation
 // that stays under them across scenes is the brand frame's source note
 // (story.frame.sources, kit/core/brand-frame.mjs), not a module. Registered
 // in kit/core/catalog-h.mjs.
 
 import {decimalsOf, niceStep, timingRules} from './catalog-b-base.mjs';
-import {hex2} from './catalog-b-view.mjs';
+import {hex2, svgRoot} from './catalog-b-view.mjs';
 import {VARIANT_PARAM, FORMAT_PARAM, contrastRatio, createHBase, fitText, numberFormat, r2, rt, textWidth, titleBlock, toneColor} from './catalog-h-base.mjs';
 import {abs, chromeNodes, chromeOps, countOps, countSamples, el, label, popOps, riseOps, set, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
@@ -253,7 +254,7 @@ const LINE_VARIANTS = Object.freeze(['ruler', 'track']);
 const EVERY = [1, 2, 4, 5, 10, 20, 25, 50, 100];
 
 function lineResolve(params, ctx) {
-  const b = createHBase('number-line', params, ctx, {allowed: ['from', 'to', 'step', 'labelEvery', 'ranges', 'marker', 'title', 'source', 'unit', 'format', 'at'], required: ['from', 'to', 'ranges'], variants: LINE_VARIANTS});
+  const b = createHBase('number-line', params, ctx, {allowed: ['from', 'to', 'step', 'labelEvery', 'ranges', 'marker', 'points', 'pointsAt', 'zoom', 'title', 'source', 'unit', 'format', 'at'], required: ['from', 'to'], variants: LINE_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
   const lo = check.num(p.from, 'params.from', -1e9, 1e9), hi = check.num(p.to, 'params.to', -1e9, 1e9);
@@ -265,9 +266,10 @@ function lineResolve(params, ctx) {
   const values = Array.from({length: count + 1}, (_, k) => Number((lo + k * step).toFixed(6)));
   const W = rect.width;
 
-  check.arr(p.ranges, 'params.ranges', 1, 3);
+  if (p.ranges === undefined && p.points === undefined && p.marker === undefined) check.fail('params', 'needs ranges, points or a marker');
+  if (p.ranges !== undefined) check.arr(p.ranges, 'params.ranges', 1, 3);
   const tones = ['primary', 'accent', 'paper'];
-  const ranges = p.ranges.map((r, i) => {
+  const ranges = (p.ranges ?? []).map((r, i) => {
     const path = `params.ranges[${i}]`;
     check.obj(r, path, ['from', 'to', 'label', 'tone', 'at'], ['from', 'to', 'label']);
     const from = check.num(r.from, `${path}.from`, lo, hi), to = check.num(r.to, `${path}.to`, lo, hi);
@@ -281,6 +283,24 @@ function lineResolve(params, ctx) {
   if (p.marker !== undefined) {
     check.obj(p.marker, 'params.marker', ['value', 'label', 'tone', 'at'], ['value']);
     marker = {value: check.num(p.marker.value, 'params.marker.value', lo, hi), text: p.marker.label === undefined ? null : check.str(p.marker.label, 'params.marker.label', 24), color: dataTone(b, p.marker.tone, 'params.marker.tone', 'paper'), at: p.marker.at};
+  }
+  let points = [];
+  if (p.points !== undefined) {
+    check.arr(p.points, 'params.points', 1, 8);
+    points = p.points.map((pt, i) => {
+      check.obj(pt, `params.points[${i}]`, ['value', 'label', 'tone'], ['value']);
+      return {value: check.num(pt.value, `params.points[${i}].value`, lo, hi), text: pt.label === undefined ? null : check.str(pt.label, `params.points[${i}].label`, 24), color: dataTone(b, pt.tone, `params.points[${i}].tone`, 'accent')};
+    });
+  } else if (p.pointsAt !== undefined) check.fail('params.pointsAt', 'needs params.points');
+  let zoom = null;
+  if (p.zoom !== undefined) {
+    const z = check.obj(p.zoom, 'params.zoom', ['from', 'to', 'step', 'label', 'at'], ['from', 'to']);
+    const zf = check.num(z.from, 'params.zoom.from', lo, hi), zt = check.num(z.to, 'params.zoom.to', lo, hi);
+    if (!(zt > zf)) check.fail('params.zoom.to', `must be greater than params.zoom.from (${zf})`);
+    if (zt - zf > span / 2) check.fail('params.zoom', 'must cover at most half the line (it zooms in)');
+    const zspan = zt - zf;
+    const zstep = z.step === undefined ? niceStep(zspan, 4) : check.num(z.step, 'params.zoom.step', zspan / 20, zspan / 2);
+    zoom = {from: zf, to: zt, step: zstep, text: z.label === undefined ? null : check.str(z.label, 'params.zoom.label', 40), at: z.at};
   }
   const unit = p.unit === undefined ? null : check.str(p.unit, 'params.unit', 12);
   const tb = titleBlock(b, {title: p.title, source: p.source});
@@ -300,7 +320,7 @@ function lineResolve(params, ctx) {
   labelled.sort((a, c) => a - c);
 
   // Range labels in up to three rows above the line, so neighbours never collide.
-  const rangeSize = Math.min(...ranges.map((r, i) => fitText(check, `params.ranges[${i}].label`, r.text, {family: 'display', width: W, preferred: u(b.portrait ? 84 : 72), min: b.min.key}).size));
+  const rangeSize = Math.min(u(b.portrait ? 84 : 72), ...ranges.map((r, i) => fitText(check, `params.ranges[${i}].label`, r.text, {family: 'display', width: W, preferred: u(b.portrait ? 84 : 72), min: b.min.key}).size));
   const rows = [];
   ranges.map((r, i) => ({r, i})).sort((a, c) => a.r.from - c.r.from).forEach(({r}) => {
     const w = textWidth(r.text, rangeSize, 'display') + u(8);
@@ -316,7 +336,38 @@ function lineResolve(params, ctx) {
   const markerH = marker ? u(34) : 0;
   const markerSize = marker?.text ? r2(Math.max(b.min.key, u(46))) : 0;
   const unitSize = unit ? r2(Math.max(b.min.meta, u(30))) : 0;
-  const blockH = rows.length * rowH + u(22) + markerH + major + u(16) + tickSize * 1.2 + (markerSize ? u(24) + markerSize * 1.2 : 0) + (unitSize ? u(14) + unitSize * 1.3 : 0);
+  // Value points: dots on the line, their labels in rows under the tick numbers.
+  const pointSize = r2(Math.max(b.min.meta, u(32)));
+  const labelRows = (list, xAt) => {
+    const out = [];
+    for (const pt of list) {
+      if (!pt.text) continue;
+      const w = textWidth(pt.text, pointSize, 'body') + u(12);
+      const left = r2(Math.min(Math.max(0, xAt(pt.value) - w / 2), W - w));
+      let row = out.findIndex(list2 => list2.every(o => left >= o.right + u(16) || left + w <= o.left - u(16)));
+      if (row < 0) { out.push([]); row = out.length - 1; }
+      out[row].push({left, right: left + w});
+      Object.assign(pt, {labelX: left, labelW: r2(w), labelRow: row});
+    }
+    return out.length;
+  };
+  const ptRowH = r2(pointSize * 1.25 + u(6));
+  const ptRows = labelRows(points, xOf);
+  const ptBlock = ptRows ? u(14) + ptRows * ptRowH : 0;
+  // The zoom inset: connectors down to a second ruler over [zoom.from, zoom.to].
+  let zoomBlock = 0, inset = null;
+  if (zoom) {
+    const zxOf = v => r2(pad + (v - zoom.from) / (zoom.to - zoom.from) * (W - 2 * pad));
+    const zcount = Math.round((zoom.to - zoom.from) / zoom.step);
+    const zvalues = Array.from({length: zcount + 1}, (_, k) => Number((zoom.from + k * zoom.step).toFixed(6))).filter(v => v <= zoom.to + 1e-9);
+    const zfmt = numberFormat(check, p.format, 'params.format', {decimals: Math.max(decimalsOf(zoom.from), decimalsOf(zoom.step))});
+    const zlabelSize = zoom.text ? fitText(check, 'params.zoom.label', zoom.text, {family: 'display', width: W, preferred: u(b.portrait ? 64 : 56), min: b.min.key}).size : 0;
+    const zpoints = points.filter(pt => pt.value >= zoom.from - 1e-9 && pt.value <= zoom.to + 1e-9).map(pt => ({...pt}));
+    const zrows = labelRows(zpoints, zxOf);
+    inset = {xOf: zxOf, values: zvalues, texts: zvalues.map(v => zfmt.format(v)), labelSize: zlabelSize, points: zpoints, rows: zrows};
+    zoomBlock = u(120) + (zlabelSize ? zlabelSize * 1.2 + u(18) : 0) + major + u(16) + tickSize * 1.2 + (zrows ? u(14) + zrows * ptRowH : 0);
+  }
+  const blockH = rows.length * rowH + u(22) + markerH + major + u(16) + tickSize * 1.2 + ptBlock + (markerSize ? u(24) + markerSize * 1.2 : 0) + (unitSize ? u(14) + unitSize * 1.3 : 0) + zoomBlock;
   const avail = rect.height - tb.top - tb.bottom;
   if (blockH > avail) check.fail('params', 'does not fit the rect; drop the title, shorten the range labels or enlarge rect');
   const y0 = r2(tb.top + (avail - blockH) / 2);
@@ -324,6 +375,9 @@ function lineResolve(params, ctx) {
   const lineY = r2(y0 + rows.length * rowH + u(22) + markerH + major);
   const tickY = r2(lineY + u(16));
   const zoneTop = r2(lineY - major - u(14)), zoneBottom = r2(tickY + tickSize * 1.2 + u(10));
+  const ptY = r2(tickY + tickSize * 1.2 + u(14));
+  points.forEach(pt => { pt.x = xOf(pt.value); if (pt.text) pt.labelY = r2(ptY + pt.labelRow * ptRowH); });
+  const belowPoints = r2(tickY + tickSize * 1.2 + ptBlock);
   const half = Math.min(spacing / 2, labelW / 2 + u(10));
 
   // Timing: the ruler draws, then each range (and the marker) on its own cue.
@@ -332,7 +386,7 @@ function lineResolve(params, ctx) {
   const buildEnd = rt(buildAt + 0.15 + tickStep * count + 0.35);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'whoosh-soft'});
   const settled = buildEnd - b.start;
-  const cues = ranges.length + (marker ? 1 : 0);
+  const cues = ranges.length + (marker ? 1 : 0) + (points.length ? 1 : 0) + (zoom ? 1 : 0);
   const first = settled + 0.35, last = Math.max(first, b.lastEvent - 0.25);
   const gap = cues > 1 ? Math.min(1, (last - first) / (cues - 1)) : 0;
   ranges.forEach((r, i) => {
@@ -348,16 +402,37 @@ function lineResolve(params, ctx) {
     b.events.push({id: `${b.id}-marker`, name: 'marker', time: marker.time, endTime: rt(marker.time + 0.5), role: 'emphasis', cue: 'pop'});
     marker.x = xOf(marker.value);
     marker.top = r2(lineY - major - markerH);
-    marker.labelY = r2(tickY + tickSize * 1.2 + u(24));
+    marker.labelY = r2(belowPoints + u(24));
     marker.size = markerSize;
     delete marker.at;
+  }
+  let pointsAt = null;
+  if (points.length) {
+    pointsAt = cueTime(b, 'points', p.pointsAt, 'params.pointsAt', first + (ranges.length + (marker ? 1 : 0)) * gap, settled);
+    b.events.push({id: `${b.id}-points`, name: 'points', time: pointsAt, endTime: rt(pointsAt + 0.2 + 0.08 * points.length), role: 'emphasis', cue: 'tally'});
+    points.forEach((pt, i) => { pt.time = rt(pointsAt + i * 0.08); });
+  }
+  if (zoom) {
+    const time = cueTime(b, 'zoom', zoom.at, 'params.zoom.at', first + (cues - 1) * gap, settled);
+    b.events.push({id: `${b.id}-zoom`, name: 'zoom', time, endTime: rt(time + 1.2), role: 'emphasis', cue: 'whoosh'});
+    let y = r2((marker?.text ? marker.labelY + markerSize * 1.2 : belowPoints) + (unitSize ? u(14) + unitSize * 1.3 : 0) + u(28));
+    const top = y;
+    y += u(92);
+    const labelY = r2(y);
+    if (inset.labelSize) y += inset.labelSize * 1.2 + u(18);
+    const zLineY = r2(y + major), zTickY = r2(zLineY + u(16));
+    const zPtY = r2(zTickY + tickSize * 1.2 + u(14));
+    inset.points.forEach(pt => { pt.x = inset.xOf(pt.value); if (pt.text) pt.labelY = r2(zPtY + pt.labelRow * ptRowH); pt.time = rt(time + 0.75 + 0.1 * inset.points.indexOf(pt)); });
+    Object.assign(zoom, {time, top, labelY, lineY: zLineY, tickY: zTickY, x0: xOf(zoom.from), x1: xOf(zoom.to), ticks: inset.values.map((v, k) => ({x: inset.xOf(v), text: inset.texts[k], time: rt(time + 0.45 + k * 0.05)})),
+      labelSize: inset.labelSize, points: inset.points});
+    delete zoom.at;
   }
   const ticks = values.map((v, k) => ({x: xOf(v), major: k % every === 0 || labelled.includes(k), time: rt(buildAt + 0.15 + k * tickStep)}));
   const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'center', lineY, tickY, tickSize, labelW: r2(labelW), pad, major, minor, zoneTop, zoneBottom,
     ticks, tickLabels: labelled.map(k => ({k, x: xOf(values[k]), text: texts[k]})), ranges, rangeSize, marker,
-    unit: unit ? {text: unit, size: unitSize, y: r2(marker?.text ? marker.labelY + markerSize * 1.2 + u(14) : tickY + tickSize * 1.2 + u(14))} : null,
+    unit: unit ? {text: unit, size: unitSize, y: r2(marker?.text ? marker.labelY + markerSize * 1.2 + u(14) : belowPoints + u(14))} : null, points, pointsAt, pointSize, zoom,
     buildAt, buildEnd, ink: b.theme.foreground, muted: b.theme.muted, border: b.theme.border};
-  return b.finish(content, {minTextPx: Math.min(rangeSize, markerSize || Infinity, tb.title ? tb.title.size : Infinity)});
+  return b.finish(content, {minTextPx: Math.min(ranges.length ? rangeSize : Infinity, markerSize || Infinity, zoom?.labelSize || Infinity, tb.title ? tb.title.size : b.min.key)});
 }
 
 function lineView(model) {
@@ -399,6 +474,36 @@ function lineView(model) {
     }
   }
   if (c.unit) kids.push(label(`${id}-unit`, 0, c.unit.y, r2(W - c.pad + c.labelW / 2), c.unit.text, {size: c.unit.size, family: fonts.meta, color: c.muted, align: 'right', spacing: '0.08em', extra: {opacity: 0}}));
+  const dot = (target, pt, lineY) => {
+    const d = r2(26 * u);
+    return el('div', target, abs(r2(pt.x - d / 2), r2(lineY - d / 2), d, d, {borderRadius: '50%', background: pt.color, boxShadow: `0 0 ${r2(14 * u)}px ${pt.color}, 0 0 0 ${r2(5 * u)}px ${hex2(pt.color, 0.25)}`, opacity: 0}));
+  };
+  const pointLabel = (target, pt) => label(target, pt.labelX, pt.labelY, pt.labelW, pt.text, {size: c.pointSize, family: fonts.body, color: pt.color, align: 'center', weight: 700, extra: {opacity: 0}});
+  c.points.forEach((pt, i) => {
+    kids.push(dot(`${id}-pt-${i}`, pt, c.lineY));
+    if (pt.text) kids.push(pointLabel(`${id}-ptl-${i}`, pt));
+  });
+  if (c.zoom) {
+    const z = c.zoom, H = r2(z.lineY - c.lineY);
+    const edge = r2(3 * u), fill = hex2(c.ink, 0.06), dash = `${r2(8 * u)} ${r2(8 * u)}`;
+    kids.push(el('div', `${id}-zbracket`, abs(r2(z.x0 - 6 * u), r2(c.lineY - 22 * u), r2(z.x1 - z.x0 + 12 * u), r2(44 * u), {boxSizing: 'border-box', borderRadius: r2(10 * u), border: `${edge}px solid ${c.ink}`, opacity: 0})));
+    kids.push(el('div', `${id}-zlink`, {...abs(0, c.lineY, W, H), clipPath: 'inset(0% 0% 100% 0%)'}, [svgRoot(W, H, [
+      el('path', null, null, [], {d: `M${z.x0} ${r2(22 * u)} L${c.pad} ${r2(H - c.major - 12 * u)} L${r2(W - c.pad)} ${r2(H - c.major - 12 * u)} L${z.x1} ${r2(22 * u)} Z`, fill}),
+      el('path', null, null, [], {d: `M${z.x0} ${r2(22 * u)} L${c.pad} ${r2(H - c.major - 12 * u)} M${z.x1} ${r2(22 * u)} L${r2(W - c.pad)} ${r2(H - c.major - 12 * u)}`, stroke: c.muted, strokeWidth: edge, strokeDasharray: dash, fill: 'none'})
+    ])]));
+    if (z.labelSize) kids.push(label(`${id}-zlabel`, 0, z.labelY, W, z.text, {size: z.labelSize, family: fonts.display, color: c.ink, align: 'center', extra: {opacity: 0}}));
+    const zlineH = r2((track ? 22 : 6) * u);
+    kids.push(el('div', `${id}-zline`, abs(c.pad, r2(z.lineY - zlineH / 2), r2(W - 2 * c.pad), zlineH, {background: track ? c.border : c.ink, borderRadius: zlineH, transform: 'scale(0, 1)', transformOrigin: '0% 50%'})));
+    z.ticks.forEach((t, k) => {
+      const w = r2(4 * u);
+      kids.push(el('div', `${id}-zt-${k}`, abs(r2(t.x - w / 2), r2(z.lineY - c.major), w, c.major, {background: c.ink, opacity: 0, transformOrigin: '50% 100%'})));
+      kids.push(label(`${id}-ztl-${k}`, r2(t.x - box / 2), z.tickY, box, t.text, {size: c.tickSize, family: fonts.display, color: c.muted, align: 'center', extra: {opacity: 0}}));
+    });
+    z.points.forEach((pt, i) => {
+      kids.push(dot(`${id}-zp-${i}`, pt, z.lineY));
+      if (pt.text) kids.push(pointLabel(`${id}-zpl-${i}`, pt));
+    });
+  }
   return kids;
 }
 
@@ -426,16 +531,39 @@ function lineTimeline(model, ops) {
     riseOps(ops, `${id}-marker`, start, c.marker.time, r2(-60 * u), {duration: 0.5, ease: 'back.out(1.8)'});
     if (c.marker.text) riseOps(ops, `${id}-ml`, start, rt(c.marker.time + 0.15), r2(14 * u));
   }
+  c.points.forEach((pt, i) => {
+    popOps(ops, `${id}-pt-${i}`, start, pt.time, {from: 0.2, duration: 0.4, ease: 'back.out(2.4)'});
+    if (pt.text) riseOps(ops, `${id}-ptl-${i}`, start, rt(pt.time + 0.1), r2(10 * u));
+  });
+  if (c.zoom) {
+    const z = c.zoom;
+    popOps(ops, `${id}-zbracket`, start, z.time, {from: 0.85, duration: 0.35, ease: 'power2.out'});
+    set(ops, `${id}-zlink`, start, {opacity: 1, clipT: 0, clipR: 0, clipB: 100, clipL: 0});
+    tw(ops, `${id}-zlink`, rt(z.time + 0.15), 0.55, 'power2.inOut', {clipT: 0, clipR: 0, clipB: 100, clipL: 0}, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});
+    if (z.labelSize) riseOps(ops, `${id}-zlabel`, start, rt(z.time + 0.35), r2(18 * u));
+    set(ops, `${id}-zline`, start, {x: 0, y: 0, scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-zline`, rt(z.time + 0.4), 0.5, 'power3.out', {scaleX: 0}, {scaleX: 1});
+    z.ticks.forEach((t, k) => {
+      popOps(ops, `${id}-zt-${k}`, start, t.time, {from: 0.2, duration: 0.35, ease: 'back.out(2)'});
+      riseOps(ops, `${id}-ztl-${k}`, start, rt(t.time + 0.05), r2(10 * u), {duration: 0.35});
+    });
+    z.points.forEach((pt, i) => {
+      popOps(ops, `${id}-zp-${i}`, start, pt.time, {from: 0.2, duration: 0.45, ease: 'back.out(2.4)'});
+      if (pt.text) riseOps(ops, `${id}-zpl-${i}`, start, rt(pt.time + 0.1), r2(10 * u));
+    });
+  }
 }
 
 export const numberLine = {
   id: 'number-line',
-  describe: 'A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, and an optional marker that drops onto a value.',
+  describe: 'A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, an optional marker that drops onto a value, glowing value points ("+0.3", "+23.0"), and a zoom inset that re-plots a slice of the line at a finer scale under dashed connectors ("wins by less than 1 point").',
   params: {from: 'number, the start of the line', to: 'number > from, the end', step: 'tick spacing (optional; default a round step for about 25 ticks, at most 100)', labelEvery: 'integer: label every n-th tick (optional; default the closest that fits; range ends are always labelled)',
-    ranges: `[{from, to, label ≤ 28, tone? (${DATA_TONE}), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>)`,
+    ranges: `[{from, to, label ≤ 28, tone? (${DATA_TONE}), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>) (one of ranges, points or marker)`,
+    points: `[{value, label? ≤ 24, tone? (default accent)}] 1–8 glowing dots on the line, labels under the tick numbers (optional; event points)`, pointsAt: `the points: ${at}`,
+    zoom: '{from, to (at most half the line), step?, label? ≤ 40, at?} a second ruler under the line re-plotting that slice and its points, joined by dashed connectors (optional; event zoom, last)',
     marker: `{value, label? ≤ 24, tone?, at?} a pin that drops onto one value (optional; event marker)`, unit: 'string ≤ 12 under the line\'s end ("reps") (optional)', format: FORMAT_PARAM,
     title: 'string ≤ 60 (optional)', source: 'string ≤ 80 (optional; a story-wide source note is frame.sources)', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
-  events: ['build', 'range-0', 'range-1', 'range-2', 'marker'], timing: timingRules({rules: ['the ruler draws in about 1 s from at', 'ranges (then the marker) follow the build, up to 1 s apart by default']}), variants: LINE_VARIANTS,
+  events: ['build', 'range-0', 'range-1', 'range-2', 'marker', 'points', 'zoom'], timing: timingRules({rules: ['the ruler draws in about 1 s from at', 'ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default']}), variants: LINE_VARIANTS,
   resolve: lineResolve, view: lineView, timeline: lineTimeline
 };
 

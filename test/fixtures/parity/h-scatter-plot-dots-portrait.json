@@ -32,66 +32,89 @@
         "start": 0,
         "end": 4,
         "params": {
-          "title": "Length vs. retention",
-          "xLabel": "VIDEO LENGTH (S)",
-          "yLabel": "RETENTION %",
-          "points": [
+          "title": "Score vs. cost per task",
+          "xLabel": "COST PER TASK ($, LOG)",
+          "yLabel": "SCORE %",
+          "x": {
+            "min": 0.1,
+            "max": 100,
+            "scale": "log"
+          },
+          "y": {
+            "min": 0,
+            "max": 100
+          },
+          "xFormat": {
+            "style": "currency",
+            "decimals": 1
+          },
+          "series": [
             {
-              "x": 8,
-              "y": 92
+              "label": "Model A",
+              "points": [
+                {
+                  "x": 0.3,
+                  "y": 38
+                },
+                {
+                  "x": 1.2,
+                  "y": 52
+                },
+                {
+                  "x": 4,
+                  "y": 61
+                },
+                {
+                  "x": 15,
+                  "y": 66
+                }
+              ]
             },
             {
-              "x": 12,
-              "y": 88
-            },
-            {
-              "x": 15,
-              "y": 84,
-              "size": 3
-            },
-            {
-              "x": 21,
-              "y": 79
-            },
-            {
-              "x": 26,
-              "y": 74,
-              "size": 2
-            },
-            {
-              "x": 30,
-              "y": 71
-            },
-            {
-              "x": 34,
-              "y": 63,
-              "size": 4
-            },
-            {
-              "x": 41,
-              "y": 58
-            },
-            {
-              "x": 45,
-              "y": 61
-            },
-            {
-              "x": 52,
-              "y": 49,
-              "size": 2
-            },
-            {
-              "x": 58,
-              "y": 44
-            },
-            {
-              "x": 60,
-              "y": 40,
-              "size": 5
+              "label": "Model B",
+              "points": [
+                {
+                  "x": 0.5,
+                  "y": 46
+                },
+                {
+                  "x": 2,
+                  "y": 63
+                },
+                {
+                  "x": 8,
+                  "y": 74
+                },
+                {
+                  "x": 30,
+                  "y": 79
+                }
+              ]
             }
           ],
-          "trend": true,
-          "highlight": 2,
+          "focus": 1,
+          "annotations": [
+            {
+              "type": "guide",
+              "id": "best",
+              "series": 1,
+              "index": 2
+            },
+            {
+              "type": "placeholder",
+              "id": "next",
+              "x": 70,
+              "y": 91,
+              "label": "Next model?"
+            },
+            {
+              "type": "callout",
+              "id": "cheap",
+              "series": 0,
+              "index": 0,
+              "text": "Cheapest run"
+            }
+          ],
           "variant": "dots"
         }
       }

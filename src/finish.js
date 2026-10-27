@@ -46,6 +46,7 @@ import { directionFileFor, moduleParamErrors, validateStory } from "./story_cli.
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
+import { typesetProjectStory } from "./math/index.js";
 import { storyCadence, styleAdherence, styleProfile } from "./style_adherence.js";
 import { analyzeReference } from "./style_reference.js";
 import { resolveStyleV2 } from "./style_store.js";
@@ -635,6 +636,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   // The style pack is merged into the working copy; storyboard.json stays as written.
   const styled = await applyProjectStyle(await readJson(storyFile, "storyboard.json"), { projectDir: project });
   const story = styled.story;
+  // Equation scenes are typeset from their LaTeX into the working copy.
+  await typesetProjectStory(story);
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);

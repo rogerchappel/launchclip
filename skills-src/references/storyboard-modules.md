@@ -260,6 +260,17 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | talks about a server, GPU or box running live ("one GPU", "on a single node", "it has been up for", "requests so far"): the device lands with a screen counting requests and an uptime clock | device-box |
 | walks through a long document, report or paper section by section, with what passed and what failed ("chapter by chapter", "page 14", "the audit found", "red flags"): sections land as a stack and each gets a check or a red flag (books, or a folder that opens, as variants) | paper-stack |
 | introduces a product family from small to large ("the small one, the mid one, the flagship", "three sizes", "light, standard and pro"): each member as a moon, earth, sun or galaxy with its name and tagline, the camera tracking across | planet-family |
+| reads an official benchmark chart or a score against cost or size ("on the chart", "cost per task", "the official numbers vs the re-run"): series lines draw on, one glows, guides and callouts land one at a time, an official chart and a re-run side by side | scatter-plot |
+| says one thing is N times faster or finishes first ("3× faster", "in half the time"): rows fill like progress bars at their own speeds and the winner gets its badge | race-bars |
+| walks through several benchmarks or tests at once ("across four benchmarks", "wins 18 of 20"): a dashboard of mini bar charts with one legend, each lighting its winner | small-multiples |
+| goes back or forward to a date ("rewind to October 5th", "three weeks earlier", "on launch day"): day cards rewind under a REWIND sign and land on the day with its event | date-carousel |
+| counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter | month-grid |
+| introduces a real person by name and role in an explainer ("Professor X at Y", "the paper's author", "her advisor"): their photo with a glowing name pill and role | person-id |
+| traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
+| shows or changes a formula ("the equation", "a sign error", "this term"): typeset LaTeX that reveals term by term, boxes the term in question and diffs red to green | equation |
+| unpacks a paper or report title word by word ("the paper's title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss | title-decompose |
+| describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line | feynman-diagram |
+| states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
 
@@ -678,9 +689,9 @@ events: point, sticker
 Footage-led: a name and title bar that slides in above the caption band.
 params:
 - name: string ≤ 32
-- title: string ≤ 48 (optional)
+- title: string ≤ 48 (optional; the role)
 - align: left|center
-- tone: dark|primary
+- tone: dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: name, title
 
@@ -1038,26 +1049,6 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
 variants: gradient (default), line, steps
-
-### scatter-plot (keeps captions)
-Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.
-params:
-- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60
-- xLabel: string ≤ 32
-- yLabel: string ≤ 32
-- x: {min, max} (optional)
-- y: {min, max} (optional)
-- trend: boolean: draw the least-squares line (default false)
-- tone: dot colour (primary | accent | paper | #rrggbb)
-- highlight: point index to call out (optional)
-- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
-- title: string ≤ 60 (optional)
-- source: string ≤ 80, where the numbers come from (optional)
-- at: build start: seconds from scene start (optional; else a matching hit, else a default)
-- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
-- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, highlight
-variants: dots (default), bubbles, rings
 
 ### radar-chart (keeps captions)
 Radar (spider) chart: the grid lands, then each series' shape grows out from the centre; 3–8 labelled axes.
@@ -1466,18 +1457,20 @@ events: build
 variants: stroke (default), duotone, tiles
 
 ### map-highlight (keeps captions)
-A world map that fades in, zooms to the highlighted countries when they sit close together, then fills them one by one with label pills: plain fills, pins that drop on each, or a glow.
+A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.
 params:
-- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, color?}] 1–8
-- focus: "auto" (zoom when the countries are close; default) | "world"
+- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?}] 1–8 (one of highlight or pins, or both)
+- pins: [{lon, lat, label ≤ 28, sub? ≤ 20 ("Ph.D. 2008"), card?: {title ≤ 28, sub? ≤ 32, image? (assets/… photo)}, color?}] 1–4 places; at most two cards (events pin-<i>)
+- route: boolean: a dashed travel path from pin to pin, in order (default false; events route-<i>)
+- focus: "auto" (zoom when the places are close; default) | "world"
 - tone: primary | accent | paper | #rrggbb
 - title: string ≤ 60 (optional)
 - source: string ≤ 80 (optional)
 - at: map lands: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, zoom, highlight-<i>
-variants: fill (default), pins, glow
+events: build, zoom, highlight-<i>, pin-<i>, route-<i>
+variants: fill (default), pins, glow, outline, dots
 
 ### unit-grid (keeps captions)
 An isotype: 1–200 units (a person by default, or any icon) that count in as a grid, then split into 2–3 labelled groups that slide apart and recolour ("49 lifters → 24 heavy, 25 light"), or light up a few and dim the rest ("1 in 10").
@@ -1499,13 +1492,16 @@ events: build, split, highlight
 variants: solid (default), stroke, dots
 
 ### number-line (keeps captions)
-A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, and an optional marker that drops onto a value.
+A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, an optional marker that drops onto a value, glowing value points ("+0.3", "+23.0"), and a zoom inset that re-plots a slice of the line at a finer scale under dashed connectors ("wins by less than 1 point").
 params:
 - from: number, the start of the line
 - to: number > from, the end
 - step: tick spacing (optional; default a round step for about 25 ticks, at most 100)
 - labelEvery: integer: label every n-th tick (optional; default the closest that fits; range ends are always labelled)
-- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>)
+- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>) (one of ranges, points or marker)
+- points: [{value, label? ≤ 24, tone? (default accent)}] 1–8 glowing dots on the line, labels under the tick numbers (optional; event points)
+- pointsAt: the points: seconds from scene start (optional; else a matching hit, else a default)
+- zoom: {from, to (at most half the line), step?, label? ≤ 40, at?} a second ruler under the line re-plotting that slice and its points, joined by dashed connectors (optional; event zoom, last)
 - marker: {value, label? ≤ 24, tone?, at?} a pin that drops onto one value (optional; event marker)
 - unit: string ≤ 12 under the line's end ("reps") (optional)
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
@@ -1514,7 +1510,7 @@ params:
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, range-0, range-1, range-2, marker
+events: build, range-0, range-1, range-2, marker, points, zoom
 variants: ruler (default), track
 
 ### social-post (keeps captions)
@@ -1942,6 +1938,177 @@ params:
 events: build, body-0, body-1, body-2, body-3, body-4
 variants: track (default), lineup
 
+### scatter-plot (keeps captions)
+Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
+params:
+- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60 (one of points, series or panels)
+- series: [{points: [{x, y, label?, size?}] 1–24, label? ≤ 22, color? (primary | accent | paper | #rrggbb), line? (default true with 2+ points), at?}] 1–5; each draws on its own cue (event series-<i>)
+- panels: [{title ≤ 32, series}] exactly 2, side by side (stacked in portrait) on shared axes ("Official chart" | "Independent re-run"); their series count on in one sequence (series-<i>), the second panel lands on event panel-1
+- focus: series index to glow while the others dim (optional; in both panels; event focus)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- annotations: [{type: "guide" | "callout" | "placeholder", id? (a reveal id; default a<i>), panel?, series? + index? (a series point) | x + y, text? (callout text ≤ 40, guide tag, placeholder glyph ≤ 3, default "?"), label? ≤ 24 (placeholder caption), at?}] 1–6; each lands on its own cue (event reveal-<id>)
+- x: {min?, max?, scale?: "linear" | "log"} (optional)
+- y: {min?, max?, scale?: "linear" | "log"} (optional)
+- format: y values: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- xFormat: x values: as format
+- xLabel: string ≤ 32
+- yLabel: string ≤ 32
+- trend: boolean: draw the least-squares line through points (default false)
+- tone: dot colour (primary | accent | paper | #rrggbb)
+- highlight: points index to call out (optional; with points)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, panel-1, series-<i>, focus, highlight, reveal-<id>
+variants: dots (default), bubbles, rings
+
+### race-bars (keeps captions)
+A race: 2–5 rows fill like progress bars at their own speeds, each timer counting to its finish, the fastest ticking first; then an "N× faster" badge lands on the winner ("3× faster", "1h 26m vs 4h 10m").
+params:
+- rows: [{label ≤ 24, time (how long it takes, any unit), tone? (good | bad | neutral | primary | accent | paper | #rrggbb), icon?}] 2–5
+- badge: string ≤ 24 on the winner (optional; default "N× faster" from the times; false for none)
+- format: the timers: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- race: seconds the slowest row takes to fill (optional; default up to 3.2 s, fitting the scene)
+- badgeAt: the badge: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, finish-<i>, badge
+variants: bars (default), lanes
+
+### small-multiples (keeps captions)
+A benchmark dashboard: 2–6 mini bar charts (one per test) in a grid of glass cards under one shared legend; the bars grow panel by panel, then each panel lights its winning bar with a glow and its value while the rest dim.
+params:
+- series: [label | {label ≤ 20, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)}] 2–4, the shared legend (one bar per series in every panel)
+- panels: [{title ≤ 24, values: [number per series], highlight? (series index; default the largest), note? ≤ 16}] 2–6
+- columns: integer (optional; default 1–2 in portrait, 2–3 in landscape)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), flat
+
+### date-carousel (keeps captions)
+A row of day cards (month, date, weekday) that lands on one date, then rewinds or fast-forwards under a ◀◀ REWIND sign to another, slowing as it arrives; the focus day lights up with a glowing rim and its event chip ("GPT-6.1 released", "Day 1"), and an optional caption ("where it started") rises under it.
+params:
+- from: "YYYY-MM-DD", the day shown first
+- to: "YYYY-MM-DD", the focus day it lands on (within 120 days; earlier rewinds, later fast-forwards)
+- event: {label ≤ 24, sub? ≤ 24, icon?, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)} the chip pinned on the focus day (optional)
+- startEvent: {label, sub?, icon?, tone?} a chip on the start day that clears as the strip moves (optional)
+- caption: string ≤ 40 under the cards after the focus (optional)
+- moveAt: the move: seconds from scene start (optional; else a matching hit, else a default)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, move, focus
+variants: glass (default), flat
+
+### month-grid (keeps captions)
+A month calendar of glass day cells (weekday header, date, "DAY n") whose cells fill one after another across a run of days ("Codex · 28 days"), with marks pinned on given days ("−50% faster", "both") and legend chips under the grid.
+params:
+- from: "YYYY-MM-DD", the run's first day
+- days: integer 1–42, the run's length (the grid shows the whole weeks around it)
+- weekStart: "mon" (default) | "sun"
+- tone: the fill (good | bad | neutral | primary | accent | paper | #rrggbb; default accent)
+- marks: [{day (1–days), label ≤ 16, icon? (shown alone where the label is too wide for the cell), tone?}] up to 8, landing as the fill reaches them
+- legend: [{label ≤ 28, icon?, tone?}] 1–3 chips under the grid (optional; event legend)
+- fillAt: the fill: seconds from scene start (optional; else a matching hit, else a default)
+- legendAt: the legend: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 ("Codex · 28 days")
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, fill, legend
+variants: glass (default), flat
+
+### person-id (keeps captions)
+Who is speaking or being cited: a photo in a rounded frame with a glowing rim, the name in bold capitals inside a glow pill across its foot and the role under it ("Physics professor, ITU"); or the same as a glass card. Without a photo, an initials tile. Use real photos only of the real person named.
+params:
+- name: string ≤ 28
+- role: string ≤ 40 (optional)
+- image: assets/… photo or video still of that person (optional; else an initials tile)
+- align: "left" | "center" (default) | "right"
+- tone: the pill and rim: primary | accent (default) | paper | #rrggbb
+- nameAt: the name: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, name
+variants: pill (default), card
+
+### lineage-graph (keeps captions)
+A lineage: 2–5 people as photos (or initials tiles) linked by dashed connectors with role labels ("doctoral advisor", "co-author"), laid out by generation (left to right in landscape, top to bottom in portrait) and drawn in order, each link drawing into the next person.
+params:
+- people: [{name ≤ 24, role? ≤ 28, image? (assets/… photo of that person), id? (a reveal id; default p<i>), at?}] 2–5 (events node-<id>)
+- links: [{from, to (index or id), label? ≤ 24}] 1–6, parent → child, no loops
+- tone: connector and rim colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, node-<id>
+variants: circles (default), frames
+
+### equation (keeps captions)
+Typeset LaTeX (MathJax glyphs, drawn the same in both renderers) that wipes in, then reveals its \term{…} marks one at a time, boxes marked terms with a glowing frame and a label ("first quantum correction"), and runs a red/green diff: \del{…} turns red and is struck through while \add{…} lands in green.
+params:
+- latex: string ≤ 400, display-style TeX; mark parts with \term{…} (reveals on its own cue), \add{…} or \del{…} (the diff); marks do not nest
+- typeset: generated from latex by src/math/typeset.js (launchclip fills it in; never write it by hand)
+- boxes: [{mark (index of a \term/\add/\del mark, from 0), label? ≤ 32, tone?, at?}] 1–4 (events box-<n>)
+- diffAt: the diff: seconds from scene start (optional; else a matching hit, else a default)
+- size: px per em (optional; default the largest that fits, at most 120)
+- tone: box colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<n>, diff, box-<n>
+variants: plain (default), glass
+
+### title-decompose (keeps captions)
+A paper (or any) title set as word chips under its citation; each marked term in turn lights its chips, a dashed connector drops from them, and an icon with a plain gloss lands under it ("Self-Mass" → "the field's own mass"), building a glossary row.
+params:
+- text: string ≤ 120, the title
+- citation: string ≤ 80 over it ("Kahya & Woodard, Phys. Rev. D 76 (2007)") (optional)
+- terms: [{text (a run of words in the title), gloss ≤ 24, sub? ≤ 28, icon?}] 1–5, glossed left to right (events term-<i>)
+- tone: primary | accent (default) | paper | #rrggbb
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<i>
+variants: chips (default), underline
+
+### feynman-diagram (keeps captions)
+A Feynman diagram that draws itself line by line: fermions (straight, with an arrow), photons (wavy), gluons (curly), scalars (dashed) and gravitons (double wave), bent into loops where asked, vertices popping as lines meet them and labels (e⁻, γ, φ) landing beside the lines. Presets: self-energy (a one-loop correction), exchange, annihilation.
+params:
+- preset: self-energy | exchange | annihilation (or give points and lines)
+- points: {name: [x, y]} on a 12 × 6 grid, y down (optional with a preset)
+- lines: [{from, to (point names), type? (fermion | antifermion | photon | gluon | scalar | graviton; default fermion), bend? −1–1 (a loop or arc), label? ≤ 12, at?}] 1–12, drawn in order (events line-<i>)
+- tone: boson and glow colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- caption: string ≤ 80 under it (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, line-<i>
+variants: glow (default), ink
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -2051,7 +2218,6 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | stacked-bar | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | pie-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | area-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
-| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | radar-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | sparkline | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | progress-ring | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
@@ -2080,9 +2246,9 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
-| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
+| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
-| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | social-post | 2 s | 0.5 s | scene − 0.65 s | the card builds in about 0.9 s from at (default 0.2 s); the highlight sweeps 0.45–1.4 s across the phrase (default 0.35 s after the build); focus follows the highlight by 0.4 s |
 | social-stack | 2 s | 0.5 s | scene − 0.65 s | cards land stagger s apart from at (default 0.2 s, 0.45 s apart); focus follows the last card; the highlight 0.5 s after the focus |
 | social-sort | 2 s | 0.5 s | scene − 0.65 s | cards pile in 0.3 s apart from at (default 0.2 s); the sort follows the pile by 0.5 s; cards fly 0.14 s apart |
@@ -2109,6 +2275,16 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
 | paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
 | planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
+| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
+| race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
+| small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
+| date-carousel | 2 s | 0.5 s | scene − 0.65 s | the move starts about 0.9 s after at and runs 0.7–2.4 s (longer for more days); the focus lands as the move ends |
+| month-grid | 2 s | 0.5 s | scene − 0.65 s | the grid lands in 0.7 s from at; the fill runs up to 90 ms a day (2.2 s at most); the legend follows the fill |
+| person-id | 2 s | 0.5 s | scene − 0.65 s | the frame rises from at; the name slides in 0.45 s later and the role follows |
+| lineage-graph | 2 s | 0.5 s | scene − 0.65 s | people land generation by generation about 0.9 s apart (squeezed to fit); each link draws in 0.6 s just before its child |
+| equation | 2 s | 0.5 s | scene − 0.65 s | the equation wipes in over 0.7 s from at; terms, the diff and the boxes follow 0.75–0.9 s apart (squeezed to fit) |
+| title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
+| feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

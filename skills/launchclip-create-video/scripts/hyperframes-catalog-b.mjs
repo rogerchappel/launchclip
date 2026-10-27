@@ -19,7 +19,7 @@ import {UNITLESS} from './catalog-b-view.mjs';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
-const KEEP_ATTR_CASE = new Set(['viewBox', 'pathLength', 'preserveAspectRatio', 'gradientUnits']);
+const KEEP_ATTR_CASE = new Set(['viewBox', 'pathLength', 'preserveAspectRatio', 'gradientUnits', 'maskUnits']);
 const VOID = new Set(['img']);
 const SVG_LEAF = new Set(['path', 'line', 'rect', 'circle', 'stop']);
 const kebab = key => key.replace(/[A-Z]/g, ch => `-${ch.toLowerCase()}`).replace(/^webkit-/, '-webkit-');

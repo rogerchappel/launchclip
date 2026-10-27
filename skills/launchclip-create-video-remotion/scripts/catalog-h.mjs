@@ -3,7 +3,8 @@
 // Contract: docs/KIT_CONTRACTS.md ("Catalogue H").
 //
 //   charts    catalog-h-charts.mjs (bar-chart, stacked-bar, pie-chart,
-//             area-chart, scatter-plot, radar-chart, sparkline, progress-ring)
+//             area-chart, radar-chart, sparkline, progress-ring),
+//             catalog-h-scatter.mjs (scatter-plot: series, guides, log axes)
 //             and catalog-h-flows.mjs (funnel-chart, waterfall, sankey,
 //             heatmap, leaderboard, comparison-table), catalog-h-map.mjs
 //             (map-highlight, on kit/core/world-110m.mjs)
@@ -30,6 +31,8 @@
 //             and catalog-i-tokenizer.mjs (tokenizer: BPE chips and prices)
 //   3D        catalog-i-3d.mjs (catalogue I: glass bars, stacks, shelves,
 //             devices, paper and planets on a CSS 3D rig)
+//   explain   catalog-i-explain.mjs (catalogue I: the explainer modules,
+//             drawn with these same helpers)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -40,6 +43,7 @@ import {grammarTweens} from './grammar.mjs';
 import {applyShotStates, shotStateView} from './shot-states.mjs';
 import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
+import {SCATTER} from './catalog-h-scatter.mjs';
 import {FLOWS} from './catalog-h-flows.mjs';
 import {NUMBERS} from './catalog-h-numbers.mjs';
 import {FRAMES} from './catalog-h-frames.mjs';
@@ -56,9 +60,11 @@ import {PARTICLE_MODULES} from './catalog-i-particles.mjs';
 import {GRID_MODULES} from './catalog-i-grids.mjs';
 import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
 import {OBJECT_MODULES} from './catalog-i-3d.mjs';
+import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...SCATTER, ...EXPLAIN_MODULES];
+
 
 
 
