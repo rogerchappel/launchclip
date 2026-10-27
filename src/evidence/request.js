@@ -15,12 +15,15 @@
 //     "provenance": {"source_title": "…", "fetched_at": "ISO", "publisher": "…", "published_at": "ISO?"} }
 //
 // Additive extensions (all optional): target {text, nth?, within?, closest?}
-// (closest: the ancestor matching a selector, such as a diff row) and
-// {selector, nth?, within?}; beat.zoom (a fixed scale for zoom beats); request.chrome
+// (closest: the ancestor matching a selector, such as a diff row; near: of
+// several matches, the one nearest a phrase), {selector, nth?, within?,
+// near?} and {any: [targets]} (alternatives, the first found wins); beat.zoom (a fixed scale for zoom beats); request.chrome
 // ("dark" | "none", the browser chrome drawn round the page), request.fps,
 // request.tail (seconds held after the last beat), request.still
 // ({target, pad?, scale?}, the default crop for --still), request.wait_for
-// (a selector the page must show before capture) and request.hide (CSS
+// (a selector the page must show before capture), request.start ("auto",
+// "top" or "target": where the clip opens on a long page), request.file (one
+// file's diff in a GitHub PR or commit; src/evidence/routes.js) and request.hide (CSS
 // selectors of page furniture to hide before capture, such as a promo
 // popover; recorded in the sidecar, never used on the evidence itself).
 //
@@ -33,6 +36,7 @@ export const KINDS = ["page", "post", "repo", "pr", "diff", "commit", "model-car
 export const ACTIONS = ["scroll", "zoom", "cursor", "select", "highlight", "focus-ring", "pin", "wait"];
 export const THEMES = ["dark", "light"];
 export const CHROMES = ["dark", "none"];
+export const STARTS = ["auto", "top", "target"];
 export const DEFAULT_VIEWPORT = Object.freeze({ width: 1600, height: 1000 });
 
 // Beats that point at something on the page; wait and pin may not.
@@ -54,11 +58,19 @@ export function normalizeTarget(target) {
   if (Number.isInteger(target.nth)) out.nth = target.nth;
   if (typeof target.within === "string") out.within = target.within;
   if (typeof target.closest === "string") out.closest = target.closest;
+  if (typeof target.near === "string") out.near = target.near;
+  // any: alternatives tried in order (the sentence a fetch saw, then the price as the page renders it).
+  if (Array.isArray(target.any)) out.any = target.any.map(normalizeTarget);
   return out;
 }
 
+/** Whether a normalised target names something to find (text, a selector, or alternatives that each do). */
+const targetComplete = (t) => Boolean(t) && (t.text !== undefined || t.selector !== undefined || (Array.isArray(t.any) && t.any.length > 0 && t.any.length <= 6 && t.any.every((alt) => alt && !alt.any && targetComplete(alt))));
+/** Whether a target can sweep a phrase: text, or alternatives that are all text. */
+const textTarget = (t) => t.text !== undefined || (Array.isArray(t.any) && t.any.every((alt) => alt?.text !== undefined));
+
 /** A target as a short label for logs and the sidecar. */
-export const targetLabel = (target) => (!target ? null : target.text !== undefined ? `"${target.text}"` : target.selector) + (target?.nth ? ` #${target.nth}` : "");
+export const targetLabel = (target) => (!target ? null : target.any ? target.any.map(targetLabel).join(" | ") : (target.text !== undefined ? `"${target.text}"` : target.selector) + (target.nth ? ` #${target.nth}` : "") + (target.near ? ` near "${target.near}"` : ""));
 
 /**
  * Check a capture request. → {errors: [string], warnings: [string], request}
@@ -91,6 +103,9 @@ export function validateCaptureRequest(input) {
   const tail = input.tail ?? 1.2;
   if (typeof tail !== "number" || tail < 0 || tail > 10) errors.push("tail must be 0–10 seconds");
   if (input.wait_for !== undefined && typeof input.wait_for !== "string") errors.push("wait_for must be a CSS selector");
+  if (input.file !== undefined && (typeof input.file !== "string" || !input.file.trim() || input.file.startsWith("/") || input.file.split("/").includes(".."))) errors.push("file must be a repository path such as src/app.js (no leading /, no ..)");
+  const start = input.start ?? "auto";
+  if (!STARTS.includes(start)) errors.push(`start must be ${STARTS.join(", ")}`);
   if (input.hide !== undefined && (!Array.isArray(input.hide) || input.hide.length > 12 || input.hide.some((item) => typeof item !== "string" || !item.trim()))) errors.push("hide must be an array of at most 12 CSS selectors");
 
   if (!Array.isArray(input.beats)) errors.push("beats must be an array");
@@ -103,10 +118,10 @@ export function validateCaptureRequest(input) {
     if (typeof dur !== "number" || !(dur > 0) || dur > 30) errors.push(`${where}.dur must be over 0 and at most 30 seconds`);
     // target null is "no target" (the research agent writes it on wait and pin beats).
     const target = beat.target === undefined || beat.target === null ? null : normalizeTarget(beat.target);
-    if (beat.target !== undefined && beat.target !== null && (!target || (target.text === undefined && target.selector === undefined))) errors.push(`${where}.target must be a CSS selector or {text} / {selector}`);
+    if (beat.target !== undefined && beat.target !== null && !targetComplete(target)) errors.push(`${where}.target must be a CSS selector, {text} / {selector}, or {any: [1–6 of those]}`);
     if (target?.text !== undefined && !target.text.trim()) errors.push(`${where}.target.text must not be empty`);
     if (NEEDS_TARGET.has(beat.action) && !target) errors.push(`${where} (${beat.action}) needs a target`);
-    if (TEXT_ONLY.has(beat.action) && target && target.text === undefined) errors.push(`${where} (${beat.action}) needs a {text} target: it sweeps a phrase`);
+    if (TEXT_ONLY.has(beat.action) && target && !textTarget(target)) errors.push(`${where} (${beat.action}) needs a {text} target: it sweeps a phrase`);
     if (beat.action === "pin" && (typeof beat.label !== "string" || !beat.label.trim())) errors.push(`${where} (pin) needs a label, the text on the pill`);
     // A label is a note on most beats (the research agent writes the claim there); on a pin it is the pill's text.
     if (beat.label !== undefined && (typeof beat.label !== "string" || beat.label.length > 160)) errors.push(`${where}.label must be a string of at most 160 characters`);
@@ -141,8 +156,8 @@ export function validateCaptureRequest(input) {
     }
   }
 
-  const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, beats, out,
-    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(still ? { still } : {}) };
+  const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, start, beats, out,
+    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(input.file ? { file: input.file } : {}), ...(still ? { still } : {}) };
   return { errors, warnings, request };
 }
 

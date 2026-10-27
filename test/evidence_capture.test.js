@@ -3,9 +3,10 @@
 // The browser run itself is exercised by the samples in docs/EVIDENCE_CAPTURE.md.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mediaSkip } from "./helpers/media.js";
 import { CAPTURE_SCHEMA, normalizeTarget, requestDuration, validateCaptureRequest } from "../src/evidence/request.js";
 import { buildTimeline, cameraAt, clampCamera, stateAt, toWindow, viewOf } from "../src/evidence/timeline.js";
-import { assertPublicUrl, blockReason, isRejectLabel } from "../src/evidence/capture.js";
+import { assertPublicUrl, blockReason, captureRegion, isRejectLabel, regionTiles } from "../src/evidence/capture.js";
 import { chromeHeight, playerHtml, urlParts } from "../src/evidence/player.js";
 
 const request = (extra = {}) => ({
@@ -27,6 +28,12 @@ test("a valid request normalises: defaults filled, beats sorted, targets as obje
   assert.equal(r.beats[0].dur, 1.2);
   assert.equal(requestDuration(r), 2.5 + 1.2);
   assert.deepEqual(normalizeTarget({ text: "x", closest: "tr", nth: 2 }), { text: "x", closest: "tr", nth: 2 });
+  // Alternatives and a nearby phrase, for pages that render a price differently from the fetched text.
+  const priced = validateCaptureRequest(request({ beats: [{ at: 0, action: "highlight", target: { any: [{ text: "costs $1.00/M input tokens" }, { text: "$1.00", near: "Input" }] } }, { at: 1, action: "focus-ring", target: { any: [{ text: "$1.00", closest: "tr" }, "td.price"] } }] }));
+  assert.deepEqual(priced.errors, []);
+  assert.deepEqual(priced.request.beats[0].target.any[1], { text: "$1.00", near: "Input" });
+  assert.match(validateCaptureRequest(request({ beats: [{ at: 0, action: "highlight", target: { any: [{ text: "a" }, "td"] } }] })).errors.join(), /needs a \{text\} target/);
+  assert.match(validateCaptureRequest(request({ beats: [{ at: 0, action: "zoom", target: { any: [] } }] })).errors.join(), /any: \[1–6/);
 });
 
 test("the validator names each problem", () => {
@@ -161,6 +168,20 @@ test("the timeline survives the JSON trip into the player page unchanged", () =>
   assert.equal(stateAt(tripped, 2.4).selection.length, 1, "a finished selection stays until the next one");
 });
 
+test("a long page is shot as the slice the beats need, in tiles", () => {
+  const win = { width: 1600, height: 948 };
+  // Near the top: from the page top, as before.
+  assert.deepEqual(captureRegion([{ x: 0, y: 2000, width: 10, height: 20 }], { docHeight: 9000, win }), { y0: 0, y1: 3158 });
+  // Deep: open just above the first target, as if arriving by anchor.
+  const deep = captureRegion([{ x: 0, y: 10410, width: 10, height: 20 }, { x: 0, y: 11000, width: 10, height: 20 }], { docHeight: 14000, win });
+  assert.deepEqual(deep, { y0: 10126, y1: 12158 });
+  assert.equal(captureRegion([{ x: 0, y: 10410, width: 10, height: 20 }], { docHeight: 14000, win, start: "top" }).y0, 0);
+  assert.equal(captureRegion([{ x: 0, y: 900, width: 10, height: 20 }], { docHeight: 14000, win, start: "target" }).y0, 616);
+  // Never past the page's end, never shorter than a window.
+  assert.deepEqual(captureRegion([], { docHeight: 500, win }), { y0: 0, y1: 500 });
+  assert.deepEqual(regionTiles({ y0: 100, y1: 9100 }), [{ y: 100, height: 4000 }, { y: 4100, height: 4000 }, { y: 8100, height: 1000 }]);
+});
+
 test("the player draws the URL in the chrome and inlines the timeline", async () => {
   assert.deepEqual(urlParts("https://www.example.com/a/b/?q=1"), { host: "example.com", rest: "/a/b/?q=1" });
   assert.equal(chromeHeight({ width: 1600, height: 1000 }), 52);
@@ -170,6 +191,9 @@ test("the player draws the URL in the chrome and inlines the timeline", async ()
   assert.match(html, /<span class="host">github\.com<\/span><span class="rest">\/dotnet\/efcore\/pull\/39217\/files<\/span>/);
   assert.match(html, /function stateAt\(/);
   assert.doesNotMatch(html, /^export /m);
+  const tiled = await playerHtml({ timeline: tl, images: [{ src: "page-0.png", y: 0, height: 4000 }, { src: "page-1.png", y: 4000, height: 1200 }], url: "https://example.com/" });
+  assert.match(tiled, /id="shot-0" src="page-0\.png".*id="shot-1" src="page-1\.png"/s);
+  assert.match(tiled, /const TILES = \[\{"y":0,"height":4000\},\{"y":4000,"height":1200\}\]/);
 });
 
 test("the CLI checks a request, runs a capture or a still, and prints scene params from a sidecar", async () => {
@@ -201,4 +225,53 @@ test("the CLI checks a request, runs a capture or a still, and prints scene para
   const scene = await runEvidenceCommand("scene", sidecar);
   assert.equal(scene.module, "evidence-clip");
   assert.deepEqual(scene.params.source, { publisher: "GitHub", date: "Oct 16, 2026" });
+});
+
+test("routes: X posts open the public embed, GitHub files open their own diff anchor", async () => {
+  const { githubDiffAnchor, resolveRoute, retarget, xStatus } = await import("../src/evidence/routes.js");
+  assert.deepEqual(xStatus("https://x.com/Mr_Salio/status/2114266090356232253?s=20"), { user: "Mr_Salio", id: "2114266090356232253" });
+  assert.equal(xStatus("https://example.com/a/status/1"), null);
+  const x = resolveRoute({ url: "https://twitter.com/PeterJ_Walker/status/2114377706603429899", theme: "dark" });
+  assert.equal(x.name, "x-embed");
+  assert.equal(x.url, "https://platform.twitter.com/embed/Tweet.html?id=2114377706603429899&theme=dark&dnt=true&lang=en");
+  // The page-title wrapper a research fetch sees is not in the embed.
+  for (const text of ['on X: "🚨 GPT-6.1 Terra is showing up', 'Salio on X: "🚨 GPT-6.1 Terra is showing up"']) assert.equal(retarget({ text }, x).target.text, "GPT-6.1 Terra is showing up");
+  assert.equal(retarget({ text: "plain words" }, x).note, undefined);
+  // GitHub's anchor for a file is the sha256 of its path.
+  assert.equal(githubDiffAnchor("eng/harness-evaluation/skills/code-review/eval.yaml"), "diff-30465b3480d20f41a988a131d4c9ba056d6940021f9f1fc1b64b704b355f8f7b");
+  const gh = resolveRoute({ url: "https://github.com/dotnet/efcore/pull/39217", file: "eng/harness-evaluation/skills/code-review/eval.yaml" });
+  assert.equal(gh.url, "https://github.com/dotnet/efcore/pull/39217/files#diff-30465b3480d20f41a988a131d4c9ba056d6940021f9f1fc1b64b704b355f8f7b");
+  assert.deepEqual(retarget({ text: "gpt-6.1-terra" }, gh).target, { text: "gpt-6.1-terra", within: gh.scope });
+  assert.deepEqual(retarget({ text: "x", within: "main" }, gh).target, { text: "x", within: "main" });
+  assert.throws(() => resolveRoute({ url: "https://example.com/a", file: "a.js" }), /needs a GitHub pull request or commit URL/);
+  assert.equal(resolveRoute({ url: "https://example.com/a" }).name, "page");
+  assert.match(validateCaptureRequest(request({ file: "/etc/passwd" })).errors.join(), /file must be a repository path/);
+});
+
+test("targets in a real page: hidden text fails with what the page renders; near and any pick the shown element", async (t) => {
+  const { recorderAvailability } = await import("../src/demo/record.js");
+  const { measureTarget } = await import("../src/evidence/capture.js");
+  const available = await recorderAvailability();
+  const skip = mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`);
+  if (skip) return t.skip(skip);
+  const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  await page.setContent(`<style>body{font:16px sans-serif;margin:0}.faq{height:0;overflow:hidden}td{padding:6px 20px}</style>
+    <h1>Model</h1><p>In/out price <b id="head">$1 / $5</b> per 1M</p>
+    <table><tr id="row-a"><td>OpenAI</td><td>$1.00</td><td>$5.00</td><td>$0.05</td></tr>
+    <tr id="row-b"><td>OpenAI Flex</td><td>$0.50</td><td>$2.50</td><td>$0.025</td></tr></table>
+    <div style="height:900px"></div><p>Fast</p><p>$0.05 elsewhere</p>
+    <details><summary>How much does it cost?</summary></details>
+    <div class="faq">It costs $1.00/M input tokens and $5.00/M output tokens.</div>`);
+  await assert.rejects(measureTarget(page, { text: "It costs $1.00/M input tokens" }, "b"), /on the page but hidden .*the page renders "…[^"]*OpenAI\$1\.00\$5\.00/s);
+  await assert.rejects(measureTarget(page, { text: "Nowhere $9.99/M" }, "b"), /is not on the page/);
+  const row = await measureTarget(page, { text: "$1.00", near: "OpenAI", closest: "tr" }, "b");
+  assert.equal(Math.round(row.rects[0].y), Math.round(await page.evaluate(() => document.getElementById("row-a").getBoundingClientRect().top)));
+  // Of the two "$0.05", the one beside "$5.00", not the one further down the page.
+  const cache = await measureTarget(page, { text: "$0.05", near: "$5.00" }, "b");
+  assert.ok(cache.rects[0].y < 200, JSON.stringify(cache.rects));
+  const alt = await measureTarget(page, { any: [{ text: "It costs $1.00/M input tokens" }, { text: "$1 / $5" }] }, "b");
+  assert.equal(alt.via, 'any[1] "$1 / $5"');
+  await assert.rejects(measureTarget(page, { any: [{ text: "gone" }, { selector: "#nope" }] }, "b"), /none of 2 alternatives.*any\[0\].*any\[1\]/s);
 });

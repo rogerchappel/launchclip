@@ -53,6 +53,14 @@ Additive extensions, all optional:
   across `<span>`s. Either form takes `nth` (0-based match), `within` (a
   selector to search inside), and a text target takes `closest` (use the
   ancestor matching a selector, such as `"tr"` for a whole diff row).
+  `near: "phrase"` picks, of several matches, the one nearest that phrase
+  (the `$1.00` in the OpenAI row). `{any: [target, …]}` (1–6) tries
+  alternatives in order and uses the first found, recorded as `via` in the
+  sidecar: lead with the sentence a fetch saw, then the element as the page
+  renders it. Text only counts when a reader could see it: text in a box
+  clipped to nothing (a collapsed accordion answer, `overflow: hidden` at
+  height 0) is an error, and a missing or hidden target's error lists what
+  the page does render round its prices or key words.
   Text inside shadow DOM (GitHub's `<relative-time>` "last week") is not
   searched; target a neighbour or a selector instead. The browser runs in
   UTC, so target dates as the page renders them in UTC.
@@ -69,6 +77,31 @@ Additive extensions, all optional:
   evidence itself.
 - `still`: `{target?, pad? (CSS px, default 24), scale? (1–4, default 3)}`, the
   default crop for `--still`.
+- `start`: `auto` (default), `top` or `target`: where the clip opens on a long
+  page (see Shoots below).
+- `file`: one file of a GitHub PR or commit, such as
+  `"eng/harness-evaluation/skills/code-review/eval.yaml"` (see Routes).
+
+### Routes
+
+Some URLs are not the page to film; the sidecar's `route` says which page
+was opened instead and why (`name`, `url`, `notes`, `retargeted`).
+
+- **`x-embed`:** an `x.com` or `twitter.com` post. X refuses headless
+  browsers on the post page, so the capture opens the public embed page that
+  X's oEmbed widget uses (`platform.twitter.com/embed/Tweet.html?id=…&dnt=true`),
+  rendered by X itself, centres and enlarges the card on a dark ground, and
+  stores the oEmbed record (`publish.twitter.com`: author, text) as
+  `route.oembed`. A target written from the post page's title (`Salio on X:
+  "🚨 GPT-6.1 Terra…`) is matched without that wrapper. It never signs in; a
+  deleted, protected or age-restricted post fails.
+- **`github-file`:** a request with `file`. The capture opens GitHub's own
+  anchor for that file (`#diff-<sha256 of the path>`) on the PR's Files tab,
+  presses that one file's **Load diff** when GitHub has collapsed it (a
+  display toggle, never a form), and searches every target without its own
+  `within` inside that file. A 112-file PR whose hunk sits 31,600 px down is
+  capturable this way. A path not in the diff fails.
+- **`page`:** everything else, the URL as given.
 
 ### Beats
 
@@ -106,10 +139,17 @@ log space.
    reason. No clip of a wall is ever made. A "Sign in" link or "Already a
    subscriber?" line beside a free article is not a wall.
 4. **Freezes** the page (animations and transitions paused, carets hidden,
-   media paused), scrolls through it once so lazy content loads, and measures
+   media paused), scrolls through it so lazy content loads, and measures
    every beat target. A target that is missing or hidden is an error.
-5. **Shoots** the page once at 2× (up to 7,600 CSS px down; a target further
-   down is an error: link to an anchor nearer it) and saves the HTML.
+5. **Shoots** only the slice of the page the beats need, at 2×, and saves
+   the HTML. When every target ends within about 9,000 px of the top the
+   slice starts at the top, as a reader would; otherwise it opens just above
+   the first target, as if the reader had followed an anchor there
+   (`start` forces either). Targets may sit up to 120,000 px down; one clip
+   covers at most 16,000 px of page (split beats further apart into two
+   requests). The slice is shot in tiles of up to 4,000 px, all at scroll 0,
+   so a tall page stays inside Chromium's texture limit and the frames stay
+   deterministic.
 6. **Plays** the beats over that shot: `buildTimeline` turns beats and rects
    into segments, and `stateAt(timeline, t)` reads them at any time with
    nothing carried between frames. The player page draws each frame in px
@@ -132,14 +172,17 @@ Next to `out`:
   "provenance": { "source_title": "…", "fetched_at": "…", "publisher": "…", "published_at": "…" },
   "captured_at": "ISO", "consent": { "action": "none|rejected|hidden", "via": "…" }, "hidden": ["…"],
   "video": "pr-39217.mp4", "poster": "pr-39217.poster.png",
-  "fullpage": { "path": "pr-39217.fullpage.png", "width": 1600, "height": 2737, "scale": 2 },
+  "fullpage": { "path": "pr-39217.fullpage.png", "width": 1600, "height": 2737, "scale": 2, "region": { "y0": 0, "y1": 2737 } },
+  "route": { "name": "page", "url": "…", "notes": [] },
   "snapshot": { "path": "pr-39217.snapshot.html", "sha256": "…", "bytes": 5006171 },
   "viewport": { "width": 1600, "height": 1000 }, "chrome": 52, "fps": 30, "duration": 9, "frames": 270,
   "spans": [{ "beat": 1, "action": "select", "text": "#39217", "rects": [{ "x": 899.4, "y": 197, "width": 108.4, "height": 38 }] }],
   "beats": [{ "index": 0, "action": "cursor", "at": 0.4, "dur": 0.9, "target": "\"#39217\"", "matched": "#39217", "start": 0.4, "end": 1.3, "box": {} }] }
 ```
 
-Rects and boxes are page CSS px. `spans` lists every selected or
+Rects and boxes are page CSS px. A slice shot in several tiles writes
+`<id>.fullpage-<n>.png` and lists them in `fullpage.tiles` (`path`, `y`,
+`height`, from the slice's top at `fullpage.region.y0`). `spans` lists every selected or
 highlighted phrase as the page actually wrote it.
 
 ### `--still`

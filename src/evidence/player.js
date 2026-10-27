@@ -31,8 +31,12 @@ export function urlParts(href) {
   return { host: url.hostname.replace(/^www\./, ""), rest };
 }
 
-/** The player page's HTML. `image` is the screenshot's file name in the same dir. */
-export async function playerHtml({ timeline, image, url, theme = "dark" }) {
+/**
+ * The player page's HTML. `images` are the screenshot tiles in the same dir,
+ * [{src, y, height}] in page px from the clip's top (a tall page is shot in
+ * tiles); `image` is shorthand for one tile covering the whole page.
+ */
+export async function playerHtml({ timeline, image, images = [{ src: image, y: 0, height: timeline.page.height }], url, theme = "dark" }) {
   const source = (await readFile(TIMELINE_SOURCE, "utf8")).replace(/^export /gm, "");
   const { width, height } = timeline.viewport;
   const ch = timeline.chrome;
@@ -55,27 +59,30 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 #url svg{flex:none;width:${Math.round(14 * k)}px;height:${Math.round(14 * k)}px;fill:none;stroke:#8b919a;stroke-width:2}
 #url .host{color:#e8eaed}#url .rest{color:#8b919a;overflow:hidden;text-overflow:ellipsis;margin-left:-${Math.round(8 * k)}px}
 #win{position:absolute;left:0;top:${ch}px;width:${width}px;height:${height - ch}px;overflow:hidden}
-#shot{position:absolute;left:0;top:0;max-width:none;image-rendering:auto}
+.shot{position:absolute;left:0;top:0;max-width:none;image-rendering:auto}
 .sel{position:absolute;background:rgba(56,132,255,.42);mix-blend-mode:normal}
 .mark{position:absolute;background:rgba(34,211,238,.28);box-shadow:inset 0 -2px 0 #22d3ee;border-radius:2px}
 #ring{position:absolute;border:${(2.5 * k).toFixed(2)}px solid #22d3ee;border-radius:${Math.round(8 * k)}px;box-shadow:0 0 0 ${Math.round(4 * k)}px rgba(34,211,238,.16),0 0 ${Math.round(22 * k)}px rgba(34,211,238,.55),inset 0 0 ${Math.round(12 * k)}px rgba(34,211,238,.18);display:none}
 .pin{position:absolute;white-space:nowrap;padding:${Math.round(12 * k)}px ${Math.round(24 * k)}px;border-radius:999px;background:rgba(14,17,22,.88);border:1px solid rgba(255,255,255,.22);color:#fff;font:800 ${Math.round(28 * k)}px -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;letter-spacing:.01em;text-transform:uppercase;box-shadow:0 ${Math.round(10 * k)}px ${Math.round(30 * k)}px rgba(0,0,0,.55),0 0 0 1px rgba(34,211,238,.12);transform-origin:50% 50%}
 #cursor{position:absolute;left:0;top:0;width:${Math.round(26 * k)}px;height:${Math.round(26 * k)}px;display:none;filter:drop-shadow(0 ${Math.round(2 * k)}px ${Math.round(3 * k)}px rgba(0,0,0,.45));transform-origin:${(3.5 * k).toFixed(1)}px ${(2.5 * k).toFixed(1)}px}
 </style></head><body>${bar}
-<div id="win"><img id="shot" src="${escapeHtml(image)}"><div id="marks"></div><div id="sels"></div><div id="ring"></div><div id="pins"></div>
+<div id="win">${images.map((tile, i) => `<img class="shot" id="shot-${i}" src="${escapeHtml(tile.src)}">`).join("")}<div id="marks"></div><div id="sels"></div><div id="ring"></div><div id="pins"></div>
 <svg id="cursor" viewBox="0 0 26 26"><path d="M3.5 2.5 L3.5 20.5 L8.2 16.4 L11.6 23.6 L14.9 22.1 L11.6 15.1 L18 14.9 Z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
 <script>
 ${source}
 const TL = ${JSON.stringify(timeline)};
+const TILES = ${JSON.stringify(images.map(({ y, height }) => ({ y, height })))};
 const $ = (id) => document.getElementById(id);
 const pool = (parent, n, cls) => { while (parent.children.length < n) { const d = document.createElement('div'); d.className = cls; parent.appendChild(d); } [...parent.children].forEach((c, i) => { c.style.display = i < n ? 'block' : 'none'; }); return parent.children; };
 const place = (node, r, cam) => { const a = toWindow({x: r.x, y: r.y}, cam, TL.win); node.style.left = a.x + 'px'; node.style.top = a.y + 'px'; node.style.width = r.width * cam.s + 'px'; node.style.height = r.height * cam.s + 'px'; return a; };
 window.__render = (t) => {
   const st = stateAt(TL, t), cam = st.camera, v = viewOf(cam, TL.win);
-  const shot = $('shot');
-  shot.style.width = TL.page.width * cam.s + 'px';
-  shot.style.left = (-v.x * cam.s) + 'px';
-  shot.style.top = (-v.y * cam.s) + 'px';
+  TILES.forEach((tile, i) => {
+    const shot = $('shot-' + i);
+    shot.style.width = TL.page.width * cam.s + 'px';
+    shot.style.left = (-v.x * cam.s) + 'px';
+    shot.style.top = ((tile.y - v.y) * cam.s) + 'px';
+  });
   const marks = st.highlights.flat();
   [...pool($('marks'), marks.length, 'mark')].slice(0, marks.length).forEach((n, i) => place(n, marks[i], cam));
   [...pool($('sels'), st.selection.length, 'sel')].slice(0, st.selection.length).forEach((n, i) => place(n, st.selection[i], cam));
@@ -100,7 +107,7 @@ window.__render = (t) => {
   const cur = $('cursor');
   if (st.cursor) { cur.style.display = 'block'; cur.style.opacity = st.cursor.opacity; cur.style.transform = 'translate(' + (st.cursor.x - 3.5) + 'px,' + (st.cursor.y - 2.5) + 'px)' + (st.cursor.down ? ' scale(.9)' : ''); } else cur.style.display = 'none';
 };
-window.__ready = $('shot').decode().then(() => true);
+window.__ready = Promise.all([...document.querySelectorAll('.shot')].map((img) => img.decode())).then(() => true);
 </script></body></html>`;
 }
 
@@ -109,9 +116,9 @@ window.__ready = $('shot').decode().then(() => true);
  * 0 to timeline.duration at `fps`, piped to ffmpeg. → {frames, duration}.
  * `.webm` outputs are VP9, anything else H.264.
  */
-export async function renderClip(browser, { timeline, workDir, image, url, theme, out, poster, fps = 30, log = () => {} }) {
+export async function renderClip(browser, { timeline, workDir, image, images, url, theme, out, poster, fps = 30, log = () => {} }) {
   const html = path.join(workDir, "player.html");
-  await writeFile(html, await playerHtml({ timeline, image, url, theme }));
+  await writeFile(html, await playerHtml({ timeline, image, ...(images ? { images } : {}), url, theme }));
   const context = await browser.newContext({ viewport: { width: timeline.viewport.width, height: timeline.viewport.height }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   try {
