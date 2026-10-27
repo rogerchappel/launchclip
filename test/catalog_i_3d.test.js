@@ -184,3 +184,18 @@ test('paper-stack: statuses pop on their cues, portrait sections label the edges
   folder.content.items.forEach((item, i) => assert.equal(end.get(`scene-f${i}`).y, -item.lift));
 });
 
+test('planet-family: kinds are procedural, the camera tracks body to body, stars are seeded', () => {
+  const r = (params, aspect) => resolve('planet-family', params, aspect);
+  assert.throws(() => r({bodies: [{kind: 'comet', name: 'A'}, {kind: 'sun', name: 'B'}]}), /params\.bodies\[0\]\.kind/);
+  assert.throws(() => r({bodies: [{kind: 'moon', name: 'A'}, {kind: 'sun', name: 'B', at: 1.2}]}), /comes less than 0\.75 s after the previous body/);
+  const model = r(SAMPLES['planet-family'], '16:9');
+  const html = EMITTERS['planet-family'](model).html;
+  assert.doesNotMatch(html, /<img|url\(/, 'no images: every body is drawn from gradients');
+  const ops = catalogHTimeline(model);
+  const last = model.content.bodies.at(-1);
+  const x = frameState(ops, last.time + 0.8).get('scene-strip').x;
+  assert.ok(Math.abs(x + (model.content.bodies.length - 1) * model.content.spacing) < 80 * model.unit, `the strip sits on the last body (x ${x})`);
+  const far = frameState(ops, last.time + 0.8).get('scene-stars0').x;
+  assert.ok(far > x && far < 0, 'the far stars move less than the strip');
+  assert.deepEqual(r(SAMPLES['planet-family'], '16:9').content.layers, model.content.layers, 'the same stars every time');
+});

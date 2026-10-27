@@ -1551,6 +1551,19 @@ params:
 events: build, open, status-0, status-1, status-2, status-3, status-4, status-5, status-6
 variants: sections (default), books, folder
 
+### planet-family (keeps captions)
+A product family as celestial bodies: 2–5 procedural moon, ice world, earth, ringed gas giant, sun or galaxy, each with its name and tagline ("LUNA · light, fast, cheap"), the camera tracking from one to the next on cue over parallax star layers; the lineup variant shows 2–4 side by side and moves the focus while the rest dim. Surfaces turn, coronas and spiral arms spin.
+params:
+- bodies: [{kind (moon | ice | earth | gas | sun | galaxy), name ≤ 16 (set in capitals), tagline? ≤ 28, at? (its cue; the first shows with the build)}] 2–5 (lineup: 2–4), small to large reads best
+- tone: tagline tone: primary | accent | paper | #rrggbb (default accent)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the first body: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, body-0, body-1, body-2, body-3, body-4
+variants: track (default), lineup
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1697,6 +1710,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | rack-shelf | 2 s | 0.5 s | scene − 0.65 s | trays stack in bottom first (cubes glide in) within about 1.7 s from at; focus follows the build; the camera dollies in over the whole scene |
 | device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
 | paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
+| planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
