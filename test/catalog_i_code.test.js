@@ -166,9 +166,13 @@ test('date-pinned-timeline: the playhead scrubs to each date as its card pins an
   assert.equal(c.ticks.length, 7);
   assert.deepEqual(c.pins.map(p => p.day), [2, 3, 4]);
   c.cards.forEach((card, i) => {
-    assert.ok(c.pins[i].x >= card.x && c.pins[i].x <= card.x + card.w, `pin ${i} meets its card`);
-    if (i) assert.ok(card.y > c.cards[i - 1].y, 'later cards stack lower');
+    const stemTop = c.pins[i].box.x + Number(c.pins[i].d.split(' ').at(-2));
+    assert.ok(stemTop >= card.x && stemTop <= card.x + card.w && Math.abs(c.pins[i].top - (card.y + card.h)) < 0.01, `stem ${i} ends on its card`);
+    if (i) assert.ok(card.x >= c.cards[i - 1].x + c.cards[i - 1].w, 'cards sit side by side, never overlapping');
   });
+  assert.ok(c.cards[0].at - c.buildAt <= 0.5 + 1e-6, 'the first card lands while the axis draws');
+  const tall = resolve('date-pinned-timeline', SAMPLES['date-pinned-timeline'], '9:16').content.cards;
+  tall.slice(1).forEach((card, i) => assert.ok(card.y >= tall[i].y + tall[i].h, '9:16 stacks without overlap'));
   const ops = catalogHTimeline(model);
   const head = t => frameState(ops, t).get('scene-head').x;
   c.pins.forEach(pin => assert.ok(Math.abs(head(pin.at) - (pin.x - c.pad)) < 0.01, 'the playhead reaches the date as the card pins'));

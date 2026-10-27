@@ -175,6 +175,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
       items.push({t: 'mark', x: P, y: r2(y + (h - z.head) / 2), s: z.head, c: 'fg'});
       const rw = W - 2 * P - z.head * 1.4 - (rightText ? textWidth(rightText, z.meta, 'meta') + u(16) : 0);
       text(P + z.head * 1.4, y + (h - z.head * 1.25) / 2, rw, s.repo, z.head, 'body', 'fg', {wt: 650, clip: true});
+      if (s.repo.length * z.head * proseAdvance(b.fonts.body) > rw) items.cropped = (items.cropped ?? 0) + 1;
     }
     if (rightText) right(rightText, z.meta, rightFont, 'muted', y, h);
     y += h;
@@ -280,7 +281,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     bar(s.site);
     y += P * 0.8;
     const fit = titleFit(s.title, W - 2 * P, r2(z.title * 1.1), Math.min(z.title, b.min.meta * 1.1), 2);
-    text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.15});
+    text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.15, box: r2(fit.size * 1.15 * fit.lines)});
     y += fit.size * 1.15 * fit.lines + u(8);
     if (s.date) { text(P, y, W - 2 * P, s.date.long, z.meta, 'body', 'muted'); y += z.meta * 1.3 + u(12); }
     const size = z.body, lh = r2(size * 1.45);
@@ -300,7 +301,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     y += P * 0.8;
     const h = r2(y);
     if (h > maxHeight) check.fail(path, `is ${Math.round(h)} px tall, taller than the ${Math.round(maxHeight)} px it has; shorten text or the title`);
-    return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code: null, codeTop: null, tokens: tokenBox ? [tokenBox] : [], sizes: z};
+    return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code: null, codeTop: null, tokens: tokenBox ? [tokenBox] : [], sizes: z, cropped: items.cropped ?? 0};
   }
 
   let code = null, codeTop = null, tokens = [];
@@ -316,7 +317,9 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
   y += P * 0.6;
   const h = r2(y);
   if (h > maxHeight) check.fail(path, `is ${Math.round(h)} px tall, taller than the ${Math.round(maxHeight)} px it has; use fewer lines${compact ? ' or fewer sources' : ''}, or give the module a larger rect`);
-  return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code, codeTop, tokens, sizes: z};
+  // How much the card cuts (a clipped repo name, cropped code rows): a larger scale must not cut more.
+  const cropped = (items.cropped ?? 0) + (code ? code.rows.filter(r => /^…|…$/.test(r.text)).length : 0);
+  return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code, codeTop, tokens, sizes: z, cropped};
 }
 
 // ---------------------------------------------------------------------------
@@ -796,27 +799,53 @@ function timelineResolve(params, ctx) {
     const xOf = d => r2(pad + (d - from.day) / days * axisW);
     const every = EVERY_DAY.find(k => (axisW / days) * k >= labelW + u(8)) ?? days;
     const axisY = r2(H - daySize * 1.3 - u(30)), labelY = r2(axisY + u(22));
-    const cardW = r2(portrait ? W * 0.9 : Math.min(u(860), W * 0.5));
+    // Cards never overlap: side by side above the axis in 16:9 (date order,
+    // bottoms aligned), stacked in 9:16, at the largest scale (up to 1.6x)
+    // that fits. A curved dashed stem joins each date to its card.
     const areaH = axisY - u(40);
-    const cards = entries.map((e, i) => fitCard(b, e.spec, `params.cards[${i}]`, {width: cardW, compact: true, maxHeight: n > 1 ? areaH * 0.62 : areaH, scale: portrait ? 1.4 : 1.25}));
-    const maxH = Math.max(...cards.map(c => c.h));
-    // Cards stack lower one by one; a card may cover the one before, never its token row.
-    const tokenFloor = Math.max(0, ...cards.slice(0, -1).map(c => (c.tokens.length ? Math.max(...c.tokens.map(t => t.y + t.h)) : r2(c.sizes.head * 1.6 + c.sizes.pad)) + u(30)));
-    const stepY = n > 1 ? Math.min(maxH + u(24), (areaH - maxH) / (n - 1)) : 0;
-    if (n > 1 && stepY < tokenFloor - 1e-6) check.fail('params.cards', `leave too little room to stack ${n} cards without covering a token; use fewer lines or cards`);
-    const top = r2((areaH - (maxH + (n - 1) * stepY)) / 2);
-    cards.forEach((c, i) => { const dx = xOf(entries[i].date.day); c.x = r2(Math.min(Math.max(0, dx - u(18)), W - cardW)); c.y = r2(top + i * stepY); c.pinX = dx; });
-    // The last card's token box must finish drawing before the exit.
-    const lag = c => r2(0.35 + 0.35 + Math.max(0, (c.code?.rows.length ?? 0) - 1) * 0.06 + 0.32 + 0.1);
-    const first = buildAt - b.start + 0.9, last = Math.max(first, Math.min(b.lastEvent, b.motion.exitStart - b.start - lag(cards.at(-1)) - 0.65));
-    const step = n > 1 ? Math.max(0.4, Math.min(2.4, (last - first) / (n - 1))) : 0;
+    const gap = u(portrait ? 28 : 40), stemMin = u(portrait ? 40 : 70);
+    const cardW = r2(portrait ? W : n === 1 ? Math.min(W, u(1100)) : (W - gap * (n - 1)) / n);
+    const fits = list => (portrait ? list.reduce((sum, c) => sum + c.h, 0) + gap * (n - 1) : Math.max(...list.map(c => c.h))) <= areaH - stemMin;
+    const at = k => entries.map((e, i) => layoutCard(b, e.spec, `params.cards[${i}]`, {width: cardW, compact: true, sizes: cardSizes(b, true, k)}));
+    const cuts = list => list.reduce((sum, c) => sum + c.cropped, 0);
+    const base = cuts(at(1));
+    let cards = null;
+    for (let k = 1.6; k > 0.8 - 1e-9; k = Math.round((k - 0.1) * 100) / 100) {
+      try { cards = at(k); }
+      catch (error) { if (!/characters per line|cannot show/.test(error.message)) throw error; cards = null; continue; }
+      // Larger only while it fits and cuts no more than 1x does.
+      if (fits(cards) && (k <= 1 || cuts(cards) <= base)) break;
+      cards = null;
+    }
+    if (!cards) check.fail('params.cards', `do not fit above the axis; use fewer lines or cards`);
+    if (portrait) {
+      const total = cards.reduce((sum, c) => sum + c.h, 0) + gap * (n - 1);
+      let y = r2(Math.max(0, (areaH - stemMin - total) / 2));
+      cards.forEach(c => { c.x = 0; c.y = y; y = r2(y + c.h + gap); });
+    } else {
+      const maxH = Math.max(...cards.map(c => c.h));
+      const bottom = r2(axisY - Math.min(u(200), Math.max(stemMin, (axisY - maxH) * 0.4)));
+      const x0 = n === 1 ? Math.min(Math.max(0, xOf(entries[0].date.day) - cardW / 2), W - cardW) : 0;
+      cards.forEach((c, i) => { c.x = r2(x0 + i * (cardW + gap)); c.y = r2(bottom - c.h); });
+    }
+    cards.forEach((c, i) => { c.pinX = xOf(entries[i].date.day); });
+    // Cards land fast: the first while the axis draws, then each on its cue.
+    const lag = c => r2(0.15 + 0.35 + Math.max(0, (c.code?.rows.length ?? 0) - 1) * 0.06 + 0.32 + 0.1);
+    const first = buildAt - b.start + 0.35, last = Math.max(first, Math.min(b.lastEvent, b.motion.exitStart - b.start - lag(cards.at(-1)) - 0.65));
+    const step = n > 1 ? Math.max(0.4, Math.min(1.6, (last - first) / (n - 1))) : 0;
     const pins = entries.map((e, i) => {
-      const t = cueTime(b, `card-${i}`, e.at, `params.cards[${i}].at`, first + i * step, buildAt - b.start + 0.6);
+      const t = cueTime(b, `card-${i}`, e.at, `params.cards[${i}].at`, first + i * step, buildAt - b.start + 0.3);
       if (i && t < cards[i - 1].at + 0.4 - 1e-6) check.fail(`params.cards[${i}].at`, 'must come at least 0.4 s after the card before');
       cards[i].at = t;
       const tokenAt = rt(t + lag(cards[i]));
       b.events.push({id: `${b.id}-card-${i}`, name: `card-${i}`, time: t, endTime: tokenAt, role: 'emphasis', cue: 'pop'});
-      return {x: cards[i].pinX, top: r2(cards[i].y + cards[i].h), at: t, cardAt: rt(t + 0.3), tokenAt, day: e.date.day - from.day};
+      const c = cards[i];
+      // The stem: from the date on the axis up to the card's bottom (its centre, or above the date in 9:16).
+      const cx = portrait ? c.pinX : r2(Math.min(Math.max(c.pinX, c.x + u(40)), c.x + c.w - u(40)));
+      const top = r2(c.y + c.h), x1 = Math.min(c.pinX, cx) - u(6), x2 = Math.max(c.pinX, cx) + u(6);
+      const box = {x: r2(x1), y: top, w: r2(x2 - x1), h: r2(axisY - top)};
+      const ax = r2(c.pinX - box.x), bx = r2(cx - box.x);
+      return {x: c.pinX, top, box, d: `M${ax} ${box.h} C${ax} ${r2(box.h * 0.45)} ${bx} ${r2(box.h * 0.55)} ${bx} 0`, at: t, cardAt: rt(t + 0.15), tokenAt, day: e.date.day - from.day};
     });
     const ticks = Array.from({length: days + 1}, (_, k) => ({x: xOf(from.day + k), dom: new Date((from.day + k) * 864e5).getUTCDate(), label: k % every === 0 || pins.some(pin => pin.day === k), lit: pins.findIndex(pin => pin.day === k)}));
     b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: rt(buildAt + 0.8), role: 'emphasis', cue: 'whoosh-soft'});
@@ -877,7 +906,8 @@ function timelineView(model) {
   const W = model.rect.width;
   const kids = [];
   if (c.variant === 'axis') {
-    c.pins.forEach((pin, i) => kids.push(el('div', `${id}-pin-${i}`, abs(r2(pin.x - 1 * u), pin.top, r2(2 * u), r2(c.axisY - pin.top), {borderLeft: `${r2(2 * u)}px dashed ${hex2(pal.accent, 0.8)}`, clipPath: 'inset(100% 0% 0% 0%)'}))));
+    c.pins.forEach((pin, i) => kids.push(el('svg', `${id}-pin-${i}`, abs(pin.box.x, pin.box.y, pin.box.w, pin.box.h, {overflow: 'visible', clipPath: 'inset(100% 0% 0% 0%)'}),
+      [el('path', null, null, [], {d: pin.d, stroke: hex2(pal.accent, 0.8), strokeWidth: r2(2 * u), strokeDasharray: `${r2(6 * u)} ${r2(6 * u)}`, fill: 'none'})], {width: pin.box.w, height: pin.box.h, viewBox: `0 0 ${pin.box.w} ${pin.box.h}`, fill: 'none'})));
     kids.push(el('div', `${id}-axis`, abs(c.pad, r2(c.axisY - 1.5 * u), c.axisW, r2(3 * u), {background: hex2(pal.fg, 0.35), transform: 'scale(0, 1)', transformOrigin: '0% 50%'})));
     c.ticks.forEach((t, k) => {
       if (t.label) kids.push(label(`${id}-day-${k}`, r2(t.x - c.labelW / 2), c.labelY, c.labelW, String(t.dom), {size: c.daySize, family: fonts.display, color: pal.muted, align: 'center', extra: {opacity: 0}}));
@@ -921,7 +951,9 @@ function timelineTimeline(model, ops) {
     let x = 0;
     c.pins.forEach((pin, i) => {
       const nx = r2(pin.x - c.pad);
-      tw(ops, `${id}-head`, rt(pin.at - 0.7), 0.7, 'power2.inOut', {x, y: 0, scaleX: 1, scaleY: 1}, {x: nx, y: 0, scaleX: 1, scaleY: 1});
+      // The playhead reaches the date as the card pins (in 0.15–0.6 s, from the axis build at the earliest).
+      const from = Math.min(Math.max(rt(c.buildAt + 0.3), rt(pin.at - 0.6)), rt(pin.at - 0.15));
+      if (nx !== x) tw(ops, `${id}-head`, from, rt(pin.at - from), 'power2.inOut', {x, y: 0, scaleX: 1, scaleY: 1}, {x: nx, y: 0, scaleX: 1, scaleY: 1});
       x = nx;
       const k = c.ticks.findIndex(t => t.lit === i);
       set(ops, `${id}-dayl-${k}`, start, {opacity: 0});
@@ -929,7 +961,7 @@ function timelineTimeline(model, ops) {
       popOps(ops, `${id}-node-${k}`, start, pin.at, {from: 0.2, duration: 0.35, ease: 'back.out(2.4)'});
       const closed = {clipT: 100, clipR: 0, clipB: 0, clipL: 0};
       set(ops, `${id}-pin-${i}`, start, closed);
-      tw(ops, `${id}-pin-${i}`, rt(pin.at + 0.05), 0.35, 'power2.out', closed, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});
+      tw(ops, `${id}-pin-${i}`, rt(pin.at - 0.05), 0.3, 'power2.out', closed, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});
       cardBuildOps(ops, model, c.cards[i], `${id}-c${i}`, pin.cardAt, {rowStep: 0.06});
       cardTokenOps(ops, model, c.cards[i], `${id}-c${i}`, pin.tokenAt);
     });
