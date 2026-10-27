@@ -32,10 +32,12 @@ test("a character with a target faces it and turns its face to it, not the camer
   assert.equal(theo.states[0].facing, "left", "theo, on the right, faces maya");
   assert.ok(theo.states[0].gaze.x < 0);
   assert.ok(ids(charactersView(model).front).includes("c-c0-gaze"), "the face is drawn on a gaze joint");
-  // Without a target nothing changes: no gaze joint, the slot's facing.
+  assert.ok(ids(charactersView(model).front).includes("c-c0-turn"), "the head is drawn on a turn joint");
+  // Without a target nothing changes: no gaze or turn joint, the slot's facing.
   const plain = resolve([plate(), bench([{ id: "maya" }])]);
   assert.equal(plain.content.actors[0].gaze, false);
   assert.ok(!ids(charactersView(plain).front).includes("c-c0-gaze"));
+  assert.ok(!ids(charactersView(plain).front).includes("c-c0-turn"));
 });
 
 test("look-far shades the eyes and looks at the world's far point; the face turns on the cue", () => {
@@ -45,11 +47,13 @@ test("look-far shades the eyes and looks at the world's far point; the face turn
   assert.equal(actor.states[1].target, "far");
   assert.ok(actor.states[1].gaze.y < 0, "a far look lifts the face");
   const ops = charactersTimeline(model);
-  assert.deepEqual(frameState(ops, 1).get("c-c0-gaze"), { x: 0, y: 0, scaleX: 1 });
-  // Seated, a far look turns three-quarters: the face swings and narrows.
+  assert.deepEqual(frameState(ops, 1).get("c-c0-gaze"), { x: 0, scaleX: 1 });
+  assert.deepEqual(frameState(ops, 1).get("c-c0-turn"), { x: 0, y: 0 });
+  // Seated, a far look turns three-quarters: the head turns and lifts, the face swings and narrows.
   assert.equal(actor.states[1].view, "three-quarter");
   const { x, y, scale } = actor.states[1].gaze;
-  assert.deepEqual(frameState(ops, 3).get("c-c0-gaze"), { x, y, scaleX: scale });
+  assert.deepEqual(frameState(ops, 3).get("c-c0-turn"), { x, y });
+  assert.deepEqual(frameState(ops, 3).get("c-c0-gaze"), { x, scaleX: scale });
 });
 
 test("stand-up then walk-to: the character rises, walks at a walking pace and stands", () => {
