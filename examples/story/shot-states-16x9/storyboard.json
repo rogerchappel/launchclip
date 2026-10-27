@@ -32,7 +32,7 @@
       "module": "comparison-table",
       "start": 12.5,
       "end": 20,
-      "in": {"type": "rack-focus", "dur": 0.8},
+      "in": {"type": "rack-focus", "dur": 0.5},
       "params": {
         "title": "What changed",
         "columns": ["New model", "Last model"],

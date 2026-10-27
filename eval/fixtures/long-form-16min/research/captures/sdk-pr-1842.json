@@ -28,5 +28,27 @@
   "provenance": {
     "source_title": "northlight/sdk#1842",
     "fetched_at": "2026-10-20T09:00:00Z"
+  },
+  "data": {
+    "module": "repo-pr-card",
+    "params": {
+      "repo": "northlight/sdk",
+      "number": 1842,
+      "title": "default to halcyon-2",
+      "state": "merged",
+      "date": "2026-03-10",
+      "file": "src/defaults.ts",
+      "additions": 1,
+      "deletions": 1,
+      "lines": [
+        "-export const DEFAULT_MODEL = \"halcyon-1.5\";",
+        "+export const DEFAULT_MODEL = \"halcyon-2\";"
+      ],
+      "startLine": {
+        "old": 12,
+        "new": 12
+      },
+      "highlight": "halcyon-2"
+    }
   }
 }

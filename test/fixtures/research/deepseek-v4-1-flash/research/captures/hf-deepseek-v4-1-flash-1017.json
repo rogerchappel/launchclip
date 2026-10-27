@@ -20,7 +20,7 @@
       "at": 0.6,
       "action": "scroll",
       "target": {
-        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering substantial improvements across reasoning, coding, agentic"
+        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering"
       },
       "dur": 1.2,
       "label": "to the passage"
@@ -29,7 +29,7 @@
       "at": 1.8,
       "action": "highlight",
       "target": {
-        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering substantial improvements across reasoning, coding, agentic"
+        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering"
       },
       "dur": 2.2,
       "label": "DeepSeek calls it a minor update to DeepSeek-V4.1-Flash,…"

@@ -20,7 +20,7 @@ import { MODULES as CATALOG_H } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
 import { MODULES as WORLD, castStandsIn, worldBeneath } from './catalog-world.mjs';
 import { plateBleed, ridesPlate } from './camera-world.mjs';
-import { sceneWindows } from './transitions.mjs';
+import { CARRY_TRANSITIONS, sceneWindows } from './transitions.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -506,7 +506,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     if (placement) model.subjectPlacement = placement.where;
     // Footage checklist rows type in on their at word (RFC §6.2).
     if (module === 'checklist' && story?.lane === 'footage-led') model = checklistTypeIn(model, { fps: Number(format.fps) || 30 });
-    return openingSettled(finishModel(model, { module, scene }), story, scene);
+    return carriedByTransition(openingSettled(finishModel(model, { module, scene }), story, scene), story, scene);
   }
 
   const definition = catalogModules()[module];
@@ -519,6 +519,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   const finished = finishModel(model, { module, scene });
   plateCuts(finished, story, scene);
   openingSettled(finished, story, scene);
+  carriedByTransition(finished, story, scene);
   keepCaptions(finished, story);
   if (track !== undefined) finished.track = track;
   // Catalogue B/C timelines remap their pop eases from model.grammar.
@@ -642,6 +643,30 @@ function openingSettled(model, story, scene) {
     for (const anim of model.animations) if (anim.node === 'root' && Number(anim.start) <= Number(model.start ?? start) + 1 / fps + 1e-6 && anim.from) anim.from = rest(anim.from);
   }
   model.openingSettled = true;
+  return model;
+}
+
+// A card the transition carries (rack-focus, card-to-card: kit/core/transitions.mjs
+// CARRY_TRANSITIONS): the layer move brings the card in or takes it away, so
+// the card is whole on the transition's first frame instead of fading in under
+// it, and stays whole into the next plate's carry instead of fading out first.
+// Its moves (a slide, a scale settle) still play; only opacity and blur rest.
+function carriedByTransition(model, story, scene) {
+  if (!model || (scene?.track ?? 0) !== 0 || scene?.insert === true) return model;
+  const carries = (plate) => CARRY_TRANSITIONS.includes(plate?.in?.type) && Number(plate?.in?.dur) > 0;
+  const rest = (from) => Object.fromEntries(Object.entries(from).map(([key, value]) => [key, key in SETTLED ? SETTLED[key] : value]));
+  const m = model.motion;
+  if (carries(scene)) {
+    if (m?.enterFrom && typeof m.enterFrom === 'object') m.enterFrom = rest(m.enterFrom);
+    if (Array.isArray(model.animations)) for (const anim of model.animations) if (anim.node === 'root' && anim.from && Number(anim.start) <= Number(scene.start) + 0.05) anim.from = rest(anim.from);
+    model.carriedIn = true;
+  }
+  const next = (Array.isArray(story?.scenes) ? story.scenes : []).find((plate) => (plate?.track ?? 0) === 0 && plate !== scene && Math.abs(Number(plate?.start) - Number(scene?.end)) < 0.1);
+  if (carries(next)) {
+    if (m?.exitTo && typeof m.exitTo === 'object') m.exitTo = rest(m.exitTo);
+    if (Array.isArray(model.animations)) for (const anim of model.animations) if (anim.node === 'root' && anim.to && Number(anim.start) >= Number(scene.end) - 1.5) anim.to = rest(anim.to);
+    model.carriedOut = true;
+  }
   return model;
 }
 

@@ -8,6 +8,7 @@ import { validateDirection } from "../kit/core/direction.mjs";
 import { longFormChunks } from "../kit/core/long-form.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { DEFAULT_CHANNEL } from "../eval/beat-map-dry-run.mjs";
 
 const FIXTURE = path.resolve("eval/fixtures/long-form-16min");
 const script = readFileSync(path.join(FIXTURE, "SCRIPT.md"), "utf8");
@@ -15,8 +16,8 @@ const ledger = JSON.parse(readFileSync(path.join(FIXTURE, "research", "evidence.
 const captures = readdirSync(path.join(FIXTURE, "research", "captures")).sort().map((name) => JSON.parse(readFileSync(path.join(FIXTURE, "research", "captures", name), "utf8")));
 const timed = dryRunWords(script, { wpm: 155 });
 let cached = null;
-// The fixture's structure (eval/beat-map-dry-run.mjs): subscribe calls at 3:30, 9:40 and 15:00, stings at both ends.
-const STRUCTURE = { ctas: [210, 580, 900].map((at) => ({ at, action: "Subscribe for the next breakdown" })), stings: true };
+// The fixture's structure (eval/beat-map-dry-run.mjs): subscribe calls at 3:30, 9:40 and 15:00, stings at both ends, and its channel.
+const STRUCTURE = { ctas: [210, 580, 900].map((at) => ({ at, action: "Subscribe for the next breakdown" })), stings: true, stingBrand: { ...DEFAULT_CHANNEL } };
 const plan = () => (cached ??= directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title }, STRUCTURE));
 
 test("beat director: a script parses into chapters and dry-run timings", () => {
@@ -102,7 +103,8 @@ test("beat director: mid-roll calls to action and logo stings, and words per eve
   for (const [i, at] of [210, 580, 900].entries()) assert.ok(ctas[i].start <= at + 0.6 && ctas[i].end > at, `${ctas[i].start}–${ctas[i].end} for ${at}`);
   assert.equal(states[0].kind, "sting");
   assert.equal(states.at(-1).kind, "sting");
-  assert.equal(states[0].params.text, "Halcyon 2, explained");
+  // With the channel, the stings are its logo-stings (without one, the title: test/beat_director_look.test.js).
+  assert.deepEqual([states[0].module, states[0].params.name], ["logo-sting", DEFAULT_CHANNEL.name]);
   const wpe = map.report.cadence.words_per_event;
   assert.ok(wpe >= 10 && wpe <= 20, String(wpe));
   assert.ok(map.report.cadence.gate.checks.some((check) => check.id === "words_per_event" && check.ok));
@@ -161,4 +163,8 @@ test("beat director: the map is a valid direction map and renders as a storyboar
   for (const scene of resolved.scenes) assert.doesNotThrow(() => resolveModule(scene, resolved), scene.id);
   assert.equal(story.scenes[0].start, 0);
   assert.equal(story.scenes.at(-1).end, story.format.duration);
+  // A build inside a shot racks focus to the next card (a visible event); a new shot cuts.
+  const builds = story.scenes.filter((scene) => scene.in);
+  assert.ok(builds.length > 0 && builds.every((scene) => scene.in.type === "rack-focus" && scene.in.dur === 0.4), JSON.stringify(builds.map((scene) => scene.in)));
+  assert.ok(story.scenes.length > builds.length + 1, "shots still cut");
 });

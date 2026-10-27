@@ -56,6 +56,8 @@ const CAPTURE_GAP = 24;
 // A phrase can break before these when a sentence runs long.
 const PHRASE_STARTS = new Set(['in', 'on', 'with', 'that', 'who', 'from', 'to', 'for', 'by', 'over', 'across', 'after', 'before', 'into', 'about', 'than', 'compared', 'including', 'using', 'down', 'up']);
 const CONJUNCTIONS = new Set(['and', 'but', 'so', 'because', 'which', 'while', 'then', 'when', 'where', 'until', 'though', 'although', 'as', 'or', 'yet', 'since', 'unless']);
+// The subscribe pill: about 5.5 s on screen, and never under 4 s (the click needs room either side).
+const CTA_SECONDS = 5.5, CTA_MIN_SECONDS = 4;
 const DEFAULT_BRAND = Object.freeze({ colors: Object.freeze({ bg: '#070b14', primary: '#5ee6ff', accent: '#ffb347', ink: '#070b14', paper: '#eef4ff' }), fonts: Object.freeze({ display: 'space-grotesk', body: 'space-grotesk', meta: 'jetbrains-mono' }) });
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -493,7 +495,10 @@ function makeChecker(format, brand) {
  * earlier beat map: matching chunks are reused), avoid (historyAvoid()),
  * ctas (mid-roll calls to action: seconds or {at, action, detail, handle};
  * the clause at that time becomes a cta state), stings (true: a logo sting
- * opens and closes the video; stingBrand {mark, wordmark} for the brand's own),
+ * opens and closes the video; stingBrand {name?, logo?, tagline?, mark?,
+ * wordmark?} for the channel's own: with a name the sting is the channel's
+ * logo-sting, and the map keeps it as map.channel for the story's subscribe
+ * pill and watermark),
  * registered (module ids; knownModules() by default), brand, onChunk}.
  * → the beat map, with its report.
  */
@@ -513,7 +518,8 @@ export function directLongForm(input, options = {}) {
   for (const chapter of options.previous?.chapters ?? []) for (const shot of chapter.shots ?? []) previousShots.set(shot.id, shot);
   // Structure: mid-roll calls to action (seconds, or {at, action, detail, handle}) and logo stings at the open and close.
   const structure = { ctas: (options.ctas ?? []).map((entry) => (typeof entry === 'number' ? { at: entry } : { ...entry })).sort((a, b) => a.at - b.at), stings: options.stings === true, brand: options.stingBrand ?? null, title: input.title ?? null };
-  const settings = { structure: { ctas: structure.ctas, stings: structure.stings }, cadence, style, format, registered: [...registered].sort(), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
+  // The brand joins the cache key only when set, so maps planned without one keep their keys.
+  const settings = { structure: { ctas: structure.ctas, stings: structure.stings, ...(structure.brand ? { brand: structure.brand } : {}) }, cadence, style, format, registered: [...registered].sort(), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
   const settingsKey = hashText(JSON.stringify(settings));
 
   let history = emptyHistory();
@@ -551,7 +557,8 @@ export function directLongForm(input, options = {}) {
   for (const chapter of chapters) { chapter.start = chapter.shots[0]?.start ?? chapter.start; chapter.end = chapter.shots.at(-1)?.end ?? chapter.end; }
   chapters[0].start = 0;
   if (chapters[0].shots[0]) { chapters[0].shots[0].start = 0; chapters[0].shots[0].states[0].start = 0; }
-  const map = { schema: BEAT_MAP_SCHEMA, ...(input.title ? { title: input.title } : {}), format, cadence: { format: cadence, style }, duration, chapters, chunks: chunkOut };
+  const channel = typeof structure.brand?.name === 'string' && structure.brand.name.trim() ? structure.brand : null;
+  const map = { schema: BEAT_MAP_SCHEMA, ...(input.title ? { title: input.title } : {}), format, cadence: { format: cadence, style }, duration, ...(channel ? { channel } : {}), chapters, chunks: chunkOut };
   map.report = beatMapReport(map, { reused });
   return map;
 }
@@ -651,10 +658,19 @@ export function beatMapToDirection(map, { profile = 'youtube-long-form' } = {}) 
 /**
  * A storyboard for [from, to] of the map (a sample to render, or a cut):
  * a scene per state on the story's clock, a cut at each shot start and a
- * soft change inside a shot, the chapter's plate as a chapter (when plates
- * are registered) or its background. A scene whose module does not resolve
- * walks its fallback chain. options: {words, from, to, brand, fps, format,
- * title, plates (true when kit/core/plates.mjs is registered), captions}.
+ * soft change inside a shot. A scene whose module does not resolve walks its
+ * fallback chain. options: {words, from, to, brand, fps, format, title,
+ * plates, channel, style, captions, chapters}.
+ *
+ * The long-form look (kit/core/plates.mjs, catalog-h-channel.mjs), on a
+ * long-form map only, so Shorts and other formats are untouched:
+ * - plates (default: on for a long-form map): each chapter's plate on its
+ *   chapter, so the backdrop changes at chapter boundaries and never cuts
+ *   inside one; a window inside one chapter takes it as the story's plate;
+ * - channel ({name, logo?}; default map.channel): a subscribe-cta pill on
+ *   track 1 at each call to action, over the scene before it (which holds),
+ *   and a channel-watermark on track 2 across the whole video;
+ * - style "glass-explainer": the story names the style and its rim-glass panel.
  */
 export function beatMapToStory(map, options = {}) {
   const from = options.from ?? 0;
@@ -664,16 +680,28 @@ export function beatMapToStory(map, options = {}) {
   const brand = options.brand ?? DEFAULT_BRAND;
   const duration = round(to - from);
   const check = makeChecker(format, brand);
+  const longForm = (map.cadence?.format ?? 'long-form') === 'long-form';
+  const plates = options.plates ?? longForm;
+  const channelIn = options.channel === undefined ? (longForm ? map.channel : null) : options.channel;
+  const channel = typeof channelIn?.name === 'string' && channelIn.name.trim() ? { name: channelIn.name.trim().slice(0, 32), ...(channelIn.logo ? { logo: channelIn.logo } : {}) } : null;
   const scenes = [];
+  const overlays = [];
   const chapters = [];
   let background = null;
   for (const chapter of map.chapters) {
     if (chapter.end <= from || chapter.start >= to) continue;
     background ??= chapter.background;
-    chapters.push({ id: chapter.id, title: chapter.title.slice(0, 60), start: round(Math.max(0, chapter.start - from)), ...(options.plates ? { plate: chapter.plate } : {}) });
+    chapters.push({ id: chapter.id, title: chapter.title.slice(0, 60), start: round(Math.max(0, chapter.start - from)), ...(plates && chapter.plate ? { plate: chapter.plate } : {}) });
     for (const shot of chapter.shots) for (const [k, state] of shot.states.entries()) {
       const a = Math.max(state.start, from), b = Math.min(state.end, to);
       const seconds = round(b - a);
+      // A call to action with a channel: the subscribe pill rides over the scene before, which holds through it.
+      if (channel && state.kind === 'cta' && scenes.length) {
+        scenes.at(-1).end = round(b - from);
+        const end = Math.min(a + CTA_SECONDS, to);
+        if (end - a >= CTA_MIN_SECONDS) overlays.push({ id: `${state.id}-subscribe`, module: 'subscribe-cta', track: 1, start: round(a - from), end: round(end - from), params: { name: channel.name, ...(channel.logo ? { logo: channel.logo } : {}) } });
+        continue;
+      }
       let module = state.module, params = state.params;
       if (!check(module, params, seconds)) {
         module = fallbackChain(state.capability).find((id) => check(id, capabilityParams(id, state), seconds)) ?? null;
@@ -681,23 +709,30 @@ export function beatMapToStory(map, options = {}) {
       }
       // Too short for any module that shows it: the scene before holds on.
       if (!module || seconds < 1) { if (scenes.length) scenes.at(-1).end = round(b - from); continue; }
-      scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'fade', dur: 0.35 } } : {}) });
+      scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'rack-focus', dur: 0.4 } } : {}) });
     }
   }
   if (scenes.length) scenes[0].start = 0;
   if (scenes.length) scenes.at(-1).end = duration;
   chapters.sort((a, b) => a.start - b.start);
   if (chapters.length) chapters[0].start = 0;
+  const withChapters = chapters.length >= 2 && options.chapters !== false;
+  // One chapter in the window (or no chapter list): its plate is the story's.
+  const plate = plates && !withChapters ? chapters[0]?.plate ?? null : null;
+  if (channel && duration > 0) overlays.push({ id: 'channel-watermark', module: 'channel-watermark', track: 2, start: 0, end: duration, params: { name: channel.name, ...(channel.logo ? { logo: channel.logo } : {}) } });
+  const glass = options.style === 'glass-explainer';
   return {
     schema: 'launchclip.story.v1',
     title: options.title ?? map.title ?? 'Beat map sample',
     lane: 'motion',
     format: { width: format.width, height: format.height, fps, duration, ...(format.platform ? { platform: format.platform } : {}) },
     brand,
+    ...(glass ? { style: 'glass-explainer', panel: { treatment: 'rim-glass', radius: 22 } } : {}),
     ...(background ? { background: { kind: background } } : {}),
+    ...(plate ? { plate } : {}),
     audio: { words: 'NARRATION.json' },
-    scenes,
-    ...(chapters.length >= 2 && options.chapters !== false ? { chapters } : {}),
+    scenes: [...scenes, ...overlays],
+    ...(withChapters ? { chapters } : {}),
     overlays: options.captions === false ? [] : [{ type: 'captions', style: 'word-highlight' }]
   };
 }

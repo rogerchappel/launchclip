@@ -74,7 +74,10 @@ export async function runCli(argv, io = {}) {
   // launchclip evidence capture|check|scene <file> [flags]; plain `evidence <workspace>` is the production stage.
   const evidenceTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const evidenceInvocation = command === "evidence" && ["capture", "check", "scene"].includes(firstArg) ? { action: firstArg, target: evidenceTarget, flagArgs: evidenceTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  // launchclip research attach [dir] [flags]
+  const researchAttachTarget = command === "research" && firstArg === "attach" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const researchAttachInvocation = command === "research" && firstArg === "attach" ? { target: researchAttachTarget ?? "research", flagArgs: researchAttachTarget ? rest.slice(1) : rest } : null;
+  const flags = parseFlags(researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -230,6 +233,10 @@ export async function runCli(argv, io = {}) {
         return;
       }
       result = report;
+    } else if (command === "research" && firstArg === "attach") {
+      // launchclip research attach <research-dir> [--root .]: evidence data from the captured clips' sidecars.
+      const { writeResearchEvidence } = await import("./research/evidence_data.js");
+      result = await writeResearchEvidence(researchAttachInvocation.target, { root: flags.root });
     } else if (command === "research") {
       const { runResearch } = await import("./research/index.js");
       result = await runResearch(required(firstArg, "topic or script file"), {

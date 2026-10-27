@@ -27,7 +27,7 @@ import { promisify } from 'node:util';
 import { beatMapToStory, windowWords } from '../kit/core/beat-director.mjs';
 import { cadenceGate, cadenceTarget, eventStats } from '../kit/core/cadence.mjs';
 import { cutShorts } from '../kit/core/cutdown.mjs';
-import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, scenesAbove, scoreBrief } from './scorecard.mjs';
+import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, scenesAbove, scoreBrief, stateEvents } from './scorecard.mjs';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -156,6 +156,7 @@ export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hype
       const loaded = await readProjectStory(staged.project);
       const planned = (loaded?.resolved?.scenes ?? []).filter((scene) => scene.track === undefined || scene.track === 0 || scene.insert === true).map((scene) => Number(scene.start));
       measures.sync = avSync(planned, changePeaks(scores), { probe, duration });
+      if (loaded?.resolved) measures.states = stateEvents(scores, loaded.resolved);
       result.probe = { duration, fps: probe.fps, frames: probe.frames, width: probe.width, height: probe.height, audio: Boolean(probe.audio) };
       result.scenes = { native: Object.fromEntries(Object.entries(scenes).map(([key, value]) => [key, value.length])), [`${SOFT_EVENT_FPS}fps`]: Object.fromEntries(Object.entries(soft).map(([key, value]) => [key, value.length])) };
       result.contact_sheet = path.relative(path.resolve(out), await contactSheet(video, path.join(dir, 'sheet.jpg'), { duration, portrait: probe.height > probe.width }));
@@ -193,6 +194,12 @@ export function reportMarkdown(report) {
       lines.push('| threshold | events | per min | gap p10 | gap p50 | gap p90 | longest static |', '|---|---|---|---|---|---|---|');
       for (const [threshold, s] of Object.entries(c.thresholds)) lines.push(`| ${threshold} | ${s.events} | ${s.per_min} | ${s.gap.p10 ?? '–'} | ${s.gap.p50 ?? '–'} | ${s.gap.p90 ?? '–'} | ${s.longest_static.seconds} s |`);
       for (const [threshold, s] of Object.entries(result.measures.soft_cadence?.thresholds ?? {})) lines.push(`| ${threshold} at ${SOFT_EVENT_FPS} fps (soft) | ${s.events} | ${s.per_min} | ${s.gap.p10 ?? '–'} | ${s.gap.p50 ?? '–'} | ${s.gap.p90 ?? '–'} | ${s.longest_static.seconds} s |`);
+      lines.push('');
+    }
+    const states = result.measures?.states;
+    if (states?.marks?.length) {
+      lines.push(`State events (peak scene score per change; median ${states.median}, want ≥ ${states.min}):`, '', '| at | change | peak |', '|---|---|---|');
+      for (const mark of states.marks) lines.push(`| ${mark.t} s | ${mark.label} | ${mark.peak >= states.min ? '' : '✗ '}${mark.peak} |`);
       lines.push('');
     }
     for (const check of result.score?.checks ?? []) lines.push(`- ${check.status === 'pass' ? '✓' : check.status === 'warn' ? '~' : check.status === 'fail' ? '✗' : '·'} **${check.id}**: ${typeof check.value === 'object' ? JSON.stringify(check.value) : check.value} (want ${check.want})`);

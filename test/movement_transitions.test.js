@@ -24,8 +24,13 @@ test('rack-focus: the outgoing card blurs back, the incoming one sharpens forwar
   const {in: inn, out} = transitionTweens({type: 'rack-focus', dur: 0.8}, size);
   const at = (list, t) => atEnd(list.map(tw => ({...tw, at: tw.start})), t);
   const start = at(inn, 0), end = at(inn, 0.8);
-  assert.ok(start.blur > 10 && start.scale > 1 && start.opacity === 0);
-  assert.deepEqual([end.blur, end.scale, end.opacity], [0, 1, 1]);
+  assert.ok(start.rackIn === 1 && start.scale > 1 && start.opacity === 0);
+  // Blur and the exposure lift travel in one filter, so GSAP never drops one.
+  assert.equal(layerStyle(start).filter, 'blur(22px) brightness(1.45)');
+  assert.deepEqual(gsapVars('rackIn', 1), {filter: 'blur(22px) brightness(1.45)'});
+  // Most of the rack lands in the first frames: past half by the third.
+  assert.ok(at(inn, 3 / 30).rackIn < 0.5 && at(inn, 3 / 30).opacity > 0.5);
+  assert.deepEqual([end.rackIn, end.scale, end.opacity], [0, 1, 1]);
   const gone = at(out, 0.8);
   assert.ok(gone.blur > 10 && gone.scale < 1 && gone.opacity === 0);
   // Nothing stays blurred once it lands.
@@ -68,4 +73,17 @@ test('card-to-card: the incoming card starts on the outgoing card and settles on
   // Same rects (no params.rect on either): a crossfade with a little depth.
   const plain = transitionTweens({type: 'card-to-card', dur: 0.7}, {...size, fromRect: null, toRect: null});
   assert.deepEqual(plain.in.map(tw => tw.prop), ['opacity', 'scale']);
+});
+
+test('a rack-focus carries the cards: the incoming one is whole on its first frame, the outgoing one stays whole into the rack', async () => {
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const s = resolveStory(story([card('a', 0, 4), card('b', 4, 8, {in: {type: 'rack-focus', dur: 0.4}}), card('c', 8, 12, {in: {type: 'fade', dur: 0.35}})]));
+  const [a, b, c] = s.scenes.map(scene => resolveModule(scene, s));
+  assert.equal(a.carriedOut, true);
+  assert.equal(a.motion.exitTo.opacity, 1);
+  assert.equal(b.carriedIn, true);
+  assert.equal(b.motion.enterFrom.opacity, 1);
+  // A fade does not carry: b fades out under c, and c fades in.
+  assert.equal(b.carriedOut, undefined);
+  assert.equal(c.motion.enterFrom.opacity, 0);
 });

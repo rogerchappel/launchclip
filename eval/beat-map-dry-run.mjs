@@ -13,44 +13,51 @@
 //                    short-form cadence and each state's module
 //
 //   node eval/beat-map-dry-run.mjs [folder] [--wpm 155] [--style default] [--fresh]
-//     [--ctas 210,580,900] [--no-stings]
+//     [--ctas 210,580,900] [--no-stings] [--channel "Signal Lab" | --no-channel]
 //
 // The fixture's structure: mid-roll subscribe calls at 3:30, 9:40 and 15:00
-// and a logo sting at the open and the close (the reference's).
+// and a logo sting at the open and the close (the reference's). The channel
+// is a placeholder name of our own (not the reference's): it makes the
+// stings logo-stings and, in a storyboard cut from the map, the subscribe
+// pills and the watermark.
 //
 // A BEATMAP.json already there is passed back as `previous`, so chunks whose
 // words, history and settings are unchanged are reused (--fresh plans all).
 // Exits 1 when the plan misses its cadence gate.
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beatMapReportText, beatMapToDirection, directLongForm, dryRunWords } from '../kit/core/beat-director.mjs';
 import { cutShorts } from '../kit/core/cutdown.mjs';
 import { directionJson, validateDirection } from '../kit/core/direction.mjs';
+import { loadResearchEvidence } from '../src/research/evidence_data.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const DEFAULT_FIXTURE = path.join(ROOT, 'eval', 'fixtures', 'long-form-16min');
 
-/** Load SCRIPT.md, research/evidence.json and research/captures/*.json from a folder. */
-export async function loadFixture(folder) {
+/**
+ * Load SCRIPT.md, research/evidence.json and research/captures/*.json from a
+ * folder, with the module-ready evidence data attached in memory
+ * (src/research/evidence_data.js: GitHub cards from assets/evidence/github-*.json,
+ * posts from capture sidecars, series from research/data/, people, tokens).
+ */
+export async function loadFixture(folder, adapters = {}) {
   const script = await readFile(path.join(folder, 'SCRIPT.md'), 'utf8');
-  const ledgerFile = path.join(folder, 'research', 'evidence.json');
-  const ledger = existsSync(ledgerFile) ? JSON.parse(await readFile(ledgerFile, 'utf8')) : null;
-  const captureDir = path.join(folder, 'research', 'captures');
-  const captures = existsSync(captureDir) ? await Promise.all(readdirSync(captureDir).filter((name) => name.endsWith('.json')).sort().map(async (name) => JSON.parse(await readFile(path.join(captureDir, name), 'utf8')))) : [];
-  return { script, ledger, captures };
+  const { ledger, captures, report } = await loadResearchEvidence(path.join(folder, 'research'), { root: folder }, adapters);
+  return { script, ledger, captures, evidenceData: report };
 }
 
 export const DEFAULT_CTAS = Object.freeze([210, 580, 900]);
+export const DEFAULT_CHANNEL = Object.freeze({ name: 'Signal Lab', tagline: 'AI, explained weekly' });
 
-export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 }, ctas = DEFAULT_CTAS, stings = true } = {}) {
+export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 }, ctas = DEFAULT_CTAS, stings = true, channel = DEFAULT_CHANNEL } = {}) {
   const { script, ledger, captures } = await loadFixture(folder);
   const timed = dryRunWords(script, { wpm });
   const beatsFile = path.join(folder, 'BEATMAP.json');
   const previous = !fresh && existsSync(beatsFile) ? JSON.parse(await readFile(beatsFile, 'utf8')) : null;
-  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings, ...(channel ? { stingBrand: { ...channel } } : {}) });
   const direction = beatMapToDirection(map);
   const check = validateDirection(direction, { words: timed.words, lane: 'motion', deferScenes: true });
   if (!check.ok) throw new Error(`the direction map does not validate:\n${check.errors.slice(0, 5).join('\n')}`);
@@ -83,7 +90,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
   const folder = args.find((arg, i) => !arg.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? DEFAULT_FIXTURE;
-  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh'), ctas: flag('ctas', null) ? flag('ctas').split(',').map(Number) : DEFAULT_CTAS, stings: !args.includes('--no-stings') });
+  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh'), ctas: flag('ctas', null) ? flag('ctas').split(',').map(Number) : DEFAULT_CTAS, stings: !args.includes('--no-stings'), channel: args.includes('--no-channel') ? null : flag('channel', null) ? { name: flag('channel') } : DEFAULT_CHANNEL });
   console.log(report);
   // The planning gate: a plan that misses its cadence target fails the run.
   if (!map.report.cadence.gate.ok) process.exitCode = 1;
