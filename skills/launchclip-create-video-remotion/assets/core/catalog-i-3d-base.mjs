@@ -322,3 +322,4 @@ export function floorGrid(id, color, x, y, w, h, step, u, alpha = 0.22) {
 export function fitSize(check, path, text, opts) {
   return fitText(check, path, text, {...opts, preferred: Math.max(opts.preferred, Math.ceil(opts.min))});
 }
+

@@ -133,3 +133,22 @@ test('coin-stack: counts follow per, are capped, and every coin lands on its sta
   }
   assert.ok(model.events.some(e => e.name === 'callout'));
 });
+
+test('rack-shelf: trays stack top-down, the focus slides out; rail cubes glide to their values', () => {
+  const r = (params, aspect) => resolve('rack-shelf', params, aspect);
+  assert.throws(() => r({rows: [{label: 'A'}, {label: 'B'}], variant: 'rail'}), /params\.rows\[0\]\.value/);
+  assert.throws(() => r({rows: [{label: 'A'}, {label: 'B'}], axis: 'x'}), /params\.axis is the rail variant's caption/);
+  assert.throws(() => r({rows: [{label: 'A', icon: 'nope'}, {label: 'B'}]}), /params\.rows\[0\]\.icon must be an icon name/);
+  const rack = r(SAMPLES['rack-shelf']);
+  const e = rack.content.trays.map(t => t.e);
+  assert.deepEqual([...e].sort((a, c) => c - a), e, 'the first row is the top tray');
+  const end = frameState(catalogHTimeline(rack), rack.motion.exitStart - 0.01);
+  assert.equal(end.get(`scene-s${rack.content.focus}`).y, rack.content.slide, 'the focus tray slid out');
+  assert.ok(end.get('scene-cam').scaleX > 1, 'the camera dollied in');
+  const rail = r({...EXTRA_SAMPLES.find(x => x.name === 'rack-shelf-rail').params, variant: 'rail'}, '16:9');
+  const xs = rail.content.cubes.map(c => c.x);
+  assert.deepEqual([...xs].sort((a, c) => a - c), xs, 'cubes sit in value order');
+  const railEnd = frameState(catalogHTimeline(rail), rail.motion.exitStart - 0.01);
+  for (const i of xs.keys()) assert.equal(railEnd.get(`scene-g${i}`).x, 0, `cube ${i} reached its value`);
+  assert.throws(() => r({rows: [{label: 'A', value: 5}, {label: 'B', value: 5.2}], variant: 'rail'}, '16:9'), /sits too close/);
+});

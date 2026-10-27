@@ -1500,6 +1500,24 @@ params:
 events: build, callout
 variants: coins (default), cylinders
 
+### rack-shelf (keeps captions)
+A stacked server shelf in 3D: 2–6 glass trays, each a labelled row ("model · score · price") with an optional icon, stack in from the bottom while the camera dollies in, then one tray slides out toward the viewer and lights up. The rail variant glides 1–5 glass cubes (name and price on the face) along a price rail to their values, with ticks and a caption under it.
+params:
+- rows: [{label ≤ 24, cells? [≤ 10 chars] up to 3 (rail: 2, the first set large), icon? (icon name), value? (the cube's place on the rail; required by the rail, unused by the rack)}] 2–6 (rail: 1–5)
+- focus: index or label of the tray that slides out (rail: the cube that lights) (optional)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- format: rail only: the tick format, {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- axis: rail only: a caption under the rail ≤ 48 ("Output price per 1M tokens")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus
+variants: rack (default), rail
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1643,6 +1661,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
 | glass-bars-3d | 2 s | 0.5 s | scene − 0.65 s | bars grow left to right within about 1.6 s from at; highlight and marker hops follow the build; the camera orbits for the whole scene |
 | coin-stack | 2 s | 0.5 s | scene − 0.65 s | coins drop one per stack level, all stacks together, within about 2 s from at; the callout follows the build |
+| rack-shelf | 2 s | 0.5 s | scene − 0.65 s | trays stack in bottom first (cubes glide in) within about 1.7 s from at; focus follows the build; the camera dollies in over the whole scene |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
