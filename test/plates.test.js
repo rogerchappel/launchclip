@@ -173,3 +173,19 @@ test("segment digests change with a story or chapter plate, and stay put without
   other.chapters[1].plate = "bokeh";
   assert.notEqual(hashValue(globalSettings(plated)), hashValue(globalSettings(other)));
 });
+
+test("the GSAP tweens of every plate axis reproduce the cosine Remotion draws", () => {
+  const sineInOut = (p) => -(Math.cos(Math.PI * p) - 1) / 2;
+  for (const kind of PLATE_KINDS) {
+    const plan = platePlan(story(), resolvePlate(kind));
+    for (const layer of plan.layers) for (const [prop, axis] of Object.entries(layer.axes)) {
+      assert.ok(Number.isInteger(axis.phase), `${kind} ${layer.id}.${prop}: phase ${axis.phase} must be whole half turns`);
+      const tweens = layerTweens(layer, 0, 30).filter((tw) => tw.prop === prop);
+      for (const t of [0.4, 3.3, 7.9, 12.5, 21.75, 29.1]) {
+        const tw = tweens.find((entry) => t >= entry.at && t < entry.at + entry.duration);
+        const gsap = tw.from + (tw.to - tw.from) * sineInOut((t - tw.at) / tw.duration);
+        assert.ok(Math.abs(gsap - layerStateAt(layer, t)[prop]) < 0.01, `${kind} ${layer.id}.${prop} at ${t}: ${gsap} vs ${layerStateAt(layer, t)[prop]}`);
+      }
+    }
+  }
+});

@@ -159,9 +159,13 @@ function palette(story) {
 }
 
 const box = (x, y, width, height) => ({ x: round(x), y: round(y), width: round(width), height: round(height) });
+// A wave axis (ambient.mjs). Its phase is a whole number of half turns: the
+// GSAP side plays half-period tweens between extrema at multiples of
+// period / 2 (axisSegments), which matches the cosine only then. The periods
+// differ, so the layers still drift out of step.
 function wave(amp, period, phase) {
   if (!(Math.abs(amp) > 1e-6) || !(period > 0) || !Number.isFinite(period)) return undefined;
-  return { kind: 'wave', center: 0, amp: round(amp, 4), period: round(period, 4), phase };
+  return { kind: 'wave', center: 0, amp: round(amp, 4), period: round(period, 4), phase: Math.round(phase) % 2 };
 }
 
 // An SVG document blurred by `blur` px (0 = sharp), drawn in a group at `alpha`.
