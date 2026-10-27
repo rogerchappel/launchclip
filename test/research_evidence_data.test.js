@@ -196,3 +196,12 @@ test("found on the Terra run: a post X refuses to capture comes from its fetched
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("found on the Terra run: prices are not TeX, and a model name is not a person", async () => {
+  const { extractClaims } = await import("../src/research/claims.js");
+  assert.equal(texOf("GPT-6.1 Terra costs $1 per million input tokens and $5 per million output tokens."), null);
+  assert.equal(texOf("The loss falls as $L = aN^{-b}$."), "L = aN^{-b}");
+  const [claim] = extractClaims("Andrew Curran posted that people are switching to Anthropic because of Claude Opus 5.5.");
+  assert.ok(!claim.entities.some((entity) => entity.kind === "person" && /Opus/.test(entity.name)));
+  assert.ok(claim.entities.some((entity) => entity.name === "Andrew Curran" && entity.kind === "person"));
+});

@@ -251,8 +251,10 @@ export async function tokenData(text, tokenize) {
 
 /** "$E = mc^2$" or \( … \) in the text → the TeX, else null. */
 export function texOf(text) {
-  const match = String(text).match(/\$\$?([^$]{2,200})\$\$?|\\\((.{2,200}?)\\\)/);
-  return match ? (match[1] ?? match[2]).trim() : null;
+  // "$1 per million input tokens and $5" is money, not maths: TeX opens on a non-digit and holds a TeX mark (\, ^, _ or =).
+  const match = String(text).match(/\$\$?(?!\d)([^$]{2,200}?)\$\$?|\\\((.{2,200}?)\\\)/);
+  const tex = match ? (match[1] ?? match[2]).trim() : null;
+  return tex && /[\\^_=]/.test(tex) ? tex : null;
 }
 
 /** TeX → {data: {tex, svg?}, reason?}: the SVG kit/core cannot make, precomputed when mathjax-full is installed. */

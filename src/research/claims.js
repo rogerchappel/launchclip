@@ -24,6 +24,12 @@ const ROLE_WORDS = new Set(["CEO", "CTO", "CFO", "COO", "Founder", "Co-founder",
 const PERSON_CUES = /\b(?:CEO|CTO|founder|co-founder|researcher|scientist|engineer|professor|director|lead|head of|chief|author|said|says|wrote|writes|posted|tweeted|told|according to|announced)\b/i;
 const ORG_SUFFIX = /\b(?:AI|Labs?|Inc|Corp|Research|University|Institute|Foundation|Technologies|Systems|DeepMind|Group)\b/;
 
+/** "Claude Opus 5.5": a name with a version after it is a model, never a person. */
+function versionFollows(text, name) {
+  const at = text.indexOf(name);
+  return at >= 0 && /^[\s-]*v?\d/.test(text.slice(at + name.length));
+}
+
 /** Markdown or plain text → sentences, keeping headings as context. */
 export function splitSentences(text) {
   const sentences = [];
@@ -146,7 +152,7 @@ export function extractEntities(sentence) {
     if (words.length === 1 && name.length < 3) continue;
     const kind = BENCHMARK_NAME.test(name) ? "benchmark"
       : ORG_SUFFIX.test(name) || /[A-Z].*[A-Z]/.test(words[0]) && words.length === 1 ? "org"
-      : words.length >= 2 && words.length <= 3 && words.every((word) => /^[A-Z][a-z'’-]+$/.test(word)) && PERSON_CUES.test(sentence) ? "person"
+      : words.length >= 2 && words.length <= 3 && words.every((word) => /^[A-Z][a-z'’-]+$/.test(word)) && PERSON_CUES.test(sentence) && !versionFollows(withoutUrls, name) ? "person"
       : "name";
     add(name, kind);
   }
