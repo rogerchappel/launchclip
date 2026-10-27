@@ -127,6 +127,8 @@ export function matchSnapshot(claim, snapshot) {
       cell = cells.find(Boolean) ?? null;
       for (const entry of cells) if (entry?.header) entitiesHere.push(entry.header);
     }
+    // The passage must be about what the claim names: every benchmark, and every other entity but one when it names three or more.
+    if (!entitiesCovered(claim, passage)) continue;
     const anchors = values.length + (claim.dates?.length ?? 0);
     const anchorsFound = numbersFound.length + datesFound.length;
     let score = 0;
@@ -251,7 +253,42 @@ export function tableCell(passage, value, entityNames) {
 
 /** "284B" in a claim matches 284B, 284 B, 284 billion, 284,000,000,000, 284000000000 in the source. */
 export function numberAppears(text, value) {
-  return numbersIn(text).some((found) => Math.abs(found.value - value.value) <= Math.abs(value.value) * 1e-9 + (value.unit === "percent" ? 0.001 : 0));
+  return numbersIn(text).some((found) => Math.abs(found.value - value.value) <= Math.abs(value.value) * 1e-9 + (value.unit === "percent" ? 0.001 : 0) && unitsAgree(value.unit, found.unit));
+}
+
+/**
+ * A "9x" is not the 9 in "July 9", nor "$1" a bare 1: a multiple or a currency
+ * needs the same unit in the source. A percentage may match a bare figure (a
+ * benchmark table drops the %); other units match the same unit or none.
+ */
+export function unitsAgree(claimed, found) {
+  if (!claimed || claimed === found) return true;
+  if (["multiple", "usd", "eur", "gbp"].includes(claimed)) return false;
+  return found == null || (claimed === "percent" ? false : found === claimed);
+}
+
+/**
+ * Whether a passage covers the entities a claim names (entities inside a
+ * longer one count once): every benchmark must be there, and all the others
+ * but one when there are three or more. In a table row a model counts when a
+ * column is headed by it.
+ */
+export function entitiesCovered(claim, passage) {
+  // One capitalised word ("Flash", "Sol") is too weak to demand; URLs and papers are checked by fetching them.
+  const all = (claim.entities ?? []).filter((entity) => entity.kind !== "url" && entity.kind !== "paper" && !(entity.kind === "name" && !/\s/.test(entity.name)));
+  const named = all.filter((entity) => !all.some((other) => other !== entity && other.name.length > entity.name.length && other.name.includes(entity.name)));
+  if (!named.length) return true;
+  const lower = passage.text.toLowerCase();
+  const tokens = (name) => String(name).toLowerCase().split(/[\s_/-]+/).filter(Boolean);
+  const inHeader = (name) => (passage.header ?? []).some((cell) => {
+    const left = new Set(tokens(cell));
+    const right = new Set(tokens(name));
+    return [...left].filter((token) => right.has(token)).length / Math.max(1, new Set([...left, ...right]).size) >= 0.34;
+  });
+  const covered = (entity) => looseIncludes(lower, entity.name) || (passage.row && (entity.kind === "model" || entity.kind === "repo") && inHeader(entity.name));
+  if (named.some((entity) => entity.kind === "benchmark" && !covered(entity))) return false;
+  const missing = named.filter((entity) => !covered(entity)).length;
+  return named.length >= 3 ? missing <= 1 : missing === 0;
 }
 
 export function numbersIn(text) {

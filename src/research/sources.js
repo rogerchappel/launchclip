@@ -93,7 +93,8 @@ export function classifyUrl(url, orgs = []) {
   // "Nimbus AI" owns nimbus.ai and nimbusai.com: the org's name without its suffix word.
   const orgWords = orgs.flatMap((org) => [org, org.replace(/\b(?:AI|Labs?|Inc|Corp|Research|Technologies|Systems|Group)\b/gi, "")]).map((org) => org.toLowerCase().replace(/[^a-z0-9]/g, "")).filter((word) => word.length >= 3);
   const hostWord = host.replace(/^www\./, "").split(".").slice(0, -1).join("");
-  const official = orgWords.some((word) => hostWord.includes(word));
+  // The org's own domain: nimbus.ai for "Nimbus AI", but not openrouter.ai for "OpenAI" (a stripped name must keep five letters).
+  const official = orgWords.some((word) => hostWord === word || (word.length >= 5 && hostWord.startsWith(word)));
   const primary = PRIMARY_HOSTS.some((primaryHost) => host === primaryHost || host.endsWith(`.${primaryHost}`)) || official;
   return { kind, primary };
 }

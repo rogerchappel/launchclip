@@ -124,6 +124,29 @@ test("a PR snapshot names its repo and number, so a claim citing the number veri
   const fetch = async (url) => ({ ok: true, status: 200, url, headers: new Map(), text: async () => JSON.stringify(pull) });
   const http = createHttp({ fetch, env: {}, now: () => "2026-10-27T00:00:00.000Z" });
   const snap = await githubPull(http, "dotnet/efcore", 39217);
-  const [claim] = extractClaims("On October 16, 2026, the Entity Framework Core team merged pull request 39217 in dotnet/efcore.");
+  const [claim] = extractClaims("On October 16, 2026, pull request 39217 was merged in dotnet/efcore.");
   assert.equal(verifyClaim(claim, [{ ...snap, primary: true }]).status, "verified");
+});
+
+test("found on the Terra run: a passage must name what the claim names, and units must agree", () => {
+  const page = snapshot({ url: "https://openrouter.ai/openai/gpt-6.1-terra", primary: false, text: "GPT-6.1 Terra was released on October 26, 2026.\nWhat OpenAI does publish is GPT-5.6 Terra, shipped on July 9, 2026 at $2 per million input tokens." });
+  // The release date is not the Copilot launch date: the passage never names GitHub Copilot.
+  const [copilot] = extractClaims("GPT-6.1 Terra came to GitHub Copilot on October 26, 2026.");
+  assert.equal(verifyClaim(copilot, [page]).status, "unverified");
+  // "9x" is not the 9 in "July 9", and the 5.5 of "Claude Opus 5.5" is a name, not a quantity.
+  const [cost] = extractClaims("OpenAI says Terra completes computer-use tasks at 9x lower cost than Claude Opus 5.5.");
+  assert.deepEqual(cost.values.map((value) => value.raw), ["9x"]);
+  assert.equal(verifyClaim(cost, [page]).status, "unverified");
+  assert.ok(!numberAppears("shipped on July 9, 2026", { value: 9, unit: "multiple" }));
+  assert.ok(numberAppears("a 9x lower cost", { value: 9, unit: "multiple" }));
+  assert.ok(numberAppears("| Terminal-Bench 4.0 | 50.3 |", { value: 50.3, unit: "percent" }), "a table may drop the %");
+  // A benchmark claim needs a passage that names the benchmark.
+  const [science] = extractClaims("On Terminal-Bench-Science, Terra beats GPT-6.1 Sol at lower cost.");
+  const other = snapshot({ url: "https://example.com/terra", primary: false, text: "Terra beats GPT-6.1 Sol at lower cost on many tasks, analysts said in a long post about Terra." });
+  assert.equal(verifyClaim(science, [other]).status, "unverified");
+});
+
+test("openrouter.ai is not OpenAI's own domain", () => {
+  assert.equal(classifyUrl("https://openrouter.ai/openai/gpt-6.1-terra", ["OpenAI"]).primary, false);
+  assert.equal(classifyUrl("https://openai.com/index/introducing-gpt-6-1-terra/", ["OpenAI"]).primary, true);
 });
