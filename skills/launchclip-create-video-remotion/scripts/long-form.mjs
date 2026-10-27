@@ -10,6 +10,8 @@
 //   youtubeChapters(chapters)                → chapters.txt text (0:00 Title)
 //   youtubeChapterProblems(chapters, duration) → why YouTube would ignore them
 //   ffmetadataChapters(chapters, {duration}) → an FFMETADATA1 document
+//   longFormChunks(chapters, words, {chunkSeconds}) → the beat director's
+//                                               resumable planning chunks
 //
 // The chapter contract itself (story.chapters, validateChapters,
 // storyChapters) is in kit/core/story.mjs, which stays import-free.
@@ -560,4 +562,49 @@ export function ffmetadataChapters(chapters, { duration, title = null } = {}) {
 function round(value, places = 3) {
   const factor = 10 ** places;
   return Math.round(value * factor) / factor;
+}
+
+// ---------------------------------------------------------------------------
+// Planning chunks (the beat director, kit/core/beat-director.mjs)
+
+/**
+ * The chunks a long video is directed in: one or more per chapter, each at
+ * most chunkSeconds, split at a sentence end near the limit. Chapters without
+ * words are dropped; with no chapters, a part every chunkSeconds × 2.
+ * chapters: [{id, title, start}] (story.chapters or chaptersFromMap).
+ * → [{id, chapter: {id, title, index, start, end}, words: [a, b], start, end, first}]
+ */
+export function longFormChunks(chapters, words, { chunkSeconds = 180, duration = null } = {}) {
+  const list = narrationWords(words);
+  if (!list.length) return [];
+  const end = finite(duration) ? duration : list.at(-1).end;
+  let parts = (Array.isArray(chapters) ? chapters : []).filter((chapter) => isObject(chapter) && finite(Number(chapter.start))).map((chapter, index) => ({ id: slug(chapter.id) || `c${index + 1}`, title: nonEmpty(chapter.title) ? chapter.title : `Part ${index + 1}`, start: Number(chapter.start) })).sort((a, b) => a.start - b.start);
+  if (!parts.length) {
+    const count = Math.max(1, Math.round(end / (chunkSeconds * 2)));
+    parts = Array.from({ length: count }, (_, index) => ({ id: `part-${index + 1}`, title: `Part ${index + 1}`, start: round((end / count) * index) }));
+  }
+  const out = [];
+  let index = 0;
+  parts.forEach((chapter, c) => {
+    const until = parts[c + 1]?.start ?? Infinity;
+    const first = list.findIndex((word) => word.start >= chapter.start - 1e-6 && word.start < until);
+    if (first < 0) return;
+    let last = first;
+    while (last + 1 < list.length && list[last + 1].start < until) last += 1;
+    const info = { id: chapter.id, title: chapter.title, index, start: chapter.start, end: Math.min(until, end) };
+    index += 1;
+    let a = first, n = 1;
+    while (a <= last) {
+      let b = a;
+      while (b < last && list[b + 1].end - list[a].start <= chunkSeconds) b += 1;
+      if (b < last) {
+        // Back up to the last sentence end in the chunk's final third.
+        for (let k = b; k > a && list[k].end - list[a].start > chunkSeconds * 0.66; k -= 1) if (/[.!?]["”')]?$/.test(list[k].text)) { b = k; break; }
+      }
+      out.push({ id: `${chapter.id}-${n}`, chapter: info, words: [a, b], start: round(list[a].start), end: round(list[b].end), first: n === 1 });
+      a = b + 1;
+      n += 1;
+    }
+  });
+  return out;
 }
