@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPABILITIES, VISUAL_KINDS, capabilitiesFor, capabilityAdditions, capabilityParams, fallbackChain, hasParamsBuilder, resolveCapability } from "../kit/core/visual-capabilities.mjs";
+import { CAPABILITIES, VISUAL_KINDS, capabilitiesFor, capabilityAdditions, capabilityParams, fallbackChain, hasParamsBuilder, isPlanned, resolveCapability } from "../kit/core/visual-capabilities.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
@@ -20,7 +20,7 @@ test("capabilities: every kind has a module and every planned module falls back 
   for (const entry of CAPABILITIES) {
     const resolved = resolveCapability(entry.id);
     assert.ok(known.has(resolved.module), `${entry.id} resolves to ${resolved.module}, which is not registered`);
-    if (!entry.planned) assert.ok(known.has(entry.id), `${entry.id} is not planned, so it must be registered`);
+    if (!isPlanned(entry.id)) assert.ok(known.has(entry.id), `${entry.id} has a params builder, so it must be registered`);
   }
   // Registered, a module is used as is; without it, its fallback chain is walked.
   assert.deepEqual(resolveCapability("social-post"), { module: "social-post", wanted: "social-post", fallback: false, chain: ["social-post"] });
@@ -57,7 +57,7 @@ test("capabilities: every params builder resolves in 16:9 and 9:16", () => {
   for (const [width, height] of [[1920, 1080], [1080, 1920]]) {
     const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 } };
     for (const id of [...CAPABILITIES.map((entry) => entry.id), "feed-frame", "proof-wall"]) {
-      if (!hasParamsBuilder(id)) { assert.ok(CAPABILITIES.find((entry) => entry.id === id)?.planned, `${id} has no params builder`); continue; }
+      if (!hasParamsBuilder(id)) { assert.ok(isPlanned(id), `${id} has no params builder`); continue; }
       const params = capabilityParams(id, BEAT) ?? capabilityParams(id, SERIES);
       assert.ok(params, `${id} has no params for either sample beat`);
       const scene = { id: "s", module: id, start: 1, end: 5, params };
