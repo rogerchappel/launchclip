@@ -173,11 +173,12 @@ function numbersOf(beat) {
   return (beat.facts?.numbers ?? []).filter((entry) => Number.isFinite(entry.value));
 }
 
+// A clause's list ("A, B and C"), else its content words; null when it has fewer than min.
 function itemsOf(beat, min = 3, max = 4) {
   const items = (beat.facts?.items ?? []).map((item) => cap1(clip(item, 22))).filter(Boolean);
   if (items.length >= min) return items.slice(0, max);
-  const words = keyTerms(beat.text);
-  return words.length >= min ? words.slice(0, max) : [...items, ...words, 'Then', 'Next', 'Now'].slice(0, min);
+  const words = keyTerms(beat.text).map(cap1);
+  return words.length >= min ? words.slice(0, max) : null;
 }
 
 const STOP = new Set(['a', 'an', 'and', 'the', 'so', 'to', 'of', 'for', 'that', 'this', 'it', 'its', 'is', 'are', 'was', 'were', 'we', 'i', 'you', 'they', 'he', 'she', 'in', 'on', 'at', 'from', 'with', 'which', 'because', 'has', 'have', 'had', 'just', 'our', 'your', 'their', 'but', 'or', 'as', 'be', 'by', 'then', 'there', 'here', 'what', 'when', 'how', 'why', 'not', 'into', 'than', 'more', 'most', 'will', 'would', 'can', 'could', 'about', 'every', 'each', 'one', 'all', 'also', 'only', 'even', 'now', 'still', 'that\'s', 'it\'s', 'does', 'did', 'do', 'been', 'being', 'very', 'much', 'many', 'some', 'any', 'out', 'up', 'down', 'over', 'same', 'way', 'thing', 'things']);
@@ -202,26 +203,29 @@ const BUILDERS = {
   'object-card': (beat) => ({ object: 'box', caption: clip(beat.headline, 30), label: clip(keyTerms(beat.text)[0] ?? 'Note', 12) }),
   'motion-title': (beat) => ({ text: clip(beat.headline, 34), ...(beat.kicker ? { kicker: clip(beat.kicker, 24) } : {}), highlight: keyTerms(beat.headline)[0] }),
   'kinetic-words': (beat) => ({ words: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ text: clip(text, 14), at: round(0.2 + i * 0.7), ...(i === 2 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' }),
-  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return { value: clip(n ? formatValue(n) : beat.headline, 12), label: clip(beat.label ?? beat.headline, 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) }; },
-  'count-up': (beat) => { const n = numbersOf(beat)[0] ?? { value: 0 }; return { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: ` ${n.unit}`.slice(0, 8) } : {}), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) }; },
-  'odometer': (beat) => { const n = numbersOf(beat)[0] ?? { value: 0 }; return { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' }; },
-  'percent-fill': (beat) => { const n = numbersOf(beat).find((entry) => entry.unit === '%') ?? numbersOf(beat)[0]; return { value: Math.max(0, Math.min(100, Math.round(n?.value ?? 50))), label: clip(beat.label ?? beat.headline, 36), variant: 'bar' }; },
-  'unit-grid': (beat) => { const n = numbersOf(beat).find((entry) => entry.unit === '%') ?? numbersOf(beat)[0]; const lit = Math.max(1, Math.min(99, Math.round(n?.value ?? 50))); return { title: clip(beat.headline, 36), count: 100, groups: [{ count: lit, label: clip(beat.label ?? `${lit} in 100`, 24), tone: 'primary' }, { count: 100 - lit, label: 'The rest', tone: 'accent' }], variant: 'dots' }; },
-  'pie-chart': (beat) => { const n = numbersOf(beat).find((entry) => entry.unit === '%') ?? numbersOf(beat)[0]; const v = Math.max(1, Math.min(99, Math.round(n?.value ?? 50))); return { title: clip(beat.headline, 36), data: [{ label: clip(beat.label ?? 'This', 18), value: v }, { label: 'The rest', value: 100 - v }], variant: 'donut' }; },
-  'number-line': (beat) => { const n = numbersOf(beat)[0]; const v = n?.value ?? 50; const to = v <= 100 ? 100 : 10 ** Math.ceil(Math.log10(v)); return { from: 0, to, ranges: [{ from: 0, to: Math.max(1, Math.round(v)), label: clip(beat.label ?? 'Here', 18), tone: 'good' }], marker: { value: v, label: clip(n ? formatValue(n) : 'Now', 12) }, variant: 'ruler' }; },
-  'bar-chart': (beat) => ({ title: clip(beat.headline, 40), data: seriesOf(beat), highlight: 0, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' }),
-  'leaderboard': (beat) => ({ title: clip(beat.headline, 40), entries: seriesOf(beat).map((entry) => ({ label: entry.label, value: entry.value })), variant: 'bars' }),
-  'compare': (beat) => { const [a, b] = sidesOf(beat); return { left: { title: a.label, items: [a.detail] }, right: { title: b.label, items: [b.detail] } }; },
-  'gauge-compare': (beat) => { const [a, b] = sidesOf(beat); const unit = clip(a.unit && a.unit === b.unit ? a.unit : 'pts', 8); return { left: { label: a.label, value: a.value, unit, color: 'primary' }, right: { label: b.label, value: b.value, unit, color: 'accent' } }; },
-  'comparison-table': (beat) => { const [a, b] = sidesOf(beat); return { title: clip(beat.headline, 40), columns: [a.label, b.label], rows: itemsOf(beat, 2, 3).map((label, i) => ({ label, values: [i === 0 ? a.detail : true, i === 0 ? b.detail : false] })), highlight: 0, variant: 'cards' }; },
-  'timeline': (beat) => ({ direction: 'horizontal', steps: timelineSteps(beat).map((label, i) => ({ label, icon: iconFor(beat, i) })) }),
-  'icon-row': (beat) => ({ title: clip(beat.headline, 32), items: itemsOf(beat, 3, 3).map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })) }),
-  'icon-grid': (beat) => ({ title: clip(beat.headline, 32), items: itemsOf(beat, 4, 6).map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' }),
-  'process-steps': (beat) => ({ title: clip(beat.headline, 32), layout: 'horizontal', steps: itemsOf(beat, 3, 3).map((label) => ({ label: clip(label, 22) })) }),
-  'checklist': (beat) => ({ title: clip(beat.headline, 32), rows: itemsOf(beat, 3, 3).map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) }),
+  // Number modules show only the clause's own numbers: no number, no params (null), never a placeholder figure.
+  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.headline, 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
+  'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
+  'odometer': (beat) => { const n = numbersOf(beat).find((entry) => Number.isInteger(entry.scaled ?? entry.value)); return n ? { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' } : null; },
+  'percent-fill': (beat) => { const n = percentOf(beat); return n ? { value: Math.round(n.value), label: clip(beat.label ?? beat.headline, 36), variant: 'bar' } : null; },
+  'unit-grid': (beat) => { const n = percentOf(beat); if (!n) return null; const lit = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), count: 100, groups: [{ count: lit, label: clip(`${lit} in 100`, 24), tone: 'primary' }, { count: 100 - lit, label: 'The rest', tone: 'accent' }], variant: 'dots' }; },
+  'pie-chart': (beat) => { const n = percentOf(beat); if (!n) return null; const v = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), data: [{ label: clip(beat.label ?? 'This', 18), value: v }, { label: 'The rest', value: 100 - v }], variant: 'donut' }; },
+  'number-line': (beat) => { const n = numbersOf(beat)[0]; if (!n) return null; const v = n.value; const to = v <= 100 ? 100 : 10 ** Math.ceil(Math.log10(v)); return { from: 0, to, ranges: [{ from: 0, to: Math.max(1, Math.round(v)), label: clip(beat.label ?? 'Here', 18), tone: 'good' }], marker: { value: v, label: clip(formatValue(n), 12) }, variant: 'ruler' }; },
+  'bar-chart': (beat) => { const data = seriesOf(beat, 2); return data ? { title: clip(beat.headline, 40), data, highlight: data.length - 1, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' } : null; },
+  'leaderboard': (beat) => { const data = seriesOf(beat, 3); return data ? { title: clip(beat.headline, 40), entries: data, variant: 'bars' } : null; },
+  'compare': (beat) => { const sides = sidesOf(beat); return sides ? { left: { title: sides[0].label, items: [sides[0].detail] }, right: { title: sides[1].label, items: [sides[1].detail] } } : null; },
+  'gauge-compare': (beat) => { const sides = sidesOf(beat, true); if (!sides || sides[0].unit !== sides[1].unit || !sides[0].unit) return null; return { left: { label: sides[0].label, value: sides[0].value, unit: clip(sides[0].unit, 8), color: 'primary' }, right: { label: sides[1].label, value: sides[1].value, unit: clip(sides[1].unit, 8), color: 'accent' } }; },
+  // Two columns, a row per pair of the clause's numbers (two pairs at least).
+  'comparison-table': (beat) => { const n = numbersOf(beat); if (n.length < 4) return null; const rows = []; for (let i = 0; i + 1 < n.length && rows.length < 4; i += 2) rows.push({ label: cap1(clip(n[i].label ?? `Row ${rows.length + 1}`, 28)), values: [formatValue(n[i]), formatValue(n[i + 1])] }); return { title: clip(beat.headline, 40), columns: [cap1(clip(beat.facts?.sides?.[0] ?? 'Before', 16)), cap1(clip(beat.facts?.sides?.[1] ?? 'After', 16))], rows, highlight: 1, variant: 'cards' }; },
+
+  'timeline': (beat) => { const steps = timelineSteps(beat); return steps.length >= 2 ? { direction: 'horizontal', steps: steps.map((label, i) => ({ label, icon: iconFor(beat, i) })) } : null; },
+  'icon-row': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })) } : null; },
+  'icon-grid': (beat) => { const items = itemsOf(beat, 4, 6); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' } : null; },
+  'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), layout: 'horizontal', steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
+  'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
   'quote-card': (beat) => ({ quote: clip(beat.facts?.quote ?? beat.text, 90), author: clip(beat.evidence?.source?.title ?? beat.speaker ?? 'From the source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) }),
   'feed-frame': (beat) => ({ handle: clip(beat.facts?.handle ?? '@source', 20), caption: clip(beat.headline, 26) }),
-  'proof-wall': (beat) => ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
+  'proof-wall': (beat) => !itemsOf(beat, 3, 4) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
   'excerpt': (beat) => ({ type: 'text', title: clip(beat.evidence?.source?.title ?? beat.headline, 40), source: clip(sourceOf(beat) ?? 'Source', 40), lines: excerptLines(beat) }),
   'code-snippet': (beat) => ({ title: clip(beat.headline, 32), code: { language: 'text', typing: true, lines: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 24), type: i ? 'string' : 'keyword' }] })) } }),
   'window-chrome': (beat) => ({ title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: excerptLines(beat).map((line) => (typeof line === 'string' ? line : line.text)), caption: clip(beat.headline, 36), variant: 'mac' }),
@@ -230,24 +234,33 @@ const BUILDERS = {
   'map-highlight': (beat) => ({ title: clip(beat.headline, 36), highlight: (beat.facts?.places ?? []).slice(0, 4).map((country) => ({ country })), variant: 'fill' })
 };
 
-function seriesOf(beat) {
-  const numbers = numbersOf(beat);
-  if (numbers.length >= 3) return numbers.slice(0, 5).map((entry, i) => ({ label: clip(entry.label ?? keyTerms(beat.text)[i] ?? `#${i + 1}`, 14), value: entry.value }));
-  const v = numbers[0]?.value ?? 10;
-  return [{ label: clip(beat.label ?? keyTerms(beat.text)[0] ?? 'Now', 14), value: v }, { label: 'Before', value: round(v / 2) }, { label: 'At first', value: round(v / 5) }];
+function percentOf(beat) {
+  const n = numbersOf(beat).find((entry) => entry.unit === '%');
+  return n && n.value >= 0 && n.value <= 100 ? n : null;
 }
 
-function sidesOf(beat) {
+// Two or more of the clause's own numbers as labelled bars (null when it has fewer).
+function seriesOf(beat, least = 2) {
   const numbers = numbersOf(beat);
+  if (numbers.length < least) return null;
   const terms = keyTerms(beat.text);
-  const sides = beat.facts?.sides ?? [];
-  const side = (i) => ({ label: cap1(clip(sides[i] ?? numbers[i]?.label ?? terms[i] ?? (i ? 'After' : 'Before'), 16)), value: numbers[i]?.value ?? (i ? 100 : 40), unit: numbers[i]?.unit, detail: clip(numbers[i] ? formatValue(numbers[i]) : terms[i + 2] ?? (i ? 'Now' : 'Then'), 22) });
+  return numbers.slice(0, 5).map((entry, i) => ({ label: cap1(clip(entry.label ?? terms[i] ?? formatValue(entry), 14)), value: entry.value }));
+}
+
+// The two sides of a comparison: named sides ("A versus B") or two numbers.
+// numeric: both sides need a number of the clause (null otherwise).
+function sidesOf(beat, numeric = false) {
+  const numbers = numbersOf(beat);
+  const named = beat.facts?.sides ?? [];
+  if (numeric && numbers.length < 2) return null;
+  if (!named.length && numbers.length < 2) return null;
+  const side = (i) => ({ label: cap1(clip(named[i] ?? numbers[i]?.label ?? (i ? 'After' : 'Before'), 16)), value: numbers[i]?.value, unit: numbers[i]?.unit, detail: clip(numbers[i] ? formatValue(numbers[i]) : named[i], 22) });
   return [side(0), side(1)];
 }
 
 function timelineSteps(beat) {
   const dates = (beat.facts?.dates ?? []).map((entry) => entry.label).filter(Boolean);
-  return (dates.length >= 2 ? dates : itemsOf(beat, 3, 3)).slice(0, 4).map((label) => clip(label, 14));
+  return (dates.length >= 2 ? dates : itemsOf(beat, 3, 3) ?? []).slice(0, 4).map((label) => clip(label, 14));
 }
 
 function excerptLines(beat) {
@@ -264,11 +277,33 @@ function excerptLines(beat) {
  * facts: {numbers, items, dates, quote, sides, places}, evidence?}). Unknown
  * (planned) modules get the beat's facts as a neutral bag the module's own
  * session can map; the story builder checks every scene and falls back.
+ * null: the module cannot show this beat (a number module and no number).
  */
 export function capabilityParams(module, beat) {
   const build = BUILDERS[module];
-  if (build) return strip(build(beat));
+  if (build) { const params = build(beat); return params ? strip(params) : null; }
   return strip({ title: clip(beat.headline, 40), text: clip(beat.text, 120), ...(numbersOf(beat).length ? { values: numbersOf(beat).map((entry) => ({ value: entry.value, unit: entry.unit, label: entry.label })) } : {}), ...(beat.evidence ? { evidence: { claim: beat.evidence.claim, url: beat.evidence.source?.url, capture: beat.evidence.capture?.out } } : {}) });
+}
+
+// What one more clause adds to a module that builds (a bar, an icon, a step):
+// the params key it extends and the new entries.
+const ADDITIONS = {
+  'bar-chart': (beat) => ({ key: 'data', items: numbersOf(beat).map((entry, i) => ({ label: cap1(clip(entry.label ?? keyTerms(beat.text)[i] ?? formatValue(entry), 14)), value: entry.value })) }),
+  'leaderboard': (beat) => ({ key: 'entries', items: numbersOf(beat).map((entry, i) => ({ label: cap1(clip(entry.label ?? keyTerms(beat.text)[i] ?? formatValue(entry), 18)), value: entry.value })) }),
+  'icon-row': (beat) => ({ key: 'items', items: [{ icon: iconFor(beat), label: clip(beat.headline, 14) }] }),
+  'icon-grid': (beat) => ({ key: 'items', items: [{ icon: iconFor(beat), label: clip(beat.headline, 14) }] }),
+  'process-steps': (beat) => ({ key: 'steps', items: [{ label: clip(beat.headline, 22) }] }),
+  'timeline': (beat) => ({ key: 'steps', items: ((beat.facts?.dates ?? []).length ? beat.facts.dates.map((entry) => entry.label) : [beat.headline]).map((label, i) => ({ label: clip(label, 14), icon: iconFor(beat, i) })) }),
+  'checklist': (beat) => ({ key: 'rows', items: [{ label: clip(beat.headline, 28), status: 'done' }] })
+};
+
+/**
+ * What a clause adds to a module that is already on screen (a build state):
+ * {key, items} or null when the module does not build or the clause adds nothing.
+ */
+export function capabilityAdditions(module, beat) {
+  const add = ADDITIONS[module]?.(beat);
+  return add?.items?.length ? strip(add) : null;
 }
 
 /** Whether the table has a params builder for a module (otherwise it is a planned module's neutral bag). */

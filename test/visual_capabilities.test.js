@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPABILITIES, VISUAL_KINDS, capabilitiesFor, capabilityParams, fallbackChain, hasParamsBuilder, resolveCapability } from "../kit/core/visual-capabilities.mjs";
+import { CAPABILITIES, VISUAL_KINDS, capabilitiesFor, capabilityAdditions, capabilityParams, fallbackChain, hasParamsBuilder, resolveCapability } from "../kit/core/visual-capabilities.mjs";
 import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
@@ -34,15 +34,33 @@ test("capabilities: evidence leads, and portrait drops wide-only modules", () =>
   assert.ok(!capabilitiesFor("compare", { wide: false }).includes("comparison-table"));
 });
 
+// Four same-unit numbers: the multi-number modules (leaderboard, gauges, table) have data.
+const SERIES = { ...BEAT, text: "Scores rose from 39 percent to 48 percent, then 55 percent and 71 percent.", facts: { ...BEAT.facts, numbers: [39, 48, 55, 71].map((value, i) => ({ value, unit: "%", raw: `${value}%`, label: ["Old", "New", "Maths", "Docs"][i] })) } };
+
+test("capabilities: number modules never invent a number", () => {
+  const bare = { id: "b2", text: "The launch landed without warning.", headline: "Launch without warning", facts: { numbers: [], dates: [], items: [] } };
+  for (const id of ["stat-card", "count-up", "odometer", "percent-fill", "unit-grid", "pie-chart", "number-line", "bar-chart", "leaderboard", "gauge-compare", "comparison-table"]) assert.equal(capabilityParams(id, bare), null, id);
+  assert.equal(capabilityParams("bar-chart", SERIES).data.length, 4);
+  assert.deepEqual(capabilityParams("gauge-compare", SERIES).left, { label: "Old", value: 39, unit: "%", color: "primary" });
+});
+
 test("capabilities: every params builder resolves in 16:9 and 9:16", () => {
   for (const [width, height] of [[1920, 1080], [1080, 1920]]) {
     const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 } };
     for (const id of [...CAPABILITIES.map((entry) => entry.id), "feed-frame", "proof-wall"]) {
       if (!hasParamsBuilder(id)) { assert.ok(CAPABILITIES.find((entry) => entry.id === id)?.planned, `${id} has no params builder`); continue; }
-      const scene = { id: "s", module: id, start: 1, end: 5, params: capabilityParams(id, BEAT) };
+      const params = capabilityParams(id, BEAT) ?? capabilityParams(id, SERIES);
+      assert.ok(params, `${id} has no params for either sample beat`);
+      const scene = { id: "s", module: id, start: 1, end: 5, params };
       assert.doesNotThrow(() => resolveModule(scene, { ...story, scenes: [scene] }), `${id} at ${width}x${height}`);
     }
   }
   // A planned module gets a neutral bag of facts.
   assert.deepEqual(Object.keys(capabilityParams("coin-stack", BEAT)).sort(), ["evidence", "text", "title", "values"]);
+});
+
+test("capabilities: a build adds the clause's own entries", () => {
+  assert.deepEqual(capabilityAdditions("bar-chart", SERIES).items.map((entry) => entry.value), [39, 48, 55, 71]);
+  assert.equal(capabilityAdditions("process-steps", BEAT).items[0].label, "Compute grew tenfold");
+  assert.equal(capabilityAdditions("stat-card", BEAT), null);
 });
