@@ -154,15 +154,16 @@ The fixture `eval/fixtures/long-form-16min` is an original script about a fictio
 
 `eval/formats.json` holds a golden brief per format. Each brief has a short sample: an example project, a minute of the beat-map fixture, or a Short cut from it. The runner stages, validates, layout-checks, compiles and renders each sample (`--renderer hyperframes|remotion`, `--quality draft`), then measures the video:
 
-- **Cadence.** Scene changes are detected with ffmpeg at 0.04, 0.08 and 0.15, and merged when closer than 1.5 s (or the format's p10 floor). The gate reads 0.08, as on the reference, and cuts come from 0.15.
+- **Cadence.** Every frame's ffmpeg scene score is read in one pass. Events are frames over 0.04, 0.08 or 0.15, merged when closer than 1.5 s (or the format's p10 floor). The gate reads 0.08 on every frame, as on the reference, so the numbers compare with the benchmark. Cuts come from 0.15.
+- **Soft events.** The same thresholds on frames 0.25 s apart, as a diagnostic that can warn but not fail. A fade or a build on a quiet frame spreads its change over many frames and never reaches the reference's thresholds at full frame rate.
 - **Motion on hold.** `freezedetect` (noise 0.002, 1 s minimum) gives the share of the runtime that keeps moving.
 - **Evidence coverage.** The beat map's claims (or the storyboard's number and quote scenes) shown with a source.
 - **Module variety.** Distinct modules over scenes, plus the top module's share.
 - **Layout and legibility.** `checkLayoutProject` errors and warnings.
 - **Caption hygiene.** Captions on where the format needs them, a peak of at most 4.2 words per second over 2 s, and clean word timings.
-- **A/V sync.** The share of planned scene starts that land on a detected change within 250 ms, the median offset, and the audio stream's length against the video's.
+- **A/V sync.** The share of planned scene starts that land on a change within 250 ms, the median offset, and the audio stream's length against the video's. A change is a local peak in the per-frame scene score, measured against the video's own noise rather than a fixed threshold.
 
-Each check passes, warns (within 15% of the line) or fails. The brief's score is the share of points. `--no-render` scores the plan alone. The command writes `qa/format-eval/report.{json,md}` and a contact sheet per format.
+Each check passes, warns (within 15% of the line) or fails. The brief's score is the share of points. `--no-render` scores the plan alone. `--reuse` keeps a render whose storyboard hasn't changed. The command writes `qa/format-eval/report.{json,md}` and a contact sheet per format.
 
 ## Not yet
 

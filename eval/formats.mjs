@@ -3,16 +3,19 @@
 // golden briefs in eval/formats.json), measures it and prints the scorecard.
 //
 //   npm run eval:formats [-- --formats short-form,long-form] [--renderer hyperframes|remotion]
-//     [--no-render] [--quality draft] [--out qa/format-eval]
+//     [--no-render] [--reuse] [--quality draft] [--out qa/format-eval]
 //
 // Per brief: stage the sample project (an example, a window of the long-form
 // beat-map fixture, or a Short cut from it), validate it, run the layout
 // check, compile and render it, then measure the video with ffmpeg: scene
-// detection at 0.04, 0.08 and 0.15 (the reference's thresholds) for the
-// event cadence and the a/v sync check, freezedetect for motion on every
-// hold, ffprobe for the audio. Evidence coverage, module variety and caption
+// detection at 0.04, 0.08 and 0.15 (the reference's thresholds, on every
+// frame, so the numbers compare with the benchmark) for the event cadence,
+// the same on frames 0.25 s apart as a soft-event diagnostic (a fade or a
+// build on a quiet frame), per-frame change peaks for the a/v sync check,
+// freezedetect for motion on every hold, ffprobe for the audio. Evidence coverage, module variety and caption
 // hygiene come from the storyboard (and the beat map when there is one).
-// --no-render scores what the plan alone can answer. Writes
+// --no-render scores what the plan alone can answer; --reuse keeps a render
+// whose storyboard has not changed since it was made. Writes
 // <out>/report.json, <out>/report.md and a contact sheet per format.
 
 import { execFile } from 'node:child_process';
@@ -24,7 +27,7 @@ import { promisify } from 'node:util';
 import { beatMapToStory, windowWords } from '../kit/core/beat-director.mjs';
 import { cadenceGate, cadenceTarget, eventStats } from '../kit/core/cadence.mjs';
 import { cutShorts } from '../kit/core/cutdown.mjs';
-import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, CAPTIONS_REQUIRED, avSync, captionHygiene, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneTimes, renderedCadence, scoreBrief } from './scorecard.mjs';
+import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, scenesAbove, scoreBrief } from './scorecard.mjs';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -83,9 +86,11 @@ export async function stageSample(brief, project) {
   return { project, story, words, map: sampleMap, plan, warnings: [] };
 }
 
-async function sceneTimes(video, threshold) {
-  const { stderr } = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', video, '-vf', `select='gt(scene,${threshold})',showinfo`, '-an', '-f', 'null', '-']);
-  return parseSceneTimes(stderr);
+// Every frame's scene score in one pass (fps: sample first, for the soft-event diagnostic).
+async function sceneScores(video, fps = null) {
+  const filter = `${fps ? `fps=${fps},` : ''}select='gte(scene,0)',metadata=print:key=lavfi.scene_score`;
+  const { stderr } = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', video, '-vf', filter, '-an', '-f', 'null', '-']);
+  return parseSceneScores(stderr);
 }
 
 async function freezes(video, duration) {
@@ -100,7 +105,7 @@ async function contactSheet(video, file, { duration, portrait }) {
 }
 
 /** Evaluate one brief: stage, check, render, measure, score. */
-export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hyperframes', quality = 'draft', render = true, onProgress = () => {} } = {}) {
+export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hyperframes', quality = 'draft', render = true, reuse = false, onProgress = () => {} } = {}) {
   const dir = path.resolve(out, brief.id);
   await mkdir(dir, { recursive: true });
   const result = { id: brief.id, format: brief.format, label: brief.label, brief: brief.brief, renderer: render ? renderer : null, warnings: [] };
@@ -126,24 +131,33 @@ export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hype
       const { getRenderer } = await import('../src/renderers/index.js');
       const { probeVideo } = await import('../src/renderer_eval.js');
       const { readProjectStory } = await import('../src/story_loader.js');
-      await compileStoryCommand(staged.project, { renderer, ...(renderer === 'hyperframes' ? { out: path.join(staged.project, 'hyperframes') } : {}) });
       const video = path.join(dir, `${renderer}.mp4`);
-      const started = Date.now();
-      await getRenderer(renderer).render(renderer === 'hyperframes' ? path.join(staged.project, 'hyperframes') : staged.project, video, { quality });
-      result.render_seconds = Math.round((Date.now() - started) / 100) / 10;
+      const storyKey = JSON.stringify(staged.story);
+      const keyFile = path.join(dir, `${renderer}.story.json`);
+      if (reuse && existsSync(video) && existsSync(keyFile) && (await readFile(keyFile, 'utf8')) === storyKey) result.reused = true;
+      else {
+        await compileStoryCommand(staged.project, { renderer, ...(renderer === 'hyperframes' ? { out: path.join(staged.project, 'hyperframes') } : {}) });
+        const started = Date.now();
+        await getRenderer(renderer).render(renderer === 'hyperframes' ? path.join(staged.project, 'hyperframes') : staged.project, video, { quality });
+        result.render_seconds = Math.round((Date.now() - started) / 100) / 10;
+        await writeFile(keyFile, storyKey);
+      }
       result.video = path.relative(path.resolve(out), video);
       onProgress(brief.id, 'measure');
       const probe = await probeVideo(video);
       const duration = probe.video_duration;
-      const scenes = {};
-      for (const threshold of SCENE_THRESHOLDS) scenes[threshold] = await sceneTimes(video, threshold);
+      const scores = await sceneScores(video);
+      const sampled = await sceneScores(video, SOFT_EVENT_FPS);
+      const scenes = {}, soft = {};
+      for (const threshold of SCENE_THRESHOLDS) { scenes[threshold] = scenesAbove(scores, threshold); soft[threshold] = scenesAbove(sampled, threshold); }
       measures.cadence = renderedCadence(scenes, { duration, format: brief.format });
+      measures.soft_cadence = renderedCadence(soft, { duration, format: brief.format });
       measures.motion = motionOnHold(await freezes(video, duration), duration);
       const loaded = await readProjectStory(staged.project);
       const planned = (loaded?.resolved?.scenes ?? []).filter((scene) => scene.track === undefined || scene.track === 0 || scene.insert === true).map((scene) => Number(scene.start));
-      measures.sync = avSync(planned, scenes[SCENE_THRESHOLDS[0]], { probe, duration });
+      measures.sync = avSync(planned, changePeaks(scores), { probe, duration });
       result.probe = { duration, fps: probe.fps, frames: probe.frames, width: probe.width, height: probe.height, audio: Boolean(probe.audio) };
-      result.scenes = Object.fromEntries(Object.entries(scenes).map(([key, value]) => [key, value.length]));
+      result.scenes = { native: Object.fromEntries(Object.entries(scenes).map(([key, value]) => [key, value.length])), [`${SOFT_EVENT_FPS}fps`]: Object.fromEntries(Object.entries(soft).map(([key, value]) => [key, value.length])) };
       result.contact_sheet = path.relative(path.resolve(out), await contactSheet(video, path.join(dir, 'sheet.jpg'), { duration, portrait: probe.height > probe.width }));
     }
     result.measures = measures;
@@ -155,12 +169,12 @@ export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hype
   return result;
 }
 
-export async function runFormatEval({ formats = null, out = DEFAULT_OUT, renderer = 'hyperframes', quality = 'draft', render = true, onProgress } = {}) {
+export async function runFormatEval({ formats = null, out = DEFAULT_OUT, renderer = 'hyperframes', quality = 'draft', render = true, reuse = false, onProgress } = {}) {
   const briefs = (await loadBriefs()).filter((brief) => !formats || formats.includes(brief.id) || formats.includes(brief.format));
   if (!briefs.length) throw new Error(`no brief matches ${formats?.join(', ')}`);
   const startedAt = new Date().toISOString();
   const results = [];
-  for (const brief of briefs) results.push(await evaluateBrief(brief, { out, renderer, quality, render, onProgress }));
+  for (const brief of briefs) results.push(await evaluateBrief(brief, { out, renderer, quality, render, reuse, onProgress }));
   const report = { schema: SCORECARD_SCHEMA, started_at: startedAt, finished_at: new Date().toISOString(), renderer: render ? renderer : null, quality, results, rows: results.map((result) => result.score) };
   await mkdir(path.resolve(out), { recursive: true });
   await writeFile(path.resolve(out, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
@@ -178,6 +192,7 @@ export function reportMarkdown(report) {
     if (c) {
       lines.push('| threshold | events | per min | gap p10 | gap p50 | gap p90 | longest static |', '|---|---|---|---|---|---|---|');
       for (const [threshold, s] of Object.entries(c.thresholds)) lines.push(`| ${threshold} | ${s.events} | ${s.per_min} | ${s.gap.p10 ?? '–'} | ${s.gap.p50 ?? '–'} | ${s.gap.p90 ?? '–'} | ${s.longest_static.seconds} s |`);
+      for (const [threshold, s] of Object.entries(result.measures.soft_cadence?.thresholds ?? {})) lines.push(`| ${threshold} at ${SOFT_EVENT_FPS} fps (soft) | ${s.events} | ${s.per_min} | ${s.gap.p10 ?? '–'} | ${s.gap.p50 ?? '–'} | ${s.gap.p90 ?? '–'} | ${s.longest_static.seconds} s |`);
       lines.push('');
     }
     for (const check of result.score?.checks ?? []) lines.push(`- ${check.status === 'pass' ? '✓' : check.status === 'warn' ? '~' : check.status === 'fail' ? '✗' : '·'} **${check.id}**: ${typeof check.value === 'object' ? JSON.stringify(check.value) : check.value} (want ${check.want})`);
@@ -187,16 +202,17 @@ export function reportMarkdown(report) {
 }
 
 export function parseArguments(argv) {
-  /** @type {{render: boolean, formats?: string[], renderer?: string, quality?: string, out?: string}} */
+  /** @type {{render: boolean, reuse?: boolean, formats?: string[], renderer?: string, quality?: string, out?: string}} */
   const options = { render: true };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--no-render') options.render = false;
+    else if (arg === '--reuse') options.reuse = true;
     else if (arg === '--formats') options.formats = argv[++i].split(',').map((value) => value.trim()).filter(Boolean);
     else if (arg === '--renderer') options.renderer = argv[++i];
     else if (arg === '--quality') options.quality = argv[++i];
     else if (arg === '--out') options.out = argv[++i];
-    else throw new Error(`unknown argument ${arg}; use --formats a,b --renderer hyperframes|remotion --no-render --quality draft --out dir`);
+    else throw new Error(`unknown argument ${arg}; use --formats a,b --renderer hyperframes|remotion --no-render --reuse --quality draft --out dir`);
   }
   return options;
 }

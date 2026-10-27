@@ -3,6 +3,9 @@
 //
 //   SCENE_THRESHOLDS                       0.04, 0.08, 0.15 (as measured on the reference)
 //   parseSceneTimes(text)                  ffmpeg showinfo → [pts seconds]
+//   parseSceneScores(text)                 ffmpeg metadata=print → [{t, score}] per frame
+//   scenesAbove(scores, threshold)         the frames whose scene score passes a threshold
+//   changePeaks(scores)                    local peaks well above the video's own noise (a/v sync)
 //   parseFreezes(text, duration)           ffmpeg freezedetect → [[start, end]]
 //   renderedCadence(scenes, {duration, format}) → per-threshold event stats
 //   motionOnHold(freezes, duration)        share of the runtime that moves
@@ -23,6 +26,8 @@ export const SCORECARD_SCHEMA = 'launchclip.format-scorecard.v1';
 export const SCENE_THRESHOLDS = Object.freeze([0.04, 0.08, 0.15]);
 // The threshold the cadence gate reads (the reference's "distinct visual events").
 export const EVENT_THRESHOLD = 0.08;
+// The soft-event diagnostic samples frames this often (a 0.35 s fade lands in one step).
+export const SOFT_EVENT_FPS = 4;
 // Per-format floors for the metrics that are not cadence.
 export const METRIC_TARGETS = Object.freeze({
   motion_on_hold: Object.freeze({ 'long-form': 0.85, 'short-form': 0.9, 'talking-head': 0.95, 'art-direction': 0.85, 'motion-graphics': 0.9, animated: 0.85 }),
@@ -41,6 +46,42 @@ export function parseSceneTimes(text) {
   const out = [];
   for (const match of String(text ?? '').matchAll(/pts_time:\s*([0-9.]+)/g)) out.push(Number(match[1]));
   return out.filter(finite).sort((a, b) => a - b);
+}
+
+/** Per-frame scene scores from `select='gte(scene,0)',metadata=print:key=lavfi.scene_score`. */
+export function parseSceneScores(text) {
+  const out = [];
+  let t = null;
+  for (const line of String(text ?? '').split('\n')) {
+    const time = line.match(/pts_time:\s*([0-9.]+)/);
+    if (time) { t = Number(time[1]); continue; }
+    const score = line.match(/lavfi\.scene_score=([0-9.]+)/);
+    if (score && t !== null) { out.push({ t, score: Number(score[1]) }); t = null; }
+  }
+  return out;
+}
+
+/** Times of the frames scoring over a threshold (what `select='gt(scene,T)'` keeps). */
+export function scenesAbove(scores, threshold) {
+  return scores.filter((entry) => entry.score > threshold).map((entry) => entry.t);
+}
+
+/**
+ * Where the picture changes, judged against the video's own noise: local
+ * peaks over max(floor, k × the median score), at least `gap` apart. A soft
+ * change (a fade, a build) on a quiet frame never reaches the reference's
+ * thresholds but still peaks here, so a/v sync can find it.
+ */
+export function changePeaks(scores, { floor = 0.004, k = 4, gap = 0.2 } = {}) {
+  if (!scores.length) return [];
+  const sorted = scores.map((entry) => entry.score).sort((a, b) => a - b);
+  const line = Math.max(floor, k * sorted[Math.floor(sorted.length / 2)]);
+  const peaks = [];
+  for (let i = 1; i < scores.length - 1; i += 1) {
+    const { t, score } = scores[i];
+    if (score > line && score >= scores[i - 1].score && score >= scores[i + 1].score && (!peaks.length || t - peaks.at(-1) >= gap)) peaks.push(t);
+  }
+  return peaks;
 }
 
 /** Frozen intervals from an ffmpeg freezedetect run's stderr (an open freeze runs to the end). */
@@ -192,6 +233,12 @@ export function scoreBrief(brief, measures) {
     add('gap_p90', band(s.gap.p90, s.gap.p90 <= t.gap.p90_max, s.gap.p90 <= t.gap.p90_max * 1.15), s.gap.p90, `≤ ${t.gap.p90_max} s`);
     add('longest_static', band(s.longest_static.seconds, s.longest_static.seconds <= t.longest_static, s.longest_static.seconds <= t.longest_static * 1.15), s.longest_static.seconds, `≤ ${t.longest_static} s`);
   }
+  if (measures.soft_cadence) {
+    // Diagnostic: soft events per minute on sampled frames. It can only warn, never fail.
+    const soft = measures.soft_cadence.thresholds[EVENT_THRESHOLD];
+    const t = measures.soft_cadence.target;
+    add('soft_events', soft.per_min >= t.per_min.min ? 'pass' : 'warn', soft.per_min, `${t.per_min.min}+ (diagnostic)`);
+  }
   if (measures.plan) add('plan_cadence', measures.plan.ok ? 'pass' : 'fail', measures.plan.ok ? 'ok' : measures.plan.checks.filter((check) => !check.ok).map((check) => check.id).join(','), 'gate');
   if (measures.motion) {
     const floor = METRIC_TARGETS.motion_on_hold[brief.format] ?? 0.85;
@@ -219,8 +266,8 @@ export function scoreBrief(brief, measures) {
 
 /** The scorecard as a fixed-width table: a row per brief, a column per metric. */
 export function formatScorecard(rows) {
-  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync'];
-  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync' };
+  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'soft_events', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync'];
+  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', soft_events: 'soft ev', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync' };
   const mark = { pass: '✓', warn: '~', fail: '✗', 'n/a': '·' };
   const cell = (check) => {
     if (!check) return '·';

@@ -66,3 +66,13 @@ test("scorecard: a brief scores pass, warn and fail, and prints a row", () => {
   assert.match(table, /variety 0.2 \(want/);
   assert.match(reportMarkdown({ renderer: null, quality: "draft", finished_at: "now", rows: [row], results: [{ ...brief, score: row, measures: {} }] }), /# Format scorecard/);
 });
+
+test("scorecard: per-frame scene scores, thresholds and change peaks", async () => {
+  const { parseSceneScores, scenesAbove, changePeaks } = await import("../eval/scorecard.mjs");
+  const text = [0, 0.001, 0.002, 0.03, 0.002, 0.001, 0.12, 0.001, 0.002, 0.001].map((score, i) => `[m] frame:${i} pts:${i} pts_time:${i / 10}\n[m] lavfi.scene_score=${score}`).join("\n");
+  const scores = parseSceneScores(text);
+  assert.equal(scores.length, 10);
+  assert.deepEqual(scenesAbove(scores, 0.08), [0.6]);
+  assert.deepEqual(scenesAbove(scores, 0.02), [0.3, 0.6]);
+  assert.deepEqual(changePeaks(scores), [0.3, 0.6]);
+});
