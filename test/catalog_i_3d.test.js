@@ -231,3 +231,11 @@ test('glass-bars-3d: the reference label faces the camera past the last bar', ()
   assert.equal(end.get('scene-refbb').rotation, -end.get('scene-turn').rotation, 'it counter-rotates with the orbit');
   assert.ok(model.content.reference.size >= 30, 'meta size at least');
 });
+
+test('glass-bars-3d: bars reach readable height within about 0.6 s of the scene start', () => {
+  const model = resolve('glass-bars-3d', TERRA, '16:9', {start: 0});
+  const ops = catalogHTimeline(model);
+  assert.ok(model.content.buildAt <= 0.2, `build starts at ${model.content.buildAt}`);
+  for (const i of model.content.bars.keys()) assert.ok(frameState(ops, 0.6).get(`scene-g${i}`).scaleY >= 0.75, `bar ${i} at 0.6 s`);
+  assert.ok(frameState(ops, 0.9).get('scene-g1').scaleY >= 0.97);
+});

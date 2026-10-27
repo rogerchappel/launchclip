@@ -182,8 +182,9 @@ function barsResolve(params, ctx) {
   }
 
   // Timing
-  const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
-  const grow = 0.75, step = Math.min(0.14, 0.9 / Math.max(1, n - 1));
+  // Bars start growing as the scene enters and reach readable height within about 0.6 s.
+  const buildAt = b.timeOf('build', p.at, 'params.at', 0.15, {min: 0.1});
+  const grow = 0.6, step = Math.min(0.1, 0.6 / Math.max(1, n - 1));
   const buildEnd = rt(buildAt + step * (n - 1) + grow);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'whoosh-soft'});
   const settled = buildEnd - b.start;
