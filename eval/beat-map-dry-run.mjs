@@ -7,7 +7,10 @@
 //   NARRATION.json   the dry-run word timings
 //   BEATS.json       the beat map (launchclip.beat-map.v1)
 //   DIRECTION.json   the same plan as a direction map
-//   CADENCE.md       the planning report (cadence gate, variety, evidence)
+//   CADENCE.md       the planning report (cadence gate, variety, evidence),
+//                    and the Shorts cut from it
+//   SHORTS.json      3–5 Shorts (9:16) cut from the map: windows, skeletons,
+//                    short-form cadence and each state's module
 //
 //   node eval/beat-map-dry-run.mjs [folder] [--wpm 155] [--style default] [--fresh]
 //
@@ -19,6 +22,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beatMapReportText, beatMapToDirection, directLongForm, dryRunWords } from '../kit/core/beat-director.mjs';
+import { cutShorts } from '../kit/core/cutdown.mjs';
 import { directionJson, validateDirection } from '../kit/core/direction.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -43,12 +47,29 @@ export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'def
   const direction = beatMapToDirection(map);
   const check = validateDirection(direction, { words: timed.words, lane: 'motion', deferScenes: true });
   if (!check.ok) throw new Error(`the direction map does not validate:\n${check.errors.slice(0, 5).join('\n')}`);
-  const report = beatMapReportText(map);
+  const shorts = cutShorts(map, timed.words, { count: 4 });
+  const report = `${beatMapReportText(map)}\n\n${shortsReportText(shorts)}`;
+  await writeFile(path.join(folder, 'SHORTS.json'), `${JSON.stringify(shorts.map(shortSummary), null, 1)}\n`);
   await writeFile(path.join(folder, 'NARRATION.json'), `${JSON.stringify({ words: timed.words }, null, 0).replace(/\},\{/g, '},\n{')}\n`);
   await writeFile(beatsFile, `${JSON.stringify(map, null, 1)}\n`);
   await writeFile(path.join(folder, 'DIRECTION.json'), directionJson(direction));
   await writeFile(path.join(folder, 'CADENCE.md'), `# Beat map dry run\n\n${timed.words.length} words at ${wpm} wpm (dry-run timings, no voice), \`node eval/beat-map-dry-run.mjs\`.\n\n\`\`\`text\n${report}\n\`\`\`\n`);
-  return { map, report };
+  return { map, shorts, report };
+}
+
+/** A Short as SHORTS.json lists it: where it comes from and what it shows. */
+export function shortSummary(short) {
+  const states = short.map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states.map((state) => ({ shot: shot.id, start: state.start, module: state.module, change: state.change, text: state.text }))));
+  return { id: short.id, title: short.title, window: short.window, skeleton: short.skeleton, duration: short.map.duration, cadence: { events: short.report.cadence.events, per_min: short.report.cadence.per_min, gap: short.report.cadence.gap, cuts: short.report.cadence.cuts, ok: short.report.gate.ok }, states };
+}
+
+export function shortsReportText(shorts) {
+  const lines = [`shorts: ${shorts.length} cut for 9:16 at short-form cadence`];
+  for (const short of shorts) {
+    const c = short.report.cadence;
+    lines.push(`  ${short.report.gate.ok ? 'ok  ' : 'FAIL'} ${short.id.padEnd(44)} ${String(short.window.start).padStart(8)}–${String(short.window.end).padEnd(8)} ${String(short.map.duration).padStart(6)} s  ${c.events} events, p50 ${c.gap.p50} s, ${c.cuts} cuts  skeleton ${short.skeleton?.id ?? 'none'}  opens on ${short.story.scenes[0]?.module}`);
+  }
+  return lines.join('\n');
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
