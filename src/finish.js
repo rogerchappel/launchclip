@@ -736,7 +736,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
 
 async function finishCover(ctx) {
   try {
-    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force) });
+    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force), video: ctx.out });
   } catch (error) {
     ctx.warnings.push(`cover: ${COVER_PATH} was not rendered (${firstLine(error.message)})`);
     return { file: null, status: "failed", error: firstLine(error.message) };
@@ -1560,7 +1560,7 @@ async function runGates(ctx) {
     if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });
     if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
-    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null });
+    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
     if (structure.status !== "skipped") gates.structure = structure;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
@@ -1692,7 +1692,7 @@ export function formatFinishSummary(report) {
     for (const [name, gate] of gates) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.error ? `  ${firstLine(gate.error)}` : ""}`);
   }
   if (report.final) lines.push(`final: ${report.final}`);
-  if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : ""}`);
+  if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : report.cover.source === "video" ? ` (the video's frame at ${report.cover.frame} s)` : ""}`);
   if (report.publish) lines.push(`publish: ${report.publish}`);
   for (const warning of report.warnings ?? []) lines.push(`warning: ${warning}`);
   for (const step of report.next_steps ?? []) lines.push(`next: ${step}`);

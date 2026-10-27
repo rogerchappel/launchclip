@@ -6,7 +6,11 @@ import test from "node:test";
 import { LIBRARY_SKELETONS, SKELETON_SCHEMA, TITLE_CARD_MODULES, chooseSkeleton, kitCapabilities, mergeSkeletons, skeletonById, skeletonFeasibility, skeletonLibraryReference, skeletonProblems, skeletonScriptPlan, skeletonStale, storyboardStructureErrors, structureCheck } from "../kit/core/skeleton-library.mjs";
 import { SHORT_VIDEO_RULES, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../kit/core/script-formats.mjs";
 import { validateStory } from "../kit/core/story.mjs";
-import { loadSkeletonLibrary, runSkeletonsCommand, structureGate } from "../src/skeletons.js";
+import { loadSkeletonLibrary, openingPixels, runSkeletonsCommand, structureGate } from "../src/skeletons.js";
+import { parseScriptMarkdown, buildPublishManifest } from "../src/publish_manifest.js";
+import { coverFromVideo, renderCover } from "../src/cover.js";
+import { resolveModule } from "../kit/core/modules.mjs";
+import { resolveStory } from "../kit/core/story.mjs";
 import { parseAngle, rankTitles, writeScript } from "../src/make/script.js";
 import { assessCinematicReadiness } from "../src/production_readiness.js";
 
@@ -69,7 +73,8 @@ test("the structure checks: an image opens a short video, the key shot has a sce
   assert.equal(opened.status, "failed");
   assert.match(opened.findings[0], /^first_frame: opens on hook-title at 0 s \(a title card\)/);
   assert.match(storyboardStructureErrors(titleOpen, null)[0], /^opening: .* a title card \(hook-title/);
-  const good = story([scene("s1", "count-up", 0, 3), scene("s2", "hook-title", 3, 20), scene("s3", "odometer", 20, 30)]);
+  // dollar-a-second's key shot belongs in its first or second milestone (4.2–9 s or 12–18 s of 30, by the beat shares).
+  const good = story([scene("s1", "count-up", 0, 3), scene("s2", "odometer", 3, 18), scene("s3", "hook-title", 18, 30)]);
   const words = "I'll pay you a dollar a second they are twelve days and thirty two years apart".split(" ").map((text, i) => ({ text, start: i * 2 }));
   const beats = [{ role: "hook", spoken: "I'll pay you", visual_noun: "a one-dollar coin" }, { role: "share", spoken: "twelve days and thirty two years apart", visual_noun: "two rulers side by side" }];
   const titles = ["a", "b", "c", "d", "e"];
@@ -218,4 +223,85 @@ test("a short video's cover is a thumbnail frame, not a text card opening the vi
   // The resolved story carries the card as a scene: still the cover card.
   const resolved = story([{ ...scene("cover", "hook-title", 0, 1.5), cover: true }, scene("s1", "count-up", 1.5, 30)]);
   assert.match(structureCheck(resolved, null, {}).findings[0], /opens on the cover card/);
+});
+
+test("SCRIPT.md's Titles section feeds the structure gate and publish.json; a loop line is not a call to action", async () => {
+  const markdown = ["# Script: A billion seconds ago", "", "## Narration", "", "Count back a billion seconds. So, one more time, from right now:", "", "## Titles (best first)", "", "| # | Title | Score |", "| --- | --- | ---: |", "| 1 | A billion seconds ago, it was 1995 | 7.95 |", "| 2 | Count back a billion seconds | 7.9 |", "", "## Cover", "", "x"].join("\n");
+  const parsed = parseScriptMarkdown(markdown);
+  assert.deepEqual(parsed.title_options, ["A billion seconds ago, it was 1995", "Count back a billion seconds"]);
+  assert.equal(parsed.title, "A billion seconds ago, it was 1995");
+  assert.match(parsed.narration, /^Count back a billion seconds\. So, one more time/);
+  assert.deepEqual(parseScriptMarkdown("# T\n\n## Titles\n\n1. First one\n2. Second one\n- Third one\n").title_options, ["First one", "Second one", "Third one"]);
+  const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, scenes: [scene("s1", "count-up", 0, 20)], ending: { loop_to: "s1" } };
+  assert.deepEqual(buildPublishManifest({ story: base, script: parsed }).cta, { text: "" });
+  assert.equal(buildPublishManifest({ story: base, script: { narration: "Try it today." } }).cta.text, "Try it today.");
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-scriptmd-"));
+  try {
+    await writeFile(path.join(project, "SCRIPT.md"), markdown);
+    const gate = await structureGate({ project, story: story([scene("s1", "count-up", 0, 30)]) });
+    assert.deepEqual(gate.checks.packaging, { ok: false, detail: "2 title option(s); write 5, the best first" });
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("the opening plate is drawn on frame 0, keeping its moves; frame 0 is measured in the render", async () => {
+  const opening = resolveStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand: { colors: { bg: "#000000", paper: "#ffffff", ink: "#000000", primary: "#ff0000", accent: "#00ff00" }, fonts: { display: "Inter", body: "Inter" } }, scenes: [scene("s1", "count-up", 0, 4, { value: 12, suffix: " days", label: "a million seconds" }), { ...scene("s2", "count-up", 4, 8, { value: 32, suffix: " years", label: "a billion seconds" }), in: { type: "fade", dur: 0.3 } }] });
+  const first = resolveModule(opening.scenes[0], opening);
+  const second = resolveModule(opening.scenes[1], opening);
+  assert.equal(first.openingSettled, true);
+  for (const from of [first.motion?.enterFrom, ...(first.animations ?? []).filter((anim) => anim.node === "root" && anim.start === 0).map((anim) => anim.from)].filter(Boolean)) {
+    if ("opacity" in from) assert.equal(from.opacity, 1);
+  }
+  assert.equal(second.openingSettled, undefined);
+  // The pixel check: an opening that fades up from an empty background fails; an unreadable render is not judged.
+  const faded = await openingPixels("v.mp4", { measure: async (_, at) => (at === 0 ? 5.3 : 37.1) });
+  assert.equal(faded.ok, false);
+  assert.match(faded.detail, /frame 0 carries 14% of the content at 1 s: it fades up/);
+  assert.equal((await openingPixels("v.mp4", { measure: async (_, at) => (at === 0 ? 34.5 : 36.7) })).ok, true);
+  assert.equal((await openingPixels("v.mp4", { measure: async () => { throw new Error("no video"); } })).ok, true);
+});
+
+test("a short video's cover is grabbed from its own frame at cover.frame; a longer one renders the card", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-cover-frame-"));
+  try {
+    const video = path.join(project, "draft.mp4");
+    await writeFile(video, "not really a video");
+    const grabs = [];
+    const short = { format: { width: 1080, height: 1920, fps: 30, duration: 28 }, cover: { text: "1995", frame: 12 } };
+    assert.equal(coverFromVideo(short), true);
+    assert.equal(coverFromVideo({ ...short, cover: { text: "1995" } }), false);
+    assert.equal(coverFromVideo({ ...short, format: { ...short.format, duration: 600 } }), false);
+    const grab = async (file, at, out) => { grabs.push([file, at]); await writeFile(out, "png"); };
+    const first = await renderCover({ project, story: short, renderer: "hyperframes", video, grab });
+    assert.deepEqual([first.source, first.frame, first.cached], ["video", 12, false]);
+    assert.equal((await renderCover({ project, story: short, renderer: "hyperframes", video, grab })).cached, true);
+    assert.deepEqual(grabs, [[video, 12]]);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("the key shot must land in its beat, and the cover frame on the key shot", () => {
+  const skeleton = skeletonById("dollar-a-second");
+  // An odometer only at the very end (the loop beat): a key-shot module, but outside first or second.
+  const late = story([scene("s1", "stat-card", 0, 24), scene("s2", "odometer", 24, 30)]);
+  const check = structureCheck(late, skeleton, {});
+  assert.equal(check.checks.key_shot.ok, false);
+  assert.match(check.checks.key_shot.detail, /in first \(4\.2–9\.0 s, estimated\) or second \(12\.0–18\.0 s, estimated\); s2 use a key-shot module elsewhere/);
+  // Timed from the narration when the beats are spoken.
+  const words = ["start", "with", "a", "million", "now", "a", "billion"].map((text, i) => ({ text, start: i * 4 }));
+  const timed = structureCheck(story([scene("s1", "stat-card", 0, 12), scene("s2", "odometer", 12, 30)]), skeleton, { words, beats: [{ role: "hook", spoken: "start with" }, { role: "proof", spoken: "a million" }, { role: "rehook", spoken: "now" }, { role: "escalation", spoken: "a billion" }] });
+  assert.match(timed.checks.key_shot.detail, /^s2 \(odometer\) in first \(8\.0–16\.0 s\) or second \(20\.0–30\.0 s\)/);
+  const covered = { ...story([scene("s1", "count-up", 0, 3), scene("s2", "odometer", 3, 18), scene("s3", "stat-card", 18, 30)]), cover: { text: "1995", frame: 25 } };
+  assert.match(structureCheck(covered, skeleton, {}).checks.cover_frame.detail, /cover\.frame 25 s is not on a key-shot scene \(s1 0–3 s, s2 3–18 s\)/);
+  assert.equal(structureCheck({ ...covered, cover: { text: "1995", frame: 10 } }, skeleton, {}).checks.cover_frame.ok, true);
+  // A passing opening no longer prints what the structure wants.
+  assert.equal(structureCheck(covered, skeleton, {}).checks.first_frame.detail, "opens on count-up at 0 s");
+});
+
+test("story validate warns when a short video's cover opens it", () => {
+  const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, brand: { colors: { bg: "#000000", paper: "#ffffff", ink: "#000000", primary: "#ff0000", accent: "#00ff00" }, fonts: { display: "Inter", body: "Inter" } }, scenes: [scene("s1", "count-up", 2, 20, { value: 5, label: "x" })] };
+  assert.ok(validateStory({ ...base, cover: { text: "A billion?" } }).warnings.some((warning) => /cover\.frame is "first" \(the default\): a video of 90 s or less would open on a text card/.test(warning)));
+  assert.ok(!validateStory({ ...base, cover: { text: "A billion?", frame: 10 } }).warnings.some((warning) => /cover\.frame is "first"/.test(warning)));
 });
