@@ -56,6 +56,9 @@ Additive extensions, all optional:
   Text inside shadow DOM (GitHub's `<relative-time>` "last week") is not
   searched; target a neighbour or a selector instead. The browser runs in
   UTC, so target dates as the page renders them in UTC.
+- `target: null` is the same as no target (wait and pin beats).
+- `label` is a note of up to 160 characters on most beats; on a `pin` it is
+  the pill's text and stays within 48.
 - `beat.zoom`: a fixed scale (1–4) for a zoom beat.
 - `chrome`: `dark` (default) or `none`.
 - `fps`: 24, 25, 30 (default), 50 or 60. `tail`: seconds held after the last

@@ -101,13 +101,16 @@ export function validateCaptureRequest(input) {
     if (typeof beat.at !== "number" || !(beat.at >= 0) || beat.at > 600) errors.push(`${where}.at must be 0–600 seconds`);
     const dur = beat.dur ?? DEFAULT_DUR[beat.action] ?? 1;
     if (typeof dur !== "number" || !(dur > 0) || dur > 30) errors.push(`${where}.dur must be over 0 and at most 30 seconds`);
-    const target = beat.target === undefined ? null : normalizeTarget(beat.target);
-    if (beat.target !== undefined && (!target || (target.text === undefined && target.selector === undefined))) errors.push(`${where}.target must be a CSS selector or {text} / {selector}`);
+    // target null is "no target" (the research agent writes it on wait and pin beats).
+    const target = beat.target === undefined || beat.target === null ? null : normalizeTarget(beat.target);
+    if (beat.target !== undefined && beat.target !== null && (!target || (target.text === undefined && target.selector === undefined))) errors.push(`${where}.target must be a CSS selector or {text} / {selector}`);
     if (target?.text !== undefined && !target.text.trim()) errors.push(`${where}.target.text must not be empty`);
     if (NEEDS_TARGET.has(beat.action) && !target) errors.push(`${where} (${beat.action}) needs a target`);
     if (TEXT_ONLY.has(beat.action) && target && target.text === undefined) errors.push(`${where} (${beat.action}) needs a {text} target: it sweeps a phrase`);
     if (beat.action === "pin" && (typeof beat.label !== "string" || !beat.label.trim())) errors.push(`${where} (pin) needs a label, the text on the pill`);
-    if (beat.label !== undefined && (typeof beat.label !== "string" || beat.label.length > 48)) errors.push(`${where}.label must be a string of at most 48 characters`);
+    // A label is a note on most beats (the research agent writes the claim there); on a pin it is the pill's text.
+    if (beat.label !== undefined && (typeof beat.label !== "string" || beat.label.length > 160)) errors.push(`${where}.label must be a string of at most 160 characters`);
+    if (beat.action === "pin" && typeof beat.label === "string" && beat.label.length > 48) errors.push(`${where} (pin) label must be at most 48 characters: it is the text on the pill`);
     if (beat.zoom !== undefined && (typeof beat.zoom !== "number" || beat.zoom < 1 || beat.zoom > 4)) errors.push(`${where}.zoom must be 1–4`);
     return { index, at: beat.at, action: beat.action, target, dur, ...(beat.label !== undefined ? { label: beat.label } : {}), ...(beat.zoom !== undefined ? { zoom: beat.zoom } : {}) };
   }).filter(Boolean);

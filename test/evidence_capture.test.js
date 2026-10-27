@@ -40,6 +40,19 @@ test("the validator names each problem", () => {
   assert.match(validateCaptureRequest(request({ url: "https://user:pw@example.com/" })).errors.join(), /credentials/);
 });
 
+test("the research agent's capture requests validate as written", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = new URL("./fixtures/research/deepseek-v4-1-flash/research/captures/", import.meta.url);
+  const files = readdirSync(dir).filter((name) => name.endsWith(".json"));
+  assert.ok(files.length >= 1);
+  for (const name of files) {
+    const { errors, request: r } = validateCaptureRequest(JSON.parse(readFileSync(new URL(name, dir), "utf8")));
+    assert.deepEqual(errors, [], name);
+    assert.equal(r.beats.find((b) => b.action === "wait").target, null);
+  }
+  assert.match(validateCaptureRequest(request({ beats: [{ at: 0, action: "pin", label: "x".repeat(49) }] })).errors.join(), /pin\) label must be at most 48/);
+});
+
 test("evidence capture refuses local and private hosts", () => {
   assert.throws(() => assertPublicUrl("http://localhost:3000/"), /public pages only/);
   assert.throws(() => assertPublicUrl("http://192.168.1.4/"), /public pages only/);
