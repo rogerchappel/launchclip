@@ -230,7 +230,30 @@
           }
         }
       ],
-      "capture": "hf-deepseek-v4-1-flash-1017"
+      "capture": "hf-deepseek-v4-1-flash-1017",
+      "data": {
+        "text": "delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.",
+        "tokens": [
+          "del",
+          "ivering",
+          " substantial",
+          " improvements",
+          " across",
+          " reasoning",
+          ",",
+          " coding",
+          ",",
+          " agent",
+          "ic",
+          " tasks",
+          ",",
+          " and",
+          " visual",
+          " benchmarks",
+          "."
+        ],
+        "encoding": "o200k_base"
+      }
     },
     {
       "id": "c003",
@@ -295,9 +318,215 @@
         }
       ],
       "capture": "hf-deepseek-v4-1-flash-1017",
-      "data": [
+      "tables": [
         "hf-deepseek-v4-1-flash-1017-benchmark-1"
-      ]
+      ],
+      "data": {
+        "series": [
+          {
+            "label": "DS-V4.1-Flash-1017",
+            "value": 42.3
+          },
+          {
+            "label": "DS-V4.1-Flash",
+            "value": 31.2
+          },
+          {
+            "label": "K3",
+            "value": 12.6
+          },
+          {
+            "label": "GLM-5.3",
+            "value": 37.9
+          },
+          {
+            "label": "GPT-5.6 Sol",
+            "value": 39.9
+          },
+          {
+            "label": "Opus 5",
+            "value": 51.8
+          }
+        ],
+        "panels": [
+          {
+            "title": "Terminal-Bench 4.0",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 42.3
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 31.2
+              },
+              {
+                "label": "K3",
+                "value": 12.6
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 37.9
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 39.9
+              },
+              {
+                "label": "Opus 5",
+                "value": 51.8
+              }
+            ]
+          },
+          {
+            "title": "HLE w/o tools",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 42.6
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 36.8
+              },
+              {
+                "label": "K3",
+                "value": 43.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 42
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 44.5
+              },
+              {
+                "label": "Opus 5",
+                "value": 56.3
+              }
+            ]
+          },
+          {
+            "title": "DeepSWE v1.1",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 77
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 74.2
+              },
+              {
+                "label": "K3",
+                "value": 67.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 66.9
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 73
+              },
+              {
+                "label": "Opus 5",
+                "value": 74
+              }
+            ]
+          },
+          {
+            "title": "ProgramBench",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 29.1
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 20.3
+              },
+              {
+                "label": "K3",
+                "value": 17.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 19
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 23
+              },
+              {
+                "label": "Opus 5",
+                "value": 37
+              }
+            ]
+          },
+          {
+            "title": "NL2Repo-Bench",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 68.2
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 65.4
+              },
+              {
+                "label": "K3",
+                "value": 58
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 58
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 56.8
+              },
+              {
+                "label": "Opus 5",
+                "value": 75.3
+              }
+            ]
+          },
+          {
+            "title": "Automation-Bench v1.0.6",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 60.5
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 54.8
+              },
+              {
+                "label": "K3",
+                "value": 46.7
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 48.8
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 45.8
+              },
+              {
+                "label": "Opus 5",
+                "value": 50.3
+              }
+            ]
+          }
+        ],
+        "source": "Hugging Face · deepseek-ai, 2026-10-17",
+        "table": "hf-deepseek-v4-1-flash-1017-benchmark-1"
+      }
     },
     {
       "id": "c004",
@@ -370,9 +599,215 @@
         }
       ],
       "capture": "hf-deepseek-v4-1-flash-1017",
-      "data": [
+      "tables": [
         "hf-deepseek-v4-1-flash-1017-benchmark-1"
-      ]
+      ],
+      "data": {
+        "series": [
+          {
+            "label": "DS-V4.1-Flash-1017",
+            "value": 77
+          },
+          {
+            "label": "DS-V4.1-Flash",
+            "value": 74.2
+          },
+          {
+            "label": "K3",
+            "value": 67.5
+          },
+          {
+            "label": "GLM-5.3",
+            "value": 66.9
+          },
+          {
+            "label": "GPT-5.6 Sol",
+            "value": 73
+          },
+          {
+            "label": "Opus 5",
+            "value": 74
+          }
+        ],
+        "panels": [
+          {
+            "title": "DeepSWE v1.1",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 77
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 74.2
+              },
+              {
+                "label": "K3",
+                "value": 67.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 66.9
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 73
+              },
+              {
+                "label": "Opus 5",
+                "value": 74
+              }
+            ]
+          },
+          {
+            "title": "HLE w/o tools",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 42.6
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 36.8
+              },
+              {
+                "label": "K3",
+                "value": 43.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 42
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 44.5
+              },
+              {
+                "label": "Opus 5",
+                "value": 56.3
+              }
+            ]
+          },
+          {
+            "title": "Terminal-Bench 4.0",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 42.3
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 31.2
+              },
+              {
+                "label": "K3",
+                "value": 12.6
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 37.9
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 39.9
+              },
+              {
+                "label": "Opus 5",
+                "value": 51.8
+              }
+            ]
+          },
+          {
+            "title": "ProgramBench",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 29.1
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 20.3
+              },
+              {
+                "label": "K3",
+                "value": 17.5
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 19
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 23
+              },
+              {
+                "label": "Opus 5",
+                "value": 37
+              }
+            ]
+          },
+          {
+            "title": "NL2Repo-Bench",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 68.2
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 65.4
+              },
+              {
+                "label": "K3",
+                "value": 58
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 58
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 56.8
+              },
+              {
+                "label": "Opus 5",
+                "value": 75.3
+              }
+            ]
+          },
+          {
+            "title": "Automation-Bench v1.0.6",
+            "series": [
+              {
+                "label": "DS-V4.1-Flash-1017",
+                "value": 60.5
+              },
+              {
+                "label": "DS-V4.1-Flash",
+                "value": 54.8
+              },
+              {
+                "label": "K3",
+                "value": 46.7
+              },
+              {
+                "label": "GLM-5.3",
+                "value": 48.8
+              },
+              {
+                "label": "GPT-5.6 Sol",
+                "value": 45.8
+              },
+              {
+                "label": "Opus 5",
+                "value": 50.3
+              }
+            ]
+          }
+        ],
+        "source": "Hugging Face · deepseek-ai, 2026-10-17",
+        "table": "hf-deepseek-v4-1-flash-1017-benchmark-1"
+      }
     },
     {
       "id": "c005",
@@ -542,7 +977,7 @@
         }
       ],
       "capture": "hf-deepseek-v4-1-flash-1017-2",
-      "data": [
+      "tables": [
         "hf-deepseek-v4-1-flash-1017-table-2",
         "hf-deepseek-v4-1-flash-table-4"
       ]
