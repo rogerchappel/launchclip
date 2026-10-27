@@ -296,6 +296,11 @@ const HELPERS = Object.freeze({ clip, keyTerms, numbersOf, itemsOf, percentOf, s
 const FAMILIES = [socialBuilders, codeBuilders, particlesBuilders, objectsBuilders, explainBuilders, channelBuilders].map((family) => family(HELPERS));
 for (const family of FAMILIES) Object.assign(BUILDERS, family.builders);
 
+/** The family files' sample beats (with evidence.data), for tests and sample sheets. */
+export function capabilitySamples() {
+  return FAMILIES.flatMap((family) => family.samples ?? []);
+}
+
 /**
  * Params for a module from a beat ({id, text, headline, label?, sub?, kicker?,
  * facts: {numbers, items, dates, quote, sides, places}, evidence?}). Unknown

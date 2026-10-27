@@ -22,7 +22,12 @@
 //
 // Pure ESM, no imports. Canonical copy: kit/core/capability-builders-code.mjs.
 
-/** → {builders: {[module]: (beat) => params | null}, additions: {[module]: (beat) => {key, items}}} */
+/**
+ * → {builders: {[module]: (beat) => params | null}, additions: {[module]: (beat) => {key, items}},
+ *    samples: [beat]}: samples are test beats carrying the evidence.data these
+ *    builders need; test/visual_capabilities.test.js resolves every builder against
+ *    them, so an evidence-only builder is checked without inventing data elsewhere.
+ */
 export function codeBuilders(h) {
-  return { builders: {}, additions: {} };
+  return { builders: {}, additions: {}, samples: [] };
 }
