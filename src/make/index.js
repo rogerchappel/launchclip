@@ -39,6 +39,7 @@ import { plannedSubjectRanges } from "../subject/plan.js";
 import { fileProjectMatte, fileProjectTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
+import { auditNarration, researchBrief, researchMode } from "../research/make.js";
 import { packCaptionsFor } from "../../kit/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
@@ -120,7 +121,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -432,7 +433,10 @@ async function prepareVoiceover(ctx) {
 async function prepareMotion(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
-  const notes = await notesText(ctx);
+  const briefNotes = await notesText(ctx);
+  // --research on: the brief is checked against sources, and the script pass writes from what they state (src/research/make.js).
+  const research = await researchBrief(ctx, briefNotes);
+  const notes = research ? [...briefNotes, research.notes] : briefNotes;
   const rules = rulesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
   // The skeleton library (docs/VIRAL_FORMATS_RFC.md): a short video whose brief fits a library skeleton is built on it (--skeleton pins one).
@@ -470,6 +474,7 @@ async function prepareMotion(ctx) {
   script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) };
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
   script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
+  auditNarration(ctx, research, script.narration);
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
   // The angle the script is written on (a short video's script pass finds it): the agent path's ANGLE.json.
@@ -706,6 +711,7 @@ async function stageFinish(ctx) {
   report.finish = { status: finish.status, report: "finish.json", seconds: finish.seconds, stages: finish.stages.map((stage) => ({ name: stage.name, status: stage.status, seconds: stage.seconds, ...(stage.error ? { error: stage.error.split("\n")[0] } : {}) })) };
   report.gates = Object.fromEntries(Object.entries(finish.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}) }]));
   if (ctx.baseEditQa) report.gates.base_edit_qa = ctx.baseEditQa;
+  if (ctx.researchGate) report.gates.research = ctx.researchGate;
   report.final = finish.final ? path.relative(project, finish.final) : null;
   // finish wrote publish.json (and the cover) with SCRIPT.json's titles.
   if (finish.publish) report.publish = finish.publish;

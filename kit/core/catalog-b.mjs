@@ -38,6 +38,7 @@
 
 import {rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
+import {applyShotStates, shotStateView} from './shot-states.mjs';
 import {logoRow} from './catalog-b-logo-row.mjs';
 import {archiveCard} from './catalog-b-archive-card.mjs';
 import {processSteps} from './catalog-b-process-steps.mjs';
@@ -50,8 +51,11 @@ export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withU
 
 const DEFINITIONS = [functionChart, gaugeCompare, flowCompare, processSteps, archiveCard, logoRow, brandLockup];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
+
+// The module's own view and op list, for the states engine to re-run with a state's params.
+const stateHooks = def => ({view: model => def.view(model), timeline: model => { const ops = []; rootOps(model, ops); def.timeline(model, ops); return ops; }});
 
 function definition(model) {
   const def = model && BY_ID[model.module];
@@ -61,7 +65,8 @@ function definition(model) {
 
 /** Static element tree for a catalogue B model (initial state at scene start). */
 export function catalogBView(model) {
-  return rootNode(model, definition(model).view(model));
+  const def = definition(model);
+  return rootNode(model, shotStateView(model, def.view(model), stateHooks(def)));
 }
 
 /** Renderer-neutral animation ops for a catalogue B model, root first. */
@@ -70,6 +75,8 @@ export function catalogBTimeline(model) {
   const ops = [];
   rootOps(model, ops);
   def.timeline(model, ops);
+  // Shot states (kit/core/shot-states.mjs): param changes, reveals, the focus ring.
+  if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   // Motion grammar: pops (back/elastic eases) follow the story's grammar.
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;

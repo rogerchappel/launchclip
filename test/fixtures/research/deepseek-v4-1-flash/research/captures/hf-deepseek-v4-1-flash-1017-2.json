@@ -1,0 +1,61 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "hf-deepseek-v4-1-flash-1017-2",
+  "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "kind": "model-card",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "at": 0,
+      "action": "wait",
+      "target": null,
+      "dur": 0.6,
+      "label": "page settles"
+    },
+    {
+      "at": 0.6,
+      "action": "scroll",
+      "target": {
+        "text": "context_window"
+      },
+      "dur": 1.2,
+      "label": "to context_window"
+    },
+    {
+      "at": 1.8,
+      "action": "focus-ring",
+      "target": {
+        "text": "context_window"
+      },
+      "dur": 1,
+      "label": "context_window"
+    },
+    {
+      "at": 2.8,
+      "action": "highlight",
+      "target": {
+        "text": "1M tokens"
+      },
+      "dur": 1.8,
+      "label": "It keeps a 1M tokens context window."
+    },
+    {
+      "at": 4.6,
+      "action": "pin",
+      "target": null,
+      "dur": 1.2,
+      "label": "Hugging Face · deepseek-ai"
+    }
+  ],
+  "out": "assets/evidence/hf-deepseek-v4-1-flash-1017-2.mp4",
+  "provenance": {
+    "source_title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+    "fetched_at": "2026-10-27T05:11:45.950Z",
+    "publisher": "Hugging Face · deepseek-ai",
+    "published_at": "2026-10-17T02:40:38.000Z"
+  }
+}

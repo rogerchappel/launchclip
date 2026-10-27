@@ -81,7 +81,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'The gap', 0.14, 'The gap in one line the viewer will repeat at dinner.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.08, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'a clock or calendar racing while the stake grows beside it', modules: Object.freeze(['count-up', 'odometer', 'flip-clock', 'slot-roll', 'number-line', 'timeline']) }),
+    key_shot: Object.freeze({ describe: 'a clock or calendar racing while the stake grows beside it', beats: Object.freeze(['first', 'second']), modules: Object.freeze(['count-up', 'odometer', 'flip-clock', 'slot-roll', 'number-line', 'timeline']) }),
     first_frame: Object.freeze({ describe: 'the stake as an object (a coin, a note, a counter at $1), never a title card', modules: Object.freeze(['count-up', 'odometer', 'flip-clock', 'stat-card', 'object-card', 'photo-scene']) }),
     avoid: Object.freeze(['a title card as the hook', 'a bar chart without a picturable unit', 'a source line held over scenes it does not cite']),
     share: Object.freeze({ kind: 'surprise', rule: 'A comparison the viewer can repeat ("twelve days and thirty-two years apart").' }),
@@ -111,7 +111,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'Reframe', 0.2, 'What that makes us, in one line worth repeating.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.1, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'the familiar span (a clock, a ruler, a pitch) with the landmarks squeezed into its last sliver', modules: Object.freeze(['timeline', 'number-line', 'countdown', 'progress-ring', 'percent-fill']) }),
+    key_shot: Object.freeze({ describe: 'the familiar span (a clock, a ruler, a pitch) with the landmarks squeezed into its last sliver', beats: Object.freeze(['marks', 'turn']), modules: Object.freeze(['timeline', 'number-line', 'countdown', 'progress-ring', 'percent-fill']) }),
     first_frame: Object.freeze({ describe: 'the familiar span itself (a clock face, a calendar), never a title card', modules: Object.freeze(['timeline', 'countdown', 'progress-ring', 'number-line', 'photo-scene', 'object-card']) }),
     avoid: Object.freeze(['a title card as the hook', 'a wall of dates', 'numbers without the span on screen']),
     share: Object.freeze({ kind: 'surprise', rule: 'A reframe the viewer can repeat ("all of history fits in the last seconds before midnight").' }),
@@ -141,7 +141,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'The argument', 0.16, 'The line people will argue with, grounded in the evidence.'),
       beat('cta', 'cta_or_loop', 'Close', 0.1, 'One action, or a loop back to the match-up.')
     ]),
-    key_shot: Object.freeze({ describe: 'a split frame that resolves to one side', modules: Object.freeze(['compare', 'comparison-table', 'flow-compare', 'gauge-compare', 'bar-chart']) }),
+    key_shot: Object.freeze({ describe: 'a split frame that resolves to one side', beats: Object.freeze(['round-1', 'round-2', 'verdict']), modules: Object.freeze(['compare', 'comparison-table', 'flow-compare', 'gauge-compare', 'bar-chart']) }),
     first_frame: Object.freeze({ describe: 'both sides on screen at once, never a title card', modules: Object.freeze(['compare', 'comparison-table', 'gauge-compare', 'photo-scene', 'device-frame']) }),
     avoid: Object.freeze(['a title card as the hook', 'a verdict with no evidence', 'more than two sides']),
     share: Object.freeze({ kind: 'debate', rule: 'A claim people will argue with in the comments, and only one the evidence supports.' }),
@@ -171,7 +171,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'Takeaway', 0.14, 'The takeaway worth saving, in one line.'),
       beat('cta', 'cta_or_loop', 'Close', 0.1, 'One action, or a loop.')
     ]),
-    key_shot: Object.freeze({ describe: 'the hidden cost revealed underneath the known one', modules: Object.freeze(['stacked-bar', 'waterfall', 'object-card', 'excerpt', 'torn-paper', 'callout-arrow']) }),
+    key_shot: Object.freeze({ describe: 'the hidden cost revealed underneath the known one', beats: Object.freeze(['hidden']), modules: Object.freeze(['stacked-bar', 'waterfall', 'object-card', 'excerpt', 'torn-paper', 'callout-arrow']) }),
     first_frame: Object.freeze({ describe: 'the familiar thing itself (the receipt, the contract, the habit), never a title card', modules: Object.freeze(['object-card', 'photo-scene', 'excerpt', 'device-frame', 'polaroid']) }),
     avoid: Object.freeze(['a title card as the hook', 'a list of five tips', 'fear without a fix']),
     share: Object.freeze({ kind: 'useful', rule: 'A takeaway the viewer will save or send to someone about to do the thing.' }),
@@ -201,7 +201,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'Why it matters', 0.14, 'The takeaway worth saving.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.1, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'number one revealed last, bigger than the rest', modules: Object.freeze(['leaderboard', 'countdown', 'icon-grid', 'stat-card', 'object-card']) }),
+    key_shot: Object.freeze({ describe: 'number one revealed last, bigger than the rest', beats: Object.freeze(['top']), modules: Object.freeze(['leaderboard', 'countdown', 'icon-grid', 'stat-card', 'object-card']) }),
     first_frame: Object.freeze({ describe: 'the list in motion, number one hidden, never a title card', modules: Object.freeze(['leaderboard', 'icon-grid', 'countdown', 'object-card', 'photo-scene']) }),
     avoid: Object.freeze(['a title card as the hook', 'numbered slides of equal weight', 'number one revealed early']),
     share: Object.freeze({ kind: 'useful', rule: 'A takeaway worth saving; the ranking itself is worth sending.' }),
@@ -231,7 +231,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'The reframe', 0.14, 'The line the viewer will use to correct someone.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.1, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'the myth stamped on screen, then overturned', modules: Object.freeze(['concept-card', 'object-card', 'sticker', 'badge', 'stat-card', 'excerpt']) }),
+    key_shot: Object.freeze({ describe: 'the myth stamped on screen, then overturned', beats: Object.freeze(['test', 'truth']), modules: Object.freeze(['concept-card', 'object-card', 'sticker', 'badge', 'stat-card', 'excerpt']) }),
     first_frame: Object.freeze({ describe: 'the myth as a thing (the advice, the headline, the habit), never a title card', modules: Object.freeze(['excerpt', 'object-card', 'photo-scene', 'quote-card', 'feed-frame']) }),
     avoid: Object.freeze(['a title card as the hook', 'a "myth vs fact" table', 'a debunk without a source']),
     share: Object.freeze({ kind: 'surprise', rule: 'A reframe the viewer can use to correct someone, with its source.' }),
@@ -261,7 +261,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'The call', 0.16, 'The one thing to do today.'),
       beat('end', 'closing_reframe', 'Close', 0.1, 'A quiet line that lands the feeling.')
     ]),
-    key_shot: Object.freeze({ describe: 'the parent lifting the child, the moment the title promises', modules: Object.freeze(['cast-scene']), requires: Object.freeze({ poses: Object.freeze(['lift']) }) }),
+    key_shot: Object.freeze({ describe: 'the parent lifting the child, the moment the title promises', beats: Object.freeze(['hook', 'then']), modules: Object.freeze(['cast-scene']), requires: Object.freeze({ poses: Object.freeze(['lift']) }) }),
     first_frame: Object.freeze({ describe: 'the two characters in the ordinary moment, faces readable, never a title card', modules: Object.freeze(['cast-scene', 'character-cameo', 'photo-scene']) }),
     avoid: Object.freeze(['a title card as the hook', 'captions across the characters', 'figures too small to read their faces']),
     share: Object.freeze({ kind: 'act', rule: 'One small act the viewer can do today ("so call him").' }),
@@ -290,7 +290,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'Recognition', 0.2, 'The line they will send to the friend who does this.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.14, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'the character caught in the viewer\'s situation, their face doing the work', modules: Object.freeze(['cast-scene']), requires: Object.freeze({ actions: Object.freeze(['look-far']) }) }),
+    key_shot: Object.freeze({ describe: 'the character caught in the viewer\'s situation, their face doing the work', beats: Object.freeze(['build', 'turn']), modules: Object.freeze(['cast-scene']), requires: Object.freeze({ actions: Object.freeze(['look-far']) }) }),
     first_frame: Object.freeze({ describe: 'the character mid-situation, never a title card', modules: Object.freeze(['cast-scene', 'character-cameo']) }),
     avoid: Object.freeze(['a title card as the hook', 'a narrator explaining the joke']),
     share: Object.freeze({ kind: 'identity', rule: 'A line the viewer sends to the friend who does exactly this.' }),
@@ -319,7 +319,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'The difference', 0.18, 'The difference in one line worth sending.'),
       beat('cta', 'cta_or_loop', 'Call to action', 0.2, 'One action, one destination.')
     ]),
-    key_shot: Object.freeze({ describe: 'the same frame, before and after', modules: Object.freeze(['compare', 'product-demo', 'app-stage', 'phone-stage', 'device-frame', 'media-window']) }),
+    key_shot: Object.freeze({ describe: 'the same frame, before and after', beats: Object.freeze(['switch', 'after']), modules: Object.freeze(['compare', 'product-demo', 'app-stage', 'phone-stage', 'device-frame', 'media-window']) }),
     first_frame: Object.freeze({ describe: 'the before, on screen, never a title card or a logo', modules: Object.freeze(['product-demo', 'app-stage', 'phone-stage', 'device-frame', 'media-window', 'photo-scene']) }),
     avoid: Object.freeze(['a logo as the hook', 'a feature list', 'an after with no before']),
     share: Object.freeze({ kind: 'useful', rule: 'The difference, measured, in one line worth sending to a colleague.' }),
@@ -349,7 +349,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
       beat('share', 'share', 'Takeaway', 0.14, 'What the viewer will notice next time they see one.'),
       beat('loop', 'cta_or_loop', 'Loop', 0.1, LOOP)
     ]),
-    key_shot: Object.freeze({ describe: 'the one step people never see, shown in full', modules: Object.freeze(['process-steps', 'flow-compare', 'photo-scene', 'footage-callout', 'zoom-through']) }),
+    key_shot: Object.freeze({ describe: 'the one step people never see, shown in full', beats: Object.freeze(['steps', 'reveal']), modules: Object.freeze(['process-steps', 'flow-compare', 'photo-scene', 'footage-callout', 'zoom-through']) }),
     first_frame: Object.freeze({ describe: 'the thing mid-process, never a title card', modules: Object.freeze(['photo-scene', 'process-steps', 'footage-callout', 'zoom-through', 'object-card']) }),
     avoid: Object.freeze(['a title card as the hook', 'step one first', 'a diagram with no real object']),
     share: Object.freeze({ kind: 'useful', rule: 'Something the viewer will notice next time they see the thing.' }),
@@ -383,6 +383,7 @@ export function skeletonProblems(skeleton) {
   const total = beats.reduce((sum, entry) => sum + Number(entry?.share ?? 0), 0);
   if (beats.length && Math.abs(total - 1) > 0.02) problems.push(`${where}: beat shares sum to ${total.toFixed(2)}, not 1`);
   if (!Array.isArray(skeleton.key_shot?.modules) || !skeleton.key_shot.modules.length) problems.push(`${where}: key_shot.modules is required`);
+  for (const id of skeleton.key_shot?.beats ?? []) if (!beats.some((entry) => entry?.id === id)) problems.push(`${where}: key_shot.beats names ${id}, which is not one of its beats`);
   if (!Array.isArray(skeleton.first_frame?.modules) || !skeleton.first_frame.modules.length) problems.push(`${where}: first_frame.modules is required`);
   if (!SHARE_KINDS.includes(skeleton.share?.kind)) problems.push(`${where}: share.kind must be one of ${SHARE_KINDS.join(', ')}`);
   if (!VOICE_TIERS.includes(skeleton.voice?.tier)) problems.push(`${where}: voice.tier must be one of ${VOICE_TIERS.join(', ')}`);
@@ -595,15 +596,30 @@ export function structureCheck(story, skeleton = null, options = {}) {
     const card = coverCard || TITLE_CARD_MODULES.includes(module);
     const want = skeleton ? `; the structure wants ${skeleton.first_frame.describe}` : '';
     const what = coverCard ? 'the cover card (cover.frame "first")' : `${module} at ${opening ? startOf(opening) : 0} s${card ? ' (a title card)' : ''}`;
-    checks.first_frame = { ok: Boolean(opening) && startOf(opening) <= FIRST_FRAME_SECONDS && !card, detail: opening ? `opens on ${what}${want}` : 'no scene opens the video' };
+    const firstOk = Boolean(opening) && startOf(opening) <= FIRST_FRAME_SECONDS && !card;
+    checks.first_frame = { ok: firstOk, detail: opening ? `opens on ${what}${firstOk ? '' : want}` : 'no scene opens the video' };
   }
+  const beats = Array.isArray(options.beats) ? options.beats : [];
   let keyScenes = [];
   if (skeleton) {
     const requires = skeleton.key_shot.requires ?? {};
-    keyScenes = scenes.filter((scene) => skeleton.key_shot.modules.includes(sceneModule(scene)) && castHas(scene, requires));
-    checks.key_shot = { ok: keyScenes.length > 0, detail: keyScenes.length ? keyScenes.map((scene) => `${scene.id ?? sceneModule(scene)} (${sceneModule(scene)})`).join(', ') : `no scene renders the key shot (${skeleton.key_shot.describe}) with ${skeleton.key_shot.modules.join(', ')}` };
+    const candidates = scenes.filter((scene) => skeleton.key_shot.modules.includes(sceneModule(scene)) && castHas(scene, requires));
+    // The key shot lands inside the beat it belongs to (key_shot.beats), not anywhere in the video.
+    const windows = keyShotWindows(skeleton, beats, options.words, duration);
+    const inside = (scene) => {
+      const start = startOf(scene), end = Number(scene.end ?? scene.resolved?.end ?? start);
+      return windows.some((window) => Math.min(end, window.end) - Math.max(start, window.start) >= Math.min(0.5, (window.end - window.start) * 0.3));
+    };
+    keyScenes = windows.length ? candidates.filter(inside) : candidates;
+    const where = windows.length ? ` in ${windows.map((window) => `${window.beat} (${window.start.toFixed(1)}–${window.end.toFixed(1)} s${window.estimated ? ', estimated' : ''})`).join(' or ')}` : '';
+    checks.key_shot = { ok: keyScenes.length > 0, detail: keyScenes.length ? `${keyScenes.map((scene) => `${scene.id ?? sceneModule(scene)} (${sceneModule(scene)})`).join(', ')}${where}` : `no scene renders the key shot (${skeleton.key_shot.describe}) with ${skeleton.key_shot.modules.join(', ')}${where}${candidates.length ? `; ${candidates.map((scene) => scene.id).join(', ')} use a key-shot module elsewhere` : ''}` };
+    // A short video's cover frame is a real frame of the video: on a library skeleton, a frame of the key shot.
+    const frame = story?.cover ? coverFrame(story) : null;
+    if (typeof frame === 'number' && duration <= SHORT_VIDEO_SECONDS) {
+      const on = candidates.some((scene) => frame >= startOf(scene) && frame < Number(scene.end ?? scene.resolved?.end ?? 0));
+      checks.cover_frame = { ok: on, detail: on ? `cover.frame ${frame} s is on the key shot` : `cover.frame ${frame} s is not on a key-shot scene (${candidates.map((scene) => `${scene.id} ${startOf(scene)}–${scene.end} s`).join(', ') || 'none'})` };
+    }
   }
-  const beats = Array.isArray(options.beats) ? options.beats : [];
   if (skeleton || options.requireShare || beats.some((entry) => entry?.role === 'share')) {
     const share = beats.find((entry) => entry?.role === 'share' && String(entry.spoken ?? entry.text ?? '').trim());
     let ok = Boolean(share);
@@ -639,6 +655,35 @@ export function storyboardStructureErrors(story, skeleton = null) {
   else if (checks.first_frame && !checks.first_frame.ok) errors.push(`opening: ${checks.first_frame.detail}. Open at 0 s on an image (${skeleton ? skeleton.first_frame.modules.join(', ') : 'a photo, object, chart, character or product scene'}) that shows the hook's subject; a title card (${TITLE_CARD_MODULES.join(', ')}) may follow, not open.`);
   if (checks.key_shot && !checks.key_shot.ok) errors.push(`skeleton ${skeleton.id}: ${checks.key_shot.detail}. Give the key shot (${skeleton.key_shot.describe}) its own scene inside the beat it belongs to.`);
   return errors;
+}
+
+/**
+ * The time windows of a skeleton's key-shot beats: from the story beats'
+ * spoken lines in the narration (the k-th beat with a role matches the
+ * skeleton's k-th beat with that role), else estimated from the skeleton's
+ * beat shares. → [{beat, start, end, estimated}]
+ */
+function keyShotWindows(skeleton, beats, words, duration) {
+  const ids = skeleton.key_shot.beats ?? [];
+  if (!ids.length || !duration) return [];
+  const occurrence = (list, index) => list.slice(0, index).filter((entry) => entry.role === list[index].role).length;
+  const starts = Array.isArray(words) && words.length ? beats.map((entry) => spokenAt(String(entry?.spoken ?? entry?.text ?? ''), words)) : [];
+  const windows = [];
+  let shareStart = 0;
+  skeleton.beats.forEach((entry, index) => {
+    const shareEnd = shareStart + entry.share * duration;
+    if (ids.includes(entry.id)) {
+      const k = occurrence(skeleton.beats, index);
+      const at = beats.map((beat, i) => ({ beat, i })).filter(({ beat }) => beat?.role === entry.role)[k];
+      const start = at ? starts[at.i] : null;
+      if (Number.isFinite(start)) {
+        const next = starts.slice(at.i + 1).find((value) => Number.isFinite(value));
+        windows.push({ beat: entry.id, start, end: Number.isFinite(next) ? next : duration, estimated: false });
+      } else windows.push({ beat: entry.id, start: shareStart, end: shareEnd, estimated: true });
+    }
+    shareStart = shareEnd;
+  });
+  return windows;
 }
 
 function castHas(scene, requires) {
@@ -678,7 +723,10 @@ export function skeletonLibraryReference({ kit = kitCapabilities() } = {}) {
     `- **A share line.** One spoken line in the last ${Math.round(SHARE_WINDOW * 100)}% that gives a viewer a reason to send the video or comment: a surprise, a line they recognise themselves in, one small act, a grounded claim to argue with, or a takeaway worth saving. Give it the \`share\` role in \`STORY.json\`.`,
     '- **Concrete visuals.** Every beat\'s `visual_noun` names a thing the viewer can picture, never a bare abstraction ("the gap", "growth").',
     `- **${TITLE_OPTIONS} title options, scored and best first.** Score each 0-10 on curiosity (a gap that carries self-interest, never a tease), clarity (what the video is, at a glance) and match (it fits the opening image and the hook); order by 0.4 × curiosity + 0.35 × clarity + 0.25 × match, minus 3 for over 70 characters or a tease. \`make\` records them as \`title_scores\` in \`SCRIPT.json\`.`,
-    '- **The cover is a thumbnail, not the opening.** Set `story.cover` `{text, number?, kicker?, frame}` with `frame` at the seconds of the strongest image (the key shot), never `"first"`, which would open the video on a text card. `cover.text` echoes the best title; on a library skeleton, build it on the skeleton\'s cover idea. finish renders it as `video/cover.png`.',
+    '- **The cover is a frame of the video, not the opening.** Set `story.cover` `{text, number?, kicker?, frame}` with `frame` at the seconds of the strongest image (on a library skeleton, a frame of its key shot), never `"first"`, which would open the video on a text card. finish takes `video/cover.png` from the finished video at that frame. `cover.text` echoes the best title for the platforms that take a text cover.',
+    '- **Titles in SCRIPT.md** go under a `## Titles` heading, best first, as a table with a `Title` column or a numbered list: the structure gate and `publish.json` read them there when there is no `SCRIPT.json`.',
+    `- **The opening is drawn on frame 0.** The scene that opens the video with no transition starts at rest; what happens inside it still plays. finish measures the render: frame 0 must carry at least half the content of the frame at 1 s.`,
+    '- **The key shot lands in its beat.** A library skeleton names the beats its key shot belongs to; a key-shot scene must overlap one of them (timed from the narration, else from the beat shares).',
     '',
     '`launchclip finish` checks these in its `structure` gate (and the key shot, on a library skeleton); `launchclip cinematic-check` reads the same gate.',
     '',

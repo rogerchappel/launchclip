@@ -29,6 +29,7 @@ import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
+import { holdGate, stateGate } from "./movement_guardrails.js";
 import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -739,7 +740,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
 
 async function finishCover(ctx) {
   try {
-    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force) });
+    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force), video: ctx.out });
   } catch (error) {
     ctx.warnings.push(`cover: ${COVER_PATH} was not rendered (${firstLine(error.message)})`);
     return { file: null, status: "failed", error: firstLine(error.message) };
@@ -1486,6 +1487,12 @@ async function runGates(ctx) {
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };
   }
+  try {
+    gates.holds = holdGate(ctx.resolved);
+    gates.states = stateGate(ctx.resolved);
+  } catch (error) {
+    gates.holds ??= { status: "failed", error: error.message };
+  }
 
   const master = ctx.state.stages?.master?.details;
   gates.loudness = !master
@@ -1563,7 +1570,7 @@ async function runGates(ctx) {
     if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });
     if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
-    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null });
+    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
     if (structure.status !== "skipped") gates.structure = structure;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
@@ -1695,7 +1702,7 @@ export function formatFinishSummary(report) {
     for (const [name, gate] of gates) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.error ? `  ${firstLine(gate.error)}` : ""}`);
   }
   if (report.final) lines.push(`final: ${report.final}`);
-  if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : ""}`);
+  if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : report.cover.source === "video" ? ` (the video's frame at ${report.cover.frame} s)` : ""}`);
   if (report.publish) lines.push(`publish: ${report.publish}`);
   for (const warning of report.warnings ?? []) lines.push(`warning: ${warning}`);
   for (const step of report.next_steps ?? []) lines.push(`next: ${step}`);
