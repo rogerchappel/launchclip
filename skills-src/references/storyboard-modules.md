@@ -1451,13 +1451,16 @@ events: build, split, highlight
 variants: solid (default), stroke, dots
 
 ### number-line (keeps captions)
-A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, and an optional marker that drops onto a value.
+A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, an optional marker that drops onto a value, glowing value points ("+0.3", "+23.0"), and a zoom inset that re-plots a slice of the line at a finer scale under dashed connectors ("wins by less than 1 point").
 params:
 - from: number, the start of the line
 - to: number > from, the end
 - step: tick spacing (optional; default a round step for about 25 ticks, at most 100)
 - labelEvery: integer: label every n-th tick (optional; default the closest that fits; range ends are always labelled)
-- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>)
+- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>) (one of ranges, points or marker)
+- points: [{value, label? ≤ 24, tone? (default accent)}] 1–8 glowing dots on the line, labels under the tick numbers (optional; event points)
+- pointsAt: the points: seconds from scene start (optional; else a matching hit, else a default)
+- zoom: {from, to (at most half the line), step?, label? ≤ 40, at?} a second ruler under the line re-plotting that slice and its points, joined by dashed connectors (optional; event zoom, last)
 - marker: {value, label? ≤ 24, tone?, at?} a pin that drops onto one value (optional; event marker)
 - unit: string ≤ 12 under the line's end ("reps") (optional)
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
@@ -1466,7 +1469,7 @@ params:
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, range-0, range-1, range-2, marker
+events: build, range-0, range-1, range-2, marker, points, zoom
 variants: ruler (default), track
 
 ### cast-scene (keeps captions)
@@ -1609,7 +1612,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
-| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
