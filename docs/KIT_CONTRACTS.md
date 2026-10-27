@@ -2120,6 +2120,27 @@ A style can define named segment templates, so a series looks like a series: a "
 - **`--model`.** `planStoryboard` re-plans the section's words with the planner against the same profile (paid). The cut keeps the base edit, and the loop returns to the first scene.
 - **Output.** `storyboard.json`, `DIRECTION.json`, `NARRATION.json` and `CUTDOWN.json` (`launchclip.cutdown.v1`). The receipt holds `{source, to, section, window, duration, trim, planner, hook, loop_to, carried, added, profile: {id, status, measures, errors}, warnings}`. The command checks the Short with `checkStoryboard` and the coverage gate, and its status is `ready` when the Short passes the profile. Then run `launchclip finish` on the Short.
 
+### The beat director (`kit/core/beat-director.mjs`, docs/BEAT_DIRECTOR.md)
+
+The beat director gives every 3–10 s clause of a long video a visual decision. Each decision has a module from the capability table (`kit/core/visual-capabilities.mjs`), params built from the clause's own facts or evidence, and a state change (`enter`, `build` or `swap`). Decisions are grouped into shots of 2–4 states over a per-chapter plate.
+
+- **Output.** `directLongForm({words, chapters, ledger, captures, format}, {cadence, style, previous, avoid})` returns a `launchclip.beat-map.v1` map (`BEATMAP.json`, never `BEATS.json`, which holds music beats).
+- **The gate.** `beatMapReport` checks the map against `cadenceTarget(format, style)` from `kit/core/cadence.mjs`. That file also holds `CADENCE_BENCHMARK` (170 events in 975 s; gaps p10 2.5, p50 5.2 and p90 9.8 s; 50 cuts), a `CADENCE_TARGETS` band for each of `long-form`, `short-form`, `talking-head`, `art-direction`, `motion-graphics` and `animated`, the style factors (`calm`, `default` and `energetic`), and `eventStats`, `cadenceGate` and `cadenceReport`.
+- **Chunks.** `longFormChunks` splits the work into resumable chunks of at most 180 s, keyed by their words, settings and the visual history they start from.
+- **Conversions.** `beatMapToDirection` returns a direction map. `beatMapToStory(map, {from, to})` returns a storyboard for any window.
+- **Evidence.** Claims are matched against `research/evidence.json` (`launchclip.evidence.v1`) first. A capture (`launchclip.capture.v1`) is linked by `claim`, `claims[]` or a source URL.
+- **Fallbacks.** A planned module that is not registered falls back down its chain. Number modules never get a placeholder figure.
+
+### Shorts from a beat map (`kit/core/cutdown.mjs`)
+
+`cutShorts(map, words, {count})` returns 3–5 Shorts, one per chapter, never overlapping.
+
+- **Windows.** Each window is 20–50 s of whole clauses. It opens on a number, a quote or evidence.
+- **Re-direction.** Each window is re-directed at the `short-form` cadence on 1080×1920. The long form's evidence carries over.
+- **The first frame.** A Short opens on an image, never a title card.
+- **Structure.** A library skeleton is attached when one fits. Each Short has word captions and loops back to its hook.
+- **Output.** `{id, title, window, skeleton, map, story, words, report: {cadence, gate}}`.
+
 ### Exports
 
 - **`finish`.** The master stage writes `renders/chapters.txt` (`youtubeChapters`: `0:00 Title` lines for the YouTube description).
