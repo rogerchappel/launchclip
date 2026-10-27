@@ -67,11 +67,14 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   [Ambient motion](#ambient-motion-kitcoreambientmjs).
 - `plate` (story), `chapters[j].plate` and `scenes[i].plate` set the blurred
   backdrop plate; see [Backdrop plates](#backdrop-plates-kitcoreplatesmjs).
+- `engine` = `{version?, revision?}` is the stamp of the engine that wrote
+  the story; see [Story versions and migrations](#story-versions-and-migrations-kitcorestory-migrationsmjs).
 
 Exports:
 
 ```js
 export const STORY_SCHEMA = "launchclip.story.v1";
+export const STORY_REVISION = 0; // see "Story versions and migrations"
 export function validateStory(story, {modules, moduleParams} = {}) // → {ok, errors: string[], warnings: string[]}
 // modules: optional Set or array of known module ids; unknown ids are errors when given.
 // moduleParams: optional (id, params) → [{path, message}]; pass validateModuleParams
@@ -89,6 +92,63 @@ export function deriveBoundaries(story) // story must be resolved
 export function storyFormat(story) // → {duration, width, height, fps}
 export function storyHits(story)   // resolved → [{scene_id, at, event, cue?}] sorted by at
 ```
+
+## Story versions and migrations (`kit/core/story-migrations.mjs`)
+
+A story's version is its `schema` (the major contract, `launchclip.story.v1`)
+plus `engine.revision` (a whole number; 0 when absent): the count of
+non-additive changes made inside that major. `STORY_REVISION` is the revision
+this engine reads.
+
+```js
+export const STORY_REVISION, STORY_MIGRATIONS // the registry, in order; frozen
+export function storyVersion(story)  // → {schema, revision}
+export function migrateStory(story, {migrations, current} = {})
+// → {story, applied: [ids], from, to}; the input is never changed (the same
+//   object comes back when nothing applied). Throws when the story is newer
+//   than the engine or no chain of steps reaches the current version.
+export function stampStory(story, {version, revision = STORY_REVISION} = {})
+// → a copy with engine: {version, revision}
+export function migrationProblems(migrations, {current} = {}) // → [] when the registry chains
+```
+
+A migration step is `{id, from: {schema, revision}, to: {schema, revision},
+describe, migrate(story) → story}`. `migrate` gets a private deep copy and
+must be pure: it reads nothing but the story. Each step moves forward by
+exactly one: the next revision of the same schema, or revision 0 of the next
+major. `migrationProblems()` holds the shipped registry to that (a test runs
+it), and the last step must end at the current version.
+
+Change policy:
+
+- **Additive changes need nothing.** A new optional field, module, param,
+  enum value or transition, or a looser limit, keeps every saved story valid
+  and meaning the same thing: no migration, no revision bump. An older engine
+  reading a newer story of the same revision warns about the top-level fields
+  it does not know and ignores them.
+- **Non-additive changes inside a major add one migration and bump
+  `STORY_REVISION`.** Renaming a field, changing what a value or a default
+  means, tightening a limit, or removing a field that has a replacement: the
+  step rewrites old JSON into the new form, in the same PR that makes the
+  change, with a test that converts a story written before it.
+- **Breaking changes are a new major.** When no step can convert old stories
+  mechanically (or the shape changes wholesale), the new contract is
+  `launchclip.story.v<N+1>` and a step from the last v<N> revision to
+  revision 0 of it carries whatever can be carried.
+- Module params follow the same rule through their schemas: a param that
+  changes name or meaning is a story migration over `scenes[].params`.
+
+Readers migrate before they validate: the project loader
+(`src/story_loader.js`) and `launchclip story validate|resolve` run
+`migrateStory` in memory and leave `storyboard.json` untouched (`story
+validate` warns that the story was upgraded and should be saved again).
+`validateStory` refuses a revision above `STORY_REVISION` ("upgrade
+launchclip") or below it ("migrate it first"). Writers stamp: `story plan`
+writes `engine: {version: <package version>, revision}`. The stamp never
+reaches a frame, so render segments do not hash it.
+
+No migration is registered yet: every change to story v1 so far has been
+additive.
 
 ## Module param schemas (`kit/core/module-schemas.mjs`)
 
