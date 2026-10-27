@@ -9,7 +9,7 @@ import { extractFacts } from "../kit/core/beat-director.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
-const IDS = ["glass-bars-3d", "coin-stack", "rack-shelf"];
+const IDS = ["glass-bars-3d", "coin-stack", "rack-shelf", "paper-stack", "planet-family"];
 const SOURCE = { url: "https://example.com/report", title: "Lab report", date: "2026-03-01" };
 const beat = (text, extra = {}) => ({ id: "b", text, headline: extra.headline ?? "The line-up", facts: extractFacts(text), ...extra });
 
@@ -33,7 +33,9 @@ const CASES = {
     beat("One task costs $1 with Nova and $10 with Atlas.", { headline: "Cost of one task" }),
     beat("It dropped from $8.82 per task to $1.01 per task.", { headline: "Cost per finished task" })
   ],
-  "rack-shelf": [beat("Here is the line-up.", { headline: "Model by model", evidence: SERIES }), beat("It scored 84 points on coding and 78 points on maths.")]
+  "rack-shelf": [beat("Here is the line-up.", { headline: "Model by model", evidence: SERIES }), beat("It scored 84 points on coding and 78 points on maths.")],
+  "paper-stack": [beat("The audit went chapter by chapter.", { headline: "The audit", evidence: { claim: "c2", source: SOURCE, data: { sections: [{ label: "Feynman rules", pages: "1–2", status: "verified" }, { label: "Four-point loop", pages: "3–5", status: "pass" }, { label: "Counterterms", pages: 14, status: "fail" }, { label: "Late times", pages: "p. 18" }] } } })],
+  "planet-family": [beat("There are three sizes.", { headline: "One family", evidence: { claim: "c3", source: SOURCE, data: { members: [{ name: "Luna", tagline: "fast and cheap" }, { name: "Terra", tagline: "mid-range value" }, { name: "Sol", tagline: "the flagship" }] } } })]
 };
 
 test("objects builders: every module has a builder, and each case resolves in 16:9 and 9:16", () => {
@@ -56,6 +58,10 @@ test("objects builders: nothing is invented; no data, no params", () => {
   // Mixed units are not one series; dollars and euros are not one pile.
   assert.equal(capabilityParams("glass-bars-3d", beat("It went from 40 percent to $3.2 billion.")), null);
   assert.equal(capabilityParams("coin-stack", beat("It costs $5 here and €9 there.")), null);
+  // Paper and planets come only from evidence data, never from the narration.
+  assert.equal(capabilityParams("paper-stack", beat("Chapter one, chapter two and chapter three all passed.")), null);
+  assert.equal(capabilityParams("planet-family", beat("Luna, Terra and Sol make up the family.")), null);
+  assert.equal(capabilityParams("planet-family", beat("x", { evidence: { claim: "c", data: { members: [{ name: "Solo" }] } } })), null);
   // Names longer than a 9:16 bar holds, or two bars with one name, fall back to the 2D chart.
   const four = { claim: "c", data: { series: ["Northlight", "Halcyon", "Meridian", "Lumen"].map((label, i) => ({ label, value: 40 - i * 10 })) } };
   assert.equal(capabilityParams("glass-bars-3d", beat("x", { evidence: four })), null);
@@ -84,12 +90,19 @@ test("objects builders: values and labels are the clause's or the evidence's own
   assert.deepEqual(rack.rows.map((entry) => entry.label), ["Atlas", "Orbit", "Nova"]);
   assert.equal(rack.focus, 0, "the top value is the focus tray");
 
+  const paper = capabilityParams("paper-stack", CASES["paper-stack"][0]);
+  assert.deepEqual(paper.items.map((entry) => [entry.detail, entry.status]), [["pp. 1–2", "ok"], [undefined, "ok"], ["p. 14", "flag"], ["p. 18", "none"]], "a long name drops its pages rather than overflow a 9:16 row");
+
+  const planets = capabilityParams("planet-family", CASES["planet-family"][0]);
+  assert.deepEqual(planets.bodies.map((entry) => [entry.kind, entry.name]), [["moon", "Luna"], ["earth", "Terra"], ["sun", "Sol"]]);
 });
 
-test("objects builders: a later clause adds its own bar, stack or row", () => {
+test("objects builders: a later clause adds its own bar, stack, row or section", () => {
   assert.deepEqual(capabilityAdditions("glass-bars-3d", beat("Then 71 percent on docs.")).items.map((entry) => entry.value), [71]);
   assert.equal(capabilityAdditions("coin-stack", beat("A third option costs $4 per task.")).items[0].display, "$4");
   assert.deepEqual(capabilityAdditions("rack-shelf", beat("It scored 62 points on maths.")).items, [{ label: "Maths", cells: ["62"] }]);
   assert.equal(capabilityAdditions("rack-shelf", beat("The next model scored 62 points.")), null, "a value with no name adds no row");
+  assert.equal(capabilityAdditions("paper-stack", CASES["paper-stack"][0]).items.length, 4);
   assert.equal(capabilityAdditions("glass-bars-3d", beat("Nothing to add here.")), null);
+  assert.equal(capabilityAdditions("planet-family", CASES["planet-family"][0]), null);
 });

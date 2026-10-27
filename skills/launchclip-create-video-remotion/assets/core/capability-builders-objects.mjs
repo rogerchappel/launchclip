@@ -27,7 +27,7 @@
 //
 // Pure ESM, no imports. Canonical copy: kit/core/capability-builders-objects.mjs.
 
-const LIMIT = { bars: 4, stacks: 4, rows: 4 };
+const LIMIT = { bars: 4, stacks: 4, rows: 4, sections: 7, members: 5 };
 // Characters a line of a label keeps at key size in 9:16 (measured against the modules, one spare), by
 // how many bars, stacks or steps share the width: a bar name may wrap to two lines; stack and step
 // names stay on one.
@@ -39,7 +39,11 @@ const SHORT_UNIT = { thousand: 'K', million: 'M', billion: 'B', trillion: 'T', k
 const EDGE = /^(on|in|at|of|to|for|from|with|per|by|the|a|an|and|or|than|vs|versus)$/i;
 // Unit words the parser leaves at the front of a label ("seconds before", "points on coding").
 const UNIT_WORD = /^(seconds?|minutes?|hours?|days?|points?|pts|percent|tokens?|dollars?|times|requests?|users?|parameters?|params)$/i;
+// A family small to large: the kind is how a member looks, not a claim about it.
+const BODIES = { 2: ['moon', 'sun'], 3: ['moon', 'earth', 'sun'], 4: ['moon', 'earth', 'sun', 'galaxy'], 5: ['moon', 'ice', 'earth', 'sun', 'galaxy'] };
 const CURRENCY = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' };
+const OK = /^(ok|pass(ed)?|verified|done|clean|green)$/i;
+const FLAG = /^(flag(ged)?|fail(ed)?|issue|error|red|warning)$/i;
 
 /**
  * → {builders: {[module]: (beat) => params | null}, additions: {[module]: (beat) => {key, items}},
@@ -111,6 +115,16 @@ export function objectsBuilders(h) {
     return new Set(figures.map((entry) => entry.prefix)).size === 1 ? figures : [];
   };
   const moneyLabel = (beat, entry, i) => tidy(entry.label) ?? tidy(beat.facts?.sides?.[i]) ?? cap1(h.keyTerms(beat.text)[i] ?? display(entry));
+  const sections = (beat) => (Array.isArray(beat.evidence?.data?.sections) ? beat.evidence.data.sections.filter((entry) => entry && typeof entry.label === 'string' && entry.label.trim()) : []);
+  const section = (entry) => {
+    const pages = entry.pages === undefined || entry.pages === null ? null : String(entry.pages).trim();
+    const status = typeof entry.status === 'string' ? (OK.test(entry.status) ? 'ok' : FLAG.test(entry.status) ? 'flag' : 'none') : 'none';
+    const label = h.clip(entry.label, 18);
+    const detail = pages ? h.clip(/^p/i.test(pages) ? pages : `${/[–-]/.test(pages) ? 'pp.' : 'p.'} ${pages}`, 12) : null;
+    // A 9:16 row holds about 20 characters at key size: the pages stay when name and pages fit together.
+    return { label, ...(detail && label.length + detail.length <= 20 ? { detail } : {}), status };
+  };
+  const members = (beat) => (Array.isArray(beat.evidence?.data?.members) ? beat.evidence.data.members.filter((entry) => entry && typeof entry.name === 'string' && entry.name.trim()) : []);
 
   const builders = {
     // Bars from a series of 2+ (research data first, else the clause's own numbers); a descending one is a staircase line-up.
@@ -141,6 +155,17 @@ export function objectsBuilders(h) {
       if (!data || data.some((entry) => !entry.labelled) || !fitted(data.map((entry) => cap1(entry.label)), 16)) return null;
       const top = data.reduce((best, entry, i) => (entry.value > data[best].value ? i : best), 0);
       return { variant: 'rack', title: h.clip(beat.headline, 48), rows: data.map((entry) => ({ label: cap1(entry.label), cells: [entry.display] })), focus: top, ...source(beat) };
+    },
+    // Only a document's own sections (evidence.data.sections), each with its pages and check or flag.
+    'paper-stack': (beat) => {
+      const rows = sections(beat).slice(0, LIMIT.sections);
+      return rows.length >= 2 ? { variant: 'sections', title: h.clip(beat.headline, 48), items: rows.map(section), ...source(beat) } : null;
+    },
+    // Only a family's own members (evidence.data.members), in the order given (small to large reads best).
+    'planet-family': (beat) => {
+      const rows = members(beat).slice(0, LIMIT.members);
+      if (rows.length < 2) return null;
+      return { variant: 'track', title: h.clip(beat.headline, 48), bodies: rows.map((entry, i) => ({ kind: BODIES[rows.length][i], name: h.clip(entry.name, 12), ...(entry.tagline ? { tagline: h.clip(entry.tagline, 22) } : {}) })), ...source(beat) };
     }
   };
 
@@ -148,13 +173,20 @@ export function objectsBuilders(h) {
   const additions = {
     'glass-bars-3d': (beat) => ({ key: 'data', items: (seriesData(beat, 1) ?? []).filter((entry) => entry.labelled).map((entry) => ({ label: cap1(h.clip(entry.label, 14)), value: entry.value, display: entry.display })) }),
     'coin-stack': (beat) => ({ key: 'stacks', items: money(beat).map((entry, i) => ({ label: moneyLabel(beat, entry, i), value: entry.scaled ?? entry.value, display: display(entry) })) }),
-    'rack-shelf': (beat) => ({ key: 'rows', items: (seriesData(beat, 1) ?? []).filter((entry) => entry.labelled).map((entry) => ({ label: cap1(h.clip(entry.label, 16)), cells: [entry.display] })) })
+    'rack-shelf': (beat) => ({ key: 'rows', items: (seriesData(beat, 1) ?? []).filter((entry) => entry.labelled).map((entry) => ({ label: cap1(h.clip(entry.label, 16)), cells: [entry.display] })) }),
+    'paper-stack': (beat) => ({ key: 'items', items: sections(beat).map(section) })
+    // planet-family has none: a member's look depends on the family's size, so the family builds at once.
   };
 
   // Test beats with the data these builders need (test/visual_capabilities.test.js resolves every builder against them).
   const samples = [
     // Two prices in one currency, each with its name (coin-stack).
-    { id: 'objects-prices', text: 'One task costs $1 with Nova and $10 with Atlas.', headline: 'Cost of one task', facts: { numbers: [{ value: 1, prefix: '$', raw: '$1', label: 'with Nova' }, { value: 10, prefix: '$', raw: '$10', label: 'with Atlas' }], items: [], dates: [] } }
+    { id: 'objects-prices', text: 'One task costs $1 with Nova and $10 with Atlas.', headline: 'Cost of one task', facts: { numbers: [{ value: 1, prefix: '$', raw: '$1', label: 'with Nova' }, { value: 10, prefix: '$', raw: '$10', label: 'with Atlas' }], items: [], dates: [] } },
+    // A document's sections and a product family, as the research stage attaches them (paper-stack, planet-family).
+    { id: 'objects-evidence', text: 'The audit went section by section, across the whole family.', headline: 'The audit', facts: { numbers: [], items: [], dates: [] },
+      evidence: { claim: 'c-objects', source: { url: 'https://example.com/report', title: 'Lab report' }, data: {
+        sections: [{ label: 'Methods', pages: '1–4', status: 'verified' }, { label: 'Results', pages: '5–9', status: 'fail' }, { label: 'Appendix', pages: 12 }],
+        members: [{ name: 'Luna', tagline: 'fast and cheap' }, { name: 'Terra', tagline: 'mid-range value' }, { name: 'Sol', tagline: 'the flagship' }] } } }
   ];
 
   return { builders, additions, samples };
