@@ -23,11 +23,12 @@ import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
-import { CAMERA_STACK, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
+import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
-import { scenePlatePlan, storyPlatePlan } from './plates.mjs';
+import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
+import { worldBackdrops } from './world-backdrops.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
@@ -147,10 +148,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // A story.background kind other than blobs (kit/core/backgrounds.mjs)
   // replaces the field with its layers, in the same places.
   // A backdrop plate (kit/core/plates.mjs) replaces the background on the
-  // scenes it covers, one per chapter; the story's own plate is the world
-  // camera's one backdrop.
-  const backdrop = isolate ? null : storyPlatePlan(story) ?? backgroundPlan(story);
-  const field = isolate || backdrop ? null : ambientField(story);
+  // scenes it covers, one per chapter. In world mode the plates are the
+  // camera's backdrops (kit/core/world-backdrops.mjs), changing with its
+  // moves; story.background (or the depth layer's field and glows) shows
+  // only where a shot has none.
+  const worldCamera = !isolate && resolveCamera(story).mode === 'world';
+  const everyShotPlated = (story.scenes ?? []).filter((scene) => (scene.track ?? 0) === 0).every((scene) => scenePlateSpec(story, scene));
+  const backdrop = isolate ? null : worldCamera ? backgroundPlan(story) : storyPlatePlan(story) ?? backgroundPlan(story);
+  const field = isolate || backdrop || (worldCamera && everyShotPlated && storyPlatePlan(story)) ? null : ambientField(story);
   const plateFor = (scene) => (isolate ? null : scenePlatePlan(story, scene));
   const drawsBackground = (scene) => Boolean(plateFor(scene)) || sceneBackground(story, scene);
   const geometry = profileGeometry({ width: W, height: H });
@@ -206,9 +211,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const cameraMotion = plan ? cameraGsapLines(plan) : [];
   const worldField = plan?.background ? worldFieldLayer(backgroundFieldTiles(plan, field)) : { html: '', motion: [] };
   cameraMotion.push(...worldField.motion);
-  // World mode with a background kind: the background stays fixed to the
-  // screen under the camera (in #lc-bg), in place of the depth layer's glows.
-  const worldBackdrop = plan?.mode === 'world' && backdrop ? backdropLayer('world', 0, D, backdrop) : null;
+  // World mode: the plates travel with the camera as backdrops over the
+  // depth layer; a background kind stays fixed to the screen under the camera
+  // (in #lc-bg), in place of the depth layer's glows, where a shot has none.
+  const backdrops = plan?.mode === 'world' ? worldBackdrops(story, plan, windows) : null;
+  const covered = Boolean(backdrops?.segments.every((segment) => segment.plan));
+  const stack = backdrops ? worldBackdropStack(backdrops, bg) : null;
+  if (stack) cameraMotion.push(...stack.motion);
+  const worldBackdrop = plan?.mode === 'world' && backdrop && !covered ? backdropLayer('world', 0, D, backdrop) : null;
   if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
@@ -504,7 +514,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}</div>
     ${baseMarkup.join('\n    ')}
     ${audio}
-    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop) : ''}
+    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}
     ${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
@@ -585,7 +595,48 @@ export function windowComposition(html, [start, end]) {
 // blurred move runs), then drift, zoom (about the canvas centre) and pan.
 const CAMERA_SELECTORS = Object.freeze({ pan: '#lc-cam-pan', zoom: '#lc-cam-zoom', drift: '#lc-cam-drift', background: '#lc-world-bg' });
 
-function cameraMarkup(plan, brand, plates, field = '', glowing = true) {
+// World backdrops (kit/core/world-backdrops.mjs): one segment per run of
+// shots on the same plate, each an opaque, masked canvas of the plate's
+// layers inside a mover (#lc-wb-<n>-move, the ops' x / y) inside the segment
+// (#lc-wb-<n>, the ops' opacity as autoAlpha, so a hidden segment is not
+// painted), with one fixed vignette over the stack.
+function worldBackdropStack(backdrops, bg) {
+  const html = [], motion = [];
+  for (const segment of backdrops.segments) {
+    const id = `lc-wb-${segment.index}`;
+    const c = segment.canvas;
+    const mask = segment.mask ? `;-webkit-mask-image:${segment.mask};mask-image:${segment.mask};-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat` : '';
+    const layers = segment.layers.map((layer) => `<div id="${id}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, segment.from)}">${layerSvg(layer) ?? ''}</div>`).join('');
+    const canvas = segment.plan ? `<div class="lc-wb-canvas" style="left:${num(c.x)}px;top:${num(c.y)}px;width:${num(c.width)}px;height:${num(c.height)}px;background:${bg}${mask}">${layers}</div>` : '';
+    html.push(`<div id="${id}" class="lc-wb" data-launchclip-backdrop="${attr(segment.kind)}" style="${segment.index === 0 ? '' : 'opacity:0;visibility:hidden'}"><div id="${id}-move" class="lc-wb-move">${canvas}</div></div>`);
+    for (const layer of segment.layers) {
+      motion.push(...layerTweens(layer, segment.from, segment.to).map((tw) => `tl.fromTo(${js(`#${id}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    }
+  }
+  // Ops: {x, y} move the canvas, opacity shows the segment (autoAlpha).
+  for (const op of backdrops.ops) {
+    const id = `#lc-wb-${op.target.slice('backdrop-'.length)}`;
+    const split = (props) => {
+      const move = {}, show = {};
+      for (const [key, value] of Object.entries(props)) (key === 'opacity' ? show : move)[key === 'opacity' ? 'autoAlpha' : key] = value;
+      return { move, show };
+    };
+    if (op.type === 'set') {
+      const { move, show } = split(op.props);
+      if (Object.keys(move).length) motion.push(`tl.set(${js(`${id}-move`)}, ${js({ ...move, force3D: false })}, ${num(op.time)});`);
+      if (Object.keys(show).length) motion.push(`tl.set(${js(id)}, ${js(show)}, ${num(op.time)});`);
+    } else {
+      const from = split(op.from), to = split(op.to);
+      const timing = { duration: round(op.duration, 6), ease: op.ease, immediateRender: false };
+      if (Object.keys(to.move).length) motion.push(`tl.fromTo(${js(`${id}-move`)}, ${js({ ...from.move, force3D: false })}, ${js({ ...to.move, ...timing, force3D: false })}, ${num(op.start)});`);
+      if (Object.keys(to.show).length) motion.push(`tl.fromTo(${js(id)}, ${js(from.show)}, ${js({ ...to.show, ...timing })}, ${num(op.start)});`);
+    }
+  }
+  const vignette = backdrops.vignette ? `<div class="lc-bg-layer lc-wb-vignette" style="${layerCss(backdrops.vignette, 0)}"></div>` : '';
+  return { html: `<div id="lc-wb" class="lc-wb-stack" aria-hidden="true">${html.join('')}${vignette}</div>`, motion };
+}
+
+function cameraMarkup(plan, brand, plates, field = '', glowing = true, backdrops = '') {
   const parts = [];
   if (plan.background) {
     // The depth layer (world mode): ambient motion's background field tiled
@@ -597,6 +648,7 @@ function cameraMarkup(plan, brand, plates, field = '', glowing = true) {
     const glows = field || !glowing ? [] : backgroundLayer(plan, brand).glows;
     parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}${field}</div>`);
   }
+  if (backdrops) parts.push(backdrops);
   const defs = plan.blurSamples.length ? '<svg class="lc-cam-defs" width="0" height="0" aria-hidden="true"><defs><filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur id="lc-cam-blur-k" in="SourceGraphic" stdDeviation="0 0"></feGaussianBlur></filter></defs></svg>' : '';
   parts.push(`${defs}<div id="lc-camera" class="lc-camera" data-launchclip-camera="${plan.mode}"><div id="lc-cam-drift" class="lc-cam"><div id="lc-cam-zoom" class="lc-cam"><div id="lc-cam-pan" class="lc-cam">${plates.join('')}</div></div></div></div>`);
   return parts.join('\n    ');
@@ -610,6 +662,7 @@ function cameraCss(plan, W, H) {
     `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`
   ];
   if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }', '.lc-scene.lc-world-plate { overflow: visible; }');
+  if (plan.mode === 'world') rules.push(`.lc-wb-stack, .lc-wb, .lc-wb-move { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; }`, '.lc-wb-stack, .lc-wb { overflow: hidden; }', '.lc-wb-canvas { position: absolute; overflow: hidden; }');
   if (plan.background) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }', `.lc-world-field, .lc-world-tile { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: visible; pointer-events: none; }`);
   return rules.join('\n    ');
 }

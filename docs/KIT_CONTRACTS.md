@@ -1378,30 +1378,57 @@ and `./panels.mjs`.
 | `silk` | folded ribbons between wandering curves, shaded dark → lit fold → dark, laid diagonally, over a softer far bank | neutral |
 | `strands` | double helices of glossy beads joined by rungs: one in focus, one faint far, one huge and soft near | primary |
 | `bokeh` | a starfield: pinpoints far, soft ringed discs mid and near | primary |
+| `starfield` | deep space: crisp dust and stars at two depths, a faint nebula of the tint and accent far behind, and a few bright stars with a halo and a thin cross flare; slow drift | neutral |
+| `smoke` | grey, low-saturation wisps: billows far, a bank of thin wisps in focus, a soft near bank (the tint pulled 80% to a grey of its lightness) | neutral |
+| `wash` | a bright, opaque full-frame gradient in the tint (light upper left, deeper lower right) with two drifting highlights and a slow sheen: a punctuation shot | primary |
+| `image` | a still from the project (`params.src`), cover-fit, blurred inside its SVG past every edge, under a `bg` dim, with a slow push and drift | neutral |
 
 Params: `focus` 0–1 (how out of focus; 0.6), `intensity` 0–1 (0.5), `speed`
 0–2 (1), `depth` 0–1 (parallax spread; 0.5) and `tint` (`neutral` is paper,
 a silver on a dark style; `primary`; `accent`). Each plate is an atmosphere
 lift, two or three depth layers (far: most blur, least travel; subject: the
-plate's focus; near: large and very soft, travelling most) and a vignette.
+plate's focus; near: large and very soft, travelling most) and a vignette
+(marked `fixed`: it stays on the canvas when a renderer moves the plate).
+`image` also takes `src` (required: a project-relative `.png`, `.jpg`,
+`.webp` or `.avif`, no URL, leading `/` or `..`; HyperFrames loads it from the
+copied `assets/`, Remotion through `staticFile`), `blur` (px at 1080p, 0–80;
+24) and `dim` (0–1, how much `bg` covers it; 0.55). `platePlan(story, spec,
+{frame})` draws a plate over a wider canvas-px rect than the screen with the
+same density per screen (world backdrops use it).
 Every axis is an ambient wave of absolute time, so any seek gives the same
 pixels; the ambient level scales the speed and `off` stills it.
 
 **Where the plate comes from** (`scenePlateSpec`, first match wins):
-`scenes[i].plate` (a kind, `{kind, params?}`, or `"none"` for the story's
-background), then `chapters[j].plate` for the chapter the scene starts in,
-then `story.plate`; with `story.plate.cycle: true`, chapter j takes
-`PLATE_KINDS[(k + j) % 4]` (k the story kind's index). A plate replaces
-`story.background` on the scenes it covers. No plate is drawn when
-`ambient.background` is false for the story or scene, or on a footage-led
-story. One plan is memoised per story and plate, so a cut inside a chapter
-shows the same drifting pixels on both sides. In `camera.mode` "world" the
-story's own plate is the camera's one backdrop.
+`scenes[i].backdrop` (a kind, `{kind, params?}`, or `"none"` for the story's
+background), `scenes[i].plate` (the same, the older name), then
+`chapters[j].plate` for the chapter the scene starts in, then `story.plate`
+with its `cycle`:
 
-**Contrast.** Every colour a layer lays is clamped (`safeAlpha`) on every
-tone laid before it, so paper text keeps 4.5:1 anywhere on the plate, on dark
-and light palettes. Pinpoints finer than a letter's stroke (the bokeh's far
-stars) are clamped but add no tone.
+| `cycle` | Effect |
+|---|---|
+| `true` | chapter j takes `CYCLE_KINDS[(k + j) % 4]` (the four original kinds; k the story kind's index) |
+| `{every: n, plates?}` | every n shots (track-0 scenes, in start order) the next plate of `plates` (1–12 kinds or `{kind, params}`; default `ROTATION_KINDS`, every dark kind), starting from the story's plate when it is in the list, else after it. A kind name takes the story plate's focus, intensity, speed and depth with its own tint (or the story's tint when it names one) |
+
+```json
+{ "plate": { "kind": "smoke", "cycle": { "every": 3, "plates": ["smoke", "starfield", { "kind": "wash", "params": { "intensity": 0.8 } }] } } }
+```
+
+A plate replaces `story.background` on the scenes it covers. No plate is
+drawn when `ambient.background` is false for the story or scene, or on a
+footage-led story. One plan is memoised per story, plate and frame, so a cut
+inside a chapter shows the same drifting pixels on both sides. In
+`camera.mode` "world" the same per-scene plates are the camera's backdrops;
+see [World backdrops](#world-backdrops-kitcoreworld-backdropsmjs).
+
+**Contrast.** Every colour a dark kind (`DARK_PLATE_KINDS`: all but `wash`
+and `image`) lays is clamped (`safeAlpha`) on every tone laid before it, so
+paper text keeps 4.5:1 anywhere on the plate, on dark and light palettes.
+Pinpoints finer than a letter's stroke (the bokeh's far stars, the
+starfield's dust and star cores) are clamped but add no tone. A `wash` is
+bright by design and an `image`'s pixels are unknown: their `tones` are what
+they lay (the wash's gradient; white and black under the image's dim), and
+finish's caption check backs captions where they need it. Put a card with its
+own panel, or ink text, on a wash.
 
 A style pack's `plate` fills a story that has none (`applyStyle`), checked by
 `plateErrors`; `validateStory` checks the story, chapter and scene values
@@ -1416,6 +1443,64 @@ over one drifting plate, with the watermark. Parity: `plate-<kind>` (each
 kind on the minimal story with rim-glass panels) and `plate-glass-example`
 in `test/fixtures/parity-backgrounds/`, run by
 `node scripts/parity-backgrounds.mjs --only plate-…`.
+
+## World backdrops (`kit/core/world-backdrops.mjs`)
+
+In `camera.mode` "world" the backdrop changes with the camera, the way an
+open-world explainer moves through regions: every track-0 shot has a plate
+(`scenePlateSpec` above) or none, and each run of shots on the same plate is
+one segment. Shared by both renderers; imports only `./plates.mjs`.
+
+```js
+export const BACKDROP_FEATHER = 0.15; // the sliding edge's feather, × the long side
+export const WORLD_VIGNETTE = 0.4;
+export function worldBackdrops(story, plan, windows)
+// plan: cameraPlan(story, {windows}); windows: sceneWindows(story) (riders joined)
+// → null (cuts mode, or no shot has a plate) |
+//   {feather, vignette, segments: [{index, target, spec, kind, shot, start, from, to,
+//     entry: {type, start, duration, ease?, side?}, canvas, mask, layers, plan}], ops}
+```
+
+- **Change with the move.** Into a new segment, a pan, whip-pan or orbit
+  slides the new backdrop in from the side the camera travels toward (`side`:
+  the depth layer's dominant travel axis), its feathered leading edge first,
+  over the move with the move's ease; push and pull (or a move with no
+  sideways travel) crossfade over the move; a scene with no camera move
+  crossfades it over its own transition (a `fade`, say) or changes it on a
+  cut. The outgoing backdrop stays under it and is hidden
+  when the move ends. The loop ending's clone continues the loop scene's
+  plate.
+- **Parallax.** A backdrop follows the camera's background depth layer
+  (`backgroundKeys`: 0.3× the plates with parallax, 1× without; translation
+  only), anchored so it frames the screen where its segment settles. Its plate
+  is drawn with `platePlan(..., {frame})` over every part of itself the
+  camera shows across the segment, plus the feather, so no edge comes on
+  screen, including a back ease's overshoot.
+- **Stacking.** Over `#lc-world-bg`, under the camera: each segment is an
+  opaque canvas (`bg` under the plate's layers, the feather `mask` on its
+  leading edge) inside a mover inside the segment, later segments on top, and
+  one fixed vignette (0.4) over the stack instead of one per plate, so edges
+  do not double up mid-slide. Where a segment has no plate, the story's
+  background kind (fixed in `#lc-bg`) or the depth layer's field and glows
+  show; when every segment has one, neither is drawn.
+- **Ops** (renderer-neutral, as `cameraOps`): target `backdrop-<n>`, props
+  `{x, y, opacity}`: a set at 0 (shown for the first segment, hidden for the
+  rest), the entry (a slide tween of x / y with a set of opacity 1, a fade
+  tween of x / y / opacity, or a set on the cut), a tween per later move that
+  starts while it shows (the depth layer's travel relative to its anchor),
+  and a hide at the next segment's entry end. HyperFrames (`#lc-wb`) plays
+  x / y on `#lc-wb-<n>-move` and opacity as `autoAlpha` on `#lc-wb-<n>` (a
+  hidden segment is not painted), with each layer's drift tweened over the
+  segment's own window; Remotion (`WorldBackdrops` in `CameraWorld`)
+  evaluates `opsStateAt` per frame and skips hidden segments.
+
+`test/world_backdrops.test.js` checks the entry per move type, that the
+backdrops cover the screen on every frame (mid-move too), the parallax
+follow, chapters and `backdrop` in world mode, and that the GSAP calls seek
+to the ops' values. Parity: `plate-starfield`, `plate-smoke`, `plate-wash`,
+`plate-image` (fixture `files` may copy a binary with `{from}`) and
+`world-backdrops` (a starfield, then a pan's slide into a wash caught
+mid-move) in `test/fixtures/parity-backgrounds/`.
 
 ## Medium (`kit/core/medium.mjs`)
 
