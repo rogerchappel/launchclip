@@ -37,6 +37,8 @@ const MAX_COLUMNS = 43;
 const RUNS_ON = new Set(['that', 'which', 'who', 'to', 'into', 'over', 'from', 'by', 'across', 'per', 'than', 'is', 'are', 'was', 'were', 'has', 'had', 'uses', 'used', 'called']);
 const FILLER = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'for', 'with']);
 const MEASURES = new Set(['times', 'dollars', 'euros', 'pounds', 'hours', 'minutes', 'seconds', 'days', 'weeks', 'months', 'years', 'percent', 'gigawatt', 'megawatt', 'kilowatt', 'miles', 'kilometres', 'kilometers', 'pages']);
+// Words too vague to be the one word on screen.
+const WEAK = new Set(['those', 'these', 'see', 'lot', 'lots', 'rest', 'version', 'model', 'models', 'thing', 'part', 'kind', 'make', 'made', 'take', 'get', 'got', 'said', 'says', 'like', 'well', 'really', 'actually', 'change', 'number', 'first', 'second', 'third', 'next', 'last', 'other', 'another', 'where', 'while', 'there', 'their', 'chapter']);
 // The fact extractor's scale words, written compact.
 const COMPACT = { thousand: 'K', k: 'K', million: 'M', m: 'M', billion: 'B', bn: 'B', b: 'B', trillion: 'T', t: 'T' };
 
@@ -56,6 +58,9 @@ export function particlesBuilders(h) {
     const columns = [...value].reduce((sum, ch) => sum + (ch === ' ' ? 3 : /[.,:!']/.test(ch) ? 2 : 6), 0) - 1;
     return columns <= MAX_COLUMNS ? value : null;
   };
+
+  // A bare single digit ("Halcyon 2", "step 3") is a name or an ordinal more often than a figure.
+  const bare = (entry) => !entry.unit && !entry.prefix && Number.isInteger(entry.value) && entry.value < 10;
 
   // A number as particle text: a scaled figure compact ("3.2 billion" → "3.2B").
   const figure = (entry) => (COMPACT[entry.unit] ? `${entry.prefix ?? ''}${entry.value}${COMPACT[entry.unit]}` : h.formatValue(entry));
@@ -96,6 +101,21 @@ export function particlesBuilders(h) {
     return best;
   };
 
+  // The word worth assembling from particles: a name in the clause (written
+  // capitalised mid-sentence: HALCYON, FINNISH), else on a title beat its
+  // longest content word. Filler ("those", "lot") is never the word; null
+  // when there is none, and the director picks another module.
+  const keyWordOf = (beat) => {
+    const text = String(beat.text ?? '');
+    const named = (term) => new RegExp(`(?<![.!?]\\s|^)\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text) && /^\p{Lu}/u.test(term);
+    const terms = [...h.keyTerms(beat.headline), ...h.keyTerms(text)].filter((term, i, all) => all.findIndex((t) => t.toLowerCase() === term.toLowerCase()) === i && !WEAK.has(term.toLowerCase()) && matrix(term));
+    const name = terms.find(named);
+    if (name) return matrix(name);
+    if (beat.kind !== 'title') return null;
+    const longest = h.keyTerms(beat.headline).filter((term) => term.length >= 5 && !WEAK.has(term.toLowerCase()) && matrix(term)).sort((x, y) => y.length - x.length)[0];
+    return longest ? matrix(longest) : null;
+  };
+
   // The tokenizer's split: {text, tokens, models} that joins back to its text.
   const splitOf = (beat) => {
     const data = beat.evidence?.data?.tokens;
@@ -120,12 +140,12 @@ export function particlesBuilders(h) {
       },
       // The clause's key number ("60%", "$3.2B"), else its key word, assembling from particles.
       'particle-text': (beat) => {
-        const number = h.numbersOf(beat).filter((entry) => whole(beat, entry)).map((entry) => ({ entry, text: matrix(figure(entry)) })).find((n) => n.text);
+        const number = h.numbersOf(beat).filter((entry) => whole(beat, entry) && !bare(entry)).map((entry) => ({ entry, text: matrix(figure(entry)) })).find((n) => n.text);
         if (number) {
           const sub = number.entry.label ?? beat.label ?? beat.headline;
           return { text: number.text, ...(beat.kicker ? { kicker: h.clip(beat.kicker, 40) } : {}), ...(sub ? { sub: h.clip(sub, 60) } : {}), mode: 'assemble' };
         }
-        const word = h.keyTerms(beat.headline).map(matrix).find(Boolean);
+        const word = keyWordOf(beat);
         if (!word) return null;
         const sub = beat.sub ?? (beat.headline.toUpperCase() !== word ? beat.headline : null);
         return { text: word, ...(beat.kicker ? { kicker: h.clip(beat.kicker, 40) } : {}), ...(sub ? { sub: h.clip(sub, 60) } : {}), mode: 'assemble' };

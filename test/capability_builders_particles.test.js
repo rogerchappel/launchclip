@@ -50,14 +50,19 @@ test("particle-text: the key number, else the key word, in the dot-matrix face",
   const money = capabilityParams("particle-text", beat("Training cost $3.2 billion in total."));
   assert.equal(money.text, "$3.2B", "a scaled figure is written compact");
   // "$3.2B" reads as $3.2 to the fact extractor: never shown cut short.
-  assert.equal(capabilityParams("particle-text", beat("Training cost $3.2B.", { headline: "Training cost" })).text, "COST", "TRAINING is too wide for 9:16; the next key term");
+  assert.equal(capabilityParams("particle-text", beat("Training cost $3.2B.", { headline: "Training costs", kind: "title" })).text, "COSTS", "TRAINING is too wide for 9:16; the longest that fits");
   resolves("particle-text", money);
-  const word = capabilityParams("particle-text", beat("What changes when the agents arrive.", { headline: "Agents arrive" }));
+  const word = capabilityParams("particle-text", beat("What changes when the agents arrive.", { headline: "Agents arrive", kind: "title" }));
   assert.equal(word.text, "AGENTS");
   assert.equal(word.sub, "Agents arrive");
   resolves("particle-text", word);
+  // A name in the clause, else nothing: filler is never the word, and a bare digit is a name, not a figure.
+  assert.equal(capabilityParams("particle-text", beat("Halcyon 2 will land hard on the market.", { headline: "Halcyon lands hard", kind: "concept" })), null, "a name at the start of a sentence is not told from a capital");
+  assert.equal(capabilityParams("particle-text", beat("The new Halcyon model will land hard.", { headline: "Lands hard", kind: "concept" })).text, "HALCYON");
+  assert.equal(capabilityParams("particle-text", beat("Those big jumps are rare.", { headline: "Those big jumps", kind: "concept" })), null);
+  assert.equal(capabilityParams("particle-text", beat("Why this release matters", { headline: "Why this release matters", kind: "title", kicker: "Chapter 2" })).text, "RELEASE");
   // Too wide for 9:16 at a readable size: the next drawable thing, else nothing.
-  assert.equal(capabilityParams("particle-text", beat("Read 1,234,567,890 rows.", { headline: "Rows" })).text, "ROWS");
+  assert.equal(capabilityParams("particle-text", beat("Read 1,234,567,890 rows.", { headline: "Rows scanned", kind: "title" })).text, "SCANNED");
   // A word the face cannot draw is skipped, and nothing drawable means no params.
   assert.equal(capabilityParams("particle-text", beat("Café über naïve.", { headline: "Café über naïve" })), null);
 });
