@@ -1462,6 +1462,26 @@ params:
 events: build, range-0, range-1, range-2, marker
 variants: ruler (default), track
 
+### glass-bars-3d (keeps captions)
+Extruded glass bars in 3D under a slow orbiting camera: 2–6 values grow in with count-up labels, one bar can glow while the rest drop back, with an optional dashed reference ("half"). The staircase variant lines them up as descending glass steps, price and name on each front face, with a score marker that hops between steps on cue.
+params:
+- data: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value, "$0.50")}] 2–6; for the staircase list them highest first (step heights follow the rank)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the bar that glows (optional)
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- marker: staircase only: {text ≤ 12 ("59.3%"), label? ≤ 24, steps: [index or label] 1–4 (the steps it visits, in order), at?: [seconds]} (events marker-<k>)
+- reference: bars only: {value, label? ≤ 12} a dashed level across the bars ("half")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- highlightTone: the lit bar's tone (default primary)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight, marker-0, marker-1, marker-2, marker-3
+variants: bars (default), staircase
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1603,6 +1623,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| glass-bars-3d | 2 s | 0.5 s | scene − 0.65 s | bars grow left to right within about 1.6 s from at; highlight and marker hops follow the build; the camera orbits for the whole scene |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
