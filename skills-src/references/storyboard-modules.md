@@ -1462,6 +1462,79 @@ params:
 events: build, range-0, range-1, range-2, marker
 variants: ruler (default), track
 
+### social-post (keeps captions)
+A real social post (X, Threads, Bluesky, LinkedIn, Reddit or generic) as a high-fidelity card: avatar, name and tick, handle, body with coloured mentions and links, optional media, quoted post, "Replying to" and "Translated from" lines, time · date · views and the engagement row, with a small source line under it. It rises in, can sweep a highlight across a phrase on a word cue, then step forward into focus.
+params:
+- platform: x | threads | bluesky | linkedin | reddit | generic (default x)
+- name: display name ≤ 50, as on the post
+- handle: handle ≤ 40, with or without @ (u/ on Reddit); optional on LinkedIn
+- verified: true | "blue" | "gold" | "gray": the tick (optional)
+- avatar: assets/… the author's avatar from the capture (optional; else initials)
+- text: the post's words ≤ 600, verbatim (an excerpt marks cuts with …); @mentions, #tags and links are coloured
+- media: {image: assets/…, layout?: "below" | "side", aspect? w/h} the attached image (optional)
+- quote: {name, handle?, verified?, avatar?, text ≤ 280, date?} a quoted post (optional)
+- replyingTo: handle: a "Replying to @…" line (optional)
+- translatedFrom: language: a "Translated from …" tag (optional)
+- time: "6:06 AM" (optional)
+- date: "Oct 25, 2026" (optional)
+- ago: "2h": the relative time on Threads, Bluesky, LinkedIn and Reddit (optional)
+- metrics: {replies?, reposts?, likes?, bookmarks?, views?}: numbers (shown as 1.2K) or strings as on the post
+- title: Reddit post title ≤ 140
+- community: Reddit subreddit (required on Reddit)
+- headline: LinkedIn author headline ≤ 60
+- source: {url, captured_at?, screenshot? (assets/…), schema? "launchclip.capture.v1"}: where the post lives (validation warns without url; a small source line always shows)
+- demo: true marks a fictional demo account for tests and samples (handle must say "demo" or "example"; no source.url)
+- highlight: a phrase of text (whole words), or [{text, at?}] 1–3: a highlight sweeps across it (events highlight, highlight-2, highlight-3; time it to a word with a scene hit)
+- focus: true: the card steps forward with a rim glow after the highlight (event focus)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- at: card build: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight, highlight-2, highlight-3, focus
+variants: glass (default), native, light
+
+### social-stack (keeps captions)
+2–5 real posts cascading in, one after another: the focused one lands in front with a rim glow while the others step back, blurred and dimmed (cascade), or a vertical list whose focused card steps forward (list). The focused post can sweep a highlight across a phrase.
+params:
+- posts: [post] each a social-post's post fields (platform, name, handle, verified, avatar, text, media, quote, time, date, metrics, source, demo…) 2–5
+- focus: index of the post in front (default the last)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- highlight: a phrase of the focused post, or [{text, at?}] 1–3 (events highlight, highlight-2, highlight-3)
+- look: glass | native | light: the cards' look (default glass)
+- stagger: seconds between cards (0.15–1.2, default 0.45)
+- at: first card: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus, highlight, highlight-2, highlight-3
+variants: cascade (default), list
+
+### social-sort (keeps captions)
+2–6 real posts pile up in the middle, then fly into 2–3 labelled columns ("Can't wait" / "Tired"): side by side in 16:9, stacked bands in 9:16, with dashed dividers.
+params:
+- posts: [post] each a social-post's post fields (platform, name, handle, verified, avatar, text, media, quote, time, date, metrics, source, demo…) 2–6, each with column (index into columns)
+- columns: [label ≤ 24 | {label, tone? (primary | accent | paper | #rrggbb)}] 2–3
+- sortAt: the sort: seconds from scene start (optional; else a matching hit, else a default)
+- look: glass | native | light: the cards' look (default glass)
+- at: first card: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, sort
+
+### social-wall (keeps captions)
+A wall of real posts in depth: many cards drift with parallax across the frame, smaller and blurrier further back, among soft bokeh orbs; then one or two are pulled forward, sharp and in focus, while the field dims. The first pulled post can sweep a highlight across a phrase.
+params:
+- posts: [post] each a social-post's post fields (platform, name, handle, verified, avatar, text, media, quote, time, date, metrics, source, demo…) 2–16 (the field repeats them)
+- focus: index or [index, index]: the post(s) pulled forward (default 0)
+- pullAt: the pull: seconds from scene start (optional; else a matching hit, else a default)
+- highlight: a phrase of the first pulled post, or [{text, at?}] 1–3 (events highlight…)
+- tiles: cards in the field, 6–24 (default 18)
+- drift: "left" | "right" | "up" | "down" (default left)
+- look: glass | native | light: the cards' look (default glass)
+- at: field build: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, pull, highlight, highlight-2, highlight-3
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1603,6 +1676,10 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| social-post | 2 s | 0.5 s | scene − 0.65 s | the card builds in about 0.9 s from at (default 0.2 s); the highlight sweeps 0.45–1.4 s across the phrase (default 0.35 s after the build); focus follows the highlight by 0.4 s |
+| social-stack | 2 s | 0.5 s | scene − 0.65 s | cards land stagger s apart from at (default 0.2 s, 0.45 s apart); focus follows the last card; the highlight 0.5 s after the focus |
+| social-sort | 2 s | 0.5 s | scene − 0.65 s | cards pile in 0.3 s apart from at (default 0.2 s); the sort follows the pile by 0.5 s; cards fly 0.14 s apart |
+| social-wall | 2 s | 0.5 s | scene − 0.65 s | the field fades in over about 1.4 s from at (default 0 s) and drifts for the whole scene; the pull follows the build by 0.6 s and takes 1.1 s; the highlight 1.2 s after the pull |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
