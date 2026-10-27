@@ -112,15 +112,21 @@ export function htmlToText(html) {
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<(?:td|th)[^>]*>/gi, " | ")
     .replace(/<\/(?:p|div|li|h[1-6]|tr|table|section|article|header|footer|blockquote|pre|br)\s*>|<br\s*\/?>/gi, "\n")
+    // Inline tags join their text the way the page shows it ("GPT-6.1 <a>Sol</a>." is "GPT-6.1 Sol."), so a highlight target matches the DOM.
+    .replace(/<\/?(?:a|span|strong|em|b|i|u|code|mark|small|sup|sub|abbr|time|cite|q|s)\b[^>]*>/gi, "")
     .replace(/<[^>]+>/g, " "))
     .split("\n").map((line) => line.replace(/[ \t ]+/g, " ").trim()).filter(Boolean).join("\n");
-  return { text, title, publisher: meta("og:site_name"), published_at: published ? isoDate(published) : null };
+  // A page that renders in script (an X post) carries its text in og:description.
+  const description = meta("og:description");
+  const body = description && text.length < 500 && !text.includes(description) ? `${description}\n${text}`.trim() : text;
+  return { text: body, title, publisher: meta("og:site_name"), published_at: published ? isoDate(published) : null };
 }
 
 export function decodeEntities(text) {
   return String(text)
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"").replace(/&#39;|&apos;|&#x27;/g, "'")
+    .replace(/&rsquo;|&lsquo;/g, "’").replace(/&ldquo;/g, "“").replace(/&rdquo;/g, "”").replace(/&mdash;/g, "—").replace(/&ndash;/g, "–").replace(/&hellip;/g, "…").replace(/&middot;/g, "·")
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
 }

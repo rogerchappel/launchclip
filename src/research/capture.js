@@ -8,6 +8,8 @@ import { safeHost } from "./http.js";
 export const CAPTURE_VIEWPORT = Object.freeze({ width: 1600, height: 1000 });
 const MAX_BEATS_PER_CLAIM = 3;
 const MAX_CLAIMS_PER_CAPTURE = 3;
+// Short spans stay inside one element of the page; a long one crosses links and cells and is not found.
+const MAX_SPAN_WORDS = 8;
 
 /** ledger → {requests[], byClaim: {claimId: captureId}} */
 export function buildCaptureRequests(ledger, options = {}) {
@@ -83,20 +85,24 @@ export function beatsFor(claim, quote) {
 
 /**
  * The words to highlight: the whole passage when it is short, else the
- * stretch of up to ~14 words around the claim's first anchor (a number, a
- * date, an entity), cut on word boundaries so the page can find it verbatim.
+ * stretch of up to eight words around the claim's first anchor (a number, a
+ * date, an entity), cut on word boundaries and inside one table cell, so the
+ * page can find it verbatim.
  */
 export function highlightSpan(claim, text) {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= 16) return text;
   const anchors = [
     ...(claim.values ?? []).map((value) => String(value.raw).split(/\s/)[0]),
     ...(claim.entities ?? []).map((entity) => entity.name.split(/\s/)[0])
-  ].map((anchor) => anchor.toLowerCase());
+  ].map((anchor) => anchor.toLowerCase()).filter(Boolean);
+  // A row of an HTML table flattened to "a | b | c": the target is the one cell holding the anchor (a page never shows the pipes).
+  const pieces = text.split(/\s+\|\s+/).map((piece) => piece.trim()).filter(Boolean);
+  const scoped = pieces.length > 1 ? pieces.find((piece) => anchors.some((anchor) => piece.toLowerCase().includes(anchor))) ?? pieces[0] : text;
+  const words = scoped.split(/\s+/).filter(Boolean);
+  if (words.length <= MAX_SPAN_WORDS) return scoped.replace(/[,;:]$/, "");
   let index = words.findIndex((word) => anchors.some((anchor) => word.toLowerCase().includes(anchor)));
   if (index < 0) index = 0;
-  const start = Math.max(0, index - 5);
-  return words.slice(start, start + 14).join(" ").replace(/[,;:]$/, "");
+  const start = Math.max(0, Math.min(index - 3, words.length - MAX_SPAN_WORDS));
+  return words.slice(start, start + MAX_SPAN_WORDS).join(" ").replace(/[,;:.]$/, "");
 }
 
 /** Markdown and table syntax out, so the target matches the rendered page's text. */

@@ -150,3 +150,8 @@ test("openrouter.ai is not OpenAI's own domain", () => {
   assert.equal(classifyUrl("https://openrouter.ai/openai/gpt-6.1-terra", ["OpenAI"]).primary, false);
   assert.equal(classifyUrl("https://openai.com/index/introducing-gpt-6-1-terra/", ["OpenAI"]).primary, true);
 });
+
+test("found on the Terra run: page text joins inline tags and decodes named entities; a script-rendered post keeps og:description", () => {
+  const page = htmlToText("<html><head><meta property=\"og:description\" content=\"Terra is back!\"></head><body><p>The model moved to GPT-6.1 <a href=\"#\">Sol</a>. OpenAI&rsquo;s newest model.</p></body></html>");
+  assert.equal(page.text, "Terra is back!\nThe model moved to GPT-6.1 Sol. OpenAI’s newest model.");
+});

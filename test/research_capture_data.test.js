@@ -87,3 +87,10 @@ test("a claim verified only by API facts is checked but never captured", () => {
   const ledger = { claims: [{ id: "c001", status: "verified", text: "Nimbus-7B was released on October 20, 2026.", values: [], entities: [], sources: [{ url: SOURCE.url, title: SOURCE.title, publisher: SOURCE.publisher, fetched_at: SOURCE.fetched_at, primary: true, supports: true, confidence: 0.9, kind: "model-card", quote: { text: "Hugging Face API: Model: nimbus-ai/Nimbus-7B; Created: 2026-10-20T10:00:00.000Z.", start: 0, end: 10 } }] }] };
   assert.deepEqual(buildCaptureRequests(ledger).requests, []);
 });
+
+test("found on the Terra run: highlight spans stay short and inside one table cell", () => {
+  assert.equal(highlightSpan({ values: [], entities: [{ name: "Claude Opus 5.5" }] }, "A Anthropic | Anthropic: Claude Opus 5.5 | 2026-09-22 | 58 Intelligence"), "Anthropic: Claude Opus 5.5");
+  const span = highlightSpan({ values: [{ raw: "50.3%" }], entities: [] }, "On Terminal-Bench 4.0 at max effort Terra solves 50.3% of tasks against GPT-5.6 Terra's published 21.5% score.");
+  assert.ok(span.includes("50.3%"));
+  assert.ok(span.split(" ").length <= 8);
+});
