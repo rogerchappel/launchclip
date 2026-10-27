@@ -36,6 +36,8 @@
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
 export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card']);
+/** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
+export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
 
 /** Whether a transition moves the world camera (push only in world mode). */
@@ -47,9 +49,11 @@ export function isCameraTransition(transition, mode = 'cuts') {
 /**
  * Identity state of a scene layer. iris: null = no clip; wipeT/R/B/L: percent
  * insets of a straight-edged clip (null = none); glow: extra brightness (0 =
- * none, 0.8 = brightness(1.8)).
+ * none, 0.8 = brightness(1.8)); rackIn: a rack-focus card arriving, 1 → 0
+ * (blur(RACK.blurIn × v) brightness(1 + RACK.lift × v) in one filter, so the
+ * two never overwrite each other in GSAP).
  */
-export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0 });
+export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0, rackIn: 0 });
 const WIPE_PROPS = ['wipeT', 'wipeR', 'wipeB', 'wipeL'];
 
 const EPS = 1e-6;
@@ -77,7 +81,9 @@ export function sceneLeadIn(scene, fps = 30) {
 }
 
 // rack-focus: blur (px) and scale of the card racked out of focus.
-const RACK = Object.freeze({ blurIn: 18, scaleIn: 1.04, blurOut: 16, scaleOut: 0.95 });
+// The change lands in its first frames (expo.out), so a viewer and a scene
+// detector both read it as an event.
+const RACK = Object.freeze({ blurIn: 22, scaleIn: 1.08, blurOut: 26, scaleOut: 0.9, lift: 0.45 });
 // glow-wipe: peak extra brightness at the wipe edge.
 const GLOW_WIPE = 0.85;
 
@@ -156,9 +162,10 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     case 'rack-focus':
       // The outgoing card blurs back into the plate while the incoming one
       // sharpens forward: depth of field racks from one to the other.
+      // Both cards move at once and most of the move lands in the first frames.
       return { type, duration: d,
-        in: [t('blur', RACK.blurIn, 0, 'power2.out'), t('scale', RACK.scaleIn, 1, 'power3.out'), t('opacity', 0, 1, 'power1.inOut', 0, d * 0.7)],
-        out: [t('blur', 0, RACK.blurOut, 'power2.in'), t('scale', 1, RACK.scaleOut, 'power2.inOut'), t('opacity', 1, 0, 'power1.in', d * 0.25, d * 0.75)] };
+        in: [t('rackIn', 1, 0, 'expo.out'), t('scale', RACK.scaleIn, 1, 'expo.out'), t('opacity', 0, 1, 'expo.out', 0, d * 0.6)],
+        out: [t('blur', 0, RACK.blurOut, 'expo.out'), t('scale', 1, RACK.scaleOut, 'expo.out'), t('opacity', 1, 0, 'power2.out', d * 0.2, d * 0.8)] };
     case 'glow-wipe': {
       // Chapter break: a straight wipe in the travel direction, with the
       // frame flaring bright at the edge and settling as the new plate lands.
@@ -212,11 +219,17 @@ export function layerStyle(state) {
   if (state.x || state.y || state.scale !== 1) style.transform = `translate(${round(state.x)}px, ${round(state.y)}px) scale(${round(state.scale, 5)})`;
   const filters = [];
   if (state.blur > 0.001) filters.push(`blur(${round(state.blur, 3)}px)`);
+  if (state.rackIn > 0.0001) filters.push(...rackFilter(state.rackIn));
   if (state.glow > 0.001) filters.push(`brightness(${round(1 + state.glow, 4)})`);
   if (filters.length) style.filter = filters.join(' ');
   if (state.iris !== null && state.iris !== undefined) style.clipPath = `circle(${round(state.iris, 2)}px at 50% 50%)`;
   else if (WIPE_PROPS.some((prop) => state[prop] !== null && state[prop] !== undefined)) style.clipPath = wipeCss(state);
   return style;
+}
+
+/** A rack-focus arrival at v (1 → 0): its blur and its exposure lift, as filter functions. */
+export function rackFilter(v) {
+  return [`blur(${round(RACK.blurIn * v, 3)}px)`, `brightness(${round(1 + RACK.lift * v, 4)})`];
 }
 
 /** A wipe state → CSS inset() (unset edges are 0 %). */
@@ -230,6 +243,7 @@ export function gsapVars(prop, value) {
   if (prop === 'blur') return { filter: `blur(${round(value, 3)}px)` };
   if (prop === 'iris') return { clipPath: `circle(${round(value, 2)}px at 50% 50%)` };
   if (prop === 'glow') return { filter: `brightness(${round(1 + value, 4)})` };
+  if (prop === 'rackIn') return { filter: rackFilter(value).join(' ') };
   if (WIPE_PROPS.includes(prop)) return { clipPath: wipeCss({ [prop]: value }) };
   return { [prop]: value };
 }
