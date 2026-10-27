@@ -5,8 +5,10 @@
 //
 //   data       catalog-i-data.mjs (race-bars, small-multiples)
 //   calendars  catalog-i-calendar.mjs (date-carousel, month-grid)
+//   people     catalog-i-people.mjs (person-id, lineage-graph)
 
 import {DATA_I} from './catalog-i-data.mjs';
 import {CALENDARS} from './catalog-i-calendar.mjs';
+import {PEOPLE} from './catalog-i-people.mjs';
 
-export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS];
+export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS, ...PEOPLE];

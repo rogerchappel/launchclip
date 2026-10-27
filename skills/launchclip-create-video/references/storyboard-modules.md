@@ -1543,6 +1543,36 @@ params:
 events: build, fill, legend
 variants: glass (default), flat
 
+### person-id (keeps captions)
+Who is speaking or being cited: a photo in a rounded frame with a glowing rim, the name in bold capitals inside a glow pill across its foot and the role under it ("Physics professor, ITU"); or the same as a glass card. Without a photo, an initials tile. Use real photos only of the real person named.
+params:
+- name: string ≤ 28
+- role: string ≤ 40 (optional)
+- image: assets/… photo or video still of that person (optional; else an initials tile)
+- align: "left" | "center" (default) | "right"
+- tone: the pill and rim: primary | accent (default) | paper | #rrggbb
+- nameAt: the name: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, name
+variants: pill (default), card
+
+### lineage-graph (keeps captions)
+A lineage: 2–5 people as photos (or initials tiles) linked by dashed connectors with role labels ("doctoral advisor", "co-author"), laid out by generation (left to right in landscape, top to bottom in portrait) and drawn in order, each link drawing into the next person.
+params:
+- people: [{name ≤ 24, role? ≤ 28, image? (assets/… photo of that person), id? (a reveal id; default p<i>), at?}] 2–5 (events node-<id>)
+- links: [{from, to (index or id), label? ≤ 24}] 1–6, parent → child, no loops
+- tone: connector and rim colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, node-<id>
+variants: circles (default), frames
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1688,6 +1718,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
 | date-carousel | 2 s | 0.5 s | scene − 0.65 s | the move starts about 0.9 s after at and runs 0.7–2.4 s (longer for more days); the focus lands as the move ends |
 | month-grid | 2 s | 0.5 s | scene − 0.65 s | the grid lands in 0.7 s from at; the fill runs up to 90 ms a day (2.2 s at most); the legend follows the fill |
+| person-id | 2 s | 0.5 s | scene − 0.65 s | the frame rises from at; the name slides in 0.45 s later and the role follows |
+| lineage-graph | 2 s | 0.5 s | scene − 0.65 s | people land generation by generation about 0.9 s apart (squeezed to fit); each link draws in 0.6 s just before its child |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
