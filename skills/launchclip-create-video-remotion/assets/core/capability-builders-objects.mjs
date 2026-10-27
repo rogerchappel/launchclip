@@ -31,14 +31,18 @@ const LIMIT = { bars: 4, stacks: 4, rows: 4, sections: 7, members: 5 };
 // Characters a line of a label keeps at key size in 9:16 (measured against the modules, one spare), by
 // how many bars, stacks or steps share the width: a bar name may wrap to two lines; stack and step
 // names stay on one.
-const BAR_WORD = { 2: 9, 3: 8, 4: 5 };
+const BAR_WORD = { 2: 8, 3: 7, 4: 5 };
 const STACK_CHARS = { 2: 12, 3: 8, 4: 5 };
 const STEP_CHARS = { 3: 7, 4: 4 };
 // Compact units for a value on a 3D object ($400M, 4.1 s, 200K).
 const SHORT_UNIT = { thousand: 'K', million: 'M', billion: 'B', trillion: 'T', k: 'K', m: 'M', b: 'B', t: 'T', '%': '%', '×': '×', seconds: ' s', second: ' s', s: ' s', ms: ' ms', minutes: ' min', minute: ' min', hours: ' h', hour: ' h', days: ' days', points: ' pts', point: ' pt' };
-const EDGE = /^(on|in|at|of|to|for|from|with|per|by|the|a|an|and|or|than|vs|versus)$/i;
-// Unit words the parser leaves at the front of a label ("seconds before", "points on coding").
-const UNIT_WORD = /^(seconds?|minutes?|hours?|days?|points?|pts|percent|tokens?|dollars?|times|requests?|users?|parameters?|params)$/i;
+const EDGE = /^(on|in|at|of|to|for|from|with|per|by|the|a|an|and|or|than|vs|versus|instead|compared|down|up|into|roughly|about|around|nearly|almost|only|just|over|under|while|whereas|each)$/i;
+// Unit words the parser leaves at the front of a label ("seconds before", "points on coding"); they are the number's unit.
+const UNIT_WORD = /^(seconds?|minutes?|hours?|days?|points?|pts|percent|tokens?|dollars?|euros?|pounds?|times|requests?|users?|parameters?|params)$/i;
+const CURRENCY_WORD = { dollar: '$', dollars: '$', euro: '€', euros: '€', pound: '£', pounds: '£' };
+// A verb between a name and its number ("Halcyon 2 scored 48%").
+const PRONOUN = /^(it|this|that|they|we|he|she|there|these|those|you|i|our|its)$/i;
+const VERB = /^(scored|scores|costs?|cost|is|was|hit|hits|reached|reaches|got|gets|at|runs?|ran|takes?|took|charges?|sells?|sold)$/i;
 // A family small to large: the kind is how a member looks, not a claim about it.
 const BODIES = { 2: ['moon', 'sun'], 3: ['moon', 'earth', 'sun'], 4: ['moon', 'earth', 'sun', 'galaxy'], 5: ['moon', 'ice', 'earth', 'sun', 'galaxy'] };
 const CURRENCY = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' };
@@ -55,9 +59,12 @@ export function objectsBuilders(h) {
   const cap1 = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
   // A value as a chart shows it: the clause's sign, the number, a compact unit (or none when it does not fit in 8).
   const display = (entry) => {
-    const unit = entry.unit === undefined ? '' : SHORT_UNIT[String(entry.unit).toLowerCase()] ?? ` ${entry.unit}`;
-    const text = `${entry.prefix ?? ''}${entry.value}${unit}`;
-    return text.length <= 8 ? text : `${entry.prefix ?? ''}${entry.value}${unit.length <= 2 ? unit : ''}`;
+    const word = unitWord(entry);
+    const sign = entry.prefix ?? CURRENCY_WORD[`${word ?? ''}s`] ?? '';
+    const unit = entry.unit !== undefined ? SHORT_UNIT[String(entry.unit).toLowerCase()] ?? ` ${entry.unit}` : word && !CURRENCY_WORD[`${word}s`] ? SHORT_UNIT[`${word}s`] ?? '' : '';
+    const digits = /^[\d,.]+$/.test(String(entry.raw ?? '').replace(/^[$€£]/, '')) ? String(entry.raw).replace(/^[$€£]/, '') : String(entry.value);
+    const text = `${sign}${digits}${unit}`;
+    return text.length <= 8 ? text : `${sign}${digits}${unit.length <= 2 ? unit : ''}`;
   };
   // A parsed label without the prepositions at its edges ("on Nova" → "Nova", "seconds to" → "Seconds"); null when nothing is left.
   const tidy = (label) => {
@@ -88,14 +95,36 @@ export function objectsBuilders(h) {
     const rows = series.filter((entry) => entry && typeof entry.label === 'string' && entry.label.trim() && Number.isFinite(entry.value) && entry.value >= 0);
     return rows.length ? rows.map((entry) => ({ label: entry.label, value: entry.value, ...(entry.unit ? { unit: entry.unit } : {}) })) : null;
   };
-  // The clause's own numbers that share one unit (a bar of % beside a bar of $ would mislead). Labels: the words after a number, else the clause's content words.
+  // The unit word a parsed label starts with ("seconds before" → seconds), lower case, or null.
+  const unitWord = (entry) => { const first = String(entry.label ?? '').split(/\s+/)[0]; return UNIT_WORD.test(first) ? first.toLowerCase().replace(/s$/, '') : null; };
+  const currencyOf = (entry) => entry.prefix ?? CURRENCY_WORD[String(entry.label ?? '').split(/\s+/)[0].toLowerCase()] ?? null;
+  // The name a number belongs to when it comes before it: the capitalised words just before a verb ("Halcyon 2 scored 48%").
+  const nameBefore = (beat, entry) => {
+    // The parser rewrites "48 percent" as "48%": find the figure by its sign and digits.
+    const digits = String(entry.raw ?? entry.value).match(/[$€£]?[\d][\d,.]*/)?.[0];
+    const found = digits ? new RegExp(`(^|[^\\w.])${digits.replace(/[$.]/g, '\\$&')}(?![\\d])`).exec(String(beat.text ?? '')) : null;
+    if (!found) return null;
+    const at = found.index + found[1].length;
+    const words = beat.text.slice(0, at).trim().split(/\s+/).slice(-5);
+    if (!words.length || !VERB.test(words.at(-1))) return null;
+    words.pop();
+    const name = [];
+    while (words.length && /^([A-Z][\w-]*|\d[\w.]*)$/.test(words.at(-1).replace(/[,;:]$/, '')) && !/[,;:.]$/.test(words.at(-1))) name.unshift(words.pop());
+    return name.length && /^[A-Z]/.test(name[0]) && !PRONOUN.test(name[0]) ? name.join(' ') : null;
+  };
+  // The clause's own numbers that share one unit (a bar of % beside a bar of $ would mislead). Labels: the name just before a number, else the words after it, else the clause's content words (marked unlabelled).
   const clauseSeries = (beat, least) => {
     const numbers = h.numbersOf(beat).filter((entry) => entry.value >= 0);
     if (numbers.length < least) return null;
-    const unitOf = (entry) => `${entry.prefix ?? ''}|${entry.unit ?? ''}`;
+    const unitOf = (entry) => `${currencyOf(entry) ?? ''}|${entry.unit ?? ''}|${unitWord(entry) ?? ''}`;
     if (new Set(numbers.map(unitOf)).size !== 1) return null;
     const terms = h.keyTerms(beat.text);
-    return numbers.map((entry, i) => ({ label: tidy(entry.label) ?? terms[i] ?? null, value: entry.scaled ?? entry.value, display: display(entry), labelled: Boolean(tidy(entry.label)) }));
+    return numbers.map((entry, i) => {
+      // A name before the verb ("Nova costs 3 dollars per task") beats the words after ("per task").
+      const before = nameBefore(beat, entry);
+      const own = before ?? tidy(entry.label);
+      return { label: own ?? terms[i] ?? null, value: entry.scaled ?? entry.value, display: display(entry), labelled: Boolean(own), subject: Boolean(before) };
+    });
   };
   const seriesData = (beat, least) => {
     const evidence = evidenceSeries(beat);
@@ -109,12 +138,13 @@ export function objectsBuilders(h) {
   };
   const descending = (data) => data.every((entry, i) => i === 0 || entry.value <= data[i - 1].value) && data[0].value > data.at(-1).value;
   const source = (beat) => { const s = h.sourceOf(beat); return s ? { source: h.clip(s, 80) } : {}; };
-  // Money: the clause's figures with a currency sign, in one currency.
+  // Money: the clause's figures with a currency sign or word, in one currency.
   const money = (beat) => {
-    const figures = h.numbersOf(beat).filter((entry) => entry.prefix && entry.value >= 0);
-    return new Set(figures.map((entry) => entry.prefix)).size === 1 ? figures : [];
+    const figures = h.numbersOf(beat).filter((entry) => currencyOf(entry) && entry.value >= 0);
+    return new Set(figures.map(currencyOf)).size === 1 ? figures : [];
   };
-  const moneyLabel = (beat, entry, i) => tidy(entry.label) ?? tidy(beat.facts?.sides?.[i]) ?? cap1(h.keyTerms(beat.text)[i] ?? display(entry));
+  // A stack's name: the name before its figure, the words after it, or the comparison's named side; null when the clause names none.
+  const moneyLabel = (beat, entry, i) => nameBefore(beat, entry) ?? tidy(entry.label) ?? tidy(beat.facts?.sides?.[i]);
   const sections = (beat) => (Array.isArray(beat.evidence?.data?.sections) ? beat.evidence.data.sections.filter((entry) => entry && typeof entry.label === 'string' && entry.label.trim()) : []);
   const section = (entry) => {
     const pages = entry.pages === undefined || entry.pages === null ? null : String(entry.pages).trim();
@@ -133,7 +163,9 @@ export function objectsBuilders(h) {
       const labels = data && data.every((entry) => entry.labelled) && fitted(data.map((entry) => cap1(entry.label)), BAR_WORD[data.length], { lines: 2 });
       if (!labels) return null;
       const stairs = data.length >= 3 && descending(data) && labels.every((label) => label.length <= STEP_CHARS[data.length]);
-      return { variant: stairs ? 'staircase' : 'bars', title: h.clip(beat.headline, 48), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: data.length - 1 }), ...source(beat) };
+      // The lit bar is the clause's subject when it names one ("Halcyon 2 scored…"), else the last.
+      const subject = data.findIndex((entry) => entry.subject);
+      return { variant: stairs ? 'staircase' : 'bars', title: h.clip(beat.headline, 28), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: subject >= 0 ? subject : data.length - 1 }), ...source(beat) };
     },
     // Two (to four) money figures in one currency: stacks sized by value, with the ratio beside the larger.
     'coin-stack': (beat) => {
@@ -147,25 +179,25 @@ export function objectsBuilders(h) {
       const labels = fitted(figures.map((entry, i) => moneyLabel(beat, entry, i)), STACK_CHARS[figures.length]);
       if (!labels) return null;
       // Fewer than 16 coins per stack: the smallest gets at least one.
-      return { variant: 'coins', title: h.clip(beat.headline, 48), stacks: figures.map((entry, i) => ({ label: labels[i], value: values[i], display: display(entry) })), highlight: big, ...(ratio && ratio >= 2 && ratio < 1000 ? { callout: { text: `×${ratio}`, stack: big } } : {}), ...source(beat) };
+      return { variant: 'coins', title: h.clip(beat.headline, 28), stacks: figures.map((entry, i) => ({ label: labels[i], value: values[i], display: display(entry) })), highlight: big, ...(ratio && ratio >= 2 && ratio < 1000 ? { callout: { text: `×${ratio}`, stack: big } } : {}), ...source(beat) };
     },
     // Rows with a name and a value (model · score or price): the research series, else the clause's own labelled numbers. A row needs its own name.
     'rack-shelf': (beat) => {
       const data = seriesData(beat, 2)?.slice(0, LIMIT.rows);
       if (!data || data.some((entry) => !entry.labelled) || !fitted(data.map((entry) => cap1(entry.label)), 16)) return null;
       const top = data.reduce((best, entry, i) => (entry.value > data[best].value ? i : best), 0);
-      return { variant: 'rack', title: h.clip(beat.headline, 48), rows: data.map((entry) => ({ label: cap1(entry.label), cells: [entry.display] })), focus: top, ...source(beat) };
+      return { variant: 'rack', title: h.clip(beat.headline, 28), rows: data.map((entry) => ({ label: cap1(entry.label), cells: [entry.display] })), focus: top, ...source(beat) };
     },
     // Only a document's own sections (evidence.data.sections), each with its pages and check or flag.
     'paper-stack': (beat) => {
       const rows = sections(beat).slice(0, LIMIT.sections);
-      return rows.length >= 2 ? { variant: 'sections', title: h.clip(beat.headline, 48), items: rows.map(section), ...source(beat) } : null;
+      return rows.length >= 2 ? { variant: 'sections', title: h.clip(beat.headline, 28), items: rows.map(section), ...source(beat) } : null;
     },
     // Only a family's own members (evidence.data.members), in the order given (small to large reads best).
     'planet-family': (beat) => {
       const rows = members(beat).slice(0, LIMIT.members);
       if (rows.length < 2) return null;
-      return { variant: 'track', title: h.clip(beat.headline, 48), bodies: rows.map((entry, i) => ({ kind: BODIES[rows.length][i], name: h.clip(entry.name, 12), ...(entry.tagline ? { tagline: h.clip(entry.tagline, 22) } : {}) })), ...source(beat) };
+      return { variant: 'track', title: h.clip(beat.headline, 28), bodies: rows.map((entry, i) => ({ kind: BODIES[rows.length][i], name: h.clip(entry.name, 12), ...(entry.tagline ? { tagline: h.clip(entry.tagline, 22) } : {}) })), ...source(beat) };
     }
   };
 

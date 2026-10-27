@@ -100,9 +100,28 @@ test("objects builders: values and labels are the clause's or the evidence's own
 test("objects builders: a later clause adds its own bar, stack, row or section", () => {
   assert.deepEqual(capabilityAdditions("glass-bars-3d", beat("Then 71 percent on docs.")).items.map((entry) => entry.value), [71]);
   assert.equal(capabilityAdditions("coin-stack", beat("A third option costs $4 per task.")).items[0].display, "$4");
-  assert.deepEqual(capabilityAdditions("rack-shelf", beat("It scored 62 points on maths.")).items, [{ label: "Maths", cells: ["62"] }]);
+  assert.deepEqual(capabilityAdditions("rack-shelf", beat("It scored 62 points on maths.")).items, [{ label: "Maths", cells: ["62 pts"] }]);
   assert.equal(capabilityAdditions("rack-shelf", beat("The next model scored 62 points.")), null, "a value with no name adds no row");
   assert.equal(capabilityAdditions("paper-stack", CASES["paper-stack"][0]).items.length, 4);
   assert.equal(capabilityAdditions("glass-bars-3d", beat("Nothing to add here.")), null);
   assert.equal(capabilityAdditions("planet-family", CASES["planet-family"][0]), null);
+});
+
+test("objects builders: a bar takes the name before its number, and units the parser misses still split series", () => {
+  const halcyon = beat("On the open coding test, Halcyon 2 scored 48 percent, compared with 39 percent for Orbit and 51 percent for Lumen.", { headline: "Open SWE benchmark" });
+  const bars = capabilityParams("glass-bars-3d", halcyon);
+  assert.deepEqual(bars.data.map((entry) => [entry.label, entry.display]), [["Halcyon 2", "48%"], ["Orbit", "39%"], ["Lumen", "51%"]]);
+  assert.equal(bars.highlight, 0, "the clause's subject is the lit bar");
+  resolves("glass-bars-3d", bars);
+  // "Previous model" is longer than a 9:16 bar holds at key size with three bars: the 2D chart takes it.
+  assert.equal(capabilityParams("glass-bars-3d", beat("Halcyon 2 scored 48 percent, compared with 39 percent for the previous model and 51 percent for the best rival.")), null);
+  // Seconds and dollars in one clause are two series, not one.
+  assert.equal(capabilityParams("glass-bars-3d", beat("It answers in 1.8 seconds on Nova, costs 3 dollars on Atlas and 8 dollars on Orbit.")), null);
+  // "Instead of", "down from", "into roughly" name nothing.
+  assert.equal(capabilityParams("glass-bars-3d", beat("It answers in about 1.8 seconds instead of 4.1 seconds.")), null);
+  assert.equal(capabilityParams("coin-stack", beat("That can turn a monthly bill of 2,400 dollars into roughly 900 dollars.")), null);
+  // A currency word is a currency: two named dollar figures are a pile each.
+  const coins = capabilityParams("coin-stack", beat("Nova costs 3 dollars per task and Atlas costs 8 dollars per task."));
+  assert.deepEqual(coins.stacks.map((entry) => [entry.label, entry.display]), [["Nova", "$3"], ["Atlas", "$8"]]);
+  resolves("coin-stack", coins);
 });
