@@ -2912,6 +2912,54 @@ role or hex (`dataTone`). The study's citation is the frame's source note
 | `unit-grid` | solid, stroke, dots | `count` 1–200, `icon` (`person`, the module's isotype silhouette, or any icon name), `tone`, `columns`, `groups` 2–3 `{count, label ≤ 24, tone?}` adding up to `count`, `splitAt`, or `highlight` `{count, label?, tone?}` and `highlightAt` (not both) | build, split, highlight | Units pop in reading order within about 1.1 s in the largest square cells that fit; on split each unit slides and scales (0.75 s, power3.inOut, a 12 ms ripple) into its group's own grid, side by side, recolouring as it moves, while each group's count rises and counts up over its label; a highlight lights the first `count` units with a pulse, dims the rest to 28% and raises the label |
 | `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value. Default cues follow the build up to 1 s apart |
 
+### Catalogue I: 3D data objects (`catalog-i-3d.mjs`)
+
+Rendered 3D objects driven by data (visual gap map B2, C2), registered with
+catalogue H so both renderers draw them from the same view tree and op list.
+The 3D is CSS 3D transforms on one rig (`catalog-i-3d-base.mjs`), never
+WebGL:
+
+- `cam` (2D zoom and pan of the flattened render) → `stage` (`perspective`
+  P px, origin at the pivot) → `tilt` (static `rotateX(T)`: the floor leans
+  back, the camera looks down at 90 − T°) → `turn` (animated `rotation`, the
+  orbit about the world vertical) → per object a `slot` (floor point; its
+  x, y slide it) → `stand` (static `rotateX(-90deg)`: a vertical plane where
+  −y is up, so `scaleY` on a child grows a bar and `y` drops a coin).
+- Every animated element is a 2D transform the op list already has (x, y,
+  scale, rotation, opacity), so GSAP and `frameState` move it the same way.
+  A label faces the camera by counter-rotating with the turn (`billboard`);
+  a lid or flap turns about a horizontal axis with `hinge` (an in-plane
+  rotation conjugated by `rotateY(±90deg)`).
+- Rules the tests enforce: an element the ops move carries no static
+  transform (GSAP owns it), and an element that fades holds no
+  `preserve-3d` children (opacity flattens the 3D context), so dims fade
+  faces and labels one by one. Only `set` and `tween` ops; continuous
+  motion (orbit, fans, a ticking clock) is a pure function of the playhead.
+- `project()` mirrors the chain in JS. `fitScene` picks the largest world
+  scale whose projection, labels included, stays inside the rect at every
+  camera state (orbit ends and middle × zoom ends), centred; text is set in
+  face px as key size over the smallest projected scale of its face
+  (`minScale`, `faceScale`, `faceWidthScale`), and slabs, trays and steps
+  grow until their text fits. A module fails with a param error when copy
+  cannot keep key size.
+- Glass reads from style roles: fill in the module's tone (default
+  `accent`), rims in `accent` mixed toward `paper`, the lit item in
+  `primary` (or `accent` when the tone is `primary`), so any pack with the
+  five roles works.
+
+| Module | Variants | Params (beyond title, source, at, orbit, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `glass-bars-3d` | bars, staircase | `data` 2–6 `{label ≤ 24, value, display?}`, `format`, `highlight` (index or label), `highlightAt`, `tone`, `highlightTone`; bars: `reference` `{value, label?}`; staircase: `marker` `{text ≤ 12, label?, steps [1–4], at?}` | build, highlight, marker-&lt;k&gt; | Bars grow by scaleY (0.75 s, staggered) with count-up value labels on billboards; the lit bar glows and the rest drop to 42%; the staircase sets price and name on each step's front face (step heights by rank) and the marker's chip hops step to step with its dashed leader rescaling; the camera orbits 10–14° and pushes in 5% over the scene |
+| `coin-stack` | coins, cylinders | `stacks` 1–4 `{label, value, display?, count? 1–16}`, `per` (value of one coin), `format`, `highlight`, `callout` `{text ≤ 10, stack?, at?}`, `tone` | build, callout | Each coin is hidden until its turn, then falls from above its stack (bounce.out, 0.42 s) while the stack's value counts up; faceted cylinders shaded by facet angle; the callout pops beside its stack |
+| `rack-shelf` | rack, rail | `rows` 2–6 (rail 1–5) `{label ≤ 24, cells? ≤ 3 (rail 2), icon?, value? (rail)}`, `focus`, `focusAt`; rail: `format`, `axis` ≤ 48 | build, focus | Trays drop in bottom first while the camera dollies in 10%; the focus tray slides out toward the viewer (0.8 s) and its rim lights while the rest drop back; the rail glides cubes from its left end to their values, farthest first, with ticks and a caption under it |
+| `device-box` | server, appliance | `readout` `{label ≤ 14, to, from?, format?, at?, duration?}`, `clock` `{start "HH:MM:SS", label?}`, `name` ≤ 24, `units` 1–8, `unitLabel` ≤ 6, `tone` | build, readout | The device and its screen land; the screen flickers on, the readout counts (linear) and the clock ticks on whole scene seconds; fans spin at a constant rate and LEDs blink in a fixed pattern; the clock moves under the readout when both do not fit across |
+| `paper-stack` | sections, books, folder | `items` 2–7 (folder 1–5) `{label ≤ 28, detail? ≤ 14, status? ok · flag · none, size? 0.5–4, at?}`, `openAt` (folder), `tone` | build, open, status-&lt;i&gt; | Slabs land bottom first; each status pops (check in the good tone, flag in the bad red) on its cue, a flagged section also tints red; landscape labels rows beside the stack on leaders, portrait on the slabs' front edges; books carry titles on their spines; the folder's front swings open on its hinge (−78°) and the files rise to show their strips |
+| `planet-family` | track, lineup | `bodies` 2–5 (lineup 2–4) `{kind moon · ice · earth · gas · sun · galaxy, name ≤ 16, tagline? ≤ 28, at?}`, `tone` | build, body-&lt;i&gt; | Procedural bodies (CSS gradients, no images): surfaces slide (a turning sphere), coronas and spiral arms spin; track pans a world strip body to body on each cue (0.75 s, at least 0.75 s apart) over two seeded star layers at 0.18× and 0.42×; lineup veils all but the focus body |
+
+Parity fixtures: `test/fixtures/parity/h-{glass-bars-3d,coin-stack,rack-shelf,device-box,paper-stack,planet-family}-*.json`
+(every variant in portrait, the default in landscape, plus the staircase
+marker, token discs and price rail cases).
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its
