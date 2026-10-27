@@ -120,6 +120,14 @@ test("chapters[j].plate and scenes[i].backdrop apply in world mode; none shows t
   assert.equal(backdrops.segments[2].spec.params.tint, "accent");
 });
 
+test("a non-camera transition crossfades the backdrop over its own duration", () => {
+  const raw = story({ ins: [null, { type: "fade", dur: 0.6 }] });
+  const { backdrops } = build(raw);
+  assert.deepEqual(backdrops.segments[1].entry, { type: "fade", start: 5, duration: 0.6, ease: "power1.inOut" });
+  assert.ok(Math.abs(opsStateAt(backdrops.ops, "backdrop-1", 5.3).opacity - 0.5) < 1e-9);
+  assert.equal(opsStateAt(backdrops.ops, "backdrop-0", 5.6).opacity, 0);
+});
+
 test("no backdrops without a plate, and none in cuts mode", () => {
   assert.equal(build(story({ plate: null })).backdrops, null);
   const cuts = story();
@@ -143,7 +151,7 @@ test("HyperFrames draws one segment per backdrop and its GSAP seeks match the op
     // Play the backdrop calls on a paused GSAP timeline of plain objects.
     const targets = {};
     const calls = html.split("\n").map((line) => line.trim()).filter((line) => /^tl\.(set|fromTo)\("#lc-wb-\d+(-move)?"/.test(line));
-    const code = calls.map((line) => line.replace(/^tl\.(set|fromTo)\("(#lc-wb-\d+(?:-move)?)"/, (_, verb, id) => { targets[id] ??= { x: 0, y: 0, autoAlpha: 0 }; return `tl.${verb}(T[${JSON.stringify(id)}]`; })).join("\n");
+    const code = calls.map((line) => line.replace(/^tl\.(set|fromTo)\("(#lc-wb-\d+(?:-move)?)"/, (_, verb, id) => { targets[id] ??= { x: 0, y: 0, autoAlpha: 0 }; return `tl.${verb}(T[${JSON.stringify(id)}]`; }).replace(/,\s*"?force3D"?:\s*false/g, "")).join("\n");
     const tl = gsap.timeline({ paused: true });
     new Function("tl", "T", code)(tl, targets);
     for (const t of [0.5, 5.2, 5.5, 10.3, 10.6, 15.4, 20.01, 25.2, 29.5, 3, 12, 0]) {

@@ -19,7 +19,8 @@
 //                              feathered edge first, with the move's ease;
 //     push / pull, or a move   it crossfades over the move (and follows the
 //     with no sideways travel  depth layer's travel while it does);
-//     a cut (no camera move)   it changes on the cut.
+//     no camera move           it crossfades over the scene's own
+//                              transition (a fade, say), or changes on a cut.
 //   The outgoing backdrop keeps following the depth layer under it and is
 //   hidden when the move ends.
 // - Each backdrop is opaque (bg under its layers), so the depth layer's glows
@@ -59,10 +60,10 @@ export function worldBackdrops(story, plan, windows) {
   if (plan?.mode !== 'world' || !plan.background || !windows) return null;
   const W = plan.width, H = plan.height;
   const plates = windows.scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
-  const shots = plates.map((entry) => ({ id: entry.id, start: entry.start, spec: scenePlateSpec(story, entry.scene) }));
+  const shots = plates.map((entry) => ({ id: entry.id, start: entry.start, transition: entry.transitionIn, spec: scenePlateSpec(story, entry.scene) }));
   if (windows.loop) {
     const scene = plates.find((entry) => entry.id === windows.loop.sceneId)?.scene;
-    shots.push({ id: `${windows.loop.sceneId}-loop`, start: windows.loop.start, spec: scene ? scenePlateSpec(story, scene) : null });
+    shots.push({ id: `${windows.loop.sceneId}-loop`, start: windows.loop.start, transition: windows.loop.transitionIn, spec: scene ? scenePlateSpec(story, scene) : null });
   }
   if (!shots.some((shot) => shot.spec)) return null;
 
@@ -77,7 +78,7 @@ export function worldBackdrops(story, plan, windows) {
   const segments = [];
   for (const shot of shots) {
     if (segments.length && segments.at(-1).key === keyOf(shot.spec)) continue;
-    segments.push({ key: keyOf(shot.spec), spec: shot.spec, shotId: shot.id, start: shot.start });
+    segments.push({ key: keyOf(shot.spec), spec: shot.spec, shotId: shot.id, start: shot.start, transition: shot.transition });
   }
   // Entry: the camera move into the segment's first shot, else a cut.
   for (const [n, segment] of segments.entries()) {
@@ -85,7 +86,12 @@ export function worldBackdrops(story, plan, windows) {
     segment.moveIndex = at >= 0 ? at : null;
     const move = at >= 0 ? moves[at] : null;
     if (n === 0) segment.entry = { type: 'first', start: 0, duration: 0 };
-    else if (!move) segment.entry = { type: 'cut', start: round(segment.start, 6), duration: 0 };
+    else if (!move) {
+      const dur = Number(segment.transition?.dur);
+      segment.entry = segment.transition && segment.transition.type !== 'cut' && dur > 0
+        ? { type: 'fade', start: round(segment.start, 6), duration: round(dur, 6), ease: 'power1.inOut' }
+        : { type: 'cut', start: round(segment.start, 6), duration: 0 };
+    }
     else {
       const key = keys[at];
       const dx = key.to.x - key.from.x, dy = key.to.y - key.from.y;
@@ -115,7 +121,7 @@ export function worldBackdrops(story, plan, windows) {
     const offset = (state) => ({ x: round(state.x - segment.anchor.x), y: round(state.y - segment.anchor.y) });
     const offsets = [{ x: 0, y: 0 }];
     for (const { key } of segment.follows) offsets.push(offset(key.from), offset(key.to));
-    if (segment.entry.type === 'fade') offsets.push(offset(keys[segment.moveIndex].from));
+    if (segment.entry.type === 'fade' && segment.moveIndex !== null) offsets.push(offset(keys[segment.moveIndex].from));
     // The canvas region the screen shows: the screen moved by −offset.
     const x0 = Math.floor(Math.min(...offsets.map((o) => -o.x))), y0 = Math.floor(Math.min(...offsets.map((o) => -o.y)));
     const x1 = Math.ceil(Math.max(...offsets.map((o) => -o.x)) + W), y1 = Math.ceil(Math.max(...offsets.map((o) => -o.y)) + H);
@@ -138,7 +144,8 @@ export function worldBackdrops(story, plan, windows) {
     const entry = segment.entry;
     if (entry.type === 'cut') ops.push({ type: 'set', target, time: entry.start, props: { x: 0, y: 0, opacity: 1 } });
     else if (entry.type === 'fade') {
-      ops.push({ type: 'tween', target, start: entry.start, duration: entry.duration, ease: entry.ease, from: { ...offset(keys[segment.moveIndex].from), opacity: 0 }, to: { x: 0, y: 0, opacity: 1 } });
+      const from = segment.moveIndex !== null ? offset(keys[segment.moveIndex].from) : { x: 0, y: 0 };
+      ops.push({ type: 'tween', target, start: entry.start, duration: entry.duration, ease: entry.ease, from: { ...from, opacity: 0 }, to: { x: 0, y: 0, opacity: 1 } });
     } else if (entry.type === 'slide') {
       // Start with the feathered edge just off the screen on its side.
       const start = { right: { x: W - canvas.x, y: 0 }, left: { x: -(canvas.x + canvas.width), y: 0 }, bottom: { x: 0, y: H - canvas.y }, top: { x: 0, y: -(canvas.y + canvas.height) } }[side];
