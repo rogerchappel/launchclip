@@ -37,12 +37,15 @@ export const SOUND_PALETTE_NOTES = Object.freeze({
 export const SFX_FAMILY_NAMES = Object.freeze([
   'whoosh', 'impact', 'riser', 'tick', 'pop', 'shimmer', 'subdrop', 'click',
   'keystroke', 'keystroke-space', 'keystroke-enter',
-  'swipe', 'slide', 'snap', 'thud', 'chime', 'ding', 'ping', 'glitch',
+  'tally', 'swipe', 'slide', 'snap', 'thud', 'chime', 'ding', 'ping', 'glitch',
   'tape-stop', 'page-turn', 'pen-scribble', 'camera-shutter', 'cash',
   'notification', 'error-buzz', 'success', 'boing', 'sparkle', 'footstep', 'door'
 ]);
 
 /** The families of the historic kit (rendered with no palette, unchanged). */
+/** Seconds into a tally where its landing chord sounds: finish puts this on the moment. */
+export const TALLY_LANDS_AT = 1.1;
+
 export const HISTORIC_SFX_FAMILIES = Object.freeze(SFX_FAMILY_NAMES.slice(0, 11));
 
 /** Ambience beds: seamless loops, ducked under narration. */

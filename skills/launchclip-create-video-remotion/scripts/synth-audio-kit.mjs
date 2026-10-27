@@ -122,8 +122,9 @@ function riser({ seed, duration, base, spread = 1.5, tremolo = 0 }) {
     layers: [
       layer(`0.55*${sweep(base)}*${build}${trem}`, { right: `0.55*${sweep(base * 1.008)}*${build}${trem}`, seed }),
       layer(`0.3*${sweep(base * spread)}*${build}${trem}`, { right: `0.3*${sweep(base * spread * 1.006)}*${build}${trem}`, seed }),
-      layer(`${noise(0)}*pow(t/${d},3)`, { right: `${noise(1)}*pow(t/${d},3)`, filter: 'highpass=f=1800', gain: 0.4, seed }),
-      layer(`${noise(2)}*pow(t/${d},4)`, { right: `${noise(3)}*pow(t/${d},4)`, filter: 'bandpass=f=5000:width_type=q:w=0.8', gain: 0.5, seed })
+      // A breath of air only: a loud high noise build is a white-noise wash
+      // over the voice (src/sfx/timbre.js refuses one).
+      layer(`${noise(0)}*pow(t/${d},3)`, { right: `${noise(1)}*pow(t/${d},3)`, filter: 'bandpass=f=1500:width_type=q:w=1.2', gain: 0.08, seed })
     ]
   };
 }

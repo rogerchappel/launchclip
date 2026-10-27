@@ -8,7 +8,7 @@
 // finishing chain and room, faded and normalised.
 import { attack, decay, fmt, glidePhase, layer, noise, semi, wave } from './dsp.mjs';
 import { MATERIALS, paletteChain } from './palettes.mjs';
-import { SFX_FAMILY_NAMES } from './options.mjs';
+import { SFX_FAMILY_NAMES, TALLY_LANDS_AT } from './options.mjs';
 
 const clampHz = (f) => Math.min(16000, Math.max(30, f));
 
@@ -120,7 +120,9 @@ function impact(T, r) {
 const RISER_SECONDS = 1.4;
 
 function riser(T, r) {
-  const character = r.pick(['tonal', 'noise', 'shepard', 'pulse']);
+  // No filtered-noise character: a noise sweep is a white-noise wash that rides
+  // over the voice (sfx/timbre.js refuses one), so every riser climbs in tone.
+  const character = r.pick(['tonal', 'shepard', 'pulse']);
   const duration = RISER_SECONDS;
   const d = fmt(duration);
   const curve = r.range(2, 3);
@@ -129,27 +131,18 @@ function riser(T, r) {
   const k = Math.log(r.range(3.5, 8)) / duration;
   const phase = (f) => `2*PI*${fmt(f)}*(exp(${fmt(k)}*t)-1)/${fmt(k)}`;
   const air = [
-    hiss(r, `pow(t/${d},${fmt(curve + 0.6)})`, `highpass=f=${fmt(r.range(1500, 2400) * T.bright)}`, { gain: 0.15 + 0.3 * T.air, k: 0 }),
-    hiss(r, `pow(t/${d},${fmt(curve + 1.6)})`, band(r.range(4000, 6000) * Math.min(1.1, T.bright), 0.8), { gain: 0.2 + 0.3 * T.air, k: 2 })
+    // A breath of air under the tone, kept low and below the hiss band.
+    hiss(r, `pow(t/${d},${fmt(curve + 0.6)})`, band(r.range(1200, 1800) * Math.min(1.1, T.bright), 1.2), { gain: 0.05 + 0.08 * T.air, k: 0 })
   ];
   let layers;
-  if (character === 'noise') {
-    // A filtered-noise sweep: bands from low to high take over in turn.
-    const count = r.int(4, 6);
-    layers = Array.from({ length: count }, (_, i) => {
-      const at = (0.25 + (0.75 * i) / (count - 1)) * duration;
-      const env = `exp(-pow((t-${fmt(at)})/${fmt(duration * 0.22)},2))*${build}`;
-      return hiss(r, env, band(r.range(220, 320) * 2 ** (i * r.range(0.8, 1)), 1.3), { gain: 1.1, k: (i % 3) * 2 });
-    });
-    layers.push(...air);
-  } else if (character === 'shepard') {
+  if (character === 'shepard') {
     // Octave-spaced sweeps fading in and out, so the climb seems to keep going.
     layers = [0, 1, 2].map((octave) => {
       const f = base * 2 ** octave;
       const fade = `pow(sin(PI*min((t/${d}+${fmt(octave / 3)})*0.75,1)),2)`;
       return layer(`0.35*${wave(T.wave === 'saw' ? 'soft-saw' : T.wave, phase(f))}*${fade}*${build}`, { right: `0.35*${wave(T.wave === 'saw' ? 'soft-saw' : T.wave, phase(f * 1.006))}*${fade}*${build}`, seed: r.seed() });
     });
-    layers.push(air[0]);
+    layers.push(...air);
   } else {
     const spread = r.pick([1.5, 2, 1.335, 1.26]);
     const trem = character === 'pulse' ? `*(0.55+0.45*sin(2*PI*(${fmt(r.range(2.5, 5))}*t+${fmt(r.range(4, 10))}*t*t)))` : '';
@@ -160,6 +153,34 @@ function riser(T, r) {
     ];
   }
   return { duration, master: 'highpass=f=150,lowpass=f=11000', fade: 0.012, layers };
+}
+
+// A tally: pitched blips that speed up and climb the palette's scale while a
+// number counts or a chart builds, then land on a two-note chord at the
+// moment (TALLY_LANDS_AT into the file, where finish anchors it). Dry and
+// tonal throughout: a count should sound like play, not a noise build.
+function tally(T, r) {
+  const character = T.material === 'chip' ? 'blip' : r.pick(['blip', 'pluck', 'wood']);
+  const count = r.int(9, 14);
+  const span = TALLY_LANDS_AT;
+  const base = fold(T.root * T.pitch, 700);
+  const steps = T.scale.length;
+  const noteAt = (degree) => fold(base * semi(T.scale[degree % steps] + 12 * Math.floor(degree / steps)), 2600);
+  const voice = (f, d, gain, delay) => {
+    if (character === 'pluck') return [body(T, r, f, d * 1.4, { gain, delay })];
+    if (character === 'wood') return [layer(`(sin(2*PI*${fmt(f * 0.75)}*t)*${decay(d * 0.35)}+0.4*sin(2*PI*${fmt(f * 1.9)}*t)*${decay(d * 0.2)})*${attack(0.0004)}`, { gain, delay, seed: r.seed() })];
+    return [layer(`(${wave(T.material === 'chip' ? 'square' : 'sine', `2*PI*${fmt(f)}*t`)}+0.3*sin(2*PI*${fmt(f * 2)}*t))*${decay(d)}*${attack(0.001)}`, { right: `(${wave(T.material === 'chip' ? 'square' : 'sine', `2*PI*${fmt(f * 1.003)}*t`)}+0.3*sin(2*PI*${fmt(f * 2.006)}*t))*${decay(d)}*${attack(0.001)}`, gain, delay, seed: r.seed() })];
+  };
+  const d = r.range(0.028, 0.045) * T.decay;
+  const layers = [];
+  for (let i = 0; i < count; i++) {
+    // (i/count)^0.65: the gaps shrink, so the count accelerates into its landing.
+    const at = span * (i / count) ** 0.65;
+    layers.push(...voice(noteAt(Math.round(i * steps * 1.5 / count)), d, 0.4 + 0.4 * (i / count), at));
+  }
+  const top = noteAt(Math.round(steps * 1.5));
+  layers.push(...voice(top, d * 6, 0.9, span), ...voice(fold(top * 1.5, 2600), d * 5, 0.5, span));
+  return { duration: span + 0.35, master: 'highpass=f=120,lowpass=f=7000', fade: 0.08, layers };
 }
 
 function tick(T, r) {
@@ -550,6 +571,7 @@ export const FAMILY_BUILDERS = Object.freeze({
   whoosh: { intent: 'spatial travel, push, whip pan', variants: 4, build: (T, r) => whoosh(T, r) },
   impact: { intent: 'big reveal, law/headline lock, scene slam', variants: 4, build: impact },
   riser: { intent: 'tension into a payoff or rehook (ends on the hit)', variants: 3, build: riser },
+  tally: { intent: 'a number counts up or a chart builds (tonal blips that land on the moment)', variants: 3, build: tally },
   tick: { intent: 'counter step, data point lands, small UI state change', variants: 4, build: tick },
   pop: { intent: 'object or label appears', variants: 4, build: pop },
   shimmer: { intent: 'insight, equilibrium, satisfying resolve', variants: 3, build: shimmer },
