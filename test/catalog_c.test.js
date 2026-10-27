@@ -213,6 +213,17 @@ test('lower-third: sits on the caption band edge, left or centred; strict valida
   assert.throws(() => r({name: 'x'.repeat(33)}), /params\.name must be a string of 1–32/);
   assert.throws(() => r({name: 'Ada', tone: 'glass'}), /params\.tone must be one of dark, primary/);
   assert.throws(() => MODULES['lower-third'].resolve({name: 'Ada'}, ctx({duration: 1.5})), /duration must be between 2/);
+  // pill: the name in capitals in a glowing pill, the role on its own line under it.
+  const pill = resolve('lower-third', {...PARAMS['lower-third'], tone: 'pill'});
+  assert.equal(pill.content.name, 'ADA PARK');
+  assert.ok(pill.content.titleBox.y >= pill.content.pill.y + pill.content.pill.height, 'the role sits under the pill');
+  assert.ok(Math.abs(pill.rect.y + pill.rect.height - 1160) < 0.05, 'bottom edge on the caption gap');
+  const ids = [];
+  const walk = node => { if (node && typeof node === 'object') { if (node.id) ids.push(node.id); (node.children ?? []).forEach(walk); } };
+  walk(catalogCView(pill));
+  for (const op of catalogCTimeline(pill)) assert.ok(ids.includes(op.target), `${op.target} is in the view`);
+  assert.match(EMITTERS['lower-third'](pill).html, /ADA PARK/);
+  assert.equal(frameState(catalogCTimeline(pill), pill.end - 0.5).get('scene-title').opacity, 1);
 });
 
 test('emphasis-caption: hides captions, pops words on a stagger, outlined for contrast', () => {

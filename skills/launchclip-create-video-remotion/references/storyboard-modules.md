@@ -623,9 +623,9 @@ events: point, sticker
 Footage-led: a name and title bar that slides in above the caption band.
 params:
 - name: string ≤ 32
-- title: string ≤ 48 (optional)
+- title: string ≤ 48 (optional; the role)
 - align: left|center
-- tone: dark|primary
+- tone: dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: name, title
 

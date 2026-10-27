@@ -439,7 +439,9 @@ function calloutTimeline(model, ops) {
 // ---------------------------------------------------------------------------
 // lower-third: name and title bar
 
-const LOWER_THIRD_TONES = ['dark', 'primary'];
+// pill: the name in bold capitals inside a glowing brand pill, the role on
+// its own line under it (the explainer's person ID over footage).
+const LOWER_THIRD_TONES = ['dark', 'primary', 'pill'];
 
 function resolveLowerThird(params, ctx) {
   const b = createFootageBase('lower-third', params, ctx, {allowed: ['name', 'title', 'at', 'align', 'tone'], required: ['name'], minDuration: CATALOG_C_TIMING['lower-third'].minDuration});
@@ -449,6 +451,7 @@ function resolveLowerThird(params, ctx) {
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ['left', 'center']);
   const tone = p.tone === undefined ? 'dark' : check.oneOf(p.tone, 'params.tone', LOWER_THIRD_TONES);
+  if (tone === 'pill') return resolveLowerThirdPill(b, name, title, align);
   const panel = tone === 'dark' ? colors.bg : colors.primary;
   const nameInk = tone === 'dark' ? colors.paper : colors.ink;
   const titleInk = tone === 'dark' ? theme.muted : mixColor(colors.ink, colors.primary, 0.8);
@@ -475,7 +478,46 @@ function resolveLowerThird(params, ctx) {
     motion: {enterEnd: rt(t0 + 0.65), exitStart, exitTo: {opacity: 0, x: -u(40)}}});
 }
 
+function resolveLowerThirdPill(b, name, title, align) {
+  const {check, u, safe, colors, end, duration} = b;
+  const p = b.params;
+  const caps = name.toUpperCase();
+  const nameInk = [colors.ink, colors.paper, colors.bg].reduce((best, ink) => (contrastRatio(ink, colors.primary) > contrastRatio(best, colors.primary) ? ink : best), colors.ink);
+  b.requireContrast('name/pill', nameInk, colors.primary, 'params.name on the primary pill');
+  const padX = u(34), padY = u(14);
+  const nameFit = fitText(check, 'params.name', caps, {family: 'body', width: safe.width - 2 * padX, preferred: u(52), min: b.min.key, maxLines: 1});
+  const titleFit = title ? fitText(check, 'params.title', title, {family: 'body', width: safe.width, preferred: u(44), min: b.min.key, maxLines: 1}) : null;
+  const pillW = r2(textWidth(caps, nameFit.size, 'body', 0.04) + 2 * padX), pillH = r2(nameFit.size * 1.2 + 2 * padY);
+  const titleW = title ? r2(textWidth(title, titleFit.size, 'body') + u(8)) : 0;
+  const width = r2(Math.min(safe.width, Math.max(pillW, titleW))), gapLines = u(14);
+  const height = r2(pillH + (titleFit ? gapLines + titleFit.size * 1.25 : 0));
+  const x = r2(align === 'left' ? safe.x : safe.x + (safe.width - width) / 2);
+  const y = r2(safe.y + safe.height - height);
+  const t0 = b.timeOf('name', p.at, 'params.at', 0, {min: 0, max: duration - CATALOG_C_TIMING['lower-third'].leadOut});
+  b.events.push({id: `${b.id}-name`, name: 'name', time: t0, endTime: rt(t0 + 0.55), role: 'title', cue: 'whoosh'});
+  if (title) b.events.push({id: `${b.id}-title`, name: 'title', time: rt(t0 + 0.3), endTime: rt(t0 + 0.65), role: 'subtitle'});
+  const pillX = r2(align === 'left' ? x : x + (width - pillW) / 2);
+  const content = {name: caps, title, align, tone: 'pill', nameInk, titleInk: colors.paper, fill: colors.primary, nameSize: nameFit.size, titleSize: titleFit?.size ?? null, padX, padY,
+    box: {x, y, width, height}, pill: {x: pillX, y, width: pillW, height: pillH}, titleBox: title ? {x: r2(align === 'left' ? x : x + (width - titleW) / 2), y: r2(y + pillH + gapLines), width: titleW} : null,
+    slide: u(60), times: {panel: t0, name: rt(t0 + 0.12), title: rt(t0 + 0.3)}, shadow: colors.bg};
+  return b.finish(content, {rect: {x, y, width, height}, role: 'text', minTextPx: Math.min(nameFit.size, titleFit?.size ?? Infinity),
+    motion: {enterEnd: rt(t0 + 0.65), exitStart: rt(end - 0.32), exitTo: {opacity: 0, x: -u(40)}}});
+}
+
+function lowerThirdPillView(model) {
+  const {id, fonts, unit: u} = model;
+  const c = model.content, P = c.pill;
+  const kids = [el('div', `${id}-panel`, abs(P.x, P.y, P.width, P.height, {boxSizing: 'border-box', borderRadius: 999, background: c.fill, opacity: 0, transform: transformString({x: -c.slide}),
+    boxShadow: `0 0 ${r2(28 * u)}px ${c.fill}99, 0 0 ${r2(6 * u)}px ${c.fill}`}), [
+    el('div', `${id}-name`, abs(c.padX, c.padY, r2(P.width - 2 * c.padX), undefined, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.body, fontWeight: 800, fontSize: c.nameSize, lineHeight: '1.2', letterSpacing: '0.04em', color: c.nameInk, opacity: 0, transform: transformString({y: 16 * u})}), [c.name])
+  ])];
+  if (c.title) kids.push(el('div', `${id}-title`, abs(c.titleBox.x, c.titleBox.y, c.titleBox.width, undefined, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.body, fontWeight: 600, fontSize: c.titleSize, lineHeight: '1.25', color: c.titleInk,
+    textShadow: `0 ${r2(2 * u)}px ${r2(12 * u)}px ${c.shadow}`, opacity: 0, transform: transformString({y: 16 * u})}), [c.title]));
+  return kids;
+}
+
 function lowerThirdView(model) {
+  if (model.content.tone === 'pill') return lowerThirdPillView(model);
   const {id, fonts} = model;
   const c = model.content, B = c.box;
   const kids = [
@@ -491,8 +533,10 @@ function lowerThirdView(model) {
 function lowerThirdTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content, T = c.times, lift = 16 * model.unit;
-  set(ops, `${id}-bar`, start, {scaleX: 1, scaleY: 0});
-  tw(ops, `${id}-bar`, T.bar, 0.3, 'power3.out', {scaleY: 0}, {scaleY: 1});
+  if (c.tone !== 'pill') {
+    set(ops, `${id}-bar`, start, {scaleX: 1, scaleY: 0});
+    tw(ops, `${id}-bar`, T.bar, 0.3, 'power3.out', {scaleY: 0}, {scaleY: 1});
+  }
   set(ops, `${id}-panel`, start, {opacity: 0, x: -c.slide});
   tw(ops, `${id}-panel`, T.panel, 0.45, 'power3.out', {opacity: 0, x: -c.slide}, {opacity: 1, x: 0});
   for (const part of c.title ? ['name', 'title'] : ['name']) {
@@ -770,7 +814,7 @@ const DEFINITIONS = [
     params: {text: 'claim ≤ 42 chars, up to 2 lines', label: 'kicker ≤ 24 (optional)', point: '{x, y} canvas fractions 0.04–0.96 (the anchored spot)', side: 'auto|above|below|left|right', tone: 'primary|paper|dark', tilt: 'degrees −6–6 (default −2)', at},
     events: ['point', 'sticker'], resolve: resolveCallout, view: calloutView, timeline: calloutTimeline},
   {id: 'lower-third', describe: 'Footage-led: a name and title bar that slides in above the caption band.',
-    params: {name: 'string ≤ 32', title: 'string ≤ 48 (optional)', align: 'left|center', tone: 'dark|primary', at},
+    params: {name: 'string ≤ 32', title: 'string ≤ 48 (optional; the role)', align: 'left|center', tone: 'dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)', at},
     events: ['name', 'title'], resolve: resolveLowerThird, view: lowerThirdView, timeline: lowerThirdTimeline},
   {id: 'emphasis-caption', describe: 'Footage-led: one to three big words that pop over the footage; hides the captions while on screen.',
     params: {text: '1–3 words, ≤ 24 chars', color: 'primary|accent|paper or #hex (≥ 3:1 on the bg outline)', position: 'center|upper|lower', stagger: 'seconds between words (default 0.09)', at},
