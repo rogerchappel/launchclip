@@ -7,10 +7,10 @@
       "title": "The launch nobody saw coming",
       "layout": "full",
       "lines": [
-        { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): nothing else fits, a concept card" },
+        { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): logo-sting" },
         { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: icon-row" },
         { "words": [27, 36], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-3"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card" },
+        { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
         { "words": [51, 63], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-1"], "why": "social (evidence c-shares, capture halcyon-2-post): quote-card" },
         { "words": [64, 80], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-2"], "why": "stat (evidence c-unverified-tests): odometer" },
         { "words": [81, 91], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-3"], "why": "concept: particle-text" },
@@ -170,11 +170,11 @@
       "layout": "full",
       "lines": [
         { "words": [1507, 1518], "intent": "list", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-1"], "why": "title: kinetic-words" },
-        { "words": [1519, 1534], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-2"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card" },
+        { "words": [1519, 1534], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-2"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
         { "words": [1535, 1541], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-3"], "why": "concept: icon-row" },
         { "words": [1542, 1560], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-4"], "why": "concept: builds on icon-row (+1 items)" },
         { "words": [1561, 1568], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-1"], "why": "terminal: window-chrome" },
-        { "words": [1569, 1588], "intent": "cta", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-2"], "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): nothing else fits, a concept card" },
+        { "words": [1569, 1588], "intent": "cta", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-2"], "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): commit-card" },
         { "words": [1589, 1597], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-3"], "why": "concept: glass-word" },
         { "words": [1598, 1608], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-1"], "why": "social: nothing else fits, a concept card" },
         { "words": [1609, 1624], "intent": "process", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-2"], "why": "process: timeline" },
@@ -241,7 +241,7 @@
         { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: builds on icon-row (+1 items)" },
         { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: motion-title" },
         { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: glass-word" },
-        { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: nothing else fits, a concept card" }
+        { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: logo-sting" }
       ]
     }
   ]

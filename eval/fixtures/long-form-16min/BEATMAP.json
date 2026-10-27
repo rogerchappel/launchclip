@@ -10,6 +10,10 @@
   "style": "default"
  },
  "duration": 976.377,
+ "channel": {
+  "name": "Signal Lab",
+  "tagline": "AI, explained weekly"
+ },
  "chapters": [
   {
    "id": "the-launch-nobody-saw-coming",
@@ -40,12 +44,12 @@
        "text": "On a quiet Tuesday in March, Northlight Labs shipped a model that nobody had on their calendar.",
        "intent": "hook",
        "kind": "sting",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "capability": "logo-sting",
+       "module": "logo-sting",
        "change": "enter",
        "params": {
-        "text": "Halcyon 2, explained",
-        "icon": "scale"
+        "name": "Signal Lab",
+        "tagline": "AI, explained weekly"
        },
        "evidence": {
         "claim": "c-history-2023",
@@ -59,7 +63,7 @@
         },
         "quote": "a research preview for partners"
        },
-       "why": "sting (evidence c-history-2023): nothing else fits, a concept card"
+       "why": "sting (evidence c-history-2023): logo-sting"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-2",
@@ -125,12 +129,28 @@
        "text": "and a pull request that quietly changed the default model in their public SDK.",
        "intent": "claim",
        "kind": "pr",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "capability": "repo-pr-card",
+       "module": "repo-pr-card",
        "change": "swap",
        "params": {
-        "text": "Pull request quietly",
-        "icon": "cpu"
+        "repo": "northlight/sdk",
+        "number": 1842,
+        "title": "default to halcyon-2",
+        "state": "merged",
+        "date": "2026-03-10",
+        "file": "src/defaults.ts",
+        "additions": 1,
+        "deletions": 1,
+        "lines": [
+         "-export const DEFAULT_MODEL = \"halcyon-1.5\";",
+         "+export const DEFAULT_MODEL = \"halcyon-2\";"
+        ],
+        "startLine": {
+         "old": 12,
+         "new": 12
+        },
+        "highlight": "DEFAULT_MODEL",
+        "highlightAt": 3.07
        },
        "evidence": {
         "claim": "c-pr-comments",
@@ -147,9 +167,31 @@
          "id": "sdk-pr-1842",
          "kind": "pr",
          "out": "assets/evidence/sdk-pr-1842.mp4"
+        },
+        "data": {
+         "module": "repo-pr-card",
+         "params": {
+          "repo": "northlight/sdk",
+          "number": 1842,
+          "title": "default to halcyon-2",
+          "state": "merged",
+          "date": "2026-03-10",
+          "file": "src/defaults.ts",
+          "additions": 1,
+          "deletions": 1,
+          "lines": [
+           "-export const DEFAULT_MODEL = \"halcyon-1.5\";",
+           "+export const DEFAULT_MODEL = \"halcyon-2\";"
+          ],
+          "startLine": {
+           "old": 12,
+           "new": 12
+          },
+          "highlight": "halcyon-2"
+         }
         }
        },
-       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card"
+       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card"
       }
      ]
     },
@@ -3902,12 +3944,28 @@
        "text": "On GitHub, the pull request that switched the SDK default collected more than six hundred comments.",
        "intent": "claim",
        "kind": "pr",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "capability": "repo-pr-card",
+       "module": "repo-pr-card",
        "change": "swap",
        "params": {
-        "text": "GitHub pull request",
-        "icon": "brain"
+        "repo": "northlight/sdk",
+        "number": 1842,
+        "title": "default to halcyon-2",
+        "state": "merged",
+        "date": "2026-03-10",
+        "file": "src/defaults.ts",
+        "additions": 1,
+        "deletions": 1,
+        "lines": [
+         "-export const DEFAULT_MODEL = \"halcyon-1.5\";",
+         "+export const DEFAULT_MODEL = \"halcyon-2\";"
+        ],
+        "startLine": {
+         "old": 12,
+         "new": 12
+        },
+        "highlight": "DEFAULT_MODEL",
+        "highlightAt": 3.39
        },
        "evidence": {
         "claim": "c-pr-comments",
@@ -3924,9 +3982,31 @@
          "id": "sdk-pr-1842",
          "kind": "pr",
          "out": "assets/evidence/sdk-pr-1842.mp4"
+        },
+        "data": {
+         "module": "repo-pr-card",
+         "params": {
+          "repo": "northlight/sdk",
+          "number": 1842,
+          "title": "default to halcyon-2",
+          "state": "merged",
+          "date": "2026-03-10",
+          "file": "src/defaults.ts",
+          "additions": 1,
+          "deletions": 1,
+          "lines": [
+           "-export const DEFAULT_MODEL = \"halcyon-1.5\";",
+           "+export const DEFAULT_MODEL = \"halcyon-2\";"
+          ],
+          "startLine": {
+           "old": 12,
+           "new": 12
+          },
+          "highlight": "halcyon-2"
+         }
         }
        },
-       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card"
+       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh1-3",
@@ -4041,12 +4121,26 @@
        "text": "Northlight merged a fix four days later, in a follow up commit that restored the old behaviour behind a flag.",
        "intent": "cta",
        "kind": "commit",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "capability": "commit-card",
+       "module": "commit-card",
        "change": "swap",
        "params": {
-        "text": "Northlight merged fix",
-        "icon": "shield"
+        "repo": "northlight/sdk",
+        "sha": "9f3c2e1",
+        "message": "fix: respect format setting behind legacy_format flag",
+        "date": "2026-03-14",
+        "file": "src/format.ts",
+        "additions": 1,
+        "deletions": 1,
+        "lines": [
+         "-  return render(output);",
+         "+  return options.legacy_format ? renderLegacy(output) : render(output);"
+        ],
+        "startLine": {
+         "old": 40,
+         "new": 40
+        },
+        "highlight": "legacy_format"
        },
        "evidence": {
         "claim": "c-fix-commit",
@@ -4063,9 +4157,30 @@
          "id": "sdk-fix-commit",
          "kind": "commit",
          "out": "assets/evidence/sdk-fix-commit.mp4"
+        },
+        "data": {
+         "module": "commit-card",
+         "params": {
+          "repo": "northlight/sdk",
+          "sha": "9f3c2e1",
+          "message": "fix: respect format setting behind legacy_format flag",
+          "date": "2026-03-14",
+          "file": "src/format.ts",
+          "additions": 1,
+          "deletions": 1,
+          "lines": [
+           "-  return render(output);",
+           "+  return options.legacy_format ? renderLegacy(output) : render(output);"
+          ],
+          "startLine": {
+           "old": 40,
+           "new": 40
+          },
+          "highlight": "legacy_format"
+         }
         }
        },
-       "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): nothing else fits, a concept card"
+       "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): commit-card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh2-3",
@@ -5608,14 +5723,14 @@
        "text": "with every number we used and where it came from. Thanks for watching, and I will see you in the next one.",
        "intent": "process",
        "kind": "sting",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "capability": "logo-sting",
+       "module": "logo-sting",
        "change": "swap",
        "params": {
-        "text": "Halcyon 2, explained",
-        "icon": "scale"
+        "name": "Signal Lab",
+        "tagline": "AI, explained weekly"
        },
-       "why": "sting: nothing else fits, a concept card"
+       "why": "sting: logo-sting"
       }
      ]
     }
@@ -5632,7 +5747,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "042f6fef438dbe9d",
+   "key": "0628bbfa404c7f14",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5651,8 +5766,10 @@
      "kinetic-words"
     ],
     "counts": {
-     "concept-card": 3,
+     "logo-sting": 1,
      "icon-row": 4,
+     "concept-card": 1,
+     "repo-pr-card": 1,
      "quote-card": 1,
      "odometer": 1,
      "particle-text": 1,
@@ -5682,7 +5799,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "6ad94f49a1a34817",
+   "key": "46ebb2bdb774f35f",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5701,8 +5818,10 @@
      "icon-grid"
     ],
     "counts": {
-     "concept-card": 5,
+     "logo-sting": 1,
      "icon-row": 5,
+     "concept-card": 3,
+     "repo-pr-card": 1,
      "quote-card": 2,
      "odometer": 1,
      "particle-text": 2,
@@ -5744,7 +5863,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "e34fa017574c8b1d",
+   "key": "776b9c69992024ab",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5763,8 +5882,10 @@
      "icon-row"
     ],
     "counts": {
-     "concept-card": 7,
+     "logo-sting": 1,
      "icon-row": 8,
+     "concept-card": 5,
+     "repo-pr-card": 1,
      "quote-card": 2,
      "odometer": 1,
      "particle-text": 3,
@@ -5816,7 +5937,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "ea93fe0ef1c9d720",
+   "key": "12e0df5c87134c02",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5835,8 +5956,10 @@
      "icon-grid"
     ],
     "counts": {
-     "concept-card": 8,
+     "logo-sting": 1,
      "icon-row": 9,
+     "concept-card": 6,
+     "repo-pr-card": 1,
      "quote-card": 2,
      "odometer": 1,
      "particle-text": 4,
@@ -5894,7 +6017,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "2bbbbd123c4fbe88",
+   "key": "7d80bc289124c722",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -5913,8 +6036,10 @@
      "motion-title"
     ],
     "counts": {
-     "concept-card": 8,
+     "logo-sting": 1,
      "icon-row": 12,
+     "concept-card": 6,
+     "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 5,
@@ -5979,7 +6104,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "6c706c5346507fa5",
+   "key": "082cdbf1766ba2c7",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -5998,8 +6123,10 @@
      "kinetic-words"
     ],
     "counts": {
-     "concept-card": 10,
+     "logo-sting": 1,
      "icon-row": 13,
+     "concept-card": 8,
+     "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 6,
@@ -6071,7 +6198,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "99f4dd877dad5755",
+   "key": "75356da0ef97ed02",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6090,8 +6217,10 @@
      "concept-card"
     ],
     "counts": {
-     "concept-card": 14,
+     "logo-sting": 1,
      "icon-row": 16,
+     "concept-card": 12,
+     "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 7,
@@ -6168,7 +6297,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "46c949e3715f486d",
+   "key": "c2df20fb8f817851",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6187,8 +6316,10 @@
      "motion-title"
     ],
     "counts": {
-     "concept-card": 16,
+     "logo-sting": 1,
      "icon-row": 17,
+     "concept-card": 14,
+     "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 8,
@@ -6271,7 +6402,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "c7a2a8dea8f1f174",
+   "key": "7716ce5cf0a76ec6",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6280,7 +6411,7 @@
    ],
    "history": {
     "recent": [
-     "concept-card",
+     "commit-card",
      "glass-word",
      "concept-card",
      "timeline",
@@ -6290,8 +6421,10 @@
      "icon-row"
     ],
     "counts": {
-     "concept-card": 20,
+     "logo-sting": 1,
      "icon-row": 20,
+     "concept-card": 16,
+     "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 8,
@@ -6312,7 +6445,8 @@
      "process-steps": 3,
      "glass-word": 4,
      "excerpt": 1,
-     "window-chrome": 1
+     "window-chrome": 1,
+     "commit-card": 1
     },
     "plates": [
      {
@@ -6381,7 +6515,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "954804dd137fa7d7",
+   "key": "353f928d550d7aab",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6400,8 +6534,10 @@
      "icon-grid"
     ],
     "counts": {
-     "concept-card": 21,
+     "logo-sting": 1,
      "icon-row": 23,
+     "concept-card": 17,
+     "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
      "particle-text": 9,
@@ -6422,7 +6558,8 @@
      "process-steps": 3,
      "glass-word": 5,
      "excerpt": 1,
-     "window-chrome": 1
+     "window-chrome": 1,
+     "commit-card": 1
     },
     "plates": [
      {
@@ -6496,7 +6633,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "16a0b561a7ff7347",
+   "key": "43eeaacccfd07372",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6515,8 +6652,10 @@
      "concept-card"
     ],
     "counts": {
-     "concept-card": 23,
+     "logo-sting": 1,
      "icon-row": 23,
+     "concept-card": 19,
+     "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
      "particle-text": 10,
@@ -6537,7 +6676,8 @@
      "process-steps": 6,
      "glass-word": 5,
      "excerpt": 1,
-     "window-chrome": 1
+     "window-chrome": 1,
+     "commit-card": 1
     },
     "plates": [
      {
@@ -6616,7 +6756,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "9b6db6ba37c8f518",
+   "key": "4b424afb8508ad61",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6632,11 +6772,13 @@
      "icon-row",
      "motion-title",
      "glass-word",
-     "concept-card"
+     "logo-sting"
     ],
     "counts": {
-     "concept-card": 26,
+     "logo-sting": 2,
      "icon-row": 25,
+     "concept-card": 21,
+     "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
      "particle-text": 11,
@@ -6658,6 +6800,7 @@
      "glass-word": 6,
      "excerpt": 1,
      "window-chrome": 1,
+     "commit-card": 1,
      "checklist": 3
     },
     "plates": [
@@ -6831,15 +6974,15 @@
    }
   },
   "variety": {
-   "modules": 24,
+   "modules": 27,
    "top": [
-    {
-     "id": "concept-card",
-     "share": 0.165
-    },
     {
      "id": "icon-row",
      "share": 0.158
+    },
+    {
+     "id": "concept-card",
+     "share": 0.133
     },
     {
      "id": "motion-title",
