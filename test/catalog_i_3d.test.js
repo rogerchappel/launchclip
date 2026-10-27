@@ -199,3 +199,11 @@ test('planet-family: kinds are procedural, the camera tracks body to body, stars
   assert.ok(far > x && far < 0, 'the far stars move less than the strip');
   assert.deepEqual(r(SAMPLES['planet-family'], '16:9').content.layers, model.content.layers, 'the same stars every time');
 });
+
+test('glass-bars-3d: a landscape staircase with title, source and marker fits with one-line names', () => {
+  const model = resolve('glass-bars-3d', {variant: 'staircase', title: 'The line-up, by output price', source: 'Vendor price lists, Oct 2026',
+    data: [{label: 'Atlas Max', value: 50, display: '$50'}, {label: 'Atlas', value: 10, display: '$10'}, {label: 'Nova', value: 5, display: '$5'}, {label: 'Nova Mini', value: 0.5, display: '$0.50'}],
+    marker: {text: '59.3%', label: 'best score', steps: [0, 1, 2]}}, '16:9', {duration: 7.5});
+  assert.ok(model.content.bars.every(bar => bar.size.lines === 1), 'every name on one line');
+  assert.ok(model.content.k > 0.5, `the scene keeps its scale (k ${model.content.k})`);
+});

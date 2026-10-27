@@ -81,7 +81,7 @@ function barsResolve(params, ctx) {
     const w = Math.max(textWidth(marker.text, textSize, 'display') + textSize * 0.9, marker.label ? textWidth(marker.label, labelSize, 'body') : 0) + u(40);
     return {textSize, labelSize, w, h: textSize * 1.25 + labelSize * 1.2 + u(24)};
   })() : null;
-  const lift = u(110);
+  const lift = u(70);
   const build = k => {
     const bars = geometry(k);
     const points = [];
@@ -121,30 +121,46 @@ function barsResolve(params, ctx) {
       sizes[i].value = Math.max(sizes[i].value, up2(b.min.key / s));
       minText = Math.min(minText, sizes[i].name * s, sizes[i].value * s);
     });
-  } else for (let pass = 0; pass < 6; pass++) {
+  } else for (let pass = 0; pass < 12; pass++) {
     // A frame with room to spare across (landscape) gets wider steps.
     if (fit.bounds.w < box.W * 0.9 && stepW < world.w * 2.6) {
       stepW = Math.min(world.w * 2.6, stepW * box.W * 0.94 / fit.bounds.w);
       fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
       bars = geometry(fit.k);
     }
-    // Staircase: price and name on each step's front face, top left; the
-    // shortest step grows until its text fits, then the scene refits.
-    let need = 0;
+    // Steps wide enough for every name on one line (two lines would make the
+    // shortest step, and so the whole staircase, taller than the frame).
+    const wantW = Math.max(...items.map((item, i) => {
+      const fs = faceScale(cam, [bars[i].x, bars[i].d / 2, bars[i].h]);
+      return (Math.max(textWidth(item.label, b.min.key, 'body'), textWidth(texts[i], b.min.key, 'display')) / (fs * 0.98) + 2 * u(14) + u(6)) / fit.k;
+    }));
+    if (wantW > stepW + 1e-6 && stepW < world.w * 3.4) {
+      stepW = Math.min(world.w * 3.4, wantW * 1.02);
+      fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
+      bars = geometry(fit.k);
+    }
+    // Staircase: price and name on each step's front face, top left. A step
+    // too narrow for its text widens; the shortest step grows until its text
+    // fits; then the scene refits.
+    let need = 0, narrow = false;
     minText = Infinity;
+    const last = pass === 11;
+    const fitOr = (path, text, opts) => {
+      try { return fitSize(check, path, text, opts); } catch (error) { if (last || stepW >= world.w * 3.4) throw error; narrow = true; return {size: b.min.key, lines: opts.maxLines ?? 1}; }
+    };
     sizes = items.map((item, i) => {
       const fs = faceScale(cam, [bars[i].x, bars[i].d / 2, bars[i].h]);
       const room = (bars[i].w - 2 * u(14)) * fs * 0.98;
-      const value = fitSize(check, `params.data[${i}].value`, texts[i], {family: 'display', width: room, preferred: u(b.portrait ? 70 : 62), min: b.min.key});
-      const name = fitSize(check, `params.data[${i}].label`, item.label, {family: 'body', width: room, preferred: u(b.portrait ? 44 : 34), min: b.min.key, maxLines: 2});
+      const value = fitOr(`params.data[${i}].value`, texts[i], {family: 'display', width: room, preferred: u(b.portrait ? 70 : 62), min: b.min.key});
+      const name = fitOr(`params.data[${i}].label`, item.label, {family: 'body', width: room, preferred: u(b.portrait ? 44 : 34), min: b.min.key, maxLines: 2});
       need = Math.max(need, (value.size * 1.1 + name.size * 1.2 * name.lines + u(34)) / fs / fit.k);
       minText = Math.min(minText, value.size, name.size);
       return {value: up2(value.size / fs), name: up2(name.size / fs), lines: name.lines, scale: fs};
     });
-    if (need <= lo + 1e-6) break;
-    if (pass === 5) check.fail('params.data', 'the shortest step is too short for its price and name; use fewer steps or shorter names');
-    lo = need * 1.04;
-    hi = Math.max(world.hMax, lo * 1.75);
+    if (!narrow && need <= lo + 1e-6) break;
+    if (last) check.fail('params.data', 'the shortest step is too short for its price and name; use fewer steps or shorter names');
+    if (narrow) stepW = Math.min(world.w * 3.4, stepW * 1.15);
+    if (need > lo) { lo = need * 1.04; hi = Math.max(world.hMax, lo * 1.45); }
     fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
     bars = geometry(fit.k);
   }
