@@ -28,9 +28,11 @@
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/beat-director.mjs.
 
+import { ENTRY, cameraSummary, planCamera } from './beat-camera.mjs';
 import { cadenceGate, cadenceTarget, eventStats } from './cadence.mjs';
 import { DIRECTION_SCHEMA, classifyIntent, narrationWords } from './direction.mjs';
 import { longFormChunks } from './long-form.mjs';
+import { TRANSITION_TYPES } from './transitions.mjs';
 import { catalogModules, knownModules, moduleVariants, resolveModule } from './modules.mjs';
 import { MAX_SHOT_STATES, stateSpec } from './shot-states.mjs';
 import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, isPlanned, keyTerms, resolveCapability } from './visual-capabilities.mjs';
@@ -1187,7 +1189,10 @@ function makeChecker(format, brand) {
  * wordmark?} for the channel's own: with a name the sting is the channel's
  * logo-sting, and the map keeps it as map.channel for the story's subscribe
  * pill and watermark),
- * registered (module ids; knownModules() by default), brand, onChunk}.
+ * registered (module ids; knownModules() by default), brand, onChunk,
+ * camera (false: no camera pass; by default every shot gets an entry move,
+ * the cards the narration points into get zooms and each chapter of 4+ shots
+ * an overview, kit/core/beat-camera.mjs)}.
  * → the beat map, with its report.
  */
 export function directLongForm(input, options = {}) {
@@ -1247,6 +1252,8 @@ export function directLongForm(input, options = {}) {
   if (chapters[0].shots[0]) { chapters[0].shots[0].start = 0; chapters[0].shots[0].states[0].start = 0; }
   const channel = typeof structure.brand?.name === 'string' && structure.brand.name.trim() ? structure.brand : null;
   const map = { schema: BEAT_MAP_SCHEMA, ...(input.title ? { title: input.title } : {}), format, cadence: { format: cadence, style }, duration, ...(channel ? { channel } : {}), chapters, chunks: chunkOut };
+  // The camera (kit/core/beat-camera.mjs): each shot's entry move, zooms into what a line names, an overview per chapter.
+  if (options.camera !== false) planCamera(map, words, { format, brand: options.brand ?? DEFAULT_BRAND });
   map.report = beatMapReport(map, { reused });
   return map;
 }
@@ -1302,6 +1309,7 @@ export function beatMapReport(map, { reused = 0 } = {}) {
     shots: { count: shots.length, states_per_shot: { min: Math.min(...perShot), max: Math.max(...perShot), mean: round(perShot.reduce((a, b) => a + b, 0) / Math.max(1, perShot.length), 2) }, changes },
     variety: { modules: top.length, top: top.slice(0, 5).map(([id, n]) => ({ id, share: round(n / Math.max(1, shown.length), 3) })), longest_same_module_across_cuts: longestRun },
     evidence: { claims: claims.length, sourced: sourced.length, coverage: claims.length ? round(sourced.length / claims.length, 3) : null, captures: states.filter((state) => state.evidence?.capture).length },
+    camera: cameraSummary(map),
     fallbacks: Object.entries(wanted).sort((a, b) => b[1].states - a[1].states).map(([id, entry]) => ({ wanted: id, states: entry.states, using: Object.keys(entry.using).sort((x, y) => entry.using[y] - entry.using[x]) })),
     chunks: { count: map.chunks?.length ?? 0, reused }
   };
@@ -1317,7 +1325,7 @@ export function beatMapReportText(map) {
   const r = map.report ?? beatMapReport(map);
   const c = r.cadence;
   const lines = [
-    `beat map: ${map.title ?? 'untitled'} — ${round(map.duration / 60, 1)} min, ${map.chapters.length} chapters, ${r.shots.count} shots, ${c.events + 1} states`,
+    `beat map: ${map.title ?? 'untitled'} — ${round(map.duration / 60, 1)} min, ${map.chapters.length} chapters, ${r.shots.count} shots, ${c.events + 1} states, ${r.camera?.zooms ?? 0} zooms, ${r.camera?.overviews ?? 0} overviews`,
     `cadence ${c.gate.ok ? 'passed' : 'FAILED'} (${c.gate.format}, ${c.gate.style}): ${c.events} events, ${c.per_min}/min, ${c.words_per_event} words per event; gaps p10 ${c.gap.p10} / p50 ${c.gap.p50} / p90 ${c.gap.p90} s; longest static ${c.longest_static.seconds} s; ${c.cuts} cuts, median ${c.cut_gap?.p50} s apart`
   ];
   for (const check of c.gate.checks) lines.push(`  ${check.ok ? 'ok  ' : 'FAIL'} ${check.id.padEnd(15)} ${String(check.value).padStart(7)}  want ${check.want}`);
@@ -1325,6 +1333,12 @@ export function beatMapReportText(map) {
   lines.push(`variety: ${r.variety.modules} modules; top ${r.variety.top.map((entry) => `${entry.id} ${Math.round(entry.share * 100)}%`).join(', ')}; longest same-module run across cuts ${r.variety.longest_same_module_across_cuts}`);
   lines.push(`evidence: ${r.evidence.sourced}/${r.evidence.claims} claims shown with a sourced visual (${r.evidence.coverage === null ? 'n/a' : `${Math.round(r.evidence.coverage * 100)}%`}), ${r.evidence.captures} on a capture`);
   if (r.fallbacks.length) lines.push(`fallbacks (modules without params yet, or not registered): ${r.fallbacks.map((entry) => `${entry.wanted}→${entry.using.join('/')} ×${entry.states}`).join(', ')}`);
+  const cam = r.camera;
+  if (cam && Object.keys(cam.entries).length) {
+    lines.push(`camera: ${Object.entries(cam.entries).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}; longest push-in run ${cam.longest_push_run}; ${cam.zooms} zooms (${cam.zooms_per_min}/min), ${cam.overviews} overviews`);
+    for (const zoom of cam.list.zooms) lines.push(`  zoom     ${clock(zoom.at)}  ${zoom.module} → ${zoom.element} on "${zoom.word}" (${zoom.by})`);
+    for (const overview of cam.list.overviews) lines.push(`  overview ${clock(overview.at)}  ${overview.chapter}: ${overview.why.replace(/^overview of [^:]+: /, '')}`);
+  }
   lines.push(`chunks: ${r.chunks.count} (${r.chunks.reused} reused)`);
   return lines.join('\n');
 }
@@ -1361,7 +1375,13 @@ export function beatMapToDirection(map, { profile = 'youtube-long-form' } = {}) 
  * - channel ({name, logo?}; default map.channel): a subscribe-cta pill on
  *   track 1 at each call to action, over the scene before it (which holds),
  *   and a channel-watermark on track 2 across the whole video;
- * - style "glass-explainer": the story names the style and its rim-glass panel.
+ * - style "glass-explainer": the story names the style and its rim-glass panel;
+ * - camera (default: on for a long-form map; false: hard cuts as before): a
+ *   world camera, each shot entering on its planned move (push, pull,
+ *   whip-pan, orbit, overview), the cards inside a shot on a rack focus, and
+ *   each card's zooms as scene.zooms on the story clock. An overview whose
+ *   chapter has fewer than 3 scenes in the window, or a kit without the
+ *   overview transition, enters on a pull instead.
  */
 export function beatMapToStory(map, options = {}) {
   const from = options.from ?? 0;
@@ -1379,6 +1399,11 @@ export function beatMapToStory(map, options = {}) {
   const overlays = [];
   const chapters = [];
   let background = null;
+  const camera = options.camera ?? longForm;
+  const overviewReady = TRANSITION_TYPES.includes('overview');
+  const entered = new Set();
+  const sceneChapter = new Map();
+  const pendingZooms = new Map();
   for (const chapter of map.chapters) {
     if (chapter.end <= from || chapter.start >= to) continue;
     background ??= chapter.background;
@@ -1408,7 +1433,17 @@ export function beatMapToStory(map, options = {}) {
       }
       // Too short for any module that shows it: the scene before holds on.
       if (!module || seconds < 1) { if (scenes.length) scenes.at(-1).end = round(b - from); continue; }
-      scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'rack-focus', dur: 0.4 } } : {}) });
+      let entry = k > 0 && scenes.length ? { type: 'rack-focus', dur: 0.4 } : null;
+      // With the camera, a shot's first scene enters on the shot's move.
+      if (camera && scenes.length && !entered.has(shot.id) && shot.camera) {
+        const { type, dur, direction, span, hold } = shot.camera;
+        entry = type === 'overview' ? { type, dur, span, hold, chapter: shot.camera.chapter } : { type, dur, ...(direction ? { direction } : {}) };
+      }
+      entered.add(shot.id);
+      const scene = { id: state.id, module, start: round(a - from), end: round(b - from), params, ...(entry ? { in: entry } : {}) };
+      scenes.push(scene);
+      sceneChapter.set(scene, chapter.id);
+      if (camera && state.zooms?.length) pendingZooms.set(scene, state.zooms);
     }
   }
   // A scene whose focus steps do not fit (too close to its entrance or exit) keeps its card and drops the steps.
@@ -1422,6 +1457,24 @@ export function beatMapToStory(map, options = {}) {
   chapters.sort((a, b) => a.start - b.start);
   if (chapters.length) chapters[0].start = 0;
   const withChapters = chapters.length >= 2 && options.chapters !== false;
+  if (camera) {
+    // An overview needs the chapter it maps in the window (and the kit's overview move); otherwise it pulls back.
+    scenes.forEach((scene, i) => {
+      if (scene.in?.type !== 'overview') return;
+      const { chapter: id, ...entry } = scene.in;
+      const shown = scenes.slice(0, i).filter((before) => sceneChapter.get(before) === id).length;
+      if (!overviewReady || shown < 3) scene.in = { type: 'pull', dur: ENTRY.pull };
+      else scene.in = withChapters ? entry : { ...entry, span: Math.min(8, shown) };
+    });
+    // Zooms on the story clock, kept clear of the scene's entry and exit; none on a scene under 3 s.
+    for (const [scene, zooms] of pendingZooms) {
+      if (scene.end - scene.start < 3) continue;
+      const after = scene.start + (scene.in?.dur ?? 0) + 0.3;
+      const kept = zooms.map((zoom) => ({ at: round(zoom.at - from), until: round(zoom.until - from), ...(zoom.target !== undefined ? { target: zoom.target } : { box: zoom.box }) }))
+        .filter((zoom) => zoom.at >= after && zoom.until <= scene.end - 0.2);
+      if (kept.length) scene.zooms = kept;
+    }
+  }
   // One chapter in the window (or no chapter list): its plate is the story's.
   const plate = plates && !withChapters ? chapters[0]?.plate ?? null : null;
   if (channel && duration > 0) overlays.push({ id: 'channel-watermark', module: 'channel-watermark', track: 2, start: 0, end: duration, params: { name: channel.name, ...(channel.logo ? { logo: channel.logo } : {}) } });
@@ -1433,6 +1486,7 @@ export function beatMapToStory(map, options = {}) {
     format: { width: format.width, height: format.height, fps, duration, ...(format.platform ? { platform: format.platform } : {}) },
     brand,
     ...(glass ? { style: 'glass-explainer', panel: { treatment: 'rim-glass', radius: 22 } } : {}),
+    ...(camera ? { camera: { mode: 'world', layout: 'path', spacing: 0.14, parallax: true } } : {}),
     ...(background ? { background: { kind: background } } : {}),
     ...(plate ? { plate } : {}),
     audio: { words: 'NARRATION.json' },
@@ -1493,6 +1547,11 @@ export function dryRunWords(script, { wpm = 140, comma = 0.18, sentence = 0.42, 
     }
   });
   return { title: parsed.title, words, chapters, duration: round(t + 0.5) };
+}
+
+function clock(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 function slugOf(value) {
