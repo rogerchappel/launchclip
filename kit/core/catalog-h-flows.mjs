@@ -7,6 +7,7 @@ import {svgRoot, transformString} from './catalog-b-view.mjs';
 import {VARIANT_PARAM, FORMAT_PARAM, contrastRatio, createHBase, dataRows, fitText, inkOn, mixColor, numberFormat, r2, rt, stagger, textWidth, titleBlock, toneColor} from './catalog-h-base.mjs';
 import {abs, chromeNodes, chromeOps, countOps, countSamples, drawOps, el, fadeOps, label, popOps, riseOps, set, strokePath, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
+import {glassSurface} from './panels.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -577,14 +578,19 @@ function tableView(model) {
   const c = model.content;
   const kids = chromeNodes(model);
   const tableH = c.headH + c.rowH * c.rows.length;
-  if (c.variant === 'cards') c.columns.forEach((_, j) => kids.push(el('div', `${id}-colcard-${j}`, abs(r2(c.labelW + j * c.colW + 6 * u), c.y0, r2(c.colW - 12 * u), tableH, {boxSizing: 'border-box', borderRadius: r2(22 * u), background: c.panel, border: `${r2(2 * u)}px solid ${c.border}`, opacity: 0}))));
+  // The glass role (story.panel rim-glass): column cards turn to glass; the
+  // other variants sit on one glass sheet, and their row labels step in off its rim.
+  const glass = glassSurface(model, {radius: 22});
+  const inset = glass && c.variant !== 'cards' ? r2(28 * u) : 0;
+  if (glass && c.variant !== 'cards') kids.push(el('div', `${id}-glass`, {...abs(0, r2(c.y0 - 12 * u), c.W, r2(tableH + 24 * u)), ...glass, opacity: 0}));
+  if (c.variant === 'cards') c.columns.forEach((_, j) => kids.push(el('div', `${id}-colcard-${j}`, {...abs(r2(c.labelW + j * c.colW + 6 * u), c.y0, r2(c.colW - 12 * u), tableH), ...(glass ?? {boxSizing: 'border-box', borderRadius: r2(22 * u), background: c.panel, border: `${r2(2 * u)}px solid ${c.border}`}), opacity: 0})));
   if (c.highlight !== null) kids.push(el('div', `${id}-focus`, abs(r2(c.labelW + c.highlight * c.colW + 2 * u), r2(c.y0 - 6 * u), r2(c.colW - 4 * u), r2(tableH + 12 * u), {boxSizing: 'border-box', borderRadius: r2(22 * u), border: `${r2(4 * u)}px solid ${c.primary}`, boxShadow: `0 0 ${r2(30 * u)}px ${c.primary}55`, opacity: 0})));
   c.columns.forEach((col, j) => kids.push(label(`${id}-head-${j}`, r2(c.labelW + j * c.colW + 8 * u), r2(c.y0 + c.headH / 2 - c.headSize * 0.6), r2(c.colW - 16 * u), col, {size: c.headSize, family: fonts.body, color: j === c.highlight ? c.primary : c.ink, align: 'center', weight: 700, extra: {opacity: 0}})));
   c.rows.forEach((row, i) => {
     const inner = [];
-    if (c.variant === 'striped' && i % 2 === 0) inner.push(el('div', null, abs(0, 0, c.W, c.rowH, {borderRadius: r2(12 * u), background: c.panel})));
-    if (c.variant === 'grid') inner.push(el('div', null, abs(0, 0, c.W, r2(2 * u), {background: c.border})));
-    inner.push(label(null, r2(c.variant === 'striped' ? 20 * u : 4 * u), r2(c.rowH / 2 - c.labelSize * 0.6 * row.lines), r2(c.labelW - 24 * u), row.label, {size: c.labelSize, family: fonts.body, color: c.ink, weight: 600, wrap: row.lines > 1}));
+    if (c.variant === 'striped' && i % 2 === 0) inner.push(el('div', null, abs(r2(inset / 2), 0, r2(c.W - inset), c.rowH, {borderRadius: r2(12 * u), background: c.panel})));
+    if (c.variant === 'grid' && !(glass && i === 0)) inner.push(el('div', null, abs(inset, 0, r2(c.W - inset * 2), r2(2 * u), {background: c.border})));
+    inner.push(label(null, r2((c.variant === 'striped' ? 20 * u : 4 * u) + inset * 0.6), r2(c.rowH / 2 - c.labelSize * 0.6 * row.lines), r2(c.labelW - 24 * u - inset * 0.6), row.label, {size: c.labelSize, family: fonts.body, color: c.ink, weight: 600, wrap: row.lines > 1}));
     row.values.forEach((v, j) => {
       const cx = r2(c.labelW + j * c.colW + c.colW / 2);
       const node = typeof v === 'string' ? label(`${id}-cell-${i}-${j}`, r2(cx - c.colW / 2 + 6 * u), r2(c.rowH / 2 - c.cellSize * 0.6), r2(c.colW - 12 * u), v, {size: c.cellSize, family: fonts.display, color: c.ink, align: 'center', extra: {opacity: 0}})
@@ -601,6 +607,7 @@ function tableTimeline(model, ops) {
   const {id, start, unit: u} = model;
   const c = model.content;
   chromeOps(model, ops);
+  if (glassSurface(model) && c.variant !== 'cards') riseOps(ops, `${id}-glass`, start, c.buildAt, r2(24 * u), {duration: 0.55});
   if (c.variant === 'cards') c.columns.forEach((_, j) => riseOps(ops, `${id}-colcard-${j}`, start, rt(c.buildAt + j * 0.08), r2(24 * u), {duration: 0.5}));
   c.columns.forEach((_, j) => popOps(ops, `${id}-head-${j}`, start, rt(c.buildAt + 0.1 + j * 0.08), {from: 0.7}));
   c.rows.forEach((row, i) => {

@@ -44,7 +44,9 @@ export const SEED_PATTERN = /^[0-9a-f]{8}$/;
 export const TONES = Object.freeze(['calm', 'serious', 'warm', 'energetic', 'playful', 'premium', 'technical']);
 export const THEMES = Object.freeze(['dark', 'light', 'tinted']);
 export const PALETTE_SCHEMES = Object.freeze(['complementary', 'split-complementary', 'analogous', 'triadic', 'monochrome', 'duotone']);
-export const SEED_PANEL_TREATMENTS = PANEL_TREATMENTS;
+// rim-glass belongs with a backdrop plate (kit/core/plates.mjs, the
+// glass-explainer pack), and leaving it out keeps every existing seed's draw.
+export const SEED_PANEL_TREATMENTS = Object.freeze(PANEL_TREATMENTS.filter((treatment) => treatment !== 'rim-glass'));
 // Plain flat fills look poor, so subtle patterns and textures carry most of
 // the weight; flat and the blobs field stay possible. Every kit kind is drawn
 // except logo-pattern, which needs a brand logo a seeded style does not have.
@@ -426,13 +428,14 @@ export function styleDistance(a, b) {
   return round(palette * 0.5 + parts, 4);
 }
 
-// The looks a generated style must not resemble: the five starters in
+// The looks a generated style must not resemble: the starters in
 // kit/styles (test/style_seed.test.js checks this table against the files)
 // and the renderers' fallback when a story names no brand.
 const FALLBACK_LOOK = Object.freeze({ name: 'fallback', colors: Object.freeze({ bg: '#0b0b0f', paper: '#f5f3ee', ink: '#0b0b0f', primary: '#ffd23f', accent: '#46d4ff' }), fonts: Object.freeze({ display: 'anton', body: 'inter' }), panel: 'solid', grammar: 'editorial', caption: 'word-highlight' });
 export const AVOID_LOOKS = Object.freeze([
   Object.freeze({ name: 'bold-creator', colors: { bg: '#0b0b0b', paper: '#ffffff', ink: '#0b0b0b', primary: '#ffe14d', accent: '#ff3d7f' }, fonts: { display: 'anton', body: 'archivo-black' }, panel: 'solid', grammar: 'snappy', caption: 'outline-heavy' }),
   Object.freeze({ name: 'editorial-dark', colors: { bg: '#0e0f12', paper: '#f1ede4', ink: '#0e0f12', primary: '#e8b04a', accent: '#7fb8a4' }, fonts: { display: 'stix-two-text', body: 'inter' }, panel: 'solid', grammar: 'editorial', caption: 'minimal-line' }),
+  Object.freeze({ name: 'glass-explainer', colors: { bg: '#04070d', paper: '#f3f8ff', ink: '#04070d', primary: '#3fd8ff', accent: '#ff9b54' }, fonts: { display: 'plus-jakarta-sans', body: 'plus-jakarta-sans' }, panel: 'rim-glass', grammar: 'smooth', caption: 'minimal-line' }),
   Object.freeze({ name: 'minimal-tech', colors: { bg: '#f4f5f7', paper: '#0f1720', ink: '#ffffff', primary: '#2257e8', accent: '#00866a' }, fonts: { display: 'space-grotesk', body: 'inter' }, panel: 'glass', grammar: 'smooth', caption: 'underline-sweep' }),
   Object.freeze({ name: 'neon-explainer', colors: { bg: '#07051a', paper: '#f4f1ff', ink: '#07051a', primary: '#19f0ff', accent: '#ff4fd8' }, fonts: { display: 'bricolage-grotesque', body: 'space-grotesk' }, panel: 'glass', grammar: 'playful', caption: 'glow' }),
   Object.freeze({ name: 'warm-documentary', colors: { bg: '#1c1612', paper: '#f3e6d0', ink: '#1c1612', primary: '#e08a34', accent: '#9cbf86' }, fonts: { display: 'instrument-serif', body: 'stix-two-text' }, panel: 'paper', grammar: 'documentary', caption: 'lower-band' }),

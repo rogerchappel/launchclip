@@ -1,0 +1,103 @@
+{
+  "schema": "launchclip.style.v3",
+  "name": "glass-explainer",
+  "description": "Long-form tech explainers: glass panels with a cyan rim over a dark, out-of-focus plate that changes per chapter; type in white and cyan only, one warm accent for the brand being discussed, builds inside a shot rather than cuts.",
+  "brand": {
+    "colors": {
+      "bg": "#04070d",
+      "paper": "#f3f8ff",
+      "ink": "#04070d",
+      "primary": "#3fd8ff",
+      "accent": "#ff9b54"
+    },
+    "fonts": {
+      "display": "plus-jakarta-sans",
+      "body": "plus-jakarta-sans",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "smooth"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "ambient": {
+    "level": "subtle"
+  },
+  "captions": {
+    "preset": "minimal-line",
+    "position": "bottom",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
+  },
+  "sound": {
+    "sfx_density": "normal",
+    "music": {
+      "prompt_hints": [
+        "cinematic ambient electronica",
+        "soft pulsing synths",
+        "airy pads"
+      ],
+      "bpm_range": [
+        84,
+        100
+      ],
+      "energy_curve": "steady"
+    }
+  },
+  "modules": {
+    "prefer": [
+      "window-chrome",
+      "comparison-table",
+      "stat-card",
+      "excerpt",
+      "bar-chart",
+      "leaderboard"
+    ],
+    "avoid": [
+      "scrapbook",
+      "doodle-outline",
+      "torn-paper",
+      "tape-note"
+    ],
+    "params": {
+      "callout": {
+        "presentation": "glass"
+      }
+    }
+  },
+  "layout": {
+    "title_case": false
+  },
+  "layouts": {
+    "panel": {
+      "treatment": "rim-glass",
+      "radius": 22
+    }
+  },
+  "plate": {
+    "kind": "hex-shell",
+    "cycle": true,
+    "params": {
+      "focus": 0.6,
+      "intensity": 0.5
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "primary",
+    "illustration": false
+  },
+  "brand_frame": {
+    "enabled": false
+  },
+  "dials": {
+    "energy": 0.45,
+    "density": 0.7,
+    "playfulness": 0.2,
+    "polish": 0.9
+  }
+}

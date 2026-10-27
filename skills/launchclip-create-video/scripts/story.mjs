@@ -66,7 +66,7 @@ export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_B
   ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
 }])));
-export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow"];
+export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
 // kept in step by test/medium.test.js).
 export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink", "gouache"];
