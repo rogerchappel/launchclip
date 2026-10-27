@@ -1,0 +1,61 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-social-post-light-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "social-post",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "platform": "x",
+          "name": "Dana Demo",
+          "handle": "demo_dana",
+          "verified": true,
+          "demo": true,
+          "text": "Shipped the new render queue tonight. Every storyboard now previews in under a minute. Notes at example.com/changelog, and tell @demo_kai what breaks.",
+          "time": "6:06 AM",
+          "date": "Oct 25, 2026",
+          "metrics": {
+            "replies": 1043,
+            "reposts": 169,
+            "likes": 5512,
+            "bookmarks": 169,
+            "views": 1000000
+          },
+          "highlight": "previews in under a minute",
+          "focus": true,
+          "variant": "light"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
