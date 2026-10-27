@@ -38,8 +38,9 @@ export function jointTargets(cid, j) {
     [`${cid}-shin-r`]: {rotation: j.shinR},
     [`${cid}-fingerwrap-l`]: {opacity: j.fingerL},
     [`${cid}-fingerwrap-r`]: {opacity: j.fingerR},
-    // The face turned toward a target (drawn only for a character with one).
-    ...(j.gazeX !== undefined ? {[`${cid}-gaze`]: {x: j.gazeX, y: j.gazeY, scaleX: j.gazeScale ?? 1}} : {})
+    // The head and the face turned toward a target (drawn only for a
+    // character with one; each style draws its share, toon.mjs HEAD_TURN).
+    ...(j.gazeX !== undefined ? {[`${cid}-turn`]: {x: j.gazeX, y: j.gazeY}, [`${cid}-gaze`]: {x: j.gazeX, scaleX: j.gazeScale ?? 1}} : {})
   };
 }
 
