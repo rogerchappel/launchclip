@@ -190,3 +190,10 @@ test('validateStory warns when a social post has no source.url, but not for demo
   assert.match(warnings, /scene s2 \(social-stack\) shows a post with no params\.posts\[1\]\.source\.url/);
   assert.doesNotMatch(warnings, /posts\[0\]|posts\[2\]/);
 });
+
+test('a whole launchclip.capture.v1 record can be the source; its other fields are ignored', () => {
+  const capture = {schema: 'launchclip.capture.v1', url: 'https://x.com/ada/status/1', captured_at: '2026-10-26T10:00:00Z', screenshot: 'assets/captures/ada.png', claim: 'c1', claims: ['c1']};
+  const model = resolve('social-post', {name: 'Ada', handle: 'ada', text: 'Hello', source: capture});
+  assert.equal(model.content.post.source.screenshot, 'assets/captures/ada.png');
+  assert.throws(() => resolve('social-post', {name: 'Ada', handle: 'ada', text: 'Hello', source: 'https://x.com'}), /source must be an object/);
+});

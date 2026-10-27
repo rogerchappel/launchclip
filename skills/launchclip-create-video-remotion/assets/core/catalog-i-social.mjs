@@ -76,7 +76,8 @@ function metricValue(check, value, path) {
 /** source block → {url, host, capturedAt, screenshot, schema} (null when absent). */
 export function sourceOf(check, raw, path) {
   if (raw === undefined) return null;
-  check.obj(raw, path, SOURCE_KEYS);
+  // A whole capture record may be passed: its other fields (claim, claims…) are kept out of the card.
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) check.fail(path, `must be an object {${SOURCE_KEYS.slice(0, 4).join(', ')}}`);
   const url = raw.url === undefined ? null : check.str(raw.url, `${path}.url`, 400);
   if (url && !/^https?:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/i.test(url)) check.fail(`${path}.url`, 'must be the http(s) address of the original post');
   const capturedAt = raw.captured_at === undefined ? null : check.str(raw.captured_at, `${path}.captured_at`, 40);
