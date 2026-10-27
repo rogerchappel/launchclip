@@ -1462,6 +1462,110 @@ params:
 events: build, range-0, range-1, range-2, marker
 variants: ruler (default), track
 
+### repo-pr-card (keeps captions)
+A GitHub pull request rebuilt as a glass card: repo, PR number, title, merged/open state chip, author avatar and date, and a −/+ excerpt with line numbers; a box draws round the highlighted token (a model name, a flag) on its word. Real data only: map a PR with src/evidence/github.js.
+params:
+- repo: "owner/name"
+- number: PR number
+- title: PR title ≤ 140
+- state: merged | open | closed | draft (default open)
+- author: "login" | {login, avatar? (assets/ image)}
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 1–14
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- file: path of the file the lines are from ≤ 160 (optional)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- date: "YYYY-MM-DD" (optional)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), github
+
+### commit-card (keeps captions)
+A GitHub commit rebuilt as a glass card: repo, short sha, a Verified chip, co-author avatars and names, the message, the file path and the diff hunk; a box draws round the highlighted token on its word. Real data only (src/evidence/github.js).
+params:
+- repo: "owner/name"
+- sha: 7–40 hex (shown as 7)
+- verified: boolean (default false)
+- authors: ["login" | {login, avatar?}] 1–3
+- message: the commit message's first line ≤ 140
+- number: the PR number it came from (optional, shown "(#n)")
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 1–14
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- file: path of the file the lines are from ≤ 160 (optional)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- date: "YYYY-MM-DD" (optional)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), github
+
+### diff-view (keeps captions)
+A Files-changed file diff (path, +/− stats, two line-number gutters, red and green rows) where a cyan focus ring steps through rows in 1–6 states on their cues, sliding and resizing from one to the next while the other rows dim to 30%. Real diffs only (src/evidence/github.js).
+params:
+- file: path ≤ 160
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 2–18
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- focus: [{row | rows: [from, to] | line (new-file number), at?}] 1–6 states (events focus-<i>)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus-0, focus-1, focus-2, focus-3, focus-4, focus-5, highlight
+variants: glass (default), github
+
+### evidence-chain (keeps captions)
+An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".
+params:
+- sources: [{kind: pr | commit | excerpt | announcement, …that kind's fields: pr {repo, number, state?, author?, date?, file?, lines?}, commit {repo, sha, verified?, authors?, date?, file?, lines?}, excerpt {file, sub?, lines, startLine?}, announcement {site, title, text ≤ 320, date?}; highlight} + at?] 2–4, up to 6 lines each (events source-<i>, link-<i>)
+- token: the token to box in every source that sets no highlight (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: first source: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, source-0, source-1, source-2, source-3, link-1, link-2, link-3
+variants: glass (default), github
+
+### date-pinned-timeline (keeps captions)
+Evidence on a date axis: a day axis (Oct 16 → 25) whose playhead scrubs to each date while 1–4 source cards (PR, commit, excerpt, announcement) pin to it with a dashed stem and stack; or (variant summary) the "why now? 3 clues in 9 days" layout: a glass title panel with one dot per day over the clue thumbnails, each with its date and label.
+params:
+- from: "YYYY-MM-DD", the first day
+- to: "YYYY-MM-DD", the last (1–45 days on)
+- cards: [{date, label? ≤ 32 (summary caption), at?, …{kind: pr | commit | excerpt | announcement, …that kind's fields: pr {repo, number, state?, author?, date?, file?, lines?}, commit {repo, sha, verified?, authors?, date?, file?, lines?}, excerpt {file, sub?, lines, startLine?}, announcement {site, title, text ≤ 320, date?}; highlight}}] 1–4 in date order (events card-<i>)
+- title: summary only: ≤ 40 (default "why now?")
+- subtitle: summary only: ≤ 60 (default "N clues in N days")
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, card-0, card-1, card-2, card-3
+variants: axis (default), summary
+
+### terminal-session (keeps captions)
+A terminal that types: each command types character by character after the prompt, then its output streams row by row (plain lines, or PASS/FAIL rows with timings), scrolling when it outgrows the window; a ⏩ timer in the title bar fast-forwards the elapsed time while a long run streams, and a box draws round a path or token. For "git clone, pip install, run_all" proof beats.
+params:
+- title: window title ≤ 60 (default "zsh")
+- prompt: string ≤ 6 (default "$")
+- steps: [{cmd ≤ 160, output?: [string | {status: PASS | FAIL | OK | ERROR | SKIP, time? ≤ 10 ("10.0 s"), text} | {text, tone?: fg | muted | accent | add | del}] ≤ 30, typing? (seconds), at?}] 1–8 (events step-<i>)
+- stream: seconds between output rows (default 0.12)
+- timer: {to (seconds of real time shown), from? (default 0), step? (default the last with output)}: the ⏩ elapsed timer runs over that step's output (event timer)
+- highlight: "token" | {token, step?, row? (an output row), at?}: a box draws round it (event highlight)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, step-0, step-1, step-2, step-3, step-4, step-5, step-6, step-7, timer, highlight
+variants: glass (default), solid
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1603,6 +1707,12 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| repo-pr-card | 2 s | 0.5 s | scene − 0.65 s | the card racks into focus at at; rows land top to bottom within about 0.8 s; the token boxes draw 0.4 s after the rows (or on the highlight hit) |
+| commit-card | 2 s | 0.5 s | scene − 0.65 s | the card racks into focus at at; rows land within about 0.8 s; the token boxes draw 0.4 s after the rows (or on the highlight hit) |
+| diff-view | 2 s | 0.5 s | scene − 0.65 s | rows land within about 0.7 s from at; focus states follow the build up to 1.6 s apart (at least 0.3 s); the token box draws 0.4 s after the first focus |
+| evidence-chain | 2 s | 0.5 s | scene − 0.65 s | each source racks in, its rows land, then its token box draws; the connector from the previous token follows 0.25 s later; sources are spaced evenly, 0.4–2.6 s apart, the last connector ending before the exit when the scene is long enough (about 2.5 s per source) |
+| date-pinned-timeline | 2 s | 0.5 s | scene − 0.65 s | the axis (or title panel) builds in about 0.8 s from at; cards follow, 0.4–2.4 s apart (axis) or up to 1.2 s (summary), the last token finishing before the exit when the scene is long enough |
+| terminal-session | 2 s | 0.5 s | scene − 0.65 s | each command types in min(1.4, max(0.25, chars / 28)) s, 0.25 s for enter, then one output row every stream s; the next step follows the last row by 0.3 s; defaults that would run past the exit compress to fit (to 35%) |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

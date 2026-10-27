@@ -1,0 +1,67 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-repo-pr-card-glass-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "repo-pr-card",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "repo": "rogerchappel/launchclip",
+          "number": 88,
+          "title": "feat: select and rotate fit-for-purpose free OpenRouter models",
+          "state": "merged",
+          "author": {
+            "login": "rogerchappel",
+            "avatar": "assets/evidence/avatars/rogerchappel.jpg"
+          },
+          "date": "2026-07-17",
+          "file": "src/intake.js",
+          "additions": 6,
+          "deletions": 5,
+          "lines": [
+            "-  const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? (modelPolicy === \"quality\" ? \"gpt-5.6\" : \"gpt-5.6-terra\")).trim();",
+            "+  const modelProvider = modelPolicy === \"free\" ? \"openrouter\" : \"openai\";",
+            "+  const model = String(flags.model ?? (modelPolicy === \"free\" ? \"openrouter/free\" : env.OPENAI_VIDEO_MODEL ?? (modelPolicy === \"quality\" ? \"gpt-5.6\" : \"gpt-5.6-terra\"))).trim();",
+            "   const resources = [];"
+          ],
+          "startLine": {
+            "old": 70,
+            "new": 70
+          },
+          "highlight": "openrouter/free",
+          "variant": "glass"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

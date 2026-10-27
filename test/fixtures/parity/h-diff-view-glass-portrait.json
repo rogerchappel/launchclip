@@ -1,0 +1,77 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-diff-view-glass-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "diff-view",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "file": "src/director.js",
+          "additions": 4,
+          "deletions": 3,
+          "startLine": {
+            "old": 90,
+            "new": 90
+          },
+          "highlight": "gpt-5.5",
+          "lines": [
+            "     // Default to a reasoning model: the strict density/word-grounding linter",
+            "-    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). Override via",
+            "-    // --model or OPENAI_MODEL.",
+            "-    const model = flags.model || process.env.OPENAI_MODEL || \"o4-mini\";",
+            "+    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). gpt-5.5",
+            "+    // lands valid, lint-clean AND gap-free; o4-mini works as a cheaper",
+            "+    // fallback. Override via --model or OPENAI_MODEL.",
+            "+    const model = flags.model || process.env.OPENAI_MODEL || \"gpt-5.5\";",
+            "     log(`provider: openai (${model})`);"
+          ],
+          "focus": [
+            {
+              "row": 3
+            },
+            {
+              "rows": [
+                4,
+                6
+              ]
+            },
+            {
+              "row": 7
+            }
+          ],
+          "variant": "glass"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
