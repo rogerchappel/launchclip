@@ -984,26 +984,6 @@ params:
 events: build
 variants: gradient (default), line, steps
 
-### scatter-plot (keeps captions)
-Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.
-params:
-- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60
-- xLabel: string ≤ 32
-- yLabel: string ≤ 32
-- x: {min, max} (optional)
-- y: {min, max} (optional)
-- trend: boolean: draw the least-squares line (default false)
-- tone: dot colour (primary | accent | paper | #rrggbb)
-- highlight: point index to call out (optional)
-- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
-- title: string ≤ 60 (optional)
-- source: string ≤ 80, where the numbers come from (optional)
-- at: build start: seconds from scene start (optional; else a matching hit, else a default)
-- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
-- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, highlight
-variants: dots (default), bubbles, rings
-
 ### radar-chart (keeps captions)
 Radar (spider) chart: the grid lands, then each series' shape grows out from the centre; 3–8 labelled axes.
 params:
@@ -1048,6 +1028,33 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
 variants: ring (default), thick, segmented, half
+
+### scatter-plot (keeps captions)
+Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
+params:
+- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60 (one of points, series or panels)
+- series: [{points: [{x, y, label?, size?}] 1–24, label? ≤ 22, color? (primary | accent | paper | #rrggbb), line? (default true with 2+ points), at?}] 1–5; each draws on its own cue (event series-<i>)
+- panels: [{title ≤ 32, series}] exactly 2, side by side (stacked in portrait) on shared axes ("Official chart" | "Independent re-run"); their series count on in one sequence (series-<i>), the second panel lands on event panel-1
+- focus: series index to glow while the others dim (optional; in both panels; event focus)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- annotations: [{type: "guide" | "callout" | "placeholder", id? (a reveal id; default a<i>), panel?, series? + index? (a series point) | x + y, text? (callout text ≤ 40, guide tag, placeholder glyph ≤ 3, default "?"), label? ≤ 24 (placeholder caption), at?}] 1–6; each lands on its own cue (event reveal-<id>)
+- x: {min?, max?, scale?: "linear" | "log"} (optional)
+- y: {min?, max?, scale?: "linear" | "log"} (optional)
+- format: y values: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- xFormat: x values: as format
+- xLabel: string ≤ 32
+- yLabel: string ≤ 32
+- trend: boolean: draw the least-squares line through points (default false)
+- tone: dot colour (primary | accent | paper | #rrggbb)
+- highlight: points index to call out (optional; with points)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, panel-1, series-<i>, focus, highlight, reveal-<id>
+variants: dots (default), bubbles, rings
 
 ### funnel-chart (keeps captions)
 A conversion funnel: stages widen in top to bottom with counting values and the step-to-step rate between them; tapered, bars or steps.
@@ -1571,10 +1578,10 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | stacked-bar | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | pie-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | area-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
-| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | radar-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | sparkline | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | progress-ring | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
+| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
 | funnel-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | waterfall | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |
 | sankey | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.8 s from at; highlight.at comes after the build |

@@ -3,7 +3,8 @@
 // Contract: docs/KIT_CONTRACTS.md ("Catalogue H").
 //
 //   charts    catalog-h-charts.mjs (bar-chart, stacked-bar, pie-chart,
-//             area-chart, scatter-plot, radar-chart, sparkline, progress-ring)
+//             area-chart, radar-chart, sparkline, progress-ring),
+//             catalog-h-scatter.mjs (scatter-plot: series, guides, log axes)
 //             and catalog-h-flows.mjs (funnel-chart, waterfall, sankey,
 //             heatmap, leaderboard, comparison-table), catalog-h-map.mjs
 //             (map-highlight, on kit/core/world-110m.mjs)
@@ -26,6 +27,7 @@ import {propsToStyle, rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
 import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
+import {SCATTER} from './catalog-h-scatter.mjs';
 import {FLOWS} from './catalog-h-flows.mjs';
 import {NUMBERS} from './catalog-h-numbers.mjs';
 import {FRAMES} from './catalog-h-frames.mjs';
@@ -37,7 +39,7 @@ import {MAPS} from './catalog-h-map.mjs';
 import {DATA_MODULES} from './catalog-h-data.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES];
+const DEFINITIONS = [...CHARTS, ...SCATTER, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
