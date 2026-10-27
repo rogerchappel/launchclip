@@ -13,10 +13,13 @@
 //                    short-form cadence and each state's module
 //
 //   node eval/beat-map-dry-run.mjs [folder] [--wpm 155] [--style default] [--fresh]
-//     [--ctas 210,580,900] [--no-stings]
+//     [--ctas 210,580,900] [--no-stings] [--channel "Signal Lab" | --no-channel]
 //
 // The fixture's structure: mid-roll subscribe calls at 3:30, 9:40 and 15:00
-// and a logo sting at the open and the close (the reference's).
+// and a logo sting at the open and the close (the reference's). The channel
+// is a placeholder name of our own (not the reference's): it makes the
+// stings logo-stings and, in a storyboard cut from the map, the subscribe
+// pills and the watermark.
 //
 // A BEATMAP.json already there is passed back as `previous`, so chunks whose
 // words, history and settings are unchanged are reused (--fresh plans all).
@@ -44,13 +47,14 @@ export async function loadFixture(folder) {
 }
 
 export const DEFAULT_CTAS = Object.freeze([210, 580, 900]);
+export const DEFAULT_CHANNEL = Object.freeze({ name: 'Signal Lab', tagline: 'AI, explained weekly' });
 
-export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 }, ctas = DEFAULT_CTAS, stings = true } = {}) {
+export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 }, ctas = DEFAULT_CTAS, stings = true, channel = DEFAULT_CHANNEL } = {}) {
   const { script, ledger, captures } = await loadFixture(folder);
   const timed = dryRunWords(script, { wpm });
   const beatsFile = path.join(folder, 'BEATMAP.json');
   const previous = !fresh && existsSync(beatsFile) ? JSON.parse(await readFile(beatsFile, 'utf8')) : null;
-  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings, ...(channel ? { stingBrand: { ...channel } } : {}) });
   const direction = beatMapToDirection(map);
   const check = validateDirection(direction, { words: timed.words, lane: 'motion', deferScenes: true });
   if (!check.ok) throw new Error(`the direction map does not validate:\n${check.errors.slice(0, 5).join('\n')}`);
@@ -83,7 +87,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
   const folder = args.find((arg, i) => !arg.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? DEFAULT_FIXTURE;
-  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh'), ctas: flag('ctas', null) ? flag('ctas').split(',').map(Number) : DEFAULT_CTAS, stings: !args.includes('--no-stings') });
+  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh'), ctas: flag('ctas', null) ? flag('ctas').split(',').map(Number) : DEFAULT_CTAS, stings: !args.includes('--no-stings'), channel: args.includes('--no-channel') ? null : flag('channel', null) ? { name: flag('channel') } : DEFAULT_CHANNEL });
   console.log(report);
   // The planning gate: a plan that misses its cadence target fails the run.
   if (!map.report.cadence.gate.ok) process.exitCode = 1;

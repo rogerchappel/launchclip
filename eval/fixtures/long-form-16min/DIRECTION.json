@@ -7,7 +7,7 @@
       "title": "The launch nobody saw coming",
       "layout": "full",
       "lines": [
-        { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): nothing else fits, a concept card" },
+        { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): logo-sting" },
         { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: icon-row" },
         { "words": [27, 36], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-3"], "why": "documents: nothing else fits, a concept card" },
         { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card" },
@@ -241,7 +241,7 @@
         { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: glass-word" },
         { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: kinetic-words" },
         { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: icon-row" },
-        { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: nothing else fits, a concept card" }
+        { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: logo-sting" }
       ]
     }
   ]
