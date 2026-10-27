@@ -163,4 +163,8 @@ test("beat director: the map is a valid direction map and renders as a storyboar
   for (const scene of resolved.scenes) assert.doesNotThrow(() => resolveModule(scene, resolved), scene.id);
   assert.equal(story.scenes[0].start, 0);
   assert.equal(story.scenes.at(-1).end, story.format.duration);
+  // A build inside a shot racks focus to the next card (a visible event); a new shot cuts.
+  const builds = story.scenes.filter((scene) => scene.in);
+  assert.ok(builds.length > 0 && builds.every((scene) => scene.in.type === "rack-focus" && scene.in.dur === 0.4), JSON.stringify(builds.map((scene) => scene.in)));
+  assert.ok(story.scenes.length > builds.length + 1, "shots still cut");
 });

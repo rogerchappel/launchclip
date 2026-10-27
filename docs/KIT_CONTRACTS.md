@@ -261,8 +261,11 @@ the fallback table). `resolveModule()` resolves one model per param change
 
 ### How a state moves
 
+Every state is a visible event: its change lands in the first frames, so a
+viewer (and a scene detector, see "State events" below) reads it as one.
+
 - Params: each element of the base view tweens over `STATE_MOVE` (0.6 s,
-  `power3.inOut`) to where the next model settles it: a box maps its rect
+  `expo.out`) to where the next model settles it: a box maps its rect
   about its transform origin with x/y/scale, text moves with its alignment
   edge and counts between numbers in the same frame (`$1` → `$3`), opacity,
   clip and dash follow the settled ops. Colours and SVG paths do not morph.
@@ -271,7 +274,11 @@ the fallback table). `resolveModule()` resolves one model per param change
   target gets its own ring that starts exactly on the old ring's rect and
   settles exactly on its own (FLIP), so it ends crisp; the targets' siblings
   (other items, or for an element id its id'd siblings) dim to 30 % and come
-  back when focus moves on. Rects follow param changes.
+  back when focus moves on (0.25 s, `expo.out`). Rects follow param changes.
+- Bloom (`STATE_BLOOM`): each state with a target (focus, glow, else what it
+  reveals, else a band along its guide) gets one soft fill in the focus colour
+  behind the target (blurred 34 px, padded 28 px) that rises to 0.6 opacity in
+  0.07 s and decays to nothing over 0.85 s. One pulse per state.
 - Overlays (glow, guide, note, rings) are inserted into the deepest node that
   holds every target, so they share its coordinates (a flowed panel in
   catalogue G included). Ids carry `-ss-`.
@@ -293,9 +300,14 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 ### Transitions (`kit/core/transitions.mjs`)
 
-- `rack-focus`: the outgoing card blurs back (16 px) and shrinks to 0.95 into
-  the plate while the incoming one sharpens forward from 18 px and 1.04. The
-  default between builds of different shots.
+- `rack-focus`: the incoming card is there within a few frames (opacity over
+  a quarter of the rack), blurred 22 px, at 1.08 and with a short exposure
+  lift (brightness 1.45), then pulls sharp and settles while the outgoing
+  card blurs back (26 px) and shrinks to 0.9 under it. Every part eases
+  `expo.out`, so the change lands in its first frames. The incoming card's
+  blur and lift are one layer prop, `rackIn` (1 → 0, `rackFilter(v)`), so the
+  two never overwrite each other's `filter` in GSAP. The beat director's
+  in-shot builds use it (0.4 s).
 - `glow-wipe` (direction left|right|up|down): a straight inset wipe in the
   travel direction; both plates flare (`glow` = extra brightness, peak 0.85)
   at the edge. For chapter breaks only.
@@ -304,6 +316,11 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   canvas; `cardMap(a, b, width, height)`) and settles on its own, while the
   outgoing layer travels on to the incoming rect and fades. Equal rects give
   a crossfade with a 0.97 → 1 settle.
+- Cards a transition carries (`CARRY_TRANSITIONS`: rack-focus, card-to-card)
+  rest whole at both ends (`modules.mjs` carriedByTransition: the incoming
+  module enters at opacity 1 with no blur, the outgoing one keeps opacity 1
+  into its exit), so the transition, not the card's own fade, brings it in
+  and takes it away. Their slides and settles still play.
 - Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
   once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
   with blur in one filter).
@@ -312,6 +329,21 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 `holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
 nothing still for over 3 s, no shot over 10 s without a change.
+
+### State events (`eval/scorecard.mjs`, `scripts/state-events.mjs`)
+
+A state change reads as a visual event when its peak ffmpeg scene score
+(the measure the scorecard's cadence and the reference's 170 events use)
+over `[t - 0.1, t + 0.8]` reaches 0.08 (`STATE_EVENT`). `stateMarks(story)`
+lists the changes: every `scene.states` entry, and every track-0 scene that
+arrives by a transition (an in-shot swap); hard cuts are not states.
+`stateEvents(scores, story)` gives each peak, the median and the misses; the
+format scorecard reports them as `state_events` (median ≥ 0.08).
+`node scripts/state-events.mjs <storyboard|project>` measures without a full
+render (compile to HyperFrames, seek frame by frame in Chromium around each
+change, encode each window, read the scene score) and exits 1 under the line.
+The shot-states sample is held to it in the media tests
+(`test/state_events.test.js`).
 
 ## Editorial core (`kit/core/editorial-core.mjs`)
 

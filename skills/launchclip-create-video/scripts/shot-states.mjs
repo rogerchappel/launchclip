@@ -47,6 +47,15 @@ export const STATE_GAP = 0.6;
 /** Seconds a param change, a reveal's fade and the ring's travel take. */
 export const STATE_MOVE = 0.6;
 export const FOCUS_DIM = 0.3;
+/**
+ * The bloom that marks a state: a soft fill in the focus colour behind the
+ * state's target that lands in about two frames and decays (STATE_BLOOM.peak
+ * opacity, gone after STATE_BLOOM.decay s), so the change reads as an event
+ * and not as a slow drift. One pulse per state, never repeated.
+ */
+export const STATE_BLOOM = Object.freeze({peak: 0.6, rise: 0.07, decay: 0.85, pad: 28, blur: 34});
+// The ease every state move uses: most of the change lands in the first frames.
+const ONSET = 'expo.out';
 const EPS = 1e-6;
 const r2 = value => Math.round(value * 100) / 100;
 const rt = value => Math.round(value * 1e6) / 1e6;
@@ -356,7 +365,7 @@ export function focusDevice({id, steps, color, unit = 1, dimTo = FOCUS_DIM, star
           const from = {opacity: 1, x: r2(a.x - b.x), y: r2(a.y - b.y), scaleX: rt((shown.rect.width + pad * 2 * unit) / (ring.rect.width + pad * 2 * unit)), scaleY: rt((shown.rect.height + pad * 2 * unit) / (ring.rect.height + pad * 2 * unit))};
           ops.push({type: 'set', target: shown.id, time: T, props: {opacity: 0}});
           ops.push({type: 'set', target: ring.id, time: T, props: from});
-          ops.push({type: 'tween', target: ring.id, start: T, duration: move, ease: 'power3.inOut', from: {x: from.x, y: from.y, scaleX: from.scaleX, scaleY: from.scaleY}, to: {x: 0, y: 0, scaleX: 1, scaleY: 1}});
+          ops.push({type: 'tween', target: ring.id, start: T, duration: move, ease: ONSET, from: {x: from.x, y: from.y, scaleX: from.scaleX, scaleY: from.scaleY}, to: {x: 0, y: 0, scaleX: 1, scaleY: 1}});
         } else if (ring) {
           ops.push({type: 'tween', target: ring.id, start: T, duration: 0.3, ease: 'power2.out', from: {opacity: 0}, to: {opacity: 1}});
           ops.push({type: 'tween', target: ring.id, start: T, duration: 0.45, ease: 'power3.out', from: {scaleX: 1.06, scaleY: 1.06}, to: {scaleX: 1, scaleY: 1}});
@@ -370,13 +379,13 @@ export function focusDevice({id, steps, color, unit = 1, dimTo = FOCUS_DIM, star
       for (const [target, base] of [...dimmed]) {
         if (want.has(target)) continue;
         const now = state.get(target)?.opacity ?? base;
-        ops.push({type: 'tween', target, start: T, duration: 0.35, ease: 'power1.out', from: {opacity: now}, to: {opacity: base}});
+        ops.push({type: 'tween', target, start: T, duration: 0.25, ease: ONSET, from: {opacity: now}, to: {opacity: base}});
         dimmed.delete(target);
       }
       for (const target of want) {
         if (dimmed.has(target)) continue;
         const base = state.get(target)?.opacity ?? 1;
-        ops.push({type: 'tween', target, start: T, duration: 0.35, ease: 'power1.out', from: {opacity: base}, to: {opacity: r2(base * level)}});
+        ops.push({type: 'tween', target, start: T, duration: 0.25, ease: ONSET, from: {opacity: base}, to: {opacity: r2(base * level)}});
         dimmed.set(target, base);
       }
     });
@@ -411,6 +420,7 @@ function statePlan(model, children, view) {
     if (set.glow !== undefined) out.push(['glow', resolveTarget(model, index, parts, set.glow, `${path}.set.glow`)]);
     if (set.note) out.push(['note', resolveTarget(model, index, parts, set.note.target, `${path}.set.note.target`)]);
     if (set.guide?.target !== undefined) out.push(['guide', resolveTarget(model, index, parts, set.guide.target, `${path}.set.guide.target`)]);
+    if (set.reveal) out.push(['reveal', resolveTarget(model, index, parts, set.reveal, `${path}.set.reveal`)]);
     return out;
   };
   const resolved = shot.states.map(state => ({state, targets: targetsOf(state.set, `states[${state.index}]`)}));
@@ -442,6 +452,14 @@ function statePlan(model, children, view) {
   }
   const device = focusDevice({id: model.id, steps, color, unit: u, start: model.start});
 
+  // A state's guide line in container px: {axis, at, from, to}.
+  const guideLine = (state, targets, k) => {
+    if (state.guide) return {axis: state.guide.axis, at: r2(state.guide.at), from: state.guide.from, to: state.guide.to};
+    const rect = rectOf(targets.find(([kind]) => kind === 'guide')[1].entries, k);
+    const edge = state.set.guide.edge ?? 'top';
+    return edge === 'top' || edge === 'bottom' ? {axis: 'y', at: edge === 'top' ? rect.y : r2(rect.y + rect.height), from: 0, to: W} : {axis: 'x', at: edge === 'left' ? rect.x : r2(rect.x + rect.width), from: 0, to: H};
+  };
+
   // Glows, guides and notes: built hidden, shown at their state, cleared by a later clear.
   const overlays = [];
   const live = [];
@@ -449,6 +467,22 @@ function statePlan(model, children, view) {
     const T = state.at;
     if (state.set.clear) for (const item of live.splice(0)) for (const target of item.ids) overlays.push({ops: ops => ops.push({type: 'tween', target, start: T, duration: 0.3, ease: 'power1.out', from: {opacity: 1}, to: {opacity: 0}})});
     const k = state.index;
+    // The bloom: on what this state brings into view (focus, glow, else what
+    // it reveals, else a band along its guide).
+    const marked = ['focus', 'glow', 'reveal'].map(kind => targets.find(([name]) => name === kind)?.[1]).find(Boolean);
+    const band = !marked && state.set.guide ? guideLine(state, targets, k) : null;
+    if (marked || band) {
+      const half = r2(40 * u);
+      const rect = marked ? rectOf(marked.entries, k) : band.axis === 'y' ? {x: band.from, y: r2(band.at - half), width: r2(band.to - band.from), height: half * 2} : {x: r2(band.at - half), y: band.from, width: half * 2, height: r2(band.to - band.from)};
+      const p = r2(STATE_BLOOM.pad * u), bid = `${model.id}-ss-bloom-${k}`;
+      overlays.push({under: true, node: el('div', bid, abs(r2(rect.x - p), r2(rect.y - p), r2(rect.width + p * 2), r2(rect.height + p * 2), {borderRadius: r2(32 * u), background: color, filter: `blur(${r2(STATE_BLOOM.blur * u)}px)`, opacity: 0, transformOrigin: '50% 50%'})),
+        ops: ops => {
+          ops.push({type: 'set', target: bid, time: model.start, props: {opacity: 0, scaleX: 0.9, scaleY: 0.9}});
+          ops.push({type: 'tween', target: bid, start: T, duration: STATE_BLOOM.rise, ease: 'power2.out', from: {opacity: 0}, to: {opacity: STATE_BLOOM.peak}});
+          ops.push({type: 'tween', target: bid, start: T, duration: STATE_BLOOM.rise + STATE_BLOOM.decay, ease: ONSET, from: {scaleX: 0.9, scaleY: 0.9}, to: {scaleX: 1.04, scaleY: 1.04}});
+          ops.push({type: 'tween', target: bid, start: rt(T + STATE_BLOOM.rise), duration: STATE_BLOOM.decay, ease: 'power2.out', from: {opacity: STATE_BLOOM.peak}, to: {opacity: 0}});
+        }});
+    }
     const glow = targets.find(([kind]) => kind === 'glow')?.[1];
     if (glow) {
       const rect = rectOf(glow.entries, k);
@@ -459,14 +493,7 @@ function statePlan(model, children, view) {
     }
     const guideSpec = state.set.guide;
     if (guideSpec) {
-      let line;
-      if (state.guide) line = state.guide.axis === 'y' ? {axis: 'y', at: r2(state.guide.at), from: state.guide.from, to: state.guide.to} : {axis: 'x', at: r2(state.guide.at), from: state.guide.from, to: state.guide.to};
-      else {
-        const t = targets.find(([kind]) => kind === 'guide')[1];
-        const rect = rectOf(t.entries, k);
-        const edge = guideSpec.edge ?? 'top';
-        line = edge === 'top' || edge === 'bottom' ? {axis: 'y', at: edge === 'top' ? rect.y : r2(rect.y + rect.height), from: 0, to: W} : {axis: 'x', at: edge === 'left' ? rect.x : r2(rect.x + rect.width), from: 0, to: H};
-      }
+      const line = guideLine(state, targets, k);
       const gid = `${model.id}-ss-guide-${k}`, stroke = r2(3 * u);
       const style = line.axis === 'y'
         ? abs(line.from, r2(line.at - stroke / 2), r2(line.to - line.from), 0, {borderTop: `${stroke}px dashed ${color}`, transformOrigin: '0% 50%', opacity: 0})
@@ -475,7 +502,7 @@ function statePlan(model, children, view) {
       overlays.push({node: el('div', gid, style), ops: ops => {
         ops.push({type: 'set', target: gid, time: model.start, props: {opacity: 0, ...scaleFrom}});
         ops.push({type: 'set', target: gid, time: T, props: {opacity: 1}});
-        ops.push({type: 'tween', target: gid, start: T, duration: STATE_MOVE, ease: 'power3.out', from: scaleFrom, to: {scaleX: 1, scaleY: 1}});
+        ops.push({type: 'tween', target: gid, start: T, duration: STATE_MOVE, ease: ONSET, from: scaleFrom, to: {scaleX: 1, scaleY: 1}});
       }});
       const ids = [gid];
       if (guideSpec.label) {
@@ -605,7 +632,7 @@ function morphOps(model, base, next, settled, T, ops) {
       const was = current[key] ?? (key === 'opacity' ? a.opacity ?? 1 : DEFAULTS[key]);
       if (Math.abs(was - target[key]) > 1e-3) { from[key] = r2s(was, key); to[key] = r2s(target[key], key); }
     }
-    if (Object.keys(to).length) ops.push({type: 'tween', target: id, start: T, duration: STATE_MOVE, ease: 'power3.inOut', from, to});
+    if (Object.keys(to).length) ops.push({type: 'tween', target: id, start: T, duration: STATE_MOVE, ease: ONSET, from, to});
     const textNow = current.text ?? a.text, textNext = settled.get(id)?.text ?? b.text;
     if (textNow !== null && textNext !== null && textNow !== undefined && textNext !== undefined && String(textNow) !== String(textNext)) countText(ops, id, T, String(textNow), String(textNext), model.fps ?? 30);
   }

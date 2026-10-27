@@ -13,6 +13,8 @@
 //   moduleVariety(story)                   distinct modules, top share, entropy
 //   captionHygiene(story, words, {required}) captions on, readable pace, clean timings
 //   avSync(planned, detected, {probe})     planned scene starts that land on a detected change
+//   stateMarks(story)                      every state change: scene.states and in-shot swaps
+//   stateEvents(scores, story)             each state's peak scene score and their median
 //   scoreBrief(brief, measures)            → {id, format, checks, score, status}
 //   formatScorecard(rows)                  → the table npm run eval:formats prints
 //
@@ -28,6 +30,9 @@ export const SCENE_THRESHOLDS = Object.freeze([0.04, 0.08, 0.15]);
 export const EVENT_THRESHOLD = 0.08;
 // The soft-event diagnostic samples frames this often (a 0.35 s fade lands in one step).
 export const SOFT_EVENT_FPS = 4;
+// A state change reads as a visual event when its peak scene score reaches
+// the event threshold: the median state of a sample must (state_events).
+export const STATE_EVENT = Object.freeze({ min: EVENT_THRESHOLD, before: 0.1, after: 0.8 });
 // Per-format floors for the metrics that are not cadence.
 export const METRIC_TARGETS = Object.freeze({
   motion_on_hold: Object.freeze({ 'long-form': 0.85, 'short-form': 0.9, 'talking-head': 0.95, 'art-direction': 0.85, 'motion-graphics': 0.9, animated: 0.85 }),
@@ -46,6 +51,37 @@ export function parseSceneTimes(text) {
   const out = [];
   for (const match of String(text ?? '').matchAll(/pts_time:\s*([0-9.]+)/g)) out.push(Number(match[1]));
   return out.filter(finite).sort((a, b) => a - b);
+}
+
+/**
+ * Every state change in a resolved story: each scene.states entry, and each
+ * track-0 scene that arrives by a transition inside a shot (a build swap; a
+ * hard cut is a cut, not a state). → [{t, id, kind: "state"|"swap", label}]
+ */
+export function stateMarks(story) {
+  const marks = [];
+  for (const scene of story?.scenes ?? []) {
+    if (!finite(Number(scene?.start))) continue;
+    for (const [i, state] of (Array.isArray(scene.states) ? scene.states : []).entries()) if (finite(Number(state?.at))) marks.push({ t: Number(state.at), id: scene.id, kind: 'state', label: `${scene.module} state ${i + 1}` });
+    const transition = scene.in?.type;
+    if ((scene.track ?? 0) === 0 && transition && transition !== 'cut' && Number(scene.in?.dur) > 0) marks.push({ t: Number(scene.start), id: scene.id, kind: 'swap', label: `${scene.module} (${transition})` });
+  }
+  return marks.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Each state change's peak scene score in [t - before, t + after] (the score
+ * on the change's own frames), their median and the ones under the event
+ * threshold. scores: [{t, score}] (parseSceneScores). → {marks, median, under}
+ */
+export function stateEvents(scores, story, { before = STATE_EVENT.before, after = STATE_EVENT.after, min = STATE_EVENT.min } = {}) {
+  const marks = stateMarks(story).map((mark) => {
+    const peak = (scores ?? []).filter((frame) => frame.t >= mark.t - before - 1e-6 && frame.t <= mark.t + after + 1e-6).reduce((best, frame) => Math.max(best, frame.score), 0);
+    return { ...mark, peak: round(peak, 3) };
+  });
+  const sorted = marks.map((mark) => mark.peak).sort((a, b) => a - b);
+  const median = sorted.length ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2, 3)) : null;
+  return { marks, median, min, under: marks.filter((mark) => mark.peak < min).map((mark) => mark.id) };
 }
 
 /** Per-frame scene scores from `select='gte(scene,0)',metadata=print:key=lavfi.scene_score`. */
@@ -239,6 +275,7 @@ export function scoreBrief(brief, measures) {
     const t = measures.soft_cadence.target;
     add('soft_events', soft.per_min >= t.per_min.min ? 'pass' : 'warn', soft.per_min, `${t.per_min.min}+ (diagnostic)`);
   }
+  if (measures.states && measures.states.median !== null) add('state_events', band(measures.states.median, measures.states.median >= measures.states.min, measures.states.median >= measures.states.min * 0.85), measures.states.median, `median ≥ ${measures.states.min}`);
   if (measures.plan) add('plan_cadence', measures.plan.ok ? 'pass' : 'fail', measures.plan.ok ? 'ok' : measures.plan.checks.filter((check) => !check.ok).map((check) => check.id).join(','), 'gate');
   if (measures.motion) {
     const floor = METRIC_TARGETS.motion_on_hold[brief.format] ?? 0.85;
@@ -266,8 +303,8 @@ export function scoreBrief(brief, measures) {
 
 /** The scorecard as a fixed-width table: a row per brief, a column per metric. */
 export function formatScorecard(rows) {
-  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'soft_events', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync'];
-  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', soft_events: 'soft ev', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync' };
+  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'soft_events', 'state_events', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync'];
+  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', soft_events: 'soft ev', state_events: 'states', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync' };
   const mark = { pass: '✓', warn: '~', fail: '✗', 'n/a': '·' };
   const cell = (check) => {
     if (!check) return '·';
