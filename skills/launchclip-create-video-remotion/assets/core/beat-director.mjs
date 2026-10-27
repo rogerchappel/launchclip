@@ -31,7 +31,8 @@
 import { cadenceGate, cadenceTarget, eventStats } from './cadence.mjs';
 import { DIRECTION_SCHEMA, classifyIntent, narrationWords } from './direction.mjs';
 import { longFormChunks } from './long-form.mjs';
-import { knownModules, resolveModule } from './modules.mjs';
+import { catalogModules, knownModules, moduleVariants, resolveModule } from './modules.mjs';
+import { MAX_SHOT_STATES, stateSpec } from './shot-states.mjs';
 import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, isPlanned, keyTerms, resolveCapability } from './visual-capabilities.mjs';
 
 export const BEAT_MAP_SCHEMA = 'launchclip.beat-map.v1';
@@ -191,13 +192,15 @@ function listItems(text) {
   return [head, middle, last].map((item) => item.join(' ')).filter((item) => item.length > 1 && item.split(' ').length <= 3);
 }
 
-// The words after a number, up to four, stopping at punctuation and the next number.
+// The words after a number, up to six, stopping at punctuation and the next number.
 function labelAfter(text, index) {
   const words = [];
   for (const word of text.slice(index).split(/[.,;:!?—–]/)[0].trim().split(/\s+/).filter(Boolean)) {
-    if (/^\d|^(percent|and)$/i.test(word) || words.length === 4) break;
+    if (/^\d|^(percent|and)$/i.test(word) || words.length === 6) break;
     words.push(word);
   }
+  // Not a dangling "than" or "of": the label ends on a content word.
+  while (words.length > 1 && /^(than|of|to|for|per|the|a|an|by|with)$/i.test(words.at(-1))) words.pop();
   return words.join(' ');
 }
 
@@ -252,6 +255,22 @@ export function visualKind(beat) {
 // Evidence
 
 const contentSet = (text) => new Set(keyTerms(text).map((word) => word.toLowerCase()));
+
+/**
+ * Whether a source's quote span can be shown as a quote: prose, not an API
+ * record ("GitHub API: …"), a table row ("| a | b |"), a heading, a list item
+ * or a code line, and long enough to say something.
+ */
+export function isQuotable(text) {
+  const value = String(text ?? '').trim();
+  if (value.length < 12 || value.length > 280) return false;
+  if (/^(GitHub|Hugging Face) API:/.test(value)) return false;
+  if (/\|/.test(value) || /^(#{1,6}\s|[-*+]\s|\d+\.\s|>|```|\{|\[|<)/.test(value)) return false;
+  return /\p{L}{3,}/u.test(value) && value.split(/\s+/).length >= 3;
+}
+
+// Clauses that point back at an entity named before them.
+const POINTERS = { repo: /\b(that|this|the same)\s+(repository|repo|codebase)\b/i, benchmark: /\b(that|this|the same)\s+(benchmark|test|leaderboard)\b/i };
 
 // Entity kinds a clause names with a common noun.
 const ENTITY_HINTS = [['repo', /\b(repositor(y|ies)|repo|codebase)\b/], ['benchmark', /\b(benchmark|leaderboard)\b/]];
@@ -339,7 +358,7 @@ function mentions(text, name) {
  * Contradicted claims never match. → {claim, status, kind, source, quote?,
  * capture?: {id, kind, out}, data?} | null (data: capture.data, else claim.data)
  */
-export function matchEvidence(beat, { ledger = null, captures = [], at = null, played = null, aliases = null } = {}) {
+export function matchEvidence(beat, { ledger = null, captures = [], at = null, played = null, aliases = null, refer = null } = {}) {
   const claims = (ledger?.claims ?? []).filter((claim) => claim?.id && claim.status !== 'contradicted');
   if (!claims.length) return null;
   const index = ledgerIndex(ledger, claims);
@@ -353,7 +372,10 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
   const known = [...words].filter((word) => index.df.has(word));
   const beatWeight = known.reduce((sum, word) => sum + idf(word), 0);
   let best = null;
-  for (const claim of claims) {
+  // A clause that points back ("that repository") is about the claim it points to.
+  const pinned = refer ? claims.find((claim) => claim.id === refer) : null;
+  if (pinned) best = { score: 1, claim: pinned };
+  for (const claim of pinned ? [] : claims) {
     const other = index.words.get(claim.id);
     const shared = [...words].filter((word) => other.has(word));
     const claimWeight = [...other].reduce((sum, word) => sum + idf(word), 0);
@@ -403,8 +425,8 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
     kind: claim.kind ?? 'statement',
     score: round(best.score),
     source: source ? { url: source.url, ...(source.title ? { title: source.title } : {}), ...(source.publisher ? { publisher: source.publisher } : {}), ...(source.published_at ?? source.date ? { date: String(source.published_at ?? source.date).slice(0, 10) } : {}) } : null,
-    // The source's supporting quote, else the quote the claim itself reports (not an API record).
-    ...((source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text)) || claim.quote ? { quote: source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text) ? source.quote.text : claim.quote } : {}),
+    // A quote only from a verified claim's supporting source, verbatim, and only prose (never an API record or a table row).
+    ...(claim.status === 'verified' && source?.supports === true && isQuotable(source?.quote?.text) ? { quote: source.quote.text.trim() } : {}),
     // The claim's subjects, shortest first ("Terra" before "GPT-6.1"): who a figure belongs to when the clause does not say.
     ...((claim.entities ?? []).some((e) => e?.kind === 'name') ? { names: (claim.entities ?? []).filter((e) => e?.kind === 'name' && e.name).map((e) => e.name).sort((a, b) => a.length - b.length) } : {}),
     ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {}),
@@ -415,6 +437,28 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
 
 // ---------------------------------------------------------------------------
 // Directing a chunk
+
+/**
+ * What an unverified claim may put on screen: its source line at most. Its
+ * capture, its data and any quote stay off, so a reported claim never shows
+ * as a quote, a post or proof; the director shows its figures as an
+ * attributed claim card instead (kind `claim`).
+ */
+export function gateEvidence(evidence) {
+  if (!evidence || evidence.status === 'verified') return evidence;
+  const { capture, data, quote, ...rest } = evidence;
+  return { ...rest, unverified: true };
+}
+
+// The one who makes a claim: "OpenAI also says …", "Salio reported …".
+const SPEAKER = /\b([A-Z][\w'.-]*(?:\s[A-Z][\w'.-]*)?)\s+(?:also\s+)?(?:says|said|claims|claimed|reports|reported|writes|wrote|estimates|estimated|told)\b/;
+function speakerOf(...texts) {
+  for (const text of texts) {
+    const name = String(text ?? '').match(SPEAKER)?.[1];
+    if (name && !/^(It|This|That|He|She|They|We|The)$/.test(name)) return name.replace(/'s$/, '');
+  }
+  return null;
+}
 
 /** A fresh visual history (what the director carries across chunks). */
 export function emptyHistory() {
@@ -465,18 +509,25 @@ export function directChunk(chunk, options) {
   const beats = clauseBeats(words, { from: chunk.words[0], to: chunk.words[1], min: 3 * factor, max: 10 * factor, weight: 0.65 / factor, target: target.gap.p50_min + 0.15 * (target.gap.p50_max - target.gap.p50_min) });
   const total = narrationWords(words).length;
   const aliases = ledger ? entityAliases(ledger, words) : null;
+  const lastOfKind = {};
   const states = beats.map((beat, i) => {
     const facts = extractFacts(beat.text);
     const intent = beat.words[0] === 0 ? classifyIntent(beat.text, { index: 0 }) : classifyIntent(beat.text, { index: 1 });
     const draft = { ...beat, intent, facts };
-    const evidence = matchEvidence(draft, { ledger, captures, at: beat.start, played: history.captures, aliases });
+    // "That repository", "the same benchmark": the claim about the last one named.
+    const pointer = Object.entries(POINTERS).find(([, regex]) => regex.test(beat.text))?.[0];
+    const evidence = matchEvidence(draft, { ledger, captures, at: beat.start, played: history.captures, aliases, refer: pointer ? lastOfKind[pointer] ?? null : null });
+    for (const e of ledger?.claims?.find((claim) => claim.id === evidence?.claim)?.entities ?? []) if (e?.kind && !pointer) lastOfKind[e.kind] = evidence.claim;
     if (evidence?.capture) {
       // A capture plays once a minute at most: shown again sooner, the claim keeps its source line instead.
       const last = history.captures?.[evidence.capture.id];
       if (finite(last) && beat.start - last < CAPTURE_GAP_SECONDS) delete evidence.capture;
       else history.captures = { ...(history.captures ?? {}), [evidence.capture.id]: beat.start };
     }
-    if (evidence) draft.evidence = evidence;
+    if (evidence) draft.evidence = gateEvidence(evidence);
+    // A quote in the narration ("a 'not found' page") is the narrator's words, not a source's: it is shown as a
+    // quote only when the verified source's own quote span says it.
+    if (facts.quote && !(draft.evidence?.quote && draft.evidence.quote.toLowerCase().includes(facts.quote.toLowerCase()))) delete facts.quote;
     const opener = chunk.first && i === 0 && beat.words[0] !== 0;
     // The clause under a call-to-action time (or just after it, in a pause) carries it.
     const cta = (options.structure?.ctas ?? []).find((entry) => beat.start - 0.6 <= entry.at && entry.at < beat.end);
@@ -486,10 +537,15 @@ export function directChunk(chunk, options) {
     draft.kind = sting ? 'sting' : cta ? 'cta' : opener ? 'title' : visualKind(draft);
     // Without the brand's mark, the sting is the video's title.
     if (sting && !draft.brand && options.structure?.title) draft.headline = options.structure.title.split(/[:—–]/)[0].trim();
+    // A chapter opens on its own title (a real headline), not on the clause's key words.
+    if (opener && chunk.chapter.title) draft.headline = chunk.chapter.title;
     draft.headline ??= headlineOf(beat.text);
+    draft.chapterTitle = chunk.chapter.title ?? null;
     if (opener) draft.kicker = `Chapter ${chunk.chapter.index + 1}`;
+    // A figure's label is what the narration says it measures, else who it belongs to ("Terra scores 50.3%"), never key words.
     const n = facts.numbers[0];
-    if (n?.label) draft.label = n.label;
+    const label = n ? n.label || figureSubject(beat.text, n) : null;
+    if (label) draft.label = label;
     return draft;
   });
   if (beats.length && beats.at(-1).words[1] === total - 1 && states.at(-1).intent !== 'cta') states.at(-1).closing = true;
@@ -514,6 +570,18 @@ export function directChunk(chunk, options) {
     }
   }
   pairSeries(states);
+  // A figure from an unverified claim is never a hero stat: it is an attributed claim card ("OpenAI's claim, not verified").
+  let speaker = null;
+  for (const state of states) {
+    if (STRUCTURE_KINDS.has(state.kind)) continue;
+    const claimText = ledger?.claims?.find((claim) => claim.id === state.evidence?.claim)?.text;
+    speaker = speakerOf(state.text, claimText) ?? (state.evidence?.unverified ? speaker : null);
+    const figure = state.facts?.numbers?.[0];
+    if (!state.evidence?.unverified || !figure || familyOf(state.kind) !== 'number') continue;
+    state.kind = 'claim';
+    state.headline = figure.unit === '×' ? `${figure.value}×` : String(figure.raw ?? figure.value);
+    state.sub = clip(`${figure.label ? `${figure.label}: ` : ''}${speaker ? `${speaker}'s claim` : 'reported'}, not verified`, 64);
+  }
 
   // Shots: 2–4 states, cut near the target cut gap, at a topic shift when one is close.
   const groups = [];
@@ -532,12 +600,15 @@ export function directChunk(chunk, options) {
   if (groups.length > 1 && groups.at(-1).length === 1 && groups.at(-2).length < target.states.max + 1 && groups.at(-1)[0].end - groups.at(-1)[0].start < target.cut_gap.min / 2) groups.at(-2).push(...groups.pop());
 
   const check = makeChecker(format, options.brand ?? DEFAULT_BRAND);
-  const shots = groups.map((group, g) => {
+  let lastOut = null;
+  let lastEventAt = null;
+  const built = groups.map((group, g) => {
     const shotId = `${chunk.id}-sh${g + 1}`;
     const out = [];
     for (const [k, state] of group.entries()) {
       const previous = out.at(-1) ?? null;
-      const decision = decide(state, previous, { history, avoid, registered, wide, check });
+      const decision = decide(state, previous, { history, avoid, registered, wide, check, last: previous && !STRUCTURE_KINDS.has(previous.kind) ? previous : lastOut, sinceEvent: lastEventAt === null ? null : state.start - lastEventAt, limit: target.longest_static * 0.8 });
+      if (decision.change !== 'hold') lastEventAt = state.start;
       const id = `${shotId}-${k + 1}`;
       const builds = decision.change === 'build' ? (previous?.builds ?? 0) + 1 : 0;
       out.push({
@@ -551,18 +622,33 @@ export function directChunk(chunk, options) {
         capability: decision.capability,
         module: decision.module,
         ...(decision.fallback ? { fallback: true } : {}),
-        change: k === 0 ? 'enter' : decision.change,
+        change: k === 0 && !EXTENDS.has(decision.change) ? 'enter' : decision.change,
         params: decision.params,
+        ...(decision.focus !== undefined ? { focus: decision.focus } : {}),
+        ...(decision.guide ? { guide: decision.guide } : {}),
         ...(state.evidence ? { evidence: state.evidence } : {}),
         why: decision.why,
         builds
       });
+      // A call to action or a sting is never carried on: the card before it is.
+      if (!STRUCTURE_KINDS.has(state.kind)) lastOut = out.at(-1);
       history.recent = [...history.recent, decision.module].slice(-RECENT);
       history.counts[decision.module] = (history.counts[decision.module] ?? 0) + 1;
       history.states += 1;
     }
     return { id: shotId, start: out[0].start, end: out.at(-1).end, states: out };
   });
+  // States that open a shot by extending the card before it belong to that shot (no cut); the rest of the shot cuts in after them.
+  const shots = [];
+  for (const shot of built) {
+    let lead = 0;
+    while (shots.length && lead < shot.states.length && EXTENDS.has(shot.states[lead].change)) lead += 1;
+    if (lead) shots.at(-1).states.push(...shot.states.slice(0, lead));
+    const rest = shot.states.slice(lead);
+    if (!rest.length) continue;
+    if (lead) rest[0].change = 'enter';
+    shots.push({ ...shot, start: rest[0].start, states: rest });
+  }
   // States run back to back: each holds until the next starts.
   const all = shots.flatMap((shot) => shot.states);
   for (let i = 0; i < all.length - 1; i += 1) all[i].end = all[i + 1].start;
@@ -599,7 +685,7 @@ function sideOf(text, figure) {
   const after = String(figure.label ?? '').split(/\s+/).slice(0, 3).join(' ');
   const raw = String(figure.raw ?? figure.value);
   const at = text.indexOf(raw);
-  const before = at >= 0 ? text.slice(0, at).split(/[.!?]\s+/).at(-1).split(/\s+/).slice(-4).join(' ') : '';
+  const before = at >= 0 ? text.slice(0, at).split(/[.!?]\s+/).at(-1).trim().split(/\s+/).slice(-4).join(' ') : '';
   return QUALIFIER.find(([regex]) => regex.test(after))?.[1] ?? QUALIFIER.find(([regex]) => regex.test(before))?.[1] ?? null;
 }
 const NAME_TOKEN = /^(?:[A-Z][\w.]*(?:-[\w.]+)*|[a-z]+-\d[\w.-]*)$/;
@@ -639,7 +725,7 @@ function figureSubject(text, entry) {
 /**
  * Figures that belong together across neighbouring clauses become one series
  * ("$1 in and $5 out … Sol costs $2 in and $10 out … exactly half"): up to
- * three clauses in a row with figures of one family (money in one currency,
+ * four clauses in a row with figures of one family (money in one currency,
  * shares, or a count of one thing), or a clause that compares them (half,
  * double, N times) right after. Each clause then carries the series so far
  * (evidence.data.series, the rows labelled by the name each figure belongs
@@ -654,11 +740,14 @@ export function pairSeries(states) {
   const close = () => { if (run) runs.push(run); run = null; };
   for (const state of states) {
     if (STRUCTURE_KINDS.has(state.kind) || state.kind === 'title') { close(); continue; }
-    // A run takes at most three clauses in 25 s.
-    if (run && (run.states.length >= 3 || state.end - run.states[0].state.start > 25)) close();
-    const all = (state.facts?.numbers ?? []).map((entry) => ({ entry, family: figureFamily(entry, run?.family) })).filter((figure) => figure.family);
-    // One family per clause: the run's when the clause has it, else its last figure's ("$10 … buys 1 million tokens" counts tokens).
-    const family = run && all.some((figure) => figure.family === run.family) ? run.family : all.at(-1)?.family ?? null;
+    // A run takes at most four clauses (a shot's states) in 25 s.
+    if (run && (run.states.length >= 4 || state.end - run.states[0].state.start > 25)) close();
+    // A scaled figure with no noun ("2 million") counts what the clause or run counted last ("1 million tokens").
+    let counting = run?.family?.startsWith('count:') ? run.family : null;
+    const all = (state.facts?.numbers ?? []).map((entry) => { const family = figureFamily(entry, counting); if (family?.startsWith('count:')) counting = family; return { entry, family }; }).filter((figure) => figure.family);
+    // One family per clause: a count wins over the money spent on it ("the same $10 buys 2 million"), then the run's, then the last figure's.
+    const count = all.find((figure) => figure.family.startsWith('count:'))?.family;
+    const family = count ?? (run && all.some((figure) => figure.family === run.family) ? run.family : all.at(-1)?.family ?? null);
     const figures = all.filter((figure) => figure.family === family);
     const ratio = RATIO.map(([regex, guide]) => ({ match: state.text.match(regex), guide })).find((entry) => entry.match);
     if (run && (figures.length ? family === run.family : ratio)) { run.states.push({ state, figures, ratio }); continue; }
@@ -693,6 +782,8 @@ export function pairSeries(states) {
     if (new Set(short).size === names.length) for (const row of kept) if (row.name) row.label = [row.name.split(' ').at(-1), row.side].filter(Boolean).join(' ');
     let shown = [];
     for (const step of entry.states) {
+      // A clause whose own figures all stay out of the series (a lone "cached" price) shows them itself.
+      if (step.rows.length && !step.rows.some((row) => kept.includes(row)) && !step.ratio) { step.state.alone = true; continue; }
       shown = [...shown, ...step.rows.filter((row) => kept.includes(row))].slice(-MAX_SERIES);
       // A run's first figure on its own is a stat; the series builds from the next clause.
       if (shown.length < 2) {
@@ -710,9 +801,12 @@ export function pairSeries(states) {
       const evidence = { ...(step.state.evidence ?? {}) };
       // The series is the visual: a capture of the page it came from waits for another clause.
       delete evidence.capture;
-      evidence.data = { ...(isPlain(evidence.data) ? evidence.data : {}), series, ...(reference ? { reference } : {}) };
+      const title = seriesTitle(entry);
+      // What one budget buys from two options ("$10 buys 1 million … the same $10 buys 2 million") is a race of unit grids.
+      const race = raceOf(entry, series);
+      evidence.data = { ...(isPlain(evidence.data) ? evidence.data : {}), series, ...(reference ? { reference } : {}), ...(title ? { title } : {}), ...(race ? { race } : {}) };
       step.state.evidence = evidence;
-      step.state.kind = 'series';
+      step.state.kind = race ? 'race' : 'series';
       step.state.paired = entry.states.indexOf(step);
     }
   }
@@ -720,6 +814,50 @@ export function pairSeries(states) {
 }
 
 const isPlain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const SCALE_OF = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 };
+
+/**
+ * A chart title from what the run measures, never a clause fragment: money
+ * per a unit ("Price per million tokens"), a count bought with one budget
+ * ("Tokens for $10"), or the benchmark a share is on ("Terminal-Bench 4.0");
+ * null when the run does not say.
+ */
+export function seriesTitle(run) {
+  const figures = run.states.flatMap((step) => step.figures.map((figure) => figure.entry));
+  if (run.family.startsWith('money:')) {
+    const per = figures.map((entry) => String(entry.label ?? '').match(/^per\s+((?:million|thousand|billion)\s+)?(?:input\s+|output\s+|cached\s+)?([a-z]+)/i)).find(Boolean);
+    return per ? `Price per ${per[1] ?? ''}${per[2]}`.replace(/\s+/g, ' ').trim() : 'Price';
+  }
+  if (run.family.startsWith('count:')) {
+    const noun = run.family.slice('count:'.length);
+    const spend = spendOf(run);
+    return `${noun.charAt(0).toUpperCase()}${noun.slice(1)}s${spend ? ` for ${spend.raw}` : ''}`;
+  }
+  // A share is on a test: the name the run says that is not one of its rows.
+  const rows = new Set(figures.map((entry) => String(entry.label ?? '').toLowerCase()));
+  for (const step of run.states) {
+    const name = String(step.state.text).match(/\b((?:[A-Z][\w'’-]*\s){0,3}[A-Z][\w'’-]*(?:\s\d[\d.]*)?)(?=,|\s(?:which|a test|measures))/)?.[1];
+    const clean = name?.split(/\s+/).filter((word, i, all) => !(i < all.length - 1 && NOT_NAME_START.has(word))).join(' ');
+    if (clean && !rows.has(clean.toLowerCase()) && /\p{Lu}.*(?:\d|[A-Z].*[A-Z]|-)/u.test(clean)) return clean.length <= 28 ? clean : null;
+  }
+  return null;
+}
+
+// The budget a count run spends on each side ("$10 of output … the same $10"): a money figure every mention shares.
+function spendOf(run) {
+  const money = run.states.flatMap((step) => (step.state.facts?.numbers ?? []).filter((entry) => entry.prefix));
+  if (!money.length || new Set(money.map((entry) => entry.value)).size !== 1) return null;
+  return { value: money[0].value, raw: money[0].raw ?? `${money[0].prefix}${money[0].value}` };
+}
+
+/** Two counts bought with the same budget → {spend, suffix, rows: [{label, total}]} for a grid race, else null. */
+function raceOf(run, series) {
+  if (!run.family.startsWith('count:') || series.length !== 2) return null;
+  const spend = spendOf(run);
+  if (!spend) return null;
+  const rows = series.map((row) => ({ label: row.label, total: row.value * (SCALE_OF[row.unit] ?? 1) }));
+  return rows.every((row) => row.total > 0) ? { spend: spend.value, suffix: run.family.slice('count:'.length) + 's', rows } : null;
+}
 
 // ---------------------------------------------------------------------------
 // Story-shaped evidence: a running timeline, a model's tokens
@@ -806,7 +944,143 @@ function tidyLabel(label) {
 }
 
 // The module, params and state change for one clause.
-function decide(state, previous, { history, avoid, registered, wide, check }) {
+function decide(state, previous, options) {
+  const decision = choose(state, previous, options);
+  // The same card again (same module, same params) is the card on screen carrying on, not a new one.
+  const last = options.last;
+  if (last && decision.module === last.module && JSON.stringify(decision.params) === JSON.stringify(last.params) && !STRUCTURE_KINDS.has(state.kind)) {
+    // A guide the clause draws ("exactly half") over a chart that takes one as a shot state is a new event on the same card.
+    const reference = state.evidence?.data?.reference;
+    if (reference && stateSpec(last.module, catalogModules()[last.module] ?? null)?.guide) return { ...decision, change: 'guide', guide: { value: reference.value, ...(reference.label ? { label: reference.label.toUpperCase() } : {}) }, why: `${decision.why}; draws the ${reference.label} guide` };
+    return { ...decision, change: 'hold', why: `${decision.why}; the same card carries on` };
+  }
+  if (!isSalad(decision, state)) return decision;
+  // A line the narration says, verbatim (a short sentence, a full name), is a headline; its key words are not.
+  // Held this long already, the clause's own words carry the next event rather than a longer static run.
+  const loose = Number.isFinite(options.sinceEvent) && options.limit && options.sinceEvent + (state.end - state.start) > options.limit;
+  const line = verbatimHeadline(state.text, { loose });
+  if (line) {
+    const said = { ...state, headline: line, line, kicker: null, sub: null };
+    // Typography takes turns (the least used first, a fresh motion-title effect each time), so lines do not all look alike.
+    const counts = options.history?.counts ?? {};
+    // The card type on screen goes last: a new line on it is still a new card, but another type reads better.
+    const order = ['motion-title', 'kinetic-words', 'concept-card'].sort((a, b) => Number(options.last?.module === a) - Number(options.last?.module === b) || (counts[a] ?? 0) - (counts[b] ?? 0));
+    const effects = moduleVariants()['motion-title'] ?? [];
+    for (const module of order) {
+      let params = capabilityParams(module, said);
+      if (!params) continue;
+      if (module === 'concept-card' && (params.text !== line || line.split(/\s+/).length > 3)) continue;
+      if (module === 'motion-title' && effects.length) params = { ...params, variant: effects[(counts['motion-title'] ?? 0) % effects.length] };
+      if (options.check(module, params)) return { capability: module, module, fallback: false, params, change: 'swap', why: `${state.kind}: nothing specific draws it; the line itself ("${line}")` };
+    }
+  }
+  // No specific module draws the clause and its key words are no headline: the card on screen carries on.
+  if (last) {
+    const items = focusItems(last);
+    if (items) {
+      const focus = ((last.focus ?? -1) + 1) % items;
+      return { capability: last.capability, module: last.module, fallback: last.fallback === true, params: last.params, change: 'focus', focus, why: `${state.kind}: nothing specific draws it; ${last.module} holds, focus on item ${focus + 1}` };
+    }
+    return { capability: last.capability, module: last.module, fallback: last.fallback === true, params: last.params, change: 'hold', why: `${state.kind}: nothing specific draws it; ${last.module} holds` };
+  }
+  // Nothing on screen to carry on: the chapter's own title.
+  const title = { ...state, headline: state.chapterTitle ?? state.headline, kicker: null };
+  const params = capabilityParams('motion-title', title);
+  if (state.chapterTitle && options.check('motion-title', params)) return { capability: 'motion-title', module: 'motion-title', fallback: false, params, change: 'swap', why: `${state.kind}: nothing specific draws it; the chapter title` };
+  return decision;
+}
+
+const NAME_PART = /^(?:\p{Lu}[\p{L}\d.'’-]*|\d[\d.]*)$/u;
+const NOT_NAME_START = new Set(['The', 'A', 'An', 'And', 'But', 'So', 'Then', 'On', 'In', 'At', 'If', 'It', 'This', 'That', 'These', 'Those', 'We', 'You', 'They', 'He', 'She', 'Now', 'Look', 'Start']);
+
+/**
+ * A headline the clause itself says, verbatim: a whole sentence of two to
+ * six words ("That is not a rounding error"), else a full proper name of two
+ * or more words ("Andrew Curran", "Agents' Last Exam"), else the stressed end
+ * of a sentence it completes ("mark Sol's homework"); null when it says none
+ * of these (then its key words are no headline and the card on screen holds).
+ */
+export function verbatimHeadline(text, { loose = false } = {}) {
+  const sentences = String(text ?? '').split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim().replace(/[.!?,;:]+$/, '')).filter(Boolean);
+  const short = sentences.find((sentence) => { const n = sentence.split(/\s+/).length; return n >= 2 && n <= 6 && sentence.length <= 34 && keyTerms(sentence).length >= 1; });
+  if (short) return short;
+  const raw = String(text ?? '').split(/\s+/);
+  const tokens = raw.map((token) => token.replace(/^[("“]+|[)"”,;:.!?]+$/g, ''));
+  let best = null;
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (!NAME_PART.test(tokens[i]) || /^\d/.test(tokens[i]) || NOT_NAME_START.has(tokens[i])) continue;
+    let j = i;
+    // A name stops at punctuation ("Entity Framework, Microsoft's …" is two names).
+    while (j + 1 < tokens.length && !/[,;:.!?)]$/.test(raw[j]) && NAME_PART.test(tokens[j + 1])) j += 1;
+    const name = tokens.slice(i, j + 1).join(' ').replace(/['’]s$/, '');
+    if (j > i && name.length <= 34 && (!best || name.length > best.length)) best = name;
+    i = j;
+  }
+  if (best) return best;
+  // A clause that opens on a phrase of its own before a comma ("a full legal case file, or …"), as said.
+  const opening = String(text ?? '').match(/^((?:a|an|the)\s+)?([^,;:.!?]+?),/i);
+  if (opening) {
+    const words = opening[0].replace(/,$/, '').trim().split(/\s+/);
+    const head = words[0].toLowerCase();
+    if (words.length >= 2 && words.length <= 5 && opening[0].length <= 31 && (!TAIL_STOP.has(head) || /^(a|an|the)$/.test(head)) && keyTerms(opening[0]).length >= 2) return opening[0].replace(/,$/, '').trim();
+  }
+  // The stressed end of a sentence the clause completes ("… trusting Terra to mark Sol's homework."), as said: two to four words from a content word.
+  // Else the end of the clause itself, where its stress falls ("… hand it an entire codebase,").
+  const ended = String(text ?? '').split(/(?<=[.!?])\s+/).filter((sentence) => /[.!?]["”']?$/.test(sentence.trim()) || sentence.trim().split(/\s+/).length >= 6);
+  for (const sentence of ended.reverse()) {
+    const words = sentence.trim().replace(/[.!?,;:"”']+$/, '').split(/\s+/);
+    for (let k = 4; k >= 2; k -= 1) {
+      const tail = words.slice(-k);
+      const lead = tail[0].toLowerCase().replace(/[^\p{L}'’-]/gu, '');
+      const last = tail.at(-1).toLowerCase().replace(/[^\p{L}'’-]/gu, '');
+      // A phrasal verb may end on its particle ("the others catch up"), a verb on its object ("actually uses it").
+      if (tail.length < k || (TAIL_STOP.has(lead) && !/^(a|an|the)$/.test(lead)) || (TAIL_STOP.has(last) && !/^(up|out|down|over|it|them|one)$/.test(last)) || /^(be|been|has|have|had|do|does|did|can|will|would)$/.test(last) || /[,;:]$/.test(tail.slice(0, -1).join(' '))) continue;
+      const phrase = tail.join(' ');
+      if (phrase.length <= 30 && keyTerms(phrase).length >= 1) return phrase;
+    }
+  }
+  if (!loose) return null;
+  // Loose (a static run would outlast the format's limit): the last run of two to four words the clause says that starts and ends on a content word.
+  const all = String(text ?? '').split(/\s+/).map((word) => word.replace(/[,;:.!?"“”()]+$/g, '').replace(/^["“(]+/, '')).filter(Boolean);
+  for (let end = all.length; end >= 2; end -= 1) {
+    for (let k = 4; k >= 2; k -= 1) {
+      const run = all.slice(Math.max(0, end - k), end);
+      const first = run[0].toLowerCase(), final = run.at(-1).toLowerCase();
+      if (run.length === k && !TAIL_STOP.has(first) && !TAIL_STOP.has(final) && run.join(' ').length <= 30) return run.join(' ');
+    }
+  }
+  return null;
+}
+const TAIL_STOP = new Set(['others', 'theirs', 'ours', 'yours', 'mine', 'something', 'anything', 'everything', 'nothing', 'a', 'an', 'the', 'and', 'but', 'or', 'so', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'it', 'its', 'that', 'this', 'than', 'as', 'if', 'not', 'one', 'there', 'they', 'we', 'you', 'he', 'she', 'his', 'her', 'their', 'our', 'your', 'about', 'into', 'over', 'up', 'down', 'out', 'what', 'which', 'who', 'when', 'where', 'how', 'why']);
+
+// States that carry on the card already on screen (no new card): a focus step through its items, a guide line drawn
+// over it, or a plain hold.
+export const EXTENDS = Object.freeze(new Set(['focus', 'hold', 'guide']));
+const ITEM_KEYS = ['data', 'entries', 'rows', 'steps', 'lines', 'points'];
+
+/** How many items a focus can step through on a state's card (a module with shot states), else null. */
+function focusItems(state) {
+  const definition = catalogModules()[state.module] ?? null;
+  const spec = stateSpec(state.module, definition);
+  if (!spec?.items?.length || state.module === 'unit-grid') return null;
+  const key = ITEM_KEYS.find((name) => Array.isArray(state.params?.[name]));
+  return key && state.params[key].length >= 2 ? state.params[key].length : null;
+}
+
+// A card made of the clause's key words ("Surface routine updated", "ENTITY") is not a headline. A chapter
+// opener (its chapter title), a claim card, a call to action and a sting say something of their own.
+function isSalad(decision, state) {
+  if (['title', 'claim', 'sting', 'cta'].includes(state.kind)) return false;
+  if (GENERIC_MODULES.has(decision.module)) return true;
+  return decision.module === 'particle-text' && !/\d/.test(String(decision.params?.text ?? ''));
+}
+
+function choose(state, previous, { history, avoid, registered, wide, check }) {
+  // A chapter opens on its title.
+  if (state.kind === 'title' && state.chapterTitle) {
+    const params = capabilityParams('motion-title', state);
+    if (check('motion-title', params)) return { capability: 'motion-title', module: 'motion-title', fallback: false, params, change: 'swap', why: 'title: the chapter title' };
+  }
   // A paired clause rebuilds the series on screen with its own figures (and guide) added.
   if (previous && state.paired > 0 && previous.kind === 'series') {
     const params = capabilityParams(previous.module, state);
@@ -814,7 +1088,7 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
   }
   // A build: the module on screen takes this clause's entries (a bar arrives, then a second bar).
   // Never onto a generic card (a headline is not an entry), nor for a clause with a list of its own.
-  if (previous && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind) && !GENERIC_MODULES.has(previous.module) && !(state.facts?.items?.length >= 3)) {
+  if (previous && !state.alone && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind) && !GENERIC_MODULES.has(previous.module) && !(state.facts?.items?.length >= 3)) {
     const add = capabilityAdditions(previous.module, state);
     const params = add ? appendEntries(previous.params, add, previous.module) : null;
     if (params && check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `${state.kind}: builds on ${previous.module} (+${add.items.length} ${add.key})` };
@@ -824,7 +1098,9 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
   const capture = STRUCTURE_KINDS.has(state.kind) ? null : state.evidence?.capture ?? null;
   // A clause backed by a source's own words can show them (a quote card, a post) where it would get a generic card.
   const quoted = state.evidence?.quote && familyOf(state.kind) === 'idea' ? capabilitiesFor('quote', { wide }) : [];
-  const candidates = [...new Set([...capabilitiesFor(state.kind, { evidence: capture?.kind ?? null, wide }), ...quoted])];
+  // A verified claim's own card (a PR, a commit, a diff in evidence.data) can show any clause it backs.
+  const carded = !STRUCTURE_KINDS.has(state.kind) && state.evidence?.status === 'verified' && typeof state.evidence?.data?.module === 'string' && capability(state.evidence.data.module) ? [state.evidence.data.module] : [];
+  const candidates = [...new Set([...capabilitiesFor(state.kind, { evidence: capture?.kind ?? null, wide }), ...quoted, ...carded])];
   const scored = candidates.map((id, order) => {
     const resolved = resolveCapability(id, { registered });
     const recentIndex = history.recent.lastIndexOf(resolved.module);
@@ -980,7 +1256,8 @@ export function beatMapEvents(map) {
   const events = [], cuts = [];
   for (const chapter of map.chapters ?? []) for (const shot of chapter.shots ?? []) {
     if (shot.start > 0) cuts.push(shot.start);
-    for (const state of shot.states ?? []) if (state.start > 0) events.push(state.start);
+    // A hold carries the card on: no new visual, no event. A focus step is one.
+    for (const state of shot.states ?? []) if (state.start > 0 && state.change !== 'hold') events.push(state.start);
   }
   return { events, cuts, duration: map.duration };
 }
@@ -1000,7 +1277,9 @@ export function beatMapReport(map, { reused = 0 } = {}) {
   const states = (map.chapters ?? []).flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
   const shots = (map.chapters ?? []).flatMap((chapter) => chapter.shots);
   const counts = {};
-  for (const state of states) counts[state.module] = (counts[state.module] ?? 0) + 1;
+  // Variety counts the cards put on screen; a hold carries one on.
+  const shown = states.filter((state) => state.change !== 'hold');
+  for (const state of shown) counts[state.module] = (counts[state.module] ?? 0) + 1;
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   let run = 1, longestRun = states.length ? 1 : 0;
   for (let i = 1; i < shots.length; i += 1) {
@@ -1021,7 +1300,7 @@ export function beatMapReport(map, { reused = 0 } = {}) {
   return {
     cadence: { ...stats, gate },
     shots: { count: shots.length, states_per_shot: { min: Math.min(...perShot), max: Math.max(...perShot), mean: round(perShot.reduce((a, b) => a + b, 0) / Math.max(1, perShot.length), 2) }, changes },
-    variety: { modules: top.length, top: top.slice(0, 5).map(([id, n]) => ({ id, share: round(n / states.length, 3) })), longest_same_module_across_cuts: longestRun },
+    variety: { modules: top.length, top: top.slice(0, 5).map(([id, n]) => ({ id, share: round(n / Math.max(1, shown.length), 3) })), longest_same_module_across_cuts: longestRun },
     evidence: { claims: claims.length, sourced: sourced.length, coverage: claims.length ? round(sourced.length / claims.length, 3) : null, captures: states.filter((state) => state.evidence?.capture).length },
     fallbacks: Object.entries(wanted).sort((a, b) => b[1].states - a[1].states).map(([id, entry]) => ({ wanted: id, states: entry.states, using: Object.keys(entry.using).sort((x, y) => entry.using[y] - entry.using[x]) })),
     chunks: { count: map.chunks?.length ?? 0, reused }
@@ -1114,6 +1393,14 @@ export function beatMapToStory(map, options = {}) {
         if (end - a >= CTA_MIN_SECONDS) overlays.push({ id: `${state.id}-subscribe`, module: 'subscribe-cta', track: 1, start: round(a - from), end: round(end - from), params: { name: channel.name, ...(channel.logo ? { logo: channel.logo } : {}) } });
         continue;
       }
+      // A hold or a focus step carries the card before on: its scene runs longer, and a focus step becomes one of its shot states.
+      if (EXTENDS.has(state.change) && scenes.length && scenes.at(-1).module === state.module) {
+        const scene = scenes.at(-1);
+        scene.end = round(b - from);
+        if (state.change === 'focus' && Number.isInteger(state.focus) && (scene.states?.length ?? 0) < MAX_SHOT_STATES) scene.states = [...(scene.states ?? []), { at: round(a - from), set: { focus: state.focus } }];
+        if (state.change === 'guide' && state.guide && (scene.states?.length ?? 0) < MAX_SHOT_STATES) scene.states = [...(scene.states ?? []), { at: round(a - from), set: { guide: state.guide } }];
+        continue;
+      }
       let module = state.module, params = state.params;
       if (!check(module, params, seconds)) {
         module = fallbackChain(state.capability).find((id) => check(id, capabilityParams(id, state), seconds)) ?? null;
@@ -1123,6 +1410,12 @@ export function beatMapToStory(map, options = {}) {
       if (!module || seconds < 1) { if (scenes.length) scenes.at(-1).end = round(b - from); continue; }
       scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'rack-focus', dur: 0.4 } } : {}) });
     }
+  }
+  // A scene whose focus steps do not fit (too close to its entrance or exit) keeps its card and drops the steps.
+  for (const scene of scenes) {
+    if (!scene.states) continue;
+    const story = { schema: 'launchclip.story.v1', lane: 'motion', format: { width: format.width, height: format.height, fps, duration }, brand, scenes: [scene], resolved: { duration, fps } };
+    try { resolveModule(scene, story); } catch { delete scene.states; }
   }
   if (scenes.length) scenes[0].start = 0;
   if (scenes.length) scenes.at(-1).end = duration;

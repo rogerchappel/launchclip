@@ -82,7 +82,8 @@ test("beat director: the 16-minute dry run passes the long-form gate", () => {
   assert.ok(Math.abs(report.cadence.gap.p50 - CADENCE_BENCHMARK.gap.p50) < 1.2, String(report.cadence.gap.p50));
   assert.ok(cuts.length >= 35 && cuts.length <= 70, String(cuts.length));
   const target = cadenceTarget("long-form");
-  for (const chapter of map.chapters) for (const shot of chapter.shots) assert.ok(shot.states.length <= target.states.max + 1, shot.id);
+  // A hold carries a card on and adds none: a shot's limit counts the states that change the picture.
+  for (const chapter of map.chapters) for (const shot of chapter.shots) assert.ok(shot.states.filter((state) => state.change !== "hold").length <= target.states.max + 1, shot.id);
   // States tile the runtime and every clause has a decision.
   const states = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
   for (let i = 1; i < states.length; i += 1) assert.ok(Math.abs(states[i].start - states[i - 1].end) < 1e-6, states[i].id);

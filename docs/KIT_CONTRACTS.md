@@ -2238,6 +2238,7 @@ The beat director gives every 3–10 s clause of a long video a visual decision.
 - **Conversions.** `beatMapToDirection` returns a direction map. `beatMapToStory(map, {from, to})` returns a storyboard for any window.
 - **Evidence.** Claims are matched against `research/evidence.json` (`launchclip.evidence.v1`) first. A capture (`launchclip.capture.v1`) is linked by `claim`, `claims[]` or a source URL.
 - **Fallbacks.** A planned module that is not registered falls back down its chain. Number modules never get a placeholder figure.
+- **Honesty.** An unverified claim keeps its source line only, and its figures show as an attributed claim card. A quote is a verified source's own prose quote span. A generic card shows a verbatim line of the narration, or the card on screen carries on (`focus`, `guide` or `hold` states, which become the previous scene's shot states). Paired series carry their own titles. See docs/BEAT_DIRECTOR.md, "Honesty".
 
 ### Shorts from a beat map (`kit/core/cutdown.mjs`)
 

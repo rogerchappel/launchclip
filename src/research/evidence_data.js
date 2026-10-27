@@ -61,14 +61,24 @@ export async function attachEvidenceData({ ledger, captures = [], tables = [], a
   const outCaptures = [];
   const githubByUrl = new Map();
   const claimOf = (capture) => ledger?.claims?.find((claim) => claim.capture === capture.id || claim.sources?.some((source) => source.url === capture.url));
+  // The model ids the research names in code form (gpt-6.1-terra): a PR or commit shows the file whose patch has one.
+  const ids = modelIds(ledger);
+  const card = async (url, options = {}) => {
+    if (options.token) return githubData(url, { ...options, root, fetch: adapters.fetch });
+    for (const id of ids) {
+      const hit = await githubData(url, { ...options, token: id, strict: true, root, fetch: adapters.fetch });
+      if (hit.data) return { ...hit, token: id };
+    }
+    return githubData(url, { ...options, root, fetch: adapters.fetch });
+  };
 
   for (const capture of captures) {
     const copy = { ...capture };
     const claim = claimOf(capture);
     if (claim && claim.status !== "verified") { outCaptures.push(copy); continue; }
     if (GITHUB_MODULE[capture.kind]) {
-      const result = await githubData(capture.url, { module: GITHUB_MODULE[capture.kind], token: tokenOf(capture), root, fetch: adapters.fetch });
-      if (result.data) { copy.data = result.data; githubByUrl.set(capture.url, { ...result.data, token: tokenOf(capture) }); note(capture.id, capture.kind, "attached"); }
+      const result = await card(capture.url, { module: GITHUB_MODULE[capture.kind], token: tokenOf(capture) });
+      if (result.data) { copy.data = result.data; githubByUrl.set(capture.url, { ...result.data, token: tokenOf(capture) ?? result.token ?? null }); note(capture.id, capture.kind, "attached"); }
       else note(capture.id, capture.kind, "skipped", result.reason);
     } else if (capture.kind === "post") {
       const sidecar = await readSidecar(root, capture);
@@ -107,8 +117,8 @@ export async function attachEvidenceData({ ledger, captures = [], tables = [], a
       // One PR or commit behind the claim and no clip of it: the card itself (a diff too long to capture still draws).
       const url = claim.sources?.find((source) => source.supports && /github\.com\/[^/]+\/[^/]+\/(?:pull|commit)\//.test(source.url))?.url;
       if (url) {
-        const card = githubByUrl.get(url) ?? (await githubData(url, { root, fetch: adapters.fetch })).data;
-        if (card) { Object.assign(data, { module: card.module, params: card.params }); note(claim.id, card.module, "attached"); }
+        const found = githubByUrl.get(url) ?? (await card(url)).data;
+        if (found) { Object.assign(data, { module: found.module, params: found.params }); note(claim.id, found.module, "attached"); }
         else note(claim.id, "github", "skipped", `no card for ${url}`);
       }
     }
@@ -122,7 +132,7 @@ export async function attachEvidenceData({ ledger, captures = [], tables = [], a
 // Captures
 
 /** A PR, commit or diff URL → {data: {module, params}} from github.js (its cache first), or {reason}. */
-export async function githubData(url, { module, token, root, fetch } = {}) {
+export async function githubData(url, { module, token, root, fetch, strict = false } = {}) {
   let ref;
   try { ref = parseGithubRef(url); } catch { return { reason: `not a GitHub pull request or commit URL: ${url}` }; }
   const wanted = module === "diff-view" ? "diff-view" : ref.kind === "pull" ? "repo-pr-card" : "commit-card";
@@ -131,7 +141,7 @@ export async function githubData(url, { module, token, root, fetch } = {}) {
     return { data: await run(token) };
   } catch (error) {
     // The capture highlighted text that is not in the patch (a PR title, say): the card without a highlighted token.
-    if (token && /contains/.test(String(error?.message))) {
+    if (token && !strict && /contains/.test(String(error?.message))) {
       try { return { data: await run(null) }; } catch (retry) { error = retry; }
     }
     return { reason: String(error?.message ?? error).split("\n")[0] };
@@ -303,6 +313,22 @@ export async function chainData(claim, { root, fetch, known = new Map() } = {}) 
 // ---------------------------------------------------------------------------
 
 /** The text a capture highlights (its token for a diff or card). */
+// Model ids written as code in the ledger's claims and quotes ("gpt-6.1-terra"), the one most claims are about first
+// (a claim naming "GPT-6.1 Terra" counts for gpt-6.1-terra), then in order of first mention.
+export function modelIds(ledger) {
+  const ids = [];
+  const claims = ledger?.claims ?? [];
+  for (const claim of claims) {
+    const texts = [claim.text, claim.quote, ...(claim.sources ?? []).map((source) => source?.quote?.text)];
+    for (const text of texts) for (const id of String(text ?? "").match(/\b[a-z][a-z0-9]*-\d[\w.]*(?:-[a-z0-9.]+)*\b/g) ?? []) {
+      const clean = id.replace(/\.$/, "");
+      if (!ids.includes(clean)) ids.push(clean);
+    }
+  }
+  const named = (id) => claims.filter((claim) => String(claim.text ?? "").toLowerCase().replace(/\s+/g, "-").includes(id)).length;
+  return ids.map((id, order) => ({ id, order, count: named(id) })).sort((a, b) => b.count - a.count || a.order - b.order).map((entry) => entry.id);
+}
+
 function tokenOf(capture) {
   const beat = (capture.beats ?? []).find((entry) => entry.action === "highlight" && entry.target?.text);
   return beat?.target.text ?? null;

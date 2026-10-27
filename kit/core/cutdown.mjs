@@ -30,7 +30,7 @@
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/cutdown.mjs.
 
 import { cadenceGate, cadenceTarget, eventStats, isGraphicScene, storyboardMeasures } from './cadence.mjs';
-import { beatMapToStory, directChunk, emptyHistory, windowWords } from './beat-director.mjs';
+import { GENERIC_MODULES, beatMapToStory, directChunk, emptyHistory, windowWords } from './beat-director.mjs';
 import { TITLE_CARD_MODULES, chooseSkeleton } from './skeleton-library.mjs';
 import { capabilitiesFor, capabilityParams, resolveCapability } from './visual-capabilities.mjs';
 import { draftDirectionMap, narrationWords } from './direction.mjs';
@@ -418,8 +418,9 @@ export function shortFromBeatMap(map, words, window, { registered = null, brand 
   if (TITLE_CARD_MODULES.includes(first.module)) {
     for (const id of capabilitiesFor(first.kind === 'title' ? 'concept' : first.kind, { wide: false })) {
       const module = resolveCapability(id, registered ? { registered } : {}).module;
-      if (TITLE_CARD_MODULES.includes(module)) continue;
-      const params = capabilityParams(module, first);
+      // Not a title card, and not a card of the clause's key words either.
+      if (TITLE_CARD_MODULES.includes(module) || GENERIC_MODULES.has(module) || module === 'particle-text') continue;
+      const params = capabilityParams(module, { headline: first.params?.text ?? first.text, ...first });
       if (params) { Object.assign(first, { capability: id, module, params, why: `${first.why}; the first frame is an image, not a title card` }); break; }
     }
   }
@@ -456,9 +457,13 @@ export function cutShorts(map, words, { count = 4, min = 20, max = 50, registere
     entry.tried += 1;
     const short = shortFromBeatMap(map, words, window, { registered, brand });
     entry.best ??= short;
-    if (short.report.gate.ok) entry.passing = short;
+    // A Short passes when it lands in the short-form band and opens on an image, not a title card.
+    if (short.report.gate.ok && !TITLE_CARD_MODULES.includes(short.story.scenes[0]?.module)) entry.passing = short;
     byChapter.set(window.chapter, entry);
   }
-  const ranked = [...byChapter.values()].map((entry) => entry.passing ?? entry.best).sort((a, b) => Number(b.report.gate.ok) - Number(a.report.gate.ok) || b.window.score - a.window.score);
+  // A Short that can only open on a title card is left out while others can open on an image.
+  const opensOnImage = (short) => !TITLE_CARD_MODULES.includes(short.story.scenes[0]?.module);
+  const pool = [...byChapter.values()].map((entry) => entry.passing ?? entry.best);
+  const ranked = (pool.filter(opensOnImage).length >= Math.min(want, 3) ? pool.filter(opensOnImage) : pool).sort((a, b) => Number(b.report.gate.ok) - Number(a.report.gate.ok) || b.window.score - a.window.score);
   return ranked.slice(0, want).map((short, index) => ({ ...shortFromBeatMap(map, words, short.window, { registered, brand, index }) }));
 }

@@ -8,10 +8,11 @@ const BEAT = {
   id: "b1",
   text: "Training compute grew from 40 percent to 3.2 billion dollars across France, Japan and Brazil in 2024 and 2025.",
   headline: "Compute grew tenfold",
+  line: "Training compute grew tenfold",
   label: "of the budget",
   brand: { mark: "assets/brand/mark.png", wordmark: { src: "assets/brand/wordmark.png", ratio: 7.5 } },
   facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent", "energy"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },
-  evidence: { claim: "c1", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" } }
+  evidence: { claim: "c1", status: "verified", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" }, data: { lines: ["$ launchclip eval --formats long-form", "long-form  passed"] } }
 };
 
 test("capabilities: every kind has a module and every planned module falls back to a registered one", () => {
@@ -48,7 +49,7 @@ test("capabilities: number modules never invent a number", () => {
 test("capabilities: narration is never dressed as a quote, a post or a sourced excerpt", () => {
   const plain = { id: "b3", text: "On a long document reading test, it leads.", headline: "Long document test", facts: { numbers: [], dates: [], items: [] } };
   for (const id of ["quote-card", "feed-frame", "excerpt", "proof-wall"]) assert.equal(capabilityParams(id, plain), null, id);
-  const quoted = { ...plain, evidence: { claim: "c", source: { url: "https://x.example", title: "Lab report" }, quote: "71% on long-document QA" } };
+  const quoted = { ...plain, evidence: { claim: "c", status: "verified", source: { url: "https://x.example", title: "Lab report" }, quote: "71% on long-document QA" } };
   assert.equal(capabilityParams("quote-card", quoted).quote, "71% on long-document QA");
   assert.equal(capabilityParams("quote-card", quoted).author, "Lab report");
 });

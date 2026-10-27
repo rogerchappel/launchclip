@@ -24,7 +24,7 @@ import { channelBuilders } from './capability-builders-channel.mjs';
 export const VISUAL_KINDS = Object.freeze([
   'title', 'concept', 'stat', 'money', 'compute', 'compare', 'share', 'series', 'ranking', 'list', 'process',
   'timeline', 'date', 'month', 'quote', 'social', 'code', 'terminal', 'pr', 'commit', 'diff', 'chain', 'lineage',
-  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting'
+  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting', 'claim', 'race'
 ]);
 
 // Capture kinds (launchclip.capture.v1) and the visual kind that shows each.
@@ -53,7 +53,8 @@ export const CAPABILITIES = Object.freeze([
   cap('stat-card', ['stat', 'money', 'compute'], ['concept-card']),
   cap('count-up', ['stat', 'money'], ['stat-card']),
   cap('odometer', ['stat', 'compute', 'money'], ['count-up', 'stat-card']),
-  cap('glass-bars-3d', ['compare', 'series'], ['bar-chart']),
+  cap('grid-race', ['race'], ['glass-bars-3d', 'bar-chart']),
+  cap('glass-bars-3d', ['compare', 'series', 'race'], ['bar-chart']),
   cap('coin-stack', ['money'], ['stat-card']),
   cap('rack-shelf', ['compute'], ['stat-card']),
   cap('percent-fill', ['share'], ['stat-card']),
@@ -93,7 +94,7 @@ export const CAPABILITIES = Object.freeze([
   cap('motion-title', ['title', 'concept'], ['concept-card']),
   cap('kinetic-words', ['title', 'concept', 'tokens'], ['concept-card']),
   cap('glass-word', ['concept', 'title'], ['concept-card']),
-  cap('concept-card', ['concept', 'title', 'stat'], []),
+  cap('concept-card', ['concept', 'title', 'stat', 'claim'], []),
   cap('object-card', ['concept'], ['concept-card']),
   // Structure: a mid-roll call to action, and the logo sting at the open and the close.
   cap('cta', ['cta'], ['concept-card']),
@@ -208,20 +209,31 @@ const formatValue = (entry) => entry.raw ?? `${entry.value}${entry.unit ? ` ${en
 const sourceOf = (beat) => beat.evidence?.source ? clip(`${beat.evidence.source.title ?? beat.evidence.source.publisher ?? new URL(beat.evidence.source.url).hostname}${beat.evidence.source.date ? `, ${beat.evidence.source.date}` : ''}`, 60) : undefined;
 
 const BUILDERS = {
-  'concept-card': (beat) => ({ text: clip(beat.headline, 26), icon: iconFor(beat), ...(beat.sub ? { sub: clip(beat.sub, 40) } : {}) }),
+  'concept-card': (beat) => ({ text: clip(beat.headline, 26), icon: iconFor(beat), ...(beat.sub ? { sub: clip(beat.sub, 64) } : {}) }),
   'glass-word': (beat) => ({ word: clip(keyTerms(beat.headline)[0] ?? beat.headline, 12) }),
   'object-card': (beat) => ({ object: 'box', caption: clip(beat.headline, 30), label: clip(keyTerms(beat.text)[0] ?? 'Note', 12) }),
   'motion-title': (beat) => ({ text: clip(beat.headline, 34), ...(beat.kicker ? { kicker: clip(beat.kicker, 24) } : {}), highlight: keyTerms(beat.headline)[0] }),
-  'kinetic-words': (beat) => ({ words: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ text: clip(text, 14), at: round(0.2 + i * 0.7), ...(i === 2 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' }),
+  // Kinetic type sets a line the narration says, in its own order (beat.line), never the clause's key words.
+  'kinetic-words': (beat) => { const groups = lineGroups(beat.line); return groups ? { words: groups.map((text, i) => ({ text, at: round(0.2 + i * 0.6), ...(i === groups.length - 1 ? { emphasis: true } : {}) })), layout: 'stack', variant: 'rise' } : null; },
   // Number modules show only the clause's own numbers: no number, no params (null), never a placeholder figure.
-  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.headline, 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
-  'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
-  'odometer': (beat) => { const n = numbersOf(beat).find((entry) => Number.isInteger(entry.scaled ?? entry.value)); return n ? { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.headline, 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' } : null; },
-  'percent-fill': (beat) => { const n = percentOf(beat); return n ? { value: Math.round(n.value), label: clip(beat.label ?? beat.headline, 36), variant: 'bar' } : null; },
+  'stat-card': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: clip(formatValue(n), 12), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), icon: iconFor(beat), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) } : null; },
+  'count-up': (beat) => { const n = numbersOf(beat)[0]; return n ? { value: n.value, ...(n.prefix ? { prefix: n.prefix } : {}), ...(n.unit ? { suffix: (n.unit === '%' || n.unit === '×' ? n.unit : ` ${n.unit}`).slice(0, 8) } : {}), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), ...(sourceOf(beat) ? { note: sourceOf(beat) } : {}) } : null; },
+  'odometer': (beat) => { const n = numbersOf(beat).find((entry) => Number.isInteger(entry.scaled ?? entry.value)); return n ? { value: Math.round(n.scaled ?? n.value), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 40), ...(sourceOf(beat) ? { sub: sourceOf(beat) } : {}), variant: 'mechanical' } : null; },
+  'percent-fill': (beat) => { const n = percentOf(beat); return n ? { value: Math.round(n.value), label: clip(beat.label ?? beat.evidence?.data?.title ?? '', 36), variant: 'bar' } : null; },
   'unit-grid': (beat) => { const n = percentOf(beat); if (!n) return null; const lit = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), count: 100, groups: [{ count: lit, label: clip(`${lit} in 100`, 24), tone: 'primary' }, { count: 100 - lit, label: 'The rest', tone: 'accent' }], variant: 'dots' }; },
   'pie-chart': (beat) => { const n = percentOf(beat); if (!n) return null; const v = Math.max(1, Math.min(99, Math.round(n.value))); return { title: clip(beat.headline, 36), data: [{ label: clip(beat.label ?? 'This', 18), value: v }, { label: 'The rest', value: 100 - v }], variant: 'donut' }; },
   'number-line': (beat) => { const n = numbersOf(beat)[0]; if (!n) return null; const v = n.value; const to = v <= 100 ? 100 : 10 ** Math.ceil(Math.log10(v)); return { from: 0, to, ranges: [{ from: 0, to: Math.max(1, Math.round(v)), label: clip(beat.label ?? 'Here', 18), tone: 'good' }], marker: { value: v, label: clip(formatValue(n), 12) }, variant: 'ruler' }; },
-  'bar-chart': (beat) => { const data = seriesOf(beat, 2); return data ? { title: clip(beat.headline, 40), data, highlight: data.length - 1, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' } : null; },
+  // Two unit grids filling as one budget buys from each side (the director's evidence.data.race).
+  'grid-race': (beat) => {
+    const race = beat.evidence?.data?.race;
+    if (!race || !Array.isArray(race.rows) || race.rows.length !== 2) return null;
+    const max = Math.max(...race.rows.map((row) => row.total));
+    const unit = 10 ** Math.ceil(Math.log10(max / 300));
+    return { ...(beat.evidence.data.title ? { title: clip(beat.evidence.data.title, 40) } : {}), unit, legend: clip(`1 cell = ${unit.toLocaleString('en-US')} ${race.suffix}`, 40), suffix: clip(race.suffix, 16), format: { compact: true },
+      racers: race.rows.map((row) => ({ label: clip(row.label, 28), total: row.total, ...(Number.isFinite(race.spend) ? { spend: { total: race.spend } } : {}) })), ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}) };
+  },
+  // A chart's title says what it measures (the series' own title), never a fragment of the clause.
+  'bar-chart': (beat) => { const data = seriesOf(beat, 2); return data ? { ...(beat.evidence?.data?.title ? { title: clip(beat.evidence.data.title, 40) } : {}), data, highlight: data.length - 1, ...(sourceOf(beat) ? { source: sourceOf(beat) } : {}), variant: 'bars' } : null; },
   'leaderboard': (beat) => { const data = seriesOf(beat, 3); return data ? { title: clip(beat.headline, 40), entries: data, variant: 'bars' } : null; },
   'compare': (beat) => { const sides = sidesOf(beat); return sides ? { left: { title: sides[0].label, items: [sides[0].detail] }, right: { title: sides[1].label, items: [sides[1].detail] } } : null; },
   'gauge-compare': (beat) => { const sides = sidesOf(beat, true); if (!sides || sides[0].unit !== sides[1].unit || !sides[0].unit) return null; return { left: { label: sides[0].label, value: sides[0].value, unit: clip(sides[0].unit, 8), color: 'primary' }, right: { label: sides[1].label, value: sides[1].value, unit: clip(sides[1].unit, 8), color: 'accent' } }; },
@@ -234,12 +246,13 @@ const BUILDERS = {
   'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
   'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
   // Quotes, posts and excerpts show only words someone said or wrote: a quote in the clause, or the source's own quote. Narration is never dressed as a quote.
-  'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.facts?.quote ? beat.speaker ?? beat.evidence?.source?.title ?? 'Quoted' : beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
+  'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.evidence.source?.publisher ?? beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
   'feed-frame': (beat) => (beat.facts?.handle ? { handle: clip(beat.facts.handle, 20), caption: clip(beat.headline, 26) } : null),
   'proof-wall': (beat) => !itemsOf(beat, 3, 4) || !sourceOf(beat) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
   'excerpt': (beat) => (quoteOf(beat) && sourceOf(beat) ? { type: 'text', title: clip(beat.evidence.source.title ?? beat.headline, 40), source: clip(sourceOf(beat), 40), lines: excerptLines(beat) } : null),
-  'code-snippet': (beat) => ({ title: clip(beat.headline, 32), code: { language: 'text', typing: true, lines: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 24), type: i ? 'string' : 'keyword' }] })) } }),
-  'window-chrome': (beat) => ({ title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: excerptLines(beat).map((line) => (typeof line === 'string' ? line : line.text)), caption: clip(beat.headline, 36), variant: 'mac' }),
+  // Code and terminals show only lines the evidence holds (evidence.data.lines): never the clause's words typed as code.
+  'code-snippet': (beat) => { const lines = codeLines(beat); return lines ? { title: clip(beat.evidence?.data?.file ?? beat.evidence?.source?.title ?? 'Source', 32), code: { language: 'text', typing: true, lines: lines.slice(0, 4).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 60), type: 'string' }] })) } } : null; },
+  'window-chrome': (beat) => { const lines = codeLines(beat); return lines ? { title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: lines.slice(0, 4).map((line) => clip(line, 80)), variant: 'mac' } : null; },
   'media-window': (beat) => ({ title: clip(beat.evidence?.source?.title ?? beat.headline, 54), media: { kind: 'video', src: beat.evidence?.capture?.out } }),
   'cta': (beat) => ({ action: clip(beat.cta?.action ?? 'Subscribe for the next one', 40), ...(beat.cta?.detail ? { detail: clip(beat.cta.detail, 80) } : {}), ...(beat.cta?.handle ? { handle: beat.cta.handle, icon: 'bell' } : {}) }),
   // A sting needs the brand's own mark and wordmark (beat.brand); without them the title carries the open.
@@ -269,9 +282,28 @@ function seriesOf(beat, least = 2) {
 
 // The two sides of a comparison: named sides ("A versus B") or two numbers.
 // numeric: both sides need a number of the clause (null otherwise).
+// A verbatim line of four words or more as 2–3 groups of consecutive words, each ≤ 22 characters (the module fits them by size); null when it does not split that way.
+function lineGroups(line) {
+  const words = String(line ?? '').split(/\s+/).filter(Boolean);
+  // Kinetic type needs four words or more (a shorter line is a title); two or three groups, never a word on its own like "a".
+  if (words.length < 4) return null;
+  const count = words.length <= 5 ? 2 : 3;
+  const size = Math.ceil(words.length / count);
+  const groups = [];
+  for (let i = 0; i < words.length; i += size) groups.push(words.slice(i, i + size).join(' '));
+  return groups.length >= 2 && groups.every((group) => group.length <= 22) ? groups : null;
+}
+
+// A verified source's code or terminal lines (evidence.data.lines as strings or {text}), else null.
+function codeLines(beat) {
+  const lines = beat.evidence?.status === 'verified' && Array.isArray(beat.evidence?.data?.lines) ? beat.evidence.data.lines.map((line) => (typeof line === 'string' ? line : line?.text)).filter((line) => typeof line === 'string' && line.trim()) : [];
+  return lines.length ? lines : null;
+}
+
 function sidesOf(beat, numeric = false) {
   const numbers = numbersOf(beat);
-  const named = beat.facts?.sides ?? [];
+  // Named sides are names ("Terra versus Sol", "GPT-5"), not the clause's words ("numbers against anything").
+  const named = (beat.facts?.sides ?? []).filter((side) => /^\p{Lu}|\d/u.test(side)).length === 2 ? beat.facts.sides : [];
   if (numeric && numbers.length < 2) return null;
   if (!named.length && numbers.length < 2) return null;
   const side = (i) => ({ label: cap1(clip(named[i] ?? numbers[i]?.label ?? (i ? 'After' : 'Before'), 16)), value: numbers[i]?.value, unit: numbers[i]?.unit, detail: clip(numbers[i] ? formatValue(numbers[i]) : named[i], 22) });
@@ -283,8 +315,9 @@ function timelineSteps(beat) {
   return (dates.length >= 2 ? dates : itemsOf(beat, 3, 3) ?? []).slice(0, 4).map((label) => clip(label, 14));
 }
 
+// A quote is a verified source's own quote span (the director gates it); the narration's own quotes never are.
 function quoteOf(beat) {
-  return beat.facts?.quote ?? beat.evidence?.quote ?? null;
+  return beat.evidence?.status === 'verified' && beat.evidence.quote ? beat.evidence.quote : null;
 }
 
 function excerptLines(beat) {
@@ -303,8 +336,12 @@ for (const family of FAMILIES) Object.assign(BUILDERS, family.builders);
 
 /** The family files' sample beats (with evidence.data), for tests and sample sheets. */
 export function capabilitySamples() {
-  return FAMILIES.flatMap((family) => family.samples ?? []);
+  return [...FAMILIES.flatMap((family) => family.samples ?? []), ...SAMPLES];
 }
+
+// Beats for the builders here that need director data: a grid race (pairSeries' evidence.data.race).
+const SAMPLES = [{ id: 'race-sample', text: 'On Terra, the same $10 buys 2 million.', headline: 'Tokens for $10', facts: { numbers: [], items: [], dates: [] },
+  evidence: { claim: 'c-sample', status: 'verified', source: { url: 'https://example.com/pricing', title: 'Pricing' }, data: { title: 'Tokens for $10', race: { spend: 10, suffix: 'tokens', rows: [{ label: 'Sol', total: 1e6 }, { label: 'Terra', total: 2e6 }] } } } }];
 
 /**
  * Params for a module from a beat ({id, text, headline, label?, sub?, kicker?,
