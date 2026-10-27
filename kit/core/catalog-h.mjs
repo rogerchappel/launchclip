@@ -24,6 +24,10 @@
 //   code      catalog-i-code.mjs (repo-pr-card, commit-card, diff-view,
 //             evidence-chain, date-pinned-timeline) and catalog-i-terminal.mjs
 //             (terminal-session): rebuilt GitHub evidence and a typing terminal
+//   particles catalog-i-particles.mjs (catalogue I: particles and grids at
+//             scale on a canvas painted by kit/core/particles.mjs) and
+//             catalog-i-grids.mjs (grid-race, cell-grid: unit grids at scale)
+//             and catalog-i-tokenizer.mjs (tokenizer: BPE chips and prices)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -46,9 +50,13 @@ import {DATA_MODULES} from './catalog-h-data.mjs';
 import {SOCIAL_MODULES} from './catalog-i-social.mjs';
 import {CHANNEL_MODULES} from './catalog-h-channel.mjs';
 import {CODE_MODULES} from './catalog-i-code.mjs';
+import {PARTICLE_MODULES} from './catalog-i-particles.mjs';
+import {GRID_MODULES} from './catalog-i-grids.mjs';
+import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES];
+
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */

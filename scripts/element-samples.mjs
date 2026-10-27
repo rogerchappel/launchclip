@@ -69,6 +69,13 @@ export const SAMPLES = Object.freeze({
       {status: 'PASS', time: '9.7 ms', text: 'a real PR maps to repo-pr-card params that resolve'}, {status: 'PASS', time: '4.0 ms', text: 'a real commit maps to commit-card and diff-view params'}]},
     {cmd: 'npm test', output: [{text: 'ℹ tests 2515', tone: 'muted'}, {text: 'ℹ pass 2053', tone: 'add'}, {text: 'ℹ fail 4', tone: 'del'}, {text: 'ℹ duration_ms 219907.9', tone: 'muted'}]}],
     timer: {to: 220}, highlight: 'c3ec4a11'},
+  'dot-field': {count: 1050000, label: 'tokens in context', legend: '1 dot = 1 token'},
+  'particle-text': {text: '60%', kicker: 'Hard-set score', sub: 'up from 41% a month ago'},
+  'particle-logo': {logos: [{icon: 'rocket', label: 'Northwind', sub: 'challenger'}, {icon: 'sparkle', label: 'Helio Labs', sub: 'incumbent'}]},
+  'particle-cloud': {steps: [{label: 'Lumen S', sub: 'small'}, {label: 'Lumen M', sub: 'leaked'}, {label: 'Lumen L', sub: 'near-flagship'}], target: {label: 'Next flagship', sub: 'due soon'}},
+  'grid-race': {title: 'Same $10 of output', unit: 10000, suffix: 'tokens', racers: [{label: 'Atlas 2', sub: '$10 per 1M output tokens', total: 1000000, spend: {total: 10}}, {label: 'Atlas 2 Mini', sub: '$5 per 1M output tokens', total: 1000000, spend: {total: 5}}], ratio: {text: '2×', sub: 'cheaper for the same tokens'}},
+  'cell-grid': {title: 'Cost of one completed task', legend: '1 cell = $0.01', grids: [{label: 'Atlas 2 Mini', sub: '$5 / 1M output', count: 101, value: '$1.01', tone: 'accent'}, {label: 'Rival Pro', sub: '$20 / 1M output', count: 715, value: '$7.15', tone: 'paper'}], ratio: {text: '≈7×', sub: 'cheaper per completed task'}, source: 'Example benchmark, Oct 2026'},
+  'tokenizer': {text: 'Terra continues to advance the cost-intelligence frontier', tokens: ['Ter', 'ra', ' continues', ' to', ' advance', ' the', ' cost', '-int', 'elligence', ' frontier'], encoding: 'o200k_base', source: 'text: example launch post', models: [{label: 'Atlas 2', price: 10}, {label: 'Atlas 2 Mini', price: 5}]},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 
@@ -85,6 +92,10 @@ export const EXTRA_SAMPLES = Object.freeze([
   {name: 'evidence-chain-announcement', module: 'evidence-chain', variant: 'glass', shape: 'landscape', params: {token: 'openrouter/free', sources: [
     {kind: 'excerpt', file: 'docs/guide/advanced.md', sub: 'rogerchappel/launchclip · main', lines: ['  --critic-route openrouter:openrouter/free@none \\', '  --repair-route openrouter:openrouter/free@none'], startLine: 333},
     {kind: 'announcement', site: 'github.com/rogerchappel/launchclip', title: 'Visual Review and Repair', text: 'To use OpenRouter\'s current free pool without maintaining a model list, pass openrouter:openrouter/free@none for both routes.'}]}},
+  {name: 'particle-text-both', module: 'particle-text', variant: 'led', shape: 'landscape', params: {text: '1,050,000', kicker: 'Tokens in context', mode: 'both'}},
+  {name: 'cell-grid-stacked-money', module: 'cell-grid', variant: 'bars', shape: 'landscape', params: {title: 'A simulated year running a startup', legend: '1 cell = $10,000', grids: [{label: 'Northwind', count: 102, value: '$1,024,828', segments: [{count: 20, tone: 'accent', label: 'start · $200,000'}, {count: 82, tone: 'good'}]}, {label: 'Helio', count: 64, value: '$641,290', segments: [{count: 20, tone: 'accent', label: 'start · $200,000'}, {count: 44, tone: 'good'}]}], source: 'Example benchmark, Oct 2026'}},
+  {name: 'cell-grid-ticks', module: 'cell-grid', variant: 'blocks', shape: 'portrait', params: {title: 'Tasks passed, of 100', legend: '1 cell = 1 task', order: 'reading', grids: [{label: 'Northwind', count: 100, columns: 10, value: '24%', ticks: {count: 24}}, {label: 'Helio', count: 100, columns: 10, value: '6%', ticks: {count: 6}}], source: 'Example benchmark, Oct 2026'}},
+  {name: 'cell-grid-highlight', module: 'cell-grid', variant: 'bars', shape: 'landscape', params: {legend: '1 cell = 1 question', order: 'reading', grids: [{label: 'Answered correctly', count: 198, value: '124 of 198', highlight: {count: 124}}], source: 'Example benchmark, Oct 2026'}},
   {name: 'speech-bubble-thought', module: 'speech-bubble', variant: 'comic', shape: 'portrait', params: {text: 'What if the video made itself?', type: 'thought', tail: 'bottom-right'}}
 ]);
 

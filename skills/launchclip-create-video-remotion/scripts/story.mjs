@@ -954,8 +954,8 @@ function validateMotion(motion, err) {
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
 const FRAME_KEYS = ["enabled", "logo", "kicker", "sections", "progress", "show", "labels", "color", "sources"];
-// Modules that show study or survey data; each needs a source on screen.
-const DATA_MODULES = ["unit-grid", "number-line"];
+// Modules that show study, survey or benchmark data; each needs a source on screen.
+const DATA_MODULES = ["unit-grid", "number-line", "cell-grid", "grid-race"];
 const FRAME_COLOR_ROLES = ["bg", "paper", "ink", "primary", "accent"];
 function validateFrame(frame, { err, warn, scenes }) {
   if (frame === undefined || frame === false) return;
