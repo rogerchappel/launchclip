@@ -106,6 +106,17 @@ export async function dismissConsent(page, { log = () => {} } = {}) {
   const hidden = await page.evaluate((selectors) => {
     const found = [];
     for (const selector of selectors) for (const node of document.querySelectorAll(selector)) { const box = node.getBoundingClientRect(); if (box.width * box.height > 0) { node.style.setProperty("display", "none", "important"); found.push(selector); } }
+    // A fixed bar about cookies or privacy that matched no known platform (and offered no refusal).
+    for (const node of document.querySelectorAll("body *")) {
+      const s = getComputedStyle(node);
+      if (s.position !== "fixed" && s.position !== "sticky") continue;
+      const box = node.getBoundingClientRect();
+      if (box.width < innerWidth * 0.5 || box.height > innerHeight * 0.45 || box.height < 30) continue;
+      if (box.top > 8 && box.bottom < innerHeight - 8) continue;
+      if (!/cookie|consent|your privacy|privacy (rights|choices|policy)/i.test((node.innerText || "").slice(0, 1500))) continue;
+      node.style.setProperty("display", "none", "important");
+      found.push(`fixed bar "${(node.innerText || "").trim().split("\n")[0].slice(0, 40)}"`);
+    }
     if (found.length) { document.documentElement.style.removeProperty("overflow"); document.body.style.removeProperty("overflow"); }
     return [...new Set(found)];
   }, CMP_CONTAINERS).catch(() => []);
@@ -113,12 +124,22 @@ export async function dismissConsent(page, { log = () => {} } = {}) {
   return { action: "none" };
 }
 
+/** Hide the request's page furniture (request.hide). → the selectors that matched something. */
+export async function hideFurniture(page, selectors) {
+  return page.evaluate((list) => list.filter((selector) => {
+    let nodes = [];
+    try { nodes = [...document.querySelectorAll(selector)]; } catch { return false; }
+    for (const node of nodes) node.style.setProperty("display", "none", "important");
+    return nodes.length > 0;
+  }), selectors);
+}
+
 // ---------------------------------------------------------------------------
 // Blocks, walls and paywalls
 
 const BOT_CHECK = /(verify (that )?you are (a )?human|are you a robot|checking your browser|just a moment\.\.\.|attention required|enable javascript and cookies to continue|unusual traffic from your computer|press (and|&) hold|captcha|access denied|request blocked|you have been blocked)/i;
 const SIGN_IN_WALL = /^(sign in|log in|login)( to (continue|github|your account))?\b/i;
-const PAYWALL = /(subscribe (now )?to (continue|keep) reading|this (article|story|content) is (for|available to) (subscribers|members)( only)?|already a subscriber\? (sign|log) in|to continue reading,? (please )?(subscribe|sign in|log in)|you('ve| have) reached your (free )?(article )?limit|create a free account to (continue|read))/i;
+const PAYWALL = /(subscribe (now )?to (continue|keep) reading|this (article|story|content) is (for|available to) (subscribers|members)( only)?|to continue reading,? (please )?(subscribe|sign in|log in)|you('ve| have) reached your (free )?(article )?limit|create a free account to (continue|read))/i;
 const PAYWALL_SELECTORS = ["[class*='paywall' i]", "[id*='paywall' i]", ".tp-modal", ".tp-backdrop", "[data-testid*='paywall' i]", "#gateway-content", ".meteredContent", "[class*='regwall' i]"];
 
 /**
@@ -262,10 +283,12 @@ export async function openEvidencePage(browser, request, { viewport, scale = SHO
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     const consent = await dismissConsent(page, { log });
     if (request.wait_for) await page.locator(request.wait_for).first().waitFor({ state: "visible", timeout: 15000 }).catch(() => { throw new EvidenceBlockedError(`wait_for ${request.wait_for} never showed`, { url: page.url() }); });
+    const hidden = request.hide?.length ? await hideFurniture(page, request.hide) : [];
+    if (hidden.length) log(`hid ${hidden.join(", ")}`);
     const summary = await pageSummary(page, { requested: request.url, status: response?.status() ?? null });
     const reason = blockReason(summary);
     if (reason) throw new EvidenceBlockedError(reason, { url: summary.final, title: summary.title, status: summary.status });
-    return { context, page, status: summary.status, consent, title: summary.title };
+    return { context, page, status: summary.status, consent, title: summary.title, hidden };
   } catch (error) {
     await context.close().catch(() => {});
     throw error;
@@ -296,7 +319,7 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
   const workDir = await mkdtemp(path.join(os.tmpdir(), `launchclip-evidence-${request.id}-`));
   const browser = await launch(available);
   try {
-    const { context, page, status, consent, title } = await openEvidencePage(browser, request, { viewport: windowSize, log });
+    const { context, page, status, consent, title, hidden } = await openEvidencePage(browser, request, { viewport: windowSize, log });
     let measured, pageSize, html, finalUrl;
     try {
       const docHeight = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
@@ -336,6 +359,7 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
       provenance: { ...request.provenance },
       captured_at: new Date().toISOString(),
       consent,
+      hidden,
       video: rel(dir, out),
       poster: rel(dir, poster),
       fullpage: { path: rel(dir, fullpage), width: pageSize.width, height: pageSize.height, scale: SHOT_SCALE },
@@ -378,7 +402,7 @@ export async function captureStill(input, { root = process.cwd(), target = null,
   const browser = await launch(available);
   try {
     const viewport = { width: request.viewport.width, height: request.viewport.height };
-    const { context, page, status, consent, title } = await openEvidencePage(browser, request, { viewport, scale: k, log });
+    const { context, page, status, consent, title, hidden } = await openEvidencePage(browser, request, { viewport, scale: k, log });
     try {
       await freeze(page, viewport.height * 3);
       let box = { x: 0, y: 0, width: viewport.width, height: viewport.height }, matched = null;
@@ -394,7 +418,7 @@ export async function captureStill(input, { root = process.cwd(), target = null,
       const still = `${base}.still.png`;
       await page.screenshot({ path: still, clip: box, fullPage: true, animations: "disabled", caret: "hide" });
       const record = { schema: SIDECAR_SCHEMA, id: request.id, kind: request.kind, mode: "still", request_url: request.url, final_url: page.url(), http_status: status, page_title: title,
-        provenance: { ...request.provenance }, captured_at: new Date().toISOString(), consent, still: { path: rel(dir, still), box, scale: k, pixels: { width: Math.round(box.width * k), height: Math.round(box.height * k) } },
+        provenance: { ...request.provenance }, captured_at: new Date().toISOString(), consent, hidden, still: { path: rel(dir, still), box, scale: k, pixels: { width: Math.round(box.width * k), height: Math.round(box.height * k) } },
         target: want ? targetLabel(want) : null, ...(matched ? { matched } : {}), snapshot: { sha256: sha256(html), bytes: Buffer.byteLength(html) } };
       const sidecar = `${base}.still.json`;
       await writeFile(sidecar, `${JSON.stringify(record, null, 2)}\n`);

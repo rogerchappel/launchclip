@@ -54,6 +54,8 @@ test("blocks, sign-in walls and paywalls fail with a reason; a real page passes"
   assert.match(blockReason({ ...page, final: "https://example.com/login?return=/a" }), /sign-in wall/);
   assert.match(blockReason({ ...page, text: page.text + " Subscribe to continue reading." }), /paywall/);
   assert.match(blockReason({ ...page, paywall: [".tp-modal"] }), /paywall overlay/);
+  // A sign-in prompt beside a free article is not a paywall.
+  assert.equal(blockReason({ ...page, text: page.text + " Already a subscriber? Sign in" }), null);
   assert.match(blockReason({ ...page, text: "hi" }), /empty page/);
 });
 
@@ -130,6 +132,20 @@ test("pins pop in and stay; every state is a pure function of t", () => {
   assert.deepEqual(stateAt(tl, 1.2), stateAt(tl, 1.2));
   const forward = [0.3, 1.1, 2.7].map((t) => stateAt(tl, t)), backward = [2.7, 1.1, 0.3].map((t) => stateAt(tl, t)).reverse();
   assert.deepEqual(forward, backward);
+});
+
+test("the timeline survives the JSON trip into the player page unchanged", () => {
+  const word = { x: 600, y: 300, width: 80, height: 20 };
+  const tl = buildTimeline({ viewport, chrome, page, duration: 6, beats: [
+    { index: 0, action: "cursor", at: 0.2, dur: 0.6, rects: [word] },
+    { index: 1, action: "select", at: 1, dur: 1, rects: [word] },
+    { index: 2, action: "focus-ring", at: 2.5, dur: 0.6, rects: [line] },
+    { index: 3, action: "select", at: 3.5, dur: 1, rects: [line] },
+    { index: 4, action: "pin", at: 4, dur: 0.5, label: "Oct 16, 2026", rects: [] }
+  ] });
+  const tripped = JSON.parse(JSON.stringify(tl));
+  for (const t of [0.5, 1.5, 2.4, 3, 4.2, 5.9]) assert.deepEqual(stateAt(tripped, t), stateAt(tl, t), `t = ${t}`);
+  assert.equal(stateAt(tripped, 2.4).selection.length, 1, "a finished selection stays until the next one");
 });
 
 test("the player draws the URL in the chrome and inlines the timeline", async () => {

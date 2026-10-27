@@ -19,8 +19,10 @@
 // {selector, nth?, within?}; beat.zoom (a fixed scale for zoom beats); request.chrome
 // ("dark" | "none", the browser chrome drawn round the page), request.fps,
 // request.tail (seconds held after the last beat), request.still
-// ({target, pad?, scale?}, the default crop for --still) and request.wait_for
-// (a selector the page must show before capture).
+// ({target, pad?, scale?}, the default crop for --still), request.wait_for
+// (a selector the page must show before capture) and request.hide (CSS
+// selectors of page furniture to hide before capture, such as a promo
+// popover; recorded in the sidecar, never used on the evidence itself).
 //
 // The validator returns {errors, warnings, request}: the request with
 // defaults filled, beats sorted by `at` and every target in object form.
@@ -89,6 +91,7 @@ export function validateCaptureRequest(input) {
   const tail = input.tail ?? 1.2;
   if (typeof tail !== "number" || tail < 0 || tail > 10) errors.push("tail must be 0–10 seconds");
   if (input.wait_for !== undefined && typeof input.wait_for !== "string") errors.push("wait_for must be a CSS selector");
+  if (input.hide !== undefined && (!Array.isArray(input.hide) || input.hide.length > 12 || input.hide.some((item) => typeof item !== "string" || !item.trim()))) errors.push("hide must be an array of at most 12 CSS selectors");
 
   if (!Array.isArray(input.beats)) errors.push("beats must be an array");
   const beats = (Array.isArray(input.beats) ? input.beats : []).map((beat, index) => {
@@ -136,7 +139,7 @@ export function validateCaptureRequest(input) {
   }
 
   const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, beats, out,
-    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(still ? { still } : {}) };
+    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(still ? { still } : {}) };
   return { errors, warnings, request };
 }
 
