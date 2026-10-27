@@ -92,7 +92,7 @@ const EPS = 1e-6;
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
-const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton"]);
+const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -373,6 +373,10 @@ export function validateStory(story, { modules } = {}) {
   // background and panel: the plate's background kind and the card surface (kit/core/backgrounds.mjs, kit/core/panels.mjs).
   validateBackground(story.background, err);
   validatePanel(story.panel, err);
+  // plate: the blurred backdrop plate, per story, chapter or scene (kit/core/plates.mjs).
+  validatePlate(story.plate, err, "plate", { cycle: true });
+  if (Array.isArray(story.chapters)) story.chapters.forEach((chapter, j) => { if (isObject(chapter)) validatePlate(chapter.plate, err, `chapters[${j}].plate`, { none: true }); });
+  if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => { if (isObject(scene)) validatePlate(scene.plate, err, `scenes[${i}].plate`, { none: true }); });
   // medium: the whole-frame finishing pass (kit/core/medium.mjs).
   validateMedium(story.medium, err);
 
@@ -1052,6 +1056,31 @@ function validateBackground(value, err, path = "background") {
   }
 }
 
+// The same rules as kit/core/plates.mjs plateErrors(), kept here so this
+// file stays import-free (kept in step by test/plates.test.js).
+export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh"]);
+const PLATE_UNIT = { focus: [0, 1], intensity: [0, 1], speed: [0, 2], depth: [0, 1] };
+function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
+  if (value === undefined || value === null) return;
+  if (typeof value === "string") {
+    if (!(STORY_PLATE_KINDS.includes(value) || (none && value === "none"))) err(`${path} must be one of ${STORY_PLATE_KINDS.join(", ")}${none ? ", none" : ""} (or {kind, params?})`);
+    return;
+  }
+  if (!isObject(value)) { err(`${path} must be a plate kind or {kind, params?}`); return; }
+  const keys = ["kind", "params", ...(cycle ? ["cycle"] : [])];
+  for (const key of Object.keys(value)) if (!keys.includes(key)) err(`${path}.${key} is not supported (allowed: ${keys.join(", ")})`);
+  if (!STORY_PLATE_KINDS.includes(value.kind)) { err(`${path}.kind must be one of ${STORY_PLATE_KINDS.join(", ")}`); return; }
+  if (value.cycle !== undefined && typeof value.cycle !== "boolean") err(`${path}.cycle must be true or false`);
+  if (value.params === undefined) return;
+  if (!isObject(value.params)) { err(`${path}.params must be an object`); return; }
+  for (const [key, given] of Object.entries(value.params)) {
+    if (key === "tint") { if (!["neutral", "primary", "accent"].includes(given)) err(`${path}.params.tint must be one of neutral, primary, accent`); continue; }
+    if (!PLATE_UNIT[key]) { err(`${path}.params.${key} is not supported (allowed: focus, intensity, speed, depth, tint)`); continue; }
+    const [min, max] = PLATE_UNIT[key];
+    if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
+  }
+}
+
 // The same rules as kit/core/medium.mjs mediumErrors(), kept here so this
 // file stays import-free.
 function validateMedium(value, err, path = "medium") {
@@ -1520,7 +1549,7 @@ export function layoutSpans(story) {
 
 export const CHAPTER_MIN_SECONDS = 10;
 export const CHAPTER_MIN_COUNT = 3;
-const CHAPTER_KEYS = new Set(["id", "title", "start", "segment"]);
+const CHAPTER_KEYS = new Set(["id", "title", "start", "segment", "plate"]);
 const CHAPTER_ID = /^[a-z0-9][a-z0-9-]{0,47}$/i;
 
 /** Check story.chapters (validateStory calls this). Starts may be unresolved anchors. */
@@ -1662,7 +1691,7 @@ export function coverScene(story, { end = COVER_SECONDS, still = false } = {}) {
 export function coverStory(story) {
   if (!isObject(story?.cover)) throw new Error("the story has no cover");
   const out = { schema: STORY_SCHEMA, lane: "motion" };
-  for (const key of ["title", "brand", "style", "motion", "ambient", "variants", "background", "panel"]) if (story[key] !== undefined) out[key] = JSON.parse(JSON.stringify(story[key]));
+  for (const key of ["title", "brand", "style", "motion", "ambient", "variants", "background", "panel", "plate"]) if (story[key] !== undefined) out[key] = JSON.parse(JSON.stringify(story[key]));
   out.format = { ...story.format, duration: COVER_STILL.duration };
   out.cover = { ...story.cover, frame: 0 };
   out.scenes = [coverScene(story, { end: COVER_STILL.duration, still: true })];
