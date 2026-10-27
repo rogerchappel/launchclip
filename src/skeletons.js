@@ -3,12 +3,15 @@
 // file reads the user's own (~/.launchclip/skeletons, then
 // <project>/.launchclip/skeletons; later wins), runs the structure gate for
 // finish and cinematic-check, and backs `launchclip skeletons list|show|choose`.
+import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { TITLE_CARD_MODULES, chooseSkeleton, kitCapabilities, mergeSkeletons, skeletonById, skeletonFeasibility, skeletonProblems, skeletonStale, structureCheck } from "../kit/core/skeleton-library.mjs";
 import { SCRIPT_SKELETONS } from "../kit/core/script-formats.mjs";
+import { readProjectScript } from "./publish_manifest.js";
 
 /** Where skeletons are read from, in override order: the user's, then the project's. */
 export function skeletonDirs({ project = null, home = os.homedir(), env = process.env } = {}) {
@@ -35,25 +38,63 @@ export function loadSkeletonLibrary(options = {}) {
  * The structure gate for a finished story: the short-video rules for any
  * video of 90 s or less, plus the key shot when story.skeleton names a
  * library skeleton. Beats come from STORY.json (the agent path) or SCRIPT.json
- * (make), titles from SCRIPT.json. prototype: only the opening is judged.
+ * (make), titles from SCRIPT.json or SCRIPT.md's Titles section. prototype: only the opening is judged.
  * → {status: "passed" | "failed" | "skipped", skeleton?, checks, findings, reason?}
  */
-export async function structureGate({ project, story, words = [], prototype = false, duration = null }) {
+export async function structureGate({ project, story, words = [], prototype = false, duration = null, video = null, pixels = openingPixels }) {
   const id = story?.skeleton?.id;
   const skeleton = id ? skeletonById(id, loadSkeletonLibrary({ project }).skeletons) : null;
   if (id && !skeleton) return { status: "failed", checks: {}, findings: [`skeleton ${id} is not in the skeleton library (launchclip skeletons list)`] };
   const storyReceipt = await readJson(path.join(project, "STORY.json"));
-  const script = await readJson(path.join(project, "SCRIPT.json"));
+  // SCRIPT.json (make) or SCRIPT.md's Titles section (the agent path): the packaging check runs on both.
+  const script = await readProjectScript(project);
   const beats = Array.isArray(storyReceipt?.beats) ? storyReceipt.beats : scriptBeats(script, skeleton);
   const titles = Array.isArray(script?.title_options) ? script.title_options : undefined;
   // A story receipt's author assigns the roles, so it must carry the share beat; make's script marks it only on a library skeleton.
   const check = structureCheck(story, skeleton, { words, beats, titles, duration, requireShare: Array.isArray(storyReceipt?.beats) });
+  // The opening, in pixels: the storyboard can say an image opens the video while its first frame is empty.
+  if (check.checks.first_frame && video && existsSync(video)) {
+    const opening = await pixels(video);
+    check.checks.opening_pixels = { ok: opening.ok, detail: opening.detail };
+    if (!opening.ok) { check.findings.push(`opening_pixels: ${opening.detail}`); check.status = "failed"; }
+  }
   if (prototype && check.status !== "skipped") {
     const first = check.checks.first_frame;
     if (!first) return { status: "skipped", reason: "prototype: the opening is a recording", checks: {}, findings: [] };
-    return { status: first.ok ? "passed" : "failed", ...(check.skeleton ? { skeleton: check.skeleton } : {}), scope: "prototype: the opening only", checks: { first_frame: first }, findings: first.ok ? [] : [`first_frame: ${first.detail}`] };
+    const opening = check.checks.opening_pixels;
+    const kept = { first_frame: first, ...(opening ? { opening_pixels: opening } : {}) };
+    const findings = Object.entries(kept).filter(([, entry]) => !entry.ok).map(([name, entry]) => `${name}: ${entry.detail}`);
+    return { status: findings.length ? "failed" : "passed", ...(check.skeleton ? { skeleton: check.skeleton } : {}), scope: "prototype: the opening only", checks: kept, findings };
   }
   return check;
+}
+
+const execFileAsync = promisify(execFile);
+// Frame 0 must carry at least this share of the content the frame at
+// OPENING_SETTLED_SECONDS does (the spread of its luma, at 72×128): an
+// opening that fades up from an empty background fails.
+export const OPENING_CONTENT_SHARE = 0.5;
+export const OPENING_SETTLED_SECONDS = 1;
+
+/** The spread (standard deviation) of a frame's luma, 0-255, at 72×128. */
+export async function frameContent(video, at) {
+  const { stdout } = await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(at), "-i", video, "-frames:v", "1", "-vf", "scale=72:128,format=gray", "-f", "rawvideo", "-"], { encoding: "buffer", maxBuffer: 1 << 20 });
+  const values = [...stdout];
+  if (!values.length) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+}
+
+/**
+ * The rendered opening, measured: frame 0 against the frame a second in.
+ * → {ok, detail, frame0, settled}
+ */
+export async function openingPixels(video, { measure = frameContent } = {}) {
+  let frame0, settled;
+  try { [frame0, settled] = await Promise.all([measure(video, 0), measure(video, OPENING_SETTLED_SECONDS)]); } catch { return { ok: true, detail: "the render could not be measured" }; }
+  if (!Number.isFinite(frame0) || !Number.isFinite(settled)) return { ok: true, detail: "the render could not be measured", frame0, settled };
+  const ok = settled <= 0 || frame0 >= settled * OPENING_CONTENT_SHARE;
+  return { ok, frame0: Math.round(frame0 * 10) / 10, settled: Math.round(settled * 10) / 10, detail: `frame 0 carries ${Math.round(frame0 / Math.max(settled, 1e-9) * 100)}% of the content at ${OPENING_SETTLED_SECONDS} s${ok ? "" : `: it fades up from an empty background (the opening image must be drawn on frame 0)`}` };
 }
 
 /** SCRIPT.json's beats as story beats {role, spoken}: the beat's own role, else the skeleton's role for its id. */

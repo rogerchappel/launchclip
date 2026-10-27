@@ -1586,6 +1586,8 @@ export function storyChapters(story) {
 export const COVER_SCENE_ID = "cover";
 export const COVER_SECONDS = 1.5;
 export const COVER_MAX_WORDS = 6;
+// A video this short takes its cover from its own frame (script-formats.mjs SHORT_VIDEO_SECONDS).
+export const SHORT_COVER_SECONDS = 90;
 // The still: a card this long, captured once every part has settled.
 export const COVER_STILL = Object.freeze({ duration: 3, at: 2 });
 const COVER_KEYS = new Set(["text", "kicker", "number", "frame"]);
@@ -1614,6 +1616,8 @@ export function validateCover(story, { err, warn = () => {}, duration = null } =
   if (cover.number !== undefined && !((typeof cover.number === "number" && Number.isFinite(cover.number)) || (nonEmpty(cover.number) && cover.number.trim().length <= 12))) err('cover.number must be a number or a short string such as "100g" (at most 12 characters)');
   const frame = coverFrame(story);
   if (frame !== "first" && !(typeof frame === "number" && Number.isFinite(frame) && frame >= 0)) { err('cover.frame must be "first" or the seconds of the frame a cover picker should use'); return; }
+  // A short video opens on its image; its cover is a frame of the video (src/cover.js).
+  if (frame === "first" && duration !== null && duration <= SHORT_COVER_SECONDS && !storyBase(story)) warn(`cover.frame is "first" (the default): a video of ${SHORT_COVER_SECONDS} s or less would open on a text card. Set cover.frame to the seconds of the strongest image (the key shot); finish takes the cover from that frame`);
   if (typeof frame === "number" && duration !== null && frame >= duration) err(`cover.frame (${frame}) is not within format.duration (${duration})`);
   if (frame !== "first") return;
   if (duration !== null && duration < COVER_SECONDS + COVER_MIN_AFTER) err(`cover.frame "first" holds the cover for the first ${COVER_SECONDS} s; the video is only ${duration} s`);
