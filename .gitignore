@@ -81,3 +81,6 @@ qa/enhance/
 # Subject stage model bake-off (sheets show real people; never commit)
 qa/subject/
 qa/cast-styles/
+
+# Format scorecard (npm run eval:formats)
+qa/format-eval*/
