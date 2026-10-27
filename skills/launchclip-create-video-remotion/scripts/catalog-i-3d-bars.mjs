@@ -65,6 +65,7 @@ function barsResolve(params, ctx) {
   // Hero sizes: values read from across the room, names on one line over wide bars.
   const prefValue = u(b.portrait ? 92 : 84), prefName = u(b.portrait ? 50 : 46);
   const labelGap = u(22);
+  const refSize = r2(Math.max(b.min.meta, u(34)));
   let sizes = items.map(() => ({value: prefValue, name: prefName, lines: 1}));
   let stepW = world.w;
   const geometry = k => {
@@ -91,6 +92,12 @@ function barsResolve(params, ctx) {
     for (const bar of bars) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, bar.h]) points.push([bar.x + sx * bar.w / 2, sy * bar.d / 2, z]);
     const labels = [];
     bars.forEach((bar, i) => { const lb = labelBox(i); if (lb) labels.push({at: [bar.x, 0, bar.h + labelGap], w: lb.w, h: lb.h, ax: 0.5, ay: 1}); });
+    // The reference label faces the camera at the dashed line's right end.
+    if (reference?.label) {
+      // The dashed line ends 0.7 bar widths past the last bar's centre.
+      const right = bars.at(-1).x + bars.at(-1).w * 0.7 + u(10);
+      labels.push({at: [right, bars[0].d / 2, world.hMax * k * reference.value / max], w: textWidth(reference.label, refSize, 'meta') + u(36), h: refSize * 1.5, ax: 0, ay: 0.5});
+    }
     if (marker) {
       const top = Math.max(...bars.map(bar => bar.h)) + lift;
       for (const s of marker.steps) labels.push({at: [bars[s].x, 0, top], w: chip.w * 1.08, h: chip.h * 1.08, ax: 0.5, ay: 1});
@@ -206,7 +213,7 @@ function barsResolve(params, ctx) {
     minText = Math.min(minText, b.min.key);
   }
   const content = {variant: b.variant, title: box.tb.title, source: box.tb.source, align: 'center', cam, W: box.W, H: box.H, k: bk, bars: out, tone, hiTone, highlight, highlightAt, marker: markerOut,
-    reference: reference ? {...reference, h: r2(world.hMax * fit.k * reference.value / max), size: r2(Math.max(b.min.meta, u(30)))} : null, buildAt, buildEnd, grow, labelGap: r2(labelGap), ink: b.theme.foreground, muted: b.theme.muted};
+    reference: reference ? {...reference, h: r2(world.hMax * fit.k * reference.value / max), size: up2(refSize / Math.min(1, minScale(cam, [bars.at(-1).x + bars.at(-1).w * 0.7 + u(10), bars[0].d / 2, world.hMax * fit.k * reference.value / max])))} : null, buildAt, buildEnd, grow, labelGap: r2(labelGap), ink: b.theme.foreground, muted: b.theme.muted};
   return b.finish(content, {minTextPx: r2(Math.min(minText, box.tb.title ? box.tb.title.size : Infinity))});
 }
 
@@ -253,9 +260,16 @@ function barsView(model) {
   });
   if (c.reference) {
     const r = c.reference, w = r2(spanX - c.bars[0].w * 0.6);
-    const line = el('div', `${id}-ref`, abs(r2(-w / 2), r2(-r.h), w, 0, {borderTop: `${r2(3 * u)}px dashed ${hex2(theme.foreground, 0.75)}`, opacity: 0}), r.label ? [
-      label(null, r2(w + 12 * u), r2(-r.size * 0.62), r2(textWidth(r.label, r.size, 'meta') + 8 * u), r.label, {size: r.size, family: fonts.meta, color: theme.foreground, spacing: '0.06em'})] : []);
+    const line = el('div', `${id}-ref`, abs(r2(-w / 2), r2(-r.h), w, 0, {borderTop: `${r2(3 * u)}px dashed ${hex2(theme.foreground, 0.75)}`, opacity: 0}));
     floor.push(slot(null, 0, 0, [stand([el('div', null, abs(0, 0, 0, 0, {transform: `translateZ(${r2(c.bars[0].d / 2 + 2)}px)`, transformStyle: 'preserve-3d'}), [line])])]));
+    if (r.label) {
+      // The label faces the camera at the line's right end, on a dark chip so it reads over the glow.
+      const lw = r2(textWidth(r.label, r.size, 'meta') + 28 * u), lh = r2(r.size * 1.5);
+      floor.push(billboard(`${id}-refbb`, c.cam, [r2(c.bars.at(-1).x + c.bars.at(-1).w * 0.7 + 10 * u), r2(c.bars[0].d / 2), r.h], {w: lw, h: lh, ax: 0, ay: 0.5}, [
+        el('div', `${id}-reft`, abs(0, 0, lw, lh, {opacity: 0, borderRadius: r2(lh / 2), background: hex2(theme.bg, 0.72), border: `${r2(2 * u)}px dashed ${hex2(theme.foreground, 0.5)}`, boxSizing: 'border-box'}), [
+          label(null, 0, r2((lh - r.size * 1.2) / 2), lw, r.label, {size: r.size, family: fonts.meta, color: theme.foreground, align: 'center', spacing: '0.06em'})])
+      ]));
+    }
   }
   if (c.marker) {
     const m = c.marker, w = m.width, chipH = r2(m.textSize * 1.25 + (m.label ? m.labelSize * 1.2 : 0) + 24 * u), h = r2(chipH + m.leaderMax);
@@ -280,7 +294,7 @@ function barsTimeline(model, ops) {
   const c = model.content;
   const stairs = c.variant === 'staircase';
   chromeOps(model, ops);
-  const billboards = [...c.bars.map((_, i) => `${id}-bb${i}`).filter(() => !stairs), ...(c.marker ? [`${id}-mkbb`] : [])];
+  const billboards = [...c.bars.map((_, i) => `${id}-bb${i}`).filter(() => !stairs), ...(c.marker ? [`${id}-mkbb`] : []), ...(c.reference?.label ? [`${id}-refbb`] : [])];
   rigOps(ops, id, c.cam, start, motion.enterStart, motion.end, billboards);
   set(ops, `${id}-pool`, start, {opacity: 0});
   tw(ops, `${id}-pool`, c.buildAt, 0.8, 'power1.out', {opacity: 0}, {opacity: 1});
@@ -308,6 +322,10 @@ function barsTimeline(model, ops) {
   if (c.reference) {
     set(ops, `${id}-ref`, start, {opacity: 0});
     tw(ops, `${id}-ref`, rt(c.buildEnd - 0.1), 0.45, 'power1.out', {opacity: 0}, {opacity: 1});
+    if (c.reference.label) {
+      set(ops, `${id}-reft`, start, {opacity: 0});
+      tw(ops, `${id}-reft`, rt(c.buildEnd), 0.45, 'power1.out', {opacity: 0}, {opacity: 1});
+    }
   }
   if (c.marker) {
     const m = c.marker;

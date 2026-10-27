@@ -222,3 +222,12 @@ test('glass-bars-3d: two or three bars are hero-sized, wide in their rect, with 
   const s3 = three.content.bars.at(-1).x + three.content.bars.at(-1).w / 2 - (three.content.bars[0].x - three.content.bars[0].w / 2);
   assert.ok(s3 >= 0.55 * three.rect.width, `three bars span ${s3} of ${three.rect.width}`);
 });
+
+test('glass-bars-3d: the reference label faces the camera past the last bar', () => {
+  const model = resolve('glass-bars-3d', TERRA, '16:9', {start: 0});
+  const ops = catalogHTimeline(model);
+  const end = frameState(ops, model.motion.exitStart - 0.01);
+  assert.equal(end.get('scene-reft').opacity, 1);
+  assert.equal(end.get('scene-refbb').rotation, -end.get('scene-turn').rotation, 'it counter-rotates with the orbit');
+  assert.ok(model.content.reference.size >= 30, 'meta size at least');
+});
