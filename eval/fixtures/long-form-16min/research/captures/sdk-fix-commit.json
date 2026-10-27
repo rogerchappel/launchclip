@@ -28,5 +28,26 @@
   "provenance": {
     "source_title": "fix: respect format setting",
     "fetched_at": "2026-10-20T09:00:00Z"
+  },
+  "data": {
+    "module": "commit-card",
+    "params": {
+      "repo": "northlight/sdk",
+      "sha": "9f3c2e1",
+      "message": "fix: respect format setting behind legacy_format flag",
+      "date": "2026-03-14",
+      "file": "src/format.ts",
+      "additions": 1,
+      "deletions": 1,
+      "lines": [
+        "-  return render(output);",
+        "+  return options.legacy_format ? renderLegacy(output) : render(output);"
+      ],
+      "startLine": {
+        "old": 40,
+        "new": 40
+      },
+      "highlight": "legacy_format"
+    }
   }
 }
