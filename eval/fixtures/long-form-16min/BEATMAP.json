@@ -93,7 +93,16 @@
          }
         ]
        },
-       "why": "list: process-steps, ahead of icon-row"
+       "why": "list: process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 8.54,
+         "until": 10.74,
+         "word": "keynote",
+         "element": "step Keynote",
+         "target": 0
+        }
+       ]
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-3",
@@ -305,7 +314,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"build with it\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "the-launch-nobody-saw-coming-1-sh3",
@@ -374,7 +388,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"claims hold up\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "the-launch-nobody-saw-coming-1-sh4",
@@ -401,7 +420,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"actually announced\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "pull",
+      "dur": 0.6,
+      "why": "balance: after two push-ins"
+     }
     }
    ]
   },
@@ -527,9 +551,23 @@
         },
         "quote": "71% on long-document QA"
        },
-       "why": "list (evidence c-long-doc): process-steps, ahead of icon-row"
+       "why": "list (evidence c-long-doc): process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 88.365,
+         "until": 90.565,
+         "word": "expensive",
+         "element": "step Expensive",
+         "target": 1
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "pull",
+      "dur": 0.6,
+      "why": "a new chapter steps back"
+     }
     },
     {
      "id": "a-short-history-of-halcyon-1-sh2",
@@ -624,7 +662,13 @@
        },
        "why": "list (evidence c-training-cost): checklist, ahead of icon-row"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     },
     {
      "id": "a-short-history-of-halcyon-1-sh3",
@@ -758,7 +802,13 @@
        },
        "why": "social: nothing specific draws it; the line itself (\"largest in the family\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     },
     {
      "id": "a-short-history-of-halcyon-1-sh4",
@@ -887,9 +937,23 @@
          }
         ]
        },
-       "why": "list: process-steps, ahead of icon-row"
+       "why": "list: process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 153.055,
+         "until": 155.255,
+         "word": "remember more",
+         "element": "step Remember more",
+         "target": 1
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     }
    ]
   },
@@ -1009,7 +1073,21 @@
         },
         "variant": "ruler"
        },
-       "why": "stat: number-line"
+       "why": "stat: number-line",
+       "zooms": [
+        {
+         "at": 168.845,
+         "until": 171.045,
+         "word": "64",
+         "element": "marker 64",
+         "box": {
+          "x": 1125.7,
+          "y": 360.2,
+          "width": 127.2,
+          "height": 286
+         }
+        }
+       ]
       },
       {
        "id": "inside-the-training-run-1-sh1-4",
@@ -1042,7 +1120,15 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"Running it costs real money\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "a-short-history-of-halcyon",
+      "why": "overview of a-short-history-of-halcyon: after the chapter's last line"
+     }
     },
     {
      "id": "inside-the-training-run-1-sh2",
@@ -1209,7 +1295,13 @@
        },
        "why": "concept: builds on checklist (+1 rows)"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     },
     {
      "id": "inside-the-training-run-1-sh3",
@@ -1303,7 +1395,13 @@
        },
        "why": "process: nothing specific draws it; the line itself (\"Then there is the data\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "up"
+     }
     },
     {
      "id": "inside-the-training-run-1-sh4",
@@ -1428,7 +1526,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"part is checking it\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     }
    ]
   },
@@ -1523,7 +1626,16 @@
         },
         "quote": "median latency fell from 4.1 s to 1.8 s"
        },
-       "why": "compare (evidence c-latency): bar-chart"
+       "why": "compare (evidence c-latency): bar-chart",
+       "zooms": [
+        {
+         "at": 250.344,
+         "until": 252.544,
+         "word": "1.8",
+         "element": "bar Seconds inste…",
+         "target": 0
+        }
+       ]
       },
       {
        "id": "what-northlight-actually-announced-1-sh1-3",
@@ -1557,7 +1669,15 @@
        },
        "why": "tokens: nothing specific draws it; the line itself (\"8 dollars\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "inside-the-training-run",
+      "why": "overview of inside-the-training-run: after the chapter's last line"
+     }
     },
     {
      "id": "what-northlight-actually-announced-1-sh2",
@@ -1607,7 +1727,21 @@
         },
         "quote": "62% on our multi-step coding suite, up from 41%"
        },
-       "why": "share (evidence c-coding-internal): unit-grid"
+       "why": "share (evidence c-coding-internal): unit-grid",
+       "zooms": [
+        {
+         "at": 263.157,
+         "until": 265.357,
+         "word": "62",
+         "element": "count 62 in 100",
+         "box": {
+          "x": 96,
+          "y": 135,
+          "width": 848,
+          "height": 266.7
+         }
+        }
+       ]
       },
       {
        "id": "what-northlight-actually-announced-1-sh2-2",
@@ -1698,7 +1832,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"each one normally costs\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     },
     {
      "id": "what-northlight-actually-announced-1-sh3",
@@ -1809,7 +1949,13 @@
        },
        "why": "tokens: nothing specific draws it; the line itself (\"The context window doubled\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     },
     {
      "id": "what-northlight-actually-announced-1-sh4",
@@ -1900,7 +2046,13 @@
        },
        "why": "list: nothing specific draws it; the line itself (\"most people noticed\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     }
    ]
   },
@@ -2002,9 +2154,26 @@
          }
         ]
        },
-       "why": "list: process-steps, ahead of icon-row"
+       "why": "list: process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 334.997,
+         "until": 337.197,
+         "word": "wait",
+         "element": "step They wait",
+         "target": 1
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "what-northlight-actually-announced",
+      "why": "overview of what-northlight-actually-announced: after the chapter's last line"
+     }
     },
     {
      "id": "why-speed-changed-everything-1-sh2",
@@ -2148,7 +2317,13 @@
        },
        "why": "compare (evidence c-tail): compare"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "up"
+     }
     },
     {
      "id": "why-speed-changed-everything-1-sh3",
@@ -2272,7 +2447,13 @@
        },
        "why": "stat (evidence c-open-bench): stat-card"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     },
     {
      "id": "why-speed-changed-everything-1-sh4",
@@ -2400,7 +2581,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"changes behaviour most\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     }
    ]
   },
@@ -2523,7 +2710,15 @@
        },
        "why": "tokens: nothing specific draws it; the line itself (\"Halcyon 2\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "why-speed-changed-everything",
+      "why": "overview of why-speed-changed-everything: after the chapter's last line"
+     }
     },
     {
      "id": "the-context-window-doubled-1-sh2",
@@ -2603,7 +2798,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"model actually uses it\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     },
     {
      "id": "the-context-window-doubled-1-sh3",
@@ -2682,7 +2883,13 @@
        },
        "why": "share (evidence c-needle): percent-fill"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "up"
+     }
     },
     {
      "id": "the-context-window-doubled-1-sh4",
@@ -2805,7 +3012,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"capability, not a guarantee\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     }
    ]
   },
@@ -2888,9 +3101,23 @@
         "highlight": 1,
         "variant": "bars"
        },
-       "why": "compare: bar-chart"
+       "why": "compare: bar-chart",
+       "zooms": [
+        {
+         "at": 503.654,
+         "until": 505.854,
+         "word": "2,400",
+         "element": "bar Dollars into…",
+         "target": 0
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "pull",
+      "dur": 0.6,
+      "why": "a new chapter steps back"
+     }
     },
     {
      "id": "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -2976,7 +3203,16 @@
          }
         ]
        },
-       "why": "list: process-steps, ahead of icon-row"
+       "why": "list: process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 517.97,
+         "until": 520.17,
+         "word": "hardware",
+         "element": "step Hardware",
+         "target": 0
+        }
+       ]
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh2-4",
@@ -3018,7 +3254,13 @@
        },
        "why": "page (evidence c-cluster, capture system-card-table-7): media-window"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     },
     {
      "id": "the-price-cut-and-who-pays-for-it-1-sh3",
@@ -3139,7 +3381,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"means more customers tomorrow\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "the-price-cut-and-who-pays-for-it-1-sh4",
@@ -3220,7 +3467,13 @@
        },
        "why": "money: nothing specific draws it; the line itself (\"least for now\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     }
    ]
   },
@@ -3329,7 +3582,15 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"and scored by their own graders\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "the-price-cut-and-who-pays-for-it",
+      "why": "overview of the-price-cut-and-who-pays-for-it: after the chapter's last line"
+     }
     },
     {
      "id": "reading-the-benchmarks-honestly-1-sh2",
@@ -3468,9 +3729,29 @@
         },
         "quote": "71% on long-document QA"
        },
-       "why": "share (evidence c-long-doc): unit-grid"
+       "why": "share (evidence c-long-doc): unit-grid",
+       "zooms": [
+        {
+         "at": 614.28,
+         "until": 616.48,
+         "word": "71",
+         "element": "count 71 in 100",
+         "box": {
+          "x": 96,
+          "y": 142.2,
+          "width": 848,
+          "height": 266.7
+         }
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "up"
+     }
     },
     {
      "id": "reading-the-benchmarks-honestly-1-sh3",
@@ -3574,7 +3855,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"The honest summary is this\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     },
     {
      "id": "reading-the-benchmarks-honestly-1-sh4",
@@ -3650,7 +3937,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"That is a normal, healthy release\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     }
    ]
   },
@@ -3818,7 +4111,15 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"the old one respected\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "reading-the-benchmarks-honestly",
+      "why": "overview of reading-the-benchmarks-honestly: after the chapter's last line"
+     }
     },
     {
      "id": "what-developers-found-in-week-one-1-sh2",
@@ -3949,7 +4250,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"split into two camps\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     },
     {
      "id": "what-developers-found-in-week-one-1-sh3",
@@ -4052,7 +4359,13 @@
        },
        "why": "stat (evidence c-price): stat-card"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "up"
+     }
     },
     {
      "id": "what-developers-found-in-week-one-1-sh4",
@@ -4110,7 +4423,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"exactly right\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "orbit",
+      "dur": 0.6,
+      "why": "a new topic: across",
+      "direction": "right"
+     }
     }
    ]
   },
@@ -4259,7 +4578,15 @@
        },
        "why": "share (evidence c-cutoff): percent-fill"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "what-developers-found-in-week-one",
+      "why": "overview of what-developers-found-in-week-one: after the chapter's last line"
+     }
     },
     {
      "id": "the-failure-table-and-what-it-admits-1-sh2",
@@ -4428,7 +4755,12 @@
        },
        "why": "concept (evidence c-cutoff): quote-card, ahead of glass-word"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "the-failure-table-and-what-it-admits-1-sh3",
@@ -4527,7 +4859,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"That is a good sign\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "the-failure-table-and-what-it-admits-1-sh4",
@@ -4604,9 +4941,26 @@
          "date": "2026-03-24"
         }
        },
-       "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row"
+       "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 809.273,
+         "until": 811.473,
+         "word": "benchmark chart second",
+         "element": "step Benchmark chart second",
+         "target": 1
+        }
+       ]
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "the-failure-table-and-what-it-admits",
+      "why": "overview of the-failure-table-and-what-it-admits: recap line \"That is a good…\""
+     }
     }
    ]
   },
@@ -4700,7 +5054,21 @@
         },
         "quote": "cuts of 40% and 50% within ten days"
        },
-       "why": "share (evidence c-rival-cuts): unit-grid"
+       "why": "share (evidence c-rival-cuts): unit-grid",
+       "zooms": [
+        {
+         "at": 822.669,
+         "until": 824.869,
+         "word": "40",
+         "element": "count 40 in 100",
+         "box": {
+          "x": 96,
+          "y": 135,
+          "width": 848,
+          "height": 266.7
+         }
+        }
+       ]
       },
       {
        "id": "how-the-rivals-answered-1-sh1-3",
@@ -4722,7 +5090,12 @@
        },
        "why": "stat: count-up"
       }
-     ]
+     ],
+     "camera": {
+      "type": "pull",
+      "dur": 0.6,
+      "why": "a new chapter steps back"
+     }
     },
     {
      "id": "how-the-rivals-answered-1-sh2",
@@ -4823,7 +5196,13 @@
        },
        "why": "stat (evidence c-price): stat-card"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "down"
+     }
     },
     {
      "id": "how-the-rivals-answered-1-sh3",
@@ -4950,7 +5329,12 @@
        },
        "why": "process: nothing specific draws it; the line itself (\"the others catch up\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "how-the-rivals-answered-1-sh4",
@@ -5026,7 +5410,15 @@
        },
        "why": "series: nothing specific draws it; the line itself (\"use the best one\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "overview",
+      "dur": 2.6,
+      "span": "chapter",
+      "hold": 0.6,
+      "chapter": "how-the-rivals-answered",
+      "why": "overview of how-the-rivals-answered: recap line \"That is the real…\""
+     }
     }
    ]
   },
@@ -5139,7 +5531,12 @@
        },
        "why": "list: nothing specific draws it; the line itself (\"Second, prices are falling fast\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "pull",
+      "dur": 0.6,
+      "why": "a new chapter steps back"
+     }
     },
     {
      "id": "what-this-means-for-the-next-year-1-sh2",
@@ -5218,7 +5615,12 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"Looking ahead\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     },
     {
      "id": "what-this-means-for-the-next-year-1-sh3",
@@ -5341,7 +5743,13 @@
        },
        "why": "concept: nothing specific draws it; the line itself (\"Measure on your own tasks\")"
       }
-     ]
+     ],
+     "camera": {
+      "type": "whip-pan",
+      "dur": 0.45,
+      "why": "a new topic: across",
+      "direction": "left"
+     }
     },
     {
      "id": "what-this-means-for-the-next-year-1-sh4",
@@ -5419,7 +5827,12 @@
        },
        "why": "sting: logo-sting"
       }
-     ]
+     ],
+     "camera": {
+      "type": "push",
+      "dur": 0.55,
+      "why": "same topic: closer in"
+     }
     }
    ]
   }
@@ -6643,10 +7056,158 @@
    "coverage": 0.698,
    "captures": 16
   },
+  "camera": {
+   "entries": {
+    "push": 10,
+    "pull": 5,
+    "whip-pan": 16,
+    "overview": 9,
+    "orbit": 7
+   },
+   "zooms": 12,
+   "zooms_per_min": 0.74,
+   "overviews": 9,
+   "longest_push_run": 2,
+   "list": {
+    "zooms": [
+     {
+      "at": 8.54,
+      "module": "process-steps",
+      "element": "step Keynote",
+      "word": "keynote",
+      "by": "target"
+     },
+     {
+      "at": 88.365,
+      "module": "process-steps",
+      "element": "step Expensive",
+      "word": "expensive",
+      "by": "target"
+     },
+     {
+      "at": 153.055,
+      "module": "process-steps",
+      "element": "step Remember more",
+      "word": "remember more",
+      "by": "target"
+     },
+     {
+      "at": 168.845,
+      "module": "number-line",
+      "element": "marker 64",
+      "word": "64",
+      "by": "box"
+     },
+     {
+      "at": 250.344,
+      "module": "bar-chart",
+      "element": "bar Seconds inste…",
+      "word": "1.8",
+      "by": "target"
+     },
+     {
+      "at": 263.157,
+      "module": "unit-grid",
+      "element": "count 62 in 100",
+      "word": "62",
+      "by": "box"
+     },
+     {
+      "at": 334.997,
+      "module": "process-steps",
+      "element": "step They wait",
+      "word": "wait",
+      "by": "target"
+     },
+     {
+      "at": 503.654,
+      "module": "bar-chart",
+      "element": "bar Dollars into…",
+      "word": "2,400",
+      "by": "target"
+     },
+     {
+      "at": 517.97,
+      "module": "process-steps",
+      "element": "step Hardware",
+      "word": "hardware",
+      "by": "target"
+     },
+     {
+      "at": 614.28,
+      "module": "unit-grid",
+      "element": "count 71 in 100",
+      "word": "71",
+      "by": "box"
+     },
+     {
+      "at": 809.273,
+      "module": "process-steps",
+      "element": "step Benchmark chart second",
+      "word": "benchmark chart second",
+      "by": "target"
+     },
+     {
+      "at": 822.669,
+      "module": "unit-grid",
+      "element": "count 40 in 100",
+      "word": "40",
+      "by": "box"
+     }
+    ],
+    "overviews": [
+     {
+      "at": 159.059,
+      "chapter": "a-short-history-of-halcyon",
+      "why": "overview of a-short-history-of-halcyon: after the chapter's last line"
+     },
+     {
+      "at": 242.999,
+      "chapter": "inside-the-training-run",
+      "why": "overview of inside-the-training-run: after the chapter's last line"
+     },
+     {
+      "at": 322.888,
+      "chapter": "what-northlight-actually-announced",
+      "why": "overview of what-northlight-actually-announced: after the chapter's last line"
+     },
+     {
+      "at": 408.665,
+      "chapter": "why-speed-changed-everything",
+      "why": "overview of why-speed-changed-everything: after the chapter's last line"
+     },
+     {
+      "at": 570.872,
+      "chapter": "the-price-cut-and-who-pays-for-it",
+      "why": "overview of the-price-cut-and-who-pays-for-it: after the chapter's last line"
+     },
+     {
+      "at": 654.3,
+      "chapter": "reading-the-benchmarks-honestly",
+      "why": "overview of reading-the-benchmarks-honestly: after the chapter's last line"
+     },
+     {
+      "at": 736.36,
+      "chapter": "what-developers-found-in-week-one",
+      "why": "overview of what-developers-found-in-week-one: after the chapter's last line"
+     },
+     {
+      "at": 801.215,
+      "chapter": "the-failure-table-and-what-it-admits",
+      "why": "overview of the-failure-table-and-what-it-admits: recap line \"That is a good…\""
+     },
+     {
+      "at": 882.36,
+      "chapter": "how-the-rivals-answered",
+      "why": "overview of how-the-rivals-answered: recap line \"That is the real…\""
+     }
+    ]
+   }
+  },
   "fallbacks": [],
   "chunks": {
    "count": 12,
-   "reused": 0
+   "reused": 12
   }
  }
 }
