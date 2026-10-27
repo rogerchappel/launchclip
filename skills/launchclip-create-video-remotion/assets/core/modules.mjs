@@ -10,13 +10,13 @@
 import { EDITORIAL_KINDS, EDITORIAL_VARIANTS, checklistTypeIn, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
 import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
-import { MODULES as CATALOG_B } from './catalog-b.mjs';
+import { MODULES as CATALOG_B, catalogBView } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { MODULES as CATALOG_D } from './catalog-d.mjs';
 import { MODULES as CATALOG_E } from './catalog-e.mjs';
 import { MODULES as CATALOG_F } from './catalog-f.mjs';
-import { MODULES as CATALOG_G } from './catalog-g.mjs';
-import { MODULES as CATALOG_H } from './catalog-h.mjs';
+import { MODULES as CATALOG_G, catalogGView } from './catalog-g.mjs';
+import { MODULES as CATALOG_H, catalogHView } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
 import { MODULES as WORLD, castStandsIn, worldBeneath } from './catalog-world.mjs';
 import { plateBleed, ridesPlate } from './camera-world.mjs';
@@ -30,7 +30,7 @@ import { panelFill, storyPanel } from './panels.mjs';
 import { cardFillStyles, fieldStyle, panelFillPlan } from './backgrounds.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
-import { resolveShotStates, stateSpec } from './shot-states.mjs';
+import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -208,11 +208,51 @@ export function resolveModule(scene, story, { track, end } = {}) {
       model.shotStates = resolveShotStates(scene, model, { spec, resolveWith: (params) => resolveModuleInner({ ...scene, params, states: undefined }, story, { track, end: finalEnd }) });
       if (Array.isArray(model.events)) model.events.push(...model.shotStates.events);
     }
+    // Zooms inside the shot (kit/core/zooms.mjs): each zoom's rect on the plate.
+    if (Array.isArray(scene?.zooms) && scene.zooms.length) model.zoomRects = zoomRects(scene, model);
     return model;
   } catch (error) {
     throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}${sectionFitHint(scene, story, { end: finalEnd })}`);
   }
 }
+
+// The full view tree of an op-list module (catalogue B, G or H), or null.
+function modelView(model) {
+  if (CATALOG_B[model?.module]) return catalogBView(model);
+  if (CATALOG_G[model?.module]) return catalogGView(model);
+  if (CATALOG_H[model?.module]) return catalogHView(model);
+  return null;
+}
+
+/**
+ * scene.zooms → per zoom, its rect on the plate (canvas px): {rect} or
+ * {error}. A box is its own rect; an object is model.objects[name].rect; a
+ * target is a shot-state target measured on the module's view at rest.
+ */
+export function zoomRects(scene, model) {
+  return scene.zooms.map((zoom, index) => {
+    const path = `zooms[${index}]`;
+    try {
+      if (zoom?.box) return { rect: { ...zoom.box } };
+      if (typeof zoom?.object === 'string') {
+        const rect = model?.objects?.[zoom.object]?.rect;
+        if (!rect) return { error: `${path}.object: ${model.module} has no object "${zoom.object}" (objects: ${Object.keys(model?.objects ?? {}).join(', ') || 'none'})` };
+        return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      }
+      if (zoom?.target !== undefined) {
+        const spec = stateSpec(scene.module, isEditorialKind(scene.module) ? null : catalogModules()[scene.module]);
+        const tree = spec ? modelView(model) : null;
+        if (!tree) return { error: `${path}.target: module "${model.module}" has no state targets (targets work on ${Object.keys(STATE_TARGET_MODULES()).join(', ')}); use a box or an object` };
+        return { rect: stateTargetRect(model, tree, spec.items, zoom.target, `${path}.target`) };
+      }
+      return { error: `${path} needs a box, a target or an object` };
+    } catch (error) {
+      return { error: error.message };
+    }
+  });
+}
+
+const STATE_TARGET_MODULES = () => Object.fromEntries(Object.entries(catalogModules()).filter(([id, definition]) => stateSpec(id, definition)));
 
 // ---------------------------------------------------------------------------
 // Subject-effect density (docs/SUBJECT_EFFECTS_RFC.md §7.5). Effects on the

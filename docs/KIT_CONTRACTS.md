@@ -1624,7 +1624,7 @@ Model:
 export function resolveCamera(story)      // → {mode, layout, spacing, parallax, blur}
 export function cameraActive(story)       // world mode, or any camera transition
 export function worldLayout(story, windows, {objects}) // → {placements: Map, loop, order}
-export function sceneObjectLookup(story, resolveModule) // → (sceneId, name) → plate-local rect
+export function sceneObjectLookup(story, resolveModule) // → (sceneId, name) → plate-local rect; .zoomRects(sceneId) → model.zoomRects
 export function cameraPlan(story, {windows, objects})   // → plan | null (no camera: compilers emit exactly what they did before)
 export function cameraStateAt(plan, t) / containerState(plan, t) / screenPoint(plan, point, t)
 export function blurAt(plan, t)           // {x, y} deviations
@@ -1671,6 +1671,87 @@ camera puts on screen during its frames (container states and blur per frame,
 its plates' placements, its overlays' parallax, the lattice glows or field
 tiles that cross the canvas). Changing one scene's pan direction re-renders the segments from
 that move on, including later scenes whose own fields did not change.
+
+## Zooms inside a shot (`kit/core/zooms.mjs`)
+
+The camera dives into one bar, row, number or box of a track-0 shot as the
+narration names it, holds, and eases back out: a new visual inside a shot
+without a cut. The shape matches `evidence-clip`'s `focus`.
+
+```json
+"zooms": [
+  {"at": "word:57.6%", "box": {"x": 300, "y": 180, "width": 640, "height": 360}, "scale": 1.8, "until": "word:but"},
+  {"at": "word:Astra", "target": "bar-1"},
+  {"at": "word:cost", "object": "gap-bracket"}
+]
+```
+
+- `at`, `until`: seconds or narration anchors, resolved like `hits`
+  (`resolveStory`).
+- Exactly one of:
+  - `box` `{x, y, width, height}` in plate px. Works on every module.
+  - `target`: a shot-state target, an item index (`0`) or element id without
+    the scene prefix (`"bar-2"`, `"row-1"`), or an array of them, on the
+    modules that run states (`STATE_MODULES` in `kit/core/shot-states.mjs`,
+    or a module that declares `states`). Measured on the module's view at
+    rest (`stateTargetRect`).
+  - `object`: a named `model.objects` rect (the ones a push's `from_object`
+    names, e.g. gauge-compare's `gap-bracket`).
+- `scale` 1.15–3. Default: the box fills `ZOOM.fill` (70 %) of the frame's
+  width or height, whichever it reaches first, clamped to 1.15–3.
+- Framing (`zoomFrame`): the camera centres the box, but the centre is
+  clamped so the zoomed view never leaves the plate.
+- Timing: each zoom eases in at `at` over the grammar's camera duration
+  clamped to 0.5–0.8 s (`zoomTiming`), with the grammar's camera ease. It
+  eases back out at `until`; without `until` it hands straight over to the
+  next zoom (the camera travels box to box) or, on the last zoom, eases out
+  so it is back at rest when the shot ends, before the next shot's move.
+
+Validation (`kit/core/story.mjs` `validateZooms`; timing is checked with the
+longest move, 0.8 s, so it holds in every grammar):
+
+- 1–8 zooms, track-0 shots only, in order of `at`, inside the shot.
+- No zoom during the shot's entry move (`at` ≥ `start + in.dur`).
+- A box sits inside the plate, and once zoomed inside the safe area (the
+  frame inset 5 % each side). A target or object is measured on the module,
+  so that check runs when the compilers resolve it: a zoom whose target or
+  object is missing, or that leaves the safe area, is dropped with a warning
+  (`plan.warnings` / the compile warnings).
+- Zooms don't overlap: with `until`, the next zoom starts at least 0.8 s
+  after it; `until` leaves 0.8 s before the shot ends.
+- Each zoom holds at least 1.2 s between landing and leaving.
+
+Rendering:
+
+- World mode (`camera.mode: "world"`): `cameraPlan` turns each shot's zoom
+  keys (`shotZooms`) into moves `{type: "zoom", zoom: true, …}` inside the
+  shot's window, from the shot's rest to `worldPoint(placement, centre)` at
+  `rest.zoom × scale` and back. `cameraStateAt`, `cameraOps`, the background
+  depth layer, motion blur (the grammar's `moveBlur`, or `camera.blur`) and the
+  world backdrops all follow them; a backdrop segment still enters on the
+  move between shots (`!move.zoom`).
+- Cuts mode: the same keys drive two wrappers around the plate's layer, a
+  scale about the canvas centre over a translate (`zoomOps` → ops on `zoom`
+  `{scale, rotation}` and `pan` `{x, y}`). Screen = centre + s·(p − zoom
+  centre), the world camera's zoom-over-pan math, so a point lands on the same
+  pixel in both modes. HyperFrames: `#lc-zs-<id>` > `#lc-zp-<id>` > `.lc-layer`;
+  Remotion: `SceneLayer`'s `zoom` prop. Root media (a hoisted `<video>`) stays
+  on the root and does not follow (warned).
+- Captions sit outside the camera and the wrappers: zooms never move or dip
+  them (`captionDipWindows` skips zoom moves), and layout-check's camera sweep
+  samples only the moves between shots.
+
+```js
+export const ZOOM                          // {min, max, fill, move: {min, max}, hold, safe, count}
+export function zoomTiming(story)          // → {duration, ease}
+export function zoomFrame(rect, scale?, size) // → {scale, centre, screen}
+export function zoomFitError(frame, size)  // → message | null
+export function shotZooms(story, entry, rects?) // → {zooms, keys: [{start, duration, ease, from, to}], warnings}
+export function zoomStateAt(keys, t, getEase, size) // plate-local {x, y, s}
+export function zoomOps(keys, size)        // cuts-mode ops on "zoom" and "pan"
+// kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {error}]
+// kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
+```
 
 ## Footage-led lane (RFC phase 6)
 

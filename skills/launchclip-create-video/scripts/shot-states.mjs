@@ -675,3 +675,19 @@ function formatLike(value, decimals, grouped) {
 export function stateTimes(scene) {
   return Array.isArray(scene?.states) ? scene.states.map(state => Number(state?.at)).filter(Number.isFinite) : [];
 }
+
+// ---------------------------------------------------------------------------
+// Zoom targets (kit/core/zooms.mjs): a state target's rect on the plate
+
+/**
+ * The rect (canvas px) of a state target on a module's full view tree (its
+ * root node at model.rect, as catalogBView / catalogGView / catalogHView
+ * return it): the union of the target's elements. parts: the module's item
+ * parts (stateSpec(...).items). Throws on a missing target.
+ */
+export function stateTargetRect(model, tree, parts, target, path = 'target') {
+  if (!isTarget(target)) throw new Error(`${path} must be an item index, an element id ("cell-1-2") or an array of them`);
+  const index = indexView(Array.isArray(tree) ? tree : [tree]);
+  const {entries} = resolveTarget(model, index, parts, target, path);
+  return union(entries.map(entry => rectIn(entry, index.root)));
+}

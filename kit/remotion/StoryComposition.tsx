@@ -52,6 +52,7 @@ import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSv
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "../core/plates.mjs";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
+import { shotZooms, zoomOps } from "../core/zooms.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -185,19 +186,26 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; backdrop?: any; drift?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, drift, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; backdrop?: any; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, drift, zoom, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
   const style = layerStyle(layerStateAt(t, tweens, getEase));
   const content = freeze ? <Freeze frame={0}>{children}</Freeze> : children;
-  const layer = (
+  const own = (
     <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate && !transparent ? { backgroundColor: background } : {}) }}>
       {field ? <AmbientField blobs={field} t={t} /> : null}
       {backdrop ? <BackgroundField plan={backdrop} t={t} /> : null}
       {drift ? <AbsoluteFill style={driftStyle(drift, t)}>{content}</AbsoluteFill> : content}
     </AbsoluteFill>
   );
+  // Cuts-mode zooms inside the shot (kit/core/zooms.mjs): a scale about the
+  // centre over a translate, as the HyperFrames #lc-zs / #lc-zp wrappers.
+  const layer = zoom?.length ? (
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", transform: containerTransform(opsStateAt(zoom, "zoom", t)) }}>
+      <AbsoluteFill style={{ transform: containerTransform(opsStateAt(zoom, "pan", t)) }}>{own}</AbsoluteFill>
+    </AbsoluteFill>
+  ) : own;
   return (
     <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
       {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
@@ -440,6 +448,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
+  // Cuts mode: a shot's zooms move its own container (world mode: the camera).
+  const zoomFor = (entry: any, model: any) => (entry.plate && !worldCamera ? zoomOps(shotZooms(story, entry, model?.zoomRects).keys, { width: story.format.width, height: story.format.height }) : undefined);
   const subject = React.useMemo(() => subjectPlan(story, base, layers, layout), [story, base, layers, layout]);
   const medium = React.useMemo(() => mediumPlan(story), [story]);
   if (plan) {
@@ -448,7 +458,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     const sceneLayer = ({ entry, render, model }: any) => (
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
-          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}
+          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={zoomFor(entry, model)}
           placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
           parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
@@ -488,7 +498,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
     <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}>
+      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
     </Sequence>

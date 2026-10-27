@@ -140,7 +140,7 @@ test("the prompt carries lane rules, anchors, safe zone, captions, fixed inputs 
   assert.match(prompt, /the level follows each scene's energy \(0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar\)/);
   assert.match(prompt, /footage-led stories get no background field and drift overlays only/);
   assert.match(prompt, /A scene may set ambient to override the story/);
-  assert.match(prompt, /params, hits\?, ambient\?, layer\? \(footage-led/);
+  assert.match(prompt, /params, hits\?, zooms\?, ambient\?, layer\? \(footage-led/);
   const landscape = planningPrompt({ tier: "guided", lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 60 } });
   assert.match(landscape, /landscape \(1920x1080\)/);
   assert.match(landscape, /footage-led: base/);

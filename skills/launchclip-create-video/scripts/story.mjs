@@ -519,6 +519,8 @@ export function validateStory(story, { modules } = {}) {
         }
       }
     }
+    // Zooms inside the shot (the same rules as kit/core/zooms.mjs).
+    if (scene.zooms !== undefined) validateZooms(scene, { path, label, start, end, track, err, anchorField, format: story.format });
     timing.push({ index, id: scene.id, label, start, end, track: Number.isInteger(track) ? track : 0 });
   }
 
@@ -742,6 +744,11 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     });
     if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
       if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);
+    });
+    if (Array.isArray(scene.zooms)) scene.zooms.forEach((zoom, z) => {
+      if (!isObject(zoom)) return;
+      if (zoom.at !== undefined) zoom.at = resolve(zoom.at, `${path}.zooms[${z}].at`);
+      if (zoom.until !== undefined) zoom.until = resolve(zoom.until, `${path}.zooms[${z}].until`);
     });
     if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
   });
@@ -1055,6 +1062,68 @@ function cameraTransitionRules(transition, path, { err, lane, camera, track }) {
   if (!moving) return;
   if (lane === "footage-led") err(`${path}.type "${type}" moves a world camera; footage-led stories keep cuts and punch-ins`);
   else if (track !== 0) err(`${path}.type "${type}" moves the camera between track-0 scenes; overlays (track ≥ 1) cannot use it`);
+}
+
+// ---------------------------------------------------------------------------
+// Zooms inside a shot (kit/core/zooms.mjs ZOOM, zoomFrame and zoomFitError,
+// kept here so this file stays import-free). Timing is checked against the
+// longest zoom move (ZOOM.move.max), so it holds in every grammar. A target
+// or object zoom is measured on the module, so its safe-area check runs when
+// the compilers resolve it (dropped with a warning).
+export const STORY_ZOOM = Object.freeze({ min: 1.15, max: 3, fill: 0.7, move: 0.8, hold: 1.2, safe: 0.05, count: 8 });
+
+function validateZooms(scene, { path, label, start, end, track, err, anchorField, format }) {
+  const zooms = scene.zooms;
+  if (!Array.isArray(zooms) || zooms.length < 1 || zooms.length > STORY_ZOOM.count) { err(`${path}.zooms must be an array of 1–${STORY_ZOOM.count} zooms`); return; }
+  if (track !== 0) err(`${path}.zooms: only a track-0 shot zooms (overlays ride above the camera)`);
+  const W = Number(format?.width), H = Number(format?.height);
+  const targetRef = (value) => (Number.isInteger(value) && value >= 0) || (typeof value === "string" && /^[a-z][a-z0-9-]*$/.test(value));
+  const entryEnd = isObject(scene.in) && scene.in.type !== "cut" && typeof scene.in.dur === "number" && start !== null ? start + scene.in.dur : start;
+  const times = [];
+  for (const [z, zoom] of zooms.entries()) {
+    const zoomPath = `${path}.zooms[${z}]`;
+    if (!isObject(zoom)) { err(`${zoomPath} must be an object {at, box | target | object, scale?, until?}`); times.push(null); continue; }
+    for (const key of Object.keys(zoom)) if (!["at", "box", "target", "object", "scale", "until"].includes(key)) err(`${zoomPath}.${key} is not supported (allowed: at, box, target, object, scale, until)`);
+    const kinds = ["box", "target", "object"].filter((key) => zoom[key] !== undefined);
+    if (kinds.length !== 1) err(`${zoomPath} needs exactly one of box, target or object`);
+    if (zoom.scale !== undefined && !(typeof zoom.scale === "number" && zoom.scale >= STORY_ZOOM.min && zoom.scale <= STORY_ZOOM.max)) err(`${zoomPath}.scale must be a number from ${STORY_ZOOM.min} to ${STORY_ZOOM.max}`);
+    if (zoom.target !== undefined && !(targetRef(zoom.target) || (Array.isArray(zoom.target) && zoom.target.length > 0 && zoom.target.every(targetRef)))) err(`${zoomPath}.target must be an item index, an element id ("bar-1") or an array of them`);
+    if (zoom.object !== undefined && !(typeof zoom.object === "string" && /^[A-Za-z0-9_-]+$/.test(zoom.object))) err(`${zoomPath}.object must name one of the module's objects, e.g. "gap-bracket"`);
+    if (zoom.box !== undefined) {
+      const box = zoom.box;
+      if (!isObject(box) || !["x", "y", "width", "height"].every((key) => typeof box[key] === "number" && Number.isFinite(box[key]))) err(`${zoomPath}.box must be {x, y, width, height} in plate px`);
+      else if (!(box.width >= 8 && box.height >= 8)) err(`${zoomPath}.box must be at least 8 px on each side`);
+      else if (W > 0 && H > 0 && (box.x < -EPS || box.y < -EPS || box.x + box.width > W + EPS || box.y + box.height > H + EPS)) err(`${zoomPath}.box must sit inside the scene's ${W}×${H} plate`);
+      else if (W > 0 && H > 0) {
+        const typed = typeof zoom.scale === "number" && zoom.scale >= STORY_ZOOM.min && zoom.scale <= STORY_ZOOM.max;
+        const fill = Math.min((STORY_ZOOM.fill * W) / box.width, (STORY_ZOOM.fill * H) / box.height);
+        const s = typed ? zoom.scale : Math.round(Math.min(STORY_ZOOM.max, Math.max(STORY_ZOOM.min, fill)) * 1e4) / 1e4;
+        const cx = Math.min(W - W / (2 * s), Math.max(W / (2 * s), box.x + box.width / 2)), cy = Math.min(H - H / (2 * s), Math.max(H / (2 * s), box.y + box.height / 2));
+        const x = W / 2 + s * (box.x - cx), y = H / 2 + s * (box.y - cy), mx = W * STORY_ZOOM.safe, my = H * STORY_ZOOM.safe;
+        if (x < mx - 0.5 || y < my - 0.5 || x + box.width * s > W - mx + 0.5 || y + box.height * s > H - my + 0.5) err(`${zoomPath}: the zoomed box (${s}×) leaves the safe area (the frame inset ${STORY_ZOOM.safe * 100}%); lower the scale or zoom on a smaller box`);
+      }
+    }
+    const at = zoom.at === undefined ? (err(`${zoomPath}.at is required`), null) : anchorField(zoom.at, `${zoomPath}.at`);
+    const until = zoom.until === undefined ? null : anchorField(zoom.until, `${zoomPath}.until`);
+    times.push({ at, until, explicit: zoom.until !== undefined });
+  }
+  // Timing once the times are numbers (the resolved story is checked again).
+  if (start === null || end === null || times.some((time) => !time || time.at === null || (time.explicit && time.until === null))) return;
+  const d = STORY_ZOOM.move;
+  for (const [z, time] of times.entries()) {
+    const zoomPath = `${path}.zooms[${z}]`;
+    const next = times[z + 1];
+    if (time.at <= start + EPS || time.at >= end - EPS) { err(`${zoomPath}.at (${time.at}) must fall inside ${label} (${start}, ${end})`); continue; }
+    if (time.at < entryEnd - EPS) err(`${zoomPath}.at (${time.at}) falls during the shot's entry move (until ${round3(entryEnd)} s); zoom once it has landed`);
+    if (z > 0 && time.at <= times[z - 1].at + EPS) err(`${zoomPath}.at (${time.at}) must come after zooms[${z - 1}].at`);
+    if (time.explicit) {
+      if (time.until <= time.at + EPS) err(`${zoomPath}.until (${time.until}) must come after its at (${time.at})`);
+      else if (time.until > end - d + EPS) err(`${zoomPath}.until (${time.until}) must leave ${d} s to ease out before ${label} ends (${end})`);
+      if (next && next.at < time.until + d - EPS) err(`${zoomPath} overlaps zooms[${z + 1}]: it eases out over ${d} s from ${time.until}, so the next may start at ${round3(time.until + d)} s at the earliest`);
+    }
+    const leaves = time.explicit ? time.until : next ? next.at : end - d;
+    if (leaves - (time.at + d) < STORY_ZOOM.hold - EPS) err(`${zoomPath} holds ${round3(Math.max(0, leaves - time.at - d))} s; a zoom holds at least ${STORY_ZOOM.hold} s after its ${d} s move (until, the next zoom or the shot's end ${d} s out)`);
+  }
 }
 
 // ---------------------------------------------------------------------------

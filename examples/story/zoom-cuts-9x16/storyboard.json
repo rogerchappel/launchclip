@@ -1,0 +1,100 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Which model wins on cost? (golden, 9:16 zooms, cuts)",
+  "notes": "Renderer-eval golden story for zooms inside a shot (kit/core/zooms.mjs) in camera.mode cuts: a box zoom on the title, then a target zoom on bar 0 that hands straight over to bar 2 and eases out at until. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 14,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ff7a59",
+      "accent": "#7ce7ff",
+      "ink": "#0b1020",
+      "paper": "#f5f1ea"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "playful"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 5,
+      "energy": 1,
+      "params": {
+        "headline": "Which model wins on cost?",
+        "emphasis": "cost",
+        "kicker": "Benchmarks"
+      },
+      "zooms": [
+        {
+          "at": 1.2,
+          "box": {
+            "x": 120,
+            "y": 640,
+            "width": 700,
+            "height": 360
+          },
+          "scale": 1.35,
+          "until": 3.4
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "bar-chart",
+      "start": 5,
+      "end": 14,
+      "energy": 2,
+      "in": {
+        "type": "fade",
+        "dur": 0.8,
+        "direction": "right"
+      },
+      "params": {
+        "title": "Score on the eval",
+        "data": [
+          {
+            "label": "Astra",
+            "value": 57.6
+          },
+          {
+            "label": "Bolt",
+            "value": 42
+          },
+          {
+            "label": "Comet",
+            "value": 31
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": 6.5,
+          "target": 0
+        },
+        {
+          "at": 9,
+          "target": 2,
+          "until": 11.5
+        }
+      ]
+    }
+  ]
+}

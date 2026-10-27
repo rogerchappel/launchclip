@@ -50,6 +50,7 @@ import { getEase, motionBlurPx } from './motion.mjs';
 import { isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
 import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
+import { shotZooms } from './zooms.mjs';
 
 export const CAMERA_MODES = Object.freeze(['cuts', 'world']);
 export const CAMERA_LAYOUTS = Object.freeze(['row', 'column', 'grid', 'path', 'auto']);
@@ -234,19 +235,24 @@ export function objectRectFromModel(model, name) {
  * A lookup (sceneId, objectName) → plate-local rect, resolving each scene's
  * model once with `resolve` (modules.mjs resolveModule; passed in to keep
  * this file free of the module registry). Errors resolve to null.
+ * lookup.zoomRects(sceneId) → the model's zoomRects (scene.zooms resolved to
+ * plate rects, kit/core/zooms.mjs) | null.
  */
 export function sceneObjectLookup(story, resolve) {
   const cache = new Map();
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
-  return (sceneId, name) => {
+  const modelOf = (sceneId) => {
     if (!cache.has(sceneId)) {
       const scene = scenes.find((entry) => entry?.id === sceneId);
       let model = null;
       try { model = scene ? resolve(scene, story) : null; } catch { model = null; }
       cache.set(sceneId, model);
     }
-    return objectRectFromModel(cache.get(sceneId), name);
+    return cache.get(sceneId);
   };
+  const lookup = (sceneId, name) => objectRectFromModel(modelOf(sceneId), name);
+  lookup.zoomRects = (sceneId) => modelOf(sceneId)?.zoomRects ?? null;
+  return lookup;
 }
 
 /**
@@ -335,9 +341,13 @@ export function waveSegments(axis, duration) {
 
 /**
  * The camera plan for a resolved story, or null when the story has no camera.
- * windows: sceneWindows(story); objects: (sceneId, name) → rect (push/pull).
+ * windows: sceneWindows(story); objects: (sceneId, name) → rect (push/pull),
+ * with objects.zoomRects(sceneId) for zooms on targets and objects
+ * (sceneObjectLookup).
  * → {mode, width, height, fps, duration, grammar, camera, placements, loop,
- *    moves: [{sceneId, type, start, duration, ease, blur, from, to}],
+ *    moves: [{sceneId, type, start, duration, ease, blur, from, to, zoom?}]
+ *    (world mode: a shot's zooms are moves of type "zoom" with zoom: true),
+ *    warnings: [zooms dropped, kit/core/zooms.mjs],
  *    drift: {x, y, scale} | null, parallax: {background, overlay} | null,
  *    depth: background layer speed (world mode: 0.3 with parallax, 1 without;
  *    cuts: null, the plates are opaque), background: backgroundKeys | null,
@@ -369,6 +379,21 @@ export function cameraPlan(story, { windows, objects } = {}) {
     const ease = type === 'whip-pan' ? grammar.camera.whip : grammar.ease.camera;
     moves.push({ sceneId, type, start: round(start, 6), duration: round(transition.dur, 6), ease, blur: blurFor(type), from, to });
   };
+  // World mode: a shot's zooms (kit/core/zooms.mjs) are camera moves inside
+  // its window, from its rest to the zoomed box and back. (Cuts mode zooms
+  // the scene's own container instead; the compilers do that.)
+  const warnings = [];
+  if (camera.mode === 'world') {
+    for (const entry of plates) {
+      if (!Array.isArray(entry.scene.zooms) || !entry.scene.zooms.length) continue;
+      const placement = layout.placements.get(entry.id);
+      const rest = restState(placement, size);
+      const { keys, warnings: dropped } = shotZooms(story, entry, objects?.zoomRects?.(entry.id) ?? null);
+      warnings.push(...dropped);
+      const at = (state) => { const point = worldPoint(placement, state); return { x: round(point.x, 4), y: round(point.y, 4), zoom: round(rest.zoom * state.s, 6), rotation: rest.rotation }; };
+      for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });
+    }
+  }
   for (let i = 1; i < plates.length; i += 1) {
     const entry = plates[i];
     if (!entry.transitionIn?.camera) continue;
@@ -396,7 +421,7 @@ export function cameraPlan(story, { windows, objects } = {}) {
     mode: camera.mode, width, height, fps, duration, grammar: grammar.id, camera,
     placements: Object.fromEntries(layout.placements), loop: layout.loop, order: layout.order,
     home: restState(layout.placements.get(plates[0]?.id) ?? ORIGIN, size),
-    moves, drift,
+    moves, drift, warnings,
     parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null,
     // World plates are transparent, so world mode always has a background
     // layer: parallax false only makes it travel with the plates.
@@ -563,7 +588,8 @@ export function sweepingMove(move) {
  */
 export function captionDipWindows(plan, mode = 'auto') {
   if (!plan || mode === false) return [];
-  return plan.moves.filter((move) => mode === true || sweepingMove(move))
+  // Zooms inside a shot leave the captions alone: they sit outside the camera.
+  return plan.moves.filter((move) => !move.zoom && (mode === true || sweepingMove(move)))
     .map((move) => ({ start: round(move.start, 6), end: round(move.start + move.duration, 6) }));
 }
 

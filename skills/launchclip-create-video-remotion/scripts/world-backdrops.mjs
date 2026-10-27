@@ -82,7 +82,8 @@ export function worldBackdrops(story, plan, windows) {
   }
   // Entry: the camera move into the segment's first shot, else a cut.
   for (const [n, segment] of segments.entries()) {
-    const at = moves.findIndex((move) => move.sceneId === segment.shotId);
+    // A shot's own zooms are moves too; its entry is the move between shots.
+    const at = moves.findIndex((move) => move.sceneId === segment.shotId && !move.zoom);
     segment.moveIndex = at >= 0 ? at : null;
     const move = at >= 0 ? moves[at] : null;
     if (n === 0) segment.entry = { type: 'first', start: 0, duration: 0 };

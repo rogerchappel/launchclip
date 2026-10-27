@@ -29,6 +29,7 @@ import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTwee
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
+import { shotZooms, zoomOps } from './zooms.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
@@ -202,11 +203,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const subjectZ = 10 + 10 * (layers.length + 1);
   if (subjectNeeded) z = subjectZ + 10;
   const sceneLayers = [];
+  // Set once a cuts-mode shot zooms (kit/core/zooms.mjs): its wrappers need CSS.
+  let usesZoom = false;
   // World camera (kit/core/camera-world.mjs): world mode, or a camera
   // transition in a cuts story. Plates then live inside one world container
   // (#lc-cam-pan in #lc-cam-zoom in #lc-cam-drift in #lc-camera) that the
   // camera ops move; without a camera nothing below changes.
   const plan = isolate ? null : cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value)) });
+  if (plan?.warnings?.length) warnings.push(...plan.warnings);
   const world = [];
   const cameraMotion = plan ? cameraGsapLines(plan) : [];
   const worldField = plan?.background ? worldFieldLayer(backgroundFieldTiles(plan, field)) : { html: '', motion: [] };
@@ -293,7 +297,15 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
     const parallax = plan && !entry.plate && !entry.rides ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
-    const layer = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
+    // Zooms inside the shot (kit/core/zooms.mjs): in world mode they are
+    // camera moves; in cuts mode a scale (about the centre) over a translate
+    // wraps the layer, the same math.
+    const zoom = !isolate && entry.plate && !worldMode ? shotZooms(story, entry, model.zoomRects) : null;
+    if (zoom?.warnings.length) warnings.push(...zoom.warnings);
+    const zooming = zoomOps(zoom?.keys, { width: W, height: H });
+    if (zooming.length && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the shot's zooms`);
+    const plain = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
+    const layer = zooming.length ? `<div id="lc-zs-${id}" class="lc-zoom"><div id="lc-zp-${id}" class="lc-zoom">${plain}</div></div>` : plain;
     const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
     (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.rides ?? entry.id]) : ''}">${body}</div>`);
     css.push(out.css ?? '');
@@ -301,6 +313,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
     motion.push(...opsGsap(parallax, { overlay: `#lc-par-${id}` }));
+    motion.push(...opsGsap(zooming, { zoom: `#lc-zs-${id}`, pan: `#lc-zp-${id}` }));
+    if (zooming.length) usesZoom = true;
     motion.push(...ambient.motion);
     if (drift) {
       const { from, to, position } = driftGsap(drift);
@@ -499,7 +513,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     #lc-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; background: ${bg}; }
     .lc-scene { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
-    .lc-plate > .lc-layer { background: ${bg}; }${plan ? `\n    ${cameraCss(plan, W, H)}` : ''}
+    .lc-plate > .lc-layer { background: ${bg}; }${usesZoom ? `\n    .lc-zoom { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }\n    .lc-plate > .lc-zoom > .lc-zoom > .lc-layer { background: ${bg}; }` : ''}${plan ? `\n    ${cameraCss(plan, W, H)}` : ''}
     .lc-ambient-field { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; pointer-events: none; }
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
     .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
