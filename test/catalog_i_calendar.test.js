@@ -25,10 +25,10 @@ test('date-carousel: lands on the start day, rewinds to the focus day, then ligh
   assert.equal(end.get('scene-lens').opacity, 1);
   assert.equal(end.get('scene-chip').opacity, 1);
   assert.equal(end.get('scene-schip').opacity, 0, 'the start chip cleared');
-  assert.equal(resolve('date-carousel', {start: '2026-10-01', focus: '2026-10-09'}).content.sign.text, 'FAST FORWARD');
-  assert.throws(() => resolve('date-carousel', {start: '2026-02-30', focus: '2026-03-02'}), /params\.start is not a calendar date/);
-  assert.throws(() => resolve('date-carousel', {start: '2026-10-01', focus: '2026-10-01'}), /must differ/);
-  assert.throws(() => resolve('date-carousel', {start: '2026-10-01', focus: '2027-10-01'}), /within 120 days/);
+  assert.equal(resolve('date-carousel', {from: '2026-10-01', to: '2026-10-09'}).content.sign.text, 'FAST FORWARD');
+  assert.throws(() => resolve('date-carousel', {from: '2026-02-30', to: '2026-03-02'}), /params\.from is not a calendar date/);
+  assert.throws(() => resolve('date-carousel', {from: '2026-10-01', to: '2026-10-01'}), /must differ/);
+  assert.throws(() => resolve('date-carousel', {from: '2026-10-01', to: '2027-10-01'}), /within 120 days/);
 });
 
 test('month-grid: whole weeks around the run, days fill in order, marks land with their day', () => {

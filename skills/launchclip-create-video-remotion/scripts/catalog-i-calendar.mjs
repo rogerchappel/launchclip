@@ -29,12 +29,12 @@ function chipSpec(b, raw, path, {max = 24} = {}) {
 const CAROUSEL_VARIANTS = Object.freeze(['glass', 'flat']);
 
 function carouselResolve(params, ctx) {
-  const b = createHBase('date-carousel', params, ctx, {allowed: ['start', 'focus', 'event', 'startEvent', 'caption', 'title', 'source', 'at', 'moveAt', 'focusAt'], required: ['start', 'focus'], variants: CAROUSEL_VARIANTS});
+  const b = createHBase('date-carousel', params, ctx, {allowed: ['from', 'to', 'event', 'startEvent', 'caption', 'title', 'source', 'at', 'moveAt', 'focusAt'], required: ['from', 'to'], variants: CAROUSEL_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
-  const startDay = parseDate(check, p.start, 'params.start'), focusDay = parseDate(check, p.focus, 'params.focus');
-  if (startDay === focusDay) check.fail('params.focus', 'must differ from params.start (the carousel moves between them)');
-  if (Math.abs(focusDay - startDay) > MAX_SPAN) check.fail('params.focus', `must be within ${MAX_SPAN} days of params.start`);
+  const startDay = parseDate(check, p.from, 'params.from'), focusDay = parseDate(check, p.to, 'params.to');
+  if (startDay === focusDay) check.fail('params.to', 'must differ from params.from (the carousel moves between them)');
+  if (Math.abs(focusDay - startDay) > MAX_SPAN) check.fail('params.to', `must be within ${MAX_SPAN} days of params.from`);
   const rewind = focusDay < startDay;
   const event = p.event === undefined ? null : chipSpec(b, p.event, 'params.event');
   const startEvent = p.startEvent === undefined ? null : chipSpec(b, p.startEvent, 'params.startEvent');
@@ -153,7 +153,7 @@ function carouselTimeline(model, ops) {
 export const dateCarousel = {
   id: 'date-carousel',
   describe: 'A row of day cards (month, date, weekday) that lands on one date, then rewinds or fast-forwards under a ◀◀ REWIND sign to another, slowing as it arrives; the focus day lights up with a glowing rim and its event chip ("GPT-6.1 released", "Day 1"), and an optional caption ("where it started") rises under it.',
-  params: {start: '"YYYY-MM-DD", the day shown first', focus: `"YYYY-MM-DD", the day it lands on (within ${MAX_SPAN} days; earlier rewinds, later fast-forwards)`,
+  params: {from: '"YYYY-MM-DD", the day shown first', to: `"YYYY-MM-DD", the focus day it lands on (within ${MAX_SPAN} days; earlier rewinds, later fast-forwards)`,
     event: `{label ≤ 24, sub? ≤ 24, icon?, tone? (${DATA_TONE})} the chip pinned on the focus day (optional)`, startEvent: '{label, sub?, icon?, tone?} a chip on the start day that clears as the strip moves (optional)',
     caption: 'string ≤ 40 under the cards after the focus (optional)', moveAt: `the move: ${AT}`, focusAt: `the focus: ${AT}`,
     title: 'string ≤ 60 (optional)', source: 'string ≤ 80 (optional)', at: `build start: ${AT}`, variant: VARIANT_PARAM, rect: RECT},
