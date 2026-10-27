@@ -72,8 +72,11 @@ Exports:
 
 ```js
 export const STORY_SCHEMA = "launchclip.story.v1";
-export function validateStory(story, {modules} = {}) // → {ok, errors: string[], warnings: string[]}
+export function validateStory(story, {modules, moduleParams} = {}) // → {ok, errors: string[], warnings: string[]}
 // modules: optional Set or array of known module ids; unknown ids are errors when given.
+// moduleParams: optional (id, params) → [{path, message}]; pass validateModuleParams
+//   (kit/core/module-schemas.mjs) to check every scene's params against its module's
+//   schema. story.mjs stays import-free, so the schemas come in through this option.
 export function resolveStory(story, {words = [], beats = null} = {})
 // → a deep copy with every time anchor ("word:x#n", "beat:n") replaced by seconds,
 //   scenes sorted by start, plus `resolved: {duration, fps, frames}`.
@@ -86,6 +89,81 @@ export function deriveBoundaries(story) // story must be resolved
 export function storyFormat(story) // → {duration, width, height, fps}
 export function storyHits(story)   // resolved → [{scene_id, at, event, cue?}] sorted by at
 ```
+
+## Module param schemas (`kit/core/module-schemas.mjs`)
+
+Every registered module (`knownModules()`: the editorial kinds and every
+catalogue id) has a JSON Schema, draft 2020-12, for its `params`. Editors
+generate settings panels from it; `validateStory` checks scenes against it.
+
+```js
+export function moduleSchema(id)        // → frozen schema | null for an unknown id
+export function listModuleSchemas()     // → [{id, schema}] in registry order
+export function validateModuleParams(id, params) // → [{path, message}], path an RFC 6901 pointer from params
+export function validateAgainstSchema(schema, value, base = "") // the validator, for the keywords below
+export const EDITOR_CONTROLS, EDITOR_GROUPS, JSON_SCHEMA_DIALECT
+```
+
+Where a schema comes from (first match wins):
+
+1. `MODULES[id].schema`: a module may declare its full params schema. New
+   modules should; the summary stays for the planning prompt.
+2. Otherwise it is compiled from the params summary the planning prompt
+   already uses: catalogue `MODULES[id].params`, editorial
+   `EDITORIAL_SPECS[id].params` (planning-prompt.mjs) plus the editorial
+   common params (`title` required ≤ 54, `density`, `accent`, `theme`,
+   `presentation`, `motion`). Summary objects map `type`, `max`, `min`,
+   `enum`, `default` and `required` directly. Summary strings are read as a
+   type expression followed by prose: `string ≤ 48` (`maxLength`),
+   `integer 1–6` / `seconds 0.4–4` (`minimum`/`maximum`), `[X] 2–6` / `up to
+   6` (`minItems`/`maxItems`), `{a, b?: type, c ≤ 24}` (object properties),
+   `a | b | "c"` (enum), `#rrggbb` (hex pattern), `(default X)` (`default`)
+   and `, required` (`required`).
+
+Conventions:
+
+- Shared params have one canonical schema each: `rect` ({x, y, width,
+  height}, all required, width and height > 0), `format` (the number format
+  object), `variant` (the module's variants as an enum, default first),
+  colours (an enum of brand roles **or** a `#rrggbb` pattern, as `anyOf`),
+  and seconds (`number`, `x-launchclip-unit: "s"`; cast modules also accept
+  time-anchor strings).
+- A schema never rejects params the module accepts. The compiler emits only
+  constraints it reads with certainty; a summary it cannot parse becomes an
+  unconstrained property that still carries its description. Nested object
+  fields are never required, a quoted placeholder (`"owner/name"`,
+  `"assets/…"`) is a string, not a literal, and `additionalProperties` is
+  `true` because modules read cross-cutting params (`theme`, `accent`,
+  `track`, …) the summaries leave out. The test suite holds every example
+  story, golden story, parity fixture and variant-sheet sample to zero
+  schema errors.
+- Every property has `title`, `description` and editor hints, which
+  validators ignore:
+  - `x-launchclip-editor`: the control to draw, one of `text`, `number`,
+    `seconds`, `toggle`, `select`, `color`, `media`, `icon`, `date`, `rect`,
+    `list`, `group` (an object) or `json` (no typed shape; edit raw);
+  - `x-launchclip-group`: `content`, `data`, `timing`, `layout` or `style`
+    (panel order is `x-launchclip-groups` on the schema root);
+  - `x-launchclip-advanced: true` on tuning params (`rect`, `theme`,
+    `accent`, `motion`, `presentation`, `track`, `variant`, `density`), which
+    an editor hides by default (the structured planner tier may not set
+    them);
+  - `x-launchclip-order`: declaration order; `x-launchclip-unit`: `s` or `deg`.
+- The root carries `$schema`, `$id` (`urn:launchclip:module:<id>`), `title`
+  (the id), `description` (the module's one-line `describe`) and
+  `x-launchclip-module: {id, kind: "editorial" | "catalogue", variants?, events?}`.
+- The validator implements exactly the keywords the schemas use (`type`,
+  `enum`, `const`, `minimum`, `maximum`, `exclusiveMinimum`,
+  `exclusiveMaximum`, `minLength`, `maxLength` (code points), `pattern`,
+  `items`, `minItems`, `maxItems`, `properties`, `required`,
+  `additionalProperties`, `anyOf`, `oneOf`); a test fails if a schema uses
+  any other keyword, or a `default` its own schema rejects.
+
+`launchclip story validate`, `finish` and the storyboard planner pass
+`validateModuleParams`, so a schema problem is an error such as
+`scenes[2].params.logos[1].label must be at most 20 characters (it has 21)`.
+The compilers do not: a scene whose params fail still renders as the
+labelled placeholder.
 
 ## Motion primitives (`kit/core/motion.mjs`)
 
@@ -863,7 +941,8 @@ each export:
 ```js
 export const MODULES = {
   "<id>": { describe: "one line for the planning prompt",
-            params: { /* JSON-schema-ish summary for docs */ },
+            params: { /* summary for the planning prompt; compiled to a JSON Schema, see "Module param schemas" */ },
+            schema?: { /* optional full params JSON Schema (draft 2020-12); wins over the summary */ },
             resolve(params, ctx) /* → model; throws on invalid params */ } };
 // ctx = {id, start, duration, format:{width,height,fps,duration}, brand, aspect:"9:16"|"16:9"}
 ```
