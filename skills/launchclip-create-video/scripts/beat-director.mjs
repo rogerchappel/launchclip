@@ -32,7 +32,7 @@ import { cadenceGate, cadenceTarget, eventStats } from './cadence.mjs';
 import { DIRECTION_SCHEMA, classifyIntent, narrationWords } from './direction.mjs';
 import { longFormChunks } from './long-form.mjs';
 import { knownModules, resolveModule } from './modules.mjs';
-import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, keyTerms, resolveCapability } from './visual-capabilities.mjs';
+import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, isPlanned, keyTerms, resolveCapability } from './visual-capabilities.mjs';
 
 export const BEAT_MAP_SCHEMA = 'launchclip.beat-map.v1';
 export const BEAT_MAP_FILE = 'BEATMAP.json';
@@ -232,7 +232,7 @@ const contentSet = (text) => new Set(keyTerms(text).map((word) => word.toLowerCa
  * as src/research writes it, then capture.claim(s), then a source URL): the claim
  * whose content words and numbers overlap the clause most, at least 0.3.
  * Contradicted claims never match. → {claim, status, kind, source, quote?,
- * capture?: {id, kind, out}} | null
+ * capture?: {id, kind, out}, data?} | null (data: capture.data, else claim.data)
  */
 export function matchEvidence(beat, { ledger = null, captures = [] } = {}) {
   const claims = (ledger?.claims ?? []).filter((claim) => claim?.id && claim.status !== 'contradicted');
@@ -268,7 +268,9 @@ export function matchEvidence(beat, { ledger = null, captures = [] } = {}) {
     score: round(best.score),
     source: source ? { url: source.url, ...(source.title ? { title: source.title } : {}), ...(source.publisher ? { publisher: source.publisher } : {}), ...(source.published_at ?? source.date ? { date: String(source.published_at ?? source.date).slice(0, 10) } : {}) } : null,
     ...(source?.quote?.text ? { quote: source.quote.text } : {}),
-    ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {})
+    ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {}),
+    // Module-ready data for the evidence builders (capability-builders-*.mjs): the capture's, else the claim's.
+    ...(capture?.data ?? claim.data ? { data: capture?.data ?? claim.data } : {})
   };
 }
 
@@ -436,7 +438,7 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
     score -= 2 * (avoid[resolved.module] ?? 0);
     if (previous?.module === resolved.module) score -= 3;
     if (state.evidence?.capture && capability(id)?.evidence.includes(state.evidence.capture.kind)) score += 3;
-    if (!resolved.fallback && capability(id)?.planned) score += 0.5;
+    if (!resolved.fallback && isPlanned(id)) score += 0.5;
     return { id, resolved, score };
   }).sort((a, b) => b.score - a.score);
   const source = state.evidence ? ` (evidence ${state.evidence.claim}${state.evidence.capture ? `, capture ${state.evidence.capture.id}` : ''})` : '';
