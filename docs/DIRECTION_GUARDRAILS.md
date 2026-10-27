@@ -202,6 +202,31 @@ the cast's actions within those bounds.
   - the storyboard reference shows the cues;
   - the review step names the new gates.
 
+## 7. Movement grammar
+
+**Rule.** Build inside a shot instead of cutting, and never hold still. Top
+explainers run about 170 visual events on 50 cuts in 16 minutes: one shot
+runs 2–4 states timed to the clauses, every hold has a slow dolly, and
+something live moves in it.
+
+**Enforced** (`src/movement_guardrails.js`, sampled every 0.25 s):
+
+- **Finish gate `holds`.**
+  - `static-hold` (error): longer than 3 s in which nothing moves at all:
+    no hold drift or world camera, no transition, and no module tween,
+    loop, count or state change.
+  - `drift-only` (warning): longer than 3 s in which only the hold drift
+    moves. Add a live mover: a state, a counter, a sweeping highlight, a
+    cursor.
+- **Finish gate `states`.** `still-shot` (error): a track-0 shot runs longer
+  than 10 s without a change. Changes are the shot's start, its states
+  (`scene.states`), an overlay arriving or leaving, and the module events
+  (build, highlight, count) of anything on screen.
+
+**The tools** (docs/KIT_CONTRACTS.md, "Shot states and the focus device"):
+`scene.states` for builds, the shared focus ring, and the `rack-focus`,
+`glow-wipe` and `card-to-card` transitions.
+
 ## Gates summary
 
 | Gate | Input | Fails when |
@@ -212,3 +237,5 @@ the cast's actions within those bounds.
 | ghosting | ops at 10 Hz | two copies of a character; half-transparent text or characters held too long |
 | density | layout rects at 2 Hz | an empty region for more than 4 s; a lone card over an empty set for more than 3 s |
 | variety | cast scenes | the same shot back to back |
+| holds | windows and ops at 4 Hz | nothing moves for more than 3 s (only the drift moving warns) |
+| states | shots, states and events | a shot holds one state for more than 10 s |
