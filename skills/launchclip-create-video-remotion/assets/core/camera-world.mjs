@@ -192,13 +192,27 @@ export function layoutDirection(layout, index, count) {
   return 'right'; // row, auto
 }
 
+// Pushes compound: each one shrinks the next plate by its dolly factor, so a
+// long story of push-ins reaches zooms where rounding throws the camera off
+// its plate. Outside this band a sideways move also pulls the scale back
+// toward 1 (by at most DOLLY.pull), hidden in the move's own travel.
+const SCALE_BAND = Object.freeze({ min: 1 / DOLLY.max ** 2, max: DOLLY.max ** 2 });
+
+function rebalancedScale(s) {
+  if (s < SCALE_BAND.min) return Math.min(1, s * DOLLY.pull);
+  if (s > SCALE_BAND.max) return Math.max(1, s / DOLLY.pull);
+  return s;
+}
+
 function besidePlacement(from, direction, { spacing, rotate = 0 }, size) {
   const { width, height } = size;
-  const step = { right: [1 + spacing, 0], left: [-(1 + spacing), 0], down: [0, 1 + spacing], up: [0, -(1 + spacing)] }[direction] ?? [1 + spacing, 0];
+  const unit = { right: [1, 0], left: [-1, 0], down: [0, 1], up: [0, -1] }[direction] ?? [1, 0];
   const centre = placementCentre(from, size);
-  const r = rad(from.rotation), s = from.scale;
-  const ox = step[0] * width * s, oy = step[1] * height * s;
-  return placeAt({ x: centre.x + ox * Math.cos(r) - oy * Math.sin(r), y: centre.y + ox * Math.sin(r) + oy * Math.cos(r) }, s, from.rotation + rotate, size);
+  const r = rad(from.rotation), s = from.scale, next = rebalancedScale(s);
+  // Centre to centre: half of each plate plus the gap (both at s: (1 + spacing)·s).
+  const reach = (s + next) / 2 + spacing * s;
+  const ox = unit[0] * width * reach, oy = unit[1] * height * reach;
+  return placeAt({ x: centre.x + ox * Math.cos(r) - oy * Math.sin(r), y: centre.y + ox * Math.sin(r) + oy * Math.cos(r) }, next, from.rotation + rotate, size);
 }
 
 function dollyFactor(rect, { width, height }) {

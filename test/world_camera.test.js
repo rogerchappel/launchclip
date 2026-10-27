@@ -125,6 +125,28 @@ test("at rest the camera frames each plate exactly; moves use the grammar's came
   assert.equal(planFor(worldStory({ camera: { mode: "world", blur: false } })).moves.every((move) => move.blur === 0), true);
 });
 
+test("a long chain of push-ins stays framed: sideways moves pull the zoom back before rounding drifts the camera off its plate", () => {
+  // 60 plates alternating push and whip-pan: without rebalancing the zoom
+  // compounds past 10^5 and the 6-decimal scale throws the last plates
+  // hundreds of px off-centre.
+  const story = worldStory({ mutate: (base) => ({
+    ...base, ending: undefined, format: { ...base.format, duration: 240 },
+    scenes: Array.from({ length: 60 }, (_, i) => ({
+      id: `p${i}`, module: "hook-title", start: i * 4, end: i * 4 + 4, energy: 1, params: { headline: `Plate ${i}` },
+      ...(i ? { in: i % 2 ? { type: "push", dur: 0.6 } : { type: "whip-pan", dur: 0.45, direction: "right" } } : {})
+    }))
+  }) });
+  const plan = planFor(story);
+  const zooms = plan.moves.map((move) => move.to.zoom);
+  assert.ok(Math.max(...zooms) < 40, `max zoom ${Math.max(...zooms)}`);
+  for (const id of ["p57", "p58", "p59"]) {
+    const placement = plan.placements[id];
+    const t = Number(id.slice(1)) * 4 + 2;
+    const corner = screenPoint({ ...plan, drift: null }, worldPoint(placement, { x: W, y: H }), t);
+    assert.ok(Math.abs(corner.x - W) < 0.5 && Math.abs(corner.y - H) < 0.5, `${id} corner ${corner.x},${corner.y}`);
+  }
+});
+
 test("the camera path is continuous in position and velocity at every move boundary, and never fully still", () => {
   const plan = planFor(worldStory());
   const probe = { x: W / 2, y: H / 2 };
