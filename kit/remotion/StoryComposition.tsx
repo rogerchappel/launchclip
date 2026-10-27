@@ -43,13 +43,15 @@ import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narr
 // @ts-ignore plain ESM from kit/core
 import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
-import { CAMERA_STACK, rideWorldPlates, backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
+import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
 import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSvg, layoutFillClip, panelFillPlan, sceneBackground } from "../core/backgrounds.mjs";
 // @ts-ignore plain ESM from kit/core
-import { scenePlatePlan, storyPlatePlan } from "../core/plates.mjs";
+import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "../core/plates.mjs";
+// @ts-ignore plain ESM from kit/core
+import { worldBackdrops } from "../core/world-backdrops.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -203,11 +205,42 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
   );
 };
 
+// World backdrops (kit/core/world-backdrops.mjs): each segment on screen at t
+// as an opaque, masked canvas of its plate's layers, moved by its ops' x / y
+// and shown by their opacity, with one fixed vignette over the stack. Matches
+// the HyperFrames #lc-wb markup.
+export const WorldBackdrops: React.FC<{ backdrops: any; background: string; t: number }> = ({ backdrops, background, t }) => {
+  const { width, height } = useVideoConfig();
+  const box: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, pointerEvents: "none" };
+  return (
+    <div style={{ ...box, overflow: "hidden" }} aria-hidden>
+      {backdrops.segments.map((segment: any) => {
+        const state = opsStateAt(backdrops.ops, segment.target, t);
+        if (!(state.opacity > 0) || !segment.plan) return null;
+        const c = segment.canvas;
+        const mask: React.CSSProperties = segment.mask ? { maskImage: segment.mask, WebkitMaskImage: segment.mask, maskSize: "100% 100%", WebkitMaskSize: "100% 100%", maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" } : {};
+        return (
+          <div key={segment.index} style={{ ...box, overflow: "hidden", opacity: state.opacity }}>
+            <div style={{ ...box, transform: containerTransform({ x: state.x, y: state.y }) }}>
+              <div style={{ position: "absolute", left: c.x, top: c.y, width: c.width, height: c.height, overflow: "hidden", background, ...mask }}>
+                {segment.layers.map((layer: any) => (
+                  <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, staticFile) } : undefined} />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {backdrops.vignette ? <div style={backgroundLayerStyle(backdrops.vignette, t) as React.CSSProperties} /> : null}
+    </div>
+  );
+};
+
 // The world camera containers (kit/core/camera-world.mjs), evaluated per
 // frame from the plan's ops exactly as GSAP plays them in HyperFrames:
 // parallax background, then the blur-filtered camera with drift, zoom (about
 // the canvas centre) and pan around the plates.
-export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; glowing?: boolean; children: React.ReactNode }> = ({ plan, brand, field, glowing = true, children }) => {
+export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; glowing?: boolean; backdrops?: any | null; background?: string; children: React.ReactNode }> = ({ plan, brand, field, glowing = true, backdrops = null, background = "#000000", children }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
@@ -228,6 +261,7 @@ export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; 
           {field && tiles.length ? <WorldField blobs={field.blobs} tiles={tiles} t={t} /> : null}
         </div>
       ) : null}
+      {backdrops ? <WorldBackdrops backdrops={backdrops} background={background} t={t} /> : null}
       {plan.blurSamples.length ? (
         <svg width={0} height={0} style={{ position: "absolute", left: 0, top: 0 }} aria-hidden>
           <defs>
@@ -388,13 +422,21 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const frames = (seconds: number) => Math.round(seconds * fps);
   // A background kind other than blobs (kit/core/backgrounds.mjs) replaces the field.
   // A backdrop plate (kit/core/plates.mjs) replaces the background on the
-  // scenes it covers; the story's own plate is the world camera's backdrop.
-  const backdrop = React.useMemo(() => storyPlatePlan(story) ?? backgroundPlan(story), [story]);
-  const field = React.useMemo(() => (backdrop ? null : ambientField(story)), [story, backdrop]);
+  // scenes it covers. In world mode the plates are the camera's backdrops
+  // (kit/core/world-backdrops.mjs); story.background, or the depth layer's
+  // field and glows, shows only where a shot has none.
+  const worldCamera = resolveCamera(story).mode === "world";
+  const backdrop = React.useMemo(() => (worldCamera ? backgroundPlan(story) : storyPlatePlan(story) ?? backgroundPlan(story)), [story, worldCamera]);
+  const field = React.useMemo(() => {
+    const everyShotPlated = (story.scenes ?? []).filter((scene: any) => (scene.track ?? 0) === 0).every((scene: any) => scenePlateSpec(story, scene));
+    return backdrop || (worldCamera && everyShotPlated && storyPlatePlan(story)) ? null : ambientField(story);
+  }, [story, backdrop, worldCamera]);
   const geometry = React.useMemo(() => profileGeometry({ width: story.format.width, height: story.format.height }), [story]);
   const fieldFor = (scene: any) => (field && !scenePlatePlan(story, scene) && sceneBackground(story, scene) ? field.blobs : null);
   const backdropFor = (scene: any) => scenePlatePlan(story, scene) ?? (backdrop && sceneBackground(story, scene) ? backdrop : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
+  const backdrops = React.useMemo(() => (plan?.mode === "world" ? worldBackdrops(story, plan, windows) : null), [story, plan, windows]);
+  const covered = Boolean(backdrops?.segments.every((segment: any) => segment.plan));
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
@@ -415,8 +457,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     );
     return (
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
-        {world && backdrop ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
-        <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && backdrop)}>
+        {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
+        <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && (backdrop || covered))} backdrops={backdrops} background={background}>
           {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
           {loop ? (
             <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
