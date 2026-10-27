@@ -6,6 +6,7 @@
 import { scriptPlanOptions } from "../../kit/core/script-formats.mjs";
 import { MUSIC_FLAG_VALUES } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
+import { researchMode } from "../research/make.js";
 
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
@@ -83,6 +84,7 @@ export function makeOptionsFromFlags(flags = {}) {
     url: flags.url,
     allowHost: flags["allow-host"],
     demoPlan: flags["demo-plan"],
+    research: flags.research,
     visualHistoryDir: flags["visual-history-dir"],
     visualHistoryLimit: flags["visual-history-limit"],
     visualSimilarityLimit: flags["visual-similarity-limit"],
@@ -97,6 +99,7 @@ export function makeOptionsFromFlags(flags = {}) {
 export function validateMakeOptions(options = {}) {
   const voice = String(options.voice ?? "kokoro").toLowerCase();
   if (!MAKE_VOICES.includes(voice)) throw new Error(`--voice must be kokoro or elevenlabs; got ${options.voice}`);
+  researchMode(options.research);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   const renderer = String(options.renderer ?? "remotion").toLowerCase();

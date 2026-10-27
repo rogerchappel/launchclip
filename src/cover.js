@@ -5,11 +5,27 @@
 // Remotion as a still of that story, HyperFrames as a snapshot of its compiled
 // project. The receipt (.launchclip/cover/cover.json) keeps an unchanged cover
 // from rendering again.
+//
+// A short video (90 s or less) whose cover.frame is a time is different: its
+// cover is that frame of the finished video (the key shot, already reading
+// as the cover), grabbed from the render, so the thumbnail is a real frame
+// and the video still opens on its image.
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { COVER_STILL, coverFrame, coverStory, resolveStory } from "../kit/core/story.mjs";
+import { SHORT_VIDEO_SECONDS } from "../kit/core/script-formats.mjs";
+
+const execFileAsync = promisify(execFile);
+
+/** Whether a story's cover is a frame of its own video: a short video with a cover.frame time. */
+export function coverFromVideo(story) {
+  const duration = Number(story?.format?.duration);
+  return Boolean(story?.cover) && typeof coverFrame(story) === "number" && duration > 0 && duration <= SHORT_VIDEO_SECONDS;
+}
 
 export const COVER_PATH = "video/cover.png";
 export const COVER_DIR = ".launchclip/cover";
@@ -21,10 +37,23 @@ export const COVER_DIR = ".launchclip/cover";
  * extra cache input (the kit's hash).
  * → {file, frame, seconds, renderer, cached}
  */
-export async function renderCover({ project, story, renderer, adapter, compile, fingerprint = null, force = false }) {
-  const resolved = resolveStory(coverStory(story));
+export async function renderCover({ project, story, renderer, adapter, compile, fingerprint = null, force = false, video = null, grab = grabFrame }) {
   const out = path.join(project, COVER_PATH);
   const receiptFile = path.join(project, COVER_DIR, "cover.json");
+  if (coverFromVideo(story) && video && existsSync(video)) {
+    const at = Math.max(0, Math.min(coverFrame(story), Number(story.format.duration) - 0.05));
+    const stat = statSync(video);
+    const hash = createHash("sha256").update(JSON.stringify({ video: path.resolve(video), size: stat.size, mtime: stat.mtimeMs, at })).digest("hex");
+    const result = { file: COVER_PATH, frame: at, seconds: at, renderer, source: "video" };
+    const receipt = await readJson(receiptFile);
+    if (!force && receipt?.hash === hash && existsSync(out)) return { ...result, cached: true };
+    await mkdir(path.dirname(out), { recursive: true });
+    await grab(video, at, out);
+    await mkdir(path.dirname(receiptFile), { recursive: true });
+    await writeFile(receiptFile, `${JSON.stringify({ hash, ...result }, null, 2)}\n`);
+    return { ...result, cached: false };
+  }
+  const resolved = resolveStory(coverStory(story));
   const hash = createHash("sha256").update(JSON.stringify({ resolved, renderer, fingerprint })).digest("hex");
   const result = { file: COVER_PATH, frame: coverFrame(story), seconds: COVER_STILL.at, renderer };
   const receipt = await readJson(receiptFile);
@@ -45,4 +74,9 @@ export async function renderCover({ project, story, renderer, adapter, compile, 
 
 async function readJson(file) {
   try { return JSON.parse(await readFile(file, "utf8")); } catch { return null; }
+}
+
+/** One frame of a video at `at` seconds, as a PNG. */
+async function grabFrame(video, at, out) {
+  await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(at), "-i", video, "-frames:v", "1", out]);
 }

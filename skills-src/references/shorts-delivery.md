@@ -187,26 +187,28 @@ keys are errors.
 
 ## Design the cover
 
-The first frame is the cover in the profile grid, so it has to read on its own:
-one huge number or a short question that echoes the hook, never the brand
-first. Set it in `storyboard.json`:
+The cover is the thumbnail the profile grid shows, so it has to read on its
+own: one huge number or a short question that echoes the best title and the
+hook, never the brand first. It is not the opening: a short video opens on
+its image. Set it in `storyboard.json` with `frame` at the seconds of the
+strongest image (the key shot on a library skeleton):
 
 ```json
-"cover": { "text": "Protein. All at once?", "number": "100g", "kicker": "Myth?" }
+"cover": { "text": "Protein. All at once?", "number": "100g", "kicker": "Myth?", "frame": 12.4 }
 ```
 
 - `text` is required, at most six words. `number` leads the headline as its
   lit-up emphasis unless the text already says it; `kicker` is an optional
   sticker of up to 18 characters.
-- `frame` defaults to `"first"`: the video opens on a 1.5 s `hook-title` card
-  (a full-frame insert in the footage-led lane). Every scene that started in
-  those 1.5 s starts as the card ends, and a loop back to the opening scene
-  loops back to the card, so the first scene must run past 2 s and its param
-  times must fit what is left. Set `frame` to seconds instead to leave the
-  video as it is and name the frame a platform's cover picker should use.
-- `launchclip finish` renders the card alone, in the story's format and style,
-  to `video/cover.png` with either renderer and reports it as the thumbnail.
-  Without `cover` nothing changes.
+- In a video of 90 s or less, `launchclip finish` takes `video/cover.png` from
+  the finished video at `frame`, so pick a frame that already reads as the
+  cover (the key shot with its number or headline settled). The structure
+  gate checks that it falls on the key shot of a library skeleton. A longer
+  video renders the card alone, in the story's format and style.
+- Never `"first"` (the default when `frame` is unset) in a short video: it
+  opens the video on a 1.5 s `hook-title` card, which the structure gate
+  fails. `story validate` warns when a short video's cover has no `frame`.
+- Without `cover` nothing changes.
 - Titles meant to sell name the concrete outcome ("10 vs 25 reps: which builds
   more muscle?"), not a tease.
 

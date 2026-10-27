@@ -19,6 +19,13 @@
 // needs. In world mode plates are transparent, so layered transitions (fade,
 // zoom, iris) also fade the outgoing plate out.
 //
+// Movement grammar transitions (docs/KIT_CONTRACTS.md, "Shot states"):
+// rack-focus (the outgoing card blurs back while the incoming one sharpens
+// forward; the default between builds), glow-wipe (a straight wipe that flares
+// bright at the edge, for chapter breaks) and card-to-card (the incoming card
+// starts on the outgoing card's rect, params.rect or the canvas, and settles
+// on its own).
+//
 // Empty plates: a short gap between two plates (a gap in scene timing, plus
 // any lead-in before the next scene draws anything, sceneLeadIn) would show a
 // dead frame. When that whole span is under HOLD_GAP seconds the previous
@@ -28,7 +35,7 @@
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
 
 /** Whether a transition moves the world camera (push only in world mode). */
@@ -37,8 +44,13 @@ export function isCameraTransition(transition, mode = 'cuts') {
   return CAMERA_TRANSITION_TYPES.includes(type) || (type === 'push' && mode === 'world');
 }
 
-/** Identity state of a scene layer. iris: null = no clip. */
-export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null });
+/**
+ * Identity state of a scene layer. iris: null = no clip; wipeT/R/B/L: percent
+ * insets of a straight-edged clip (null = none); glow: extra brightness (0 =
+ * none, 0.8 = brightness(1.8)).
+ */
+export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0 });
+const WIPE_PROPS = ['wipeT', 'wipeR', 'wipeB', 'wipeL'];
 
 const EPS = 1e-6;
 const ADJACENT = 0.1;
@@ -64,6 +76,30 @@ export function sceneLeadIn(scene, fps = 30) {
   return Number.isFinite(lead) && lead > 0 ? Math.min(lead, Number.isFinite(length) ? length : lead) : 0;
 }
 
+// rack-focus: blur (px) and scale of the card racked out of focus.
+const RACK = Object.freeze({ blurIn: 18, scaleIn: 1.04, blurOut: 16, scaleOut: 0.95 });
+// glow-wipe: peak extra brightness at the wipe edge.
+const GLOW_WIPE = 0.85;
+
+/**
+ * Layer transform (pivoting on the canvas centre) that puts rect `a`'s centre
+ * where rect `b`'s is and scales it to b's area. Null or equal rects → identity.
+ */
+export function cardMap(a, b, width, height) {
+  if (!a || !b || !(a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0)) return { x: 0, y: 0, scale: 1 };
+  const scale = round(Math.sqrt((b.width * b.height) / (a.width * a.height)), 4);
+  const cx = width / 2, cy = height / 2;
+  const x = round(b.x + b.width / 2 - cx - scale * (a.x + a.width / 2 - cx), 2);
+  const y = round(b.y + b.height / 2 - cy - scale * (a.y + a.height / 2 - cy), 2);
+  return { x, y, scale };
+}
+
+/** A scene's card rect for card-to-card: params.rect when the scene sets one, else the canvas. */
+export function sceneCardRect(scene, width, height) {
+  const r = scene?.params?.rect;
+  return r && [r.x, r.y, r.width, r.height].every(Number.isFinite) ? r : { x: 0, y: 0, width, height };
+}
+
 /** Radius (px) of a circle centred on the canvas that covers every corner. */
 export function irisRadius(width, height) {
   return Math.ceil(Math.hypot(width / 2, height / 2)) + 2;
@@ -75,7 +111,7 @@ export function irisRadius(width, height) {
  * Tween = {prop: "opacity"|"x"|"y"|"scale"|"blur"|"iris", from, to, start, duration, ease}
  * where start is seconds relative to the transition start.
  */
-export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts' }) {
+export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts', fromRect = null, toRect = null }) {
   const type = transition?.type ?? 'cut';
   const d = Number(transition?.dur ?? 0);
   const direction = transition?.direction ?? 'left';
@@ -117,6 +153,31 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
       return { type, duration: d, in: [t('scale', 0.6, 1, 'power3.out'), t('opacity', 0, 1, 'power2.out', 0, d * 0.6)], out: [t('scale', 1, 1.5, 'power3.in'), ...fadeOut] };
     case 'iris':
       return { type, duration: d, in: [t('iris', 0, irisRadius(width, height), 'power2.inOut')], out: fadeOut };
+    case 'rack-focus':
+      // The outgoing card blurs back into the plate while the incoming one
+      // sharpens forward: depth of field racks from one to the other.
+      return { type, duration: d,
+        in: [t('blur', RACK.blurIn, 0, 'power2.out'), t('scale', RACK.scaleIn, 1, 'power3.out'), t('opacity', 0, 1, 'power1.inOut', 0, d * 0.7)],
+        out: [t('blur', 0, RACK.blurOut, 'power2.in'), t('scale', 1, RACK.scaleOut, 'power2.inOut'), t('opacity', 1, 0, 'power1.in', d * 0.25, d * 0.75)] };
+    case 'glow-wipe': {
+      // Chapter break: a straight wipe in the travel direction, with the
+      // frame flaring bright at the edge and settling as the new plate lands.
+      const side = { left: 'wipeL', right: 'wipeR', up: 'wipeT', down: 'wipeB' }[direction] ?? 'wipeL';
+      return { type, duration: d,
+        in: [t(side, 100, 0, 'power2.inOut'), t('glow', GLOW_WIPE, 0, 'power2.out', d * 0.35, d * 0.65)],
+        out: [t('glow', 0, GLOW_WIPE, 'power2.in', 0, d * 0.6), ...fadeOut] };
+    }
+    case 'card-to-card': {
+      // Morph continuity: the incoming card starts where the outgoing card
+      // was (FLIP: same centre and area) and settles on its own rect, while
+      // the outgoing card travels on to the incoming one's rect and fades.
+      const there = cardMap(toRect, fromRect, width, height), back = cardMap(fromRect, toRect, width, height);
+      const same = there.scale === 1 && there.x === 0 && there.y === 0;
+      const inScale = same ? 0.97 : there.scale;
+      return { type, duration: d,
+        in: [t('opacity', 0, 1, 'power2.inOut', 0, d * 0.6), ...(there.x ? [t('x', there.x, 0, 'power3.inOut')] : []), ...(there.y ? [t('y', there.y, 0, 'power3.inOut')] : []), t('scale', inScale, 1, 'power3.inOut')],
+        out: [t('opacity', 1, 0, 'power2.inOut', d * 0.2, d * 0.6), ...(back.x ? [t('x', 0, back.x, 'power3.inOut')] : []), ...(back.y ? [t('y', 0, back.y, 'power3.inOut')] : []), ...(same ? [] : [t('scale', 1, back.scale, 'power3.inOut')])] };
+    }
     default:
       return { type: 'cut', duration: 0, in: [], out: [] };
   }
@@ -129,17 +190,19 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
  */
 export function layerStateAt(t, tweens, getEase) {
   const state = { ...LAYER_IDENTITY };
-  let clipped = false;
+  let clipped = false, wiped = false;
   for (const tw of tweens) {
     if (t < tw.at - EPS) continue;
     const p = tw.duration > 0 ? Math.min(1, Math.max(0, (t - tw.at) / tw.duration)) : 1;
     const value = tw.from + (tw.to - tw.from) * (p >= 1 ? 1 : getEase(tw.ease)(p));
     state[tw.prop] = value;
     if (tw.prop === 'iris') clipped = p < 1;
+    if (WIPE_PROPS.includes(tw.prop)) wiped = p < 1;
   }
-  // A finished iris covers the whole frame; drop the clip so the layer is
-  // identical to an unclipped one.
+  // A finished iris or wipe covers the whole frame; drop the clip so the
+  // layer is identical to an unclipped one.
   if (!clipped) state.iris = null;
+  if (!wiped) for (const prop of WIPE_PROPS) state[prop] = null;
   return state;
 }
 
@@ -147,15 +210,27 @@ export function layerStateAt(t, tweens, getEase) {
 export function layerStyle(state) {
   const style = { opacity: state.opacity };
   if (state.x || state.y || state.scale !== 1) style.transform = `translate(${round(state.x)}px, ${round(state.y)}px) scale(${round(state.scale, 5)})`;
-  if (state.blur > 0.001) style.filter = `blur(${round(state.blur, 3)}px)`;
+  const filters = [];
+  if (state.blur > 0.001) filters.push(`blur(${round(state.blur, 3)}px)`);
+  if (state.glow > 0.001) filters.push(`brightness(${round(1 + state.glow, 4)})`);
+  if (filters.length) style.filter = filters.join(' ');
   if (state.iris !== null && state.iris !== undefined) style.clipPath = `circle(${round(state.iris, 2)}px at 50% 50%)`;
+  else if (WIPE_PROPS.some((prop) => state[prop] !== null && state[prop] !== undefined)) style.clipPath = wipeCss(state);
   return style;
+}
+
+/** A wipe state → CSS inset() (unset edges are 0 %). */
+export function wipeCss(state) {
+  const edge = (prop) => `${round(Math.max(0, state[prop] ?? 0), 3)}%`;
+  return `inset(${edge('wipeT')} ${edge('wipeR')} ${edge('wipeB')} ${edge('wipeL')})`;
 }
 
 /** One tween property → GSAP vars (`blur` and `iris` become filter / clipPath strings). */
 export function gsapVars(prop, value) {
   if (prop === 'blur') return { filter: `blur(${round(value, 3)}px)` };
   if (prop === 'iris') return { clipPath: `circle(${round(value, 2)}px at 50% 50%)` };
+  if (prop === 'glow') return { filter: `brightness(${round(1 + value, 4)})` };
+  if (WIPE_PROPS.includes(prop)) return { clipPath: wipeCss({ [prop]: value }) };
   return { [prop]: value };
 }
 
@@ -181,18 +256,21 @@ export function sceneWindows(story) {
     return { id: scene.id, index, scene, track, plate: track === 0, start: scene.start, end: scene.end, renderEnd: scene.end, transitionIn: null, tweens: [] };
   });
   const plates = scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
+  const adjacentPlate = (entry) => plates.filter((other) => other !== entry && other.start < entry.start - EPS && other.end <= entry.start + EPS && entry.start - other.end <= ADJACENT + EPS)
+    .reduce((best, other) => (!best || other.end > best.end + EPS ? other : best), null);
   for (const entry of scenes) {
     const transition = entry.scene.in;
     if (!transition || typeof transition !== 'object') continue;
-    const tweens = transitionTweens(transition, options);
+    // card-to-card maps the outgoing card's rect onto the incoming one's.
+    const before = entry.plate ? adjacentPlate(entry) : null;
+    const tweens = transitionTweens(transition, transition.type === 'card-to-card' ? { ...options, fromRect: before ? sceneCardRect(before.scene, width, height) : null, toRect: sceneCardRect(entry.scene, width, height) } : options);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
     if (tweens.camera) entry.transitionIn.camera = true;
     entry.tweens.push(...tweens.in.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'in' })));
     if (!entry.plate || tweens.type === 'cut') continue;
     // Only an adjacent plate (gap of at most ADJACENT seconds) is carried
     // through the transition; after a gap the background shows instead.
-    const previous = plates.filter((other) => other !== entry && other.start < entry.start - EPS && other.end <= entry.start + EPS && entry.start - other.end <= ADJACENT + EPS)
-      .reduce((best, other) => (!best || other.end > best.end + EPS ? other : best), null);
+    const previous = before;
     if (!previous) continue;
     previous.renderEnd = Math.max(previous.renderEnd, Math.min(duration, entry.start + tweens.duration));
     previous.tweens.push(...tweens.out.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'out' })));

@@ -101,7 +101,7 @@ that is present is still validated.
 | `schema_version` | warn | `"launchclip.concepts.v1"` |
 | `concepts` | yes | exactly 5 |
 | `concepts[].id`, `title`, `logline`, `hook` | yes | non-empty strings; `hook` is the spoken hook, 18 words or fewer (warn) |
-| `concepts[].scores` | yes | the nine criteria above, each 0–10 (missing criteria warn; a non-number fails) |
+| `concepts[].scores` | yes | the eleven criteria above, each 0–10 (missing criteria warn; a non-number fails) |
 | `concepts[].penalties` | warn | `{genericism, slideshow_risk, unsupported_clickbait}` |
 | `concepts[].total` | warn | weighted score minus penalties; a chosen concept that is not the highest total warns |
 | `concepts[].chosen` | yes | exactly one `true` |

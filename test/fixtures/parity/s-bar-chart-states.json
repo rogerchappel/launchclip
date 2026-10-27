@@ -1,0 +1,112 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Shot states parity: s-bar-chart-states",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 12.5,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#070b14",
+        "primary": "#8a94ff",
+        "accent": "#3fe0ff",
+        "ink": "#070b14",
+        "paper": "#eef3ff"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "price",
+        "module": "bar-chart",
+        "start": 0,
+        "end": 12.5,
+        "params": {
+          "title": "Price per agent task",
+          "source": "Illustrative figures",
+          "format": {
+            "style": "currency",
+            "decimals": 2
+          },
+          "max": 2.6,
+          "data": [
+            {
+              "label": "Last model",
+              "value": 2.4
+            },
+            {
+              "label": "New model",
+              "value": 1.2
+            }
+          ]
+        },
+        "states": [
+          {
+            "at": 3.0,
+            "set": {
+              "reveal": [
+                1
+              ],
+              "focus": 1
+            }
+          },
+          {
+            "at": 5.6,
+            "set": {
+              "guide": {
+                "value": 1.2,
+                "label": "HALF"
+              }
+            }
+          },
+          {
+            "at": 8.2,
+            "set": {
+              "params": {
+                "data": [
+                  {
+                    "label": "Last model",
+                    "value": 2.4
+                  },
+                  {
+                    "label": "New model",
+                    "value": 0.8
+                  }
+                ]
+              },
+              "glow": 1,
+              "note": {
+                "text": "With caching",
+                "target": 1
+              }
+            }
+          },
+          {
+            "at": 10.6,
+            "set": {
+              "focus": [
+                0,
+                1
+              ],
+              "dim": false
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "sceneId": "price",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

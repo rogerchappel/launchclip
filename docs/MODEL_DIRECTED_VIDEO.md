@@ -218,6 +218,12 @@ Every claim in a later script points back to one or more evidence ids. The model
 may create analogies and visual metaphors, but it may not turn an unverified
 claim into fact.
 
+For claims about the world (releases, benchmarks, papers, people),
+`launchclip research` checks each claim against primary sources and writes
+the claim ledger, capture requests, cited chart data and licence-clear media
+under `research/`; `make --research on` runs it before the script pass and
+audits the narration after it. See [RESEARCH.md](RESEARCH.md).
+
 ### 3. Cinematic Concept, Story, and Narration
 
 With `--profile cinematic`, create the creative spine before the final visual
