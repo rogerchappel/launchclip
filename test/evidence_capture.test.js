@@ -142,3 +142,34 @@ test("the player draws the URL in the chrome and inlines the timeline", async ()
   assert.match(html, /function stateAt\(/);
   assert.doesNotMatch(html, /^export /m);
 });
+
+test("the CLI checks a request, runs a capture or a still, and prints scene params from a sidecar", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { runEvidenceCommand } = await import("../src/evidence/cli.js");
+  const dir = await mkdtemp(path.join(os.tmpdir(), "evidence-cli-"));
+  const file = path.join(dir, "req.json");
+  await writeFile(file, JSON.stringify(request()));
+  const check = await runEvidenceCommand("check", file);
+  assert.equal(check.ok, true);
+  await writeFile(path.join(dir, "bad.json"), JSON.stringify(request({ beats: [{ at: 0, action: "zoom" }] })));
+  assert.equal((await runEvidenceCommand("check", path.join(dir, "bad.json"))).ok, false);
+  await assert.rejects(runEvidenceCommand("capture", path.join(dir, "bad.json"), {}, { capture: {} }), /has errors/);
+  const calls = [];
+  const record = { final_url: "https://github.com/x", consent: { action: "none" }, duration: 3.7, spans: [{ text: "gpt-6.1-terra" }] };
+  const capture = {
+    captureEvidence: async (input, options) => { calls.push(["clip", input.id, options.root]); return { video: "v.mp4", poster: "p.png", sidecar: path.join(dir, "x.evidence.json"), fullpage: "f.png", record }; },
+    captureStill: async (input, options) => { calls.push(["still", options.target, options.scale]); return { still: "s.png", sidecar: "s.json", record }; }
+  };
+  const clip = await runEvidenceCommand("capture", file, { root: dir }, { capture });
+  assert.deepEqual(clip.spans, ["gpt-6.1-terra"]);
+  const still = await runEvidenceCommand("capture", file, { still: true, target: "text:gpt-6.1-terra", scale: "4" }, { capture });
+  assert.equal(still.stage, "evidence-still");
+  assert.deepEqual(calls, [["clip", "pr-39217", dir], ["still", { text: "gpt-6.1-terra" }, 4]]);
+  const sidecar = path.join(dir, "pr.evidence.json");
+  await writeFile(sidecar, JSON.stringify({ schema: "launchclip.evidence.v1", id: "pr", video: "pr.mp4", duration: 3, viewport: { width: 1600, height: 1000 }, provenance: { publisher: "GitHub", published_at: "2026-10-16T17:45:34Z" } }));
+  const scene = await runEvidenceCommand("scene", sidecar);
+  assert.equal(scene.module, "evidence-clip");
+  assert.deepEqual(scene.params.source, { publisher: "GitHub", date: "Oct 16, 2026" });
+});
