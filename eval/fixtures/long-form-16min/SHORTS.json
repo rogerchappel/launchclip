@@ -40,7 +40,7 @@
    {
     "shot": "short-1-sh1",
     "start": 0,
-    "module": "icon-row",
+    "module": "concept-card",
     "change": "enter",
     "text": "the largest rival lab cut its prices"
    },
@@ -54,21 +54,21 @@
    {
     "shot": "short-1-sh1",
     "start": 4.873,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "blog post comparing its own model favourably on maths."
    },
    {
     "shot": "short-1-sh2",
     "start": 8.945,
-    "module": "kinetic-words",
+    "module": "glass-word",
     "change": "enter",
     "text": "Five days after the launch,"
    },
    {
     "shot": "short-1-sh2",
     "start": 11.044,
-    "module": "icon-grid",
+    "module": "concept-card",
     "change": "swap",
     "text": "a second lab released an updated model"
    },
@@ -82,28 +82,28 @@
    {
     "shot": "short-1-sh3",
     "start": 17.953,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "Ten days after the launch,"
    },
    {
     "shot": "short-1-sh3",
     "start": 20.016,
-    "module": "icon-row",
-    "change": "build",
+    "module": "object-card",
+    "change": "swap",
     "text": "an open source group published"
    },
    {
     "shot": "short-1-sh3",
     "start": 22.081,
-    "module": "icon-row",
-    "change": "build",
+    "module": "particle-text",
+    "change": "swap",
     "text": "a smaller model that matched Halcyon 1.5"
    },
    {
     "shot": "short-1-sh4",
     "start": 24.849,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "on most public benchmarks and could run on a single workstation."
    },
@@ -138,7 +138,7 @@
    {
     "shot": "short-1-sh6",
     "start": 40.291,
-    "module": "icon-grid",
+    "module": "concept-card",
     "change": "swap",
     "text": "briefly took first, then settled at third after the rival updates."
    }
@@ -238,15 +238,15 @@
    {
     "shot": "short-2-sh3",
     "start": 21.839,
-    "module": "icon-row",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "for high school competitions,"
    },
    {
     "shot": "short-2-sh3",
     "start": 23.825,
-    "module": "icon-row",
-    "change": "build",
+    "module": "glass-word",
+    "change": "swap",
     "text": "it scored lower than the previous version,"
    },
    {
@@ -259,14 +259,14 @@
    {
     "shot": "short-2-sh4",
     "start": 29.959,
-    "module": "kinetic-words",
+    "module": "object-card",
     "change": "swap",
     "text": "Northlight mentioned that drop in a footnote."
    },
    {
     "shot": "short-2-sh4",
     "start": 33.329,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "swap",
     "text": "The honest summary is this."
    },
@@ -287,7 +287,7 @@
    {
     "shot": "short-2-sh5",
     "start": 40.539,
-    "module": "timeline",
+    "module": "concept-card",
     "change": "swap",
     "text": "a modest step on coding, and a small step back on maths."
    }
@@ -345,7 +345,7 @@
    {
     "shot": "short-3-sh2",
     "start": 7.867,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "The context window doubled,"
    },
@@ -366,7 +366,7 @@
    {
     "shot": "short-3-sh3",
     "start": 14.957,
-    "module": "motion-title",
+    "module": "object-card",
     "change": "swap",
     "text": "Northlight published a short section"
    },
@@ -380,7 +380,7 @@
    {
     "shot": "short-3-sh4",
     "start": 20.006,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "including a table of known failure cases."
    }
@@ -447,21 +447,21 @@
    {
     "shot": "short-4-sh1",
     "start": 5.599,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "swap",
     "text": "linked by a network that moves data between them at enormous speed."
    },
    {
     "shot": "short-4-sh2",
     "start": 10.705,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "Running it costs real money."
    },
    {
     "shot": "short-4-sh2",
     "start": 13.081,
-    "module": "kinetic-words",
+    "module": "glass-word",
     "change": "swap",
     "text": "Outside analysts estimate the"
    },
@@ -482,42 +482,42 @@
    {
     "shot": "short-4-sh3",
     "start": 19.639,
-    "module": "icon-grid",
+    "module": "process-steps",
     "change": "swap",
     "text": "once you count the chips, the power and the people."
    },
    {
     "shot": "short-4-sh3",
     "start": 23.932,
-    "module": "icon-grid",
+    "module": "process-steps",
     "change": "build",
     "text": "Northlight has not confirmed a number."
    },
    {
     "shot": "short-4-sh4",
     "start": 26.859,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "Power is the other constraint."
    },
    {
     "shot": "short-4-sh4",
     "start": 29.308,
-    "module": "icon-row",
-    "change": "build",
+    "module": "particle-text",
+    "change": "swap",
     "text": "The Finnish site was chosen"
    },
    {
     "shot": "short-4-sh4",
     "start": 31.264,
-    "module": "icon-row",
-    "change": "build",
+    "module": "kinetic-words",
+    "change": "swap",
     "text": "because electricity there is cheap,"
    },
    {
     "shot": "short-4-sh5",
     "start": 33.655,
-    "module": "motion-title",
+    "module": "glass-word",
     "change": "enter",
     "text": "mostly renewable, and the cold climate makes cooling easier."
    },

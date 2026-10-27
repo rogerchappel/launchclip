@@ -2,7 +2,7 @@
 // real long-form script (written inline; the script itself is not in the repo).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { entityAliases, extractFacts, matchEvidence, pairSeries, visualKind } from "../kit/core/beat-director.mjs";
+import { GENERIC_MODULES, directLongForm, entityAliases, extractFacts, ledgerOutputPrices, ledgerTimeline, matchEvidence, pairSeries, visualKind } from "../kit/core/beat-director.mjs";
 import { capabilityParams } from "../kit/core/visual-capabilities.mjs";
 
 const kind = (text) => visualKind({ text, facts: extractFacts(text) });
@@ -89,4 +89,68 @@ test("picks: scores across clauses pair, and \"more than double\" draws the 2× 
   assert.deepEqual(states[1].evidence.data.series, [{ label: "Terra", value: 50.3, unit: "%" }, { label: "GPT-5.6 Terra", value: 21.5, unit: "%" }]);
   assert.deepEqual(states[1].evidence.data.reference, { value: 43, label: "2×" });
   assert.deepEqual(extractFacts("GPT-5.6 Terra scored 21.5%.").numbers.map((entry) => entry.value), [21.5]);
+});
+
+// A dated ledger: a merged PR (with its card data), a post, a launch, and a rival's launch a month before.
+const PR = { repo: "dotnet/efcore", number: 39217, title: "Make the evals more realistic", state: "merged", author: "AndriySvyryd", date: "2026-10-16", file: "evals/config.yaml", lines: ["-  judge: gpt-5.6-terra", "+  judge: gpt-6.1-terra"], startLine: { old: 4, new: 4 } };
+const DATED = {
+  schema: "launchclip.evidence.v1",
+  claims: [
+    { id: "merged", kind: "date", status: "verified", text: "On October 16, 2026, pull request 39217 was merged in dotnet/efcore.", dates: ["October 16, 2026"], entities: [{ name: "dotnet/efcore", kind: "repo" }], data: { module: "repo-pr-card", params: PR }, sources: [source("https://github.com/dotnet/efcore/pull/39217", "dotnet/efcore#39217")] },
+    { id: "posted", kind: "date", status: "verified", text: "Salio posted on X on October 25, 2026 that GPT-6.1 Terra was showing up on GitHub.", dates: ["October 25, 2026"], sources: [{ ...source("https://x.com/salio/status/1", "Salio on X"), publisher: "X", quote: { text: "GPT-6.1 Terra is showing up in GitHub code review" } }] },
+    { id: "launched", kind: "date", status: "verified", text: "On October 26, 2026, OpenAI announced GPT-6.1 Terra.", dates: ["October 26, 2026"], sources: [{ ...source("https://openai.com/index/terra", "Introducing GPT-6.1 Terra"), publisher: "OpenAI", quote: { text: "GPT-6.1 Terra is available today in the API, ChatGPT and Codex." } }] },
+    { id: "rival", kind: "date", status: "verified", text: "Claude Opus 5.5 launched on September 22, 2026.", dates: ["September 22, 2026"], sources: [{ ...source("https://example.com/opus", "Opus 5.5"), publisher: "Example", quote: { text: "Opus 5.5 is out" } }] },
+    { id: "prices", kind: "number", status: "verified", text: "GPT-6.1 Terra costs $1 per million input tokens and $5 per million output tokens.", entities: [{ name: "Terra", kind: "name" }], sources: [source("https://openai.com/api/pricing", "Pricing")] },
+    { id: "sol", kind: "number", status: "verified", text: "That is half the price of GPT-6.1 Sol, which costs $2 per million input tokens and $10 per million output tokens.", entities: [{ name: "Sol", kind: "name" }], sources: [source("https://openai.com/api/pricing", "Pricing")] }
+  ]
+};
+
+test("picks: dated claims make a running timeline, one card per day", () => {
+  const cards = ledgerTimeline(DATED);
+  assert.deepEqual(cards.map((card) => card.date), ["2026-09-22", "2026-10-16", "2026-10-25", "2026-10-26"]);
+  assert.equal(cards[1].module, "repo-pr-card");
+  assert.equal(cards[2].kind, "announcement");
+  assert.deepEqual(ledgerOutputPrices(DATED), [{ label: "GPT-6.1 Terra", price: 5 }, { label: "GPT-6.1 Sol", price: 10 }]);
+});
+
+// Timed words for inline narration: 0.4 s a word, a pause after each sentence.
+function timedWords(sentences) {
+  const words = [];
+  let t = 0;
+  for (const sentence of sentences) { for (const text of sentence.split(" ")) { words.push({ text, start: +t.toFixed(2), end: +(t + 0.32).toFixed(2) }); t += 0.4; } t += 0.6; }
+  return words;
+}
+
+test("picks: on a real script's clauses, dates pin the timeline, a model id is tokenised, and generic cards are capped", () => {
+  const sentences = [
+    "Start with dotnet/efcore, the open source repository behind Entity Framework.",
+    "On October 16, pull request 39217 was merged.",
+    "It updated the evaluation harness that tests how well agents handle real work.",
+    "On October 25, Salio posted a screenshot on X.",
+    "We are treating that one as reported, not proven.",
+    "On October 26, GPT-6.1 Terra became generally available.",
+    "In the API, the model name is gpt-6.1-terra.",
+    "The price is $1 per million input tokens and $5 per million output tokens.",
+    "GPT-6.1 Sol costs $2 in and $10 out.",
+    "So Terra is exactly half the price of Sol, on both sides.",
+    "OpenAI also says Terra is 3 times faster than Astra.",
+    "That repository now returns a 404 page, so the screenshot is all that is left."
+  ];
+  const words = timedWords(sentences);
+  const tokens = { "gpt-6.1-terra": { text: "gpt-6.1-terra", tokens: ["g", "pt", "-", "6", ".", "1", "-ter", "ra"], encoding: "o200k_base" } };
+  const map = directLongForm({ words, chapters: [{ id: "trail", title: "The leak trail", start: 0 }], ledger: DATED, captures: [], tokens, title: "Terra" });
+  const states = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
+  const at = (fragment) => states.find((state) => state.text.includes(fragment));
+  for (const day of ["October 16", "October 25", "October 26"]) assert.equal(at(day).module, "date-pinned-timeline", `${day}: ${at(day).module}`);
+  // The story so far, latest last (oldest cards drop when the canvas has no room for them).
+  const days = at("October 26").params.cards.map((card) => card.date);
+  assert.ok(days.length >= 2 && days.at(-1) === "2026-10-26" && days.includes("2026-10-25"), days.join(", "));
+  assert.deepEqual(at("October 16").params.cards.map((card) => card.date), ["2026-10-16"]);
+  assert.equal(at("gpt-6.1-terra").module, "tokenizer");
+  assert.deepEqual(at("gpt-6.1-terra").params.models, [{ label: "GPT-6.1 Terra", price: 5 }, { label: "GPT-6.1 Sol", price: 10 }]);
+  assert.ok(["glass-bars-3d", "bar-chart"].includes(at("exactly half").module), at("exactly half").module);
+  assert.notEqual(at("3 times faster").kind, "quote");
+  assert.notEqual(at("404 page").module, "odometer");
+  const generic = states.filter((state) => GENERIC_MODULES.has(state.module)).length;
+  assert.ok(generic / states.length <= 0.35, `${generic} of ${states.length} generic: ${states.map((state) => state.module).join(", ")}`);
 });

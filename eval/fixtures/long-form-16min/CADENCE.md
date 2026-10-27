@@ -12,13 +12,13 @@ cadence passed (long-form, default): 157 events, 9.65/min, 14.18 words per event
   ok   longest_static   11.517  want ≤ 14 s
   ok   words_per_event   14.18  want 10–20 words
   ok   cut_gap_p50      20.607  want 15–25 s
-states per shot 1–4 (mean 3.29); changes enter 48, swap 88, build 22
-variety: 28 modules; top icon-row 16%, concept-card 13%, motion-title 8%, kinetic-words 6%, process-steps 6%; longest same-module run across cuts 1
+states per shot 1–4 (mean 3.29); changes enter 48, swap 108, build 2
+variety: 26 modules; top concept-card 20%, motion-title 11%, kinetic-words 10%, glass-word 7%, particle-text 6%; longest same-module run across cuts 2
 evidence: 60/86 claims shown with a sourced visual (70%), 16 on a capture
 chunks: 12 (0 reused)
 
 shorts: 4 cut for 9:16 at short-form cadence
-  ok   short-1-how-the-rivals-answered               819.715–864.574  45.259 s  14 events, p50 2.731 s, 5 cuts  skeleton none  opens on icon-row
+  ok   short-1-how-the-rivals-answered               819.715–864.574  45.259 s  14 events, p50 2.731 s, 5 cuts  skeleton none  opens on percent-fill
   ok   short-2-reading-the-benchmarks-honestly       598.317–643.252  45.335 s  14 events, p50 2.801 s, 4 cuts  skeleton versus  opens on percent-fill
   ok   short-3-what-northlight-actually-announced    287.073–309.85   23.177 s  7 events, p50 2.524 s, 3 cuts  skeleton none  opens on odometer
   ok   short-4-inside-the-training-run               163.723–211.413   48.09 s  15 events, p50 2.499 s, 5 cuts  skeleton dollar-a-second  opens on odometer

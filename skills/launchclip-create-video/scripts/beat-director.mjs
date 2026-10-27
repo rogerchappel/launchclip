@@ -223,7 +223,8 @@ export function visualKind(beat) {
   const facts = beat.facts ?? extractFacts(beat.text);
   if (beat.evidence?.capture?.kind && CAPTURE_KIND_VISUALS[beat.evidence.capture.kind]) return CAPTURE_KIND_VISUALS[beat.evidence.capture.kind];
   if (facts.handle || /\b(posted|tweeted|wrote on x|replied)\b/i.test(beat.text)) return 'social';
-  if (facts.quote || beat.intent === 'quote') return 'quote';
+  // "OpenAI says Terra is 3 times faster" reports a figure: it is a number, not a quote.
+  if (facts.quote || (beat.intent === 'quote' && !facts.numbers?.length)) return 'quote';
   if (facts.equation) return 'equation';
   for (const [kind, regex] of RULES.slice(0, 7)) if (regex.test(beat.text)) return kind;
   const numbers = facts.numbers ?? [];
@@ -402,7 +403,8 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
     kind: claim.kind ?? 'statement',
     score: round(best.score),
     source: source ? { url: source.url, ...(source.title ? { title: source.title } : {}), ...(source.publisher ? { publisher: source.publisher } : {}), ...(source.published_at ?? source.date ? { date: String(source.published_at ?? source.date).slice(0, 10) } : {}) } : null,
-    ...(source?.quote?.text ? { quote: source.quote.text } : {}),
+    // The source's supporting quote, else the quote the claim itself reports (not an API record).
+    ...((source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text)) || claim.quote ? { quote: source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text) ? source.quote.text : claim.quote } : {}),
     // The claim's subjects, shortest first ("Terra" before "GPT-6.1"): who a figure belongs to when the clause does not say.
     ...((claim.entities ?? []).some((e) => e?.kind === 'name') ? { names: (claim.entities ?? []).filter((e) => e?.kind === 'name' && e.name).map((e) => e.name).sort((a, b) => a.length - b.length) } : {}),
     ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {}),
@@ -491,6 +493,26 @@ export function directChunk(chunk, options) {
     return draft;
   });
   if (beats.length && beats.at(-1).words[1] === total - 1 && states.at(-1).intent !== 'cta') states.at(-1).closing = true;
+  // Story-shaped evidence: a clause on a dated day pins the timeline so far; a model id in code is tokenised.
+  const cards = ledger ? ledgerTimeline(ledger) : [];
+  const prices = ledger ? ledgerOutputPrices(ledger) : [];
+  for (const state of states) {
+    if (STRUCTURE_KINDS.has(state.kind)) continue;
+    const pinned = timelineFor(cards, state);
+    if (pinned) {
+      state.kind = 'date';
+      state.evidence = { ...(state.evidence ?? {}), data: { cards: pinned } };
+      delete state.evidence.capture;
+      continue;
+    }
+    const id = state.text.match(MODEL_ID)?.[0];
+    const split = id ? options.tokens?.[id] : null;
+    if (split && prices.length) {
+      state.kind = 'tokens';
+      state.evidence = { ...(state.evidence ?? {}), data: { tokens: { ...split, models: prices } } };
+      delete state.evidence.capture;
+    }
+  }
   pairSeries(states);
 
   // Shots: 2–4 states, cut near the target cut gap, at a topic shift when one is close.
@@ -558,6 +580,8 @@ function familyOf(kind) {
 }
 
 const STRUCTURE_KINDS = new Set(['cta', 'sting']);
+// Cards that can show any clause (its key words): picked only when no specific module draws it.
+export const GENERIC_MODULES = Object.freeze(new Set(['icon-row', 'concept-card', 'motion-title', 'kinetic-words', 'glass-word', 'object-card']));
 
 // ---------------------------------------------------------------------------
 // Series across clauses
@@ -697,6 +721,84 @@ export function pairSeries(states) {
 
 const isPlain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// ---------------------------------------------------------------------------
+// Story-shaped evidence: a running timeline, a model's tokens
+
+const clip = (text, max) => { const value = String(text ?? '').replace(/\s+/g, ' ').trim(); return value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`; };
+const MONTH_INDEX = Object.fromEntries(MONTHS.map((name, i) => [name, i + 1]));
+// "October 16, 2026" / "2026-10-16" → "2026-10-16", else null.
+function isoDate(value) {
+  const text = String(value ?? '');
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const long = text.match(/([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  const month = long ? MONTH_INDEX[long[1].toLowerCase()] : null;
+  return month ? `${long[3]}-${String(month).padStart(2, '0')}-${String(Number(long[2])).padStart(2, '0')}` : null;
+}
+
+/**
+ * The ledger's dated claims as date-pinned-timeline cards, one per day: a
+ * PR or commit as its card (claim.data), anything else as an announcement
+ * of its source (site, title, the supporting quote or the claim). Sorted by
+ * date. → [{date, label, …source}]
+ */
+export function ledgerTimeline(ledger) {
+  const days = new Map();
+  for (const claim of ledger?.claims ?? []) {
+    if (!claim?.id || claim.status === 'contradicted') continue;
+    const date = (claim.dates ?? []).map(isoDate).find(Boolean) ?? null;
+    if (!date || days.has(date)) continue;
+    const label = clip(keyTerms(claim.text).filter((word) => !/^(october|november|september|december|january|february|march|april|june|july|august)$/i.test(word)).slice(0, 4).join(' '), 32);
+    const data = claim.data;
+    if (isPlain(data?.params) && ['repo-pr-card', 'commit-card'].includes(data.module)) { days.set(date, { date, label, module: data.module, params: data.params, claim: claim.id }); continue; }
+    const source = (claim.sources ?? []).find((entry) => entry?.supports !== false) ?? null;
+    if (!source?.url) continue;
+    let site;
+    try { site = source.publisher ?? new URL(source.url).hostname.replace(/^www\./, ''); } catch { continue; }
+    days.set(date, { date, label, kind: 'announcement', site: clip(site, 40), title: clip(source.title ?? claim.text, 80), text: clip(source.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text) ? source.quote.text : claim.text, 160), claim: claim.id });
+  }
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * The cards up to a clause's date (the story so far: three at most, within
+ * three weeks), or null when the clause's day has no card. The first dated
+ * clause pins one card; later ones add theirs.
+ */
+function timelineFor(cards, beat) {
+  const day = (beat.facts?.dates ?? []).find((entry) => entry.month && entry.day);
+  if (!day || !cards.length) return null;
+  const year = cards.at(-1).date.slice(0, 4);
+  const iso = `${year}-${String(day.month).padStart(2, '0')}-${String(day.day).padStart(2, '0')}`;
+  if (!cards.some((card) => card.date === iso)) return null;
+  const toDay = (value) => Date.UTC(+value.slice(0, 4), +value.slice(5, 7) - 1, +value.slice(8, 10)) / 864e5;
+  const shown = cards.filter((card) => card.date <= iso && toDay(iso) - toDay(card.date) <= TIMELINE_DAYS).slice(-3);
+  return shown.map(({ claim, ...card }) => card);
+}
+
+const TIMELINE_DAYS = 21;
+
+// A model id as written in code: lower case, a hyphen and a digit ("gpt-6.1-terra").
+const MODEL_ID = /\b[a-z][a-z0-9]*-\d[\w.]*(?:-[a-z0-9.]+)*\b/;
+
+/**
+ * Output prices per million tokens the ledger states ("… $5 per million
+ * output tokens"), by the model they belong to, at most two. → [{label, price}]
+ */
+export function ledgerOutputPrices(ledger) {
+  const out = [];
+  for (const claim of ledger?.claims ?? []) {
+    if (!claim?.text || claim.status === 'contradicted') continue;
+    for (const figure of extractFacts(claim.text).numbers) {
+      if (!figure.prefix || !/\boutput\b/i.test(String(figure.label ?? ''))) continue;
+      const name = figureSubject(claim.text, figure) ?? (claim.entities ?? []).find((e) => e?.kind === 'name')?.name;
+      if (!name || out.some((entry) => entry.label === name)) continue;
+      out.push({ label: clip(name, 24), price: figure.value });
+    }
+  }
+  return out.slice(0, 2);
+}
+
 // A figure's label as a bar name: its first words, prepositions off ("per million input tokens" → null).
 function tidyLabel(label) {
   const words = String(label ?? '').split(/\s+/).filter((word) => word && !/^(per|of|on|in|to|for|the|a|an|and|is|was|that|which)$/i.test(word));
@@ -711,7 +813,8 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
     if (check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `series: builds on ${previous.module} (${state.evidence.data.series.length} values${state.evidence.data.reference ? `, ${state.evidence.data.reference.label} guide` : ''})` };
   }
   // A build: the module on screen takes this clause's entries (a bar arrives, then a second bar).
-  if (previous && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind)) {
+  // Never onto a generic card (a headline is not an entry), nor for a clause with a list of its own.
+  if (previous && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind) && !GENERIC_MODULES.has(previous.module) && !(state.facts?.items?.length >= 3)) {
     const add = capabilityAdditions(previous.module, state);
     const params = add ? appendEntries(previous.params, add, previous.module) : null;
     if (params && check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `${state.kind}: builds on ${previous.module} (+${add.items.length} ${add.key})` };
@@ -719,7 +822,9 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
   const known = new Set(registered);
   // A call to action or a sting is structure: it never plays the clause's capture.
   const capture = STRUCTURE_KINDS.has(state.kind) ? null : state.evidence?.capture ?? null;
-  const candidates = capabilitiesFor(state.kind, { evidence: capture?.kind ?? null, wide });
+  // A clause backed by a source's own words can show them (a quote card, a post) where it would get a generic card.
+  const quoted = state.evidence?.quote && familyOf(state.kind) === 'idea' ? capabilitiesFor('quote', { wide }) : [];
+  const candidates = [...new Set([...capabilitiesFor(state.kind, { evidence: capture?.kind ?? null, wide }), ...quoted])];
   const scored = candidates.map((id, order) => {
     const resolved = resolveCapability(id, { registered });
     const recentIndex = history.recent.lastIndexOf(resolved.module);
@@ -734,6 +839,17 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
     return { id, resolved, score };
   }).sort((a, b) => b.score - a.score);
   const source = state.evidence ? ` (evidence ${state.evidence.claim}${state.evidence.capture ? `, capture ${state.evidence.capture.id}` : ''})` : '';
+  // A pinned timeline that has no room for every card keeps the latest ones.
+  const cards = state.evidence?.data?.cards;
+  if (Array.isArray(cards) && cards.length > 1 && known.has('date-pinned-timeline')) {
+    for (let drop = 0; drop < cards.length; drop += 1) {
+      const trimmed = { ...state, evidence: { ...state.evidence, data: { ...state.evidence.data, cards: cards.slice(drop) } } };
+      const params = capabilityParams('date-pinned-timeline', trimmed);
+      if (check('date-pinned-timeline', params)) return { capability: 'date-pinned-timeline', module: 'date-pinned-timeline', fallback: false, params, change: 'swap', why: `${state.kind}${source}: date-pinned-timeline (${cards.length - drop} of ${cards.length} cards)` };
+    }
+  }
+  // The best candidate that draws the clause, a specific module ahead of any generic one (the cap on generic cards).
+  let generic = null;
   for (const { id } of scored) {
     // A registered module takes the clause or is skipped; a planned one walks its fallbacks.
     const modules = known.has(id) ? [id] : fallbackChain(id, { registered });
@@ -741,9 +857,13 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
       const params = capabilityParams(module, state);
       if (!check(module, params)) continue;
       const fellBack = module !== id;
-      return { capability: id, module, fallback: fellBack, params, change: 'swap', why: `${state.kind}${source}: ${id}${fellBack ? ` (→ ${module} until ${id} is registered)` : ''}` };
+      const decision = { capability: id, module, fallback: fellBack, params, change: 'swap', why: `${state.kind}${source}: ${id}${fellBack ? ` (→ ${module} until ${id} is registered)` : ''}` };
+      if (!GENERIC_MODULES.has(module)) return generic ? { ...decision, why: `${decision.why}, ahead of ${generic.module}` } : decision;
+      generic ??= decision;
+      break;
     }
   }
+  if (generic) return generic;
   const params = capabilityParams('concept-card', state);
   return { capability: 'concept-card', module: 'concept-card', fallback: false, params, change: 'swap', why: `${state.kind}${source}: nothing else fits, a concept card` };
 }
@@ -780,7 +900,9 @@ function makeChecker(format, brand) {
 /**
  * Direct a long video. input: {words (NARRATION.json words), chapters
  * ([{id, title, start}]), ledger (research/evidence.json), captures
- * ([launchclip.capture.v1]), format ({width, height}), title}. options:
+ * ([launchclip.capture.v1]), format ({width, height}), title, tokens
+ * ({[model id]: {text, tokens, encoding}}: BPE splits precomputed by
+ * src/tokenizer.js for the model ids the script names)}. options:
  * {cadence: 'long-form', style: 'default', chunkSeconds: 180, previous (an
  * earlier beat map: matching chunks are reused), avoid (historyAvoid()),
  * ctas (mid-roll calls to action: seconds or {at, action, detail, handle};
@@ -809,7 +931,7 @@ export function directLongForm(input, options = {}) {
   // Structure: mid-roll calls to action (seconds, or {at, action, detail, handle}) and logo stings at the open and close.
   const structure = { ctas: (options.ctas ?? []).map((entry) => (typeof entry === 'number' ? { at: entry } : { ...entry })).sort((a, b) => a.at - b.at), stings: options.stings === true, brand: options.stingBrand ?? null, title: input.title ?? null };
   // The brand joins the cache key only when set, so maps planned without one keep their keys.
-  const settings = { structure: { ctas: structure.ctas, stings: structure.stings, ...(structure.brand ? { brand: structure.brand } : {}) }, cadence, style, format, registered: [...registered].sort(), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
+  const settings = { structure: { ctas: structure.ctas, stings: structure.stings, ...(structure.brand ? { brand: structure.brand } : {}) }, cadence, style, format, registered: [...registered].sort(), ...(input.tokens ? { tokens: input.tokens } : {}), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
   const settingsKey = hashText(JSON.stringify(settings));
 
   let history = emptyHistory();
@@ -832,7 +954,7 @@ export function directLongForm(input, options = {}) {
       result = { shots: hit.shots.map((id) => previousShots.get(id)), history: hit.history };
       reused += 1;
     } else {
-      result = directChunk(chunk, { words, history, target, ledger: input.ledger ?? null, captures: input.captures ?? [], registered, format, brand: options.brand, avoidWeights: weights, structure });
+      result = directChunk(chunk, { words, history, target, ledger: input.ledger ?? null, captures: input.captures ?? [], registered, format, brand: options.brand, avoidWeights: weights, structure, tokens: input.tokens ?? null });
     }
     // The chunk before holds until this one starts.
     const lastBefore = chapters.flatMap((entry) => entry.shots).at(-1);

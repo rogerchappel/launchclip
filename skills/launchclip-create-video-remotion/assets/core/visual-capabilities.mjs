@@ -184,12 +184,11 @@ function numbersOf(beat) {
   return (beat.facts?.numbers ?? []).filter((entry) => Number.isFinite(entry.value));
 }
 
-// A clause's list ("A, B and C"), else its content words; null when it has fewer than min.
+// A clause's list ("A, B and C"); null when it has fewer than min items.
 function itemsOf(beat, min = 3, max = 4) {
+  // Only things the clause lists: its content words are not items ("Where, Next, Show" says nothing).
   const items = (beat.facts?.items ?? []).map((item) => cap1(clip(item, 22))).filter(Boolean);
-  if (items.length >= min) return items.slice(0, max);
-  const words = keyTerms(beat.text).map(cap1);
-  return words.length >= min ? words.slice(0, max) : null;
+  return items.length >= min ? items.slice(0, max) : null;
 }
 
 const STOP = new Set(['a', 'an', 'and', 'the', 'so', 'to', 'of', 'for', 'that', 'this', 'it', 'its', 'is', 'are', 'was', 'were', 'we', 'i', 'you', 'they', 'he', 'she', 'in', 'on', 'at', 'from', 'with', 'which', 'because', 'has', 'have', 'had', 'just', 'our', 'your', 'their', 'but', 'or', 'as', 'be', 'by', 'then', 'there', 'here', 'what', 'when', 'how', 'why', 'not', 'into', 'than', 'more', 'most', 'will', 'would', 'can', 'could', 'about', 'every', 'each', 'one', 'all', 'also', 'only', 'even', 'now', 'still', 'that\'s', 'it\'s', 'does', 'did', 'do', 'been', 'being', 'very', 'much', 'many', 'some', 'any', 'out', 'up', 'down', 'over', 'same', 'way', 'thing', 'things']);
