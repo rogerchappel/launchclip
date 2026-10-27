@@ -6,7 +6,7 @@
 //    duration_seconds, video, cover, cover_frame?, captions?, platforms:
 //    {<platform>: {fits, notes, url?}}, warnings}
 //
-// Titles come from the script pass (SCRIPT.json: title, and title_options
+// Titles come from the script (SCRIPT.json, else SCRIPT.md's Titles section: title, and title_options
 // when the script writes them), else the storyboard's title. The platform
 // fits are hard platform limits, checked against the storyboard's format and
 // duration; nothing here calls a network or a model. finish writes it after
@@ -141,7 +141,7 @@ export async function writePublishManifest(projectPath, options = {}) {
   const project = path.resolve(projectPath);
   const story = await readOptional(path.join(project, "storyboard.json"));
   if (!story) throw new Error(`publish-manifest needs ${path.join(project, "storyboard.json")}`);
-  const script = await readOptional(path.join(project, "SCRIPT.json"));
+  const script = await readProjectScript(project);
   const finish = options.finish ?? await readOptional(path.join(project, "finish.json"));
   const rel = (file) => path.relative(project, path.resolve(project, file)).split(path.sep).join("/");
   const finalVideo = finish?.final && existsSync(finish.final) ? finish.final : ["renders/final.mp4", "renders/draft.mp4"].map((file) => path.join(project, file)).find((file) => existsSync(file)) ?? null;
@@ -175,7 +175,56 @@ function storyCta(story, script) {
     return { text: cleanText(scene.params.action), ...(url ? { url } : {}) };
   }
   const sentences = narrationSentences(story, script);
-  return { text: sentences.at(-1) ?? "" };
+  const last = sentences.at(-1) ?? "";
+  // A loop ending's last line trails into the hook ("So, one more time, from right now:"): it is not a call to action.
+  if (story.ending?.loop_to && /[:…—-]\s*$|\.\.\.\s*$/.test(last)) return { text: "" };
+  return { text: last };
+}
+
+/**
+ * The project's script: SCRIPT.json (make) when it exists, else SCRIPT.md
+ * (the agent path) read for its title (the first "# " heading, without a
+ * "Script:" prefix), its title options (the "## Titles" section: a table's
+ * Title column or a numbered or bulleted list, best first, as written) and
+ * its narration (the "## Narration" section). null when neither exists.
+ */
+export async function readProjectScript(project) {
+  const json = await readOptional(path.join(project, "SCRIPT.json"));
+  if (json) return json;
+  let text;
+  try { text = await readFile(path.join(project, "SCRIPT.md"), "utf8"); } catch { return null; }
+  return parseScriptMarkdown(text);
+}
+
+/** SCRIPT.md → {title, title_options, narration, source}. */
+export function parseScriptMarkdown(text) {
+  const lines = String(text ?? "").split(/\r?\n/);
+  const section = (pattern) => {
+    const start = lines.findIndex((line) => /^##\s/.test(line) && pattern.test(line));
+    if (start < 0) return [];
+    const end = lines.findIndex((line, index) => index > start && /^#{1,2}\s/.test(line));
+    return lines.slice(start + 1, end < 0 ? undefined : end);
+  };
+  const heading = lines.find((line) => /^#\s/.test(line));
+  const title = heading ? cleanText(heading.replace(/^#\s+/, "").replace(/^script\s*[:—-]\s*/i, "")) : "";
+  const block = section(/titles?\b/i);
+  const options = [];
+  const header = block.find((line) => /^\s*\|/.test(line) && /title/i.test(line));
+  if (header) {
+    const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+    const column = cells(header).findIndex((cell) => /^title$/i.test(cell));
+    for (const line of block.filter((entry) => /^\s*\|/.test(entry) && entry !== header && !/^\s*\|[\s:|-]+\|?\s*$/.test(entry))) {
+      const value = cleanText(cells(line)[column]);
+      if (value) options.push(value);
+    }
+  } else {
+    for (const line of block) {
+      const match = /^\s*(?:\d+[.)]|[-*•])\s+(.+)$/.exec(line);
+      if (match) options.push(cleanText(match[1].replace(/\s+[—-]\s+\d+(\.\d+)?\s*$/, "").replace(/^["“](.+)["”]$/, "$1")));
+    }
+  }
+  const narration = cleanText(section(/narration/i).filter((line) => line.trim() && !/^\s*[|>]/.test(line)).join(" ").replace(/^["“]|["”]$/g, ""));
+  return { title: options[0] ?? title, title_options: options, ...(narration ? { narration } : {}), source: "SCRIPT.md" };
 }
 
 function description(story, script, cta, link) {
