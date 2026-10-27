@@ -25,6 +25,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
   - Every line of the story gets a visual decision, and footage gets split-screen layouts and a much larger visual vocabulary.
   - Styles carry your brand frame and a few simple dials, and a draft that's sparse or off-style fails its checks before you see it.
   - Fully animated stories get the same treatment once the animated characters below arrive: a cast directed line by line, inside the same checks.
+- **Viral formats, results built in** ([RFC](VIRAL_FORMATS_RFC.md)): proven short-form structures ("$1 a second", "the last time", "X vs Y") as first-class formats, each with its hook, beats, key shot, share moment, voice tier and packaging. The planner picks a format and a fresh angle before the concepts, offers only formats the kit can actually render, and the finish gates check the first frame, the key shot and the share beat, all at no extra cost.
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
 - **Faster first run:** smaller downloads and pre-warmed rendering, so the first video arrives sooner.
