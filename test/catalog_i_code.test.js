@@ -237,3 +237,18 @@ test('stacked cards never cover the token row of the card before', () => {
     });
   }
 });
+
+test('a card alone on stage fills its rect and grows its type instead of centring at a fixed size', () => {
+  for (const id of ['repo-pr-card', 'commit-card', 'diff-view']) {
+    const model = resolve(id, SAMPLES[id], '16:9');
+    const card = model.content.card;
+    assert.equal(card.w, model.rect.width, `${id} takes the safe area's width`);
+    assert.ok(card.code.size > 34, `${id} code grows past 34 px (${card.code.size})`);
+    assert.ok(card.h <= model.rect.height + 0.01);
+    // A rect sets the card's size.
+    const rect = {x: 150, y: 133, width: 1620, height: 700};
+    const inRect = resolve(id, {...SAMPLES[id], rect}, '16:9').content.card;
+    assert.equal(inRect.w, 1620);
+    assert.ok(inRect.h <= 700 + 0.01 && inRect.h > 450, `${id} fills most of the rect's height (${inRect.h})`);
+  }
+});

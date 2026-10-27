@@ -42,14 +42,25 @@ function cueTime(b, name, value, path, fallback, min) {
   return b.timeOf(name, value, path, Math.max(min, Math.min(fallback, b.lastEvent)), {min: Math.max(0, min - 1e-6)});
 }
 
-/** Sizes of a full card (one card on stage) or a compact one (several). */
+/**
+ * Sizes of a full card (one card on stage) or a compact one (several), at
+ * scale k. Above 1 (a hero), code type shrinks at most 20% to fit its longest
+ * line (codeFloor) before rows are cropped.
+ */
 function cardSizes(b, compact, k = 1) {
-  const {u, min} = b;
-  const m = v => r2(Math.max(min.meta, u(v * k)));
-  return compact
-    ? {pad: u(22 * k), head: m(30), meta: m(26), title: m(32), code: m(28), chipH: u(40 * k), chipText: m(22), bar: u(40 * k), avatar: u(34 * k), body: m(28)}
-    : {pad: u(30 * k), head: m(36), meta: m(28), title: r2(Math.max(min.key, u(48 * k))), code: m(34), chipH: u(48 * k), chipText: m(26), bar: u(50 * k), avatar: u(42 * k), body: m(32)};
+  const {min} = b;
+  // Above 1x the code (the evidence) grows at full rate, the chrome round it at half.
+  const c = k > 1 ? 1 + (k - 1) / 2 : k;
+  const u = v => b.u(v * c), m = v => r2(Math.max(min.meta, b.u(v * c)));
+  const code = v => r2(Math.max(min.meta, b.u(v * k)));
+  const z = compact
+    ? {pad: u(22), head: m(30), meta: m(26), title: m(32), code: code(28), chipH: u(40), chipText: m(22), bar: u(40), avatar: u(34), body: m(28)}
+    : {pad: u(30), head: m(36), meta: m(28), title: r2(Math.max(min.key, u(48))), code: code(34), chipH: u(48), chipText: m(26), bar: u(50), avatar: u(42), body: m(32)};
+  return {...z, codeFloor: k > 1 ? r2(Math.max(min.meta, z.code * 0.8)) : min.meta, lead: k > 1 ? 1.45 : 1.62};
 }
+
+// The largest scale a card alone on stage tries (repo-pr-card, commit-card, diff-view).
+const HERO_SCALE = 1.5;
 
 /**
  * layoutCard at the largest scale from `scale` (default 1) down to 80% in
@@ -150,7 +161,7 @@ function wrapProse(text, token, size, width) {
  * tokens (card coordinates), headerCount}. compact: the small header used when
  * several cards share the stage.
  */
-function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), maxHeight = Infinity}) {
+function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), maxHeight = Infinity, urlBar = true}) {
   const {u, check} = b;
   const z = sizes, P = z.pad, W = width;
   const items = [];
@@ -186,16 +197,21 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     list.forEach((p, i) => items.push({t: 'avatar', x: r2(x + i * size * 0.62), y: r2(yy), s: size, p}));
     return r2(x + (list.length - 1) * size * 0.62 + size + u(12));
   };
-  const titleFit = (v, w, preferred, minSize, lines) => fitText(check, `${path}.${s.kind === 'commit' ? 'message' : 'title'}`, v, {family: 'body', width: w, preferred, min: minSize, maxLines: lines});
+  // fitText's advance is conservative; the height reserved follows the body
+  // face's own advance (+6%), so a title that sets on one line takes one.
+  const titleFit = (v, w, preferred, minSize, lines) => {
+    const fit = fitText(check, `${path}.${s.kind === 'commit' ? 'message' : 'title'}`, v, {family: 'body', width: w, preferred, min: minSize, maxLines: lines});
+    return {...fit, lines: Math.min(fit.lines, wrapCount(v, fit.size * proseAdvance(b.fonts.body) * 1.06, w))};
+  };
 
   if (s.kind === 'pr') {
-    if (!compact) bar(`github.com/${s.repo}/pull/${s.number}`);
+    if (!compact && urlBar) bar(`github.com/${s.repo}/pull/${s.number}`);
     y += P * 0.7;
     markRow(`#${s.number}`);
     if (s.title && !compact) {
       y += u(10);
       const fit = titleFit(s.title, W - 2 * P, z.title, b.min.key, 3);
-      text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.18});
+      text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.18, box: r2(fit.size * 1.18 * fit.lines)});
       items.titleSize = fit.size;
       y += fit.size * 1.18 * fit.lines + u(14);
     } else y += u(6);
@@ -209,7 +225,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     y += h;
     fileRow();
   } else if (s.kind === 'commit') {
-    if (!compact) bar(`github.com/${s.repo}/commit/${s.sha}`);
+    if (!compact && urlBar) bar(`github.com/${s.repo}/commit/${s.sha}`);
     y += P * 0.7;
     markRow(compact ? `commit ${s.sha}` : null);
     if (!compact) {
@@ -245,7 +261,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
       const fit = titleFit(`${s.message}${tail}`, W - 2 * P - u(36), z.title, b.min.key, 3);
       const boxH = r2(fit.size * 1.18 * fit.lines + u(30));
       items.push({t: 'box', x: P, y: r2(y), w: r2(W - 2 * P), h: boxH});
-      text(P + u(18), y + u(15), W - 2 * P - u(36), tail ? [{v: s.message, c: 'fg'}, {v: tail, c: 'accent'}] : s.message, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.18});
+      text(P + u(18), y + u(15), W - 2 * P - u(36), tail ? [{v: s.message, c: 'fg'}, {v: tail, c: 'accent'}] : s.message, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.18, box: r2(fit.size * 1.18 * fit.lines)});
       items.titleSize = fit.size;
       y += boxH;
     }
@@ -293,7 +309,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     if (!s.file) items.push({t: 'rule', y: r2(y)});
     y += u(6);
     codeTop = r2(y);
-    code = layoutCode(b, s.rows, s.tokens, {width: W, preferred: z.code, min: b.min.meta, gutters: !s.numbered ? 0 : compact ? 1 : 2, diff: s.diff, path: `${path}.lines`});
+    code = layoutCode(b, s.rows, s.tokens, {width: W, preferred: z.code, min: b.min.meta, floor: z.codeFloor, lead: z.lead, gutters: !s.numbered ? 0 : compact ? 1 : 2, diff: s.diff, path: `${path}.lines`});
     tokens = code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h}));
     y += code.height + u(6);
   }
@@ -305,6 +321,16 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
 
 // ---------------------------------------------------------------------------
 // Card view and ops
+
+/** Lines `text` wraps to at `advance` px per character in `width` px (greedy, by word). */
+function wrapCount(text, advance, width) {
+  let lines = 1, used = 0;
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    const w = word.length * advance;
+    if (used && used + advance + w > width) { lines += 1; used = w; } else used += (used ? advance : 0) + w;
+  }
+  return lines;
+}
 
 /** Mean lowercase advance (em) of the body font, for prose estimates; 0.56 when it is not registered. */
 function proseAdvance(stack) {
@@ -342,10 +368,12 @@ export function cardNode(model, card, prefix, x, y, {pal, code: font} = {}) {
             background: hex2(pal.accent, 0.14), boxShadow: `0 0 ${r2(10 * u)}px ${hex2(pal.accent, 0.6)}`, boxSizing: 'border-box', clipPath: 'inset(0% 100% 0% 0%)'})]),
         it.after]));
     } else {
-      const extra = {opacity: 0, ...(it.clip ? {overflow: 'hidden', textOverflow: 'ellipsis'} : {})};
+      // A box: the text centres in the height reserved for it (its line count is an estimate).
+      const extra = {opacity: 0, ...(it.clip ? {overflow: 'hidden', textOverflow: 'ellipsis'} : {}), ...(it.box ? {height: it.box, display: 'flex', alignItems: 'center'} : {})};
       const opts = {size: it.s, family: family(it.f), color: colorOf(pal, it.c), align: it.al ?? 'left', weight: it.wt, lineHeight: it.lh ?? 1.25, wrap: !!it.wrap, extra};
       const node = label(id, it.x, it.y, it.w, '', opts);
-      node.children = Array.isArray(it.v) ? it.v.map(p => el('span', null, {color: colorOf(pal, p.c)}, [p.v])) : [it.v];
+      const parts = Array.isArray(it.v) ? it.v.map(p => el('span', null, {color: colorOf(pal, p.c)}, [p.v])) : [it.v];
+      node.children = it.box ? [el('div', null, null, parts)] : parts;
       kids.push(node);
     }
   });
@@ -400,8 +428,13 @@ function singleCardResolve(id, kind, required) {
     const {highlightAt, at: atIn, rect: _rect, ...fields} = p;
     const spec = sourceSpec(b, fields, 'params', {kind});
     const pal = cardPalette(b, b.variant);
-    const width = r2(Math.min(rect.width, u(b.portrait ? 1000 : 1360)));
-    const card = fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height});
+    // Alone on stage, the card takes the rect's width (the safe area by
+    // default) at the largest scale, up to 1.5x, whose height fits.
+    const width = r2(rect.width);
+    // The URL bar repeats the repo row: it goes when that buys a larger scale.
+    const withBar = fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height, scale: HERO_SCALE});
+    const bare = withBar.code && withBar.sizes.code < b.u(34 * HERO_SCALE) ? fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height, scale: HERO_SCALE, urlBar: false}) : null;
+    const card = bare && bare.code.size > withBar.code.size ? bare : withBar;
     const x = r2((rect.width - width) / 2), y = r2((rect.height - card.h) / 2);
     const buildAt = b.timeOf('build', atIn, 'params.at', 0.5);
     const rows = card.code?.rows.length ?? 0;
@@ -483,28 +516,33 @@ function diffResolve(params, ctx) {
     return {a, z, at: f.at};
   });
   const pal = cardPalette(b, b.variant);
-  const z = cardSizes(b, false);
-  const width = r2(Math.min(rect.width, u(b.portrait ? 1000 : 1500)));
-  // Files-changed header: chevron, path, +/− stats and the stat blocks.
-  const items = [];
-  const hh = r2(z.head * 1.9);
-  items.push({t: 'band', h: hh});
-  items.push({t: 'icon', n: 'chevron-down', x: z.pad, y: r2((hh - z.meta) / 2), s: z.meta, c: 'muted'});
-  const statsV = [{v: `+${spec.additions}`, c: 'add'}, {v: ` −${spec.deletions}`, c: 'del'}];
-  const statsW = (String(spec.additions).length + String(spec.deletions).length + 3) * z.meta * CODE_ADVANCE;
-  const blocksW = 5 * z.meta * 0.62;
-  const room = Math.floor((width - 2 * z.pad - z.meta * 1.5 - statsW - blocksW - u(24)) / (z.code * CODE_ADVANCE));
-  const fileText = spec.file.length > room ? `…${spec.file.slice(spec.file.length - room + 1)}` : spec.file;
-  items.push({t: 'text', x: r2(z.pad + z.meta * 1.5), y: r2((hh - z.code * 1.25) / 2), w: r2(width - 2 * z.pad - statsW - blocksW), v: fileText, s: z.code, f: 'code', c: 'fg', wt: 600});
-  items.push({t: 'text', x: z.pad, y: r2((hh - z.meta * 1.25) / 2), w: r2(width - 2 * z.pad - blocksW - u(14)), v: statsV, s: z.meta, f: 'code', c: 'muted', al: 'right'});
-  const total = spec.additions + spec.deletions || 1, greens = Math.round(5 * spec.additions / total);
-  const reds = spec.additions + spec.deletions ? 5 - greens : 0;
-  for (let k = 0; k < 5; k++) items.push({t: 'box', x: r2(width - z.pad - blocksW + k * z.meta * 0.62), y: r2((hh - z.meta * 0.5) / 2), w: r2(z.meta * 0.5), h: r2(z.meta * 0.5), fill: k < greens ? 'add' : k < greens + reds ? 'del' : 'faint'});
-  const codeTop = r2(hh + u(10));
-  const code = layoutCode(b, spec.rows, spec.tokens, {width, preferred: z.code, min: b.min.meta, gutters: 2, diff: true, path: 'params.lines'});
-  const h = r2(codeTop + code.height + u(16));
-  if (h > rect.height) check.fail('params.lines', `make a ${Math.round(h)} px diff, taller than the ${Math.round(rect.height)} px rect; use fewer lines`);
-  const card = {kind: 'diff', w: width, h, items, titleSize: null, code, codeTop, tokens: code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h})), sizes: z};
+  // Alone on stage: the rect's width, at the largest scale (up to 1.5x) whose height fits.
+  const width = r2(rect.width);
+  const layoutDiff = z => {
+    // Files-changed header: chevron, path, +/− stats and the stat blocks.
+    const items = [];
+    const hh = r2(z.head * 1.9);
+    items.push({t: 'band', h: hh});
+    items.push({t: 'icon', n: 'chevron-down', x: z.pad, y: r2((hh - z.meta) / 2), s: z.meta, c: 'muted'});
+    const statsV = [{v: `+${spec.additions}`, c: 'add'}, {v: ` −${spec.deletions}`, c: 'del'}];
+    const statsW = (String(spec.additions).length + String(spec.deletions).length + 3) * z.meta * CODE_ADVANCE;
+    const blocksW = 5 * z.meta * 0.62;
+    const room = Math.floor((width - 2 * z.pad - z.meta * 1.5 - statsW - blocksW - u(24)) / (z.code * CODE_ADVANCE));
+    const fileText = spec.file.length > room ? `…${spec.file.slice(spec.file.length - room + 1)}` : spec.file;
+    items.push({t: 'text', x: r2(z.pad + z.meta * 1.5), y: r2((hh - z.code * 1.25) / 2), w: r2(width - 2 * z.pad - statsW - blocksW), v: fileText, s: z.code, f: 'code', c: 'fg', wt: 600});
+    items.push({t: 'text', x: z.pad, y: r2((hh - z.meta * 1.25) / 2), w: r2(width - 2 * z.pad - blocksW - u(14)), v: statsV, s: z.meta, f: 'code', c: 'muted', al: 'right'});
+    const total = spec.additions + spec.deletions || 1, greens = Math.round(5 * spec.additions / total);
+    const reds = spec.additions + spec.deletions ? 5 - greens : 0;
+    for (let k = 0; k < 5; k++) items.push({t: 'box', x: r2(width - z.pad - blocksW + k * z.meta * 0.62), y: r2((hh - z.meta * 0.5) / 2), w: r2(z.meta * 0.5), h: r2(z.meta * 0.5), fill: k < greens ? 'add' : k < greens + reds ? 'del' : 'faint'});
+    const codeTop = r2(hh + u(10));
+    const code = layoutCode(b, spec.rows, spec.tokens, {width, preferred: z.code, min: b.min.meta, floor: z.codeFloor, lead: z.lead, gutters: 2, diff: true, path: 'params.lines'});
+    const h = r2(codeTop + code.height + u(16));
+    return {kind: 'diff', w: width, h, items, titleSize: null, code, codeTop, tokens: code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h})), sizes: z};
+  };
+  let card = null;
+  for (let k = HERO_SCALE; k > 1 - 1e-9 && !(card && card.h <= rect.height); k = Math.round((k - 0.1) * 100) / 100) card = layoutDiff(cardSizes(b, false, k));
+  if (card.h > rect.height) check.fail('params.lines', `make a ${Math.round(card.h)} px diff, taller than the ${Math.round(rect.height)} px rect; use fewer lines`);
+  const {h, codeTop, code} = card;
   const x = r2((rect.width - width) / 2), y = r2((rect.height - h) / 2);
 
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
@@ -527,7 +565,7 @@ function diffResolve(params, ctx) {
     b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55), role: 'emphasis', cue: 'ping-soft'});
   } else if (p.highlightAt !== undefined) check.fail('params.highlightAt', 'needs params.highlight');
   const content = {variant: b.variant, pal, code: codeFont(b.fonts), card, x, y, buildAt, rowStep, focus, highlightAt: hlAt, buildEnd: rowsEnd};
-  return b.finish(content, {minTextPx: Math.max(b.min.key, z.code)});
+  return b.finish(content, {minTextPx: Math.max(b.min.key, card.sizes.code)});
 }
 
 function diffNodes(model) {
