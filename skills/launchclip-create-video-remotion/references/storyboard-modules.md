@@ -98,6 +98,12 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Keep a near-empty stage and add or transform one element per beat rather than cutting to a new card: the belief is a number-line whose ranges light up on their words, the study is a unit-grid that counts in and then splits into its groups (split on the word that names them), the result lands on those groups (bar-chart, gauge-compare or stat-card), stacked fragments ("same program", "12 weeks", "every set to failure") are kinetic-words.
 - No source, no study claim: a study, survey or "researchers found" line needs its citation in the brief or assets. Show it as a source note that stays along the bottom across the data scenes: frame.sources [{text ≤ 90 ("Morton et al., 2016 · J Appl Physiol"), scene | start, until? | end?}] (keep any other frame fields; with no brand frame write frame: {kicker: false, sections: false, sources: [...]}). Every unit-grid or number-line scene sits under a note or sets params.source. Never invent an author, year or journal; without one, cut the claim.
 
+## Code evidence (the receipt)
+
+- A claim about code ("they are already testing it", "it shipped") lands on its receipt: repo-pr-card (a PR), commit-card (a commit), diff-view (what changed, row by row) or terminal-session (a run). Box the token (a model name, a flag) with highlight and time highlightAt to its word: "highlightAt": "word:terra".
+- Real data only: map a public PR or commit with `node src/evidence/github.js <url> --token <text>` (cached under assets/evidence/, avatars too) and paste its params; never type or invent repo names, numbers, shas, authors or lines. Lines stay verbatim (cropping round the token is the module's job).
+- Several sources for one name: evidence-chain (2–4 cards, one per beat, the token joined by a dashed connector) or date-pinned-timeline (cards pinned to their dates on a scrubbing day axis; the summary variant is the "why now? N clues in N days" recap). Keep one shot and build it source by source rather than cutting card to card.
+
 ## Footage layouts (sections)
 
 A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section's scenes in its panel.
@@ -127,6 +133,12 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up | unit-grid |
 | states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label | number-line |
 | cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim | frame.sources (story overlay, not a scene module) |
+| names a pull request or a change merged into a repo ("a PR in dotnet/efcore", "merged on Oct 16", "pull request #39217"): the PR rebuilt as a card, the token boxed on its word | repo-pr-card |
+| names a commit, a sha or who committed what ("a commit by Copilot", "commit cc44805", "co-authored by"): the commit card with sha, Verified, co-authors and the hunk | commit-card |
+| walks through what a change did line by line ("they swapped sol for terra", "the diff shows", "this line changed"): a Files-changed diff whose focus ring steps through the rows | diff-view |
+| finds the same name in several places ("the same model name shows up in three repos", "and again here"): the sources side by side, the token joined by a dashed connector | evidence-chain |
+| dates the clues ("on Oct 16 … then Oct 24", "three clues in nine days", "why now?"): a day axis that scrubs while each source pins to its date, or the why-now summary | date-pinned-timeline |
+| runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs | terminal-session |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
 | lists steps, features or duties | checklist |

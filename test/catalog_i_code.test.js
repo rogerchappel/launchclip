@@ -210,3 +210,17 @@ test('code text uses a registered monospace face with a 0.6 em advance', () => {
   assert.match(codeFont({meta: "'JetBrains Mono', monospace"}), /JetBrains Mono/);
   assert.match(codeFont({meta: "'Space Grotesk', sans-serif"}), /^'JetBrains Mono'/, 'a proportional meta font falls back to JetBrains Mono');
 });
+
+test('the planner maps receipt lines to the code-evidence modules and states the real-data rule', async () => {
+  const {suggestModules, storyboardModulesReference} = await import('../kit/core/planning-prompt.mjs');
+  const pick = sentence => suggestModules(sentence)[0].modules;
+  assert.ok(pick('They merged pull request #39217 on Oct 16.').includes('repo-pr-card'));
+  assert.ok(pick('A commit co-authored by Copilot swapped the model.').includes('commit-card'));
+  assert.ok(pick('The same model name shows up again in three repos.').includes('evidence-chain'));
+  assert.ok(pick('Why now? Three clues in 9 days.').includes('date-pinned-timeline'));
+  assert.ok(pick('Clone the repo, pip install, and all 38 scripts pass.').includes('terminal-session'));
+  const reference = storyboardModulesReference();
+  assert.match(reference, /## Code evidence \(the receipt\)/);
+  assert.match(reference, /node src\/evidence\/github\.js/);
+  assert.match(reference, /### evidence-chain \(keeps captions\)/);
+});

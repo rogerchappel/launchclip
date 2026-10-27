@@ -72,6 +72,13 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'unit-grid', intents: ['number', 'proof'], when: 'counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up', patterns: ['\\b\\d{1,3} (people|participants|subjects|volunteers|users|adults|students|patients|lifters|men|women|athletes)\\b', '\\b(split|divided|randomi[sz]ed|assigned) (them )?(into|to) (two|three|2|3) groups\\b', '\\b(one|\\d+) (in|out of) (every )?(\\d+|five|ten|twenty|a hundred)\\b'] },
   { module: 'number-line', intents: ['number', 'claim'], when: 'states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label', patterns: ['\\b\\d+\\s?(–|-|to)\\s?\\d+\\s?(reps|hours|minutes|grams|g|kg|percent|%|days|weeks|mph|km)\\b', '\\bbetween \\d+ and \\d+\\b', '\\b(above|below|over|under|more than|less than) \\d+\\b.*\\b(is|means|counts as|=)\\b', '\\b(the (gym )?rule|sweet spot|threshold)\\b'] },
   { module: 'source-note', overlay: 'frame.sources', intents: ['proof'], when: 'cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim', patterns: ['\\baccording to\\b', '\\b(study|studies|survey|meta-analysis|trial|journal)\\b', '\\b(researchers?|scientists?) (found|showed|discovered|tested)\\b', '\\bet al\\.?'] },
+  // Code evidence: the receipt is a real PR, commit, diff or terminal run.
+  { module: 'repo-pr-card', intents: ['proof'], when: 'names a pull request or a change merged into a repo ("a PR in dotnet/efcore", "merged on Oct 16", "pull request #39217"): the PR rebuilt as a card, the token boxed on its word', patterns: ['\\bpull request\\b', '\\bPR\\s?#?\\d+', '\\bmerged\\b', '\\b[\\w-]+\\/[\\w.-]+#\\d+\\b'] },
+  { module: 'commit-card', intents: ['proof'], when: 'names a commit, a sha or who committed what ("a commit by Copilot", "commit cc44805", "co-authored by"): the commit card with sha, Verified, co-authors and the hunk', patterns: ['\\bcommit(ted)?\\b', '\\bco-authored\\b', '\\b[0-9a-f]{7,12}\\b'] },
+  { module: 'diff-view', intents: ['proof', 'process'], when: 'walks through what a change did line by line ("they swapped sol for terra", "the diff shows", "this line changed"): a Files-changed diff whose focus ring steps through the rows', patterns: ['\\bdiff\\b', '\\b(swapp|replac|chang)ed\\b.*\\b(line|model|config|flag)\\b', '\\bfiles? changed\\b'] },
+  { module: 'evidence-chain', intents: ['proof'], when: 'finds the same name in several places ("the same model name shows up in three repos", "and again here"): the sources side by side, the token joined by a dashed connector', patterns: ['\\b(same|that) (name|token|string|model)\\b.*\\b(again|also|too|places|repos)\\b', '\\b(two|three|four) (places|repos|sources|leaks|clues)\\b'] },
+  { module: 'date-pinned-timeline', intents: ['proof', 'number'], when: 'dates the clues ("on Oct 16 … then Oct 24", "three clues in nine days", "why now?"): a day axis that scrubs while each source pins to its date, or the why-now summary', patterns: ['\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \\d{1,2}\\b.*\\b(then|and|by)\\b', '\\bclues? in \\d+ days\\b', '\\bwhy now\\b'] },
+  { module: 'terminal-session', intents: ['proof', 'process'], when: 'runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs', patterns: ['\\b(git clone|pip install|npm (i|install|ci|test)|python3?|run_all|terminal|command line)\\b', '\\b(tests?|scripts?) (pass|passed|fail|failed)\\b'] },
   { module: 'count-up', when: 'gives a number, time, price or count', patterns: ['\\d', '\\b(percent|dollars?|minutes?|seconds?|hours?|times faster)\\b', '[$%×]'] },
   { module: 'metric', when: 'gives a sourced figure that should stay on screen with captions', patterns: ['\\b(according to|reported|survey|benchmark(ed)?|measured)\\b'] },
   { module: 'checklist', when: 'lists steps, features or duties', patterns: ['\\b(features?|includes?|checklist|requirements?|you get)\\b', '\\bfirst\\b.*\\bsecond\\b'] },
@@ -378,6 +385,15 @@ function captionLines(lane) {
     `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
+  ];
+}
+
+// Code evidence: the receipt beat, rebuilt from real GitHub data.
+export function codeEvidenceLines() {
+  return [
+    'A claim about code ("they are already testing it", "it shipped") lands on its receipt: repo-pr-card (a PR), commit-card (a commit), diff-view (what changed, row by row) or terminal-session (a run). Box the token (a model name, a flag) with highlight and time highlightAt to its word: "highlightAt": "word:terra".',
+    'Real data only: map a public PR or commit with `node src/evidence/github.js <url> --token <text>` (cached under assets/evidence/, avatars too) and paste its params; never type or invent repo names, numbers, shas, authors or lines. Lines stay verbatim (cropping round the token is the module\'s job).',
+    'Several sources for one name: evidence-chain (2–4 cards, one per beat, the token joined by a dashed connector) or date-pinned-timeline (cards pinned to their dates on a scrubbing day axis; the summary variant is the "why now? N clues in N days" recap). Keep one shot and build it source by source rather than cutting card to card.'
   ];
 }
 
@@ -766,6 +782,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -861,6 +878,7 @@ export function storyboardModulesReference() {
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
