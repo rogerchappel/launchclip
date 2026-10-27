@@ -2645,6 +2645,56 @@ caption band.
     `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
     same tree and ops.
 
+## Evidence clip (catalogue D, `kit/core/catalog-d-evidence-clip.mjs`)
+
+`evidence-clip` plays a capture of a real public page (`launchclip evidence
+capture`, [EVIDENCE_CAPTURE.md](EVIDENCE_CAPTURE.md)) inside a glass window:
+a translucent bezel, a hairline at the clip's edge and a `brand.colors.accent`
+rim glow, with a `publisher · date` source tag under it. The capture already
+carries its own beats (scroll, selection sweep, focus ring, date pin, cursor);
+the module frames it and can add post moves on top. It keeps captions.
+
+```json
+{ "module": "evidence-clip", "params": {
+  "media": { "src": "assets/evidence/pr-39217.mp4" }, "viewport": { "width": 1600, "height": 1000 },
+  "source": { "publisher": "GitHub · dotnet/efcore", "date": "Oct 16, 2026" },
+  "focus": [{ "at": 3.2, "box": { "x": 345, "y": 560, "width": 1222, "height": 44 } }],
+  "cursor": [{ "at": 2.4, "x": 900, "y": 300 }, { "at": 3.1, "x": 700, "y": 575, "click": true }] } }
+```
+
+- **Params from the sidecar:** `evidenceClipParams(record)` (or `launchclip
+  evidence scene <id>.evidence.json`) gives `media`, `viewport` and `source`
+  (the provenance publisher and `published_at` as "Oct 16, 2026", UTC).
+- **`media`:** an `assets/` video (`.mp4`, `.webm`, `.mov`), `sourceStart`
+  optional. **`viewport`** (required): the capture's size, for its aspect.
+- **Window:** the capture's aspect fitted in the safe zone above the caption
+  band, less the bezel (14 px at 1080) and the tag. `frame: "none"` drops the
+  bezel and glow.
+- **`source`:** `{publisher ≤ 40, date? ≤ 24}` in the meta font, on one line,
+  or publisher and date on two when one line is too wide (portrait).
+- **Camera:** a linear push-in `1 → 1 + push` (default 0.04, 0–0.12) about the
+  window centre over the whole scene, so the frame never holds still, times
+  any `focus` zooms. A focus (`{at, box, scale?, until?}`, ≤ 4, capture px)
+  eases in over 0.8 s to `scale` (default: the box at 0.6 of the canvas,
+  1.15–2×), holds until `until` (default 2 s after landing) and eases out over
+  0.7 s, or pans straight to the next focus when it starts first;
+  easeInOutSine, scale in log space (`focusKeys`, `focusAt`,
+  `evidenceTransform`). One sample per frame becomes a set on both the video
+  and the overlay's camera layer.
+- **`cursor`:** `[{at, x, y, click?}]` ≤ 12, at least 0.2 s apart, capture
+  px: an arrow (two clip-path polygons, so both renderers draw it from style
+  alone) that fades in at the first point and glides to each next on
+  `sine.inOut`, landing on the point's time; `click` dips it to 0.86.
+- **Ambient:** `layout.drift` is false: the push is the rest motion.
+- **Layout:** `role: "media"`, rect = the bezel plus the tag.
+- **Events:** `enter`, `source`, `focus-<i>` (cue `whoosh-soft`),
+  `click-<i>` (cue `click`).
+- **Compilers:** root media, as `product-demo`: the HyperFrames emitter returns
+  `{html: <video>, overlay}` and the story compiler hoists both, the overlay
+  one z-index above. Remotion (`kit/remotion/catalog/EvidenceClip.tsx`) draws
+  an `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
+  same tree and ops.
+
 ## Icon set (`kit/core/icons.mjs`)
 
 One family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):
