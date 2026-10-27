@@ -97,7 +97,7 @@
        "zooms": [
         {
          "at": 8.54,
-         "until": 10.74,
+         "until": 10.94,
          "word": "keynote",
          "element": "step Keynote",
          "target": 0
@@ -555,7 +555,7 @@
        "zooms": [
         {
          "at": 88.365,
-         "until": 90.565,
+         "until": 90.765,
          "word": "expensive",
          "element": "step Expensive",
          "target": 1
@@ -941,7 +941,7 @@
        "zooms": [
         {
          "at": 153.055,
-         "until": 155.255,
+         "until": 155.455,
          "word": "remember more",
          "element": "step Remember more",
          "target": 1
@@ -1077,7 +1077,7 @@
        "zooms": [
         {
          "at": 168.845,
-         "until": 171.045,
+         "until": 171.245,
          "word": "64",
          "element": "marker 64",
          "box": {
@@ -1626,16 +1626,7 @@
         },
         "quote": "median latency fell from 4.1 s to 1.8 s"
        },
-       "why": "compare (evidence c-latency): bar-chart",
-       "zooms": [
-        {
-         "at": 250.344,
-         "until": 252.544,
-         "word": "1.8",
-         "element": "bar Seconds inste…",
-         "target": 0
-        }
-       ]
+       "why": "compare (evidence c-latency): bar-chart"
       },
       {
        "id": "what-northlight-actually-announced-1-sh1-3",
@@ -1731,7 +1722,7 @@
        "zooms": [
         {
          "at": 263.157,
-         "until": 265.357,
+         "until": 265.556,
          "word": "62",
          "element": "count 62 in 100",
          "box": {
@@ -2158,7 +2149,7 @@
        "zooms": [
         {
          "at": 334.997,
-         "until": 337.197,
+         "until": 337.397,
          "word": "wait",
          "element": "step They wait",
          "target": 1
@@ -3105,10 +3096,15 @@
        "zooms": [
         {
          "at": 503.654,
-         "until": 505.854,
+         "until": 505.781,
          "word": "2,400",
          "element": "bar Dollars into…",
-         "target": 0
+         "box": {
+          "x": 96,
+          "y": 313,
+          "width": 1440,
+          "height": 112
+         }
         }
        ]
       }
@@ -3207,7 +3203,7 @@
        "zooms": [
         {
          "at": 517.97,
-         "until": 520.17,
+         "until": 520.37,
          "word": "hardware",
          "element": "step Hardware",
          "target": 0
@@ -3733,7 +3729,7 @@
        "zooms": [
         {
          "at": 614.28,
-         "until": 616.48,
+         "until": 616.68,
          "word": "71",
          "element": "count 71 in 100",
          "box": {
@@ -4945,7 +4941,7 @@
        "zooms": [
         {
          "at": 809.273,
-         "until": 811.473,
+         "until": 811.673,
          "word": "benchmark chart second",
          "element": "step Benchmark chart second",
          "target": 1
@@ -5058,7 +5054,7 @@
        "zooms": [
         {
          "at": 822.669,
-         "until": 824.869,
+         "until": 825.069,
          "word": "40",
          "element": "count 40 in 100",
          "box": {
@@ -7064,8 +7060,8 @@
     "overview": 9,
     "orbit": 7
    },
-   "zooms": 12,
-   "zooms_per_min": 0.74,
+   "zooms": 11,
+   "zooms_per_min": 0.68,
    "overviews": 9,
    "longest_push_run": 2,
    "list": {
@@ -7099,13 +7095,6 @@
       "by": "box"
      },
      {
-      "at": 250.344,
-      "module": "bar-chart",
-      "element": "bar Seconds inste…",
-      "word": "1.8",
-      "by": "target"
-     },
-     {
       "at": 263.157,
       "module": "unit-grid",
       "element": "count 62 in 100",
@@ -7124,7 +7113,7 @@
       "module": "bar-chart",
       "element": "bar Dollars into…",
       "word": "2,400",
-      "by": "target"
+      "by": "box"
      },
      {
       "at": 517.97,

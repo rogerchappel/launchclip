@@ -3,7 +3,7 @@
 2241 words at 155 wpm (dry-run timings, no voice), `node eval/beat-map-dry-run.mjs`.
 
 ```text
-beat map: Halcyon 2, explained: what a frontier model launch actually changes — 16.3 min, 12 chapters, 48 shots, 156 states, 12 zooms, 9 overviews
+beat map: Halcyon 2, explained: what a frontier model launch actually changes — 16.3 min, 12 chapters, 48 shots, 156 states, 11 zooms, 9 overviews
 cadence passed (long-form, default): 155 events, 9.53/min, 14.37 words per event; gaps p10 3.905 / p50 5.772 / p90 8.933 s; longest static 11.517 s; 47 cuts, median 20.607 s apart
   ok   per_min            9.53  want 9–16 (target 11.5)
   ok   gap_p50           5.772  want 4–6.5 s
@@ -15,15 +15,14 @@ cadence passed (long-form, default): 155 events, 9.53/min, 14.37 words per event
 states per shot 1–4 (mean 3.29); changes enter 48, swap 106, hold 2, build 2
 variety: 22 modules; top motion-title 24%, kinetic-words 24%, concept-card 15%, quote-card 5%, process-steps 4%; longest same-module run across cuts 2
 evidence: 60/86 claims shown with a sourced visual (70%), 16 on a capture
-camera: whip-pan 16, push 10, overview 9, orbit 7, pull 5; longest push-in run 2; 12 zooms (0.74/min), 9 overviews
+camera: whip-pan 16, push 10, overview 9, orbit 7, pull 5; longest push-in run 2; 11 zooms (0.68/min), 9 overviews
   zoom     0:09  process-steps → step Keynote on "keynote" (target)
   zoom     1:28  process-steps → step Expensive on "expensive" (target)
   zoom     2:33  process-steps → step Remember more on "remember more" (target)
   zoom     2:49  number-line → marker 64 on "64" (box)
-  zoom     4:10  bar-chart → bar Seconds inste… on "1.8" (target)
   zoom     4:23  unit-grid → count 62 in 100 on "62" (box)
   zoom     5:35  process-steps → step They wait on "wait" (target)
-  zoom     8:24  bar-chart → bar Dollars into… on "2,400" (target)
+  zoom     8:24  bar-chart → bar Dollars into… on "2,400" (box)
   zoom     8:38  process-steps → step Hardware on "hardware" (target)
   zoom     10:14  unit-grid → count 71 in 100 on "71" (box)
   zoom     13:29  process-steps → step Benchmark chart second on "benchmark chart second" (target)
