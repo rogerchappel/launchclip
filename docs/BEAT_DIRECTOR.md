@@ -25,6 +25,7 @@ states (module, params, change) → shots of 2–4 states → chapters on a plat
 | File | What it owns |
 |---|---|
 | `kit/core/beat-director.mjs` | Clauses, facts, evidence matching, directing a chunk, the whole transcript, the report, conversions, dry runs |
+| `kit/core/beat-camera.mjs` | The camera pass: each shot's entry move, zooms inside a card, an overview per chapter (`planCamera`, `zoomSpots`, `cameraSummary`) |
 | `kit/core/visual-capabilities.mjs` | What each module can show, which captures it renders, its fallbacks, and params from a clause's facts |
 | `kit/core/cadence.mjs` | `CADENCE_BENCHMARK`, `CADENCE_TARGETS` per format, `cadenceTarget(format, style)`, `eventStats`, `cadenceGate`, `cadenceReport` |
 | `kit/core/long-form.mjs` | `longFormChunks`: the resumable planning chunks |
@@ -122,6 +123,46 @@ The director shows what the research supports, says what the narration says, and
 - **Pointing back.** A clause that points back ("that repository …") is about the claim of the repo or benchmark named last.
 - **Paired figures.** A paired series is titled by what it measures ("Price per million tokens", "Tokens for $10", "Terminal-Bench 4.0"), never a clause fragment. What one budget buys from two options is a grid race of what it buys. A hero figure is labelled by what it measures or who it belongs to.
 - **Code in PRs.** A PR or commit card shows the file whose patch holds the model id the research names (`src/research/evidence_data.js`, `modelIds`), highlighted. It's no longer the PR's first file.
+
+## Camera
+
+`directLongForm` ends with a camera pass (`kit/core/beat-camera.mjs`, wave 3 part C), so every explainer gets it without hand-placing moves. `camera: false` skips it.
+
+- **Entries.** Every shot after the first gets `shot.camera = {type, dur, direction?, why}`:
+  - a shot on the same topic family as the card before it pushes in (0.55 s);
+  - a new topic whip-pans (0.45 s), and every third sideways move orbits instead (0.6 s), with the direction cycling right, down, left, up;
+  - a chapter opens on a pull (0.6 s).
+
+  **Balance.** After two push-ins in a row, the next entry is a pull, so the world zoom stays in range.
+- **Zooms.** `state.zooms = [{at, until, word, element, target | box}]` sits on the first state of a card, a state that puts a card up, along with the focus, hold and guide states that carry it. Times are absolute seconds. A zoom fires when a narrated word names something the card shows:
+  - a bar's label or value, on `bar-chart` or `glass-bars-3d`;
+  - a table or leaderboard row;
+  - a process step;
+  - a highlighted excerpt line;
+  - a scatter point;
+  - a number-line marker;
+  - a unit-grid group's count;
+  - a grid-race racer;
+  - a token;
+  - a word on the focused diff line.
+
+  A value match beats a label match. A label made only of filler words ("Of them") never matches. The 7 state-target modules (`shot-states.mjs` `STATE_MODULES`) get `target` (the item index). The rest get a `box`: the union of the element rects in the resolved view, padded, inside the card. A box that covers more than half the card is dropped. So is a card with only one bar, row or group, because that zoom would be the whole card.
+
+  Rules:
+  - The zoom starts 0.6 s after the card's entry move.
+  - It eases out (`until`) after 2.2 s, at least 0.5 s before the card ends.
+  - Two zooms on one card have a zoom-out of at least 0.6 s between them, and a card takes at most two.
+  - No card under 3 s gets one.
+  - Zooms are at least 12 s apart, and at most 3 fall in any minute.
+
+  The rate is capped at 3 a minute, but the real rate depends on how many cards show items. The 16-minute fixture, mostly title cards, gets 0.74 a minute.
+- **Overviews.** Each chapter of 4 or more shots gets one, except the cold open (chapter 1 of several). It sits on the shot that a recap line ("Either way…", "So…", "That is…") in the chapter's back half opens, or on the chapter's next shot after that line. With no recap line, it goes on the first shot of the next chapter. Its shape is `shot.camera = {type: 'overview', dur: 2.6, span: 'chapter', hold: 0.6, chapter}`. There is at most one a minute, and never one into the story's first shot.
+- **Report.** The summary line counts zooms and overviews. A `camera:` line gives the entry mix, the longest push-in run and the zoom rate, followed by one line per zoom and per overview (`map.report.camera`).
+- **Stories.** On a long-form map, `beatMapToStory` writes `camera: {mode: 'world', layout: 'path', spacing: 0.14, parallax: true}`:
+  - Each shot's first scene enters on its move. Cards inside a shot keep the rack focus.
+  - Each card's zooms become `scene.zooms` on the story clock, clear of the scene's entry, and only on scenes of 3 s or more.
+  - An overview enters on a pull when the kit has no `overview` transition yet, or when its chapter has fewer than 3 scenes in the window. When the window holds a single chapter, `span` becomes the scene count.
+  - `camera: false` keeps hard cuts.
 
 ## Structure
 
