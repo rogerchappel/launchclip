@@ -1482,6 +1482,24 @@ params:
 events: build, highlight, marker-0, marker-1, marker-2, marker-3
 variants: bars (default), staircase
 
+### coin-stack (keeps captions)
+Stacks sized by value under a slow orbiting camera: 1–4 stacks of gold coins ("$1 vs $10"), or of glass token discs (variant cylinders, "×3 more tokens"), each coin dropping onto its stack in turn while the value counts up, with an optional callout ("×10") beside one stack.
+params:
+- stacks: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value), count? 1–16 (coins in the stack; default value / per)}] 1–4
+- per: the value of one coin (default: the tallest stack has 12; at most 16 per stack)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the stack that glows (optional)
+- callout: {text ≤ 10 ("×10"), stack? (index or label, default the last), at?} a big number beside a stack (event callout)
+- tone: coin or glass tone: primary | accent | paper | #rrggbb (default primary for coins, accent for cylinders)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: first drop: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, callout
+variants: coins (default), cylinders
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1624,6 +1642,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
 | glass-bars-3d | 2 s | 0.5 s | scene − 0.65 s | bars grow left to right within about 1.6 s from at; highlight and marker hops follow the build; the camera orbits for the whole scene |
+| coin-stack | 2 s | 0.5 s | scene − 0.65 s | coins drop one per stack level, all stacks together, within about 2 s from at; the callout follows the build |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

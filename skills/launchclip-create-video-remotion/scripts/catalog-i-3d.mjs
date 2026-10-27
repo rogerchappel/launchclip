@@ -9,5 +9,6 @@
 // ("Catalogue I: 3D data objects").
 
 import {BAR_MODULES} from './catalog-i-3d-bars.mjs';
+import {STACK_MODULES} from './catalog-i-3d-stacks.mjs';
 
-export const OBJECT_MODULES = [...BAR_MODULES];
+export const OBJECT_MODULES = [...BAR_MODULES, ...STACK_MODULES];

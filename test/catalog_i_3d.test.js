@@ -117,3 +117,19 @@ test('glass-bars-3d: data, highlight, marker and reference are validated', () =>
   assert.deepEqual([...hs].sort((a, c) => c - a), hs, 'staircase steps descend');
   assert.deepEqual(stairs.events.filter(e => e.name.startsWith('marker-')).map(e => e.name), ['marker-0', 'marker-1', 'marker-2']);
 });
+
+test('coin-stack: counts follow per, are capped, and every coin lands on its stack', () => {
+  const r = params => resolve('coin-stack', params);
+  assert.throws(() => r({stacks: [{label: 'A', value: 1}, {label: 'B', value: 100}], per: 1}), /params\.per must be between 6\.25 and 100/);
+  assert.throws(() => r({stacks: [{label: 'A', value: 1, count: 17}]}), /params\.stacks\[0\]\.count/);
+  assert.throws(() => r({stacks: [{label: 'A', value: 0}]}), /params\.stacks needs at least one value above 0/);
+  const model = r(SAMPLES['coin-stack']);
+  assert.deepEqual(model.content.stacks.map(s => s.coins), [1, 10]);
+  const state = frameState(catalogHTimeline(model), model.motion.exitStart - 0.01);
+  for (const [i, s] of model.content.stacks.entries()) for (let k = 0; k < s.coins; k++) {
+    const props = state.get(`scene-c${i}-${k}`);
+    assert.equal(props.y, 0, `coin ${i}/${k} landed`);
+    assert.equal(props.scaleY, 1);
+  }
+  assert.ok(model.events.some(e => e.name === 'callout'));
+});
