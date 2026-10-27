@@ -20,7 +20,8 @@ import {el} from '../catalog-b-view.mjs';
 import {AGE_SHAPE, BUILD_SHAPE, HEIGHT_SCALE, expressionParts, rigGeometry} from './rig.mjs';
 import {GREY_HAIR} from './palette.mjs';
 import {asShadow} from './bounds.mjs';
-import {backOfHead, backView, faceView, frontView, gazeJoint, hairBack, hairFront, joint, outfit, toonColors} from './toon.mjs';
+import {GAZE} from './actions.mjs';
+import {HEAD_TURN, asHead, backOfHead, backView, faceView, frontView, gazeJoint, hairBack, hairFront, joint, outfit, toonColors, turnJoint} from './toon.mjs';
 import {aidSide, backpackBack, covers, has, headwear, heldAid, longHem, prostheticForearm, prostheticShin, wheelchair, wristWear} from './toon-wear.mjs';
 import {capsulePath, darken, ellipsePath, group, lighten, luma, mix, noise, pathNode, placedGroup, r1, radialGradient, strokeLine} from './pens.mjs';
 import {realPen} from './real-pen.mjs';
@@ -284,8 +285,12 @@ function ears(ctx) {
   if (p.hair.style === 'headscarf') return [];
   const {rx, ry, cy} = g.head;
   const out = [];
+  // A head that turns to look (look.turn: its widest move) slides over the
+  // ears; their roots reach in under it by as much, so it never parts from them.
+  const root = ctx.look.turn ?? 0;
   for (const sx of [-1, 1]) {
-    const d = `M${r1(sx * rx * 0.94)} ${r1(cy - ry * 0.16)}C${r1(sx * rx * 1.2)} ${r1(cy - ry * 0.26)} ${r1(sx * rx * 1.24)} ${r1(cy + ry * 0.3)} ${r1(sx * rx * 0.96)} ${r1(cy + ry * 0.36)}Z`;
+    const tuck = root ? [`L${r1(sx * (rx * 0.96 - root))} ${r1(cy + ry * 0.36)}L${r1(sx * (rx * 0.94 - root))} ${r1(cy - ry * 0.16)}`] : [];
+    const d = `M${r1(sx * rx * 0.94)} ${r1(cy - ry * 0.16)}C${r1(sx * rx * 1.2)} ${r1(cy - ry * 0.26)} ${r1(sx * rx * 1.24)} ${r1(cy + ry * 0.3)} ${r1(sx * rx * 0.96)} ${r1(cy + ry * 0.36)}${tuck.join('')}Z`;
     out.push(P.piece(d, c.skin, {rim: false, width: 1.4}));
     out.push(strokeLine(`M${r1(sx * rx * 1.0)} ${r1(cy - ry * 0.1)}C${r1(sx * rx * 1.14)} ${r1(cy - ry * 0.12)} ${r1(sx * rx * 1.12)} ${r1(cy + ry * 0.2)} ${r1(sx * rx * 1.0)} ${r1(cy + ry * 0.24)}`, darken(c.skin, 0.32), 1.4, {strokeOpacity: 0.7}));
     if (has(p, 'earrings')) out.push(el('ellipse', null, null, [], {cx: r1(sx * rx * 1.03), cy: r1(cy + ry * 0.42), rx: 2.6, ry: 2.6, fill: '#e3c068', stroke: '#9c7b2c', strokeWidth: 0.8}));
@@ -294,7 +299,10 @@ function ears(ctx) {
   return out;
 }
 
-function facialHair(ctx) {
+// Facial hair. jaw: as toon.mjs facial (undefined: all; 'only': the hair
+// along the jaw, chin and temples, which stays on a turned head; 'none': the
+// moustache, which moves with the mouth).
+function facialHair(ctx, {jaw: part} = {}) {
   const {g, p, P, c, look} = ctx;
   const {rx, ry, cy} = g.head;
   const out = [];
@@ -302,15 +310,16 @@ function facialHair(ctx) {
   const mouthHole = `M${r1(-look.mw * 0.62)} ${r1(look.mouthY)}C${r1(-look.mw * 0.62)} ${r1(look.mouthY - ry * 0.12)} ${r1(look.mw * 0.62)} ${r1(look.mouthY - ry * 0.12)} ${r1(look.mw * 0.62)} ${r1(look.mouthY)}C${r1(look.mw * 0.62)} ${r1(look.mouthY + ry * 0.12)} ${r1(-look.mw * 0.62)} ${r1(look.mouthY + ry * 0.12)} ${r1(-look.mw * 0.62)} ${r1(look.mouthY)}Z`;
   const jaw = (top, chin) => `M${r1(-rx * 0.97)} ${r1(cy + ry * top)}C${r1(-rx * 0.96)} ${r1(cy + ry * 0.5)} ${r1(-rx * 0.6)} ${r1(cy + ry * chin)} 0 ${r1(cy + ry * chin)}C${r1(rx * 0.6)} ${r1(cy + ry * chin)} ${r1(rx * 0.96)} ${r1(cy + ry * 0.5)} ${r1(rx * 0.97)} ${r1(cy + ry * top)}L${r1(rx * 0.84)} ${r1(cy + ry * (top + 0.06))}C${r1(rx * 0.7)} ${r1(cy + ry * 0.4)} ${r1(rx * 0.34)} ${r1(look.mouthY - ry * 0.1)} 0 ${r1(look.mouthY - ry * 0.16)}C${r1(-rx * 0.34)} ${r1(look.mouthY - ry * 0.1)} ${r1(-rx * 0.7)} ${r1(cy + ry * 0.4)} ${r1(-rx * 0.84)} ${r1(cy + ry * (top + 0.06))}Z`;
   const tex = (d) => [P.piece(d, hair, {rule: 'evenodd', width: 1.4}), ...P.strands(d, hair, 'evenodd', 'beard')];
-  if (has(p, 'stubble')) out.push(pathNode(`${jaw(0.08, 1.04)}${mouthHole}`, {fill: mix(hair, c.skin, 0.4), opacity: 0.38, fillRule: 'evenodd'}));
-  if (has(p, 'beard')) out.push(...tex(`${jaw(0.02, 1.14)}${mouthHole}`));
-  if (has(p, 'long-beard')) out.push(...tex(`${jaw(0.02, 1.75)}${mouthHole}`));
-  if (has(p, 'goatee')) out.push(...tex(`M${r1(-look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Q0 ${r1(look.mouthY + ry * 0.06)} ${r1(look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Q${r1(look.mw * 0.42)} ${r1(cy + ry * 1.08)} 0 ${r1(cy + ry * 1.1)}Q${r1(-look.mw * 0.42)} ${r1(cy + ry * 1.08)} ${r1(-look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Z`));
-  if (has(p, 'moustache') || has(p, 'goatee') || has(p, 'beard') || has(p, 'long-beard')) {
+  const onJaw = part !== 'none', onFace = part !== 'only';
+  if (onJaw && has(p, 'stubble')) out.push(pathNode(`${jaw(0.08, 1.04)}${mouthHole}`, {fill: mix(hair, c.skin, 0.4), opacity: 0.38, fillRule: 'evenodd'}));
+  if (onJaw && has(p, 'beard')) out.push(...tex(`${jaw(0.02, 1.14)}${mouthHole}`));
+  if (onJaw && has(p, 'long-beard')) out.push(...tex(`${jaw(0.02, 1.75)}${mouthHole}`));
+  if (onJaw && has(p, 'goatee')) out.push(...tex(`M${r1(-look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Q0 ${r1(look.mouthY + ry * 0.06)} ${r1(look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Q${r1(look.mw * 0.42)} ${r1(cy + ry * 1.08)} 0 ${r1(cy + ry * 1.1)}Q${r1(-look.mw * 0.42)} ${r1(cy + ry * 1.08)} ${r1(-look.mw * 0.5)} ${r1(look.mouthY + ry * 0.1)}Z`));
+  if (onFace && (has(p, 'moustache') || has(p, 'goatee') || has(p, 'beard') || has(p, 'long-beard'))) {
     const y = look.mouthY - ry * 0.05;
     out.push(...tex(`M${r1(-look.mw * 0.66)} ${r1(y + ry * 0.04)}Q${r1(-look.mw * 0.3)} ${r1(y - ry * 0.12)} 0 ${r1(y - ry * 0.06)}Q${r1(look.mw * 0.3)} ${r1(y - ry * 0.12)} ${r1(look.mw * 0.66)} ${r1(y + ry * 0.04)}Q${r1(look.mw * 0.3)} ${r1(y + ry * 0.01)} 0 ${r1(y + ry * 0.02)}Q${r1(-look.mw * 0.3)} ${r1(y + ry * 0.01)} ${r1(-look.mw * 0.66)} ${r1(y + ry * 0.04)}Z`));
   }
-  if (has(p, 'sideburns')) for (const sx of [-1, 1]) out.push(...tex(`M${r1(sx * rx * 0.98)} ${r1(cy - ry * 0.18)}L${r1(sx * rx * 0.82)} ${r1(cy - ry * 0.18)}L${r1(sx * rx * 0.84)} ${r1(cy + ry * 0.3)}L${r1(sx * rx * 0.98)} ${r1(cy + ry * 0.26)}Z`));
+  if (onJaw && has(p, 'sideburns')) for (const sx of [-1, 1]) out.push(...tex(`M${r1(sx * rx * 0.98)} ${r1(cy - ry * 0.18)}L${r1(sx * rx * 0.82)} ${r1(cy - ry * 0.18)}L${r1(sx * rx * 0.84)} ${r1(cy + ry * 0.3)}L${r1(sx * rx * 0.98)} ${r1(cy + ry * 0.26)}Z`));
   return out;
 }
 
@@ -332,7 +341,7 @@ function eyewear(ctx) {
     ...[-1, 1].map(sx => pathNode(lens(sx), {fill: dark ? '#1b1d24' : '#ffffff', fillOpacity: dark ? 0.92 : 0.12, stroke: frame, strokeWidth: kind === 'cat-eye-glasses' ? 2.8 : 2, strokeLinejoin: 'round'})),
     ...(dark ? [-1, 1].map(sx => strokeLine(`M${r1(sx * ex - w * 0.5)} ${r1(eyeY - h * 0.3)}L${r1(sx * ex - w * 0.1)} ${r1(eyeY - h * 0.6)}`, '#ffffff', 1.4, {strokeOpacity: 0.35})) : []),
     strokeLine(`M${r1(-ex + w)} ${r1(eyeY - h * 0.45)}Q0 ${r1(eyeY - h * 0.8)} ${r1(ex - w)} ${r1(eyeY - h * 0.45)}`, frame, 1.8),
-    ...[-1, 1].map(sx => strokeLine(`M${r1(sx * (ex + w))} ${r1(eyeY - h * 0.6)}L${r1(sx * ctx.g.head.rx * 0.98)} ${r1(eyeY - h * 0.5)}`, frame, 1.8))
+    ...[-1, 1].map(sx => strokeLine(`M${r1(sx * (ex + w))} ${r1(eyeY - h * 0.6)}L${r1(sx * (ctx.g.head.rx * 0.98 - (ctx.look.reach ?? 0)))} ${r1(eyeY - h * 0.5)}`, frame, 1.8))
   ];
 }
 
@@ -482,13 +491,24 @@ export function drawReal(params, colors, {id, joints, expression = 'neutral', ex
   const onTorso = kids => group(kids, {transform: `scale(${r1((g.shoulder / toonG.shoulder) * 920) / 1000} ${r1((g.torso / toonG.torso) * 1000) / 1000})`});
 
   const faces = [...new Set([expression, ...expressions])].map(name => faceNode(ctx, name)).filter(Boolean);
+  // A look turns this head as it would the toon head, in proportion to its
+  // width; glasses' arms stop short of the ears by the face's widest move.
+  const size = rx / t.rx;
+  look.reach = gaze ? HEAD_TURN.face * GAZE.quarter * size : 0;
+  look.turn = gaze ? HEAD_TURN.head * GAZE.quarter * size + 1 : 0;
+  const earNodes = ears(ctx);
+  const outline = asHead(P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}));
+  const jaw = gaze ? facialHair(ctx, {jaw: 'only'}) : [];
+  const features = [...faceBase(ctx), ...facialHair(ctx, gaze ? {jaw: 'none'} : {}), ...faces, ...eyewear(ctx)];
   const headKids = [
-    ...ears(ctx),
-    P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}),
-    ...faceView(ctx, turns, gazeJoint(ctx, joints, gaze, [...faceBase(ctx), ...facialHair(ctx), ...faces, ...eyewear(ctx)])),
-    ...(covers(params) ? [] : [onHead(hairFront(toonCtx))]),
-    ...backView(ctx, turns, () => [P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}), ...(params.hair.style === 'bald' ? [] : [onHead(backOfHead(toonCtx).slice(1))])]),
-    onHead(headwear(toonCtx), 1.02)
+    ...earNodes,
+    ...turnJoint(ctx, joints, gaze, [
+      outline,
+      ...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, joints, gaze, features, size)]),
+      ...(covers(params) ? [] : [onHead(hairFront(toonCtx))]),
+      ...backView(ctx, turns, () => [P.piece(headOutline(g.head, params.build === 'round' || params.build === 'stocky' ? 1.08 : 1), c.skin, {width: 1.6}), ...(params.hair.style === 'bald' ? [] : [onHead(backOfHead(toonCtx).slice(1))])]),
+      onHead(headwear(toonCtx), 1.02)
+    ], size)
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);

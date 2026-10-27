@@ -58,12 +58,13 @@ function shapePoints(node) {
 
 const UNDRAWN = new Set(['defs', 'clipPath', 'mask', 'linearGradient', 'radialGradient', 'pattern']);
 
-/** {left, top, right, bottom} of a drawing in rig units. */
-export function drawingBounds(drawing) {
-  const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
-  const walk = (node, m) => {
+// Visits every drawn shape the match covers: visit(node, matrix), the matrix
+// placing the node's own coordinates in the drawing.
+function eachShape(drawing, match, hidden, visit, {clipped = true} = {}) {
+  const walk = (node, m, counted) => {
     if (!node || typeof node !== 'object') return;
-    if (node.style?.opacity === 0 || node.attrs?.opacity === 0 || node[SHADOW]) return;
+    if ((!hidden && (node.style?.opacity === 0 || node.attrs?.opacity === 0)) || node[SHADOW]) return;
+    if (!clipped && node.attrs?.clipPath) return;
     // Paint servers and clips draw nothing themselves.
     if (UNDRAWN.has(node.tag)) return;
     let here = m;
@@ -75,13 +76,91 @@ export function drawingBounds(drawing) {
       here = multiply(here, rotate(t.rotation ?? 0));
       here = multiply(here, scale(t.scaleX ?? 1, t.scaleY ?? 1));
     } else if (node.attrs?.transform) here = multiply(m, svgMatrix(node.attrs.transform));
+    const inside = counted || match(node);
+    if (inside) visit(node, here);
+    for (const child of node.children ?? []) walk(child, here, inside);
+  };
+  walk(drawing, IDENTITY, false);
+}
+
+/** {left, top, right, bottom} of a drawing in rig units. */
+export function drawingBounds(drawing) {
+  return partBounds(drawing, () => true);
+}
+
+/**
+ * {left, top, right, bottom} in rig units of the parts of a drawing that
+ * match (match(node) → boolean; a match counts with everything inside it),
+ * placed by every joint and group above them. Nothing matched: infinite.
+ * hidden: true counts parts hidden at the start too (an open mouth, the
+ * other expressions' faces), as the op list may show them.
+ */
+export function partBounds(drawing, match, {hidden = false} = {}) {
+  const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
+  eachShape(drawing, match, hidden, (node, m) => {
     for (const [x, y] of shapePoints(node)) {
-      const [px, py] = apply(here, x, y);
+      const [px, py] = apply(m, x, y);
       out.left = Math.min(out.left, px); out.right = Math.max(out.right, px);
       out.top = Math.min(out.top, py); out.bottom = Math.max(out.bottom, py);
     }
-    for (const child of node.children ?? []) walk(child, here);
-  };
-  walk(drawing, IDENTITY);
+  });
   return out;
 }
+
+/**
+ * Points along a path's outline (absolute M, L, Q, C, Z): its corners and
+ * each curve sampled. → [[x, y]]
+ */
+export function pathOutline(d, steps = 12) {
+  const tokens = String(d).match(/[MLQCZ]|-?\d*\.?\d+(?:e-?\d+)?/gi) ?? [];
+  const out = [];
+  let i = 0, cmd = null, cur = [0, 0], start = [0, 0];
+  const num = () => Number(tokens[i++]);
+  const curve = (f) => { for (let k = 1; k <= steps; k++) out.push(f(k / steps)); };
+  while (i < tokens.length) {
+    if (/^[MLQCZ]$/i.test(tokens[i])) cmd = tokens[i++].toUpperCase();
+    if (cmd === 'M') { cur = start = [num(), num()]; out.push(cur); cmd = 'L'; }
+    else if (cmd === 'L') { cur = [num(), num()]; out.push(cur); }
+    else if (cmd === 'Q') {
+      const [p0, p1, p2] = [cur, [num(), num()], [num(), num()]];
+      curve(t => [0, 1].map(k => (1 - t) ** 2 * p0[k] + 2 * (1 - t) * t * p1[k] + t * t * p2[k]));
+      cur = p2;
+    } else if (cmd === 'C') {
+      const [p0, p1, p2, p3] = [cur, [num(), num()], [num(), num()], [num(), num()]];
+      curve(t => [0, 1].map(k => (1 - t) ** 3 * p0[k] + 3 * (1 - t) ** 2 * t * p1[k] + 3 * (1 - t) * t * t * p2[k] + t ** 3 * p3[k]));
+      cur = p3;
+    } else if (cmd === 'Z') { cur = start; cmd = null; }
+    else throw new Error(`character bounds: unsupported path ${d}`);
+  }
+  return out;
+}
+
+/**
+ * The shapes of the matching parts, each with points along its drawn edge
+ * placed in the drawing (an ellipse's edge or a path's outline, sampled,
+ * with half its stroke; tighter than partBounds, which counts a curve's
+ * control points). Clipped groups are left out: they draw only inside
+ * their clip, a shape drawn beside them. matrix places the node's own
+ * coordinates (placePoint). → [{node, points, matrix}]
+ */
+export function partShapes(drawing, match, {hidden = false} = {}) {
+  const out = [];
+  eachShape(drawing, match, hidden, (node, m) => {
+    const a = node.attrs ?? {};
+    const pad = a.stroke === 'none' ? 0 : Number(a.strokeWidth ?? 0) / 2;
+    let local = [];
+    if (node.tag === 'ellipse' || node.tag === 'circle') {
+      const rx = +(a.rx ?? a.r) + pad, ry = +(a.ry ?? a.r) + pad;
+      local = Array.from({length: 24}, (_, i) => [+a.cx + rx * Math.cos(i * Math.PI / 12), +a.cy + ry * Math.sin(i * Math.PI / 12)]);
+    } else if (node.tag === 'path') {
+      const ring = Array.from({length: 8}, (_, i) => [pad * Math.cos(i * Math.PI / 4), pad * Math.sin(i * Math.PI / 4)]);
+      local = pathOutline(a.d).flatMap(([x, y]) => (pad ? ring.map(([dx, dy]) => [x + dx, y + dy]) : [[x, y]]));
+    } else local = shapePoints(node);
+    if (local.length) out.push({node, matrix: m, points: local.map(([x, y]) => apply(m, x, y))});
+  }, {clipped: false});
+  return out;
+}
+
+/** A point in a node's own coordinates placed by a partShapes matrix. → [x, y] */
+export const placePoint = (matrix, x, y) => apply(matrix, x, y);
+

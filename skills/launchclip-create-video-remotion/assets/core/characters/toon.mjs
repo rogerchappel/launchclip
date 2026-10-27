@@ -18,6 +18,8 @@
 //   C-head, C-hb (head and the hair behind it: tilt, headY), C-headidle, C-hbidle
 //   C-arm-l / C-arm-r, C-fore-l / C-fore-r, C-finger-l / C-finger-r
 //   C-leg-l / C-leg-r (and legScale), C-shin-l / C-shin-r
+//   C-turn (the head turned to look: across, nod), C-gaze (the features
+//     across the face; both only for a character with a target)
 //   C-face-<expression>, C-eyes-<expression> (blinks),
 //   C-mouth-<expression> / C-open-<expression> (closed / open mouth)
 //
@@ -337,17 +339,24 @@ export function face(ctx, name) {
   ]);
 }
 
-export function facial(ctx) {
+/**
+ * The face's marks and facial hair. jaw: undefined draws them all; 'only'
+ * just the hair that follows the jaw (beard, stubble), which stays on the
+ * head when the face turns to look (turnedHead); 'none' all but that.
+ */
+export function facial(ctx, {jaw: part} = {}) {
   const {g, p, P} = ctx;
   const {rx, ry, cy} = g.head;
   const out = [];
-  if (p.accessories.includes('freckles')) for (const [x, y] of [[-48, 26], [-38, 32], [-56, 34], [48, 26], [38, 32], [56, 34]]) out.push(P.ellipse(x, cy + y, 2.6, 2.6, 'skinShade', {outline: false}));
+  const marks = part !== 'only', jawHair = part !== 'none';
+  if (marks && p.accessories.includes('freckles')) for (const [x, y] of [[-48, 26], [-38, 32], [-56, 34], [48, 26], [38, 32], [56, 34]]) out.push(P.ellipse(x, cy + y, 2.6, 2.6, 'skinShade', {outline: false}));
   // Beards follow the jaw below the cheeks; the mouth stays clear so the
   // face still acts.
   const jaw = (side, chin, inner) => `M${-rx + 3} ${cy + side}C${-rx + 2} ${cy + 80} ${-44} ${cy + ry + chin} 0 ${cy + ry + chin}C44 ${cy + ry + chin} ${rx - 2} ${cy + 80} ${rx - 3} ${cy + side}L${rx - 16} ${cy + side + 8}C${rx - 22} ${cy + 46} 40 ${cy + inner} 0 ${cy + inner}C-40 ${cy + inner} ${-rx + 22} ${cy + 46} ${-rx + 16} ${cy + side + 8}Z`;
   const hole = `M-29 ${cy + 47}C-29 ${cy + 35} 29 ${cy + 35} 29 ${cy + 47}C29 ${cy + 64} -29 ${cy + 64} -29 ${cy + 47}Z`;
-  if (p.accessories.includes('beard')) out.push(P.shape(`${jaw(40, 6, 38)}${hole}`, 'hair', {rule: 'evenodd'}));
-  if (p.accessories.includes('stubble')) out.push(P.shape(`${jaw(46, 0, 42)}${hole}`, 'stubble', {outline: false, rule: 'evenodd', opacity: 0.55}));
+  if (jawHair && p.accessories.includes('beard')) out.push(P.shape(`${jaw(40, 6, 38)}${hole}`, 'hair', {rule: 'evenodd'}));
+  if (jawHair && p.accessories.includes('stubble')) out.push(P.shape(`${jaw(46, 0, 42)}${hole}`, 'stubble', {outline: false, rule: 'evenodd', opacity: 0.55}));
+  if (!marks) return out;
   if (p.accessories.includes('moustache')) out.push(P.shape(`M-27 ${cy + 40}Q-13 ${cy + 27} 0 ${cy + 34}Q13 ${cy + 27} 27 ${cy + 40}Q13 ${cy + 45} 0 ${cy + 40}Q-13 ${cy + 45} -27 ${cy + 40}Z`, 'hair', {width: 5}));
   out.push(P.line(`M-3 ${cy + 14}Q7 ${cy + 26} -4 ${cy + 30}`, 'skinShade', 5.5));
   return out;
@@ -400,14 +409,16 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const P = makePen(c, {id, light});
   const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing};
   const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
-  const features = [...facial(ctx), ...faceExtras(ctx), ...faceNodes, ...glasses(ctx)];
+  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
   const headKids = [
     ...ears(ctx),
-    P.shape(headShape(g), 'skin'),
-    ...faceView(ctx, turns, gazeJoint(ctx, joints, gaze, features)),
-    ...(covers(params) ? [] : hairFront(ctx)),
-    ...backView(ctx, turns, () => backOfHead(ctx)),
-    ...headwear(ctx)
+    ...turnJoint(ctx, joints, gaze, [
+      asHead(P.shape(headShape(g), 'skin')),
+      ...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, joints, gaze, features)]),
+      ...(covers(params) ? [] : hairFront(ctx)),
+      ...backView(ctx, turns, () => backOfHead(ctx)),
+      ...headwear(ctx)
+    ])
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
@@ -436,12 +447,67 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
 }
 
 /**
- * The face's features on a `gaze` joint (a character with a target): they
- * slide toward what it looks at, which reads as the head turning. Without a
- * gaze the features are drawn as before.
+ * How a look (the gaze offset, actions.mjs GAZE, in toon head units) turns
+ * the head: a share of it moves the head itself toward the target (`turn`:
+ * head across, nod up or down), and a further share moves the features
+ * across the face (`gaze`, inside the turn; never up or down, so the mouth
+ * keeps clear of the chin). The face share stays well short of the face's
+ * edge, so every feature keeps inside the head's outline at the widest look,
+ * in every style.
  */
-export function gazeJoint(ctx, joints, on, features) {
-  return on ? [joint(ctx, 'gaze', 0, 0, {x: joints.gazeX ?? 0, y: joints.gazeY ?? 0}, features)] : features;
+export const HEAD_TURN = Object.freeze({head: 0.35, nod: 0.5, face: 0.4});
+
+/** Marks a node as the head's outline (for bounds checks); a symbol, so drawings stay byte-identical. */
+export const HEAD = Symbol('character-head');
+export const asHead = node => (node && typeof node === 'object' ? Object.assign(node, {[HEAD]: true}) : node);
+
+const k3 = value => Math.round(value * 1000) / 1000;
+
+// A joint at the head's origin whose animated offset counts a share of its
+// value ({x, y}): a static scale round the joint, undone inside it. Both
+// renderers apply group scales the same way (view.mjs), so the op list is
+// the same for every style.
+function sharedJoint(ctx, part, share, values, children) {
+  const kx = k3(share.x), ky = k3(share.y);
+  if (kx === 1 && ky === 1) return joint(ctx, part, 0, 0, values, children);
+  const undo = value => Math.round(10000 / value) / 10000;
+  return group([joint(ctx, part, 0, 0, values, [group(children, {transform: `scale(${undo(kx)} ${undo(ky)})`})])], {transform: `scale(${kx} ${ky})`});
+}
+
+/**
+ * The head of a character with a target turns toward it: everything drawn
+ * on the head (outline, the face, hair over it, headwear) sits on a `turn`
+ * joint that moves HEAD_TURN.head of the gaze across and HEAD_TURN.nod of it
+ * up or down. The ears stay where they are, so the far ear slips behind the
+ * turned head and the near one shows, as a real turn does. size: the head's
+ * width over the toon head's (the gaze is measured on the toon head).
+ * Without a gaze, the parts as before.
+ */
+export function turnJoint(ctx, joints, on, parts, size = 1) {
+  return on ? [sharedJoint(ctx, 'turn', {x: HEAD_TURN.head * size, y: HEAD_TURN.nod * size}, {x: joints.gazeX ?? 0, y: joints.gazeY ?? 0}, parts)] : parts;
+}
+
+/**
+ * The face's features on a `gaze` joint (a character with a target), inside
+ * the turned head: they move HEAD_TURN.face of the gaze further across the
+ * face toward what it looks at, narrowed for a three-quarter view
+ * (gazeScale). size as turnJoint. Without a gaze the features are drawn as
+ * before.
+ */
+export function gazeJoint(ctx, joints, on, features, size = 1) {
+  return on ? [sharedJoint(ctx, 'gaze', {x: HEAD_TURN.face * size, y: 1}, {x: joints.gazeX ?? 0, scaleX: joints.gazeScale ?? 1}, features)] : features;
+}
+
+/**
+ * The face's parts for a look: hair on the jaw separately (it stays on the
+ * turned head, at its edge) from the features that move across the face.
+ * Without a gaze, all in the features, drawn in the order they always were.
+ * then(): the parts drawn after (faces, glasses).
+ */
+export function faceParts(ctx, on, then = () => []) {
+  if (!on) return {jaw: [], features: [...facial(ctx), ...faceExtras(ctx), ...then()]};
+  const jaw = [...facial(ctx, {jaw: 'only'}), ...faceExtras(ctx, {jaw: 'only'})];
+  return {jaw, features: [...facial(ctx, {jaw: 'none'}), ...faceExtras(ctx, {jaw: 'none'}), ...then()]};
 }
 
 /**

@@ -178,22 +178,44 @@ export function headwear(ctx) {
 // ---------------------------------------------------------------------------
 // Face extras
 
-export function faceExtras(ctx) {
+/**
+ * Wrinkles, sideburns, beards and marks. jaw: as toon.mjs facial ('only':
+ * the hair on the jaw, chin and temples, which stays on a turned head;
+ * 'none': the rest).
+ */
+export function faceExtras(ctx, {jaw: part} = {}) {
   const {g, p, P} = ctx;
-  const {rx, ry, cy} = g.head;
+  const {cy} = g.head;
   const out = [];
+  if (part === 'only') return [...jawExtras(ctx), ...goateeChin(ctx)];
   if (p.age === 'senior') {
     for (const sx of [-1, 1]) {
       out.push(P.line(`M${sx * 58} ${cy + 2}L${sx * 68} ${cy - 2}M${sx * 58} ${cy + 10}L${sx * 69} ${cy + 12}`, 'skinShade', 3.5));
       out.push(P.line(`M${sx * 30} ${cy + 30}Q${sx * 40} ${cy + 44} ${sx * 36} ${cy + 58}`, 'skinShade', 3.5));
     }
   }
-  if (has(p, 'sideburns')) for (const sx of [-1, 1]) out.push(P.shape(`M${sx * (rx - 18)} ${cy - 20}L${sx * (rx - 2)} ${cy - 20}L${sx * (rx - 4)} ${cy + 34}L${sx * (rx - 16)} ${cy + 30}Z`, 'hair', {width: 5}));
-  if (has(p, 'long-beard')) out.push(P.shape(`M${-rx + 3} ${cy + 36}C${-rx + 2} ${cy + 90} -54 ${cy + ry + 70} 0 ${cy + ry + 84}C54 ${cy + ry + 70} ${rx - 2} ${cy + 90} ${rx - 3} ${cy + 36}L${rx - 16} ${cy + 44}C${rx - 22} ${cy + 46} 40 ${cy + 36} 0 ${cy + 36}C-40 ${cy + 36} ${-rx + 22} ${cy + 46} ${-rx + 16} ${cy + 44}ZM-29 ${cy + 47}C-29 ${cy + 35} 29 ${cy + 35} 29 ${cy + 47}C29 ${cy + 64} -29 ${cy + 64} -29 ${cy + 47}Z`, 'hair', {rule: 'evenodd'}), P.line(`M-16 ${cy + ry + 20}Q-10 ${cy + ry + 50} -4 ${cy + ry + 66}M16 ${cy + ry + 20}Q10 ${cy + ry + 50} 4 ${cy + ry + 66}`, 'hairShade', 4));
-  if (has(p, 'goatee')) out.push(P.shape(`M-22 ${cy + 64}Q0 ${cy + 58} 22 ${cy + 64}Q20 ${cy + ry + 12} 0 ${cy + ry + 16}Q-20 ${cy + ry + 12} -22 ${cy + 64}Z`, 'hair', {width: 5}), P.shape(`M-25 ${cy + 40}Q-12 ${cy + 30} 0 ${cy + 35}Q12 ${cy + 30} 25 ${cy + 40}Q12 ${cy + 44} 0 ${cy + 40}Q-12 ${cy + 44} -25 ${cy + 40}Z`, 'hair', {width: 4.5}));
+  if (part !== 'none') out.push(...jawExtras(ctx), ...goateeChin(ctx));
+  if (has(p, 'goatee')) out.push(P.shape(`M-25 ${cy + 40}Q-12 ${cy + 30} 0 ${cy + 35}Q12 ${cy + 30} 25 ${cy + 40}Q12 ${cy + 44} 0 ${cy + 40}Q-12 ${cy + 44} -25 ${cy + 40}Z`, 'hair', {width: 4.5}));
   if (has(p, 'bindi')) out.push(P.ellipse(0, cy - 20, 5.5, 5.5, '#c8323c', {outline: false}));
   if (has(p, 'nose-stud')) out.push(P.ellipse(9, cy + 27, 3.4, 3.4, '#f3e6b4', {outline: false}));
   return out;
+}
+
+// Sideburns and a long beard: they follow the head's edge, not the features.
+function jawExtras(ctx) {
+  const {g, p, P} = ctx;
+  const {rx, ry, cy} = g.head;
+  const out = [];
+  if (has(p, 'sideburns')) for (const sx of [-1, 1]) out.push(P.shape(`M${sx * (rx - 18)} ${cy - 20}L${sx * (rx - 2)} ${cy - 20}L${sx * (rx - 4)} ${cy + 34}L${sx * (rx - 16)} ${cy + 30}Z`, 'hair', {width: 5}));
+  if (has(p, 'long-beard')) out.push(P.shape(`M${-rx + 3} ${cy + 36}C${-rx + 2} ${cy + 90} -54 ${cy + ry + 70} 0 ${cy + ry + 84}C54 ${cy + ry + 70} ${rx - 2} ${cy + 90} ${rx - 3} ${cy + 36}L${rx - 16} ${cy + 44}C${rx - 22} ${cy + 46} 40 ${cy + 36} 0 ${cy + 36}C-40 ${cy + 36} ${-rx + 22} ${cy + 46} ${-rx + 16} ${cy + 44}ZM-29 ${cy + 47}C-29 ${cy + 35} 29 ${cy + 35} 29 ${cy + 47}C29 ${cy + 64} -29 ${cy + 64} -29 ${cy + 47}Z`, 'hair', {rule: 'evenodd'}), P.line(`M-16 ${cy + ry + 20}Q-10 ${cy + ry + 50} -4 ${cy + ry + 66}M16 ${cy + ry + 20}Q10 ${cy + ry + 50} 4 ${cy + ry + 66}`, 'hairShade', 4));
+  return out;
+}
+
+// A goatee's tuft on the chin (its moustache is with the mouth).
+function goateeChin(ctx) {
+  const {g, p, P} = ctx;
+  const {ry, cy} = g.head;
+  return has(p, 'goatee') ? [P.shape(`M-22 ${cy + 64}Q0 ${cy + 58} 22 ${cy + 64}Q20 ${cy + ry + 12} 0 ${cy + ry + 16}Q-20 ${cy + ry + 12} -22 ${cy + 64}Z`, 'hair', {width: 5})] : [];
 }
 
 export function newGlasses(ctx) {
