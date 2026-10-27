@@ -68,6 +68,7 @@ function unitResolve(params, ctx) {
   const b = createHBase('unit-grid', params, ctx, {allowed: ['count', 'icon', 'title', 'source', 'tone', 'columns', 'groups', 'splitAt', 'highlight', 'highlightAt', 'at'], required: ['count'], variants: UNIT_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
+  if (Number.isInteger(p.count) && p.count > MAX_UNITS) check.fail('params.count', `is ${p.count}; unit-grid draws up to ${MAX_UNITS} units. For more, use cell-grid or grid-race, where one cell stands for an amount (up to 10,000 cells)`);
   const n = check.int(p.count, 'params.count', 1, MAX_UNITS);
   const icon = p.icon ?? 'person';
   if (icon !== 'person' && !isIcon(icon)) check.fail('params.icon', `must be "person" or an icon name from kit/core/icons.mjs (got ${JSON.stringify(icon)})`);

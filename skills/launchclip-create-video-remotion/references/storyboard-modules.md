@@ -126,6 +126,13 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | says "big X → fast, small X → slow" | flow-compare |
 | counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up | unit-grid |
 | states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label | number-line |
+| states a huge count of small things to feel its size ("1,050,000 tokens in context", "a million rows", "2 million parameters"): one dot per unit fills a bracketed field as the counter counts, pulling back from close-up dots | dot-field |
+| compares what the same budget or time buys from two options ("same $10 of output", "for the same money", "per dollar"): two unit grids fill side by side under live counters, "1 cell = X" | grid-race |
+| compares costs, money or task counts as amounts ("$1.01 vs $7.15 per task", "24 of 100 tasks passed", "grew $200,000 to $1M"): grids at one cell size whose heights compare, with ticks, a lit subset, stacked segments and a ratio ("≈9× cheaper") | cell-grid |
+| explains tokens or prices per token ("a token is part of a word", "$10 per million output tokens"): a real sentence split into token chips with each token's price, then the bills race to their totals | tokenizer |
+| reveals a headline number or word that should feel computed or leaked ("60%", "6.1", "AGI?"): it assembles from (or dissolves into) glowing particles | particle-text |
+| pits two labs, companies or products against each other by name ("OpenAI and Anthropic", "X takes on Y"): each mark drawn in particles inside an orbiting ring, side by side | particle-logo |
+| points at what comes next after a line-up ("the next flagship", "what's coming", "the model after this"): steps rise to a dashed box that a particle cloud gathers round | particle-cloud |
 | cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim | frame.sources (story overlay, not a scene module) |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
@@ -1462,6 +1469,112 @@ params:
 events: build, range-0, range-1, range-2, marker
 variants: ruler (default), track
 
+### dot-field (keeps captions)
+A huge count shown honestly ("1,050,000 tokens in context, 1 dot = 1 token"): one dot per unit (up to 2,000,000) fills a bracketed field in a scatter as the counter counts up, pulling back from close-up dots to a density field.
+params:
+- count: integer 100–2000000, one dot each
+- label: string ≤ 40 beside the counter ("tokens in context") (optional)
+- legend: string ≤ 32 at the top right (default "1 dot = 1 token")
+- tone: the dots: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- order: "scatter" (default; dots land all over) or "reading" (left to right, top to bottom)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- fillDuration: seconds the fill and the counter take (default: to just before the exit, 1.2–4.5 s)
+- at: field in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, filled
+variants: pull-back (default), still
+
+### particle-text (keeps captions)
+A number or short word (≤ 14 characters) in a dot-matrix face that assembles from a swirl of glowing particles, dissolves into drifting dust, or both ("60%" streaming in, then blowing away), with an optional kicker above and a line under.
+params:
+- text: string ≤ 14: A–Z, 0–9, space and $ % . , + - × ≈ / : ! ? # '
+- kicker: string ≤ 40 above (optional)
+- sub: string ≤ 60 under (optional)
+- mode: "assemble" (default), "dissolve" (starts whole) or "both"
+- tone: the particles: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- at: assemble start: seconds from scene start (optional; else a matching hit, else a default)
+- dissolveAt: the dissolve: seconds from scene start (optional; else a matching hit, else a default) (mode dissolve or both; default about 1.2 s before the exit)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: assemble, dissolve
+variants: led (default), dust
+
+### particle-logo (keeps captions)
+One or two marks drawn in glowing particles, each inside a tilted ring of orbiting particles, side by side with a name under each (two labs, two products). A mark is an icon, or a brand's own SVG path when the scene shows that party's real evidence.
+params:
+- logos: [{icon? (an icon name) | path? {d, viewBox "minX minY w h", rule? nonzero|evenodd}, label ≤ 24, sub? ≤ 36, tone?}] 1–2
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: ring (default), halo
+
+### particle-cloud (keeps captions)
+Up to four ascending steps (a model line-up) leading to a dashed target box ("Next flagship") that a drifting cloud of glowing particles streams up the steps to gather round; or the target alone, wrapped in its cloud.
+params:
+- target: {label ≤ 24, sub? ≤ 32} the dashed box the cloud gathers round
+- steps: [{label ≤ 24, sub? ≤ 32}] 1–4 steps below it, lowest first (the stairs variant draws them)
+- tone: the particles: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- at: first step in: seconds from scene start (optional; else a matching hit, else a default)
+- cloudAt: the cloud: seconds from scene start (optional; else a matching hit, else a default) (default 0.45 s after the last step)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, cloud
+variants: stairs (default), single
+
+### grid-race (keeps captions)
+Two unit grids racing side by side ("Same $10 of output": 1,000,000 vs 960,000 tokens), each cell one unit ("1 cell = 10,000 tokens"), up to 10000 cells a side, under live counters (and an optional spend counter) that count with the fill, then an optional ratio ("2× the tokens").
+params:
+- unit: number, what one cell stands for (10000)
+- racers: [{label ≤ 28, sub? ≤ 40, total (a multiple of unit up to 10,000 cells), spend? {total, format?}, tone?}] exactly 2
+- legend: string ≤ 40 (default "1 cell = <unit>")
+- format: the counters: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- suffix: string ≤ 16 after each counter ("tokens") (optional)
+- spendLabel: string ≤ 16 before each spend counter (default "spent")
+- pace: "together" (default: both finish together) or "same-rate" (one cell per unit of time; the bigger total takes longer)
+- ratio: {text ≤ 8 ("2×"), sub? ≤ 40, tone?, at?} after the finish (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- raceDuration: seconds (default: to just before the exit, 1–4 s)
+- at: labels in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, finish, ratio
+variants: columns (default), stacked
+
+### cell-grid (keeps captions)
+1–3 unit grids at one cell size (up to 10000 cells each), so their heights compare like bars ("1 cell = $0.01": $1.01 vs $7.15 a task), with stacked colour segments (a $200,000 stake under the growth), cells that tick to checkmarks (tasks passed), a lit subset, and a ratio note ("≈9× cheaper").
+params:
+- legend: string ≤ 40, what one cell is ("1 cell = $0.01")
+- grids: [{label ≤ 28, sub? ≤ 36, count (1–10000), value? ≤ 16 shown over the grid ("$7.15"), tone?, columns?, segments? [{count, tone, label? ≤ 28}] 1–4 from the first cell, ticks? {count, tone?, at?}, highlight? {count, tone?, at?}}] 1–3
+- order: "bottom-up" (default; cells stack like a bar) or "reading" (top row first, for task grids)
+- ratio: {text ≤ 8 ("≈9×"), sub? ≤ 40 ("cheaper per completed task"), tone?, at?} over the shortest grid (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, fill-0, fill-1, fill-2, ticks, highlight, ratio
+variants: bars (default), blocks
+
+### tokenizer (keeps captions)
+A sentence split into coloured token chips (a real BPE split, up to 48 tokens) with each token's output price under it for 1–2 models, token and character counts, then an output-token counter racing the models' bills to their totals on segmented bars ("1,000,000 tokens: $10.00 vs $5.00").
+params:
+- text: string ≤ 160, the sentence
+- tokens: [string] 1–48, its BPE split, joining back to text exactly (precompute: node src/tokenizer.js "<text>")
+- encoding: string ≤ 24 shown in the header ("o200k_base") (optional)
+- models: [{label ≤ 24, price (USD per 1M output tokens), tone?}] 1–2
+- output: integer, the output tokens the race counts to (default 1,000,000)
+- title: string ≤ 32 (default "Tokenizer")
+- source: string ≤ 60 at the top right, where the text is from (optional)
+- at: chips start: seconds from scene start (optional; else a matching hit, else a default)
+- raceAt: the race: seconds from scene start (optional; else a matching hit, else a default) (default 0.5 s after the chips)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, total
+variants: panel (default), bare
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1603,6 +1716,13 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| dot-field | 2 s | 0.5 s | scene − 0.65 s | the field and bracket appear at at; the fill and the counter run together from 0.3 s later; pull-back starts on dots about 7 px wide and ends on the whole field at 85% of the fill |
+| particle-text | 2 s | 0.5 s | scene − 0.65 s | particles fly in over about 1.8 s from at; the dissolve takes about 1.7 s and must start after the text has assembled |
+| particle-logo | 2 s | 0.5 s | scene − 0.65 s | each ring spins up and its mark assembles over about 1.8 s; a second logo follows 0.35 s later |
+| particle-cloud | 2 s | 0.5 s | scene − 0.65 s | steps rise 0.28 s apart from at; the cloud streams in after them and the target box shows inside it |
+| grid-race | 2 s | 0.5 s | scene − 0.65 s | labels and counters rise from at; the race starts 0.6 s later; the counters and the cells move together, linearly |
+| cell-grid | 2 s | 0.5 s | scene − 0.65 s | grids fill one after another (0.6–1.4 s each, overlapping) from at; ticks, highlight and the ratio follow the last fill |
+| tokenizer | 2 s | 0.5 s | scene − 0.65 s | chips pop in left to right within about 1.5 s of at; counts count with them; the race runs up to 2.6 s, ending by the last event time |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

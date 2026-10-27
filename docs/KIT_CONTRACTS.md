@@ -2912,6 +2912,63 @@ role or hex (`dataTone`). The study's citation is the frame's source note
 | `unit-grid` | solid, stroke, dots | `count` 1–200, `icon` (`person`, the module's isotype silhouette, or any icon name), `tone`, `columns`, `groups` 2–3 `{count, label ≤ 24, tone?}` adding up to `count`, `splitAt`, or `highlight` `{count, label?, tone?}` and `highlightAt` (not both) | build, split, highlight | Units pop in reading order within about 1.1 s in the largest square cells that fit; on split each unit slides and scales (0.75 s, power3.inOut, a 12 ms ripple) into its group's own grid, side by side, recolouring as it moves, while each group's count rises and counts up over its label; a highlight lights the first `count` units with a pulse, dims the rest to 28% and raises the label |
 | `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value. Default cues follow the build up to 1 s apart |
 
+### Particles and grids at scale: catalogue I (`catalog-i-*.mjs`)
+
+Catalogue I modules register in catalogue H (`catalog-h.mjs`), so both
+renderers draw them through catalogue H's emitters. The modules lean on one
+extra mechanism: paint plans.
+
+**Paint plans** (`kit/core/particles.mjs`). A model may carry
+`content.paint: {<canvas id>: plan}`, where each key is a `<canvas>` node in
+its view tree, the size of the module rect. A plan is plain JSON:
+`{width, height, layers: [...], glow?: {alpha, blur}}`. Its layers are drawn
+in order:
+
+- `field`: a token bitmap of `cols × rows` with 1 px = 1 token. It fills
+  `count` tokens in a seeded Fisher–Yates order between `t0` and `t1`,
+  through zoom keys `[{t, s, fx, fy}]`. At ≥ 4 px per token each token is a
+  round dot; below that the bitmap is scaled, which gives honest density.
+- `swarm`: target points (`pts`, or a `shape` SVG path sampled with `Path2D`
+  at paint time). They fly in from a scatter (`assemble`), dissolve out
+  (`dissolve`) and shimmer.
+- `ring`: an orbiting tilted ellipse, drawn as a `back` half and a `front`
+  half so a mark can sit between them.
+- `cloud`: particles hugging a box, drifting and twinkling, optionally
+  streaming in from a `from` point.
+- `cells`: unit grids. Each grid has `x, y, cols, rows, cell, gap, count,
+  slots, order (reading | bottom-up), t0, t1`, plus optional `segs` (colour by
+  index range), `tick` (checkmarks) and `hl` (a lit subset with the rest
+  dimmed).
+
+`paintParticles(ctx, plan, t)` takes the absolute composition time. It is a
+closed-form function of (plan, t). Every random choice is
+`particleHash(index, seed)`, and nothing is integrated frame to frame. What
+it caches (sampled shapes, the field bitmap and its fill order) derives from
+the plan alone and rebuilds on a backwards seek. HyperFrames inlines the
+painter once per page (`PARTICLE_RUNTIME`, which defines
+`window.lcPaintParticles`). It drives each canvas from a linear proxy tween
+over the scene, `tl.fromTo(clock, {t: start}, {t: end, onUpdate})`, on the
+paused root timeline (`paintMotion`, `kit/hyperframes/catalog-h.mjs`).
+Remotion paints the same plan in a layout effect (`PaintCanvas.tsx`). The
+painter is never seeded from the wall clock, and particle text uses the
+built-in 5 × 7 dot-matrix face (`dotMatrixPoints`), so no font has to load
+first. Budget: ~4 ms per layer at 1080p in Chromium (a 1,050,000-token field,
+about 30k swarm particles, 10k cells). Labels, counters and notes stay DOM
+nodes on the op list.
+
+| Module | Variants | Params (beyond title, source, at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `dot-field` | pull-back, still | `count` 100–2,000,000, `label`, `legend` (default "1 dot = 1 token"), `tone`, `order` (scatter, reading), `format`, `fillDuration` | build, filled | The bracket and counter rise. The field fills one dot per unit as the counter counts linearly. pull-back starts on dots about 7 px wide at the field's corner and eases (in log scale) to the whole field by 85% of the fill |
+| `particle-text` | led, dust | `text` ≤ 14 (A–Z, 0–9, `$%.,+-×≈/:!?#'`), `kicker`, `sub`, `mode` (assemble, dissolve, both), `tone`, `dissolveAt` | assemble, dissolve | Particles swirl in from a scatter onto dot-matrix LEDs (4 × 4 each; dust uses 6 × 6, looser) over about 1.8 s with a bloom. A dissolve blows them up and away over 1.7 s, and loose dust drifts round the text |
+| `particle-logo` | ring, halo | `logos` 1–2 `{icon | path {d, viewBox, rule?}, label, sub?, tone?}` | build | Each ring spins up as its mark assembles from it, and a second logo follows 0.35 s later. Real third-party marks only when the scene shows that party's real evidence |
+| `particle-cloud` | stairs, single | `target {label, sub?}`, `steps` 1–4 (lowest first; stairs draws them), `tone`, `cloudAt` | build, cloud | Steps rise 0.28 s apart. A cloud streams up from the first step and gathers round the dashed target box, which shows inside it, with a low haze along the steps |
+| `grid-race` | columns, stacked | `unit`, `racers` 2 `{label, sub?, total, spend? {total, format?}, tone?}`, `legend` (default "1 cell = &lt;unit&gt;"), `format`, `suffix`, `spendLabel`, `pace` (together, same-rate), `ratio {text ≤ 8, sub?, tone?, at?}`, `raceDuration` | build, race, finish, ratio | Labels rise, then both grids fill in reading order with their counters and spend counters, linearly and in step. Empty slots show up to the larger total. The ratio pops after the finish. In portrait it hides captions (a dense comparison); stacked puts the text left of each grid in landscape |
+| `cell-grid` | bars, blocks | `legend` ("1 cell = $0.01"), `grids` 1–3 `{label, sub?, count ≤ 10,000, value?, tone?, columns?, segments? [{count, tone, label?}], ticks? {count, tone?, at?}, highlight? {count, tone?, at?}}`, `order` (bottom-up, reading), `ratio` | build, fill-&lt;i&gt;, ticks, highlight, ratio | Grids share one cell pitch, so heights compare like bars, and fill one after another (0.6–1.4 s each). A segment boundary with a label draws a dashed rule as the fill passes it. Ticks turn cells into checkmarks; a highlight lights the first cells and dims the rest to 30%. The ratio sits over the shortest grid |
+| `tokenizer` | panel, bare | `text` ≤ 160, `tokens` (the BPE split, joining back to `text`; precompute with `node src/tokenizer.js "<text>"`, o200k_base or cl100k_base), `encoding`, `models` 1–2 `{label, price (USD / 1M output tokens), tone?}`, `output` (default 1,000,000), `raceAt` | build, race, total | Chips pop in left to right as the token and character counts count. Each chip's per-token prices rise under it. The output counter races each model's bill on a segmented bar (bars scaled to the dearest model) to its total. In portrait it hides captions |
+
+`validateStory` treats `cell-grid` and `grid-race` like `unit-grid`: benchmark
+data needs `params.source` or a frame source note on screen.
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its
