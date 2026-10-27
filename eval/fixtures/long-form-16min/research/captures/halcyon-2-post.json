@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "halcyon-2-post",
+  "url": "https://social.example/northlight/status/1",
+  "kind": "post",
+  "claim": "c-shares",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "Northlight Labs on Social"
+      }
+    }
+  ],
+  "out": "assets/evidence/halcyon-2-post.mp4",
+  "provenance": {
+    "source_title": "Northlight Labs on Social",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}

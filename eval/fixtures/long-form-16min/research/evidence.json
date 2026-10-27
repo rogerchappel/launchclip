@@ -1,0 +1,494 @@
+{
+  "schema": "launchclip.evidence.v1",
+  "project": "halcyon-2-explained",
+  "claims": [
+    {
+      "id": "c-shares",
+      "text": "the post had been shared more than ninety thousand times",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://social.example/northlight/status/1",
+          "title": "Northlight Labs on Social",
+          "published_at": "2026-03-10",
+          "primary": false,
+          "confidence": 0.7,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "Shared 90,412 times"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-latency",
+      "text": "answering a typical request in about 1.8 seconds instead of 4.1 seconds",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "median latency fell from 4.1 s to 1.8 s"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-price",
+      "text": "3 dollars per million input tokens, down from 8 dollars",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "$3 per million input tokens (was $8)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-coding-internal",
+      "text": "finishing 62 percent of multi step coding problems compared with 41 percent",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "62% on our multi-step coding suite, up from 41%"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-cluster",
+      "text": "trained on a new cluster in Finland using roughly 30 thousand accelerators over eleven weeks",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "approximately 30,000 accelerators for eleven weeks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-context",
+      "text": "the context window doubled from 200 thousand tokens to 400 thousand",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "context length: 400K tokens (previously 200K)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-tail",
+      "text": "the slowest tenth of requests falling from 11 seconds to 4 seconds",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "p90 latency: 11 s to 4 s"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-open-bench",
+      "text": "measured 2.1 seconds on average across three regions",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://latency.example/runs/halcyon-2",
+          "title": "Open latency benchmark run 41",
+          "published_at": "2026-03-12",
+          "primary": true,
+          "confidence": 0.8,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "2.1 s mean across three regions"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-clip",
+      "text": "a side by side recording viewed more than two million times",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://social.example/devtester/status/22",
+          "title": "Side-by-side clip",
+          "published_at": "2026-03-11",
+          "primary": true,
+          "confidence": 0.75,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "2.1M views"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-rival-cuts",
+      "text": "two rival labs announced their own price cuts of 40 percent and 50 percent",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://news.example/ai/price-war",
+          "title": "The model price war",
+          "published_at": "2026-03-20",
+          "primary": false,
+          "confidence": 0.8,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "cuts of 40% and 50% within ten days"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-swe",
+      "text": "Halcyon 2 scored 48 percent compared with 39 percent for the previous model and 51 percent for the best rival",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://leaderboard.example/swe",
+          "title": "Open SWE benchmark",
+          "published_at": "2026-03-15",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "Halcyon 2: 48.0; Halcyon 1.5: 39.2; best: 51.3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-long-doc",
+      "text": "on a long document reading test it scored 71 percent",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "71% on long-document QA"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-maths",
+      "text": "falling from 58 percent to 55 percent on the maths test",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-2",
+          "title": "Introducing Halcyon 2 (footnote 4)",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "competition maths: 55% (previous 58%)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-pr-comments",
+      "text": "the pull request that switched the SDK default collected more than six hundred comments",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://code.example/northlight/sdk/pull/1842",
+          "title": "northlight/sdk#1842: default to halcyon-2",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "612 comments"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-fix-commit",
+      "text": "Northlight merged a fix four days later in a follow up commit that restored the old behaviour behind a flag",
+      "kind": "statement",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://code.example/northlight/sdk/commit/9f3c2e1",
+          "title": "fix: respect format setting behind legacy_format flag",
+          "published_at": "2026-03-14",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "restore legacy formatting behind a flag"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-failure-table",
+      "text": "It lists twelve categories of mistakes with an estimated rate for each",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card, section 7",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "Table 7: twelve known failure categories"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-cutoff",
+      "text": "questions about events after the training cutoff where the model guesses wrongly about 30 percent of the time",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card, table 7",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "post-cutoff events: 30% error"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-repro",
+      "text": "an independent group reproduced four of the twelve rows and found rates within two points",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://evals.example/halcyon-2-failures",
+          "title": "Reproducing the Halcyon 2 failure table",
+          "published_at": "2026-03-17",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "4 of 12 rows within 2 points"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-training-cost",
+      "text": "the training run alone cost between 400 million and 600 million dollars",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://analysts.example/frontier-costs",
+          "title": "Frontier training costs, 2026",
+          "published_at": "2026-04-02",
+          "primary": false,
+          "confidence": 0.5,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "$400M\u2013$600M estimate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-energy",
+      "text": "the run used about 120 gigawatt hours of electricity",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "approximately 120 GWh"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-synthetic",
+      "text": "The share of synthetic data rose from about 10 percent to about 35 percent",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card, data",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "synthetic share: ~35% (previously ~10%)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-needle",
+      "text": "Halcyon 2 found the fact 97 percent of the time at full length compared with 84 percent",
+      "kind": "number",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/halcyon-2/system-card",
+          "title": "Halcyon 2 system card, long context",
+          "published_at": "2026-03-10",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "97% retrieval at 400K (previous 84%)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-leaderboard",
+      "text": "Halcyon 2 entered at second place briefly took first then settled at third",
+      "kind": "statement",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://arena.example/leaderboard",
+          "title": "Blind-vote leaderboard history",
+          "published_at": "2026-03-24",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "#2 \u2192 #1 \u2192 #3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-history-2023",
+      "text": "The first Halcyon model shipped in 2023 as a research preview",
+      "kind": "date",
+      "status": "verified",
+      "sources": [
+        {
+          "url": "https://northlight.example/blog/halcyon-preview",
+          "title": "Halcyon research preview",
+          "published_at": "2023-06-01",
+          "primary": true,
+          "confidence": 0.9,
+          "fetched_at": "2026-10-20T09:00:00Z",
+          "supports": true,
+          "quote": {
+            "text": "a research preview for partners"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-unverified-tests",
+      "text": "Within two days developers had pushed over four thousand projects",
+      "kind": "number",
+      "status": "unverified",
+      "sources": [],
+      "flag": "no public source found; say 'reportedly'"
+    }
+  ]
+}

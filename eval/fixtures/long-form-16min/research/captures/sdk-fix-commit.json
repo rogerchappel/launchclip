@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "sdk-fix-commit",
+  "url": "https://code.example/northlight/sdk/commit/9f3c2e1",
+  "kind": "commit",
+  "claim": "c-fix-commit",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "fix: respect format setting"
+      }
+    }
+  ],
+  "out": "assets/evidence/sdk-fix-commit.mp4",
+  "provenance": {
+    "source_title": "fix: respect format setting",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}
