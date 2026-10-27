@@ -269,6 +269,9 @@ export function isQuotable(text) {
   return /\p{L}{3,}/u.test(value) && value.split(/\s+/).length >= 3;
 }
 
+// Clauses that point back at an entity named before them.
+const POINTERS = { repo: /\b(that|this|the same)\s+(repository|repo|codebase)\b/i, benchmark: /\b(that|this|the same)\s+(benchmark|test|leaderboard)\b/i };
+
 // Entity kinds a clause names with a common noun.
 const ENTITY_HINTS = [['repo', /\b(repositor(y|ies)|repo|codebase)\b/], ['benchmark', /\b(benchmark|leaderboard)\b/]];
 // The research ledger as the matcher reads it: content words, numbers, days and entity counts per claim (built once).
@@ -355,7 +358,7 @@ function mentions(text, name) {
  * Contradicted claims never match. → {claim, status, kind, source, quote?,
  * capture?: {id, kind, out}, data?} | null (data: capture.data, else claim.data)
  */
-export function matchEvidence(beat, { ledger = null, captures = [], at = null, played = null, aliases = null } = {}) {
+export function matchEvidence(beat, { ledger = null, captures = [], at = null, played = null, aliases = null, refer = null } = {}) {
   const claims = (ledger?.claims ?? []).filter((claim) => claim?.id && claim.status !== 'contradicted');
   if (!claims.length) return null;
   const index = ledgerIndex(ledger, claims);
@@ -369,7 +372,10 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
   const known = [...words].filter((word) => index.df.has(word));
   const beatWeight = known.reduce((sum, word) => sum + idf(word), 0);
   let best = null;
-  for (const claim of claims) {
+  // A clause that points back ("that repository") is about the claim it points to.
+  const pinned = refer ? claims.find((claim) => claim.id === refer) : null;
+  if (pinned) best = { score: 1, claim: pinned };
+  for (const claim of pinned ? [] : claims) {
     const other = index.words.get(claim.id);
     const shared = [...words].filter((word) => other.has(word));
     const claimWeight = [...other].reduce((sum, word) => sum + idf(word), 0);
@@ -503,11 +509,15 @@ export function directChunk(chunk, options) {
   const beats = clauseBeats(words, { from: chunk.words[0], to: chunk.words[1], min: 3 * factor, max: 10 * factor, weight: 0.65 / factor, target: target.gap.p50_min + 0.15 * (target.gap.p50_max - target.gap.p50_min) });
   const total = narrationWords(words).length;
   const aliases = ledger ? entityAliases(ledger, words) : null;
+  const lastOfKind = {};
   const states = beats.map((beat, i) => {
     const facts = extractFacts(beat.text);
     const intent = beat.words[0] === 0 ? classifyIntent(beat.text, { index: 0 }) : classifyIntent(beat.text, { index: 1 });
     const draft = { ...beat, intent, facts };
-    const evidence = matchEvidence(draft, { ledger, captures, at: beat.start, played: history.captures, aliases });
+    // "That repository", "the same benchmark": the claim about the last one named.
+    const pointer = Object.entries(POINTERS).find(([, regex]) => regex.test(beat.text))?.[0];
+    const evidence = matchEvidence(draft, { ledger, captures, at: beat.start, played: history.captures, aliases, refer: pointer ? lastOfKind[pointer] ?? null : null });
+    for (const e of ledger?.claims?.find((claim) => claim.id === evidence?.claim)?.entities ?? []) if (e?.kind && !pointer) lastOfKind[e.kind] = evidence.claim;
     if (evidence?.capture) {
       // A capture plays once a minute at most: shown again sooner, the claim keeps its source line instead.
       const last = history.captures?.[evidence.capture.id];
@@ -615,6 +625,7 @@ export function directChunk(chunk, options) {
         change: k === 0 && !EXTENDS.has(decision.change) ? 'enter' : decision.change,
         params: decision.params,
         ...(decision.focus !== undefined ? { focus: decision.focus } : {}),
+        ...(decision.guide ? { guide: decision.guide } : {}),
         ...(state.evidence ? { evidence: state.evidence } : {}),
         why: decision.why,
         builds
@@ -674,7 +685,7 @@ function sideOf(text, figure) {
   const after = String(figure.label ?? '').split(/\s+/).slice(0, 3).join(' ');
   const raw = String(figure.raw ?? figure.value);
   const at = text.indexOf(raw);
-  const before = at >= 0 ? text.slice(0, at).split(/[.!?]\s+/).at(-1).split(/\s+/).slice(-4).join(' ') : '';
+  const before = at >= 0 ? text.slice(0, at).split(/[.!?]\s+/).at(-1).trim().split(/\s+/).slice(-4).join(' ') : '';
   return QUALIFIER.find(([regex]) => regex.test(after))?.[1] ?? QUALIFIER.find(([regex]) => regex.test(before))?.[1] ?? null;
 }
 const NAME_TOKEN = /^(?:[A-Z][\w.]*(?:-[\w.]+)*|[a-z]+-\d[\w.-]*)$/;
@@ -771,6 +782,8 @@ export function pairSeries(states) {
     if (new Set(short).size === names.length) for (const row of kept) if (row.name) row.label = [row.name.split(' ').at(-1), row.side].filter(Boolean).join(' ');
     let shown = [];
     for (const step of entry.states) {
+      // A clause whose own figures all stay out of the series (a lone "cached" price) shows them itself.
+      if (step.rows.length && !step.rows.some((row) => kept.includes(row)) && !step.ratio) { step.state.alone = true; continue; }
       shown = [...shown, ...step.rows.filter((row) => kept.includes(row))].slice(-MAX_SERIES);
       // A run's first figure on its own is a stat; the series builds from the next clause.
       if (shown.length < 2) {
@@ -933,6 +946,14 @@ function tidyLabel(label) {
 // The module, params and state change for one clause.
 function decide(state, previous, options) {
   const decision = choose(state, previous, options);
+  // The same card again (same module, same params) is the card on screen carrying on, not a new one.
+  const last = options.last;
+  if (last && decision.module === last.module && JSON.stringify(decision.params) === JSON.stringify(last.params) && !STRUCTURE_KINDS.has(state.kind)) {
+    // A guide the clause draws ("exactly half") over a chart that takes one as a shot state is a new event on the same card.
+    const reference = state.evidence?.data?.reference;
+    if (reference && stateSpec(last.module, catalogModules()[last.module] ?? null)?.guide) return { ...decision, change: 'guide', guide: { value: reference.value, ...(reference.label ? { label: reference.label.toUpperCase() } : {}) }, why: `${decision.why}; draws the ${reference.label} guide` };
+    return { ...decision, change: 'hold', why: `${decision.why}; the same card carries on` };
+  }
   if (!isSalad(decision, state)) return decision;
   // A line the narration says, verbatim (a short sentence, a full name), is a headline; its key words are not.
   // Held this long already, the clause's own words carry the next event rather than a longer static run.
@@ -942,10 +963,10 @@ function decide(state, previous, options) {
     const said = { ...state, headline: line, line, kicker: null, sub: null };
     // Typography takes turns (the least used first, a fresh motion-title effect each time), so lines do not all look alike.
     const counts = options.history?.counts ?? {};
-    const order = ['motion-title', 'kinetic-words', 'concept-card'].sort((a, b) => (counts[a] ?? 0) - (counts[b] ?? 0));
+    // The card type on screen goes last: a new line on it is still a new card, but another type reads better.
+    const order = ['motion-title', 'kinetic-words', 'concept-card'].sort((a, b) => Number(options.last?.module === a) - Number(options.last?.module === b) || (counts[a] ?? 0) - (counts[b] ?? 0));
     const effects = moduleVariants()['motion-title'] ?? [];
     for (const module of order) {
-      if (options.last?.module === module) continue;
       let params = capabilityParams(module, said);
       if (!params) continue;
       if (module === 'concept-card' && (params.text !== line || line.split(/\s+/).length > 3)) continue;
@@ -954,7 +975,6 @@ function decide(state, previous, options) {
     }
   }
   // No specific module draws the clause and its key words are no headline: the card on screen carries on.
-  const last = options.last;
   if (last) {
     const items = focusItems(last);
     if (items) {
@@ -1033,8 +1053,9 @@ export function verbatimHeadline(text, { loose = false } = {}) {
 }
 const TAIL_STOP = new Set(['others', 'theirs', 'ours', 'yours', 'mine', 'something', 'anything', 'everything', 'nothing', 'a', 'an', 'the', 'and', 'but', 'or', 'so', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'it', 'its', 'that', 'this', 'than', 'as', 'if', 'not', 'one', 'there', 'they', 'we', 'you', 'he', 'she', 'his', 'her', 'their', 'our', 'your', 'about', 'into', 'over', 'up', 'down', 'out', 'what', 'which', 'who', 'when', 'where', 'how', 'why']);
 
-// States that carry on the card already on screen (no new card): a focus step through its items, or a plain hold.
-export const EXTENDS = Object.freeze(new Set(['focus', 'hold']));
+// States that carry on the card already on screen (no new card): a focus step through its items, a guide line drawn
+// over it, or a plain hold.
+export const EXTENDS = Object.freeze(new Set(['focus', 'hold', 'guide']));
 const ITEM_KEYS = ['data', 'entries', 'rows', 'steps', 'lines', 'points'];
 
 /** How many items a focus can step through on a state's card (a module with shot states), else null. */
@@ -1067,7 +1088,7 @@ function choose(state, previous, { history, avoid, registered, wide, check }) {
   }
   // A build: the module on screen takes this clause's entries (a bar arrives, then a second bar).
   // Never onto a generic card (a headline is not an entry), nor for a clause with a list of its own.
-  if (previous && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind) && !GENERIC_MODULES.has(previous.module) && !(state.facts?.items?.length >= 3)) {
+  if (previous && !state.alone && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind) && !GENERIC_MODULES.has(previous.module) && !(state.facts?.items?.length >= 3)) {
     const add = capabilityAdditions(previous.module, state);
     const params = add ? appendEntries(previous.params, add, previous.module) : null;
     if (params && check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `${state.kind}: builds on ${previous.module} (+${add.items.length} ${add.key})` };
@@ -1377,6 +1398,7 @@ export function beatMapToStory(map, options = {}) {
         const scene = scenes.at(-1);
         scene.end = round(b - from);
         if (state.change === 'focus' && Number.isInteger(state.focus) && (scene.states?.length ?? 0) < MAX_SHOT_STATES) scene.states = [...(scene.states ?? []), { at: round(a - from), set: { focus: state.focus } }];
+        if (state.change === 'guide' && state.guide && (scene.states?.length ?? 0) < MAX_SHOT_STATES) scene.states = [...(scene.states ?? []), { at: round(a - from), set: { guide: state.guide } }];
         continue;
       }
       let module = state.module, params = state.params;

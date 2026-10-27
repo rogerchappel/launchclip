@@ -94,7 +94,7 @@
     "shot": "short-1-sh3",
     "start": 21.839,
     "module": "motion-title",
-    "change": "hold",
+    "change": "swap",
     "text": "for high school competitions,"
    },
    {
@@ -309,7 +309,7 @@
    {
     "shot": "short-3-sh2",
     "start": 10.705,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "enter",
     "text": "Running it costs real money."
    },
@@ -323,7 +323,7 @@
    {
     "shot": "short-3-sh2",
     "start": 14.923,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "swap",
     "text": "training run alone cost between"
    },
@@ -448,7 +448,7 @@
     "shot": "short-4-sh1",
     "start": 3.151,
     "module": "motion-title",
-    "change": "hold",
+    "change": "swap",
     "text": "The new cluster uses a newer generation of chips,"
    },
    {
@@ -490,14 +490,14 @@
     "shot": "short-4-sh3",
     "start": 19.669,
     "module": "motion-title",
-    "change": "hold",
+    "change": "swap",
     "text": "and that is a strategic choice."
    },
    {
     "shot": "short-4-sh3",
     "start": 22.341,
     "module": "motion-title",
-    "change": "hold",
+    "change": "swap",
     "text": "Northlight is betting that more usage today means more customers tomorrow."
    },
    {
@@ -510,7 +510,7 @@
    {
     "shot": "short-4-sh4",
     "start": 30.365,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "swap",
     "text": "two rival labs announced their own price cuts,"
    },

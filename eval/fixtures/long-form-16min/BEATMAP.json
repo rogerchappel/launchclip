@@ -275,23 +275,13 @@
        "text": "So what is Halcyon 2, why did it land so hard,",
        "intent": "number",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "Halcyon",
-          "at": 0.2
-         },
-         {
-          "text": "2",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "Halcyon 2",
+        "highlight": "Halcyon",
+        "variant": "soft-blur-in"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Halcyon 2\")"
       },
@@ -306,13 +296,12 @@
        "text": "and what does it actually change for the people who build with it?",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
         "text": "build with it",
-        "highlight": "build",
-        "variant": "soft-blur-in"
+        "icon": "target"
        },
        "why": "concept: nothing specific draws it; the line itself (\"build with it\")"
       }
@@ -334,27 +323,13 @@
        "text": "That is what this video is about. We will look at the numbers Northlight published,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "enter",
        "params": {
-        "words": [
-         {
-          "text": "numbers",
-          "at": 0.2
-         },
-         {
-          "text": "Northlight",
-          "at": 0.8
-         },
-         {
-          "text": "published",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "numbers Northlight published",
+        "highlight": "numbers",
+        "variant": "typewriter"
        },
        "why": "concept: nothing specific draws it; the line itself (\"numbers Northlight published\")"
       },
@@ -395,7 +370,7 @@
        "params": {
         "text": "claims hold up",
         "highlight": "claims",
-        "variant": "typewriter"
+        "variant": "bottom-up-letters"
        },
        "why": "concept: nothing specific draws it; the line itself (\"claims hold up\")"
       }
@@ -417,23 +392,12 @@
        "text": "which ones are marketing, and what this launch tells us about the next twelve months. Let's start with what was actually announced.",
        "intent": "number",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "enter",
        "params": {
-        "words": [
-         {
-          "text": "actually",
-          "at": 0.2
-         },
-         {
-          "text": "announced",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "actually announced",
+        "icon": "database"
        },
        "why": "concept: nothing specific draws it; the line itself (\"actually announced\")"
       }
@@ -491,13 +455,23 @@
        "text": "The first Halcyon model shipped in 2023, as a research preview that only a few hundred partners could use.",
        "intent": "number",
        "kind": "date",
-       "capability": "motion-title",
-       "module": "motion-title",
-       "change": "hold",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
+       "change": "swap",
        "params": {
-        "text": "A short history of Halcyon",
-        "kicker": "Chapter 2",
-        "highlight": "short"
+        "words": [
+         {
+          "text": "hundred partners",
+          "at": 0.2
+         },
+         {
+          "text": "could use",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-history-2023",
@@ -511,7 +485,7 @@
         },
         "quote": "a research preview for partners"
        },
-       "why": "date: nothing specific draws it; motion-title holds"
+       "why": "date: nothing specific draws it; the line itself (\"hundred partners could use\")"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh1-3",
@@ -593,27 +567,13 @@
        "text": "That version was the one most developers met.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "most",
-          "at": 0.2
-         },
-         {
-          "text": "developers",
-          "at": 0.8
-         },
-         {
-          "text": "met",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "most developers met",
+        "highlight": "developers",
+        "variant": "stagger-from-center"
        },
        "why": "concept: nothing specific draws it; the line itself (\"most developers met\")"
       },
@@ -730,23 +690,13 @@
        "text": "Looking back, that quiet year was the training run for Halcyon 2.",
        "intent": "number",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "Halcyon",
-          "at": 0.2
-         },
-         {
-          "text": "2",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "Halcyon 2",
+        "highlight": "Halcyon",
+        "variant": "stagger-from-edges"
        },
        "evidence": {
         "claim": "c-training-cost",
@@ -772,13 +722,23 @@
        "text": "Each version descended from the one before, but the jump from 1.5 to 2 is the largest in the family.",
        "intent": "number",
        "kind": "social",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "largest in the family",
-        "highlight": "largest",
-        "variant": "stagger-from-center"
+        "words": [
+         {
+          "text": "largest in",
+          "at": 0.2
+         },
+         {
+          "text": "the family",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-clip",
@@ -1068,16 +1028,12 @@
        "params": {
         "words": [
          {
-          "text": "Running it",
+          "text": "Running it costs",
           "at": 0.2
          },
          {
-          "text": "costs real",
-          "at": 0.8
-         },
-         {
-          "text": "money",
-          "at": 1.4,
+          "text": "real money",
+          "at": 0.8,
           "emphasis": true
          }
         ],
@@ -1333,16 +1289,12 @@
        "params": {
         "words": [
          {
-          "text": "Then there",
+          "text": "Then there is",
           "at": 0.2
          },
          {
-          "text": "is the",
-          "at": 0.8
-         },
-         {
-          "text": "data",
-          "at": 1.4,
+          "text": "the data",
+          "at": 0.8,
           "emphasis": true
          }
         ],
@@ -1435,13 +1387,23 @@
        "text": "That is the quiet trend across the whole industry.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "across the whole industry",
-        "highlight": "across",
-        "variant": "per-word-crossfade"
+        "words": [
+         {
+          "text": "across the",
+          "at": 0.2
+         },
+         {
+          "text": "whole industry",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"across the whole industry\")"
       },
@@ -1456,23 +1418,13 @@
        "text": "Models are increasingly trained on material that other models wrote, and the hard part is checking it.",
        "intent": "problem",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "part is",
-          "at": 0.2
-         },
-         {
-          "text": "checking it",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "part is checking it",
+        "highlight": "part",
+        "variant": "spring-scale-in"
        },
        "why": "concept: nothing specific draws it; the line itself (\"part is checking it\")"
       }
@@ -1705,27 +1657,13 @@
        "text": "Those are big jumps for a single release. Faster,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "a",
-          "at": 0.2
-         },
-         {
-          "text": "single",
-          "at": 0.8
-         },
-         {
-          "text": "release",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "a single release",
+        "highlight": "single",
+        "variant": "blur-out-up"
        },
        "why": "concept: nothing specific draws it; the line itself (\"a single release\")"
       },
@@ -1740,13 +1678,23 @@
        "text": "cheaper and better usually do not arrive together, because each one normally costs you one of the others.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "each one normally costs",
-        "highlight": "normally",
-        "variant": "shared-axis-y"
+        "words": [
+         {
+          "text": "each one",
+          "at": 0.2
+         },
+         {
+          "text": "normally costs",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"each one normally costs\")"
       }
@@ -1768,23 +1716,13 @@
        "text": "The system card fills in some of the detail.",
        "intent": "claim",
        "kind": "documents",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "enter",
        "params": {
-        "words": [
-         {
-          "text": "some of",
-          "at": 0.2
-         },
-         {
-          "text": "the detail",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "some of the detail",
+        "highlight": "detail",
+        "variant": "kinetic-center-build"
        },
        "why": "documents: nothing specific draws it; the line itself (\"some of the detail\")"
       },
@@ -1839,13 +1777,23 @@
        "text": "The context window doubled, from 200 thousand tokens to 400 thousand.",
        "intent": "number",
        "kind": "tokens",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "The context window doubled",
-        "highlight": "context",
-        "variant": "blur-out-up"
+        "words": [
+         {
+          "text": "The context",
+          "at": 0.2
+         },
+         {
+          "text": "window doubled",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-context",
@@ -2074,13 +2022,23 @@
        "text": "They let it finish their sentences, fix their code as they type,",
        "intent": "claim",
        "kind": "code",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "code as they type",
-        "highlight": "code",
-        "variant": "short-slide-right"
+        "words": [
+         {
+          "text": "code as",
+          "at": 0.2
+         },
+         {
+          "text": "they type",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "code: nothing specific draws it; the line itself (\"code as they type\")"
       },
@@ -2095,23 +2053,13 @@
        "text": "and suggest the next step before they ask.",
        "intent": "process",
        "kind": "process",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "step before",
-          "at": 0.2
-         },
-         {
-          "text": "they ask",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "step before they ask",
+        "highlight": "step",
+        "variant": "short-slide-down"
        },
        "why": "process: nothing specific draws it; the line itself (\"step before they ask\")"
       },
@@ -2218,13 +2166,23 @@
        "text": "That second number is the one developers felt.",
        "intent": "list",
        "kind": "list",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "the one developers felt",
-        "highlight": "developers",
-        "variant": "short-slide-down"
+        "words": [
+         {
+          "text": "the one",
+          "at": 0.2
+         },
+         {
+          "text": "developers felt",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "list: nothing specific draws it; the line itself (\"the one developers felt\")"
       },
@@ -2239,23 +2197,13 @@
        "text": "The slow tail is what makes a tool feel broken.",
        "intent": "problem",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "a tool",
-          "at": 0.2
-         },
-         {
-          "text": "feel broken",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "a tool feel broken",
+        "highlight": "tool",
+        "variant": "depth-parallax-words"
        },
        "why": "concept: nothing specific draws it; the line itself (\"a tool feel broken\")"
       },
@@ -2270,13 +2218,23 @@
        "text": "Independent testers mostly agreed. One open benchmark run",
        "intent": "proof",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "Independent testers mostly agreed",
-        "highlight": "Independent",
-        "variant": "depth-parallax-words"
+        "words": [
+         {
+          "text": "Independent testers",
+          "at": 0.2
+         },
+         {
+          "text": "mostly agreed",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Independent testers mostly agreed\")"
       },
@@ -2583,27 +2541,13 @@
        "text": "In practice, that means you can hand it an entire codebase,",
        "intent": "claim",
        "kind": "chain",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "enter",
        "params": {
-        "words": [
-         {
-          "text": "an",
-          "at": 0.2
-         },
-         {
-          "text": "entire",
-          "at": 0.8
-         },
-         {
-          "text": "codebase",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "an entire codebase",
+        "highlight": "entire",
+        "variant": "micro-scale-fade"
        },
        "why": "chain: nothing specific draws it; the line itself (\"an entire codebase\")"
       },
@@ -2618,13 +2562,23 @@
        "text": "a full legal case file, or a year of meeting notes, and ask questions across all of it.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "a full legal case file",
-        "highlight": "full",
-        "variant": "micro-scale-fade"
+        "words": [
+         {
+          "text": "a full legal",
+          "at": 0.2
+         },
+         {
+          "text": "case file",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"a full legal case file\")"
       },
@@ -2639,23 +2593,13 @@
        "text": "But a bigger window is only useful if the model actually uses it.",
        "intent": "turn",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "model actually",
-          "at": 0.2
-         },
-         {
-          "text": "uses it",
-          "at": 0.8,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "model actually uses it",
+        "highlight": "model",
+        "variant": "shimmer-sweep"
        },
        "why": "concept: nothing specific draws it; the line itself (\"model actually uses it\")"
       }
@@ -2756,13 +2700,23 @@
        "text": "That is a real improvement. The harder test asks the model to connect two facts that are hundreds of pages apart.",
        "intent": "claim",
        "kind": "documents",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "That is a real improvement",
-        "highlight": "real",
-        "variant": "shimmer-sweep"
+        "words": [
+         {
+          "text": "That is a",
+          "at": 0.2
+         },
+         {
+          "text": "real improvement",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "documents: nothing specific draws it; the line itself (\"That is a real improvement\")"
       },
@@ -3165,15 +3119,25 @@
        "text": "Northlight is betting that more usage today means more customers tomorrow.",
        "intent": "proof",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
-       "change": "hold",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
+       "change": "swap",
        "params": {
-        "text": "The rest is probably margin",
-        "highlight": "rest",
-        "variant": "scale-down-fade"
+        "words": [
+         {
+          "text": "means more",
+          "at": 0.2
+         },
+         {
+          "text": "customers tomorrow",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
-       "why": "concept: nothing specific draws it; motion-title holds"
+       "why": "concept: nothing specific draws it; the line itself (\"means more customers tomorrow\")"
       }
      ]
     },
@@ -3246,27 +3210,13 @@
        "text": "It is a price war, and developers are the ones who win it, at least for now.",
        "intent": "claim",
        "kind": "money",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "least",
-          "at": 0.2
-         },
-         {
-          "text": "for",
-          "at": 0.8
-         },
-         {
-          "text": "now",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "least for now",
+        "highlight": "least",
+        "variant": "focus-blur-resolve"
        },
        "why": "money: nothing specific draws it; the line itself (\"least for now\")"
       }
@@ -3604,13 +3554,23 @@
        "text": "Northlight mentioned that drop in a footnote. The honest summary is this.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "The honest summary is this",
-        "highlight": "honest",
-        "variant": "soft-blur-in"
+        "words": [
+         {
+          "text": "The honest summary",
+          "at": 0.2
+         },
+         {
+          "text": "is this",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"The honest summary is this\")"
       }
@@ -3666,13 +3626,27 @@
        "text": "That is a normal, healthy release. It is not a revolution, and the chart in the announcement made it look like one.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "That is a normal, healthy release",
-        "highlight": "normal",
-        "variant": "typewriter"
+        "words": [
+         {
+          "text": "That is",
+          "at": 0.2
+         },
+         {
+          "text": "a normal,",
+          "at": 0.8
+         },
+         {
+          "text": "healthy release",
+          "at": 1.4,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"That is a normal, healthy release\")"
       }
@@ -3868,7 +3842,7 @@
        "params": {
         "text": "command line tool overnight",
         "highlight": "command",
-        "variant": "top-down-letters"
+        "variant": "typewriter"
        },
        "why": "terminal: nothing specific draws it; the line itself (\"command line tool overnight\")"
       },
@@ -3999,7 +3973,7 @@
        "params": {
         "text": "refactored a whole codebase",
         "highlight": "refactored",
-        "variant": "stagger-from-center"
+        "variant": "bottom-up-letters"
        },
        "why": "social: nothing specific draws it; the line itself (\"refactored a whole codebase\")"
       },
@@ -4034,27 +4008,13 @@
        "text": "The other camp posted failures: confident wrong answers, invented citations,",
        "intent": "claim",
        "kind": "social",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "answers,",
-          "at": 0.2
-         },
-         {
-          "text": "invented",
-          "at": 0.8
-         },
-         {
-          "text": "citations",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "answers, invented citations",
+        "highlight": "answers",
+        "variant": "top-down-letters"
        },
        "why": "social: nothing specific draws it; the line itself (\"answers, invented citations\")"
       },
@@ -4486,13 +4446,23 @@
        "text": "It also gives outside researchers something to check.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "researchers something to check",
-        "highlight": "researchers",
-        "variant": "per-word-crossfade"
+        "words": [
+         {
+          "text": "researchers something",
+          "at": 0.2
+         },
+         {
+          "text": "to check",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "concept: nothing specific draws it; the line itself (\"researchers something to check\")"
       },
@@ -4547,27 +4517,13 @@
        "text": "That is a good sign. It means the company measured honestly, at least on the parts that were checked.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "That is",
-          "at": 0.2
-         },
-         {
-          "text": "a good",
-          "at": 0.8
-         },
-         {
-          "text": "sign",
-          "at": 1.4,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "That is a good sign",
+        "highlight": "good",
+        "variant": "stagger-from-edges"
        },
        "why": "concept: nothing specific draws it; the line itself (\"That is a good sign\")"
       }
@@ -4589,13 +4545,23 @@
        "text": "The lesson for anyone shipping a product on top of a model is simple.",
        "intent": "claim",
        "kind": "ranking",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "a model is simple",
-        "highlight": "model",
-        "variant": "spring-scale-in"
+        "words": [
+         {
+          "text": "a model",
+          "at": 0.2
+         },
+         {
+          "text": "is simple",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "why": "ranking: nothing specific draws it; the line itself (\"a model is simple\")"
       },
@@ -4980,7 +4946,7 @@
        "params": {
         "text": "the others catch up",
         "highlight": "others",
-        "variant": "blur-out-up"
+        "variant": "spring-scale-in"
        },
        "why": "process: nothing specific draws it; the line itself (\"the others catch up\")"
       }
@@ -5039,7 +5005,7 @@
        "params": {
         "text": "use the best one",
         "highlight": "use",
-        "variant": "kinetic-center-build"
+        "variant": "shared-axis-y"
        },
        "evidence": {
         "claim": "c-swe",
@@ -5159,16 +5125,12 @@
        "params": {
         "words": [
          {
-          "text": "Second, prices",
+          "text": "Second, prices are",
           "at": 0.2
          },
          {
-          "text": "are falling",
-          "at": 0.8
-         },
-         {
-          "text": "fast",
-          "at": 1.4,
+          "text": "falling fast",
+          "at": 0.8,
           "emphasis": true
          }
         ],
@@ -5201,7 +5163,7 @@
        "params": {
         "text": "becoming a competitive feature",
         "highlight": "becoming",
-        "variant": "short-slide-down"
+        "variant": "kinetic-center-build"
        },
        "why": "list: nothing specific draws it; the line itself (\"becoming a competitive feature\")"
       },
@@ -5261,7 +5223,7 @@
     {
      "id": "what-this-means-for-the-next-year-1-sh3",
      "start": 936.959,
-     "end": 962.317,
+     "end": 958.095,
      "states": [
       {
        "id": "what-this-means-for-the-next-year-1-sh3-1",
@@ -5323,7 +5285,7 @@
        "params": {
         "text": "weeks rather than years",
         "highlight": "weeks",
-        "variant": "depth-parallax-words"
+        "variant": "short-slide-right"
        },
        "why": "ranking: nothing specific draws it; the line itself (\"weeks rather than years\")"
       },
@@ -5375,10 +5337,17 @@
        "params": {
         "text": "Measure on your own tasks",
         "highlight": "Measure",
-        "variant": "mask-reveal-up"
+        "variant": "short-slide-down"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Measure on your own tasks\")"
-      },
+      }
+     ]
+    },
+    {
+     "id": "what-this-means-for-the-next-year-1-sh4",
+     "start": 958.095,
+     "end": 976.377,
+     "states": [
       {
        "id": "what-this-means-for-the-next-year-1-sh4-1",
        "words": [
@@ -5390,23 +5359,26 @@
        "text": "and do not trust a launch chart you cannot reproduce.",
        "intent": "product",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
-       "change": "hold",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
+       "change": "enter",
        "params": {
-        "text": "Measure on your own tasks",
-        "highlight": "Measure",
-        "variant": "mask-reveal-up"
+        "words": [
+         {
+          "text": "chart you",
+          "at": 0.2
+         },
+         {
+          "text": "cannot reproduce",
+          "at": 0.8,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
-       "why": "concept: nothing specific draws it; motion-title holds"
-      }
-     ]
-    },
-    {
-     "id": "what-this-means-for-the-next-year-1-sh4",
-     "start": 962.317,
-     "end": 976.377,
-     "states": [
+       "why": "concept: nothing specific draws it; the line itself (\"chart you cannot reproduce\")"
+      },
       {
        "id": "what-this-means-for-the-next-year-1-sh4-2",
        "words": [
@@ -5420,7 +5392,7 @@
        "kind": "concept",
        "capability": "concept-card",
        "module": "concept-card",
-       "change": "enter",
+       "change": "swap",
        "params": {
         "text": "the description",
         "icon": "globe"
@@ -5473,21 +5445,20 @@
     "recent": [
      "quote-card",
      "concept-card",
-     "kinetic-words",
      "motion-title",
-     "kinetic-words",
      "concept-card",
      "motion-title",
-     "kinetic-words"
+     "concept-card",
+     "motion-title",
+     "concept-card"
     ],
     "counts": {
      "logo-sting": 1,
      "process-steps": 1,
-     "motion-title": 3,
+     "motion-title": 4,
      "repo-pr-card": 1,
      "quote-card": 1,
-     "concept-card": 2,
-     "kinetic-words": 3
+     "concept-card": 4
     },
     "plates": [
      {
@@ -5512,7 +5483,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "bc3ee035d9e1e7b7",
+   "key": "c11b85b823c62842",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5523,8 +5494,8 @@
     "recent": [
      "concept-card",
      "map-highlight",
-     "kinetic-words",
      "motion-title",
+     "kinetic-words",
      "media-window",
      "quote-card",
      "quote-card",
@@ -5533,11 +5504,11 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "motion-title": 6,
+     "motion-title": 7,
      "repo-pr-card": 1,
      "quote-card": 3,
-     "concept-card": 4,
-     "kinetic-words": 5,
+     "concept-card": 6,
+     "kinetic-words": 2,
      "checklist": 1,
      "map-highlight": 1,
      "media-window": 1
@@ -5572,7 +5543,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "ac86e58b75d518a5",
+   "key": "04bef7030020e215",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5587,17 +5558,17 @@
      "kinetic-words",
      "quote-card",
      "percent-fill",
-     "motion-title",
-     "kinetic-words"
+     "kinetic-words",
+     "motion-title"
     ],
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "motion-title": 8,
+     "motion-title": 9,
      "repo-pr-card": 1,
      "quote-card": 4,
-     "concept-card": 5,
-     "kinetic-words": 8,
+     "concept-card": 7,
+     "kinetic-words": 5,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 1,
@@ -5642,7 +5613,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "57c4623658d716a0",
+   "key": "e26019088fbea326",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5651,11 +5622,11 @@
    ],
    "history": {
     "recent": [
-     "kinetic-words",
      "motion-title",
      "kinetic-words",
+     "motion-title",
      "media-window",
-     "motion-title",
+     "kinetic-words",
      "quote-card",
      "kinetic-words",
      "concept-card"
@@ -5663,11 +5634,11 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "motion-title": 11,
+     "motion-title": 12,
      "repo-pr-card": 1,
      "quote-card": 5,
-     "concept-card": 8,
-     "kinetic-words": 11,
+     "concept-card": 10,
+     "kinetic-words": 8,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 2,
@@ -5719,7 +5690,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "7b030c4c9e7287d6",
+   "key": "7c0422aeff9d23fc",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -5728,9 +5699,9 @@
    ],
    "history": {
     "recent": [
-     "motion-title",
      "kinetic-words",
      "motion-title",
+     "kinetic-words",
      "stat-card",
      "kinetic-words",
      "motion-title",
@@ -5743,8 +5714,8 @@
      "motion-title": 16,
      "repo-pr-card": 1,
      "quote-card": 5,
-     "concept-card": 9,
-     "kinetic-words": 15,
+     "concept-card": 11,
+     "kinetic-words": 13,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 2,
@@ -5803,7 +5774,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "6b2b7217604aa85d",
+   "key": "86e8112c74d751ce",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -5812,11 +5783,11 @@
    ],
    "history": {
     "recent": [
-     "motion-title",
      "kinetic-words",
+     "motion-title",
      "excerpt",
      "percent-fill",
-     "motion-title",
+     "kinetic-words",
      "unit-grid",
      "kinetic-words",
      "motion-title"
@@ -5827,8 +5798,8 @@
      "motion-title": 20,
      "repo-pr-card": 1,
      "quote-card": 5,
-     "concept-card": 10,
-     "kinetic-words": 19,
+     "concept-card": 12,
+     "kinetic-words": 17,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 2,
@@ -5893,7 +5864,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "f4489ad924d438b7",
+   "key": "023e451f4341a629",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -5906,10 +5877,10 @@
      "kinetic-words",
      "kinetic-words",
      "motion-title",
-     "motion-title",
+     "kinetic-words",
      "percent-fill",
      "concept-card",
-     "kinetic-words"
+     "motion-title"
     ],
     "counts": {
      "logo-sting": 1,
@@ -5917,8 +5888,8 @@
      "motion-title": 23,
      "repo-pr-card": 1,
      "quote-card": 5,
-     "concept-card": 12,
-     "kinetic-words": 23,
+     "concept-card": 14,
+     "kinetic-words": 21,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 3,
@@ -5988,7 +5959,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "e07895d941d69627",
+   "key": "05cda0b7a657d5f5",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6002,17 +5973,17 @@
      "unit-grid",
      "quote-card",
      "percent-fill",
-     "motion-title",
+     "kinetic-words",
      "stat-card",
-     "motion-title"
+     "kinetic-words"
     ],
     "counts": {
      "logo-sting": 1,
      "process-steps": 5,
-     "motion-title": 27,
+     "motion-title": 25,
      "repo-pr-card": 1,
      "quote-card": 6,
-     "concept-card": 13,
+     "concept-card": 15,
      "kinetic-words": 25,
      "checklist": 4,
      "map-highlight": 1,
@@ -6088,7 +6059,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "485cf6422f547964",
+   "key": "3acbb6fe79ff4db8",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6101,7 +6072,7 @@
      "kinetic-words",
      "motion-title",
      "concept-card",
-     "kinetic-words",
+     "motion-title",
      "stat-card",
      "kinetic-words",
      "concept-card"
@@ -6109,11 +6080,11 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 5,
-     "motion-title": 30,
+     "motion-title": 29,
      "repo-pr-card": 2,
      "quote-card": 6,
-     "concept-card": 16,
-     "kinetic-words": 29,
+     "concept-card": 18,
+     "kinetic-words": 28,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 3,
@@ -6195,7 +6166,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "e2c019a7157439d1",
+   "key": "53c9b7a07fb85a0a",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6207,19 +6178,19 @@
      "excerpt",
      "kinetic-words",
      "quote-card",
-     "motion-title",
-     "excerpt",
      "kinetic-words",
+     "excerpt",
      "motion-title",
+     "kinetic-words",
      "process-steps"
     ],
     "counts": {
      "logo-sting": 1,
      "process-steps": 6,
-     "motion-title": 33,
+     "motion-title": 31,
      "repo-pr-card": 2,
      "quote-card": 8,
-     "concept-card": 16,
+     "concept-card": 18,
      "kinetic-words": 31,
      "checklist": 4,
      "map-highlight": 1,
@@ -6308,7 +6279,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "c74a717f0255598d",
+   "key": "d20beb4b72b7049d",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6329,10 +6300,10 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 6,
-     "motion-title": 36,
+     "motion-title": 34,
      "repo-pr-card": 2,
      "quote-card": 8,
-     "concept-card": 18,
+     "concept-card": 20,
      "kinetic-words": 33,
      "checklist": 4,
      "map-highlight": 1,
@@ -6427,7 +6398,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "b99687e94bf3e97b",
+   "key": "6bbb1ed43fde9376",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6441,18 +6412,18 @@
      "motion-title",
      "kinetic-words",
      "motion-title",
-     "motion-title",
+     "kinetic-words",
      "concept-card",
      "logo-sting"
     ],
     "counts": {
      "logo-sting": 2,
      "process-steps": 6,
-     "motion-title": 41,
+     "motion-title": 38,
      "repo-pr-card": 2,
      "quote-card": 8,
-     "concept-card": 21,
-     "kinetic-words": 37,
+     "concept-card": 23,
+     "kinetic-words": 38,
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 5,
@@ -6546,29 +6517,29 @@
  "report": {
   "cadence": {
    "duration": 976.377,
-   "events": 152,
-   "per_min": 9.34,
+   "events": 155,
+   "per_min": 9.53,
    "gap": {
-    "count": 151,
-    "p10": 3.904,
-    "p50": 5.843,
-    "p90": 9.008,
-    "mean": 6.357
+    "count": 154,
+    "p10": 3.905,
+    "p50": 5.772,
+    "p90": 8.933,
+    "mean": 6.233
    },
    "longest_static": {
-    "seconds": 13.86,
-    "at": 73.327
+    "seconds": 11.517,
+    "at": 724.843
    },
    "cuts": 47,
    "cut_gap": {
     "count": 48,
-    "p10": 15.682,
+    "p10": 16.04,
     "p50": 20.607,
-    "p90": 24.799,
+    "p90": 24.729,
     "mean": 20.341
    },
    "words": 2241,
-   "words_per_event": 14.65,
+   "words_per_event": 14.37,
    "gate": {
     "ok": true,
     "format": "long-form",
@@ -6577,44 +6548,44 @@
      {
       "id": "per_min",
       "ok": true,
-      "value": 9.34,
+      "value": 9.53,
       "want": "9–16 (target 11.5)",
-      "message": "152 events, 9.34/min"
+      "message": "155 events, 9.53/min"
      },
      {
       "id": "gap_p50",
       "ok": true,
-      "value": 5.843,
+      "value": 5.772,
       "want": "4–6.5 s",
-      "message": "median 5.843 s between events"
+      "message": "median 5.772 s between events"
      },
      {
       "id": "gap_p10",
       "ok": true,
-      "value": 3.904,
+      "value": 3.905,
       "want": "≥ 1.5 s",
-      "message": "p10 3.904 s (events too close to read below this)"
+      "message": "p10 3.905 s (events too close to read below this)"
      },
      {
       "id": "gap_p90",
       "ok": true,
-      "value": 9.008,
+      "value": 8.933,
       "want": "≤ 10.5 s",
-      "message": "p90 9.008 s"
+      "message": "p90 8.933 s"
      },
      {
       "id": "longest_static",
       "ok": true,
-      "value": 13.86,
+      "value": 11.517,
       "want": "≤ 14 s",
-      "message": "longest static run 13.86 s at 73.327 s"
+      "message": "longest static run 11.517 s at 724.843 s"
      },
      {
       "id": "words_per_event",
       "ok": true,
-      "value": 14.65,
+      "value": 14.37,
       "want": "10–20 words",
-      "message": "2241 words over 153 visuals"
+      "message": "2241 words over 156 visuals"
      },
      {
       "id": "cut_gap_p50",
@@ -6630,13 +6601,13 @@
    "count": 48,
    "states_per_shot": {
     "min": 1,
-    "max": 5,
+    "max": 4,
     "mean": 3.29
    },
    "changes": {
     "enter": 48,
-    "swap": 103,
-    "hold": 5,
+    "swap": 106,
+    "hold": 2,
     "build": 2
    }
   },
@@ -6645,23 +6616,23 @@
    "top": [
     {
      "id": "motion-title",
-     "share": 0.248
+     "share": 0.244
     },
     {
      "id": "kinetic-words",
-     "share": 0.235
+     "share": 0.237
     },
     {
      "id": "concept-card",
-     "share": 0.137
+     "share": 0.147
     },
     {
      "id": "quote-card",
-     "share": 0.046
+     "share": 0.045
     },
     {
      "id": "process-steps",
-     "share": 0.039
+     "share": 0.038
     }
    ],
    "longest_same_module_across_cuts": 2

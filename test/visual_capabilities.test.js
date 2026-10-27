@@ -8,7 +8,7 @@ const BEAT = {
   id: "b1",
   text: "Training compute grew from 40 percent to 3.2 billion dollars across France, Japan and Brazil in 2024 and 2025.",
   headline: "Compute grew tenfold",
-  line: "Compute grew tenfold",
+  line: "Training compute grew tenfold",
   label: "of the budget",
   brand: { mark: "assets/brand/mark.png", wordmark: { src: "assets/brand/wordmark.png", ratio: 7.5 } },
   facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent", "energy"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },

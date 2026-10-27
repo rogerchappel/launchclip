@@ -282,15 +282,16 @@ function seriesOf(beat, least = 2) {
 
 // The two sides of a comparison: named sides ("A versus B") or two numbers.
 // numeric: both sides need a number of the clause (null otherwise).
-// A verbatim line as 2–3 groups of consecutive words, each ≤ 14 characters; null when it does not split that way.
+// A verbatim line of four words or more as 2–3 groups of consecutive words, each ≤ 22 characters (the module fits them by size); null when it does not split that way.
 function lineGroups(line) {
   const words = String(line ?? '').split(/\s+/).filter(Boolean);
-  if (words.length < 2) return null;
-  const count = words.length <= 3 ? words.length : Math.min(3, Math.ceil(words.length / 2));
+  // Kinetic type needs four words or more (a shorter line is a title); two or three groups, never a word on its own like "a".
+  if (words.length < 4) return null;
+  const count = words.length <= 5 ? 2 : 3;
   const size = Math.ceil(words.length / count);
   const groups = [];
   for (let i = 0; i < words.length; i += size) groups.push(words.slice(i, i + size).join(' '));
-  return groups.length >= 2 && groups.every((group) => group.length <= 14) ? groups : null;
+  return groups.length >= 2 && groups.every((group) => group.length <= 22) ? groups : null;
 }
 
 // A verified source's code or terminal lines (evidence.data.lines as strings or {text}), else null.

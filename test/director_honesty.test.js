@@ -145,3 +145,16 @@ test("data: a chart is titled by what it measures, never by a fragment of the cl
   // With no title of its own, a chart has none.
   assert.equal(capabilityParams("bar-chart", { text: "x", headline: "Cached input drops", facts: { numbers: [] }, evidence: { status: "verified", data: { series: [{ label: "A", value: 1 }, { label: "B", value: 2 }] } } }).title, undefined);
 });
+
+test("data: a lone cached price shows itself, and \"exactly half\" draws a guide on the chart on screen", () => {
+  const states = pairSeries(clauses(["The price is $1 per million input tokens and $5 per million output tokens.", "Cached input drops to $0.05 per million.", "GPT-6.1 Sol costs $2 in and $10 out.", "So Terra is exactly half the price of Sol, on both sides."]).map((state, i) => (i === 0 ? { ...state, evidence: { claim: "c", status: "verified", names: ["Terra"] } } : state)));
+  assert.equal(states[1].alone, true);
+  assert.notEqual(states[1].kind, "series");
+  assert.deepEqual(states[3].evidence.data.reference, { value: 5, label: "half" });
+  // A bar chart takes the guide as a shot state of the same scene.
+  const params = { title: "Price per million tokens", data: [{ label: "Terra in", value: 1 }, { label: "Terra out", value: 5 }, { label: "Sol in", value: 2 }, { label: "Sol out", value: 10 }] };
+  const state = (id, start, change, extra = {}) => ({ id, words: [0, 0], start, end: start + 4, text: "x", intent: "number", kind: "series", capability: "bar-chart", module: "bar-chart", change, params, why: "", ...extra });
+  const map = { schema: "launchclip.beat-map.v1", format: { width: 1920, height: 1080 }, duration: 8, chapters: [{ id: "c", title: "Prices", start: 0, end: 8, background: "mesh", shots: [{ id: "s", start: 0, end: 8, states: [state("a", 0, "enter"), state("b", 4, "guide", { guide: { value: 5, label: "HALF" } })] }] }] };
+  const story = beatMapToStory(map, { captions: false });
+  assert.deepEqual(story.scenes[0].states, [{ at: 4, set: { guide: { value: 5, label: "HALF" } } }]);
+});

@@ -27,7 +27,7 @@
       "layout": "full",
       "lines": [
         { "words": [170, 183], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-1"], "why": "title: the chapter title" },
-        { "words": [184, 202], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-2"], "why": "date: nothing specific draws it; motion-title holds" },
+        { "words": [184, 202], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-2"], "why": "date: nothing specific draws it; the line itself (\"hundred partners could use\")" },
         { "words": [203, 217], "intent": "list", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-3"], "why": "list (evidence c-long-doc): process-steps, ahead of icon-row" },
         { "words": [218, 231], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-1"], "why": "code: nothing specific draws it; the line itself (\"Halcyon 1.5\")" },
         { "words": [232, 239], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-2"], "why": "concept: nothing specific draws it; the line itself (\"most developers met\")" },
@@ -139,7 +139,7 @@
         { "words": [1217, 1230], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-1"], "why": "tokens: nothing specific draws it; the line itself (\"fell by about half\")" },
         { "words": [1231, 1243], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-2"], "why": "concept: nothing specific draws it; kinetic-words holds" },
         { "words": [1244, 1254], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-3"], "why": "concept: nothing specific draws it; the line itself (\"The rest is probably margin\")" },
-        { "words": [1255, 1265], "intent": "proof", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-4"], "why": "concept: nothing specific draws it; motion-title holds" },
+        { "words": [1255, 1265], "intent": "proof", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-4"], "why": "concept: nothing specific draws it; the line itself (\"means more customers tomorrow\")" },
         { "words": [1266, 1284], "intent": "number", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-1"], "why": "share (evidence c-rival-cuts): percent-fill" },
         { "words": [1285, 1297], "intent": "turn", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-2"], "why": "money: nothing specific draws it; the line itself (\"cheaper model\")" },
         { "words": [1298, 1314], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-3"], "why": "money: nothing specific draws it; the line itself (\"least for now\")" }
@@ -239,7 +239,7 @@
         { "words": [2156, 2172], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-2"], "why": "ranking: nothing specific draws it; the line itself (\"weeks rather than years\")" },
         { "words": [2173, 2186], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-3"], "why": "concept: nothing specific draws it; the line itself (\"the same as ever\")" },
         { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: nothing specific draws it; the line itself (\"Measure on your own tasks\")" },
-        { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: nothing specific draws it; motion-title holds" },
+        { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: nothing specific draws it; the line itself (\"chart you cannot reproduce\")" },
         { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: nothing specific draws it; the line itself (\"the description\")" },
         { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: logo-sting" }
       ]
