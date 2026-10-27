@@ -64,7 +64,7 @@ function raceResolve(params, ctx) {
     const y = r2(y0 + i * (rowH + gap));
     const duration = rt(race * r.time / slowest);
     const finish = rt(raceAt + duration);
-    b.events.push({id: `${b.id}-finish-${i}`, name: `finish-${i}`, time: finish, role: 'emphasis', cue: i === fastest ? 'hit' : 'tick'});
+    b.events.push({id: `${b.id}-finish-${i}`, name: `finish-${i}`, time: finish, role: 'emphasis', cue: i === fastest ? 'impact' : 'tick'});
     return {...r, y, labelY: y, trackY: r2(y + labelSize * 1.25 + u(12)), duration, finish, time: rt(buildAt + i * 0.08), winner: i === fastest,
       ink: inkOn(b.colors, r.color), samples: countSamples(b.model, raceAt, duration, 'none', 0, r.time, fmt.format), text: fmt.format(r.time)};
   });

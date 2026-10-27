@@ -72,7 +72,7 @@ function carouselResolve(params, ctx) {
   const span = Math.abs(focusDay - startDay);
   const travel = rt(Math.min(2.4, 0.7 + 0.05 * span));
   const moveAt = b.timeOf('move', p.moveAt, 'params.moveAt', Math.min(buildAt - b.start + 0.9, b.lastEvent - travel - 0.4), {min: buildAt - b.start + 0.2});
-  b.events.push({id: `${b.id}-move`, name: 'move', time: moveAt, endTime: rt(moveAt + travel), role: 'emphasis', cue: rewind ? 'rewind' : 'whoosh'});
+  b.events.push({id: `${b.id}-move`, name: 'move', time: moveAt, endTime: rt(moveAt + travel), role: 'emphasis', cue: rewind ? 'tape-stop' : 'whoosh'});
   const focusAt = b.timeOf('focus', p.focusAt, 'params.focusAt', Math.min(b.lastEvent, moveAt - b.start + travel + 0.05), {min: moveAt - b.start + travel - 0.05});
   b.events.push({id: `${b.id}-focus`, name: 'focus', time: focusAt, endTime: rt(focusAt + 0.5), role: 'emphasis', cue: 'hit-soft'});
   const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'center', rewind, days, startDay, focusDay, lo, cardW, cardH, cardY, pitch, gap, centerX,

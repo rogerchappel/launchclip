@@ -101,7 +101,7 @@ function equationResolve(params, ctx) {
   else if (p.diffAt !== undefined) check.fail('params.diffAt', 'needs an \\add or \\del mark in params.latex');
   boxes.forEach((box, n) => cues.push({name: `box-${n}`, at: box.at, path: `params.boxes[${n}].at`, gap: 0.8, box}));
   scheduleCues(b, cues, buildAt - b.start + 0.8);
-  for (const cue of cues) b.events.push({id: `${b.id}-${cue.name}`, name: cue.name, time: cue.time, endTime: rt(cue.time + 0.5), role: 'emphasis', cue: cue.kind === 'diff' ? 'hit' : 'hit-soft'});
+  for (const cue of cues) b.events.push({id: `${b.id}-${cue.name}`, name: cue.name, time: cue.time, endTime: rt(cue.time + 0.5), role: 'emphasis', cue: cue.kind === 'diff' ? 'impact' : 'hit-soft'});
   const diffAt = diff ? cues.find(cue => cue.kind === 'diff').time : null;
   const layers = t.layers.map((layer, i) => {
     const mark = i ? marks[i - 1] : null;
