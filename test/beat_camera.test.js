@@ -101,7 +101,7 @@ test("zooms: a line naming a value or label on screen zooms to that element, tim
     const said = spoken(word.text);
     assert.ok(spot.values.includes(said.value) || spot.labels.some((label) => label.toLowerCase().split(/\s+/).some((part) => spoken(part).text === said.text)), `${zoom.word} names ${zoom.element}`);
     // target on a state module (unless the kit's rect for it cannot fit the safe area), a box inside the card's rect elsewhere.
-    if (zoom.target !== undefined) assert.ok(STATE_MODULES[card.state.module] && Number.isInteger(zoom.target), card.state.module);
+    if (zoom.target !== undefined) assert.ok(STATE_MODULES[card.state.module] && (Number.isInteger(zoom.target) || /^[a-z]+-\d+$/.test(zoom.target)), card.state.module);
     else {
       assert.equal(zoom.target, undefined);
       assert.ok(zoom.box.x >= 0 && zoom.box.y >= 0 && zoom.box.x + zoom.box.width <= 1920 && zoom.box.y + zoom.box.height <= 1080, JSON.stringify(zoom.box));

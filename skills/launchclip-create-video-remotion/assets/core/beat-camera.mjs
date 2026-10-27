@@ -168,7 +168,8 @@ export function zoomSpots(state, { format = { width: 1920, height: 1080 }, brand
     const rows = p.rows ?? p.entries;
     rows.forEach((row, i) => spots.push({ name: `row ${row.label}`, labels: [row.label], values: [row.value, ...(row.values ?? [])].map(numberIn).filter((v) => v !== null), target: i }));
   } else if (module === 'process-steps' && Array.isArray(p.steps) && p.steps.length >= 2) {
-    p.steps.forEach((step, i) => spots.push({ name: `step ${step.label}`, labels: [step.label], values: [numberIn(step.label)].filter((v) => v !== null), target: i }));
+    // A step's item index takes its full-width text; its node is the part that fits a zoom.
+    p.steps.forEach((step, i) => spots.push({ name: `step ${step.label}`, labels: [step.label], values: [numberIn(step.label)].filter((v) => v !== null), target: `node-${i}` }));
   } else if (module === 'excerpt' && Array.isArray(p.lines) && p.lines.length >= 2) {
     p.lines.forEach((line, i) => { if (line?.highlight) spots.push({ name: `line ${i + 1}`, labels: distinctive(line.text), values: figures(line.text), target: i }); });
   } else if (module === 'scatter-plot' && Array.isArray(p.points) && p.points.length >= 2) {
