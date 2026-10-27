@@ -63,9 +63,10 @@ export const PARTIAL_RENDERERS = Object.freeze(["remotion"]);
 
 // Story fields whose visual effect is hashed through another route (scenes and
 // the ending through the layers, overlays per window) or that never reach a
-// frame. Everything else at the top level is global: a world camera, ambient
-// drift, style or grammar settings invalidate every segment.
-const NON_VISUAL_TOP = new Set(["scenes", "overlays", "audio", "ending", "title", "notes", "meta"]);
+// frame (engine: the stamp of the engine that wrote the story). Everything
+// else at the top level is global: a world camera, ambient drift, style or
+// grammar settings invalidate every segment.
+const NON_VISUAL_TOP = new Set(["scenes", "overlays", "audio", "ending", "title", "notes", "meta", "engine"]);
 // audio.* that only shapes the soundtrack (captions are hashed as chunks).
 const AUDIO_ONLY = new Set(["mix", "mix_volume", "voice", "narration", "words", "music", "sfx"]);
 // WordCaptions shows a chunk from start − 0.001 s to end + 1 s.
