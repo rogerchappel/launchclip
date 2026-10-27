@@ -18,7 +18,7 @@ const maxDecimals = values => Math.max(0, ...values.map(decimalsOf));
 function buildTimes(b, p, span, {highlight = false} = {}) {
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
   const buildEnd = rt(Math.min(buildAt + span, b.start + b.lastEvent));
-  b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'riser-short'});
+  b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'tally'});
   let highlightAt = null;
   if (highlight) {
     highlightAt = b.timeOf('highlight', p.highlightAt, 'params.highlightAt', Math.min(b.lastEvent, buildEnd - b.start + 0.35), {min: buildEnd - b.start - 1e-6});

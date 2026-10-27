@@ -156,12 +156,15 @@ export function pickVariant(count, key) {
 
 /**
  * Resolve one bound cue to a file: {file, scope, source, variant (1-based),
- * measurements}. key: the stable per-event key (story id + event id).
+ * measurements}. key: the stable per-event key (story id + event id). turn:
+ * the cue's place among its family's repeats; with it, the key seeds where
+ * the rotation starts and repeats take the variants in turn.
  */
-export function resolveCueFile(cue, { libraries = [], kit = null, key } = {}) {
+export function resolveCueFile(cue, { libraries = [], kit = null, key, turn } = {}) {
   const family = familySource(cue.cue, libraries, kit);
   if (!family) return null;
-  const index = pickVariant(family.files.length, key ?? `${cue.cue}:${cue.at}`);
+  const count = family.files.length;
+  const index = Number.isInteger(turn) ? (pickVariant(count, key ?? cue.cue) + turn) % count : pickVariant(count, key ?? `${cue.cue}:${cue.at}`);
   return { file: family.files[index], scope: family.scope, source: family.source, variant: index + 1, measurements: family.measurements[index] };
 }
 

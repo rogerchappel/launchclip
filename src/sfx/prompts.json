@@ -17,7 +17,7 @@
       "variants": 2
     },
     "riser": {
-      "prompt": "short cinematic tension riser, rising pitch and brightening noise building to a sudden stop at its loudest point, no impact at the end, no music",
+      "prompt": "short tonal synth riser, a warm pitched tone gliding up and swelling to a sudden stop at its loudest point, no noise, no hiss, no white noise, no impact at the end, no music",
       "duration_seconds": 2,
       "prompt_influence": 0.55,
       "variants": 2

@@ -626,7 +626,7 @@ function resolveGrowthLine(params, ctx) {
   const pillAt = rt(endAt + 0.1);
   const exitStart = rt(end - 0.35);
   if (pill && textWidth(pill, labelSize * 1.3, 'body', 0.08) > safe.width * 0.5) check.fail('params.pill', 'is too long; shorten it');
-  b.events.push({id: `${b.id}-draw`, name: 'draw', time: t0, endTime: endAt, role: 'emphasis', cue: 'riser'});
+  b.events.push({id: `${b.id}-draw`, name: 'draw', time: t0, endTime: endAt, role: 'emphasis', cue: 'tally'});
   b.events.push({id: `${b.id}-takeoff`, name: 'takeoff', time: spikeAt, endTime: endAt, role: 'emphasis', cue: 'whoosh'});
   if (pill) b.events.push({id: `${b.id}-pill`, name: 'pill', time: pillAt, endTime: rt(pillAt + 0.4), role: 'payoff', cue: 'pop'});
   b.model.layer = 'behind';

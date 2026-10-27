@@ -52,8 +52,9 @@ import { storyStyleRequest } from "../kit/core/style.mjs";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
+import { guardCueTimbre } from "./sfx/timbre.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, userLibraryDir } from "./sfx/library.js";
-import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, ambienceForWorld } from "../kit/core/sound/options.mjs";
+import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "../kit/core/sound/options.mjs";
 import { musicChoice } from "../kit/core/sound/music.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
@@ -123,21 +124,30 @@ export const PATHS = Object.freeze({
 export const CUE_LEVELS = Object.freeze({
   impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3, click: 0.3, keystroke: 0.3, "keystroke-space": 0.34, "keystroke-enter": 0.36,
   // The palette families (kit/core/sound/families.mjs).
-  swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
+  tally: 0.16, swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
   "pen-scribble": 0.3, "camera-shutter": 0.32, cash: 0.3, notification: 0.3, "error-buzz": 0.28, success: 0.32, boing: 0.32, sparkle: 0.28, footstep: 0.35, door: 0.4
 });
 export const CUE_DURATIONS = Object.freeze({
   whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8, click: 0.06, keystroke: 0.11, "keystroke-space": 0.16, "keystroke-enter": 0.15,
-  swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
+  tally: TALLY_LANDS_AT + 0.22, swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
   "pen-scribble": 0.9, "camera-shutter": 0.42, cash: 1.3, notification: 0.9, "error-buzz": 0.6, success: 1.4, boing: 0.8, sparkle: 1.2, footstep: 0.32, door: 1
 });
 const CUE_SPACING = 0.12;
+// Short, quiet cues (clicks, keys, ticks, pops) may repeat freely; a long,
+// tonal one heard again soon sounds like a loop. So a long family starts at
+// most once per gap (seconds, start to start) and at most once per budget
+// seconds of video (at least once). Hits are bound first, so they win.
+const CUE_REPEAT_GAPS = Object.freeze({ tally: 4, riser: 8, shimmer: 4, subdrop: 8, impact: 0.6 });
+const CUE_BUDGETS = Object.freeze({ tally: 8, riser: 15, shimmer: 10, subdrop: 15 });
 // Ambience beds are normalised to -26 LUFS; this puts them about 6 dB lower
 // in the mix, under the music, and the mix ducks them further under speech.
 export const AMBIENCE_VOLUME = 0.5;
 const WHOOSH_TRANSITIONS = new Set(["push", "whip", "zoom"]);
 const EVENT_CUES = [
-  [/riser|rise|build|count|tension/, "riser"],
+  // A count or a build gets tonal blips that land on it; a riser is kept for a
+  // deliberate build of tension into a payoff.
+  [/tally|count|build|fill|climb/, "tally"],
+  [/riser|rise|tension/, "riser"],
   [/impact|slam|stamp|lock|headline|reveal-hard|hit|plunge/, "impact"],
   [/whoosh|push|whip|zoom|swipe|pan|transition|flow/, "whoosh"],
   [/shimmer|insight|resolve|equilibrium|sparkle/, "shimmer"],
@@ -209,9 +219,10 @@ function modelEventFor(model, event) {
  * event it names, else a default from its event name; palette: true lets the
  * default reach the palette families) and to every module
  * event that carries a `cue`, plus a whoosh under push/whip/zoom transitions.
- * A hit with cue "none" silences the event it names instead.
- * Risers end on their moment. Cues of the same kind closer than 0.12 s merge
- * (hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
+ * A hit replaces the module event it names (cue "none" silences it).
+ * Risers end on their moment. Cues of the same kind closer than 0.12 s merge,
+ * and a long cue repeats no sooner than its gap and no more than its budget
+ * allows (CUE_REPEAT_GAPS, CUE_BUDGETS; hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
  */
 export function bindCues(story, { models, palette = false } = {}) {
   const warnings = [];
@@ -223,11 +234,11 @@ export function bindCues(story, { models, palette = false } = {}) {
   const raw = [];
   for (const scene of scenes) {
     const model = typeof modelFor === "function" ? modelFor(scene) : modelFor?.[scene.id] ?? null;
-    // A hit with cue "none" silences the module event it names (and adds no cue).
+    // A hit that names a module event takes its place: its cue replaces the
+    // event's own (cue "none" silences it), so one moment never cues twice.
     const silenced = new Set();
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
-      if (hit?.cue !== "none") continue;
-      const event = model ? modelEventFor(model, hit.event) : null;
+      const event = model && hit?.event ? modelEventFor(model, hit.event) : null;
       if (event) silenced.add(event);
     }
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
@@ -255,16 +266,25 @@ export function bindCues(story, { models, palette = false } = {}) {
       continue;
     }
     // A riser builds into its moment: it ends on the event (or its endTime).
-    const anchor = kit.cue === "riser" ? (entry.end ?? entry.at) - CUE_DURATIONS.riser * (kit.modifiers.includes("short") ? 0.6 : 0.95) : entry.at;
+    // A tally plays inside its count: from the count's start (or the last
+    // TALLY_LANDS_AT s of a long one) to its landing chord on the end; a
+    // short count skips the tally's first blips (offset) rather than start early.
+    const tallyLead = kit.cue === "tally" ? Math.min(TALLY_LANDS_AT, Math.max(0.15, Number.isFinite(entry.end) ? entry.end - entry.at : 0.5)) : 0;
+    const anchor = kit.cue === "riser" ? (entry.end ?? entry.at) - CUE_DURATIONS.riser * (kit.modifiers.includes("short") ? 0.6 : 0.95)
+      : kit.cue === "tally" ? (entry.end ?? entry.at) - tallyLead : entry.at;
     const at = round3(Math.max(0, anchor));
     if (Number.isFinite(duration) && at >= duration - 0.05) {
       warnings.push(`${entry.shot}: cue ${kit.cue} at ${at}s falls after the end of the video; skipped`);
       continue;
     }
-    if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < CUE_SPACING)) continue;
+    const gap = CUE_REPEAT_GAPS[kit.cue] ?? CUE_SPACING;
+    if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < gap)) continue;
+    const budget = CUE_BUDGETS[kit.cue] && Number.isFinite(duration) ? Math.max(1, Math.ceil(duration / CUE_BUDGETS[kit.cue])) : Infinity;
+    if (cues.filter((cue) => cue.cue === kit.cue).length >= budget) continue;
     const cue = { cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event, optional: entry.source !== "hit" };
     // A riser lands on its moment; library risers are re-anchored on their measured peak.
     if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
+    if (kit.cue === "tally" && tallyLead < TALLY_LANDS_AT) cue.offset = round3(TALLY_LANDS_AT - tallyLead);
     cues.push(cue);
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
@@ -279,8 +299,16 @@ export function bindCues(story, { models, palette = false } = {}) {
  * re-anchored so its measured peak lands on its moment.
  */
 export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = "" } = {}) {
+  // Repeats of a family take its variants in turn, in time order, so the same
+  // file never plays twice running.
+  const turns = new Map();
+  const turnOf = new Map([...cues].map((cue, index) => [cue, index]).sort(([a], [b]) => a.at - b.at).map(([cue]) => {
+    const turn = turns.get(cue.cue) ?? 0;
+    turns.set(cue.cue, turn + 1);
+    return [cue, turn];
+  }));
   return cues.map((cue) => {
-    const resolved = resolveCueFile(cue, { libraries, kit, key: eventKey(storyId, cue) });
+    const resolved = resolveCueFile(cue, { libraries, kit, key: `${storyId}|${cue.cue}`, turn: turnOf.get(cue) });
     if (!resolved) return cue;
     const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
     const peak = Number(resolved.measurements?.peak_at_ms);
@@ -1032,7 +1060,10 @@ const STAGES = [
       const mixFile = path.join(ctx.project, PATHS.mix);
       // SFX cue → file: library first (explicit, project, user), then the kit.
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
-      const cues = resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId });
+      // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
+      const guarded = await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
+      const cues = guarded.cues;
+      for (const finding of guarded.findings) ctx.warnings.push(`sfx ${finding.cue} at ${finding.at}s: ${path.basename(finding.file)} refused (${finding.problem}); ${finding.replacement ? `used ${path.basename(finding.replacement)}` : "cue dropped"}`);
       let typing = null;
       if (typingPlan.length) {
         const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
@@ -1051,6 +1082,7 @@ const STAGES = [
         cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null })),
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
+        timbre_refused: guarded.findings,
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));

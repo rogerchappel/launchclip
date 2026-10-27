@@ -22,7 +22,9 @@ export function normalizeCues(cues, sfxDir) {
     if (!Number.isFinite(at) || at < 0) throw new Error(`cue ${index + 1} needs a non-negative "at"`);
     const file = cue.file ?? (cue.cue ? path.join(sfxDir, `${cue.cue}.wav`) : null);
     if (!file) throw new Error(`cue ${index + 1} needs "cue" or "file"`);
-    return { cue: cue.cue ?? path.basename(file, path.extname(file)), at, volume: Number(cue.volume ?? 0.35), shot: cue.shot ?? null, intent: cue.intent ?? '', file: path.resolve(file) };
+    // offset: seconds into the file to start from (a tally fitted to a short count skips its first blips).
+    const offset = Number(cue.offset ?? 0);
+    return { cue: cue.cue ?? path.basename(file, path.extname(file)), at, volume: Number(cue.volume ?? 0.35), shot: cue.shot ?? null, intent: cue.intent ?? '', file: path.resolve(file), ...(offset > 0 ? { offset } : {}) };
   });
 }
 
@@ -53,7 +55,8 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     index += 1;
   }
   cues.forEach((cue, i) => {
-    parts.push(`[${index + i}]adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}[s${i}]`);
+    const trim = cue.offset > 0 ? `atrim=start=${cue.offset},asetpts=PTS-STARTPTS,afade=t=in:d=0.004,` : '';
+    parts.push(`[${index + i}]${trim}adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}[s${i}]`);
     mixInputs.push(`[s${i}]`);
   });
   if (!mixInputs.length) throw new Error('nothing to mix: pass --voice, --music or cues');

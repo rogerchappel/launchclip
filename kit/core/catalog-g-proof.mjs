@@ -147,7 +147,7 @@ function resolveStat(params, ctx) {
     samples.push({t: hitAt, text: value});
   }
   const labelAt = after(b, t0, 0.2), sourceAt = after(b, hitAt, 0.1);
-  b.events.push({id: `${b.id}-count`, name: 'count', time: t0, endTime: hitAt, role: 'count', ...(count ? {cue: 'riser'} : {})});
+  b.events.push({id: `${b.id}-count`, name: 'count', time: t0, endTime: hitAt, role: 'count', ...(count ? {cue: 'tally'} : {})});
   b.events.push({id: `${b.id}-hit`, name: 'hit', time: hitAt, endTime: rt(hitAt + 0.3), role: 'hit', cue: 'impact'});
   const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, value, label, source, sourceText, icon: L.mode === 'stack' ? glyph : null, count, start: count ? format(0) : value, samples,
     valueColor, labelColor: theme.foreground, sourceColor: theme.muted, iconColor: b.colors.primary, t0, hitAt, labelAt, sourceAt};
