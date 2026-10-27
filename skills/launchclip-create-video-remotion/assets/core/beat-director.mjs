@@ -679,7 +679,7 @@ export function beatMapToStory(map, options = {}) {
       }
       // Too short for any module that shows it: the scene before holds on.
       if (!module || seconds < 1) { if (scenes.length) scenes.at(-1).end = round(b - from); continue; }
-      scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'fade', dur: 0.35 } } : {}) });
+      scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'rack-focus', dur: 0.4 } } : {}) });
     }
   }
   if (scenes.length) scenes[0].start = 0;

@@ -162,9 +162,11 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     case 'rack-focus':
       // The outgoing card blurs back into the plate while the incoming one
       // sharpens forward: depth of field racks from one to the other.
-      // Both cards move at once and most of the move lands in the first frames.
+      // Both cards move at once and most of the move lands in the first frames:
+      // the new card is there within a few frames, blurred and lifted, and
+      // then pulls sharp while the old one falls back under it.
       return { type, duration: d,
-        in: [t('rackIn', 1, 0, 'expo.out'), t('scale', RACK.scaleIn, 1, 'expo.out'), t('opacity', 0, 1, 'expo.out', 0, d * 0.6)],
+        in: [t('rackIn', 1, 0, 'expo.out'), t('scale', RACK.scaleIn, 1, 'expo.out'), t('opacity', 0, 1, 'expo.out', 0, d * 0.25)],
         out: [t('blur', 0, RACK.blurOut, 'expo.out'), t('scale', 1, RACK.scaleOut, 'expo.out'), t('opacity', 1, 0, 'power2.out', d * 0.2, d * 0.8)] };
     case 'glow-wipe': {
       // Chapter break: a straight wipe in the travel direction, with the
