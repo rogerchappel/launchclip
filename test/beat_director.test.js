@@ -166,8 +166,15 @@ test("beat director: the map is a valid direction map and renders as a storyboar
   for (const scene of resolved.scenes) assert.doesNotThrow(() => resolveModule(scene, resolved), scene.id);
   assert.equal(story.scenes[0].start, 0);
   assert.equal(story.scenes.at(-1).end, story.format.duration);
-  // A build inside a shot racks focus to the next card (a visible event); a new shot cuts.
-  const builds = story.scenes.filter((scene) => scene.in);
+  // A build inside a shot racks focus to the next card (a visible event); a new shot enters on a camera move.
+  assert.deepEqual(story.camera, { mode: "world", layout: "path", spacing: 0.14, parallax: true });
+  const entries = story.scenes.filter((scene) => scene.in && scene.in.type !== "rack-focus");
+  assert.ok(entries.length > 0 && entries.every((scene) => ["push", "pull", "whip-pan", "orbit", "overview"].includes(scene.in.type)), JSON.stringify(entries.map((scene) => scene.in)));
+  // camera: false keeps hard cuts between shots.
+  const cuts = beatMapToStory(map, { from, to, title: "Speed sample", camera: false });
+  assert.equal(cuts.camera, undefined);
+  const builds = cuts.scenes.filter((scene) => scene.in);
   assert.ok(builds.length > 0 && builds.every((scene) => scene.in.type === "rack-focus" && scene.in.dur === 0.4), JSON.stringify(builds.map((scene) => scene.in)));
-  assert.ok(story.scenes.length > builds.length + 1, "shots still cut");
+  assert.ok(cuts.scenes.length > builds.length + 1, "shots still cut");
+  assert.ok(cuts.scenes.every((scene) => !scene.zooms));
 });
