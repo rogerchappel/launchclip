@@ -161,9 +161,10 @@ function riser(T, r) {
 // tonal throughout: a count should sound like play, not a noise build.
 function tally(T, r) {
   const character = T.material === 'chip' ? 'blip' : r.pick(['blip', 'pluck', 'wood']);
-  const count = r.int(6, 9);
+  const count = r.int(5, 9);
   const span = TALLY_LANDS_AT;
-  const base = fold(T.root * T.pitch, 700);
+  // Each variant starts on its own step of the scale, so repeats are told apart.
+  const base = fold(T.root * T.pitch * semi(r.pick([0, 2, 4, 5, 7, 9])), 800);
   const steps = T.scale.length;
   const noteAt = (degree) => fold(base * semi(T.scale[degree % steps] + 12 * Math.floor(degree / steps)), 2600);
   const voice = (f, d, gain, delay) => {
@@ -572,7 +573,7 @@ export const FAMILY_BUILDERS = Object.freeze({
   whoosh: { intent: 'spatial travel, push, whip pan', variants: 4, build: (T, r) => whoosh(T, r) },
   impact: { intent: 'big reveal, law/headline lock, scene slam', variants: 4, build: impact },
   riser: { intent: 'tension into a payoff or rehook (ends on the hit)', variants: 3, build: riser },
-  tally: { intent: 'a number counts up or a chart builds (tonal blips that land on the moment)', variants: 3, build: tally },
+  tally: { intent: 'a number counts up or a chart builds (tonal blips that land on the moment)', variants: 5, build: tally },
   tick: { intent: 'counter step, data point lands, small UI state change', variants: 4, build: tick },
   pop: { intent: 'object or label appears', variants: 4, build: pop },
   shimmer: { intent: 'insight, equilibrium, satisfying resolve', variants: 3, build: shimmer },
