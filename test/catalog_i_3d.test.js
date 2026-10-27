@@ -207,3 +207,18 @@ test('glass-bars-3d: a landscape staircase with title, source and marker fits wi
   assert.ok(model.content.bars.every(bar => bar.size.lines === 1), 'every name on one line');
   assert.ok(model.content.k > 0.5, `the scene keeps its scale (k ${model.content.k})`);
 });
+
+const TERRA = {title: 'Output, $ per 1M tokens', data: [{label: 'GPT-6.1 Sol', value: 10, display: '$10'}, {label: 'GPT-6.1 Terra', value: 5, display: '$5'}], reference: {value: 5, label: 'half'}, highlight: 1, orbit: 12, source: 'OpenRouter, OrcaRouter', rect: {x: 360, y: 133, width: 1200, height: 700}};
+
+test('glass-bars-3d: two or three bars are hero-sized, wide in their rect, with one-line names', () => {
+  const model = resolve('glass-bars-3d', TERRA, '16:9', {start: 0});
+  const c = model.content;
+  const span = c.bars.at(-1).x + c.bars.at(-1).w / 2 - (c.bars[0].x - c.bars[0].w / 2);
+  assert.ok(span >= 0.45 * model.rect.width, `two bars span ${span} of ${model.rect.width}`);
+  assert.ok(c.bars[0].w >= 0.18 * model.rect.width, `a bar is ${c.bars[0].w} px wide`);
+  assert.ok(c.bars.every(bar => bar.size.lines === 1), 'names stay on one line');
+  assert.ok(Math.max(...c.bars.map(bar => bar.size.value * bar.size.scale)) >= 76, 'values are hero-sized');
+  const three = resolve('glass-bars-3d', {data: [{label: 'Gemini 4 Argon', value: 10}, {label: 'GPT-6 Astra', value: 50}, {label: 'Claude Opus 5.5', value: 20}]}, '16:9');
+  const s3 = three.content.bars.at(-1).x + three.content.bars.at(-1).w / 2 - (three.content.bars[0].x - three.content.bars[0].w / 2);
+  assert.ok(s3 >= 0.55 * three.rect.width, `three bars span ${s3} of ${three.rect.width}`);
+});

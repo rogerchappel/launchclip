@@ -62,12 +62,15 @@ function barsResolve(params, ctx) {
   const texts = items.map(item => item.display ?? fmt.format(item.value));
 
   // Label sizes: preferred, then raised so the smallest projection keeps key text.
-  const prefValue = u(b.portrait ? 74 : 64), prefName = u(b.portrait ? 46 : 40);
+  // Hero sizes: values read from across the room, names on one line over wide bars.
+  const prefValue = u(b.portrait ? 92 : 84), prefName = u(b.portrait ? 50 : 46);
+  const labelGap = u(22);
   let sizes = items.map(() => ({value: prefValue, name: prefName, lines: 1}));
   let stepW = world.w;
   const geometry = k => {
     const pitch = (stepW + world.gap * stepW / world.w) * k;
-    return items.map((item, i) => ({x: (i - (n - 1) / 2) * pitch, w: stepW * k, h: heightOf(i) * k, d: world.d * (stairs ? 1 : stepW / world.w) * k}));
+    // Wide bars stay fairly shallow: their tops would otherwise take the height the bars need.
+    return items.map((item, i) => ({x: (i - (n - 1) / 2) * pitch, w: stepW * k, h: heightOf(i) * k, d: world.d * (stairs ? 1 : Math.min(1.35, stepW / world.w)) * k}));
   };
   const labelBox = i => {
     const s = sizes[i];
@@ -87,7 +90,7 @@ function barsResolve(params, ctx) {
     const points = [];
     for (const bar of bars) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, bar.h]) points.push([bar.x + sx * bar.w / 2, sy * bar.d / 2, z]);
     const labels = [];
-    bars.forEach((bar, i) => { const lb = labelBox(i); if (lb) labels.push({at: [bar.x, 0, bar.h + u(10)], w: lb.w, h: lb.h, ax: 0.5, ay: 1}); });
+    bars.forEach((bar, i) => { const lb = labelBox(i); if (lb) labels.push({at: [bar.x, 0, bar.h + labelGap], w: lb.w, h: lb.h, ax: 0.5, ay: 1}); });
     if (marker) {
       const top = Math.max(...bars.map(bar => bar.h)) + lift;
       for (const s of marker.steps) labels.push({at: [bars[s].x, 0, top], w: chip.w * 1.08, h: chip.h * 1.08, ax: 0.5, ay: 1});
@@ -95,11 +98,16 @@ function barsResolve(params, ctx) {
     return {points, labels};
   };
   let fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
-  // A height-limited frame gets chunkier bars rather than empty sides.
-  if (!stairs && fit.bounds.w < box.W * 0.8) {
-    stepW = Math.min(world.w * 1.8, stepW * box.W * 0.85 / fit.bounds.w);
-    fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
-  }
+  // A height-limited frame gets wide bars rather than empty sides: two or
+  // three bars span most of the rect, more stay slimmer.
+  const spread = n <= 2 ? 3.2 : n === 3 ? 2.6 : n === 4 ? 2.2 : 1.6;
+  const widen = () => {
+    for (let i = 0; i < 4 && !stairs && fit.bounds.w < box.W * 0.86 && stepW < world.w * spread - 1e-6; i++) {
+      stepW = Math.min(world.w * spread, stepW * box.W * 0.9 / fit.bounds.w);
+      fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
+    }
+  };
+  widen();
   let bars = geometry(fit.k);
   // Text: fit each label to its bar pitch at its smallest projected scale.
   const pitch = bars.length > 1 ? bars[1].x - bars[0].x : bars[0].w * 2;
@@ -113,6 +121,7 @@ function barsResolve(params, ctx) {
       return {value: up2(value.size / s), name: up2(name.size / s), lines: name.lines, scale: s};
     });
     fit = fitScene(cam, box.W, box.avail, build, {centre: box.centre});
+    widen();
     bars = geometry(fit.k);
     items.forEach((item, i) => {
       const s = minScale(cam, [bars[i].x, 0, bars[i].h]);
@@ -197,7 +206,7 @@ function barsResolve(params, ctx) {
     minText = Math.min(minText, b.min.key);
   }
   const content = {variant: b.variant, title: box.tb.title, source: box.tb.source, align: 'center', cam, W: box.W, H: box.H, k: bk, bars: out, tone, hiTone, highlight, highlightAt, marker: markerOut,
-    reference: reference ? {...reference, h: r2(world.hMax * fit.k * reference.value / max), size: r2(Math.max(b.min.meta, u(30)))} : null, buildAt, buildEnd, ink: b.theme.foreground, muted: b.theme.muted};
+    reference: reference ? {...reference, h: r2(world.hMax * fit.k * reference.value / max), size: r2(Math.max(b.min.meta, u(30)))} : null, buildAt, buildEnd, grow, labelGap: r2(labelGap), ink: b.theme.foreground, muted: b.theme.muted};
   return b.finish(content, {minTextPx: r2(Math.min(minText, box.tb.title ? box.tb.title.size : Infinity))});
 }
 
@@ -234,7 +243,7 @@ function barsView(model) {
       const s = bar.size;
       const w = r2(Math.max(textWidth(bar.text, s.value, 'display'), textWidth(bar.label, s.name, 'body') / s.lines) + 16 * u);
       const h = r2(s.name * 1.2 * s.lines + s.value * 1.08 + 14 * u);
-      floor.push(billboard(`${id}-bb${i}`, c.cam, [bar.x, 0, r2(bar.h + 10 * u)], {w, h}, [
+      floor.push(billboard(`${id}-bb${i}`, c.cam, [bar.x, 0, r2(bar.h + c.labelGap)], {w, h}, [
         el('div', `${id}-lb${i}`, abs(0, 0, w, h, {opacity: 0}), [
           label(null, 0, 0, w, bar.label, {size: s.name, family: fonts.body, color: theme.foreground, align: 'center', weight: 600, wrap: s.lines > 1, lineHeight: 1.2}),
           label(`${id}-v${i}`, 0, r2(s.name * 1.2 * s.lines + 4 * u), w, bar.display ?? bar.text, {size: s.value, family: fonts.display, color: hi ? c.hiTone : c.tone === theme.accent ? theme.foreground : c.tone, align: 'center', lineHeight: 1.08})
@@ -278,8 +287,8 @@ function barsTimeline(model, ops) {
   c.bars.forEach((bar, i) => {
     const g = `${id}-g${i}`;
     set(ops, g, start, {x: 0, y: 0, scaleX: 1, scaleY: 0.001});
-    tw(ops, g, bar.time, 0.75, 'power3.out', {scaleY: 0.001}, {scaleY: 1});
-    if (stairs) riseOps(ops, `${id}-ft${i}`, start, rt(bar.time + 0.45), r2(16 * u), {duration: 0.4});
+    tw(ops, g, bar.time, c.grow, 'power3.out', {scaleY: 0.001}, {scaleY: 1});
+    if (stairs) riseOps(ops, `${id}-ft${i}`, start, rt(bar.time + c.grow * 0.6), r2(16 * u), {duration: 0.4});
     else {
       riseOps(ops, `${id}-lb${i}`, start, rt(bar.time + 0.1), r2(18 * u), {duration: 0.4});
       if (bar.samples) countOps(ops, `${id}-v${i}`, start, bar.samples[0].text, bar.samples);
