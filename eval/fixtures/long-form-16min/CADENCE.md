@@ -12,10 +12,9 @@ cadence passed (long-form, default): 157 events, 9.65/min, 14.18 words per event
   ok   longest_static   11.517  want ≤ 14 s
   ok   words_per_event   14.18  want 10–20 words
   ok   cut_gap_p50      20.607  want 15–25 s
-states per shot 1–4 (mean 3.29); changes enter 48, swap 88, build 22
-variety: 23 modules; top icon-row 15%, concept-card 11%, motion-title 10%, glass-word 10%, kinetic-words 7%; longest same-module run across cuts 1
+states per shot 1–4 (mean 3.29); changes enter 48, swap 89, build 21
+variety: 23 modules; top icon-row 17%, concept-card 16%, motion-title 10%, kinetic-words 9%, icon-grid 7%; longest same-module run across cuts 1
 evidence: 55/85 claims shown with a sourced visual (65%), 12 on a capture
-fallbacks (planned modules not registered yet): particle-text→glass-word ×15, title-decompose→motion-title ×8, paper-stack→concept-card/excerpt ×6, social-post→quote-card/concept-card ×6, glass-bars-3d→bar-chart/concept-card ×6, tokenizer→kinetic-words ×5, evidence-chain→timeline ×4, coin-stack→concept-card ×4, logo-sting→motion-title ×2, repo-pr-card→window-chrome ×2, date-pinned-timeline→timeline ×2, diff-view→code-snippet ×2, lineage-graph→timeline ×2, rack-shelf→concept-card ×1, terminal-session→window-chrome ×1, commit-card→excerpt ×1
 chunks: 12 (0 reused)
 
 shorts: 4 cut for 9:16 at short-form cadence

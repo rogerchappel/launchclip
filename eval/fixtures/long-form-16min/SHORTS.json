@@ -86,7 +86,7 @@
    {
     "shot": "short-1-sh3",
     "start": 20.176,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "enter",
     "text": "And on a maths test"
    },
@@ -114,14 +114,14 @@
    {
     "shot": "short-1-sh4",
     "start": 29.959,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "Northlight mentioned that drop in a footnote."
    },
    {
     "shot": "short-1-sh4",
     "start": 33.329,
-    "module": "kinetic-words",
+    "module": "glass-word",
     "change": "swap",
     "text": "The honest summary is this."
    },
@@ -203,14 +203,14 @@
    {
     "shot": "short-2-sh1",
     "start": 4.873,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "swap",
     "text": "blog post comparing its own model favourably on maths."
    },
    {
     "shot": "short-2-sh2",
     "start": 8.945,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "Five days after the launch,"
    },
@@ -252,7 +252,7 @@
    {
     "shot": "short-2-sh4",
     "start": 24.849,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "enter",
     "text": "on most public benchmarks and could run on a single workstation."
    },
@@ -454,14 +454,14 @@
    {
     "shot": "short-4-sh2",
     "start": 10.705,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "enter",
     "text": "Running it costs real money."
    },
    {
     "shot": "short-4-sh2",
     "start": 13.081,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "Outside analysts estimate the"
    },

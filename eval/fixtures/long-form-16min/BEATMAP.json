@@ -40,13 +40,12 @@
        "text": "On a quiet Tuesday in March, Northlight Labs shipped a model that nobody had on their calendar.",
        "intent": "hook",
        "kind": "sting",
-       "capability": "logo-sting",
-       "module": "motion-title",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "enter",
        "params": {
         "text": "Halcyon 2, explained",
-        "highlight": "Halcyon"
+        "icon": "scale"
        },
        "evidence": {
         "claim": "c-history-2023",
@@ -60,7 +59,7 @@
         },
         "quote": "a research preview for partners"
        },
-       "why": "sting (evidence c-history-2023): logo-sting (→ motion-title until logo-sting is registered)"
+       "why": "sting (evidence c-history-2023): nothing else fits, a concept card"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-2",
@@ -106,15 +105,14 @@
        "text": "There was a blog post, a forty page system card,",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Blog post forty",
         "icon": "database"
        },
-       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
+       "why": "documents: nothing else fits, a concept card"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-4",
@@ -127,17 +125,12 @@
        "text": "and a pull request that quietly changed the default model in their public SDK.",
        "intent": "claim",
        "kind": "pr",
-       "capability": "repo-pr-card",
-       "module": "window-chrome",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "title": "northlight/sdk#1842: default…",
-        "lines": [
-         "612 comments"
-        ],
-        "caption": "Pull request quietly",
-        "variant": "mac"
+        "text": "Pull request quietly",
+        "icon": "cpu"
        },
        "evidence": {
         "claim": "c-pr-comments",
@@ -156,7 +149,7 @@
          "out": "assets/evidence/sdk-pr-1842.mp4"
         }
        },
-       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card (→ window-chrome until repo-pr-card is registered)"
+       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card"
       }
      ]
     },
@@ -176,9 +169,8 @@
        "text": "Within six hours, the post had been shared more than ninety thousand times.",
        "intent": "number",
        "kind": "social",
-       "capability": "social-post",
+       "capability": "quote-card",
        "module": "quote-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "quote": "Shared 90,412 times",
@@ -202,7 +194,7 @@
          "out": "assets/evidence/halcyon-2-post.mp4"
         }
        },
-       "why": "social (evidence c-shares, capture halcyon-2-post): social-post (→ quote-card until social-post is registered)"
+       "why": "social (evidence c-shares, capture halcyon-2-post): quote-card"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh2-2",
@@ -243,14 +235,14 @@
        "text": "So what is Halcyon 2, why did it land so hard,",
        "intent": "number",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "word": "Halcyon"
+        "text": "Halcyon land hard",
+        "highlight": "Halcyon"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: motion-title"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh2-4",
@@ -429,14 +421,13 @@
        "text": "which ones are marketing, and what this launch tells us about the next twelve months. Let's start with what was actually announced.",
        "intent": "number",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "glass-word",
+       "module": "glass-word",
        "change": "enter",
        "params": {
-        "text": "Ones marketing launch",
-        "highlight": "Ones"
+        "word": "Ones"
        },
-       "why": "concept: motion-title"
+       "why": "concept: glass-word"
       }
      ]
     }
@@ -471,14 +462,15 @@
        "text": "To see why this release matters, it helps to know where Halcyon came from.",
        "intent": "claim",
        "kind": "title",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "enter",
        "params": {
-        "word": "See"
+        "text": "See release matters",
+        "kicker": "Chapter 2",
+        "highlight": "See"
        },
-       "why": "title: particle-text (→ glass-word until particle-text is registered)"
+       "why": "title: motion-title"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh1-2",
@@ -491,9 +483,8 @@
        "text": "The first Halcyon model shipped in 2023, as a research preview that only a few hundred partners could use.",
        "intent": "number",
        "kind": "date",
-       "capability": "date-pinned-timeline",
+       "capability": "timeline",
        "module": "timeline",
-       "fallback": true,
        "change": "swap",
        "params": {
         "steps": [
@@ -523,7 +514,7 @@
         },
         "quote": "a research preview for partners"
        },
-       "why": "date (evidence c-history-2023): date-pinned-timeline (→ timeline until date-pinned-timeline is registered)"
+       "why": "date (evidence c-history-2023): timeline"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh1-3",
@@ -585,9 +576,8 @@
        "text": "In 2024, Northlight released Halcyon 1.5, which added code, images and a public API.",
        "intent": "number",
        "kind": "code",
-       "capability": "diff-view",
+       "capability": "code-snippet",
        "module": "code-snippet",
-       "fallback": true,
        "change": "enter",
        "params": {
         "title": "Northlight released",
@@ -628,7 +618,7 @@
          ]
         }
        },
-       "why": "code: diff-view (→ code-snippet until diff-view is registered)"
+       "why": "code: code-snippet"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh2-2",
@@ -730,9 +720,8 @@
        "text": "Then, in 2025, the company went quiet. No new models,",
        "intent": "number",
        "kind": "date",
-       "capability": "date-pinned-timeline",
+       "capability": "timeline",
        "module": "timeline",
-       "fallback": true,
        "change": "enter",
        "params": {
         "steps": [
@@ -750,7 +739,7 @@
          }
         ]
        },
-       "why": "date: date-pinned-timeline (→ timeline until date-pinned-timeline is registered)"
+       "why": "date: timeline"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh3-2",
@@ -791,12 +780,27 @@
        "text": "Looking back, that quiet year was the training run for Halcyon 2.",
        "intent": "number",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "word": "Looking"
+        "words": [
+         {
+          "text": "Looking",
+          "at": 0.2
+         },
+         {
+          "text": "back",
+          "at": 0.9
+         },
+         {
+          "text": "quiet",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-training-cost",
@@ -810,7 +814,7 @@
         },
         "quote": "$400M–$600M estimate"
        },
-       "why": "concept (evidence c-training-cost): particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept (evidence c-training-cost): kinetic-words"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh3-4",
@@ -823,9 +827,8 @@
        "text": "Each version descended from the one before, but the jump from 1.5 to 2 is the largest in the family.",
        "intent": "number",
        "kind": "social",
-       "capability": "social-post",
+       "capability": "quote-card",
        "module": "quote-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "quote": "2.1M views",
@@ -849,7 +852,7 @@
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ quote-card until social-post is registered)"
+       "why": "social (evidence c-clip, capture side-by-side-clip): quote-card"
       }
      ]
     },
@@ -941,27 +944,14 @@
        "text": "That lineage tells you what Northlight optimises for.",
        "intent": "claim",
        "kind": "lineage",
-       "capability": "lineage-graph",
-       "module": "timeline",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "steps": [
-         {
-          "label": "Lineage",
-          "icon": "users"
-         },
-         {
-          "label": "Tells",
-          "icon": "code"
-         },
-         {
-          "label": "Northlight",
-          "icon": "search"
-         }
-        ]
+        "text": "Lineage tells Northlight",
+        "icon": "users"
        },
-       "why": "lineage: lineage-graph (→ timeline until lineage-graph is registered)"
+       "why": "lineage: nothing else fits, a concept card"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh4-4",
@@ -974,31 +964,40 @@
        "text": "Every release pushed the same idea further: read more, remember more, and finish longer tasks without losing the thread.",
        "intent": "claim",
        "kind": "list",
-       "capability": "lineage-graph",
-       "module": "timeline",
-       "fallback": true,
-       "change": "build",
+       "capability": "icon-grid",
+       "module": "icon-grid",
+       "change": "swap",
        "params": {
-        "steps": [
+        "title": "Release pushed idea",
+        "items": [
          {
-          "label": "Lineage",
-          "icon": "users"
+          "icon": "clock",
+          "label": "Release"
          },
          {
-          "label": "Tells",
-          "icon": "code"
+          "icon": "users",
+          "label": "Pushed"
          },
          {
-          "label": "Northlight",
-          "icon": "search"
+          "icon": "code",
+          "label": "Idea"
          },
          {
-          "label": "Release pushe…",
-          "icon": "clock"
+          "icon": "search",
+          "label": "Further"
+         },
+         {
+          "icon": "lightbulb",
+          "label": "Read"
+         },
+         {
+          "icon": "gauge",
+          "label": "Remember"
          }
-        ]
+        ],
+        "variant": "duotone"
        },
-       "why": "list: builds on timeline (+1 steps)"
+       "why": "list: icon-grid"
       }
      ]
     }
@@ -1033,27 +1032,11 @@
        "text": "Training a model like this is mostly a story about hardware.",
        "intent": "claim",
        "kind": "title",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "glass-word",
+       "module": "glass-word",
        "change": "enter",
        "params": {
-        "words": [
-         {
-          "text": "Training",
-          "at": 0.2
-         },
-         {
-          "text": "model",
-          "at": 0.9
-         },
-         {
-          "text": "like",
-          "at": 1.6,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "word": "Training"
        },
        "evidence": {
         "claim": "c-cutoff",
@@ -1067,7 +1050,7 @@
         },
         "quote": "post-cutoff events: 30% error"
        },
-       "why": "title (evidence c-cutoff): kinetic-words"
+       "why": "title (evidence c-cutoff): glass-word"
       },
       {
        "id": "inside-the-training-run-1-sh1-2",
@@ -1174,9 +1157,8 @@
        "text": "training run alone cost between 400 million and 600 million dollars,",
        "intent": "number",
        "kind": "compare",
-       "capability": "glass-bars-3d",
+       "capability": "bar-chart",
        "module": "bar-chart",
-       "fallback": true,
        "change": "enter",
        "params": {
         "title": "Training run alone",
@@ -1206,7 +1188,7 @@
         },
         "quote": "$400M–$600M estimate"
        },
-       "why": "compare (evidence c-training-cost): glass-bars-3d (→ bar-chart until glass-bars-3d is registered)"
+       "why": "compare (evidence c-training-cost): bar-chart"
       },
       {
        "id": "inside-the-training-run-1-sh2-2",
@@ -1219,15 +1201,14 @@
        "text": "once you count the chips, the power and the people.",
        "intent": "claim",
        "kind": "compute",
-       "capability": "rack-shelf",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Once count chips",
         "icon": "code"
        },
-       "why": "compute: rack-shelf (→ concept-card until rack-shelf is registered)"
+       "why": "compute: nothing else fits, a concept card"
       },
       {
        "id": "inside-the-training-run-1-sh2-3",
@@ -1240,14 +1221,14 @@
        "text": "Northlight has not confirmed a number. Power is the other constraint.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "word": "Northlight"
+        "text": "Northlight confirmed",
+        "highlight": "Northlight"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: motion-title"
       },
       {
        "id": "inside-the-training-run-1-sh2-4",
@@ -1260,14 +1241,29 @@
        "text": "The Finnish site was chosen because electricity there is cheap, mostly renewable,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "text": "Finnish site chosen",
-        "highlight": "Finnish"
+        "words": [
+         {
+          "text": "Finnish",
+          "at": 0.2
+         },
+         {
+          "text": "site",
+          "at": 0.9
+         },
+         {
+          "text": "chosen",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
-       "why": "concept: motion-title"
+       "why": "concept: kinetic-words"
       }
      ]
     },
@@ -1287,15 +1283,14 @@
        "text": "and the cold climate makes cooling easier. The system card",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Cold climate makes",
         "icon": "key"
        },
-       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
+       "why": "documents: nothing else fits, a concept card"
       },
       {
        "id": "inside-the-training-run-1-sh3-2",
@@ -1561,9 +1556,8 @@
        "text": "The announcement made three claims. First, Halcyon 2 is faster,",
        "intent": "number",
        "kind": "title",
-       "capability": "title-decompose",
+       "capability": "motion-title",
        "module": "motion-title",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Announcement made three",
@@ -1582,7 +1576,7 @@
         },
         "quote": "a research preview for partners"
        },
-       "why": "title (evidence c-history-2023): title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title (evidence c-history-2023): motion-title"
       },
       {
        "id": "what-northlight-actually-announced-1-sh1-2",
@@ -1595,9 +1589,8 @@
        "text": "answering a typical request in about 1.8 seconds instead of 4.1 seconds.",
        "intent": "number",
        "kind": "compare",
-       "capability": "glass-bars-3d",
+       "capability": "bar-chart",
        "module": "bar-chart",
-       "fallback": true,
        "change": "swap",
        "params": {
         "title": "Answering typical request",
@@ -1627,7 +1620,7 @@
         },
         "quote": "median latency fell from 4.1 s to 1.8 s"
        },
-       "why": "compare (evidence c-latency): glass-bars-3d (→ bar-chart until glass-bars-3d is registered)"
+       "why": "compare (evidence c-latency): bar-chart"
       },
       {
        "id": "what-northlight-actually-announced-1-sh1-3",
@@ -1640,9 +1633,8 @@
        "text": "Second, it is cheaper, at 3 dollars per million input tokens, down from 8 dollars.",
        "intent": "number",
        "kind": "tokens",
-       "capability": "tokenizer",
+       "capability": "kinetic-words",
        "module": "kinetic-words",
-       "fallback": true,
        "change": "swap",
        "params": {
         "words": [
@@ -1675,7 +1667,7 @@
         },
         "quote": "$3 per million input tokens (was $8)"
        },
-       "why": "tokens (evidence c-price): tokenizer (→ kinetic-words until tokenizer is registered)"
+       "why": "tokens (evidence c-price): kinetic-words"
       }
      ]
     },
@@ -1773,14 +1765,27 @@
        "text": "Those are big jumps for a single release. Faster,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "swap",
        "params": {
-        "word": "Those"
+        "title": "Those big jumps",
+        "items": [
+         {
+          "icon": "zap",
+          "label": "Those"
+         },
+         {
+          "icon": "target",
+          "label": "Big"
+         },
+         {
+          "icon": "layers",
+          "label": "Jumps"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "what-northlight-actually-announced-1-sh2-4",
@@ -1795,25 +1800,29 @@
        "kind": "concept",
        "capability": "icon-row",
        "module": "icon-row",
-       "change": "swap",
+       "change": "build",
        "params": {
-        "title": "Cheaper better usually",
+        "title": "Those big jumps",
         "items": [
          {
+          "icon": "zap",
+          "label": "Those"
+         },
+         {
+          "icon": "target",
+          "label": "Big"
+         },
+         {
+          "icon": "layers",
+          "label": "Jumps"
+         },
+         {
           "icon": "flag",
-          "label": "Cheaper"
-         },
-         {
-          "icon": "key",
-          "label": "Better"
-         },
-         {
-          "icon": "sparkles",
-          "label": "Usually"
+          "label": "Cheaper bette…"
          }
         ]
        },
-       "why": "concept: icon-row"
+       "why": "concept: builds on icon-row (+1 items)"
       }
      ]
     },
@@ -1833,15 +1842,14 @@
        "text": "The system card fills in some of the detail.",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "System card fills",
         "icon": "cpu"
        },
-       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
+       "why": "documents: nothing else fits, a concept card"
       },
       {
        "id": "what-northlight-actually-announced-1-sh3-2",
@@ -1894,9 +1902,8 @@
        "text": "The context window doubled, from 200 thousand tokens to 400 thousand.",
        "intent": "number",
        "kind": "tokens",
-       "capability": "tokenizer",
+       "capability": "kinetic-words",
        "module": "kinetic-words",
-       "fallback": true,
        "change": "swap",
        "params": {
         "words": [
@@ -1929,7 +1936,7 @@
         },
         "quote": "context length: 400K tokens (previously 200K)"
        },
-       "why": "tokens (evidence c-context): tokenizer (→ kinetic-words until tokenizer is registered)"
+       "why": "tokens (evidence c-context): kinetic-words"
       }
      ]
     },
@@ -2105,16 +2112,15 @@
        "text": "Speed sounds like the boring part of a launch. It is not.",
        "intent": "product",
        "kind": "title",
-       "capability": "title-decompose",
+       "capability": "motion-title",
        "module": "motion-title",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Speed sounds like",
         "kicker": "Chapter 5",
         "highlight": "Speed"
        },
-       "why": "title: title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title: motion-title"
       },
       {
        "id": "why-speed-changed-everything-1-sh1-2",
@@ -2127,14 +2133,27 @@
        "text": "When a model answers in four seconds, people use it like a search box.",
        "intent": "number",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "swap",
        "params": {
-        "word": "Model"
+        "title": "Model answers four",
+        "items": [
+         {
+          "icon": "key",
+          "label": "Model"
+         },
+         {
+          "icon": "sparkles",
+          "label": "Answers"
+         },
+         {
+          "icon": "zap",
+          "label": "Four"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "why-speed-changed-everything-1-sh1-3",
@@ -2149,25 +2168,29 @@
        "kind": "list",
        "capability": "icon-row",
        "module": "icon-row",
-       "change": "swap",
+       "change": "build",
        "params": {
-        "title": "Ask wait read",
+        "title": "Model answers four",
         "items": [
          {
+          "icon": "key",
+          "label": "Model"
+         },
+         {
+          "icon": "sparkles",
+          "label": "Answers"
+         },
+         {
           "icon": "zap",
-          "label": "Ask"
+          "label": "Four"
          },
          {
-          "icon": "target",
-          "label": "They wait"
-         },
-         {
-          "icon": "layers",
-          "label": "They"
+          "icon": "zap",
+          "label": "Ask wait read"
          }
         ]
        },
-       "why": "list: icon-row"
+       "why": "list: builds on icon-row (+1 items)"
       }
      ]
     },
@@ -2187,9 +2210,8 @@
        "text": "They let it finish their sentences, fix their code as they type,",
        "intent": "claim",
        "kind": "code",
-       "capability": "diff-view",
+       "capability": "code-snippet",
        "module": "code-snippet",
-       "fallback": true,
        "change": "enter",
        "params": {
         "title": "Let finish sentences",
@@ -2230,7 +2252,7 @@
          ]
         }
        },
-       "why": "code: diff-view (→ code-snippet until diff-view is registered)"
+       "why": "code: code-snippet"
       },
       {
        "id": "why-speed-changed-everything-1-sh2-2",
@@ -2275,9 +2297,8 @@
        "text": "Northlight's own chart shows median response time falling from 4.1 seconds to 1.8 seconds,",
        "intent": "number",
        "kind": "compare",
-       "capability": "glass-bars-3d",
+       "capability": "bar-chart",
        "module": "bar-chart",
-       "fallback": true,
        "change": "swap",
        "params": {
         "title": "Northlight's own chart",
@@ -2307,7 +2328,7 @@
         },
         "quote": "median latency fell from 4.1 s to 1.8 s"
        },
-       "why": "compare (evidence c-latency): glass-bars-3d (→ bar-chart until glass-bars-3d is registered)"
+       "why": "compare (evidence c-latency): bar-chart"
       },
       {
        "id": "why-speed-changed-everything-1-sh2-4",
@@ -2506,9 +2527,8 @@
        "text": "Another developer posted a side by side recording of the old model and the new one completing the same task.",
        "intent": "claim",
        "kind": "social",
-       "capability": "social-post",
+       "capability": "quote-card",
        "module": "quote-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "quote": "2.1M views",
@@ -2532,7 +2552,7 @@
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ quote-card until social-post is registered)"
+       "why": "social (evidence c-clip, capture side-by-side-clip): quote-card"
       },
       {
        "id": "why-speed-changed-everything-1-sh4-2",
@@ -2612,14 +2632,14 @@
        "text": "Speed is the claim that holds up best, and it is the one that changes behaviour most.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "word": "Speed"
+        "text": "Speed claim holds",
+        "highlight": "Speed"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: motion-title"
       }
      ]
     }
@@ -2654,14 +2674,27 @@
        "text": "The context window is how much text the model can hold in mind at once, measured in tokens.",
        "intent": "claim",
        "kind": "title",
-       "capability": "title-decompose",
-       "module": "motion-title",
-       "fallback": true,
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "Context window text",
-        "kicker": "Chapter 6",
-        "highlight": "Context"
+        "words": [
+         {
+          "text": "context",
+          "at": 0.2
+         },
+         {
+          "text": "window",
+          "at": 0.9
+         },
+         {
+          "text": "text",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-context",
@@ -2675,7 +2708,7 @@
         },
         "quote": "context length: 400K tokens (previously 200K)"
        },
-       "why": "title (evidence c-context): title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title (evidence c-context): kinetic-words"
       },
       {
        "id": "the-context-window-doubled-1-sh1-2",
@@ -2688,9 +2721,8 @@
        "text": "A token is a piece of a word, so a page of English is roughly five hundred tokens.",
        "intent": "claim",
        "kind": "tokens",
-       "capability": "tokenizer",
+       "capability": "kinetic-words",
        "module": "kinetic-words",
-       "fallback": true,
        "change": "swap",
        "params": {
         "words": [
@@ -2711,7 +2743,7 @@
         "layout": "stack",
         "variant": "rise"
        },
-       "why": "tokens: tokenizer (→ kinetic-words until tokenizer is registered)"
+       "why": "tokens: kinetic-words"
       },
       {
        "id": "the-context-window-doubled-1-sh1-3",
@@ -2724,9 +2756,8 @@
        "text": "Halcyon 2 doubled its window, from 200 thousand tokens to 400 thousand, which is roughly eight hundred pages.",
        "intent": "number",
        "kind": "tokens",
-       "capability": "tokenizer",
+       "capability": "kinetic-words",
        "module": "kinetic-words",
-       "fallback": true,
        "change": "swap",
        "params": {
         "words": [
@@ -2759,7 +2790,7 @@
         },
         "quote": "context length: 400K tokens (previously 200K)"
        },
-       "why": "tokens (evidence c-context): tokenizer (→ kinetic-words until tokenizer is registered)"
+       "why": "tokens (evidence c-context): kinetic-words"
       }
      ]
     },
@@ -2779,27 +2810,14 @@
        "text": "In practice, that means you can hand it an entire codebase,",
        "intent": "claim",
        "kind": "chain",
-       "capability": "evidence-chain",
-       "module": "timeline",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "enter",
        "params": {
-        "steps": [
-         {
-          "label": "Practice",
-          "icon": "users"
-         },
-         {
-          "label": "Means",
-          "icon": "code"
-         },
-         {
-          "label": "Hand",
-          "icon": "search"
-         }
-        ]
+        "text": "Practice means hand",
+        "icon": "users"
        },
-       "why": "chain: evidence-chain (→ timeline until evidence-chain is registered)"
+       "why": "chain: nothing else fits, a concept card"
       },
       {
        "id": "the-context-window-doubled-1-sh2-2",
@@ -2812,31 +2830,27 @@
        "text": "a full legal case file, or a year of meeting notes, and ask questions across all of it.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "evidence-chain",
-       "module": "timeline",
-       "fallback": true,
-       "change": "build",
+       "capability": "icon-row",
+       "module": "icon-row",
+       "change": "swap",
        "params": {
-        "steps": [
+        "title": "Full legal case",
+        "items": [
          {
-          "label": "Practice",
-          "icon": "users"
+          "icon": "key",
+          "label": "Full"
          },
          {
-          "label": "Means",
-          "icon": "code"
+          "icon": "sparkles",
+          "label": "Legal"
          },
          {
-          "label": "Hand",
-          "icon": "search"
-         },
-         {
-          "label": "Full legal…",
-          "icon": "key"
+          "icon": "zap",
+          "label": "Case"
          }
         ]
        },
-       "why": "concept: builds on timeline (+1 steps)"
+       "why": "concept: icon-row"
       },
       {
        "id": "the-context-window-doubled-1-sh2-3",
@@ -2849,31 +2863,31 @@
        "text": "But a bigger window is only useful if the model actually uses it.",
        "intent": "turn",
        "kind": "concept",
-       "capability": "evidence-chain",
-       "module": "timeline",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "build",
        "params": {
-        "steps": [
+        "title": "Full legal case",
+        "items": [
          {
-          "label": "Means",
-          "icon": "code"
+          "icon": "key",
+          "label": "Full"
          },
          {
-          "label": "Hand",
-          "icon": "search"
+          "icon": "sparkles",
+          "label": "Legal"
          },
          {
-          "label": "Full legal…",
-          "icon": "key"
+          "icon": "zap",
+          "label": "Case"
          },
          {
-          "label": "Bigger window…",
-          "icon": "gauge"
+          "icon": "gauge",
+          "label": "Bigger window…"
          }
         ]
        },
-       "why": "concept: builds on timeline (+1 steps)"
+       "why": "concept: builds on icon-row (+1 items)"
       }
      ]
     },
@@ -2893,9 +2907,8 @@
        "text": "The standard test hides a single fact deep inside a long document and asks the model to find it.",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "excerpt",
        "module": "excerpt",
-       "fallback": true,
        "change": "enter",
        "params": {
         "type": "text",
@@ -2920,7 +2933,7 @@
         },
         "quote": "71% on long-document QA"
        },
-       "why": "documents (evidence c-long-doc): paper-stack (→ excerpt until paper-stack is registered)"
+       "why": "documents (evidence c-long-doc): excerpt"
       },
       {
        "id": "the-context-window-doubled-1-sh3-2",
@@ -2980,15 +2993,14 @@
        "text": "That is a real improvement. The harder test asks the model to connect two facts that are hundreds of pages apart.",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Real improvement harder",
         "icon": "scale"
        },
-       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
+       "why": "documents: nothing else fits, a concept card"
       },
       {
        "id": "the-context-window-doubled-1-sh4-2",
@@ -3022,27 +3034,14 @@
        "text": "So the window is bigger, and the model reads it well,",
        "intent": "turn",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "title": "Window bigger model",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Window"
-         },
-         {
-          "icon": "gauge",
-          "label": "Bigger"
-         },
-         {
-          "icon": "brain",
-          "label": "Model"
-         }
-        ]
+        "text": "Window bigger model",
+        "highlight": "Window"
        },
-       "why": "concept: icon-row"
+       "why": "concept: motion-title"
       },
       {
        "id": "the-context-window-doubled-1-sh4-4",
@@ -3055,31 +3054,13 @@
        "text": "but reasoning across the whole thing is still hard. Long context is a capability, not a guarantee.",
        "intent": "turn",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
-       "change": "build",
+       "capability": "glass-word",
+       "module": "glass-word",
+       "change": "swap",
        "params": {
-        "title": "Window bigger model",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Window"
-         },
-         {
-          "icon": "gauge",
-          "label": "Bigger"
-         },
-         {
-          "icon": "brain",
-          "label": "Model"
-         },
-         {
-          "icon": "users",
-          "label": "Reasoning…"
-         }
-        ]
+        "word": "Reasoning"
        },
-       "why": "concept: builds on icon-row (+1 items)"
+       "why": "concept: glass-word"
       }
      ]
     }
@@ -3114,14 +3095,27 @@
        "text": "Now the price. Three dollars per million input tokens is a cut of more than sixty percent.",
        "intent": "number",
        "kind": "title",
-       "capability": "title-decompose",
-       "module": "motion-title",
-       "fallback": true,
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "text": "Price Three dollars",
-        "kicker": "Chapter 7",
-        "highlight": "Price"
+        "words": [
+         {
+          "text": "price",
+          "at": 0.2
+         },
+         {
+          "text": "Three",
+          "at": 0.9
+         },
+         {
+          "text": "dollars",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
        "evidence": {
         "claim": "c-price",
@@ -3135,7 +3129,7 @@
         },
         "quote": "$3 per million input tokens (was $8)"
        },
-       "why": "title (evidence c-price): title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title (evidence c-price): kinetic-words"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh1-2",
@@ -3148,9 +3142,8 @@
        "text": "For a small team running a support bot, that can turn a monthly bill of 2,400 dollars into roughly 900 dollars.",
        "intent": "number",
        "kind": "compare",
-       "capability": "glass-bars-3d",
+       "capability": "bar-chart",
        "module": "bar-chart",
-       "fallback": true,
        "change": "swap",
        "params": {
         "title": "Small team running",
@@ -3167,7 +3160,7 @@
         "highlight": 1,
         "variant": "bars"
        },
-       "why": "compare: glass-bars-3d (→ bar-chart until glass-bars-3d is registered)"
+       "why": "compare: bar-chart"
       }
      ]
     },
@@ -3187,14 +3180,27 @@
        "text": "For a large company, the savings run into millions.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "enter",
        "params": {
-        "word": "Large"
+        "title": "Large company savings",
+        "items": [
+         {
+          "icon": "code",
+          "label": "Large"
+         },
+         {
+          "icon": "search",
+          "label": "Company"
+         },
+         {
+          "icon": "lightbulb",
+          "label": "Savings"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh2-2",
@@ -3207,15 +3213,14 @@
        "text": "But a price cut has to come from somewhere.",
        "intent": "turn",
        "kind": "money",
-       "capability": "coin-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Price cut come",
         "icon": "lightbulb"
        },
-       "why": "money: coin-stack (→ concept-card until coin-stack is registered)"
+       "why": "money: nothing else fits, a concept card"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh2-3",
@@ -3228,29 +3233,15 @@
        "text": "There are three places it can come from: cheaper hardware, a smaller model, or thinner margins.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "object-card",
+       "module": "object-card",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "three",
-          "at": 0.2
-         },
-         {
-          "text": "places",
-          "at": 0.9
-         },
-         {
-          "text": "come",
-          "at": 1.6,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "object": "box",
+        "caption": "Three places come",
+        "label": "three"
        },
-       "why": "concept: kinetic-words"
+       "why": "concept: object-card"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh2-4",
@@ -3263,15 +3254,14 @@
        "text": "Northlight says it is mostly the first. The new cluster uses a newer generation of chips,",
        "intent": "quote",
        "kind": "quote",
-       "capability": "social-post",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Northlight says mostly",
         "icon": "cpu"
        },
-       "why": "quote: social-post (→ concept-card until social-post is registered)"
+       "why": "quote: nothing else fits, a concept card"
       }
      ]
     },
@@ -3291,9 +3281,8 @@
        "text": "and the system card reports that serving cost per token fell by about half.",
        "intent": "claim",
        "kind": "tokens",
-       "capability": "tokenizer",
+       "capability": "kinetic-words",
        "module": "kinetic-words",
-       "fallback": true,
        "change": "enter",
        "params": {
         "words": [
@@ -3314,7 +3303,7 @@
         "layout": "stack",
         "variant": "rise"
        },
-       "why": "tokens: tokenizer (→ kinetic-words until tokenizer is registered)"
+       "why": "tokens: kinetic-words"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh3-2",
@@ -3327,27 +3316,14 @@
        "text": "That accounts for a lot of the cut, but not all of it.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "title": "Accounts lot cut",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Accounts"
-         },
-         {
-          "icon": "gauge",
-          "label": "Lot"
-         },
-         {
-          "icon": "brain",
-          "label": "Cut"
-         }
-        ]
+        "text": "Accounts lot cut",
+        "highlight": "Accounts"
        },
-       "why": "concept: icon-row"
+       "why": "concept: motion-title"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh3-3",
@@ -3360,31 +3336,13 @@
        "text": "The rest is probably margin, and that is a strategic choice.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
-       "change": "build",
+       "capability": "glass-word",
+       "module": "glass-word",
+       "change": "swap",
        "params": {
-        "title": "Accounts lot cut",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Accounts"
-         },
-         {
-          "icon": "gauge",
-          "label": "Lot"
-         },
-         {
-          "icon": "brain",
-          "label": "Cut"
-         },
-         {
-          "icon": "code",
-          "label": "Rest probably…"
-         }
-        ]
+        "word": "Rest"
        },
-       "why": "concept: builds on icon-row (+1 items)"
+       "why": "concept: glass-word"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh3-4",
@@ -3399,29 +3357,25 @@
        "kind": "concept",
        "capability": "icon-row",
        "module": "icon-row",
-       "change": "build",
+       "change": "swap",
        "params": {
-        "title": "Accounts lot cut",
+        "title": "Northlight betting usage",
         "items": [
          {
-          "icon": "gauge",
-          "label": "Lot"
-         },
-         {
           "icon": "brain",
-          "label": "Cut"
+          "label": "Northlight"
          },
          {
-          "icon": "code",
-          "label": "Rest probably…"
+          "icon": "scale",
+          "label": "Betting"
          },
          {
-          "icon": "brain",
-          "label": "Northlight…"
+          "icon": "flag",
+          "label": "Usage"
          }
         ]
        },
-       "why": "concept: builds on icon-row (+1 items)"
+       "why": "concept: icon-row"
       }
      ]
     },
@@ -3474,15 +3428,14 @@
        "text": "So the real story of the price cut is not one cheaper model.",
        "intent": "turn",
        "kind": "money",
-       "capability": "coin-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Real story price",
         "icon": "chart-line"
        },
-       "why": "money: coin-stack (→ concept-card until coin-stack is registered)"
+       "why": "money: nothing else fits, a concept card"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh4-3",
@@ -3495,15 +3448,14 @@
        "text": "It is a price war, and developers are the ones who win it, at least for now.",
        "intent": "claim",
        "kind": "money",
-       "capability": "coin-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Price war developers",
         "icon": "key"
        },
-       "why": "money: coin-stack (→ concept-card until coin-stack is registered)"
+       "why": "money: nothing else fits, a concept card"
       }
      ]
     }
@@ -3538,9 +3490,8 @@
        "text": "Benchmarks are where launches get slippery. Northlight reported 62 percent on its own coding benchmark, up from 41 percent.",
        "intent": "number",
        "kind": "title",
-       "capability": "title-decompose",
+       "capability": "motion-title",
        "module": "motion-title",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Benchmarks where launches",
@@ -3559,7 +3510,7 @@
         },
         "quote": "62% on our multi-step coding suite, up from 41%"
        },
-       "why": "title (evidence c-coding-internal): title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title (evidence c-coding-internal): motion-title"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh1-2",
@@ -3591,14 +3542,29 @@
        "text": "and scored by their own graders. The more useful numbers come from public benchmarks that other people run.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "swap",
        "params": {
-        "word": "Scored"
+        "words": [
+         {
+          "text": "scored",
+          "at": 0.2
+         },
+         {
+          "text": "own",
+          "at": 0.9
+         },
+         {
+          "text": "graders",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: kinetic-words"
       }
      ]
     },
@@ -3618,15 +3584,14 @@
        "text": "On the open software engineering test that most labs report,",
        "intent": "claim",
        "kind": "documents",
-       "capability": "paper-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Open software engineering",
         "icon": "search"
        },
-       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
+       "why": "documents: nothing else fits, a concept card"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh2-2",
@@ -3639,9 +3604,8 @@
        "text": "Halcyon 2 scored 48 percent, compared with 39 percent for the previous model and 51 percent for the best rival.",
        "intent": "number",
        "kind": "series",
-       "capability": "glass-bars-3d",
+       "capability": "bar-chart",
        "module": "bar-chart",
-       "fallback": true,
        "change": "swap",
        "params": {
         "title": "Halcyon scored percent",
@@ -3684,7 +3648,7 @@
          "out": "assets/evidence/swe-leaderboard.mp4"
         }
        },
-       "why": "series (evidence c-swe, capture swe-leaderboard): glass-bars-3d (→ bar-chart until glass-bars-3d is registered)"
+       "why": "series (evidence c-swe, capture swe-leaderboard): bar-chart"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh2-3",
@@ -3908,14 +3872,13 @@
        "text": "That is a normal, healthy release. It is not a revolution, and the chart in the announcement made it look like one.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
+       "capability": "glass-word",
        "module": "glass-word",
-       "fallback": true,
        "change": "swap",
        "params": {
         "word": "Normal"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: glass-word"
       }
      ]
     }
@@ -3985,17 +3948,12 @@
        "text": "On GitHub, the pull request that switched the SDK default collected more than six hundred comments.",
        "intent": "claim",
        "kind": "pr",
-       "capability": "repo-pr-card",
-       "module": "window-chrome",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "title": "northlight/sdk#1842: default…",
-        "lines": [
-         "612 comments"
-        ],
-        "caption": "GitHub pull request",
-        "variant": "mac"
+        "text": "GitHub pull request",
+        "icon": "brain"
        },
        "evidence": {
         "claim": "c-pr-comments",
@@ -4014,7 +3972,7 @@
          "out": "assets/evidence/sdk-pr-1842.mp4"
         }
        },
-       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card (→ window-chrome until repo-pr-card is registered)"
+       "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): nothing else fits, a concept card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh1-3",
@@ -4104,9 +4062,8 @@
        "text": "which broke a popular command line tool overnight.",
        "intent": "claim",
        "kind": "terminal",
-       "capability": "terminal-session",
+       "capability": "window-chrome",
        "module": "window-chrome",
-       "fallback": true,
        "change": "enter",
        "params": {
         "title": "terminal",
@@ -4117,7 +4074,7 @@
         "caption": "Broke popular command",
         "variant": "mac"
        },
-       "why": "terminal: terminal-session (→ window-chrome until terminal-session is registered)"
+       "why": "terminal: window-chrome"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh2-2",
@@ -4130,20 +4087,12 @@
        "text": "Northlight merged a fix four days later, in a follow up commit that restored the old behaviour behind a flag.",
        "intent": "cta",
        "kind": "commit",
-       "capability": "commit-card",
-       "module": "excerpt",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "type": "text",
-        "title": "fix: respect format setting behind…",
-        "source": "fix: respect format setting behind…",
-        "lines": [
-         {
-          "text": "restore legacy formatting behind a flag",
-          "highlight": true
-         }
-        ]
+        "text": "Northlight merged fix",
+        "icon": "shield"
        },
        "evidence": {
         "claim": "c-fix-commit",
@@ -4162,7 +4111,7 @@
          "out": "assets/evidence/sdk-fix-commit.mp4"
         }
        },
-       "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): commit-card (→ excerpt until commit-card is registered)"
+       "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): nothing else fits, a concept card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh2-3",
@@ -4202,15 +4151,14 @@
        "text": "One camp posted demos: an agent that refactored a whole codebase,",
        "intent": "claim",
        "kind": "social",
-       "capability": "social-post",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Camp posted demos",
         "icon": "gauge"
        },
-       "why": "social: social-post (→ concept-card until social-post is registered)"
+       "why": "social: nothing else fits, a concept card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh3-2",
@@ -4255,15 +4203,14 @@
        "text": "The other camp posted failures: confident wrong answers, invented citations,",
        "intent": "claim",
        "kind": "social",
-       "capability": "social-post",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Other camp posted",
         "icon": "scale"
        },
-       "why": "social: social-post (→ concept-card until social-post is registered)"
+       "why": "social: nothing else fits, a concept card"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh3-4",
@@ -4317,14 +4264,27 @@
        "text": "Both camps were right. The model is better at long, structured work,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "enter",
        "params": {
-        "word": "Both"
+        "title": "Both camps right",
+        "items": [
+         {
+          "icon": "clock",
+          "label": "Both"
+         },
+         {
+          "icon": "users",
+          "label": "Camps"
+         },
+         {
+          "icon": "code",
+          "label": "Right"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh4-2",
@@ -4339,25 +4299,29 @@
        "kind": "concept",
        "capability": "icon-row",
        "module": "icon-row",
-       "change": "swap",
+       "change": "build",
        "params": {
-        "title": "Unreliable small exact",
+        "title": "Both camps right",
         "items": [
          {
+          "icon": "clock",
+          "label": "Both"
+         },
+         {
+          "icon": "users",
+          "label": "Camps"
+         },
+         {
+          "icon": "code",
+          "label": "Right"
+         },
+         {
           "icon": "brain",
-          "label": "Unreliable"
-         },
-         {
-          "icon": "scale",
-          "label": "Small"
-         },
-         {
-          "icon": "flag",
-          "label": "Exact"
+          "label": "Unreliable…"
          }
         ]
        },
-       "why": "concept: icon-row"
+       "why": "concept: builds on icon-row (+1 items)"
       }
      ]
     }
@@ -4392,16 +4356,13 @@
        "text": "Remember the table of known failure cases in the system card.",
        "intent": "claim",
        "kind": "title",
-       "capability": "title-decompose",
-       "module": "motion-title",
-       "fallback": true,
+       "capability": "glass-word",
+       "module": "glass-word",
        "change": "enter",
        "params": {
-        "text": "Remember table known",
-        "kicker": "Chapter 10",
-        "highlight": "Remember"
+        "word": "Remember"
        },
-       "why": "title: title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title: glass-word"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh1-2",
@@ -4454,27 +4415,12 @@
        "text": "The highest rate is for questions about events after the training cutoff,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "highest",
-          "at": 0.2
-         },
-         {
-          "text": "rate",
-          "at": 0.9
-         },
-         {
-          "text": "questions",
-          "at": 1.6,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "text": "Highest rate questions",
+        "highlight": "Highest"
        },
        "evidence": {
         "claim": "c-cutoff",
@@ -4488,7 +4434,7 @@
         },
         "quote": "post-cutoff events: 30% error"
        },
-       "why": "concept (evidence c-cutoff): kinetic-words"
+       "why": "concept (evidence c-cutoff): motion-title"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh1-4",
@@ -4574,24 +4520,26 @@
        "text": "Then come citations, where roughly one in ten references the model produces cannot be found.",
        "intent": "process",
        "kind": "process",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "timeline",
+       "module": "timeline",
        "change": "swap",
        "params": {
-        "title": "Come citations where",
         "steps": [
          {
-          "label": "Come"
+          "label": "Come",
+          "icon": "cpu"
          },
          {
-          "label": "Citations"
+          "label": "Citations",
+          "icon": "database"
          },
          {
-          "label": "Where"
+          "label": "Where",
+          "icon": "globe"
          }
         ]
        },
-       "why": "process: process-steps"
+       "why": "process: timeline"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh2-3",
@@ -4604,27 +4552,30 @@
        "text": "Publishing a table like this is unusual. Most launches show only what improved.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "timeline",
+       "module": "timeline",
        "change": "build",
        "params": {
-        "title": "Come citations where",
         "steps": [
          {
-          "label": "Come"
+          "label": "Come",
+          "icon": "cpu"
          },
          {
-          "label": "Citations"
+          "label": "Citations",
+          "icon": "database"
          },
          {
-          "label": "Where"
+          "label": "Where",
+          "icon": "globe"
          },
          {
-          "label": "Publishing table like"
+          "label": "Publishing…",
+          "icon": "users"
          }
         ]
        },
-       "why": "concept: builds on process-steps (+1 steps)"
+       "why": "concept: builds on timeline (+1 steps)"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh2-4",
@@ -4637,23 +4588,26 @@
        "text": "A failure table tells you where the model is weak, so you can design around it.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "timeline",
+       "module": "timeline",
        "change": "build",
        "params": {
-        "title": "Come citations where",
         "steps": [
          {
-          "label": "Citations"
+          "label": "Citations",
+          "icon": "database"
          },
          {
-          "label": "Where"
+          "label": "Where",
+          "icon": "globe"
          },
          {
-          "label": "Publishing table like"
+          "label": "Publishing…",
+          "icon": "users"
          },
          {
-          "label": "Failure table tells"
+          "label": "Failure table…",
+          "icon": "scale"
          }
         ]
        },
@@ -4669,7 +4623,7 @@
         },
         "quote": "post-cutoff events: 30% error"
        },
-       "why": "concept: builds on process-steps (+1 steps)"
+       "why": "concept: builds on timeline (+1 steps)"
       }
      ]
     },
@@ -4689,14 +4643,27 @@
        "text": "It also gives outside researchers something to check.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "enter",
        "params": {
-        "word": "Gives"
+        "title": "Gives outside researchers",
+        "items": [
+         {
+          "icon": "search",
+          "label": "Gives"
+         },
+         {
+          "icon": "lightbulb",
+          "label": "Outside"
+         },
+         {
+          "icon": "gauge",
+          "label": "Researchers"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh3-2",
@@ -4711,21 +4678,25 @@
        "kind": "concept",
        "capability": "icon-row",
        "module": "icon-row",
-       "change": "swap",
+       "change": "build",
        "params": {
-        "title": "Within week independent",
+        "title": "Gives outside researchers",
         "items": [
          {
+          "icon": "search",
+          "label": "Gives"
+         },
+         {
+          "icon": "lightbulb",
+          "label": "Outside"
+         },
+         {
+          "icon": "gauge",
+          "label": "Researchers"
+         },
+         {
           "icon": "sparkles",
-          "label": "Within"
-         },
-         {
-          "icon": "zap",
-          "label": "Week"
-         },
-         {
-          "icon": "target",
-          "label": "Independent"
+          "label": "Within week…"
          }
         ]
        },
@@ -4741,7 +4712,7 @@
         },
         "quote": "4 of 12 rows within 2 points"
        },
-       "why": "concept (evidence c-repro): icon-row"
+       "why": "concept: builds on icon-row (+1 items)"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh3-3",
@@ -4758,19 +4729,19 @@
        "module": "icon-row",
        "change": "build",
        "params": {
-        "title": "Within week independent",
+        "title": "Gives outside researchers",
         "items": [
          {
+          "icon": "lightbulb",
+          "label": "Outside"
+         },
+         {
+          "icon": "gauge",
+          "label": "Researchers"
+         },
+         {
           "icon": "sparkles",
-          "label": "Within"
-         },
-         {
-          "icon": "zap",
-          "label": "Week"
-         },
-         {
-          "icon": "target",
-          "label": "Independent"
+          "label": "Within week…"
          },
          {
           "icon": "shield",
@@ -4886,16 +4857,15 @@
        "text": "The rest of the industry responded quickly. Two days after the launch,",
        "intent": "number",
        "kind": "title",
-       "capability": "title-decompose",
+       "capability": "motion-title",
        "module": "motion-title",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Rest industry responded",
         "kicker": "Chapter 11",
         "highlight": "Rest"
        },
-       "why": "title: title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title: motion-title"
       },
       {
        "id": "how-the-rivals-answered-1-sh1-2",
@@ -4968,14 +4938,13 @@
        "text": "Ten days after the launch, an open source group published a smaller model",
        "intent": "number",
        "kind": "concept",
-       "capability": "particle-text",
+       "capability": "glass-word",
        "module": "glass-word",
-       "fallback": true,
        "change": "enter",
        "params": {
         "word": "Ten"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: glass-word"
       },
       {
        "id": "how-the-rivals-answered-1-sh2-2",
@@ -5098,26 +5067,20 @@
        "text": "The spread between first and fifth place is now smaller than it has ever been.",
        "intent": "list",
        "kind": "list",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "process-steps",
+       "module": "process-steps",
        "change": "swap",
        "params": {
         "title": "Spread between first",
-        "rows": [
+        "steps": [
          {
-          "label": "Spread",
-          "status": "done",
-          "at": 0.6
+          "label": "Spread"
          },
          {
-          "label": "Between",
-          "status": "done",
-          "at": 1.2
+          "label": "Between"
          },
          {
-          "label": "First",
-          "status": "done",
-          "at": 1.8
+          "label": "First"
          }
         ]
        },
@@ -5133,7 +5096,7 @@
         },
         "quote": "#2 → #1 → #3"
        },
-       "why": "list (evidence c-leaderboard): checklist"
+       "why": "list (evidence c-leaderboard): process-steps"
       },
       {
        "id": "how-the-rivals-answered-1-sh3-3",
@@ -5146,35 +5109,27 @@
        "text": "That is the real competitive picture. No single lab is far ahead.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "process-steps",
+       "module": "process-steps",
        "change": "build",
        "params": {
         "title": "Spread between first",
-        "rows": [
+        "steps": [
          {
-          "label": "Spread",
-          "status": "done",
-          "at": 0.6
+          "label": "Spread"
          },
          {
-          "label": "Between",
-          "status": "done",
-          "at": 1.1
+          "label": "Between"
          },
          {
-          "label": "First",
-          "status": "done",
-          "at": 1.6
+          "label": "First"
          },
          {
-          "label": "Real competitive picture",
-          "status": "done",
-          "at": 2.1
+          "label": "Real competitive…"
          }
         ]
        },
-       "why": "concept: builds on checklist (+1 rows)"
+       "why": "concept: builds on process-steps (+1 steps)"
       },
       {
        "id": "how-the-rivals-answered-1-sh3-4",
@@ -5187,35 +5142,27 @@
        "text": "Each release buys a few weeks of attention, and then the others catch up.",
        "intent": "process",
        "kind": "process",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "process-steps",
+       "module": "process-steps",
        "change": "build",
        "params": {
         "title": "Spread between first",
-        "rows": [
+        "steps": [
          {
-          "label": "Between",
-          "status": "done",
-          "at": 0.6
+          "label": "Between"
          },
          {
-          "label": "First",
-          "status": "done",
-          "at": 1.1
+          "label": "First"
          },
          {
-          "label": "Real competitive picture",
-          "status": "done",
-          "at": 1.6
+          "label": "Real competitive…"
          },
          {
-          "label": "Release buys few",
-          "status": "done",
-          "at": 2.1
+          "label": "Release buys few"
          }
         ]
        },
-       "why": "process: builds on checklist (+1 rows)"
+       "why": "process: builds on process-steps (+1 steps)"
       }
      ]
     },
@@ -5235,27 +5182,14 @@
        "text": "For developers, that means switching costs matter more than loyalty.",
        "intent": "claim",
        "kind": "chain",
-       "capability": "evidence-chain",
-       "module": "timeline",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "enter",
        "params": {
-        "steps": [
-         {
-          "label": "Developers",
-          "icon": "sparkles"
-         },
-         {
-          "label": "Means",
-          "icon": "zap"
-         },
-         {
-          "label": "Switching",
-          "icon": "target"
-         }
-        ]
+        "text": "Developers means switching",
+        "icon": "sparkles"
        },
-       "why": "chain: evidence-chain (→ timeline until evidence-chain is registered)"
+       "why": "chain: nothing else fits, a concept card"
       },
       {
        "id": "how-the-rivals-answered-1-sh4-2",
@@ -5268,9 +5202,8 @@
        "text": "If your product can swap one model for another in an afternoon, you can always use the best one.",
        "intent": "claim",
        "kind": "series",
-       "capability": "glass-bars-3d",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "swap",
        "params": {
         "text": "Product swap model",
@@ -5293,7 +5226,7 @@
          "out": "assets/evidence/swe-leaderboard.mp4"
         }
        },
-       "why": "series (evidence c-swe, capture swe-leaderboard): glass-bars-3d (→ concept-card until glass-bars-3d is registered)"
+       "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card"
       }
      ]
     }
@@ -5328,16 +5261,15 @@
        "text": "So what does Halcyon 2 change? Three things.",
        "intent": "number",
        "kind": "title",
-       "capability": "title-decompose",
+       "capability": "motion-title",
        "module": "motion-title",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Halcyon change Three",
         "kicker": "Chapter 12",
         "highlight": "Halcyon"
        },
-       "why": "title: title-decompose (→ motion-title until title-decompose is registered)"
+       "why": "title: motion-title"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh1-2",
@@ -5369,14 +5301,27 @@
        "text": "Tools that respond in under two seconds will feel different, and users will notice.",
        "intent": "number",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "swap",
        "params": {
-        "word": "Tools"
+        "title": "Tools respond under",
+        "items": [
+         {
+          "icon": "layers",
+          "label": "Tools"
+         },
+         {
+          "icon": "cpu",
+          "label": "Respond"
+         },
+         {
+          "icon": "database",
+          "label": "Under"
+         }
+        ]
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: icon-row"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh1-4",
@@ -5389,40 +5334,31 @@
        "text": "Second, prices are falling fast. If your product was too expensive to run last year, run the numbers again this year.",
        "intent": "list",
        "kind": "list",
-       "capability": "icon-grid",
-       "module": "icon-grid",
-       "change": "swap",
+       "capability": "icon-row",
+       "module": "icon-row",
+       "change": "build",
        "params": {
-        "title": "Second prices falling",
+        "title": "Tools respond under",
         "items": [
          {
-          "icon": "flag",
-          "label": "Second"
-         },
-         {
-          "icon": "key",
-          "label": "Prices"
-         },
-         {
-          "icon": "sparkles",
-          "label": "Falling"
-         },
-         {
-          "icon": "zap",
-          "label": "Fast"
-         },
-         {
-          "icon": "target",
-          "label": "Product"
-         },
-         {
           "icon": "layers",
-          "label": "Too"
+          "label": "Tools"
+         },
+         {
+          "icon": "cpu",
+          "label": "Respond"
+         },
+         {
+          "icon": "database",
+          "label": "Under"
+         },
+         {
+          "icon": "flag",
+          "label": "Second prices…"
          }
-        ],
-        "variant": "duotone"
+        ]
        },
-       "why": "list: icon-grid"
+       "why": "list: builds on icon-row (+1 items)"
       }
      ]
     },
@@ -5442,24 +5378,40 @@
        "text": "Third, honest documentation is becoming a competitive feature.",
        "intent": "list",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "icon-grid",
+       "module": "icon-grid",
        "change": "enter",
        "params": {
         "title": "Third honest documentation",
-        "steps": [
+        "items": [
          {
+          "icon": "shield",
           "label": "Third"
          },
          {
+          "icon": "rocket",
           "label": "Honest"
          },
          {
+          "icon": "chart-line",
           "label": "Documentation"
+         },
+         {
+          "icon": "clock",
+          "label": "Becoming"
+         },
+         {
+          "icon": "users",
+          "label": "Competitive"
+         },
+         {
+          "icon": "code",
+          "label": "Feature"
          }
-        ]
+        ],
+        "variant": "duotone"
        },
-       "why": "list: process-steps"
+       "why": "list: icon-grid"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh2-2",
@@ -5472,27 +5424,32 @@
        "text": "A lab that publishes its failure rates earns trust that a chart cannot buy.",
        "intent": "problem",
        "kind": "concept",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "icon-grid",
+       "module": "icon-grid",
        "change": "build",
        "params": {
         "title": "Third honest documentation",
-        "steps": [
+        "items": [
          {
-          "label": "Third"
+          "icon": "clock",
+          "label": "Becoming"
          },
          {
-          "label": "Honest"
+          "icon": "users",
+          "label": "Competitive"
          },
          {
-          "label": "Documentation"
+          "icon": "code",
+          "label": "Feature"
          },
          {
-          "label": "Lab publishes failure"
+          "icon": "zap",
+          "label": "Lab publishes…"
          }
-        ]
+        ],
+        "variant": "duotone"
        },
-       "why": "concept: builds on process-steps (+1 steps)"
+       "why": "concept: builds on icon-grid (+1 items)"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh2-3",
@@ -5505,27 +5462,32 @@
        "text": "Looking ahead, expect rivals to answer with faster models of their own before the end of the summer.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "icon-grid",
+       "module": "icon-grid",
        "change": "build",
        "params": {
         "title": "Third honest documentation",
-        "steps": [
+        "items": [
          {
-          "label": "Honest"
+          "icon": "users",
+          "label": "Competitive"
          },
          {
-          "label": "Documentation"
+          "icon": "code",
+          "label": "Feature"
          },
          {
-          "label": "Lab publishes failure"
+          "icon": "zap",
+          "label": "Lab publishes…"
          },
          {
-          "label": "Looking ahead expect"
+          "icon": "sparkles",
+          "label": "Looking ahead…"
          }
-        ]
+        ],
+        "variant": "duotone"
        },
-       "why": "concept: builds on process-steps (+1 steps)"
+       "why": "concept: builds on icon-grid (+1 items)"
       }
      ]
     },
@@ -5545,9 +5507,8 @@
        "text": "Expect at least one more round of price cuts.",
        "intent": "claim",
        "kind": "money",
-       "capability": "coin-stack",
+       "capability": "concept-card",
        "module": "concept-card",
-       "fallback": true,
        "change": "enter",
        "params": {
         "text": "Expect least round",
@@ -5565,7 +5526,7 @@
         },
         "quote": "cuts of 40% and 50% within ten days"
        },
-       "why": "money (evidence c-rival-cuts): coin-stack (→ concept-card until coin-stack is registered)"
+       "why": "money (evidence c-rival-cuts): nothing else fits, a concept card"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh3-2",
@@ -5598,27 +5559,14 @@
        "text": "If you build with these models, the practical advice is the same as ever.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
+       "capability": "motion-title",
+       "module": "motion-title",
        "change": "swap",
        "params": {
-        "title": "Build these models",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Build"
-         },
-         {
-          "icon": "gauge",
-          "label": "These"
-         },
-         {
-          "icon": "brain",
-          "label": "Models"
-         }
-        ]
+        "text": "Build these models",
+        "highlight": "Build"
        },
-       "why": "concept: icon-row"
+       "why": "concept: motion-title"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh3-4",
@@ -5631,31 +5579,13 @@
        "text": "Measure on your own tasks, keep tests around exact answers,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "icon-row",
-       "module": "icon-row",
-       "change": "build",
+       "capability": "glass-word",
+       "module": "glass-word",
+       "change": "swap",
        "params": {
-        "title": "Build these models",
-        "items": [
-         {
-          "icon": "lightbulb",
-          "label": "Build"
-         },
-         {
-          "icon": "gauge",
-          "label": "These"
-         },
-         {
-          "icon": "brain",
-          "label": "Models"
-         },
-         {
-          "icon": "scale",
-          "label": "Measure own…"
-         }
-        ]
+        "word": "Measure"
        },
-       "why": "concept: builds on icon-row (+1 items)"
+       "why": "concept: glass-word"
       }
      ]
     },
@@ -5675,14 +5605,29 @@
        "text": "and do not trust a launch chart you cannot reproduce.",
        "intent": "product",
        "kind": "concept",
-       "capability": "particle-text",
-       "module": "glass-word",
-       "fallback": true,
+       "capability": "kinetic-words",
+       "module": "kinetic-words",
        "change": "enter",
        "params": {
-        "word": "Trust"
+        "words": [
+         {
+          "text": "trust",
+          "at": 0.2
+         },
+         {
+          "text": "launch",
+          "at": 0.9
+         },
+         {
+          "text": "chart",
+          "at": 1.6,
+          "emphasis": true
+         }
+        ],
+        "layout": "stack",
+        "variant": "rise"
        },
-       "why": "concept: particle-text (→ glass-word until particle-text is registered)"
+       "why": "concept: kinetic-words"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh4-2",
@@ -5695,14 +5640,27 @@
        "text": "If this breakdown helped, the full source list is in the description,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "motion-title",
-       "module": "motion-title",
+       "capability": "icon-row",
+       "module": "icon-row",
        "change": "swap",
        "params": {
-        "text": "Breakdown helped full",
-        "highlight": "Breakdown"
+        "title": "Breakdown helped full",
+        "items": [
+         {
+          "icon": "layers",
+          "label": "Breakdown"
+         },
+         {
+          "icon": "cpu",
+          "label": "Helped"
+         },
+         {
+          "icon": "database",
+          "label": "Full"
+         }
+        ]
        },
-       "why": "concept: motion-title"
+       "why": "concept: icon-row"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh4-3",
@@ -5715,15 +5673,14 @@
        "text": "with every number we used and where it came from. Thanks for watching, and I will see you in the next one.",
        "intent": "process",
        "kind": "sting",
-       "capability": "logo-sting",
-       "module": "motion-title",
-       "fallback": true,
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
         "text": "Halcyon 2, explained",
-        "highlight": "Halcyon"
+        "icon": "scale"
        },
-       "why": "sting: logo-sting (→ motion-title until logo-sting is registered)"
+       "why": "sting: nothing else fits, a concept card"
       }
      ]
     }
@@ -5740,7 +5697,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "fbaf84e55eb60c17",
+   "key": "042f6fef438dbe9d",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5751,23 +5708,22 @@
     "recent": [
      "quote-card",
      "odometer",
-     "glass-word",
+     "motion-title",
      "icon-row",
      "kinetic-words",
      "icon-grid",
      "icon-grid",
-     "motion-title"
+     "glass-word"
     ],
     "counts": {
-     "motion-title": 2,
+     "concept-card": 3,
      "icon-row": 2,
-     "concept-card": 1,
-     "window-chrome": 1,
      "quote-card": 1,
      "odometer": 1,
-     "glass-word": 1,
+     "motion-title": 1,
      "kinetic-words": 1,
-     "icon-grid": 2
+     "icon-grid": 2,
+     "glass-word": 1
     },
     "plates": [
      {
@@ -5792,7 +5748,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "82692520e6cf6d12",
+   "key": "c6a9ecd3f3639ff1",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5803,24 +5759,23 @@
     "recent": [
      "timeline",
      "map-highlight",
-     "glass-word",
+     "kinetic-words",
      "quote-card",
      "media-window",
      "motion-title",
-     "timeline",
-     "timeline"
+     "concept-card",
+     "icon-grid"
     ],
     "counts": {
-     "motion-title": 3,
+     "concept-card": 4,
      "icon-row": 4,
-     "concept-card": 1,
-     "window-chrome": 1,
      "quote-card": 2,
      "odometer": 1,
-     "glass-word": 3,
-     "kinetic-words": 1,
-     "icon-grid": 2,
-     "timeline": 4,
+     "motion-title": 3,
+     "kinetic-words": 2,
+     "icon-grid": 3,
+     "glass-word": 1,
+     "timeline": 2,
      "process-steps": 1,
      "code-snippet": 1,
      "map-highlight": 1,
@@ -5856,7 +5811,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "b41d74223aca0c44",
+   "key": "aeea3a6c8c3ee5de",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5865,7 +5820,7 @@
    ],
    "history": {
     "recent": [
-     "motion-title",
+     "kinetic-words",
      "concept-card",
      "cta",
      "timeline",
@@ -5875,16 +5830,15 @@
      "icon-row"
     ],
     "counts": {
-     "motion-title": 4,
+     "concept-card": 6,
      "icon-row": 7,
-     "concept-card": 3,
-     "window-chrome": 1,
      "quote-card": 2,
      "odometer": 1,
-     "glass-word": 4,
-     "kinetic-words": 2,
-     "icon-grid": 3,
-     "timeline": 5,
+     "motion-title": 4,
+     "kinetic-words": 3,
+     "icon-grid": 4,
+     "glass-word": 2,
+     "timeline": 3,
      "process-steps": 1,
      "code-snippet": 1,
      "map-highlight": 1,
@@ -5930,7 +5884,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "659110acbcba0846",
+   "key": "2952c4bb20dd39a9",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5939,7 +5893,7 @@
    ],
    "history": {
     "recent": [
-     "glass-word",
+     "icon-row",
      "icon-row",
      "concept-card",
      "media-window",
@@ -5949,16 +5903,15 @@
      "icon-grid"
     ],
     "counts": {
-     "motion-title": 5,
-     "icon-row": 8,
-     "concept-card": 4,
-     "window-chrome": 1,
+     "concept-card": 7,
+     "icon-row": 9,
      "quote-card": 2,
      "odometer": 1,
-     "glass-word": 5,
-     "kinetic-words": 4,
-     "icon-grid": 6,
-     "timeline": 5,
+     "motion-title": 5,
+     "kinetic-words": 5,
+     "icon-grid": 7,
+     "glass-word": 2,
+     "timeline": 3,
      "process-steps": 1,
      "code-snippet": 1,
      "map-highlight": 1,
@@ -6010,7 +5963,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "781a5ca172bb66bf",
+   "key": "58cd06936a305581",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6026,19 +5979,18 @@
      "quote-card",
      "icon-row",
      "odometer",
-     "glass-word"
+     "motion-title"
     ],
     "counts": {
-     "motion-title": 6,
-     "icon-row": 10,
-     "concept-card": 4,
-     "window-chrome": 1,
+     "concept-card": 7,
+     "icon-row": 12,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 7,
-     "kinetic-words": 4,
-     "icon-grid": 6,
-     "timeline": 6,
+     "motion-title": 7,
+     "kinetic-words": 5,
+     "icon-grid": 7,
+     "glass-word": 2,
+     "timeline": 4,
      "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6096,7 +6048,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "c3797a2fedca8bd1",
+   "key": "899704ea4badb448",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6105,26 +6057,25 @@
    ],
    "history": {
     "recent": [
-     "timeline",
-     "timeline",
+     "icon-row",
+     "icon-row",
      "excerpt",
      "media-window",
      "concept-card",
      "percent-fill",
-     "icon-row",
-     "icon-row"
+     "motion-title",
+     "glass-word"
     ],
     "counts": {
-     "motion-title": 7,
-     "icon-row": 12,
-     "concept-card": 5,
-     "window-chrome": 1,
+     "concept-card": 9,
+     "icon-row": 14,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 7,
-     "kinetic-words": 6,
-     "icon-grid": 6,
-     "timeline": 9,
+     "motion-title": 8,
+     "kinetic-words": 8,
+     "icon-grid": 7,
+     "glass-word": 3,
+     "timeline": 4,
      "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6188,7 +6139,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "d3e21034a2b62dd2",
+   "key": "bed2eddb295c8f4d",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6199,24 +6150,23 @@
     "recent": [
      "concept-card",
      "kinetic-words",
-     "icon-row",
-     "icon-row",
+     "motion-title",
+     "glass-word",
      "icon-row",
      "percent-fill",
      "concept-card",
      "concept-card"
     ],
     "counts": {
-     "motion-title": 8,
-     "icon-row": 15,
-     "concept-card": 9,
-     "window-chrome": 1,
+     "concept-card": 13,
+     "icon-row": 16,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 8,
-     "kinetic-words": 8,
-     "icon-grid": 6,
-     "timeline": 9,
+     "motion-title": 9,
+     "kinetic-words": 10,
+     "icon-grid": 7,
+     "glass-word": 4,
+     "timeline": 4,
      "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6228,7 +6178,8 @@
      "percent-fill": 4,
      "unit-grid": 1,
      "compare": 1,
-     "excerpt": 1
+     "excerpt": 1,
+     "object-card": 1
     },
     "plates": [
      {
@@ -6285,7 +6236,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "4fe84988b18637d6",
+   "key": "6154f25b5ff037cd",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6304,16 +6255,15 @@
      "glass-word"
     ],
     "counts": {
-     "motion-title": 10,
-     "icon-row": 16,
-     "concept-card": 11,
-     "window-chrome": 1,
+     "concept-card": 15,
+     "icon-row": 17,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 10,
-     "kinetic-words": 8,
-     "icon-grid": 6,
-     "timeline": 9,
+     "motion-title": 11,
+     "kinetic-words": 11,
+     "icon-grid": 7,
+     "glass-word": 5,
+     "timeline": 4,
      "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6325,7 +6275,8 @@
      "percent-fill": 5,
      "unit-grid": 2,
      "compare": 1,
-     "excerpt": 1
+     "excerpt": 1,
+     "object-card": 1
     },
     "plates": [
      {
@@ -6388,7 +6339,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "76af3c5ba970dcd5",
+   "key": "535c300654e77e38",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6397,26 +6348,25 @@
    ],
    "history": {
     "recent": [
-     "excerpt",
+     "concept-card",
      "motion-title",
      "concept-card",
      "timeline",
      "concept-card",
      "stat-card",
-     "glass-word",
+     "icon-row",
      "icon-row"
     ],
     "counts": {
-     "motion-title": 11,
-     "icon-row": 19,
-     "concept-card": 13,
-     "window-chrome": 3,
+     "concept-card": 19,
+     "icon-row": 21,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 11,
-     "kinetic-words": 9,
-     "icon-grid": 6,
-     "timeline": 10,
+     "motion-title": 12,
+     "kinetic-words": 12,
+     "icon-grid": 7,
+     "glass-word": 5,
+     "timeline": 5,
      "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6428,7 +6378,9 @@
      "percent-fill": 5,
      "unit-grid": 2,
      "compare": 1,
-     "excerpt": 2
+     "excerpt": 1,
+     "object-card": 1,
+     "window-chrome": 1
     },
     "plates": [
      {
@@ -6497,7 +6449,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "63122ecc7ef7f3a6",
+   "key": "311cdf43d3003665",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6506,27 +6458,26 @@
    ],
    "history": {
     "recent": [
-     "process-steps",
-     "process-steps",
-     "process-steps",
-     "glass-word",
+     "timeline",
+     "timeline",
+     "timeline",
+     "icon-row",
      "icon-row",
      "icon-row",
      "concept-card",
      "icon-grid"
     ],
     "counts": {
-     "motion-title": 12,
-     "icon-row": 21,
-     "concept-card": 14,
-     "window-chrome": 3,
+     "concept-card": 20,
+     "icon-row": 24,
      "quote-card": 3,
      "odometer": 2,
-     "glass-word": 12,
-     "kinetic-words": 10,
-     "icon-grid": 7,
-     "timeline": 10,
-     "process-steps": 7,
+     "motion-title": 13,
+     "kinetic-words": 12,
+     "icon-grid": 8,
+     "glass-word": 6,
+     "timeline": 8,
+     "process-steps": 4,
      "code-snippet": 2,
      "map-highlight": 1,
      "media-window": 4,
@@ -6537,7 +6488,9 @@
      "percent-fill": 6,
      "unit-grid": 3,
      "compare": 1,
-     "excerpt": 2
+     "excerpt": 1,
+     "object-card": 1,
+     "window-chrome": 1
     },
     "plates": [
      {
@@ -6611,7 +6564,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "a032f9f71d9e5089",
+   "key": "39cc02b70a403595",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6623,23 +6576,22 @@
      "kinetic-words",
      "stat-card",
      "odometer",
-     "checklist",
-     "checklist",
-     "checklist",
-     "timeline",
+     "process-steps",
+     "process-steps",
+     "process-steps",
+     "concept-card",
      "concept-card"
     ],
     "counts": {
-     "motion-title": 13,
-     "icon-row": 21,
-     "concept-card": 15,
-     "window-chrome": 3,
+     "concept-card": 22,
+     "icon-row": 24,
      "quote-card": 3,
      "odometer": 3,
-     "glass-word": 13,
-     "kinetic-words": 11,
-     "icon-grid": 7,
-     "timeline": 11,
+     "motion-title": 14,
+     "kinetic-words": 13,
+     "icon-grid": 8,
+     "glass-word": 7,
+     "timeline": 8,
      "process-steps": 7,
      "code-snippet": 2,
      "map-highlight": 1,
@@ -6651,8 +6603,9 @@
      "percent-fill": 7,
      "unit-grid": 3,
      "compare": 1,
-     "excerpt": 2,
-     "checklist": 3
+     "excerpt": 1,
+     "object-card": 1,
+     "window-chrome": 1
     },
     "plates": [
      {
@@ -6731,7 +6684,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "674870f6224d59a8",
+   "key": "1f677858b3bb39de",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6740,27 +6693,26 @@
    ],
    "history": {
     "recent": [
-     "process-steps",
+     "icon-grid",
      "concept-card",
      "concept-card",
-     "icon-row",
-     "icon-row",
-     "glass-word",
      "motion-title",
-     "motion-title"
+     "glass-word",
+     "kinetic-words",
+     "icon-row",
+     "concept-card"
     ],
     "counts": {
-     "motion-title": 16,
-     "icon-row": 23,
-     "concept-card": 17,
-     "window-chrome": 3,
+     "concept-card": 25,
+     "icon-row": 27,
      "quote-card": 3,
      "odometer": 3,
-     "glass-word": 15,
-     "kinetic-words": 11,
-     "icon-grid": 8,
-     "timeline": 11,
-     "process-steps": 10,
+     "motion-title": 16,
+     "kinetic-words": 14,
+     "icon-grid": 11,
+     "glass-word": 8,
+     "timeline": 8,
+     "process-steps": 7,
      "code-snippet": 2,
      "map-highlight": 1,
      "media-window": 4,
@@ -6771,8 +6723,9 @@
      "percent-fill": 7,
      "unit-grid": 3,
      "compare": 1,
-     "excerpt": 2,
-     "checklist": 3
+     "excerpt": 1,
+     "object-card": 1,
+     "window-chrome": 1
     },
     "plates": [
      {
@@ -6940,8 +6893,8 @@
    },
    "changes": {
     "enter": 48,
-    "swap": 88,
-    "build": 22
+    "swap": 89,
+    "build": 21
    }
   },
   "variety": {
@@ -6949,22 +6902,22 @@
    "top": [
     {
      "id": "icon-row",
-     "share": 0.146
+     "share": 0.171
     },
     {
      "id": "concept-card",
-     "share": 0.108
+     "share": 0.158
     },
     {
      "id": "motion-title",
      "share": 0.101
     },
     {
-     "id": "glass-word",
-     "share": 0.095
+     "id": "kinetic-words",
+     "share": 0.089
     },
     {
-     "id": "kinetic-words",
+     "id": "icon-grid",
      "share": 0.07
     }
    ],
@@ -6976,123 +6929,7 @@
    "coverage": 0.647,
    "captures": 12
   },
-  "fallbacks": [
-   {
-    "wanted": "particle-text",
-    "states": 15,
-    "using": [
-     "glass-word"
-    ]
-   },
-   {
-    "wanted": "title-decompose",
-    "states": 8,
-    "using": [
-     "motion-title"
-    ]
-   },
-   {
-    "wanted": "paper-stack",
-    "states": 6,
-    "using": [
-     "concept-card",
-     "excerpt"
-    ]
-   },
-   {
-    "wanted": "social-post",
-    "states": 6,
-    "using": [
-     "quote-card",
-     "concept-card"
-    ]
-   },
-   {
-    "wanted": "glass-bars-3d",
-    "states": 6,
-    "using": [
-     "bar-chart",
-     "concept-card"
-    ]
-   },
-   {
-    "wanted": "tokenizer",
-    "states": 5,
-    "using": [
-     "kinetic-words"
-    ]
-   },
-   {
-    "wanted": "evidence-chain",
-    "states": 4,
-    "using": [
-     "timeline"
-    ]
-   },
-   {
-    "wanted": "coin-stack",
-    "states": 4,
-    "using": [
-     "concept-card"
-    ]
-   },
-   {
-    "wanted": "logo-sting",
-    "states": 2,
-    "using": [
-     "motion-title"
-    ]
-   },
-   {
-    "wanted": "repo-pr-card",
-    "states": 2,
-    "using": [
-     "window-chrome"
-    ]
-   },
-   {
-    "wanted": "date-pinned-timeline",
-    "states": 2,
-    "using": [
-     "timeline"
-    ]
-   },
-   {
-    "wanted": "diff-view",
-    "states": 2,
-    "using": [
-     "code-snippet"
-    ]
-   },
-   {
-    "wanted": "lineage-graph",
-    "states": 2,
-    "using": [
-     "timeline"
-    ]
-   },
-   {
-    "wanted": "rack-shelf",
-    "states": 1,
-    "using": [
-     "concept-card"
-    ]
-   },
-   {
-    "wanted": "terminal-session",
-    "states": 1,
-    "using": [
-     "window-chrome"
-    ]
-   },
-   {
-    "wanted": "commit-card",
-    "states": 1,
-    "using": [
-     "excerpt"
-    ]
-   }
-  ],
+  "fallbacks": [],
   "chunks": {
    "count": 12,
    "reused": 0
