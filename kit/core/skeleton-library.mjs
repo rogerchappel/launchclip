@@ -35,7 +35,7 @@ import { POSES } from './characters/rig.mjs';
 import { ACTIONS } from './characters/actions.mjs';
 import { SETS } from './characters/sets.mjs';
 import { SCRIPT_FORMAT_IDS, SHORT_VIDEO_SECONDS, chooseScriptPlan } from './script-formats.mjs';
-import { storyBase } from './story.mjs';
+import { coverFrame, storyBase } from './story.mjs';
 
 export const SKELETON_SCHEMA = 'launchclip.skeleton.v1';
 export const SKELETON_FAMILIES = Object.freeze(['scale', 'last-time', 'versus', 'if-were', 'nobody-tells', 'countdown', 'before-after', 'myth', 'pov', 'process']);
@@ -590,9 +590,12 @@ export function structureCheck(story, skeleton = null, options = {}) {
   if (!storyBase(story)) {
     const opening = [...scenes].sort((a, b) => startOf(a) - startOf(b))[0] ?? null;
     const module = sceneModule(opening);
-    const card = TITLE_CARD_MODULES.includes(module);
+    // A cover with frame "first" opens the video on its text card (it is resolved in as a hook-title at 0 s).
+    const coverCard = Boolean(opening?.cover) || (story?.cover && coverFrame(story) === 'first' && !scenes.some((entry) => entry.cover));
+    const card = coverCard || TITLE_CARD_MODULES.includes(module);
     const want = skeleton ? `; the structure wants ${skeleton.first_frame.describe}` : '';
-    checks.first_frame = { ok: Boolean(opening) && startOf(opening) <= FIRST_FRAME_SECONDS && !card, detail: opening ? `opens on ${module} at ${startOf(opening)} s${card ? ' (a title card)' : ''}${want}` : 'no scene opens the video' };
+    const what = coverCard ? 'the cover card (cover.frame "first")' : `${module} at ${opening ? startOf(opening) : 0} s${card ? ' (a title card)' : ''}`;
+    checks.first_frame = { ok: Boolean(opening) && startOf(opening) <= FIRST_FRAME_SECONDS && !card, detail: opening ? `opens on ${what}${want}` : 'no scene opens the video' };
   }
   let keyScenes = [];
   if (skeleton) {
@@ -632,7 +635,8 @@ export function structureCheck(story, skeleton = null, options = {}) {
 export function storyboardStructureErrors(story, skeleton = null) {
   const { checks } = structureCheck(story, skeleton, {});
   const errors = [];
-  if (checks.first_frame && !checks.first_frame.ok) errors.push(`opening: ${checks.first_frame.detail}. Open at 0 s on an image (${skeleton ? skeleton.first_frame.modules.join(', ') : 'a photo, object, chart, character or product scene'}) that shows the hook's subject; a title card (${TITLE_CARD_MODULES.join(', ')}) may follow, not open.`);
+  if (checks.first_frame && !checks.first_frame.ok && /cover\.frame "first"/.test(checks.first_frame.detail)) errors.push(`opening: ${checks.first_frame.detail}. Set cover.frame to the seconds of the strongest image (the key shot): the cover still renders as the thumbnail, and the video opens on an image.`);
+  else if (checks.first_frame && !checks.first_frame.ok) errors.push(`opening: ${checks.first_frame.detail}. Open at 0 s on an image (${skeleton ? skeleton.first_frame.modules.join(', ') : 'a photo, object, chart, character or product scene'}) that shows the hook's subject; a title card (${TITLE_CARD_MODULES.join(', ')}) may follow, not open.`);
   if (checks.key_shot && !checks.key_shot.ok) errors.push(`skeleton ${skeleton.id}: ${checks.key_shot.detail}. Give the key shot (${skeleton.key_shot.describe}) its own scene inside the beat it belongs to.`);
   return errors;
 }
@@ -673,14 +677,15 @@ export function skeletonLibraryReference({ kit = kitCapabilities() } = {}) {
     `- **Open on an image.** The scene at 0 s shows the hook's subject (a photo, object, chart, character or product scene), never a title card (\`${TITLE_CARD_MODULES.join('`, `')}\`). A recording that opens the video counts as the image.`,
     `- **A share line.** One spoken line in the last ${Math.round(SHARE_WINDOW * 100)}% that gives a viewer a reason to send the video or comment: a surprise, a line they recognise themselves in, one small act, a grounded claim to argue with, or a takeaway worth saving. Give it the \`share\` role in \`STORY.json\`.`,
     '- **Concrete visuals.** Every beat\'s `visual_noun` names a thing the viewer can picture, never a bare abstraction ("the gap", "growth").',
-    `- **${TITLE_OPTIONS} title options**, the best first.`,
+    `- **${TITLE_OPTIONS} title options, scored and best first.** Score each 0-10 on curiosity (a gap that carries self-interest, never a tease), clarity (what the video is, at a glance) and match (it fits the opening image and the hook); order by 0.4 × curiosity + 0.35 × clarity + 0.25 × match, minus 3 for over 70 characters or a tease. \`make\` records them as \`title_scores\` in \`SCRIPT.json\`.`,
+    '- **The cover is a thumbnail, not the opening.** Set `story.cover` `{text, number?, kicker?, frame}` with `frame` at the seconds of the strongest image (the key shot), never `"first"`, which would open the video on a text card. `cover.text` echoes the best title; on a library skeleton, build it on the skeleton\'s cover idea. finish renders it as `video/cover.png`.',
     '',
     '`launchclip finish` checks these in its `structure` gate (and the key shot, on a library skeleton); `launchclip cinematic-check` reads the same gate.',
     '',
     '## Using the library on the agent path',
     '',
     '1. **Skeleton.** Run `launchclip skeletons choose "<brief>" --medium motion|character|footage|demo --aspect 9:16 --duration 30`, or read the table below. Never use a **blocked** skeleton: the kit cannot draw its key shot, so the video would promise a moment it never shows. No match is fine: use the script format\'s own skeleton and the short-video rules.',
-    '2. **Angle.** Before the concepts, write `ANGLE.json`: `crowded` (how this topic is usually done, one sentence), `inventory` (eight to twelve concrete things only this subject has) and `angles` (three fresh angles, each saying how it differs from `crowded`). Spread the five concepts across the angles.',
+    '2. **Angle.** Before the concepts, write `ANGLE.json`: `crowded` (how this topic is usually done, one sentence), `inventory` (eight to twelve concrete things only this subject has), `angles` (three fresh angles, each `{angle, differs}`) and `chosen` (the index the story is written on). Spread the five concepts across the angles. `make` writes the same file from its script pass.',
     '3. **Judge** in a fresh context (a subagent that sees only the brief, evidence, the skeleton and the anonymous concepts), and score `angle_freshness` and `share_strength` with the other criteria.',
     '4. **Story.** Write `STORY.json` on the skeleton\'s beats, roles included.',
     '5. **Storyboard.** Put `"skeleton": {"id": "<id>", "version": "<month>"}` in `storyboard.json`; render the key shot inside its beat.',
