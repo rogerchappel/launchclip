@@ -53,6 +53,7 @@ import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { guardCueTimbre } from "./sfx/timbre.js";
+import { structureGate } from "./skeletons.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "../kit/core/sound/options.mjs";
 import { musicChoice } from "../kit/core/sound/music.mjs";
@@ -1558,6 +1559,9 @@ async function runGates(ctx) {
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype });
     if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });
     if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
+    // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
+    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null });
+    if (structure.status !== "skipped") gates.structure = structure;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }

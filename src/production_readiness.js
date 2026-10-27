@@ -8,7 +8,7 @@ const STRUCTURAL_MOTION_CATEGORIES = new Set(["duration", "dimensions", "frames"
 // options.creativeReceipts: false when the story preserves an existing
 // recording (cinematic-check's recordedStory): CONCEPTS.json and STORY.json
 // are then not required, though a present one is still validated.
-export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly, receipts = {} } = {}, options = {}) {
+export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly, structure = null, receipts = {} } = {}, options = {}) {
   const blockers = [];
   const repairFindings = [];
   const creative = options.creativeReceipts !== false;
@@ -85,6 +85,9 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
     }));
   }
   if (!plan) blockers.push(blocker("plan-missing", "plan", "Production plan is missing."));
+  // The structure gate (src/skeletons.js): the short-video rules and a library skeleton's key shot.
+  const structureOk = !structure || structure.status !== "failed";
+  if (!structureOk) blockers.push(blocker("structure-failed", "structure", `The structure gate failed: ${(structure.findings ?? []).slice(0, 4).join("; ")}.`));
 
   const gates = {
     concepts: receiptGate(concepts, receipts?.concepts, receiptOk.concepts, creative),
@@ -95,7 +98,8 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
     motion: gate(motionOk, motion?.quality ? motionOk ? "passed" : "failed" : "missing", motionFindings.length),
     audio: gate(audioOk, audio?.quality ? audioOk ? "passed" : "failed" : "missing", audioFindings.length),
     critic: gate(criticOk, critique?.verdict ?? "missing", Array.isArray(critique?.findings) ? critique.findings.length : Number(critique?.findings ?? 0)),
-    fallbacks: gate(fallbackOk, !assembly ? "missing" : fallbackOk ? "passed" : "failed", fallbackCount)
+    fallbacks: gate(fallbackOk, !assembly ? "missing" : fallbackOk ? "passed" : "failed", fallbackCount),
+    structure: gate(structureOk, !structure || structure.status === "skipped" ? "not-required" : structure.status, structure?.findings?.length ?? 0)
   };
   const ok = Object.values(gates).every((entry) => entry.ok) && blockers.length === 0 && repairFindings.length === 0;
   return {

@@ -303,7 +303,7 @@ test("recordedStory is a footage-led lane with base.src or base.edl", () => {
 
 // Minimal valid creative receipts (launchclip.concepts.v1 / launchclip.story-receipt.v1).
 function conceptsReceipt() {
-  const scores = (value) => ({ scroll_stop: value, promise_clarity: value, audience_fit: value, causality: value, grounded_proof: value, visual_originality: value, motion_potential: value, sound_potential: value, feasibility: value });
+  const scores = (value) => ({ scroll_stop: value, promise_clarity: value, audience_fit: value, causality: value, grounded_proof: value, visual_originality: value, motion_potential: value, sound_potential: value, feasibility: value, angle_freshness: value, share_strength: value });
   const concepts = [1, 2, 3, 4, 5].map((n) => ({
     id: `concept-${n}`,
     title: `Concept ${n}`,
