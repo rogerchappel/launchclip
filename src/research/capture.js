@@ -76,7 +76,8 @@ export function beatsFor(claim, quote) {
       { action: "highlight", target: { text: plain(quote.row.cell) }, dur: 1.8, label }
     ];
   }
-  const span = highlightSpan(claim, plain(quote.text));
+  // The cell split needs the pipes, so the span is cut before the markup comes out.
+  const span = plain(highlightSpan(claim, quote.text));
   return [
     { action: "scroll", target: { text: span }, dur: 1.2, label: "to the passage" },
     { action: "highlight", target: { text: span }, dur: 2.2, label }

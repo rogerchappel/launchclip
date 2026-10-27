@@ -94,3 +94,9 @@ test("found on the Terra run: highlight spans stay short and inside one table ce
   assert.ok(span.includes("50.3%"));
   assert.ok(span.split(" ").length <= 8);
 });
+
+test("a flattened table row is cut to its cell before the markup comes out", async () => {
+  const { beatsFor } = await import("../src/research/capture.js");
+  const beats = beatsFor({ text: "On Agents' Last Exam Terra is on par with GPT-6 Astra.", values: [], entities: [{ name: "Agents' Last Exam", kind: "benchmark" }] }, { text: "| Agents' Last Exam, medium effort | 15 points above GPT-5.6 Terra; on par with GPT-6 Astra |" });
+  assert.equal(beats[1].target.text, "Agents' Last Exam, medium effort");
+});
