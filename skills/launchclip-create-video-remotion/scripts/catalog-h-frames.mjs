@@ -6,6 +6,7 @@
 import {timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, clip, createHBase, fitText, mixColor, r2, rt, textWidth} from './catalog-h-base.mjs';
 import {abs, el, label, riseOps, set, tw} from './catalog-h-view.mjs';
+import {glassSurface, withAlpha} from './panels.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -249,7 +250,11 @@ function windowView(model) {
   const dot = r2(c.barH * 0.24);
   [0, 1, 2].forEach(i => bar.push(el('div', null, abs(r2(c.barH * 0.4 + i * dot * 1.7), r2((c.barH - dot) / 2), dot, dot, {borderRadius: '50%', background: c.variant === 'minimal' ? c.border : ['#ff5f57', '#febc2e', '#28c840'][i]}))));
   if (c.title) bar.push(label(null, 0, r2(c.barH / 2 - c.barH * 0.3 * 0.65), B.width, c.title, {size: r2(c.barH * 0.3), family: c.terminal ? fonts.meta : fonts.body, color: c.muted, align: 'center', weight: 600}));
-  const inner = [el('div', null, abs(0, 0, B.width, c.barH, {background: c.bar, ...(c.variant === 'minimal' ? {} : {borderBottom: `${r2(2 * u)}px solid ${c.border}`})}), bar)];
+  // The glass role (story.panel rim-glass): the window is a glass pane and its title bar a faint band on it.
+  const glass = glassSurface(model, {radius: 24});
+  const barFill = glass ? (c.variant === 'minimal' ? 'transparent' : withAlpha(theme.paper, 0.05)) : c.bar;
+  const barRule = glass ? withAlpha(theme.primary, 0.3) : c.border;
+  const inner = [el('div', null, abs(0, 0, B.width, c.barH, {background: barFill, ...(c.variant === 'minimal' ? {} : {borderBottom: `${r2(glass ? 1.5 * u : 2 * u)}px solid ${barRule}`})}), bar)];
   if (c.image) inner.push(el('div', `${id}-body`, {...abs(0, c.barH, B.width, r2(B.height - c.barH)), overflow: 'hidden', clipPath: 'inset(0% 0% 100% 0%)'}, [
     el('img', null, abs(0, 0, B.width, r2(B.height - c.barH), {objectFit: 'cover', display: 'block'}), [], {src: c.image, alt: ''})]));
   c.rows.forEach((row, i) => {
@@ -262,8 +267,8 @@ function windowView(model) {
     const last = c.rows.at(-1);
     inner.push(el('div', `${id}-cursor`, abs(c.pad, r2(last.y + c.size * 1.55 + c.size * 0.1), r2(c.size * 0.55), r2(c.size * 1.05), {background: c.prompt, opacity: 0})));
   }
-  const out = [el('div', `${id}-window`, {...abs(B.x, B.y, B.width, B.height), boxSizing: 'border-box', borderRadius: r2(24 * u), overflow: 'hidden', background: c.surface, border: `${r2(2 * u)}px solid ${c.border}`,
-    boxShadow: `0 ${r2(30 * u)}px ${r2(80 * u)}px #000000aa`, opacity: 0}, inner)];
+  const out = [el('div', `${id}-window`, {...abs(B.x, B.y, B.width, B.height), boxSizing: 'border-box', borderRadius: r2(24 * u), overflow: 'hidden',
+    ...(glass ?? {background: c.surface, border: `${r2(2 * u)}px solid ${c.border}`, boxShadow: `0 ${r2(30 * u)}px ${r2(80 * u)}px #000000aa`}), opacity: 0}, inner)];
   if (c.caption) out.push(label(`${id}-caption`, 0, r2(B.y + B.height + 30 * u), model.rect.width, c.caption.text, {size: c.caption.size, family: fonts.body, color: theme.foreground, align: 'center', weight: 650, wrap: c.caption.lines > 1, extra: {opacity: 0}}));
   return out;
 }

@@ -19,6 +19,8 @@
 //             isotype and ruler)
 //   social    catalog-i-social.mjs (social-post, social-stack, social-sort,
 //             social-wall: real posts as cards, each with its source line)
+//   channel   catalog-h-channel.mjs (logo-sting, subscribe-cta,
+//             channel-watermark: the furniture round a channel's videos)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -39,9 +41,10 @@ import {ICON_MODULES} from './catalog-h-icons.mjs';
 import {MAPS} from './catalog-h-map.mjs';
 import {DATA_MODULES} from './catalog-h-data.mjs';
 import {SOCIAL_MODULES} from './catalog-i-social.mjs';
+import {CHANNEL_MODULES} from './catalog-h-channel.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */

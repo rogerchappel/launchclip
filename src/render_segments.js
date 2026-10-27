@@ -46,6 +46,7 @@ import { cameraOps } from "../kit/core/catalog-c.mjs";
 import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, containerState, objectRectFromModel, opsStateAt, overlayOps } from "../kit/core/camera-world.mjs";
 import { ambientField, blobStateAt } from "../kit/core/ambient.mjs";
 import { backgroundPlan } from "../kit/core/backgrounds.mjs";
+import { storyHasPlate } from "../kit/core/plates.mjs";
 import { allFontFaces } from "../kit/core/fonts.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -351,7 +352,10 @@ export function globalSettings(story, { models = sceneModels(story), base = null
     ambient: backgroundPlan(story) ? null : ambientField(story),
     // A background kind (kit/core/backgrounds.mjs) replaces the field; keyed
     // only when set, so stories without one keep their digests.
-    ...(backgroundPlan(story) ? { background: backgroundPlan(story) } : {})
+    ...(backgroundPlan(story) ? { background: backgroundPlan(story) } : {}),
+    // Backdrop plates (kit/core/plates.mjs): the story's and each chapter's
+    // (a scene's own plate is in its scene); keyed only when set.
+    ...(storyHasPlate(story) ? { plate: { story: story.plate ?? null, chapters: (Array.isArray(story.chapters) ? story.chapters : []).map((chapter) => ({ start: chapter?.start ?? null, plate: chapter?.plate ?? null })) } } : {})
   };
 }
 

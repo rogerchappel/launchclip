@@ -27,6 +27,7 @@ import { CAMERA_STACK, rideWorldPlates, backgroundFieldTiles, backgroundLayer, c
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
+import { scenePlatePlan, storyPlatePlan } from './plates.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
@@ -145,17 +146,24 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // sceneFilter compile is a module review and, like ModuleReview, has none.
   // A story.background kind other than blobs (kit/core/backgrounds.mjs)
   // replaces the field with its layers, in the same places.
-  const backdrop = isolate ? null : backgroundPlan(story);
+  // A backdrop plate (kit/core/plates.mjs) replaces the background on the
+  // scenes it covers, one per chapter; the story's own plate is the world
+  // camera's one backdrop.
+  const backdrop = isolate ? null : storyPlatePlan(story) ?? backgroundPlan(story);
   const field = isolate || backdrop ? null : ambientField(story);
+  const plateFor = (scene) => (isolate ? null : scenePlatePlan(story, scene));
+  const drawsBackground = (scene) => Boolean(plateFor(scene)) || sceneBackground(story, scene);
   const geometry = profileGeometry({ width: W, height: H });
-  const backdropLayer = (key, from, to) => {
+  const backdropLayer = (key, from, to, backdrop) => {
     const html = backdrop.layers.map((layer) => `<div id="lc-bg-${key}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`).join('');
     const lines = backdrop.layers.flatMap((layer) => layerTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-bg-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
     const mask = Object.entries(fieldStyle(backdrop)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
     return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true"${mask ? ` style="${mask}"` : ''}>${html}</div>`, motion: lines };
   };
-  const fieldLayer = (key, from, to) => {
-    if (backdrop) return backdropLayer(key, from, to);
+  const fieldLayer = (key, from, to, scene) => {
+    const plate = plateFor(scene);
+    if (plate) return backdropLayer(key, from, to, plate);
+    if (backdrop) return backdropLayer(key, from, to, backdrop);
     if (!field) return { html: '', motion: [] };
     const html = field.blobs.map((blob) => {
       const state = blobStateAt(blob, from);
@@ -200,7 +208,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   cameraMotion.push(...worldField.motion);
   // World mode with a background kind: the background stays fixed to the
   // screen under the camera (in #lc-bg), in place of the depth layer's glows.
-  const worldBackdrop = plan?.mode === 'world' && backdrop ? backdropLayer('world', 0, D) : null;
+  const worldBackdrop = plan?.mode === 'world' && backdrop ? backdropLayer('world', 0, D, backdrop) : null;
   if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
@@ -270,7 +278,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
     // Ambient field: inside every plate, except in world mode, where the one
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
-    const ambient = entry.plate && !worldMode && sceneBackground(story, entry.scene) ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
+    const ambient = entry.plate && !worldMode && drawsBackground(entry.scene) ? fieldLayer(id, entry.start, entry.renderEnd, entry.scene) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
@@ -322,7 +330,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       // The clone holds the scene's first state, where its drift is identity;
       // the field keeps moving with absolute time (in world mode it is the
       // camera's depth layer instead).
-      const ambient = plate && plan?.mode !== 'world' && sceneBackground(story, entry.scene) ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
+      const ambient = plate && plan?.mode !== 'world' && drawsBackground(entry.scene) ? fieldLayer(id, loop.start, loop.end, entry.scene) : { html: '', motion: [] };
       (plan ? world : markup).push(`<div id="${outer}" class="lc-scene${plate ? ' lc-plate' : ''} lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
       motion.push(...ambient.motion);
       if (media.elements.length) warnings.push(`${entry.id}: root media is not repeated in the loop ending`);

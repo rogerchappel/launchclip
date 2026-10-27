@@ -22,6 +22,7 @@ import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
 import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
 import { MEDIUM_KINDS, mediumErrors } from './medium.mjs';
+import { plateErrors } from './plates.mjs';
 import { PANEL_RADIUS, PANEL_TREATMENTS } from './panels.mjs';
 import { soundProblems } from './sound/options.mjs';
 import { WORLD_TIMES, storyWorldErrors } from './worlds/index.mjs';
@@ -37,7 +38,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -520,6 +521,8 @@ function seededFieldErrors(pack, { err, warn, known }) {
     }
   }
   for (const message of backgroundErrors(pack.background, 'background')) err(message);
+  // plate: the blurred backdrop plate (kit/core/plates.mjs); story.plate when the story has none.
+  for (const message of plateErrors(pack.plate, 'plate', { allowCycle: true })) err(message);
   if (pack.variants !== undefined) {
     if (!isObject(pack.variants)) err('variants must be {module: variant}');
     else for (const [id, variant] of Object.entries(pack.variants)) {
@@ -655,7 +658,7 @@ export function applyStyle(story, pack, options = {}) {
   // upgraded v2 pack carries is not filled, so it renders as before.
   const packPanel = JSON.stringify(pack.layouts?.panel) === JSON.stringify(STYLE_V3_DEFAULTS.layouts.panel) ? null : pack.layouts?.panel;
   const panel = isObject(packPanel) && typeof packPanel.radius === 'number' && packPanel.radius > PANEL_RADIUS.max ? { ...packPanel, radius: PANEL_RADIUS.max } : packPanel;
-  for (const [key, source] of [['background', pack.background], ['panel', panel], ['world', pack.world]]) {
+  for (const [key, source] of [['background', pack.background], ['panel', panel], ['world', pack.world], ['plate', pack.plate]]) {
     if (isObject(source) && out[key] === undefined) { out[key] = clone(source); applied.push(key); }
   }
   // Medium (kit/core/medium.mjs): the pack's material when the story names

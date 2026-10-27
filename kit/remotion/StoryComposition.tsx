@@ -49,6 +49,8 @@ import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle
 // @ts-ignore plain ESM from kit/core
 import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSvg, layoutFillClip, panelFillPlan, sceneBackground } from "../core/backgrounds.mjs";
 // @ts-ignore plain ESM from kit/core
+import { scenePlatePlan, storyPlatePlan } from "../core/plates.mjs";
+// @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 // @ts-ignore plain ESM from kit/core
 import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectFilterAt, subjectSegments, subjectWindows } from "../core/subject-layer.mjs";
@@ -385,11 +387,13 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;
   const frames = (seconds: number) => Math.round(seconds * fps);
   // A background kind other than blobs (kit/core/backgrounds.mjs) replaces the field.
-  const backdrop = React.useMemo(() => backgroundPlan(story), [story]);
+  // A backdrop plate (kit/core/plates.mjs) replaces the background on the
+  // scenes it covers; the story's own plate is the world camera's backdrop.
+  const backdrop = React.useMemo(() => storyPlatePlan(story) ?? backgroundPlan(story), [story]);
   const field = React.useMemo(() => (backdrop ? null : ambientField(story)), [story, backdrop]);
   const geometry = React.useMemo(() => profileGeometry({ width: story.format.width, height: story.format.height }), [story]);
-  const fieldFor = (scene: any) => (field && sceneBackground(story, scene) ? field.blobs : null);
-  const backdropFor = (scene: any) => (backdrop && sceneBackground(story, scene) ? backdrop : null);
+  const fieldFor = (scene: any) => (field && !scenePlatePlan(story, scene) && sceneBackground(story, scene) ? field.blobs : null);
+  const backdropFor = (scene: any) => scenePlatePlan(story, scene) ?? (backdrop && sceneBackground(story, scene) ? backdrop : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
