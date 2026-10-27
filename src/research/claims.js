@@ -116,7 +116,7 @@ export function extractEntities(sentence) {
     add(`${match[1]}/${match[2]}`, "repo");
   }
   // Model-like names: a capitalised word joined to a version (DeepSeek-V4.1, GPT-5.5, Llama 4, Qwen3.8-27B).
-  for (const match of withoutUrls.matchAll(/\b([A-Z][A-Za-z]+(?:[- ][A-Z][A-Za-z]+)?(?:[- ]?[vV]?\d+(?:\.\d+)*)(?:[- ][A-Za-z0-9.]+)*?)(?=[\s,.;:!?)"”']|$)/g)) {
+  for (const match of withoutUrls.matchAll(/\b([A-Z][A-Za-z]+(?:[- ][A-Z][A-Za-z]+)?(?:[- ]?[vV]?\d+(?:\.\d+)*[A-Za-z]*)(?:[- ][A-Za-z0-9.]+)*?)(?=[\s,.;:!?)"”']|$)/g)) {
     if (/\d/.test(match[1]) && !/^(?:19|20)\d{2}$/.test(match[1]) && !new RegExp(`^(?:${MONTHS})\\b`).test(match[1])) add(match[1], "model");
   }
   // Capitalised runs: people and organisations.
