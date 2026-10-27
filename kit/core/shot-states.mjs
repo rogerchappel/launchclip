@@ -143,7 +143,7 @@ const isTarget = value => isTargetRef(value) || (Array.isArray(value) && value.l
 /**
  * scene.states (anchors resolved) → model.shotStates, or throws.
  * resolveWith(params) resolves the same scene with other params (a model).
- * → {color, states: [{index, at, set, params, model|null, guide|null}]}
+ * → {color, items, states: [{index, at, set, params, model|null, guide|null}], events}
  */
 export function resolveShotStates(scene, model, {spec, resolveWith}) {
   if (!spec) throw new Error(`states: module "${model.module}" does not run states (states work on ${Object.keys(STATE_MODULES).join(', ')}, or a module that declares states)`);
@@ -178,7 +178,9 @@ export function resolveShotStates(scene, model, {spec, resolveWith}) {
     }
     return {index, at, set, params, model: stateModel, guide};
   });
-  return {color: focusColor(model.theme), items: spec.items, states};
+  // Each state is a module event too (state-1, state-2, …), so it gets a soft cue.
+  const events = states.map(state => ({id: `${model.id}-state-${state.index + 1}`, name: `state-${state.index + 1}`, time: state.at, endTime: rt(state.at + STATE_MOVE), role: 'emphasis', cue: 'hit-soft'}));
+  return {color: focusColor(model.theme), items: spec.items, states, events};
 }
 
 /** The focus colour: the brand accent when it reads on the background (3:1), else primary. */

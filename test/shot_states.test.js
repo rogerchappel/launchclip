@@ -163,3 +163,10 @@ test('the planner and the storyboard reference teach builds, the ring and the de
   assert.match(lines, /rack-focus.*card-to-card.*glow-wipe/s);
   assert.match(storyboardModulesReference(), /## Builds, not cuts \(shot states\)/);
 });
+
+test('each state is a module event with a soft cue', () => {
+  const m = model(barScene([{at: 3, set: {focus: 1}}, {at: 6, set: {focus: 0}}]));
+  const events = m.events.filter(event => /^state-/.test(event.name));
+  assert.deepEqual(events.map(event => [event.name, event.time, event.cue]), [['state-1', 3, 'hit-soft'], ['state-2', 6, 'hit-soft']]);
+  assert.ok(H_EMITTERS['bar-chart'](m).events.some(event => event.name === 'state-2'));
+});

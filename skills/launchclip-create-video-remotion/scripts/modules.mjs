@@ -206,6 +206,7 @@ export function resolveModule(scene, story, { track, end } = {}) {
     if (Array.isArray(scene?.states) && scene.states.length) {
       const spec = stateSpec(scene.module, isEditorialKind(scene.module) ? null : catalogModules()[scene.module]);
       model.shotStates = resolveShotStates(scene, model, { spec, resolveWith: (params) => resolveModuleInner({ ...scene, params, states: undefined }, story, { track, end: finalEnd }) });
+      if (Array.isArray(model.events)) model.events.push(...model.shotStates.events);
     }
     return model;
   } catch (error) {
