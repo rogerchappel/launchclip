@@ -96,7 +96,9 @@ export function worldBackdrops(story, plan, windows) {
     else {
       const key = keys[at];
       const dx = key.to.x - key.from.x, dy = key.to.y - key.from.y;
-      const sideways = Math.hypot(dx, dy) >= 1 && move.type !== 'push' && move.type !== 'pull';
+      // An overview zooms far out over a depth layer that never scales, so
+      // the incoming shot's backdrop crossfades in as the camera pulls back.
+      const sideways = Math.hypot(dx, dy) >= 1 && move.type !== 'push' && move.type !== 'pull' && move.type !== 'overview';
       // The layer travels by (dx, dy); the new backdrop arrives travelling the
       // same way, from the opposite side of the screen.
       const side = !sideways ? null : Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'right' : 'left') : (dy < 0 ? 'bottom' : 'top');
