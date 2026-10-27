@@ -124,12 +124,12 @@ export const PATHS = Object.freeze({
 export const CUE_LEVELS = Object.freeze({
   impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3, click: 0.3, keystroke: 0.3, "keystroke-space": 0.34, "keystroke-enter": 0.36,
   // The palette families (kit/core/sound/families.mjs).
-  tally: 0.3, swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
+  tally: 0.16, swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
   "pen-scribble": 0.3, "camera-shutter": 0.32, cash: 0.3, notification: 0.3, "error-buzz": 0.28, success: 0.32, boing: 0.32, sparkle: 0.28, footstep: 0.35, door: 0.4
 });
 export const CUE_DURATIONS = Object.freeze({
   whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8, click: 0.06, keystroke: 0.11, "keystroke-space": 0.16, "keystroke-enter": 0.15,
-  tally: TALLY_LANDS_AT + 0.35, swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
+  tally: TALLY_LANDS_AT + 0.22, swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
   "pen-scribble": 0.9, "camera-shutter": 0.42, cash: 1.3, notification: 0.9, "error-buzz": 0.6, success: 1.4, boing: 0.8, sparkle: 1.2, footstep: 0.32, door: 1
 });
 const CUE_SPACING = 0.12;
@@ -259,9 +259,12 @@ export function bindCues(story, { models, palette = false } = {}) {
       continue;
     }
     // A riser builds into its moment: it ends on the event (or its endTime).
-    // A tally's landing chord sounds on it.
+    // A tally plays inside its count: from the count's start (or the last
+    // TALLY_LANDS_AT s of a long one) to its landing chord on the end; a
+    // short count skips the tally's first blips (offset) rather than start early.
+    const tallyLead = kit.cue === "tally" ? Math.min(TALLY_LANDS_AT, Math.max(0.15, Number.isFinite(entry.end) ? entry.end - entry.at : 0.5)) : 0;
     const anchor = kit.cue === "riser" ? (entry.end ?? entry.at) - CUE_DURATIONS.riser * (kit.modifiers.includes("short") ? 0.6 : 0.95)
-      : kit.cue === "tally" ? (entry.end ?? entry.at) - TALLY_LANDS_AT : entry.at;
+      : kit.cue === "tally" ? (entry.end ?? entry.at) - tallyLead : entry.at;
     const at = round3(Math.max(0, anchor));
     if (Number.isFinite(duration) && at >= duration - 0.05) {
       warnings.push(`${entry.shot}: cue ${kit.cue} at ${at}s falls after the end of the video; skipped`);
@@ -271,6 +274,7 @@ export function bindCues(story, { models, palette = false } = {}) {
     const cue = { cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event, optional: entry.source !== "hit" };
     // A riser lands on its moment; library risers are re-anchored on their measured peak.
     if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
+    if (kit.cue === "tally" && tallyLead < TALLY_LANDS_AT) cue.offset = round3(TALLY_LANDS_AT - tallyLead);
     cues.push(cue);
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));

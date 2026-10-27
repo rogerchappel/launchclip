@@ -161,7 +161,7 @@ function riser(T, r) {
 // tonal throughout: a count should sound like play, not a noise build.
 function tally(T, r) {
   const character = T.material === 'chip' ? 'blip' : r.pick(['blip', 'pluck', 'wood']);
-  const count = r.int(9, 14);
+  const count = r.int(6, 9);
   const span = TALLY_LANDS_AT;
   const base = fold(T.root * T.pitch, 700);
   const steps = T.scale.length;
@@ -176,11 +176,12 @@ function tally(T, r) {
   for (let i = 0; i < count; i++) {
     // (i/count)^0.65: the gaps shrink, so the count accelerates into its landing.
     const at = span * (i / count) ** 0.65;
-    layers.push(...voice(noteAt(Math.round(i * steps * 1.5 / count)), d, 0.4 + 0.4 * (i / count), at));
+    layers.push(...voice(noteAt(Math.round(i * steps * 1.5 / count)), d, 0.3 + 0.3 * (i / count), at));
   }
+  // The landing is short: the chord marks the moment and is gone with the motion.
   const top = noteAt(Math.round(steps * 1.5));
-  layers.push(...voice(top, d * 6, 0.9, span), ...voice(fold(top * 1.5, 2600), d * 5, 0.5, span));
-  return { duration: span + 0.35, master: 'highpass=f=120,lowpass=f=7000', fade: 0.08, layers };
+  layers.push(...voice(top, d * 3, 0.7, span), ...voice(fold(top * 1.5, 2600), d * 2.5, 0.35, span));
+  return { duration: span + 0.22, master: 'highpass=f=120,lowpass=f=7000', fade: 0.06, layers };
 }
 
 function tick(T, r) {

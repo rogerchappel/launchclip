@@ -70,9 +70,13 @@ test("counts and builds get a tonal tally that lands on the moment", () => {
   assert.equal(defaultCueFor("bar-build"), "tally");
   assert.equal(defaultCueFor("tension"), "riser");
   const story = { format: { width: 1080, height: 1920, fps: 30, duration: 10 }, resolved: { duration: 10, fps: 30, frames: 300 }, scenes: [{ id: "s1", module: "x", start: 0, end: 10, hits: [] }] };
-  const models = { s1: { id: "s1", events: [{ id: "s1-count", name: "count", time: 2, endTime: 4, cue: "tally" }] } };
+  const models = { s1: { id: "s1", events: [
+    { id: "s1-count", name: "count", time: 2, endTime: 4, cue: "tally" },
+    // A short count: the tally starts with it, skipping its first blips.
+    { id: "s1-fill", name: "fill", time: 6, endTime: 6.5, cue: "tally" }
+  ] } };
   const { cues } = bindCues(story, { models });
-  assert.deepEqual(cues.map((cue) => [cue.cue, cue.at]), [["tally", 4 - TALLY_LANDS_AT]]);
+  assert.deepEqual(cues.map((cue) => [cue.cue, cue.at, cue.offset]), [["tally", 4 - TALLY_LANDS_AT, undefined], ["tally", 6, Number((TALLY_LANDS_AT - 0.5).toFixed(3))]]);
 });
 
 test("rendered: the kit's tonal families pass the timbre guard in every palette", { skip: mediaSkip(), timeout: 600_000 }, async () => {

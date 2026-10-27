@@ -70,6 +70,9 @@ test("builds a ducked mix graph with event-bound SFX", () => {
   assert.match(graph, /amix=inputs=4:normalize=0/);
   assert.doesNotMatch(mixGraph({ cues: [], duration: 10, hasVoice: false, hasMusic: true }), /sidechaincompress/);
   assert.throws(() => normalizeCues([{ cue: "tick" }], "sfx"), /non-negative "at"/);
+  // An offset starts the file part-way in (a tally fitted to a short count).
+  const fitted = normalizeCues([{ cue: "tally", at: 2, volume: 0.16, offset: 0.6 }], "sfx");
+  assert.match(mixGraph({ cues: fitted, duration: 10, hasVoice: false, hasMusic: false }), /\[0\]atrim=start=0\.6,asetpts=PTS-STARTPTS,afade=t=in:d=0\.004,adelay=2000:all=1,volume=0\.16\[s0\]/);
 });
 
 test("derives the phase-2 evidence schedule from declared boundaries", () => {
