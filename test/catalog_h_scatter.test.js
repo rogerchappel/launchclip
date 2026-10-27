@@ -2,6 +2,7 @@
 // in order, the focus glow, annotations as reveal ids, log axes and the
 // two-panel compare layout; the legacy points form still resolves.
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {MODULES, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
 import {frameState} from '../kit/core/catalog-b-view.mjs';
@@ -62,6 +63,14 @@ test('scatter-plot: two panels sit side by side in landscape and stack in portra
   assert.ok(d.y >= c.y + c.height, 'stacked');
   const state = settled(land);
   assert.equal(state.get('scene-s-2-wrap').opacity, 0.3, 'the focus applies in both panels');
+});
+
+test('scatter-plot: a callout card covers none of the points when the plot has room', () => {
+  const story = JSON.parse(readFileSync(new URL('../examples/story/scatter-choreography-16x9/storyboard.json', import.meta.url), 'utf8'));
+  const model = resolve(story.scenes[0].params, '16:9', {duration: 15, start: 0, brand: story.brand});
+  const {card} = model.content.notes.find(n => n.type === 'callout');
+  const under = model.content.marks.filter(m => m.x > card.x - m.d / 2 && m.x < card.x + card.w + m.d / 2 && m.y > card.y - m.d / 2 && m.y < card.y + card.h + m.d / 2);
+  assert.deepEqual(under, []);
 });
 
 test('scatter-plot: the legacy points form keeps its trend and highlight', () => {

@@ -331,8 +331,17 @@ function scatterResolve(params, ctx) {
       }
     } else {
       const cb = textBox(a.text, noteSize, 'body');
-      const right = x + u(60) + cb.w <= L.box.x + L.box.width, above = y - u(70) - cb.h >= P.y;
-      out.card = {text: a.text, x: r2(right ? x + u(60) : x - u(60) - cb.w), y: r2(above ? y - u(70) - cb.h : Math.min(y + u(50), P.y + P.height - cb.h)), ...cb};
+      // The spot inside the plot that covers the fewest points of this panel
+      // (above or below, right or left, near then far; the first on a tie).
+      const pad = u(14);
+      const spots = [];
+      for (const dy of [-u(70) - cb.h, u(50), -u(160) - cb.h, u(140), -u(250) - cb.h, -u(340) - cb.h]) for (const dx of [u(60), -u(60) - cb.w, u(240), -u(240) - cb.w]) spots.push([x + dx, y + dy]);
+      const fits = ([sx, sy]) => sx >= L.box.x && sx + cb.w <= L.box.x + L.box.width && sy >= P.y && sy + cb.h <= P.y + P.height;
+      const covered = ([sx, sy]) => marks.filter(m => m.panel === a.panel && m.x > sx - m.d / 2 - pad && m.x < sx + cb.w + m.d / 2 + pad && m.y > sy - m.d / 2 - pad && m.y < sy + cb.h + m.d / 2 + pad).length;
+      const inside = spots.filter(fits);
+      const [cx, cy] = inside.length ? inside.reduce((best, sp) => (covered(sp) < covered(best) ? sp : best)) : spots[0];
+      out.card = {text: a.text, x: r2(cx), y: r2(cy), ...cb};
+      const right = cx > x;
       const ex = right ? out.card.x : out.card.x + cb.w, ey = r2(out.card.y + cb.h / 2);
       out.leader = `M${x} ${y} L${r2((x + ex) / 2)} ${ey} L${ex} ${ey}`;
     }
