@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "side-by-side-clip",
+  "url": "https://social.example/devtester/status/22",
+  "kind": "post",
+  "claim": "c-clip",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "Side-by-side clip"
+      }
+    }
+  ],
+  "out": "assets/evidence/side-by-side-clip.mp4",
+  "provenance": {
+    "source_title": "Side-by-side clip",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}

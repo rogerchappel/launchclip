@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "system-card-table-7",
+  "url": "https://northlight.example/halcyon-2/system-card",
+  "kind": "model-card",
+  "claim": "c-failure-table",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "Halcyon 2 system card"
+      }
+    }
+  ],
+  "out": "assets/evidence/system-card-table-7.mp4",
+  "provenance": {
+    "source_title": "Halcyon 2 system card",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}

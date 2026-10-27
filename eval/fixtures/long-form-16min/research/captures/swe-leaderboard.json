@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "swe-leaderboard",
+  "url": "https://leaderboard.example/swe",
+  "kind": "chart",
+  "claim": "c-swe",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "Open SWE benchmark"
+      }
+    }
+  ],
+  "out": "assets/evidence/swe-leaderboard.mp4",
+  "provenance": {
+    "source_title": "Open SWE benchmark",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}

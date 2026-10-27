@@ -1,0 +1,32 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "sdk-pr-1842",
+  "url": "https://code.example/northlight/sdk/pull/1842",
+  "kind": "pr",
+  "claim": "c-pr-comments",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "action": "scroll",
+      "at": 0.5,
+      "dur": 1.5
+    },
+    {
+      "action": "highlight",
+      "at": 2.2,
+      "dur": 1.2,
+      "target": {
+        "text": "northlight/sdk#1842"
+      }
+    }
+  ],
+  "out": "assets/evidence/sdk-pr-1842.mp4",
+  "provenance": {
+    "source_title": "northlight/sdk#1842",
+    "fetched_at": "2026-10-20T09:00:00Z"
+  }
+}

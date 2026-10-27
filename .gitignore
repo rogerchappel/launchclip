@@ -84,3 +84,6 @@ qa/subject/
 qa/cast-styles/
 qa/social/
 qa/parity-social/
+
+# Format scorecard (npm run eval:formats)
+qa/format-eval*/
