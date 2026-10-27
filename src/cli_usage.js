@@ -99,6 +99,9 @@ export const USAGE = Object.freeze([
   ["demo doctor", "demo doctor <repo> [--plan demo/DEMO-PLAN.json] [--json] [--url http://localhost:3000] [--start \"npm run dev\"] [--seed \"npm run seed\" | --no-seed] [--no-start] [--approve] [--flows a,b] [--out .launchclip/doctor] [--step-timeout 5000] [--allow-host staging.example.com] [--headed]"],
   ["demo shots", "demo shots <docs-dir-or-file> [--draft demo/DEMO-PLAN.json] [--url http://localhost:3000]"],
   ["demo approve", "demo approve <dir> [--flows a,b] [--reject]"],
+  ["evidence capture", "evidence capture <request.json> [--root .] [--still [--target \"text:phrase\" | --target <css>] [--scale 3] [--pad 24]]"],
+  ["evidence check", "evidence check <request.json>"],
+  ["evidence scene", "evidence scene <id>.evidence.json [--src assets/evidence/<id>.mp4] [--frame glass|none]"],
   ["demo scene", "demo scene <dir> [--flow <id>] [--source-start 0.5] [--duration 8] [--src assets/demo/<flow>.mp4] [--frame window|full]"],
   ["plan", "plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]"],
   ["captions", "captions <workspace> --platforms x,linkedin,tiktok,bluesky"],
@@ -168,7 +171,7 @@ export const SUMMARIES = Object.freeze({
   "edit-recording": "Edit a raw recording: trim silence, drop retakes and fillers, QA the joins, then clean up the voice audio (--enhance light by default; --voice-isolation elevenlabs is opt-in and paid).",
   "broll-plan": "Plan b-roll inserts from a word-timed transcript.",
   produce: "Run the model-directed production lane end to end.",
-  evidence: "Collect evidence for a production workspace.",
+  evidence: "Collect evidence for a production workspace, or record real public pages as evidence clips (evidence capture) and turn them into evidence-clip scenes (evidence scene).",
   "source-preprocess": "Preprocess the workspace's source media.",
   "source-media": "Sample and describe the workspace's source media.",
   "resolve-entities": "Resolve brand entities and logos for the workspace.",
@@ -220,6 +223,9 @@ export const SUMMARIES = Object.freeze({
   "demo doctor": "Check a demo recipe before recording. Without --plan it surveys the repo (start and seed commands, test accounts, auth, e2e mocks and sign-ins, MSW, API contracts, env vars, first-run flags, docs placeholders) and recommends a setup rung, running nothing. With --plan it starts the app (asks first, like record), then runs each flow at full speed with off-origin requests blocked: every step must resolve to a visible element, nothing may cover the page or sign it out, and API requests must be answered. Each check reports a fix; --json for agents; exit 1 on any failure.",
   "demo shots": "List the video and screenshot placeholders in docs ({/* video: … */}, <!-- video: … -->, shot-list tables); --draft writes or extends a DEMO-PLAN.json with one flow per video for the agent to fill in.",
   "demo record": "Demo autopilot: detect how the repo runs, seed it, start it, plan 2–4 flows (DEMO-PLAN.json) and record each in Chromium with an action log, then write contact sheets and REVIEW.md. Asks before running the seed and start commands unless --approve; local or staging URLs only unless --allow-host.",
+  "evidence capture": "Open the request's public page in a clean Chromium (consent banners refused, never signed in; blocks, sign-in walls and paywalls fail), play its beats (scroll, zoom, cursor, select, highlight, focus-ring, pin) and write <id>.mp4, <id>.poster.png, <id>.evidence.json (provenance, final URL, snapshot sha256, full-page shot, highlighted spans). --still writes one hi-res crop (<id>.still.png and <id>.still.json) instead.",
+  "evidence check": "Validate a launchclip.capture.v1 request without opening a browser.",
+  "evidence scene": "Print evidence-clip scene params for a captured clip (from its sidecar: the clip, its size and the publisher · date source tag).",
   "demo approve": "Approve (or --reject) recorded demo flows after reviewing their contact sheets; only approved flows are used in a video.",
   "demo scene": "Print product-demo scene params for an approved flow (its action log turned into scene-relative actions, callouts and the clip window).",
   plan: "Plan the packet video.",
@@ -238,7 +244,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "story", "sfx", "module", "subject", "demo", "script", "history"]);
+export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "story", "sfx", "module", "subject", "demo", "evidence", "script", "history"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 

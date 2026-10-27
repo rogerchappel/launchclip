@@ -1334,7 +1334,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip produce <source> [--profile standard|cinematic] [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--max-cost-usd 50|none] [--no-audio] [--fast-eval]
   ```
 
-- `evidence`: Collect evidence for a production workspace.
+- `evidence`: Collect evidence for a production workspace, or record real public pages as evidence clips (evidence capture) and turn them into evidence-clip scenes (evidence scene).
 
   ```text
   launchclip evidence <workspace>
@@ -1637,6 +1637,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip demo approve <dir> [--flows a,b] [--reject]
+  ```
+
+- `evidence capture`: Open the request's public page in a clean Chromium (consent banners refused, never signed in; blocks, sign-in walls and paywalls fail), play its beats (scroll, zoom, cursor, select, highlight, focus-ring, pin) and write <id>.mp4, <id>.poster.png, <id>.evidence.json (provenance, final URL, snapshot sha256, full-page shot, highlighted spans). --still writes one hi-res crop (<id>.still.png and <id>.still.json) instead.
+
+  ```text
+  launchclip evidence capture <request.json> [--root .] [--still [--target "text:phrase" | --target <css>] [--scale 3] [--pad 24]]
+  ```
+
+- `evidence check`: Validate a launchclip.capture.v1 request without opening a browser.
+
+  ```text
+  launchclip evidence check <request.json>
+  ```
+
+- `evidence scene`: Print evidence-clip scene params for a captured clip (from its sidecar: the clip, its size and the publisher · date source tag).
+
+  ```text
+  launchclip evidence scene <id>.evidence.json [--src assets/evidence/<id>.mp4] [--frame glass|none]
   ```
 
 - `demo scene`: Print product-demo scene params for an approved flow (its action log turned into scene-relative actions, callouts and the clip window).

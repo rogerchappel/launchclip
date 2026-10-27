@@ -29,6 +29,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - world? (optional): {kind: office | home-desk | kitchen | living-room | classroom | cafe | workshop | server-room | studio | gym | city-street | shopfronts | crossing | alley | rooftop | skyline | park | beach | mountains | forest | space | abstract-stage, time?: day | dusk | night, props?: [prop ids]}. The default for every world scene; a style may set it. Pick the place that fits the topic (cooking → kitchen or cafe, fitness → gym or park, developer tools → home-desk or server-room) and the time the story is set at.
 - A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
+- Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -183,6 +184,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | cites history, a source or a quote | archive-card |
 | names a specific date or launch day | date-card |
 | shows the product in use: a recorded flow (assets/demo/<flow>.mp4 with <flow>.actions.json from launchclip demo record) [motion, voiceover-motion] | product-demo |
+| shows a real public page as proof: a PR or diff, a model card, an announcement, an article (assets/evidence/<id>.mp4 with <id>.evidence.json from launchclip evidence capture) [motion, voiceover-motion] | evidence-clip |
 | shows a product, site or repo (real capture) | media-window (planned module ui-showcase; use media-window) |
 | shows a command or a few lines of code | code-snippet |
 | names platforms or integrations | logo-row |
@@ -750,6 +752,19 @@ params:
 - align: left|center (default left)
 - title: string ≤ 60, the photo's alt text (optional)
 events: enter, line-<i>
+
+### evidence-clip (keeps captions)
+A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date) above it, with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.
+params:
+- media: {src: "assets/evidence/<id>.mp4", sourceStart?: seconds}
+- viewport: {width, height} of the capture in px (from <id>.evidence.json) — build with evidenceClipParams(sidecar) or launchclip evidence scene
+- source: {publisher ≤ 40, date? ≤ 24} the tag above the window (default from the sidecar provenance)
+- frame: glass|none (default glass)
+- push: 0–0.12, the slow push-in over the scene (default 0.04)
+- focus: [{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture's own beats
+- cursor: [{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time
+- title: string ≤ 60 (optional, for logs)
+events: enter, source, focus-<i>, click-<i>
 
 ### feed-frame (hides captions, needs the subject)
 Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
@@ -2194,6 +2209,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
+| evidence-clip | 2 s | 0 s | scene − 0.3 s | focus[].at in order; each zooms in over 0.8 s, holds to until (default 2 s after landing) and eases out over 0.7 s unless the next starts first; cursor[].at at least 0.2 s apart; each glide takes up to 0.7 s and lands on the point's time |
 | feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
 | pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |

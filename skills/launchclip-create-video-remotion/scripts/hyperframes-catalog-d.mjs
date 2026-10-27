@@ -1,4 +1,4 @@
-// HyperFrames emitters for catalogue D (product-demo, photo-scene).
+// HyperFrames emitters for catalogue D (product-demo, photo-scene, evidence-clip).
 //
 // The model comes from kit/core/catalog-d.mjs. Markup is the shared view
 // serialised by catalogue B's renderNode, motion the shared op list as
@@ -7,7 +7,7 @@
 // and the overlay (highlights and callouts, returned as `overlay`) is hoisted
 // one z-index above it, so it is drawn over the video it annotates.
 
-import {photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
+import {evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 /** {html: the <video>, overlay: the annotation layer, css, motion, events, layout}. */
@@ -40,7 +40,17 @@ export function emitPhotoScene(model) {
   return {...out, html: renderNode(frame, `${timed(model.track)} data-module="photo-scene"`)};
 }
 
+/** evidence-clip: the <video> hoisted like product-demo's, the frame, cursor and source tag one z-index above. */
+export function emitEvidenceClip(model) {
+  const {view, ops} = gsapOwnedTransforms(evidenceClipView(model), evidenceClipTimeline(model), model.start);
+  const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
+  const html = renderNode(view.media, `${timed(model.track)} data-media-start="${model.content.media.sourceStart}" data-module="evidence-clip"`);
+  const overlay = renderNode(view.overlay, timed(model.track + 1, ' data-layout-allow-occlusion="true" data-module="evidence-clip"'));
+  return {html, overlay, css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+}
+
 export const EMITTERS = {
   'product-demo': emitProductDemo,
   'photo-scene': emitPhotoScene,
+  'evidence-clip': emitEvidenceClip,
 };
