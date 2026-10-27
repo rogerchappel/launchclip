@@ -18,7 +18,8 @@
 //   data      catalog-h-data.mjs (unit-grid, number-line: the data-explainer
 //             isotype and ruler)
 //   particles catalog-i-particles.mjs (catalogue I: particles and grids at
-//             scale on a canvas painted by kit/core/particles.mjs)
+//             scale on a canvas painted by kit/core/particles.mjs) and
+//             catalog-i-grids.mjs (grid-race, cell-grid: unit grids at scale)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -38,9 +39,10 @@ import {ICON_MODULES} from './catalog-h-icons.mjs';
 import {MAPS} from './catalog-h-map.mjs';
 import {DATA_MODULES} from './catalog-h-data.mjs';
 import {PARTICLE_MODULES} from './catalog-i-particles.mjs';
+import {GRID_MODULES} from './catalog-i-grids.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...PARTICLE_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
