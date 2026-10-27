@@ -81,6 +81,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'archive-card', when: 'cites history, a source or a quote', patterns: ['\\bin \\d{3,4}\\b', '\\b(history|historian|quoted?|wrote|century|archive)\\b'] },
   { module: 'date-card', when: 'names a specific date or launch day', patterns: ['\\b(january|february|march|april|may|june|july|august|september|october|november|december) \\d{1,2}\\b', '\\blaunch(es|ed)? on\\b'] },
   { module: 'product-demo', lanes: ['motion', 'voiceover-motion'], when: 'shows the product in use: a recorded flow (assets/demo/<flow>.mp4 with <flow>.actions.json from launchclip demo record)', patterns: ['\\b(click|clicks|sign(s)? (in|up)|create[sd]?|onboard\\w*|walk(s)? through|in action|set(s)? up|watch)\\b'] },
+  { module: 'evidence-clip', lanes: ['motion', 'voiceover-motion'], when: 'shows a real public page as proof: a PR or diff, a model card, an announcement, an article (assets/evidence/<id>.mp4 with <id>.evidence.json from launchclip evidence capture)', patterns: ['\\b(pull request|merged|commit(ted)?|model card|announced|announcement|the (post|page|article|diff|changelog) (says|shows)|on (github|hugging ?face)|published)\\b'] },
   { module: 'ui-showcase', fallback: 'media-window', when: 'shows a product, site or repo (real capture)', patterns: ['\\b(dashboard|screen|app|website|site|repo|interface|demo|screenshot)\\b'] },
   { module: 'code-snippet', when: 'shows a command or a few lines of code', patterns: ['\\b(npm|npx|pip|brew|install|command|cli|terminal)\\b', '`'] },
   { module: 'logo-row', when: 'names platforms or integrations', patterns: ['\\b(integrat\\w*|works with|platforms?|plugs into)\\b'] },
@@ -411,6 +412,7 @@ function contractLines() {
     ...ambientLines(),
     ...worldLines(),
     'Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.',
+    'Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page\'s own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.',
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
   ];
 }

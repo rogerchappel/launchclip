@@ -34,8 +34,10 @@ import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarTweens} from './grammar.mjs';
 import {photoScene} from './catalog-d-photo-scene.mjs';
+import {evidenceClip} from './catalog-d-evidence-clip.mjs';
 
 export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
+export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from './catalog-d-evidence-clip.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
@@ -546,5 +548,6 @@ const TIMING_D = {
 
 export const MODULES = {
   ...Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}])),
-  [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve}
+  [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve},
+  [evidenceClip.id]: {describe: evidenceClip.describe, params: evidenceClip.params, events: evidenceClip.events, timing: evidenceClip.timing, resolve: evidenceClip.resolve}
 };
