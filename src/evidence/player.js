@@ -8,7 +8,9 @@
 // a 2.6× zoom re-samples the 2× screenshot instead of blowing up a bitmap.
 // render(t) reads only the timeline (src/evidence/timeline.js, inlined), so
 // each frame is drawn from scratch: seeking is safe and a re-run is
-// identical. Frames are JPEG screenshots piped into the system ffmpeg.
+// identical. Frames are JPEG screenshots piped into the system ffmpeg, and
+// the clip is tagged BT.709 so every renderer and player reads its colours
+// the same way (an untagged clip is guessed as BT.601 by some).
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -118,7 +120,7 @@ export async function renderClip(browser, { timeline, workDir, image, url, theme
     const frames = Math.round(timeline.duration * fps);
     const webm = /\.webm$/i.test(out);
     const codec = webm ? ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "28", "-row-mt", "1"] : ["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-movflags", "+faststart"];
-    const ffmpeg = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "image2pipe", "-c:v", "mjpeg", "-framerate", String(fps), "-i", "-", "-vf", "format=yuv420p", ...codec, "-r", String(fps), out], { stdio: ["pipe", "ignore", "pipe"] });
+    const ffmpeg = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "image2pipe", "-c:v", "mjpeg", "-framerate", String(fps), "-i", "-", "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p", ...codec, "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-r", String(fps), out], { stdio: ["pipe", "ignore", "pipe"] });
     let stderr = "";
     ffmpeg.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-4000); });
     const done = new Promise((resolve) => ffmpeg.on("close", resolve));
