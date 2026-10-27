@@ -44,10 +44,13 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   the scene and the format.
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
-  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan", dur, from_object?, direction?}`.
+  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card", dur, from_object?, direction?}`
+  (the last three: see "Shot states and the focus device").
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
   else is `ordinary`. `pan`, `pull`, `orbit`, `whip-pan` (and `push` in
   `camera.mode` "world") move the world camera; see "World camera".
+- `states` on a scene (1–5 entries, each `{at, set}`) advances one module
+  instance through timed states; see "Shot states and the focus device".
 - `motion.grammar` (a grammar name or `{base, ...overrides}`) and `camera`
   (`{mode, layout?, spacing?, parallax?, blur?}`): see "Motion grammar" and
   "World camera".
@@ -192,6 +195,121 @@ Rules:
   (editorial shell 0.2–0.36 s in, 0.16–0.28 s out; catalogue B 0.3–0.7 /
   0.2–0.5 s). Event windows and content defaults keep the editorial bounds,
   so a grammar never turns a valid spec invalid.
+
+## Shot states and the focus device (`kit/core/shot-states.mjs`)
+
+Builds, not cuts: one module instance advances through 2–6 states timed to
+the narration over the same plate. Both renderers draw the states from the
+shared view tree and op list (catalogues B, G and H), so a state is ordinary
+`set`/`tween` ops; frameState() and GSAP agree frame by frame, in any seek
+order.
+
+### `scene.states`
+
+```json
+"states": [
+  {"at": "word:two#1", "set": {"params": {"data": [{"label": "A", "value": 1}, {"label": "B", "value": 3}]}, "focus": 1}},
+  {"at": "word:half", "set": {"guide": {"value": 1.5, "label": "HALF"}}},
+  {"at": 9.2, "set": {"focus": 0, "glow": 0, "note": {"text": "Winner", "target": 0}}}
+]
+```
+
+- `at`: seconds or a time anchor, resolved to absolute story time like
+  `hits[].at`. Strictly increasing, inside the scene, at least `STATE_GAP`
+  (0.6 s) after the module has entered and before it exits.
+- `set` (at least one of):
+  - `params`: state-animatable params, merged over the previous state's.
+    Arrays keep their length: list every item in `params` and hold later
+    ones back with `reveal`.
+  - `reveal: [item | id]`: the item's own entrance ops are shifted to start
+    at this state.
+  - `focus: item | id | [..] | null`: the ring travels here and the rest
+    dims; it persists until a later `focus`, and `null` hides it.
+  - `dim: false | 0–0.8`: sibling opacity while focused (default `FOCUS_DIM`
+    0.3); persists.
+  - `glow: item | id | [..]`: a soft bloom behind the target.
+  - `guide: {value, label?}` (a module with a value axis: bar-chart) or
+    `{target, edge: top|bottom|left|right, label?}`: a dashed line that
+    draws in.
+  - `note: {text ≤ 32, target, side?: above|below}`: a chip beside a target.
+  - `clear: true`: drop the earlier glows, guides and notes.
+- Targets: an integer is an item index (every element whose id is
+  `<scene>-<part>-<n>` for the module's item parts); a string is an element
+  id without the scene prefix (`"cell-1-2"`, `"line-3"`). Unknown targets
+  fail when the module resolves.
+
+### Which modules, and what they declare
+
+| Module | State params | Item parts |
+|---|---|---|
+| bar-chart | data, max, highlight, format | bar, label, value, dot |
+| scatter-plot | points, highlight | dot |
+| comparison-table | rows, highlight | row |
+| leaderboard | entries, highlight | row |
+| unit-grid | highlight | u |
+| process-steps | steps | halo, node, text |
+| excerpt | lines | line |
+
+Any op-list module can opt in by giving its definition
+`states: {params: [...], items: [...], guide?(model, value, params) → {axis: "x"|"y", at, from, to}}`
+(catalogue B, G and H registries pass `states` through; `STATE_MODULES` is
+the fallback table). `resolveModule()` resolves one model per param change
+(`model.shotStates`); the catalogue view and timeline functions call
+`shotStateView()` and `applyShotStates()`.
+
+### How a state moves
+
+- Params: each element of the base view tweens over `STATE_MOVE` (0.6 s,
+  `power3.inOut`) to where the next model settles it: a box maps its rect
+  about its transform origin with x/y/scale, text moves with its alignment
+  edge and counts between numbers in the same frame (`$1` → `$3`), opacity,
+  clip and dash follow the settled ops. Colours and SVG paths do not morph.
+- Focus: the ring is a rounded rim in the focus colour (`focusColor(theme)`:
+  the brand accent at 3:1 on bg, else primary) with a soft outer glow. A new
+  target gets its own ring that starts exactly on the old ring's rect and
+  settles exactly on its own (FLIP), so it ends crisp; the targets' siblings
+  (other items, or for an element id its id'd siblings) dim to 30 % and come
+  back when focus moves on. Rects follow param changes.
+- Overlays (glow, guide, note, rings) are inserted into the deepest node that
+  holds every target, so they share its coordinates (a flowed panel in
+  catalogue G included). Ids carry `-ss-`.
+
+### The focus device on its own
+
+```js
+import {focusDevice} from './shot-states.mjs';
+const device = focusDevice({id: model.id, start: model.start, color, unit: model.unit,
+  steps: [{at, rect: {x, y, width, height} | null, dim: ['<id>', ...]}, ...]});
+// view: append device.nodes after the targets (same parent)
+// timeline: device.apply(ops) after the module's own ops
+```
+
+Rects are in the coordinates of the node the rings are appended to; one ring
+is drawn per distinct rect; `rect: null` hides the ring. `apply` reads the
+current opacities from the ops already in the list, so dims multiply what
+the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
+
+### Transitions (`kit/core/transitions.mjs`)
+
+- `rack-focus`: the outgoing card blurs back (16 px) and shrinks to 0.95 into
+  the plate while the incoming one sharpens forward from 18 px and 1.04. The
+  default between builds of different shots.
+- `glow-wipe` (direction left|right|up|down): a straight inset wipe in the
+  travel direction; both plates flare (`glow` = extra brightness, peak 0.85)
+  at the edge. For chapter breaks only.
+- `card-to-card`: FLIP continuity. The incoming layer starts with the
+  outgoing card's centre and area (`params.rect` of each scene, else the
+  canvas; `cardMap(a, b, width, height)`) and settles on its own, while the
+  outgoing layer travels on to the incoming rect and fades. Equal rects give
+  a crossfade with a 0.97 → 1 settle.
+- Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
+  once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
+  with blur in one filter).
+
+### Gates
+
+`holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
+nothing still for over 3 s, no shot over 10 s without a change.
 
 ## Editorial core (`kit/core/editorial-core.mjs`)
 
