@@ -53,6 +53,9 @@ Additive extensions, all optional:
   across `<span>`s. Either form takes `nth` (0-based match), `within` (a
   selector to search inside), and a text target takes `closest` (use the
   ancestor matching a selector, such as `"tr"` for a whole diff row).
+  Text inside shadow DOM (GitHub's `<relative-time>` "last week") is not
+  searched; target a neighbour or a selector instead. The browser runs in
+  UTC, so target dates as the page renders them in UTC.
 - `beat.zoom`: a fixed scale (1–4) for a zoom beat.
 - `chrome`: `dark` (default) or `none`.
 - `fps`: 24, 25, 30 (default), 50 or 60. `tail`: seconds held after the last
