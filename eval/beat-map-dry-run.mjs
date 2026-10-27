@@ -16,6 +16,7 @@
 //
 // A BEATMAP.json already there is passed back as `previous`, so chunks whose
 // words, history and settings are unchanged are reused (--fresh plans all).
+// Exits 1 when the plan misses its cadence gate.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -76,6 +77,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
   const folder = args.find((arg, i) => !arg.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? DEFAULT_FIXTURE;
-  const { report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh') });
+  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh') });
   console.log(report);
+  // The planning gate: a plan that misses its cadence target fails the run.
+  if (!map.report.cadence.gate.ok) process.exitCode = 1;
 }
