@@ -1,0 +1,39 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Glass plates example: glass cards building over one drifting backdrop plate, with the channel watermark",
+  "lane": "motion",
+  "format": { "width": 1920, "height": 1080, "fps": 30, "duration": 10, "platform": "youtube" },
+  "brand": {
+    "colors": { "bg": "#04070d", "paper": "#f3f8ff", "ink": "#04070d", "primary": "#3fd8ff", "accent": "#ff9b54" },
+    "fonts": { "display": "plus-jakarta-sans", "body": "plus-jakarta-sans", "meta": "jetbrains-mono" }
+  },
+  "panel": { "treatment": "rim-glass", "radius": 22 },
+  "plate": { "kind": "strands", "params": { "focus": 0.6, "intensity": 0.55 } },
+  "ambient": "standard",
+  "scenes": [
+    {
+      "id": "config",
+      "module": "window-chrome",
+      "start": 0,
+      "end": 5,
+      "params": { "title": "eval.yaml", "lines": ["judge: glass-6", "reasoning_effort: high", "timeout: 10m"], "variant": "terminal" }
+    },
+    {
+      "id": "context",
+      "module": "stat-card",
+      "start": 5,
+      "end": 10,
+      "in": { "type": "fade", "dur": 0.4 },
+      "params": { "value": "1.05M", "label": "tokens of context, about ten novels", "source": "Example figure", "surface": "card" }
+    },
+    {
+      "id": "watermark",
+      "module": "channel-watermark",
+      "track": 2,
+      "start": 0,
+      "end": 10,
+      "params": { "name": "Signal Lab", "showName": true }
+    }
+  ],
+  "ending": { "loop": false, "final": "hold" }
+}
