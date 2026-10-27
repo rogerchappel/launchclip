@@ -1,0 +1,76 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 8
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#5b4dff",
+        "accent": "#22c3ee",
+        "paper": "#f4efe6",
+        "ink": "#0b0d12"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "evidence",
+        "module": "evidence-clip",
+        "start": 0.5,
+        "end": 7.5,
+        "params": {
+          "media": {
+            "src": "assets/evidence-static.mp4"
+          },
+          "viewport": {
+            "width": 1600,
+            "height": 1000
+          },
+          "source": {
+            "publisher": "GitHub \u00b7 dotnet/efcore",
+            "date": "Oct 16, 2026"
+          },
+          "focus": [
+            {
+              "at": 2.2,
+              "box": {
+                "x": 400,
+                "y": 420,
+                "width": 640,
+                "height": 80
+              },
+              "scale": 1.4
+            }
+          ],
+          "cursor": [
+            {
+              "at": 1.2,
+              "x": 1100,
+              "y": 300
+            },
+            {
+              "at": 2.0,
+              "x": 700,
+              "y": 460,
+              "click": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "evidence",
+  "threshold": {
+    "ssim": 0.93
+  },
+  "threshold_note": "The frame, cursor and source tag match (PSNR 35-46 dB at every sample, colours equal once the clip is tagged BT.709). The SSIM dip (0.944 at 1.4x) is Chrome scaling the <video> through the push and focus zoom differently in each renderer, as on b-media-window-video; the clip is a static BT.709 testsrc frame so seek lag plays no part."
+}
