@@ -1573,6 +1573,51 @@ params:
 events: build, node-<id>
 variants: circles (default), frames
 
+### equation (keeps captions)
+Typeset LaTeX (MathJax glyphs, drawn the same in both renderers) that wipes in, then reveals its \term{…} marks one at a time, boxes marked terms with a glowing frame and a label ("first quantum correction"), and runs a red/green diff: \del{…} turns red and is struck through while \add{…} lands in green.
+params:
+- latex: string ≤ 400, display-style TeX; mark parts with \term{…} (reveals on its own cue), \add{…} or \del{…} (the diff); marks do not nest
+- typeset: generated from latex by src/math/typeset.js (launchclip fills it in; never write it by hand)
+- boxes: [{mark (index of a \term/\add/\del mark, from 0), label? ≤ 32, tone?, at?}] 1–4 (events box-<n>)
+- diffAt: the diff: seconds from scene start (optional; else a matching hit, else a default)
+- size: px per em (optional; default the largest that fits, at most 120)
+- tone: box colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<n>, diff, box-<n>
+variants: plain (default), glass
+
+### title-decompose (keeps captions)
+A paper (or any) title set as word chips under its citation; each marked term in turn lights its chips, a dashed connector drops from them, and an icon with a plain gloss lands under it ("Self-Mass" → "the field's own mass"), building a glossary row.
+params:
+- text: string ≤ 120, the title
+- citation: string ≤ 80 over it ("Kahya & Woodard, Phys. Rev. D 76 (2007)") (optional)
+- terms: [{text (a run of words in the title), gloss ≤ 24, sub? ≤ 28, icon?}] 1–5, glossed left to right (events term-<i>)
+- tone: primary | accent (default) | paper | #rrggbb
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<i>
+variants: chips (default), underline
+
+### feynman-diagram (keeps captions)
+A Feynman diagram that draws itself line by line: fermions (straight, with an arrow), photons (wavy), gluons (curly), scalars (dashed) and gravitons (double wave), bent into loops where asked, vertices popping as lines meet them and labels (e⁻, γ, φ) landing beside the lines. Presets: self-energy (a one-loop correction), exchange, annihilation.
+params:
+- preset: self-energy | exchange | annihilation (or give points and lines)
+- points: {name: [x, y]} on a 12 × 6 grid, y down (optional with a preset)
+- lines: [{from, to (point names), type? (fermion | antifermion | photon | gluon | scalar | graviton; default fermion), bend? −1–1 (a loop or arc), label? ≤ 12, at?}] 1–12, drawn in order (events line-<i>)
+- tone: boson and glow colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- caption: string ≤ 80 under it (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, line-<i>
+variants: glow (default), ink
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1720,6 +1765,9 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | month-grid | 2 s | 0.5 s | scene − 0.65 s | the grid lands in 0.7 s from at; the fill runs up to 90 ms a day (2.2 s at most); the legend follows the fill |
 | person-id | 2 s | 0.5 s | scene − 0.65 s | the frame rises from at; the name slides in 0.45 s later and the role follows |
 | lineage-graph | 2 s | 0.5 s | scene − 0.65 s | people land generation by generation about 0.9 s apart (squeezed to fit); each link draws in 0.6 s just before its child |
+| equation | 2 s | 0.5 s | scene − 0.65 s | the equation wipes in over 0.7 s from at; terms, the diff and the boxes follow 0.75–0.9 s apart (squeezed to fit) |
+| title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
+| feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

@@ -1,6 +1,11 @@
 // Sample params for every catalogue H module (kit/core/catalog-h.mjs): the
 // data the parity fixtures and the contact sheets draw. Every optional part
-// a variant draws is filled in.
+// a variant draws is filled in. The equation sample is typeset here, as
+// src/math/typeset.js does for a project's storyboard.
+
+import {typesetLatex} from '../src/math/typeset.js';
+
+const SCHRODINGER = 'i\\hbar\\frac{\\partial}{\\partial t}\\Psi = \\term{-\\frac{\\hbar^2}{2m}\\nabla^2\\Psi} + \\del{V}\\add{V(x)}\\,\\Psi';
 
 export const SAMPLES = Object.freeze({
   'bar-chart': {title: 'Weekly renders by format', data: [{label: 'Shorts', value: 1240}, {label: 'Reels', value: 980}, {label: 'TikTok', value: 1610}, {label: 'YouTube', value: 620}, {label: 'LinkedIn', value: 310}], highlight: 2, source: 'LaunchClip telemetry, Oct 2026'},
@@ -46,6 +51,9 @@ export const SAMPLES = Object.freeze({
   'month-grid': {title: 'Shipping daily · 28 days', from: '2026-10-05', days: 28, marks: [{day: 1, label: '2× faster', icon: 'zap'}, {day: 2, label: 'both', icon: 'refresh-cw', tone: 'accent'}, {day: 9, label: 'fix', icon: 'wrench', tone: 'accent'}], legend: [{label: 'upgrade shipped', icon: 'arrow-up'}, {label: 'limits reset', icon: 'refresh-cw', tone: 'accent'}]},
   'person-id': {name: 'Ana Ruiz', role: 'Physics professor'},
   'lineage-graph': {people: [{name: 'Ana Ruiz', role: 'Professor'}, {name: 'Sam Okafor', role: 'Ph.D. 2008'}, {name: 'Lee Chen', role: 'Ph.D. 2019'}], links: [{from: 0, to: 1, label: 'doctoral advisor'}, {from: 1, to: 2, label: 'doctoral advisor'}]},
+  'equation': {latex: SCHRODINGER, typeset: typesetLatex(SCHRODINGER), boxes: [{mark: 0, label: 'kinetic energy'}]},
+  'title-decompose': {citation: 'A. Ruiz & S. Okafor, J. Example Phys. 12 (2008)', text: 'Quantum Gravity Corrections to the One Loop Scalar Self-Mass during Inflation', terms: [{text: 'Quantum Gravity', gloss: 'Quantum gravity', sub: 'gravitons', icon: 'audio-waveform'}, {text: 'Scalar', gloss: 'Scalar', sub: 'the simplest field', icon: 'circle-dot'}, {text: 'Self-Mass', gloss: 'Self-mass', sub: 'the field\'s own mass', icon: 'atom'}, {text: 'One Loop', gloss: 'One loop', sub: 'first correction', icon: 'refresh-cw'}]},
+  'feynman-diagram': {preset: 'self-energy', title: 'The one-loop correction'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 

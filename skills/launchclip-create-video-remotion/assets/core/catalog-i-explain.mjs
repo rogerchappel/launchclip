@@ -6,9 +6,12 @@
 //   data       catalog-i-data.mjs (race-bars, small-multiples)
 //   calendars  catalog-i-calendar.mjs (date-carousel, month-grid)
 //   people     catalog-i-people.mjs (person-id, lineage-graph)
+//   maths      catalog-i-math.mjs (equation, title-decompose, feynman-diagram);
+//              equations are typeset from LaTeX by src/math/typeset.js
 
 import {DATA_I} from './catalog-i-data.mjs';
 import {CALENDARS} from './catalog-i-calendar.mjs';
 import {PEOPLE} from './catalog-i-people.mjs';
+import {MATH} from './catalog-i-math.mjs';
 
-export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS, ...PEOPLE];
+export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS, ...PEOPLE, ...MATH];
