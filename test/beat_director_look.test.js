@@ -91,6 +91,7 @@ test("director look: no channel keeps the cta card, and Shorts cut from the map 
   const map = plainMap();
   assert.equal(map.channel, undefined);
   assert.notEqual(states(map)[0].module, "logo-sting");
+  assert.equal(states(map)[0].params.text, "Halcyon 2, explained", "without a channel the sting is the video's title");
   const story = beatMapToStory(map, { from: 198, to: 222 });
   assert.ok(!story.scenes.some((scene) => ["subscribe-cta", "channel-watermark"].includes(scene.module)));
   assert.ok(story.scenes.some((scene) => scene.module === "cta"));
