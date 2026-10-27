@@ -62,6 +62,8 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 - `ambient` (story) and `scenes[i].ambient` are a level (`off | subtle |
   standard | lively`) or `{level?, background?, drift?}`; see
   [Ambient motion](#ambient-motion-kitcoreambientmjs).
+- `plate` (story), `chapters[j].plate` and `scenes[i].plate` set the blurred
+  backdrop plate; see [Backdrop plates](#backdrop-plates-kitcoreplatesmjs).
 
 Exports:
 
@@ -1121,7 +1123,8 @@ order: translate, then rotate, then scale.
 { "panel": { "treatment": "soft-shadow", "radius": 18, "fill": { "kind": "icon-pattern", "params": { "opacity": 0.08, "fade": "center" } } } }
 ```
 
-`treatment` is one of `solid`, `glass`, `paper`, `outline` and `soft-shadow`.
+`treatment` is one of `solid`, `glass`, `paper`, `outline`, `soft-shadow` and
+`rim-glass`.
 `radius` runs from 0 to 48 px at a 1080 px short side; the default is 32.
 `panelSurfaceStyle(treatment, {colors, unit, border, radius})` returns the
 surface CSS. Every treatment follows the theme: `panelTheme(colors)` reads
@@ -1136,11 +1139,23 @@ the background's side of the contrast.
 | `paper` | a sheet a shade off bg, with a crisp edge shadow |
 | `outline` | a 3 px primary border over a 35% bg wash, no shadow |
 | `soft-shadow` | an opaque card with no border, lifted by a wide soft shadow |
+| `rim-glass` | the long-form explainer's glass: a translucent fill with a breath of `primary`, a 24 px backdrop blur, a 1.5 px `primary` rim with a 22 px outer glow, a top-lit sheen and a 1 px inner highlight |
 
 `resolveModule` copies `storyPanel(story)` onto the model as `model.panel`.
 Catalogue G's `cardSurface` (the card behind `surface: "card"` modules, which
 is the default over footage) draws it in both renderers. Without
 `story.panel`, the card is today's card.
+
+Catalogue H modules that draw their own frame opt into `rim-glass` through
+`glassSurface(model, {radius})` (`panels.mjs`), which returns the surface CSS
+under `rim-glass` and null otherwise, so the module keeps its own look under
+every other treatment. `window-chrome`'s window becomes a glass pane (its
+title bar a faint band with a rim-coloured rule); `comparison-table` sits on
+one glass sheet that rises in with the build (its `cards` variant turns each
+column card to glass). Seeded styles (`SEED_PANEL_TREATMENTS`) leave
+`rim-glass` out, so every existing seed draws as before; the
+`glass-explainer` starter (`kit/styles/glass-explainer.json`) sets it with a
+cycling plate.
 
 `fill` (optional) is a background `{kind, params}`, any kind but blobs
 (`panelFillErrors`). It is drawn by the same layer renderer and clipped to
@@ -1190,6 +1205,67 @@ colour, at the canvas's px scale.
   light and a dark palette into `qa/background-sheet/sheet.png`. It also
   writes split-layout panel fills (an icon pattern and a linen texture, on
   both palettes) to `panels.png`.
+
+## Backdrop plates (`kit/core/plates.mjs`)
+
+The persistent, heavily out-of-focus plate a long-form explainer builds its
+shots over (VISUAL_GAP_MAP C1). A plate holds across every scene of a chapter
+and changes at the next, so builds land on a backdrop that never cuts. Plates
+are procedural SVG (no binary assets), blurred inside the image by
+`feGaussianBlur`, and drawn in the backgrounds kit's layer shape, so both
+renderers draw them with the code that draws `story.background`
+(`.lc-bg-layer` divs with GSAP wave tweens in HyperFrames, `BackgroundField`
+in Remotion). `plates.mjs` imports only `./ambient.mjs`, `./backgrounds.mjs`
+and `./panels.mjs`.
+
+```json
+{ "plate": { "kind": "hex-shell", "cycle": true, "params": { "focus": 0.6, "intensity": 0.5, "tint": "neutral" } } }
+```
+
+| Kind | Subject | Default tint |
+|---|---|---|
+| `hex-shell` | a sphere of hexagonal cells wrapped orthographically, each shaded by its normal against a light from the upper left, with a bright lip | neutral |
+| `silk` | folded ribbons between wandering curves, shaded dark → lit fold → dark, laid diagonally, over a softer far bank | neutral |
+| `strands` | double helices of glossy beads joined by rungs: one in focus, one faint far, one huge and soft near | primary |
+| `bokeh` | a starfield: pinpoints far, soft ringed discs mid and near | primary |
+
+Params: `focus` 0–1 (how out of focus; 0.6), `intensity` 0–1 (0.5), `speed`
+0–2 (1), `depth` 0–1 (parallax spread; 0.5) and `tint` (`neutral` is paper,
+a silver on a dark style; `primary`; `accent`). Each plate is an atmosphere
+lift, two or three depth layers (far: most blur, least travel; subject: the
+plate's focus; near: large and very soft, travelling most) and a vignette.
+Every axis is an ambient wave of absolute time, so any seek gives the same
+pixels; the ambient level scales the speed and `off` stills it.
+
+**Where the plate comes from** (`scenePlateSpec`, first match wins):
+`scenes[i].plate` (a kind, `{kind, params?}`, or `"none"` for the story's
+background), then `chapters[j].plate` for the chapter the scene starts in,
+then `story.plate`; with `story.plate.cycle: true`, chapter j takes
+`PLATE_KINDS[(k + j) % 4]` (k the story kind's index). A plate replaces
+`story.background` on the scenes it covers. No plate is drawn when
+`ambient.background` is false for the story or scene, or on a footage-led
+story. One plan is memoised per story and plate, so a cut inside a chapter
+shows the same drifting pixels on both sides. In `camera.mode` "world" the
+story's own plate is the camera's one backdrop.
+
+**Contrast.** Every colour a layer lays is clamped (`safeAlpha`) on every
+tone laid before it, so paper text keeps 4.5:1 anywhere on the plate, on dark
+and light palettes. Pinpoints finer than a letter's stroke (the bokeh's far
+stars) are clamped but add no tone.
+
+A style pack's `plate` fills a story that has none (`applyStyle`), checked by
+`plateErrors`; `validateStory` checks the story, chapter and scene values
+with the same rules (`STORY_PLATE_KINDS`, kept in step by
+`test/plates.test.js`).
+
+`node scripts/plate-sheet.mjs [--renderer hyperframes|remotion]` renders
+`qa/plate-sheet/sheet.png`: every plate under three glass card types
+(stat-card, excerpt, window-chrome) with the `glass-explainer` look.
+`examples/story/glass-plates-16x9` is a 10 s clip of glass cards building
+over one drifting plate, with the watermark. Parity: `plate-<kind>` (each
+kind on the minimal story with rim-glass panels) and `plate-glass-example`
+in `test/fixtures/parity-backgrounds/`, run by
+`node scripts/parity-backgrounds.mjs --only plate-…`.
 
 ## Medium (`kit/core/medium.mjs`)
 
@@ -2936,6 +3012,20 @@ words in the tone colour), `align` (center, left), `plate` (a brand-colour
 plate), `tone`, `speed` (0.5–2), `at`. Event `title`. The build must end
 before the exit; long text fails naming the effect, so lengthen the scene,
 shorten the text or raise `speed`.
+
+### Channel furniture (`catalog-h-channel.mjs`)
+
+The pieces a channel puts round its videos (VISUAL_GAP_MAP C5). Every surface
+is the `rim-glass` panel whatever the story's own panel; the logo is
+`params.logo` (an `assets/` image) or a monogram (`params.monogram`, default
+the name's initials). Rain and particles are seek-safe `loop` ops on tiled
+SVG sheets.
+
+| Module | Variants | Params (beyond name, logo, monogram) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `logo-sting` | rain, particles, clear | `tagline` ≤ 48, `at` (the landing, default 0.6 s) | logo, name | Weather fades in over the whole canvas (two depths); the floor line draws; the glass tile drops out of a 16 px blur onto the floor as its masked reflection rises to meet it; a shine sweeps both; the name resolves out of a blur, the tagline rises. Hides captions |
+| `subscribe-cta` | pill, compact | `label` (Subscribe), `done` (Subscribed), `position` left/center/right, `bell`, `like` (off in compact and portrait), `at` (the click, default 42% of the scene) | in, click, bell, out | The pill slides up with back.out; a pointer glides in and presses; the accent button crossfades to a glass Subscribed under a ripple; the bell swings to rest; the like fills in `primary`; the pill slides back down. Sits above the captions at the bottom of its rect; its layout box is the pill, so it collides only where it covers. Needs 1.1 s between the click and the slide out |
+| `channel-watermark` | glass, bare | `corner` (top-right), `opacity` 0.3–1 (0.7), `showName` | — | Fades in to its opacity and holds. Its layout role is `decor`, so scenes pass under it; put it on the highest track across the main body |
 
 ### Tools
 
