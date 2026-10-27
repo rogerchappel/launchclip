@@ -205,6 +205,17 @@ look": it keeps the art-direction constraints and changes the seed. Run
 generate [--seed] [--tone] [--theme] [--world] … [--out | --project]` writes a
 pack directly.
 
+Every video of 90 s or less meets the short-video rules: an image, not a
+title card, at 0 s; a spoken share line in the last 40%; concrete visual
+nouns; five title options, best first. When the brief fits a structure in the
+skeleton library ("$1 a second", "X vs Y", "myth check", a countdown …),
+`make` builds the script and storyboard on it automatically, with its key
+shot; nothing has to be switched on. `--skeleton <id>` pins one (a recipe
+saves it), `--skeleton none` keeps the script format's own, and `launchclip
+skeletons list|show|choose` prints the library and which skeletons the kit
+can't draw yet. `finish` checks all of it in its `structure` gate, and so
+does `cinematic-check`.
+
 Style management is local and makes no model calls. Do not overwrite a pack
 unless the user explicitly authorizes `--force`. Keep `.launchclip/styles/**`
 in source control when the visual identity should be shared; leave generated

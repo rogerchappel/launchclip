@@ -63,7 +63,7 @@ const EDITORIAL_TUNING = 'rect, density ("fill" with a rect), accent (#rrggbb), 
 // row with `overlay` names a story-level overlay (frame.sources), not a scene
 // module.
 export const PHRASE_MODULE_TABLE = Object.freeze([
-  { module: 'hook-title', when: 'opens on a question or claim (frame 0 visible)', patterns: ['^(why|how|what|did you know|ever wonder|stop)\\b', '\\?\\s*$'] },
+  { module: 'hook-title', when: 'states a question or claim as a headline (frame 0 visible); in a video of 90 s or less, never the first scene: an image of the hook\'s subject opens it', patterns: ['^(why|how|what|did you know|ever wonder|stop)\\b', '\\?\\s*$'] },
   { module: 'kinetic-words', when: 'lands 1–3 words per beat', patterns: ['\\b(fast|simple|instantly|never|always|zero)\\b'] },
   { module: 'function-chart', when: 'describes a quantity over time or a curve', patterns: ['\\bover time\\b', '\\bcurve\\b', '\\bexponential', '\\bdecay', '\\bcool(s|ing)?\\b', '\\brate of\\b', '\\bhalf-life\\b'] },
   { module: 'gauge-compare', when: 'contrasts two values or states', patterns: ['\\bversus\\b', '\\bvs\\.?\\s', '\\bcompared (to|with)\\b', '\\b(hotter|colder|higher|lower|bigger|smaller) than\\b'] },
@@ -432,7 +432,8 @@ function worldLines() {
 export function scriptBeatLines() {
   return [
     'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
-    'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words.',
+    'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words. In a video of 90 s or less that scene is an image (a photo, object, number with its unit, chart, character or product scene), never a title card (hook-title, motion-title, kinetic-words, section-card, masthead, glass-word, emphasis-caption); a title card may follow it.',
+    'A beat with the share role carries the line a viewer would send or comment on: give it a scene of its own that shows it, not a recap card.',
     'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
     'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.'
   ];
@@ -532,7 +533,7 @@ export function exampleStoryboard({ format, brand } = {}) {
     audio: { music: { provider: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
     base: null,
     scenes: [
-      { id: 's1', module: 'hook-title', start: 0, end: 3, energy: 1, params: { headline: 'Why does CI take 40 minutes?', emphasis: '40 minutes', kicker: 'Fix it' }, hits: [{ at: 0.8, event: 'emphasis-0' }] },
+      { id: 's1', module: 'count-up', start: 0, end: 3, energy: 1, params: { value: 40, suffix: ' min', label: 'One CI run on your repo today', note: 'illustrative' }, hits: [{ at: 1.4, event: 'hit' }] },
       { id: 's2', module: 'count-up', start: 3, end: 6.5, energy: 2, in: { type: 'push', dur: 0.4, direction: 'left' }, params: { value: 12, suffix: ' min', label: 'Same pipeline after caching', note: 'illustrative' }, hits: [{ at: 4.6, event: 'hit' }] },
       { id: 's3', module: 'checklist', start: 6.5, end: 11, energy: 2, in: { type: 'whip', dur: 0.3, direction: 'up' }, params: { title: 'Three changes', rows: [{ label: 'Cache dependencies', status: 'done', at: 0.5 }, { label: 'Split the test suite', status: 'done', at: 1.4 }, { label: 'Ship smaller images', status: 'done', at: 2.3 }] } },
       { id: 's4', module: 'cta', start: 11, end: 14, energy: 1, in: { type: 'fade', dur: 0.3 }, params: { action: 'Try it on your repo', handle: '@launchclip', loop: true } }

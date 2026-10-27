@@ -644,7 +644,8 @@ reference. Work in this order:
    installing any skill pack.
 4. Copy or link only approved assets into the project's `assets/` directory
    using stable local paths.
-5. Run the five-concept tournament and fresh-context selection.
+5. Pick the skeleton and write `ANGLE.json`, then run the five-concept
+   tournament across the angles with fresh-context selection.
 6. Write and independently edit the canonical retention story.
 7. Produce or prepare narration, measure the real take, then freeze the
    storyboard, design system, music/edit grid, and quality targets. For a

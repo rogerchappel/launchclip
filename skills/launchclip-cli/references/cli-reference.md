@@ -1238,6 +1238,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip style keep <project> --as <name> [--force]
   ```
 
+- `skeletons list`: List the library skeletons (built-in, then yours) with their media, aspects, length, share kind, voice tier, and status: ready, or blocked with what the kit is missing to draw the key shot. A skeleton past its six-month review is marked stale. Also lists the script formats' own skeletons.
+
+  ```text
+  launchclip skeletons list [--medium motion|character|footage|demo] [--fits "<prompt>"] # the skeleton library and whether the kit can draw each one's key shot
+  ```
+
+- `skeletons show`: Print one skeleton in full (a library skeleton, with its status and any problems in its definition, or a script format's skeleton).
+
+  ```text
+  launchclip skeletons show <id>
+  ```
+
+- `skeletons choose`: Show which library skeleton make would pick for a brief (or why none fits), with the other candidates and the blocked skeletons.
+
+  ```text
+  launchclip skeletons choose "<prompt>" [--medium motion|character|footage|demo] [--aspect 9:16] [--duration 30] [--skeleton <id>|auto|none] # the skeleton make would pick for a brief, and why
+  ```
+
 - `profile list`: List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).
 
   ```text
@@ -1514,7 +1532,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--style <name|path> | --seed <hex>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```

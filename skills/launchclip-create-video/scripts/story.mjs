@@ -92,7 +92,7 @@ const EPS = 1e-6;
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
-const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world"]);
+const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -269,6 +269,9 @@ export function validateStory(story, { modules } = {}) {
       }
     } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?, loop?, dials?}");
   }
+
+  // skeleton: the library skeleton the story is built on (kit/core/skeleton-library.mjs); finish's structure gate checks its key shot.
+  if (story.skeleton !== undefined && !(isObject(story.skeleton) && /^[a-z][a-z0-9-]{1,40}$/.test(String(story.skeleton.id ?? "")) && (story.skeleton.version === undefined || /^\d{4}-\d{2}$/.test(String(story.skeleton.version))))) err('skeleton must be {"id": "<library skeleton id>", "version"?: "YYYY-MM"} (launchclip skeletons list)');
 
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);
 

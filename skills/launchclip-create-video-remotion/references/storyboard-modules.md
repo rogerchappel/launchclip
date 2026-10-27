@@ -119,7 +119,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 
 | The script… | Module |
 | --- | --- |
-| opens on a question or claim (frame 0 visible) | hook-title |
+| states a question or claim as a headline (frame 0 visible); in a video of 90 s or less, never the first scene: an image of the hook's subject opens it | hook-title |
 | lands 1–3 words per beat | kinetic-words |
 | describes a quantity over time or a curve | function-chart |
 | contrasts two values or states | gauge-compare |
@@ -1647,19 +1647,20 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
   "scenes": [
     {
       "id": "s1",
-      "module": "hook-title",
+      "module": "count-up",
       "start": 0,
       "end": 3,
       "energy": 1,
       "params": {
-        "headline": "Why does CI take 40 minutes?",
-        "emphasis": "40 minutes",
-        "kicker": "Fix it"
+        "value": 40,
+        "suffix": " min",
+        "label": "One CI run on your repo today",
+        "note": "illustrative"
       },
       "hits": [
         {
-          "at": 0.8,
-          "event": "emphasis-0"
+          "at": 1.4,
+          "event": "hit"
         }
       ]
     },

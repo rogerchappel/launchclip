@@ -29,6 +29,28 @@ Inspect real source pixels and timing. Build an overview sheet, a dense first
 four-second strip, and cut/motion-boundary views for source or reference video.
 Do not let a reference support factual claims or become a shot-for-shot template.
 
+## Pick the skeleton and the angle
+
+Before the concepts, pick the structure and find a fresh angle (details in
+[skeleton-library.md](skeleton-library.md)):
+
+1. **Skeleton.** Run `launchclip skeletons choose "<brief>" --medium
+   motion|character|footage|demo --aspect <ratio> --duration <s>`. When a
+   library skeleton fits, every concept is built on its beats, key shot and
+   share line; never use one the command reports as blocked (the kit can't
+   draw its key shot). When none fits, use the script format's own skeleton.
+2. **Angle.** Write `ANGLE.json`: `crowded` (how this topic is usually done,
+   in one sentence), `inventory` (eight to twelve concrete things only this
+   subject has: its place, numbers, constraint, the objects in its world) and
+   `angles` (three fresh angles, each saying how it differs from `crowded`).
+   Spread the five concepts across the angles, not five takes on the obvious
+   one.
+
+Every video of 90 s or less also meets the short-video rules in
+[skeleton-library.md](skeleton-library.md): an image opens it, a spoken share
+line sits in its last 40%, every beat names a picturable thing, and the
+script carries five title options, best first.
+
 ## Run the concept tournament
 
 Generate exactly five complete treatments before scripting. Make their hooks,
@@ -38,22 +60,25 @@ different narrative engines and three different visual metaphors. Every concept
 must contain a hook, proof, payoff, factual evidence links, and at least four
 causal beats. Keep each spoken hook to 18 words or fewer.
 
-Judge all five in a fresh context. Prefer a new subagent that sees only the
-brief, evidence, source observations, and anonymous concepts. If subagents are
-unavailable, run a separate judging pass without the proposal rationale or an
-announced favorite. Score each criterion from 0–10:
+Judge all five in a fresh context: a new subagent that sees only the brief,
+evidence, source observations, the skeleton and `ANGLE.json`, and the
+anonymous concepts. Only if subagents are unavailable, run a separate judging
+pass without the proposal rationale or an announced favorite, and say so in
+`judging`. Score each criterion from 0–10:
 
 | Criterion | Weight |
 | --- | ---: |
-| Scroll stop | 16 |
-| Promise clarity | 11 |
-| Audience fit | 10 |
-| Causality | 10 |
-| Grounded proof | 12 |
-| Visual originality | 16 |
-| Motion potential | 10 |
-| Sound potential | 5 |
-| Feasibility | 10 |
+| Scroll stop | 14 |
+| Promise clarity | 7 |
+| Audience fit | 6 |
+| Causality | 8 |
+| Grounded proof | 10 |
+| Visual originality | 14 |
+| Motion potential | 8 |
+| Sound potential | 4 |
+| Feasibility | 7 |
+| Angle freshness (how far from `crowded`) | 12 |
+| Share strength (does the share line give a reason to send it) | 10 |
 
 Subtract `0.8 × genericism`, `1.0 × slideshow risk`, and `1.5 × unsupported
 clickbait`. Select the deterministic highest score; break ties by original
@@ -93,9 +118,9 @@ that is present is still validated.
       "title": "The stalled launch",
       "logline": "A release checklist where everything ships except the launch video, until one command unblocks it.",
       "hook": "Shipping is the easy part. The launch video is what stalls you.",
-      "scores": { "scroll_stop": 7, "promise_clarity": 9, "audience_fit": 9, "causality": 9, "grounded_proof": 9, "visual_originality": 6, "motion_potential": 8, "sound_potential": 7, "feasibility": 8 },
+      "scores": { "scroll_stop": 7, "promise_clarity": 9, "audience_fit": 9, "causality": 9, "grounded_proof": 9, "visual_originality": 6, "motion_potential": 8, "sound_potential": 7, "feasibility": 8, "angle_freshness": 7, "share_strength": 6 },
       "penalties": { "genericism": 4, "slideshow_risk": 3, "unsupported_clickbait": 0 },
-      "total": 72.8,
+      "total": 69.1,
       "chosen": true
     }
   ],
@@ -112,7 +137,10 @@ that is present is still validated.
 
 Write the whole story from the selected concept before creating shots. Use the
 roles `hook`, `promise`, `mechanism`, `proof`, `rehook`, `escalation`, `payoff`,
-`closing_reframe`, and `cta_or_loop` as appropriate. Videos at least 20 seconds
+`share`, `closing_reframe`, and `cta_or_loop` as appropriate (on a library
+skeleton, its beats and roles, in order). A video of 90 s or less has a
+`share` beat in its last 40%: the spoken line a viewer would send or comment
+on. Videos at least 20 seconds
 need a rehook and escalation; videos at least 30 seconds need six or more real
 narrative beats. Every beat must change the viewer's question or answer and
 name a concrete visual noun.
@@ -147,7 +175,7 @@ duration. Missing required fields fail the `story` gate; the rest warn.
 | `schema_version` | warn | `"launchclip.story-receipt.v1"` |
 | `concept_id` | yes | must be the chosen concept in `CONCEPTS.json` |
 | `beats` | yes | in order; the first should be the `hook` (warn); 20 s and longer need a `rehook` and an `escalation`, 30 s and longer six or more beats (warn) |
-| `beats[].role` | yes | `hook`, `promise`, `mechanism`, `proof`, `rehook`, `escalation`, `payoff`, `closing_reframe`, `cta_or_loop` (other values warn) |
+| `beats[].role` | yes | `hook`, `promise`, `mechanism`, `proof`, `rehook`, `escalation`, `payoff`, `share`, `closing_reframe`, `cta_or_loop` (other values warn) |
 | `beats[].spoken` | yes | the exact spoken line; `""` for a silent beat |
 | `beats[].visual_noun` | warn | the concrete thing on screen |
 | `narration.source` | yes | `synthesised` (`audio.narration` through `launchclip voice` / `finish`), `supplied` (the user's recording, kept byte-for-byte), `generated` (another approved voice), or `none` (intentionally unnarrated) |

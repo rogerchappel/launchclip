@@ -13,7 +13,8 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 3. **Awareness.** How much the viewer already knows (table below). Cold Shorts traffic is usually `problem` or `unaware`; launch announcements `solution` or `product`; retargeting `most`.
 4. **Budget.** Target words = duration × the format's words a minute ÷ 60; ceiling = duration × 2.75. Write to the target, measure with `launchclip voice`, never exceed the ceiling.
 5. **Write the beats** in the skeleton's order, then record `format`, `goal`, `awareness` and the beat each sentence belongs to in `SCRIPT.md` so the storyboard follows the same beats (one scene group per beat; the hook beat's scene shows the hook's subject at 0 s; the CTA beat gets the end card with the spoken wording).
-6. **Titles.** Write three publish-ready title options. For `convert`, put the concrete outcome in the title; no curiosity bait.
+6. **Titles.** Write three publish-ready title options (five, best first, for a video of 90 s or less). For `convert`, put the concrete outcome in the title; no curiosity bait.
+7. **Short videos.** A video of 90 s or less may be built on a skeleton from the skeleton library (references/skeleton-library.md), chosen when the brief fits one, and always meets the short-video rules there.
 
 ## Formats
 
