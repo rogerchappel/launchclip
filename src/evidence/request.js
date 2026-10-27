@@ -21,7 +21,8 @@
 // request.tail (seconds held after the last beat), request.still
 // ({target, pad?, scale?}, the default crop for --still), request.wait_for
 // (a selector the page must show before capture), request.start ("auto",
-// "top" or "target": where the clip opens on a long page) and request.hide (CSS
+// "top" or "target": where the clip opens on a long page), request.file (one
+// file's diff in a GitHub PR or commit; src/evidence/routes.js) and request.hide (CSS
 // selectors of page furniture to hide before capture, such as a promo
 // popover; recorded in the sidecar, never used on the evidence itself).
 //
@@ -93,6 +94,7 @@ export function validateCaptureRequest(input) {
   const tail = input.tail ?? 1.2;
   if (typeof tail !== "number" || tail < 0 || tail > 10) errors.push("tail must be 0–10 seconds");
   if (input.wait_for !== undefined && typeof input.wait_for !== "string") errors.push("wait_for must be a CSS selector");
+  if (input.file !== undefined && (typeof input.file !== "string" || !input.file.trim() || input.file.startsWith("/") || input.file.split("/").includes(".."))) errors.push("file must be a repository path such as src/app.js (no leading /, no ..)");
   const start = input.start ?? "auto";
   if (!STARTS.includes(start)) errors.push(`start must be ${STARTS.join(", ")}`);
   if (input.hide !== undefined && (!Array.isArray(input.hide) || input.hide.length > 12 || input.hide.some((item) => typeof item !== "string" || !item.trim()))) errors.push("hide must be an array of at most 12 CSS selectors");
@@ -146,7 +148,7 @@ export function validateCaptureRequest(input) {
   }
 
   const request = { schema: CAPTURE_SCHEMA, id: input.id, url: url?.href ?? input.url, kind, viewport: { width: viewport.width, height: viewport.height }, theme, chrome, fps, tail, start, beats, out,
-    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(still ? { still } : {}) };
+    provenance, ...(input.wait_for ? { wait_for: input.wait_for } : {}), ...(input.hide?.length ? { hide: input.hide } : {}), ...(input.file ? { file: input.file } : {}), ...(still ? { still } : {}) };
   return { errors, warnings, request };
 }
 

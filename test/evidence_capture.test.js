@@ -219,3 +219,24 @@ test("the CLI checks a request, runs a capture or a still, and prints scene para
   assert.equal(scene.module, "evidence-clip");
   assert.deepEqual(scene.params.source, { publisher: "GitHub", date: "Oct 16, 2026" });
 });
+
+test("routes: X posts open the public embed, GitHub files open their own diff anchor", async () => {
+  const { githubDiffAnchor, resolveRoute, retarget, xStatus } = await import("../src/evidence/routes.js");
+  assert.deepEqual(xStatus("https://x.com/Mr_Salio/status/2114266090356232253?s=20"), { user: "Mr_Salio", id: "2114266090356232253" });
+  assert.equal(xStatus("https://example.com/a/status/1"), null);
+  const x = resolveRoute({ url: "https://twitter.com/PeterJ_Walker/status/2114377706603429899", theme: "dark" });
+  assert.equal(x.name, "x-embed");
+  assert.equal(x.url, "https://platform.twitter.com/embed/Tweet.html?id=2114377706603429899&theme=dark&dnt=true&lang=en");
+  // The page-title wrapper a research fetch sees is not in the embed.
+  for (const text of ['on X: "🚨 GPT-6.1 Terra is showing up', 'Salio on X: "🚨 GPT-6.1 Terra is showing up"']) assert.equal(retarget({ text }, x).target.text, "GPT-6.1 Terra is showing up");
+  assert.equal(retarget({ text: "plain words" }, x).note, undefined);
+  // GitHub's anchor for a file is the sha256 of its path.
+  assert.equal(githubDiffAnchor("eng/harness-evaluation/skills/code-review/eval.yaml"), "diff-30465b3480d20f41a988a131d4c9ba056d6940021f9f1fc1b64b704b355f8f7b");
+  const gh = resolveRoute({ url: "https://github.com/dotnet/efcore/pull/39217", file: "eng/harness-evaluation/skills/code-review/eval.yaml" });
+  assert.equal(gh.url, "https://github.com/dotnet/efcore/pull/39217/files#diff-30465b3480d20f41a988a131d4c9ba056d6940021f9f1fc1b64b704b355f8f7b");
+  assert.deepEqual(retarget({ text: "gpt-6.1-terra" }, gh).target, { text: "gpt-6.1-terra", within: gh.scope });
+  assert.deepEqual(retarget({ text: "x", within: "main" }, gh).target, { text: "x", within: "main" });
+  assert.throws(() => resolveRoute({ url: "https://example.com/a", file: "a.js" }), /needs a GitHub pull request or commit URL/);
+  assert.equal(resolveRoute({ url: "https://example.com/a" }).name, "page");
+  assert.match(validateCaptureRequest(request({ file: "/etc/passwd" })).errors.join(), /file must be a repository path/);
+});

@@ -34,6 +34,7 @@ import { recorderAvailability } from "../demo/record.js";
 import { SIDECAR_SCHEMA, requestDuration, targetLabel, validateCaptureRequest } from "./request.js";
 import { buildTimeline } from "./timeline.js";
 import { chromeHeight, renderClip } from "./player.js";
+import { fetchXOembed, prepareRoute, resolveRoute, retarget } from "./routes.js";
 
 export class EvidenceBlockedError extends Error {
   constructor(reason, detail = {}) {
@@ -299,23 +300,26 @@ async function launch(available) {
  */
 export async function openEvidencePage(browser, request, { viewport, scale = SHOT_SCALE, log = () => {} } = {}) {
   assertPublicUrl(request.url);
+  const route = resolveRoute(request);
+  assertPublicUrl(route.url);
   const context = await browser.newContext({ viewport, deviceScaleFactor: scale, locale: "en-US", timezoneId: "UTC", colorScheme: request.theme, reducedMotion: "reduce", acceptDownloads: false, serviceWorkers: "block", javaScriptEnabled: true });
   // Typing and form submission are never part of a capture: refuse any POST of a form the page might try.
   await context.route("**/*", (route) => (route.request().method() === "POST" && route.request().resourceType() === "document" ? route.abort("blockedbyclient") : route.continue()));
   const page = await context.newPage();
   try {
-    log(`opening ${request.url}`);
-    const response = await page.goto(request.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    log(`opening ${route.url}${route.name === "page" ? "" : ` (${route.name} route for ${request.url})`}`);
+    const response = await page.goto(route.url, { waitUntil: "domcontentloaded", timeout: 45000 });
     await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     const consent = await dismissConsent(page, { log });
     if (request.wait_for) await page.locator(request.wait_for).first().waitFor({ state: "visible", timeout: 15000 }).catch(() => { throw new EvidenceBlockedError(`wait_for ${request.wait_for} never showed`, { url: page.url() }); });
     const hidden = request.hide?.length ? await hideFurniture(page, request.hide) : [];
     if (hidden.length) log(`hid ${hidden.join(", ")}`);
-    const summary = await pageSummary(page, { requested: request.url, status: response?.status() ?? null });
+    const summary = await pageSummary(page, { requested: route.url, status: response?.status() ?? null });
     const reason = blockReason(summary);
     if (reason) throw new EvidenceBlockedError(reason, { url: summary.final, title: summary.title, status: summary.status });
-    return { context, page, status: summary.status, consent, title: summary.title, hidden };
+    const { notes } = await prepareRoute(page, route, { theme: request.theme, log });
+    return { context, page, status: summary.status, consent, title: summary.title, hidden, route: { ...route, notes } };
   } catch (error) {
     await context.close().catch(() => {});
     throw error;
@@ -346,7 +350,9 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
   const workDir = await mkdtemp(path.join(os.tmpdir(), `launchclip-evidence-${request.id}-`));
   const browser = await launch(available);
   try {
-    const { context, page, status, consent, title, hidden } = await openEvidencePage(browser, request, { viewport: windowSize, log });
+    const oembed = resolveRoute(request).name === "x-embed" ? fetchXOembed(request.url) : null;
+    const { context, page, status, consent, title, hidden, route } = await openEvidencePage(browser, request, { viewport: windowSize, log });
+    const retargeted = [];
     let measured, pageSize, html, finalUrl, tiles, pageRegion;
     try {
       // Measure, load the slice the beats need, measure again (lazy content above a target can move it).
@@ -355,8 +361,10 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
         const out = [];
         for (const beat of request.beats) {
           if (!beat.target) { out.push({ ...beat, rects: [] }); continue; }
-          const result = await measureTarget(page, beat.target, `beats[${beat.index}] (${beat.action})`);
-          out.push({ ...beat, rects: result.rects, text: result.text });
+          const { target, note } = retarget(beat.target, route);
+          if (note && !retargeted.some((entry) => entry.beat === beat.index)) retargeted.push({ beat: beat.index, change: note });
+          const result = await measureTarget(page, target, `beats[${beat.index}] (${beat.action})`);
+          out.push({ ...beat, rects: result.rects, text: result.text, ...(result.via ? { via: result.via } : {}) });
         }
         return out;
       };
@@ -409,6 +417,7 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
       captured_at: new Date().toISOString(),
       consent,
       hidden,
+      route: { name: route.name, url: route.url, ...(route.file ? { file: route.file } : {}), notes: route.notes, ...(retargeted.length ? { retargeted } : {}), ...(oembed ? { oembed: await oembed } : {}) },
       video: rel(dir, out),
       poster: rel(dir, poster),
       fullpage: { path: rel(dir, fullpage), width: pageSize.width, height: pageSize.height, scale: SHOT_SCALE, region: pageRegion,
@@ -453,12 +462,12 @@ export async function captureStill(input, { root = process.cwd(), target = null,
   const browser = await launch(available);
   try {
     const viewport = { width: request.viewport.width, height: request.viewport.height };
-    const { context, page, status, consent, title, hidden } = await openEvidencePage(browser, request, { viewport, scale: k, log });
+    const { context, page, status, consent, title, hidden, route } = await openEvidencePage(browser, request, { viewport, scale: k, log });
     try {
       await freeze(page, viewport.height * 3);
       let box = { x: 0, y: 0, width: viewport.width, height: viewport.height }, matched = null;
       if (want) {
-        const result = await measureTarget(page, want, "still target");
+        const result = await measureTarget(page, retarget(want, route).target, "still target");
         const r = result.rects.reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), right: Math.max(a.right, b.x + b.width), bottom: Math.max(a.bottom, b.y + b.height) }), { x: Infinity, y: Infinity, right: -Infinity, bottom: -Infinity });
         const docWidth = await page.evaluate(() => document.documentElement.scrollWidth);
         const x = Math.max(0, r.x - margin), y = Math.max(0, r.y - margin);
@@ -469,7 +478,7 @@ export async function captureStill(input, { root = process.cwd(), target = null,
       const still = `${base}.still.png`;
       await page.screenshot({ path: still, clip: box, fullPage: true, animations: "disabled", caret: "hide" });
       const record = { schema: SIDECAR_SCHEMA, id: request.id, kind: request.kind, mode: "still", request_url: request.url, final_url: page.url(), http_status: status, page_title: title,
-        provenance: { ...request.provenance }, captured_at: new Date().toISOString(), consent, hidden, still: { path: rel(dir, still), box, scale: k, pixels: { width: Math.round(box.width * k), height: Math.round(box.height * k) } },
+        provenance: { ...request.provenance }, captured_at: new Date().toISOString(), consent, hidden, route: { name: route.name, url: route.url, notes: route.notes }, still: { path: rel(dir, still), box, scale: k, pixels: { width: Math.round(box.width * k), height: Math.round(box.height * k) } },
         target: want ? targetLabel(want) : null, ...(matched ? { matched } : {}), snapshot: { sha256: sha256(html), bytes: Buffer.byteLength(html) } };
       const sidecar = `${base}.still.json`;
       await writeFile(sidecar, `${JSON.stringify(record, null, 2)}\n`);
