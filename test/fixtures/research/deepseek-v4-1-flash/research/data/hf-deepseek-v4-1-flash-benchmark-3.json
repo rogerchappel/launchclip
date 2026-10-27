@@ -1,0 +1,161 @@
+{
+  "schema": "launchclip.research-data.v1",
+  "id": "hf-deepseek-v4-1-flash-benchmark-3",
+  "kind": "benchmark",
+  "title": "Performance across agent scaffolds (DeepSWE v1.1 and Terminal-Bench 2.1, Max reasoning effort)",
+  "source": {
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+    "title": "deepseek-ai/DeepSeek-V4.1-Flash · model card",
+    "publisher": "Hugging Face · deepseek-ai",
+    "published_at": "2026-09-10T02:17:58.000Z",
+    "fetched_at": "2026-10-27T05:11:45.950Z",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251"
+  },
+  "columns": [
+    "Benchmark (Metric)",
+    "Claude Code",
+    "Codex",
+    "OpenCode",
+    "Pi",
+    "mini-SWE",
+    "DSH Minimal",
+    "DSH Standard",
+    "DSH PTC"
+  ],
+  "rows": [
+    {
+      "label": "DeepSWE v1.1 (Resolved)",
+      "values": {
+        "Claude Code": 69.8,
+        "Codex": 65.6,
+        "OpenCode": 65.5,
+        "Pi": 66.2,
+        "mini-SWE": 74.2,
+        "DSH Minimal": 72.6,
+        "DSH Standard": 70.5,
+        "DSH PTC": 67.6
+      },
+      "raw": [
+        "DeepSWE v1.1 (Resolved)",
+        "69.8",
+        "65.6",
+        "65.5",
+        "66.2",
+        "74.2",
+        "72.6",
+        "70.5",
+        "67.6"
+      ],
+      "notes": {}
+    },
+    {
+      "label": "Terminal-Bench 2.1 (Pass@1)",
+      "values": {
+        "Claude Code": 88,
+        "Codex": 84.1,
+        "OpenCode": 85,
+        "Pi": 86.1,
+        "mini-SWE": 90.3,
+        "DSH Minimal": 90.6,
+        "DSH Standard": 85.8,
+        "DSH PTC": 85.8
+      },
+      "raw": [
+        "Terminal-Bench 2.1 (Pass@1)",
+        "88.0",
+        "84.1",
+        "85.0",
+        "86.1",
+        "90.3",
+        "90.6",
+        "85.8",
+        "85.8"
+      ],
+      "notes": {}
+    }
+  ],
+  "notes": [],
+  "claims": [],
+  "views": [
+    {
+      "module": "bar-chart",
+      "title": "DeepSWE v1.1 (Resolved)",
+      "props": {
+        "data": [
+          {
+            "label": "Claude Code",
+            "value": 69.8
+          },
+          {
+            "label": "Codex",
+            "value": 65.6
+          },
+          {
+            "label": "OpenCode",
+            "value": 65.5
+          },
+          {
+            "label": "Pi",
+            "value": 66.2
+          },
+          {
+            "label": "mini-SWE",
+            "value": 74.2
+          },
+          {
+            "label": "DSH Minimal",
+            "value": 72.6
+          },
+          {
+            "label": "DSH Standard",
+            "value": 70.5
+          },
+          {
+            "label": "DSH PTC",
+            "value": 67.6
+          }
+        ]
+      }
+    },
+    {
+      "module": "bar-chart",
+      "title": "Terminal-Bench 2.1 (Pass@1)",
+      "props": {
+        "data": [
+          {
+            "label": "Claude Code",
+            "value": 88
+          },
+          {
+            "label": "Codex",
+            "value": 84.1
+          },
+          {
+            "label": "OpenCode",
+            "value": 85
+          },
+          {
+            "label": "Pi",
+            "value": 86.1
+          },
+          {
+            "label": "mini-SWE",
+            "value": 90.3
+          },
+          {
+            "label": "DSH Minimal",
+            "value": 90.6
+          },
+          {
+            "label": "DSH Standard",
+            "value": 85.8
+          },
+          {
+            "label": "DSH PTC",
+            "value": 85.8
+          }
+        ]
+      }
+    }
+  ]
+}
