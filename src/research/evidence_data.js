@@ -72,8 +72,9 @@ export async function attachEvidenceData({ ledger, captures = [], tables = [], a
       else note(capture.id, capture.kind, "skipped", result.reason);
     } else if (capture.kind === "post") {
       const sidecar = await readSidecar(root, capture);
-      const post = sidecar ? postFromSidecar(capture, sidecar, claim) : null;
-      if (post) { copy.data = post; note(capture.id, "post", "attached"); }
+      // No clip (X refuses headless browsers): the post as the research stage fetched it, from its own page metadata.
+      const post = (sidecar ? postFromSidecar(capture, sidecar, claim) : null) ?? postFromSource(capture, claim);
+      if (post) { copy.data = post; note(capture.id, "post", "attached", post.source.via ? `from ${post.source.via}` : undefined); }
       else note(capture.id, "post", "skipped", sidecar ? "the sidecar names no author or text" : "no sidecar yet (run launchclip evidence capture)");
     }
     outCaptures.push(copy);
@@ -102,6 +103,15 @@ export async function attachEvidenceData({ ledger, captures = [], tables = [], a
     }
     const chain = await chainData(claim, { root, fetch: adapters.fetch, known: githubByUrl });
     if (chain) { Object.assign(data, chain); note(claim.id, "chain", "attached"); }
+    else if (!claim.capture) {
+      // One PR or commit behind the claim and no clip of it: the card itself (a diff too long to capture still draws).
+      const url = claim.sources?.find((source) => source.supports && /github\.com\/[^/]+\/[^/]+\/(?:pull|commit)\//.test(source.url))?.url;
+      if (url) {
+        const card = githubByUrl.get(url) ?? (await githubData(url, { root, fetch: adapters.fetch })).data;
+        if (card) { Object.assign(data, { module: card.module, params: card.params }); note(claim.id, card.module, "attached"); }
+        else note(claim.id, "github", "skipped", `no card for ${url}`);
+      }
+    }
     if (Object.keys(data).length) copy.data = data;
     outLedger.claims.push(copy);
   }
@@ -165,6 +175,21 @@ export function postFromSidecar(capture, sidecar, claim = null) {
     source: { url, ...(sidecar.captured_at ? { captured_at: sidecar.captured_at } : {}), ...(sidecar.poster ? { screenshot: sidecar.poster } : {}) },
     ...(claim ? { claim: claim.id } : {})
   };
+}
+
+/**
+ * A post from the page the research stage fetched (its title "Name (@handle)
+ * on X" and the passage that verified the claim), when no clip was made.
+ * source.via says so; there is no screenshot.
+ */
+export function postFromSource(capture, claim) {
+  const source = claim?.sources?.find((entry) => entry.url === capture.url && entry.supports && entry.quote?.text);
+  if (!source) return null;
+  const sidecar = { final_url: capture.url, page_title: source.title ?? "", spans: [{ text: source.quote.text }] };
+  const titled = String(source.title ?? "").match(/^(.+?)\s+\(@([\w.]+)\)\s+on\s+(?:X|Twitter)/);
+  const post = postFromSidecar(capture, sidecar, claim);
+  if (!post) return null;
+  return { ...post, ...(titled ? { name: titled[1].trim(), handle: `@${titled[2]}` } : {}), source: { url: capture.url, captured_at: source.fetched_at, via: "page metadata" } };
 }
 
 // ---------------------------------------------------------------------------

@@ -174,3 +174,25 @@ test("the beat-map dry run loads a folder with its evidence data attached", asyn
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("found on the Terra run: a post X refuses to capture comes from its fetched page; a lone PR claim gets its card", async () => {
+  const { postFromSource } = await import("../src/research/evidence_data.js");
+  const capture = { id: "x-peterj-walker-1", url: "https://x.com/PeterJ_Walker/status/1", kind: "post", provenance: { publisher: "X" } };
+  const claim = { id: "c019", status: "verified", sources: [{ url: capture.url, title: "Peter Walker (@PeterJ_Walker) on X", fetched_at: "2026-10-27T05:00:00Z", supports: true, quote: { text: "New from OpenRouter: 7-day average token volume for Anthropic models is up 3.6x" } }] };
+  assert.deepEqual(postFromSource(capture, claim), {
+    platform: "x", name: "Peter Walker", handle: "@PeterJ_Walker", text: "New from OpenRouter: 7-day average token volume for Anthropic models is up 3.6x",
+    claim: "c019", source: { url: capture.url, captured_at: "2026-10-27T05:00:00Z", via: "page metadata" }
+  });
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-evidence-data-"));
+  try {
+    await githubCache(root);
+    const ledger = { claims: [{ id: "c001", status: "verified", text: "On October 16, 2026, pull request 39217 was merged in dotnet/efcore.", sources: [{ ...SOURCE, url: "https://github.com/dotnet/efcore/pull/39217" }] }] };
+    const out = await attachEvidenceData({ ledger, captures: [capture] }, { root }, { fetch: noNetwork });
+    assert.equal(out.ledger.claims[0].data.module, "repo-pr-card");
+    assert.equal(out.ledger.claims[0].data.params.number, 39217);
+    // The post capture has no claim pointing at it here, so no source: skipped, not invented.
+    assert.equal(out.captures[0].data, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
