@@ -218,10 +218,10 @@ const BUILDERS = {
   // Two columns, a row per pair of the clause's numbers (two pairs at least).
   'comparison-table': (beat) => { const n = numbersOf(beat); if (n.length < 4) return null; const rows = []; for (let i = 0; i + 1 < n.length && rows.length < 4; i += 2) rows.push({ label: cap1(clip(n[i].label ?? `Row ${rows.length + 1}`, 28)), values: [formatValue(n[i]), formatValue(n[i + 1])] }); return { title: clip(beat.headline, 40), columns: [cap1(clip(beat.facts?.sides?.[0] ?? 'Before', 16)), cap1(clip(beat.facts?.sides?.[1] ?? 'After', 16))], rows, highlight: 1, variant: 'cards' }; },
 
-  'timeline': (beat) => { const steps = timelineSteps(beat); return steps.length >= 2 ? { direction: 'horizontal', steps: steps.map((label, i) => ({ label, icon: iconFor(beat, i) })) } : null; },
+  'timeline': (beat) => { const steps = timelineSteps(beat); return steps.length >= 2 ? { steps: steps.map((label, i) => ({ label, icon: iconFor(beat, i) })) } : null; },
   'icon-row': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })) } : null; },
   'icon-grid': (beat) => { const items = itemsOf(beat, 4, 6); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' } : null; },
-  'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), layout: 'horizontal', steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
+  'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
   'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
   'quote-card': (beat) => ({ quote: clip(beat.facts?.quote ?? beat.text, 90), author: clip(beat.evidence?.source?.title ?? beat.speaker ?? 'From the source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) }),
   'feed-frame': (beat) => ({ handle: clip(beat.facts?.handle ?? '@source', 20), caption: clip(beat.headline, 26) }),

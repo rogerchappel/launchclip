@@ -11,9 +11,15 @@ cadence passed (long-form, default): 157 events, 9.65/min; gaps p10 3.897 / p50 
   ok   gap_p90           8.874  want ≤ 10.5 s
   ok   longest_static   11.517  want ≤ 14 s
   ok   cut_gap_p50      20.607  want 15–25 s
-states per shot 1–4 (mean 3.29); changes enter 48, swap 87, build 23
-variety: 24 modules; top icon-row 14%, timeline 9%, glass-word 8%, motion-title 8%, kinetic-words 8%; longest same-module run across cuts 2
-evidence: 57/85 claims shown with a sourced visual (67%), 13 on a capture
-fallbacks (planned modules not registered yet): particle-text→glass-word ×13, title-decompose→motion-title ×9, glass-bars-3d→bar-chart ×8, paper-stack→excerpt ×6, social-post→feed-frame ×6, tokenizer→kinetic-words ×5, evidence-chain→timeline ×4, coin-stack→stat-card ×4, lineage-graph→timeline ×3, repo-pr-card→window-chrome ×2, date-pinned-timeline→timeline ×2, diff-view→excerpt ×2, month-grid→timeline ×1, rack-shelf→stat-card ×1, terminal-session→window-chrome ×1, commit-card→excerpt ×1, social-stack→quote-card ×1
+states per shot 1–4 (mean 3.29); changes enter 48, swap 86, build 24
+variety: 23 modules; top icon-row 15%, timeline 9%, motion-title 9%, glass-word 8%, kinetic-words 8%; longest same-module run across cuts 2
+evidence: 55/85 claims shown with a sourced visual (65%), 12 on a capture
+fallbacks (planned modules not registered yet): particle-text→glass-word ×13, title-decompose→motion-title ×8, paper-stack→excerpt ×6, social-post→feed-frame ×6, glass-bars-3d→bar-chart ×6, tokenizer→kinetic-words ×5, evidence-chain→timeline ×4, coin-stack→stat-card ×4, lineage-graph→timeline ×3, repo-pr-card→window-chrome ×2, date-pinned-timeline→timeline ×2, diff-view→excerpt ×2, month-grid→timeline ×1, rack-shelf→stat-card ×1, terminal-session→window-chrome ×1, commit-card→excerpt ×1, social-stack→quote-card ×1
 chunks: 12 (0 reused)
+
+shorts: 4 cut for 9:16 at short-form cadence
+  ok   short-1-reading-the-benchmarks-honestly       598.317–643.252  45.335 s  14 events, p50 2.801 s, 4 cuts  skeleton versus  opens on percent-fill
+  ok   short-2-how-the-rivals-answered               819.715–864.574  45.259 s  14 events, p50 2.731 s, 5 cuts  skeleton none  opens on icon-row
+  ok   short-3-inside-the-training-run               163.723–211.413   48.09 s  15 events, p50 2.499 s, 5 cuts  skeleton dollar-a-second  opens on odometer
+  ok   short-4-what-northlight-actually-announced    287.073–309.85   23.177 s  7 events, p50 2.524 s, 3 cuts  skeleton none  opens on odometer
 ```

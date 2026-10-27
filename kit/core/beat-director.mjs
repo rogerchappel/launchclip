@@ -131,6 +131,9 @@ export function extractFacts(text) {
     const n = Number(digits.replace(/,/g, ''));
     const unitWord = unitRaw?.toLowerCase();
     if (!currency && !unitWord && /^(1[89]|20)\d{2}$/.test(digits)) { dates.push({ label: digits, year: n }); continue; }
+    // A number in a name ("Halcyon 2", "version 1.5", "GPT-4") is not a figure.
+    const before = value.slice(0, match.index);
+    if (!currency && !unitWord && (/[a-z,]\s[A-Z][\w-]*[\s-]$/.test(before) || /\b(version|v|model|release|chapter|part|step|section|table|footnote|row)\s$/i.test(before))) continue;
     const unit = !unitWord ? undefined : /^(%|percent|per cent)$/.test(unitWord) ? '%' : /^(x|×|times)$/.test(unitWord) ? '×' : unitWord;
     const after = labelAfter(value, match.index + raw.length);
     numbers.push({ value: n, ...(unit ? { unit } : {}), ...(currency ? { prefix: currency } : {}), raw: raw.trim().replace(/\s*percent$/i, '%').replace(/\s*per cent$/i, '%'), ...(SCALE[unit] ? { scaled: n * SCALE[unit] } : {}), ...(after ? { label: after } : {}) });
@@ -315,7 +318,7 @@ export function directChunk(chunk, options) {
   const avoid = options.avoidWeights ?? {};
   const wide = format.width >= format.height;
   const factor = (target.gap.p50_min + target.gap.p50_max) / 2 / 5.25;
-  const beats = clauseBeats(words, { from: chunk.words[0], to: chunk.words[1], min: 3 * factor, max: 10 * factor, target: target.gap.p50_min + 0.15 * (target.gap.p50_max - target.gap.p50_min) });
+  const beats = clauseBeats(words, { from: chunk.words[0], to: chunk.words[1], min: 3 * factor, max: 10 * factor, weight: 0.65 / factor, target: target.gap.p50_min + 0.15 * (target.gap.p50_max - target.gap.p50_min) });
   const total = narrationWords(words).length;
   const states = beats.map((beat, i) => {
     const facts = extractFacts(beat.text);
@@ -455,11 +458,11 @@ function appendEntries(before, add, module) {
 function makeChecker(format, brand) {
   const story = { schema: 'launchclip.story.v1', lane: 'motion', format: { width: format.width, height: format.height, fps: 30, duration: 20 }, brand, scenes: [], resolved: { duration: 20, fps: 30 } };
   const cache = new Map();
-  return (module, params) => {
+  return (module, params, seconds = 6) => {
     if (!params) return false;
-    const key = `${module}:${JSON.stringify(params)}`;
+    const key = `${module}:${seconds}:${JSON.stringify(params)}`;
     if (cache.has(key)) return cache.get(key);
-    const scene = { id: 'check', module, start: 0, end: 6, params };
+    const scene = { id: 'check', module, start: 0, end: seconds, params };
     let ok = true;
     try { resolveModule(scene, { ...story, scenes: [scene] }); } catch { ok = false; }
     cache.set(key, ok);
@@ -647,13 +650,14 @@ export function beatMapToStory(map, options = {}) {
     chapters.push({ id: chapter.id, title: chapter.title.slice(0, 60), start: round(Math.max(0, chapter.start - from)), ...(options.plates ? { plate: chapter.plate } : {}) });
     for (const shot of chapter.shots) for (const [k, state] of shot.states.entries()) {
       const a = Math.max(state.start, from), b = Math.min(state.end, to);
-      if (b - a < 1) continue;
+      const seconds = round(b - a);
       let module = state.module, params = state.params;
-      if (!check(module, params)) {
-        const next = fallbackChain(state.capability).find((id) => check(id, capabilityParams(id, state)));
-        module = next ?? 'concept-card';
-        params = capabilityParams(module, state);
+      if (!check(module, params, seconds)) {
+        module = fallbackChain(state.capability).find((id) => check(id, capabilityParams(id, state), seconds)) ?? null;
+        params = module ? capabilityParams(module, state) : null;
       }
+      // Too short for any module that shows it: the scene before holds on.
+      if (!module || seconds < 1) { if (scenes.length) scenes.at(-1).end = round(b - from); continue; }
       scenes.push({ id: state.id, module, start: round(a - from), end: round(b - from), params, ...(k > 0 && scenes.length ? { in: { type: 'fade', dur: 0.35 } } : {}) });
     }
   }
