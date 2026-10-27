@@ -1,0 +1,186 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "World backdrops example: the backdrop changes with every camera move, sliding in on pans, crossfading on a push and a fade",
+  "lane": "motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 30,
+    "platform": "youtube"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#04070d",
+      "paper": "#f3f8ff",
+      "ink": "#04070d",
+      "primary": "#3fd8ff",
+      "accent": "#ff9b54"
+    },
+    "fonts": {
+      "display": "plus-jakarta-sans",
+      "body": "plus-jakarta-sans",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "panel": {
+    "treatment": "rim-glass",
+    "radius": 22
+  },
+  "plate": {
+    "kind": "smoke",
+    "cycle": {
+      "every": 1,
+      "plates": [
+        "smoke",
+        "starfield",
+        "bokeh",
+        "silk",
+        "strands",
+        "hex-shell"
+      ]
+    }
+  },
+  "ambient": "standard",
+  "scenes": [
+    {
+      "id": "open",
+      "module": "window-chrome",
+      "start": 0,
+      "end": 5,
+      "params": {
+        "title": "storyboard.json",
+        "lines": [
+          "camera: world",
+          "plate: smoke",
+          "cycle: every 1 shot"
+        ],
+        "variant": "terminal"
+      }
+    },
+    {
+      "id": "context",
+      "module": "stat-card",
+      "start": 5,
+      "end": 10,
+      "in": {
+        "type": "pan",
+        "dur": 0.9,
+        "direction": "right"
+      },
+      "params": {
+        "value": "1.05M",
+        "label": "tokens of context, about ten novels",
+        "source": "Example figure",
+        "surface": "card"
+      }
+    },
+    {
+      "id": "punch",
+      "module": "concept-card",
+      "start": 10,
+      "end": 15,
+      "in": {
+        "type": "push",
+        "dur": 0.9
+      },
+      "backdrop": {
+        "kind": "wash",
+        "params": {
+          "intensity": 0.75
+        }
+      },
+      "params": {
+        "text": "Punctuate",
+        "icon": "lightbulb",
+        "sub": "A bright wash lands the line"
+      }
+    },
+    {
+      "id": "steps",
+      "module": "timeline",
+      "start": 15,
+      "end": 20,
+      "in": {
+        "type": "pan",
+        "dur": 0.9,
+        "direction": "down"
+      },
+      "params": {
+        "title": "How a shot lands",
+        "steps": [
+          {
+            "label": "Move",
+            "detail": "The camera travels"
+          },
+          {
+            "label": "Change",
+            "icon": "sparkles"
+          },
+          {
+            "label": "Build"
+          },
+          {
+            "label": "Hold",
+            "icon": "pause"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote",
+      "module": "quote-card",
+      "start": 20,
+      "end": 25,
+      "in": {
+        "type": "fade",
+        "dur": 0.5
+      },
+      "params": {
+        "quote": "The background stayed too static the whole time.",
+        "author": "Viewer note",
+        "role": "Why this exists",
+        "highlight": "too static"
+      }
+    },
+    {
+      "id": "kit",
+      "module": "icon-row",
+      "start": 25,
+      "end": 30,
+      "in": {
+        "type": "whip-pan",
+        "dur": 0.45,
+        "direction": "left"
+      },
+      "params": {
+        "title": "Backdrop kinds",
+        "items": [
+          {
+            "icon": "sparkles",
+            "label": "Starfield"
+          },
+          {
+            "icon": "cloud",
+            "label": "Smoke"
+          },
+          {
+            "icon": "sun",
+            "label": "Wash"
+          },
+          {
+            "icon": "image",
+            "label": "Image"
+          }
+        ]
+      }
+    }
+  ],
+  "ending": {
+    "loop": false,
+    "final": "hold"
+  }
+}

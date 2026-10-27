@@ -3,7 +3,7 @@
   "project": "examples/story/minimal",
   "times": [
     1.2,
-    3.35,
+    3.4,
     4.6
   ],
   "patch": {
