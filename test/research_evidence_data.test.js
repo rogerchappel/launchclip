@@ -157,3 +157,20 @@ test("launchclip research attach writes the data back into the ledger and captur
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("the beat-map dry run loads a folder with its evidence data attached", async () => {
+  const { loadFixture } = await import("../eval/beat-map-dry-run.mjs");
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-evidence-dryrun-"));
+  try {
+    await githubCache(root);
+    await mkdir(path.join(root, "research", "captures"), { recursive: true });
+    await writeFile(path.join(root, "SCRIPT.md"), "# Terra\n\n## Leak\n\nA PR swapped the judge model.\n");
+    await writeFile(path.join(root, "research", "evidence.json"), JSON.stringify({ schema: "launchclip.evidence.v1", claims: [{ id: "c001", status: "verified", text: "A PR swapped the judge model.", capture: "gh-pr", sources: [] }] }));
+    await writeFile(path.join(root, "research", "captures", "gh-pr.json"), JSON.stringify({ id: "gh-pr", url: "https://github.com/dotnet/efcore/pull/39217", kind: "pr", beats: [{ action: "highlight", target: { text: "gpt-6.1-terra" } }] }));
+    const { captures, evidenceData } = await loadFixture(root, { fetch: noNetwork });
+    assert.equal(captures[0].data.params.number, 39217);
+    assert.deepEqual(evidenceData.map((entry) => entry.status), ["attached"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
