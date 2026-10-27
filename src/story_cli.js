@@ -4,6 +4,7 @@ import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory a
 import { knownModules, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { validateCastCues } from "../kit/core/characters/cues.mjs";
 import { CAST_MODULES } from "../kit/core/story.mjs";
+import { validateModuleParams } from "../kit/core/module-schemas.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, remotionRoot, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -21,10 +22,11 @@ import { profileForStory } from "./profile_store.js";
 
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
-// Validation against the kit's module registry. An unknown module is a
-// warning here: both compilers render it as a labelled placeholder.
+// Validation against the kit's module registry and each module's params
+// schema (kit/core/module-schemas.mjs). An unknown module is a warning here:
+// both compilers render it as a labelled placeholder.
 export function validateStory(story) {
-  const result = validateStoryShape(story, { modules: knownModules() });
+  const result = validateStoryShape(story, { modules: knownModules(), moduleParams: validateModuleParams });
   const unknown = result.errors.filter((message) => UNKNOWN_MODULE.test(message));
   const errors = result.errors.filter((message) => !UNKNOWN_MODULE.test(message));
   return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`)] };

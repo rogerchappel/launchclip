@@ -6,6 +6,7 @@ import {readFileSync, readdirSync, existsSync} from 'node:fs';
 import path from 'node:path';
 import {EDITOR_CONTROLS, EDITOR_GROUPS, JSON_SCHEMA_DIALECT, listModuleSchemas, moduleSchema, moduleSchemaId, paramSchemaFromText, validateAgainstSchema, validateModuleParams} from '../kit/core/module-schemas.mjs';
 import {knownModules} from '../kit/core/modules.mjs';
+import {validateStory} from '../kit/core/story.mjs';
 import {SAMPLES} from '../scripts/variant-sheet.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -119,6 +120,17 @@ test('validateModuleParams reports precise JSON Pointer paths', () => {
   assert.deepEqual(validateModuleParams('checklist', {title: 'Steps', variant: 'boxed'}), [{path: '/variant', message: 'must be one of "panel", "flat", "outline", "banner"'}]);
   // Unknown params pass: modules read cross-cutting params the summaries leave out.
   assert.deepEqual(validateModuleParams('percent-fill', {value: 1, theme: {}}), []);
+});
+
+test('validateStory checks scene params when given moduleParams', () => {
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6}, brand: {colors: {bg: '#06070d', primary: '#fdb022', paper: '#f2eee6'}, fonts: {display: 'Anton'}}, scenes: [{id: 's1', module: 'hook-title', start: 0, end: 5, params: {headline: 'x'.repeat(95), align: 'right'}}]};
+  assert.deepEqual(validateStory(story).errors, []);
+  assert.deepEqual(validateStory(story, {moduleParams: validateModuleParams}).errors, [
+    'scenes[0].params.headline must be at most 90 characters (it has 95)',
+    'scenes[0].params.align must be one of "center", "left"'
+  ]);
+  const listed = {...story, scenes: [{id: 's1', module: 'logo-row', start: 0, end: 5, params: {logos: [{src: 'assets/a.svg', label: 'A'}, {src: 'assets/b.svg', label: 'x'.repeat(21)}]}}]};
+  assert.deepEqual(validateStory(listed, {moduleParams: validateModuleParams}).errors, ['scenes[0].params.logos[1].label must be at most 20 characters (it has 21)']);
 });
 
 // The corpus: golden stories, every other example story, the parity fixtures and the variant-sheet samples.
