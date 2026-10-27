@@ -2912,6 +2912,55 @@ role or hex (`dataTone`). The study's citation is the frame's source note
 | `unit-grid` | solid, stroke, dots | `count` 1–200, `icon` (`person`, the module's isotype silhouette, or any icon name), `tone`, `columns`, `groups` 2–3 `{count, label ≤ 24, tone?}` adding up to `count`, `splitAt`, or `highlight` `{count, label?, tone?}` and `highlightAt` (not both) | build, split, highlight | Units pop in reading order within about 1.1 s in the largest square cells that fit; on split each unit slides and scales (0.75 s, power3.inOut, a 12 ms ripple) into its group's own grid, side by side, recolouring as it moves, while each group's count rises and counts up over its label; a highlight lights the first `count` units with a pulse, dims the rest to 28% and raises the label |
 | `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value. Default cues follow the build up to 1 s apart |
 
+### Social cards (`catalog-i-social.mjs`)
+
+Real posts drawn as cards, registered with catalogue H so both renderers
+draw them from the shared tree. Cards are flex columns (header, replying-to,
+title, body, media, quote, translated tag, footer): both renderers wrap them
+with the same browser layout, and the model estimates each card's height
+with the conservative advance model to place and fit cards. Every social
+module hides captions (the post's words are on screen).
+
+- A post is `{platform (x | threads | bluesky | linkedin | reddit | generic),
+  name, handle, verified?, avatar?, text ≤ 600, media? {image, layout:
+  below | side, aspect?}, quote? {name, handle?, verified?, avatar?, text,
+  date?}, replyingTo?, translatedFrom?, time?, date?, ago?, metrics?
+  {replies, reposts, likes, bookmarks, views}, title? / community? (Reddit),
+  headline? (LinkedIn), source?, demo?}`. Counts show as the platforms do
+  (1.2K, 79.2K, 1M); strings pass through.
+- Provenance: `source` is the capture lane's `launchclip.capture.v1` record
+  `{url, captured_at, screenshot (assets/…), schema, id?, sha256?, archive?}`.
+  Every render shows a source line under the card ("X · @handle · Oct 25,
+  2026 · x.com"; several posts: the focused one, then "also @a, @b").
+  `validateStory` warns on a post without `source.url`. `demo: true` marks a
+  fictional test account: its handle must contain "demo" or "example", it
+  may not carry a url, and its line reads "Demo account · not a real post".
+  Samples and tests use demo accounts only.
+- Looks (`look`, the variants of `social-post`): glass (a translucent brand
+  panel with a rim of the accent, links in the accent), native (the
+  platform's dark colours) and light. Verified ticks keep the platform blue
+  (gold and gray on request).
+- Highlight: `highlight` is a phrase of the text (whole words, case and
+  punctuation ignored) or `[{text, at?}]` 1–3. Each matched word gets a bar
+  under it that grows left to right (`ease: none`) so the sweep moves at one
+  speed (0.45–1.4 s for the phrase); the space between highlighted words is
+  inside the bar. Time it to a word with a scene hit `{at: "word:…", event:
+  "highlight"}`.
+- Context cards (the unfocused cards of a list, sorted cards) are compact
+  (no time line or divider) and may set below the key-text floor, down to
+  `max(min.meta, 0.6 × min.key)`; the focused card and the column labels
+  keep it.
+
+| Module | Variants | Params (beyond rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `social-post` | glass, native, light | the post fields, `highlight`, `focus`, `focusAt`, `at` | build, highlight, highlight-2, highlight-3, focus | The card rises 46 px out of a 12 px blur at 0.95 scale (0.65 s, power3.out), its rows following 0.07 s apart; the highlight sweeps 0.35 s after the build; focus scales the card to 1.035 and fades in its rim glow |
+| `social-stack` | cascade, list | `posts` 2–5, `focus` (default the last), `focusAt`, `highlight` (on the focused post), `look`, `stagger`, `at` | build, focus, highlight… | Cascade: cards land `stagger` s apart (default 0.45), the focused one last and in front; each arrival pushes the earlier cards one step back (−peek px, 7% smaller, 3 + 2.5d px blur, dimmer). List (a row in 16:9, a column in 9:16): on focus the others blur 3 px and dim to 42% while the focused card scales to 1.04 with its glow |
+| `social-sort` | columns | `posts` 2–6 each with `column`, `columns` 2–3 `label` or `{label, tone?}`, `sortAt`, `look`, `at` | build, sort | Cards pile in the middle 0.3 s apart, each slightly turned; on sort the labels rise and dashed dividers wipe on while each card flies to its slot (0.75 s, power3.inOut, 0.14 s apart) and squares up. Columns side by side in 16:9, bands top to bottom in 9:16 |
+| `social-wall` | field | `posts` 2–16, `focus` index or `[i, j]` (default 0), `pullAt`, `highlight` (first pulled post), `tiles` 6–24 (default 18), `drift` left/right/up/down, `look`, `at` | build, pull, highlight… | A field of `tiles` cards (the posts repeated) covers the canvas past the rect, each at a depth z: scale 0.5 − 0.3z, blur (2.5 + 7z)/scale px, opacity 0.72 − 0.42z, painted far to near, with 12 bokeh orbs; everything drifts linearly for the whole scene, nearer cards further (parallax). On pull the chosen posts travel from near the camera to the front (1.1 s, power3.inOut) sharp, the field dims to 55% and blurs further, and the first one's highlight follows. A pinhole camera computed in the model: seek-safe, plain 2D ops, no CSS 3D |
+
+Samples: `scripts/element-samples.mjs` (`DEMO_POSTS`, `SOCIAL_SAMPLES`);
+contact sheet over a soft backdrop: `node scripts/social-sheet.mjs`.
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its

@@ -72,6 +72,11 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'unit-grid', intents: ['number', 'proof'], when: 'counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up', patterns: ['\\b\\d{1,3} (people|participants|subjects|volunteers|users|adults|students|patients|lifters|men|women|athletes)\\b', '\\b(split|divided|randomi[sz]ed|assigned) (them )?(into|to) (two|three|2|3) groups\\b', '\\b(one|\\d+) (in|out of) (every )?(\\d+|five|ten|twenty|a hundred)\\b'] },
   { module: 'number-line', intents: ['number', 'claim'], when: 'states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label', patterns: ['\\b\\d+\\s?(–|-|to)\\s?\\d+\\s?(reps|hours|minutes|grams|g|kg|percent|%|days|weeks|mph|km)\\b', '\\bbetween \\d+ and \\d+\\b', '\\b(above|below|over|under|more than|less than) \\d+\\b.*\\b(is|means|counts as|=)\\b', '\\b(the (gym )?rule|sweet spot|threshold)\\b'] },
   { module: 'source-note', overlay: 'frame.sources', intents: ['proof'], when: 'cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim', patterns: ['\\baccording to\\b', '\\b(study|studies|survey|meta-analysis|trial|journal)\\b', '\\b(researchers?|scientists?) (found|showed|discovered|tested)\\b', '\\bet al\\.?'] },
+  // Social posts: real posts only, each with its source (catalog-i-social.mjs).
+  { module: 'social-post', intents: ['proof', 'quote'], when: 'quotes one real post, tweet or reply ("one user wrote", "he tweeted", "posted on X"): the post as a card, its key phrase swept with a highlight on the word', patterns: ['\\b(tweet(ed)?|posted|replied|wrote on (x|twitter|threads|bluesky|linkedin|reddit))\\b', '\\b(one|a) (user|commenter|poster|redditor) (wrote|said|posted|put it)\\b'] },
+  { module: 'social-stack', intents: ['proof', 'quote'], when: 'gathers a few reactions to one thing ("people were quick to respond", "the replies poured in"): 2–5 posts cascade in, one in front', patterns: ['\\b(the )?(replies|reactions|comments|responses) (poured|flooded|came) in\\b', '\\b(people|users|fans|developers) (were quick to|reacted|responded)\\b'] },
+  { module: 'social-sort', intents: ['proof', 'quote'], when: 'splits reactions into camps ("some can\'t wait, others are tired of it"): posts fly into labelled columns', patterns: ['\\b(some|half( of)?( the)?) (people|users|fans|developers|of them)\\b.*\\b(others|the rest|the other half)\\b', '\\b(divided|split) (opinion|reactions|the internet|the community)\\b'] },
+  { module: 'social-wall', intents: ['proof'], when: 'says a topic took over the feeds ("the internet exploded", "everyone was talking about it"): a drifting wall of posts, one or two pulled forward', patterns: ['\\b(went viral|the internet (exploded|lost it)|everyone (was|is) talking|flooded (the )?(feeds?|timeline))\\b', '\\bthousands of (posts|tweets|comments)\\b'] },
   { module: 'count-up', when: 'gives a number, time, price or count', patterns: ['\\d', '\\b(percent|dollars?|minutes?|seconds?|hours?|times faster)\\b', '[$%×]'] },
   { module: 'metric', when: 'gives a sourced figure that should stay on screen with captions', patterns: ['\\b(according to|reported|survey|benchmark(ed)?|measured)\\b'] },
   { module: 'checklist', when: 'lists steps, features or duties', patterns: ['\\b(features?|includes?|checklist|requirements?|you get)\\b', '\\bfirst\\b.*\\bsecond\\b'] },
@@ -387,6 +392,14 @@ export function dataExplainerLines() {
     'Format "the study says": the question (a choice: "10 heavy reps or 25 light ones?") → what everyone believes (the rule) → the fair test (the study: who, how many, what each group did) → the result → what to do. One idea per beat.',
     'Keep a near-empty stage and add or transform one element per beat rather than cutting to a new card: the belief is a number-line whose ranges light up on their words, the study is a unit-grid that counts in and then splits into its groups (split on the word that names them), the result lands on those groups (bar-chart, gauge-compare or stat-card), stacked fragments ("same program", "12 weeks", "every set to failure") are kinetic-words.',
     'No source, no study claim: a study, survey or "researchers found" line needs its citation in the brief or assets. Show it as a source note that stays along the bottom across the data scenes: frame.sources [{text ≤ 90 ("Morton et al., 2016 · J Appl Physiol"), scene | start, until? | end?}] (keep any other frame fields; with no brand frame write frame: {kicker: false, sections: false, sources: [...]}). Every unit-grid or number-line scene sits under a note or sets params.source. Never invent an author, year or journal; without one, cut the claim.'
+  ];
+}
+
+// Social cards: real posts only.
+export function socialPostLines() {
+  return [
+    'A post on screen is a real post: its words verbatim (an excerpt marks cuts with …), its author, handle and date as posted, and a source block {url, captured_at, screenshot} from the capture (schema launchclip.capture.v1). validateStory warns on a post without source.url; never write a post someone did not post, and never fill a wall with made-up accounts.',
+    'Sweep the phrase the narration reads (highlight: "<words of the post>"), timed with a scene hit on that word: hits [{at: "word:<text>", event: "highlight"}]. One card per beat; build the next card in the same shot (social-stack, social-sort) rather than cutting.'
   ];
 }
 
@@ -766,6 +779,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Social posts', socialPostLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -861,6 +875,7 @@ export function storyboardModulesReference() {
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Social posts', socialPostLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
