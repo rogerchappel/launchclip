@@ -52,6 +52,7 @@ import { storyStyleRequest } from "../kit/core/style.mjs";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
+import { guardCueTimbre } from "./sfx/timbre.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "../kit/core/sound/options.mjs";
 import { musicChoice } from "../kit/core/sound/music.mjs";
@@ -1037,7 +1038,10 @@ const STAGES = [
       const mixFile = path.join(ctx.project, PATHS.mix);
       // SFX cue → file: library first (explicit, project, user), then the kit.
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
-      const cues = resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId });
+      // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
+      const guarded = await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
+      const cues = guarded.cues;
+      for (const finding of guarded.findings) ctx.warnings.push(`sfx ${finding.cue} at ${finding.at}s: ${path.basename(finding.file)} refused (${finding.problem}); ${finding.replacement ? `used ${path.basename(finding.replacement)}` : "cue dropped"}`);
       let typing = null;
       if (typingPlan.length) {
         const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
@@ -1056,6 +1060,7 @@ const STAGES = [
         cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null })),
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
+        timbre_refused: guarded.findings,
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));

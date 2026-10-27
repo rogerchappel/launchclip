@@ -1,9 +1,10 @@
 // SFX post-processing: turn a raw clip (a provider download or a procedural
 // render) into a library-ready 48 kHz WAV whose transient starts within a few
 // milliseconds, whose tail is trimmed and faded, whose length fits its family,
-// and whose peak matches the family target. Clips that are silent, clipped or
-// (for single-hit families) contain several hits with no clean one are
-// rejected. Every kept clip carries its measurements.
+// and whose peak matches the family target. Clips that are silent, clipped,
+// hiss or a noise wash (sfx/timbre.js), or (for single-hit families) contain
+// several hits with no clean one are rejected. Every kept clip carries its
+// measurements, its timbre among them.
 //
 // The signal work is plain JavaScript on Float32Array channels so it is
 // deterministic and testable without FFmpeg; FFmpeg only decodes the input and
@@ -12,6 +13,7 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { measureTimbre, timbreProblem } from "./timbre.js";
 
 const execFileAsync = promisify(execFile);
 export const SAMPLE_RATE = 48000;
@@ -279,8 +281,10 @@ export function processSamples(input, sampleRate, family, { harvest = 0 } = {}) 
   if (clipped >= 3) return { ok: false, reason: `clipped (${clipped} runs at full scale)`, stats };
   const shapeOne = (segment) => {
     const shaped = shapeSegment(clean, sampleRate, rules, segment);
-    const measurements = measure(shaped.channels, sampleRate, rules);
+    const measurements = { ...measure(shaped.channels, sampleRate, rules), timbre: measureTimbre(shaped.channels, sampleRate) };
     if (measurements.duration_ms < 10) return { ok: false, reason: "too short after trimming" };
+    const problem = timbreProblem(family, measurements.timbre);
+    if (problem) return { ok: false, reason: problem };
     return {
       ok: true,
       channels: shaped.channels,
