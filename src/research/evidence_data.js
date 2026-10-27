@@ -15,7 +15,7 @@
 // and anything that cannot be built is listed in the report with its reason.
 // Only verified claims (and captures of them) get data.
 import { existsSync, readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { githubEvidence, parseGithubRef, sourceParams } from "../evidence/github.js";
 import { RESEARCH_PATHS } from "./schema.js";
@@ -41,6 +41,16 @@ export async function loadResearchEvidence(researchDir, options = {}, adapters =
   const assets = existsSync(assetsFile) ? await readJson(assetsFile) : null;
   const root = path.resolve(options.root ?? path.dirname(dir));
   return attachEvidenceData({ ledger, captures, tables, assets }, { root }, adapters);
+}
+
+/** `launchclip research attach <dir>`: loads, attaches and writes the ledger and capture requests back. → {report, captures, claims} */
+export async function writeResearchEvidence(researchDir, options = {}, adapters = {}) {
+  const dir = path.resolve(researchDir);
+  const { ledger, captures, report } = await loadResearchEvidence(dir, options, adapters);
+  if (!ledger) throw new Error(`no ${RESEARCH_PATHS.ledger} in ${dir}; run launchclip research first`);
+  await writeFile(path.join(dir, RESEARCH_PATHS.ledger), `${JSON.stringify(ledger, null, 2)}\n`);
+  for (const capture of captures) await writeFile(path.join(dir, RESEARCH_PATHS.captures, `${capture.id}.json`), `${JSON.stringify(capture, null, 2)}\n`);
+  return { stage: "research-attach", dir, attached: report.filter((entry) => entry.status === "attached").length, skipped: report.filter((entry) => entry.status !== "attached"), report };
 }
 
 /** The pure core: {ledger, captures, tables, assets} → {ledger, captures, report} with data attached (inputs are not mutated). */

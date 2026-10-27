@@ -1541,6 +1541,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip research "<topic>" | <script.md> [--out research] [--url <source>]... [--claims claims.json] [--media "<query>"...|none] [--people none] [--max-captures 12] [--max-tables 8] [--theme dark|light] # claims → sources → evidence ledger, capture requests, data, licence-clear assets
+  launchclip research attach [research] [--root .]   # module-ready evidence data once the captures are recorded
   ```
 
 - `fx`: Put one module on a clip: a one-scene footage-led story around the whole clip, the presenter cut out when the module needs them, then finish. The project it writes (<video>.fx/ by default) is an ordinary story project you can keep editing.

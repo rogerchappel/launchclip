@@ -136,3 +136,24 @@ test("loadResearchEvidence reads a research folder and finds sidecars under the 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("launchclip research attach writes the data back into the ledger and capture requests", async () => {
+  const { runCli } = await import("../src/cli.js");
+  const { readFile } = await import("node:fs/promises");
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-evidence-attach-"));
+  try {
+    const research = path.join(root, "research");
+    await mkdir(path.join(research, "captures"), { recursive: true });
+    await mkdir(path.join(root, "assets", "evidence"), { recursive: true });
+    await writeFile(path.join(research, "captures", "x-tibo-1.json"), JSON.stringify({ id: "x-tibo-1", url: "https://x.com/thsottiaux/status/1", kind: "post", out: "assets/evidence/x-tibo-1.mp4", beats: [] }));
+    await writeFile(path.join(research, "evidence.json"), JSON.stringify({ schema: "launchclip.evidence.v1", claims: [] }));
+    await writeFile(path.join(root, "assets", "evidence", "x-tibo-1.evidence.json"), JSON.stringify({ final_url: "https://x.com/thsottiaux/status/1", page_title: "Tibo on X: \"Terra is close\" / X" }));
+    let out = "";
+    await runCli(["research", "attach", research, "--root", root], { stdout: { write: (text) => { out += text; } } });
+    assert.equal(JSON.parse(out).attached, 1);
+    const written = JSON.parse(await readFile(path.join(research, "captures", "x-tibo-1.json"), "utf8"));
+    assert.equal(written.data.handle, "@thsottiaux");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
