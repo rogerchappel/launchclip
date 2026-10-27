@@ -174,6 +174,17 @@ and projected by `scripts/vendor-world.mjs`. The world-atlas licence text is
 kept at the top of that file. Natural Earth asks for no attribution; we credit
 it anyway.
 
+## MathJax
+
+`src/math/mathjax-tex-svg.js` is MathJax 3.2.2 (<https://www.mathjax.org>),
+its TeX input and SVG output bundled for Node by `scripts/vendor-mathjax.mjs`
+to typeset the `equation` module. MathJax is Copyright (c) 2009-2022 The
+MathJax Consortium and licensed under the Apache License, Version 2.0
+(<http://www.apache.org/licenses/LICENSE-2.0>); the notice is kept at the top
+of that file. Its glyph outlines are drawn from the MathJax TeX fonts and are
+written into a typeset equation's `params.typeset`. MathJax is not relicensed
+under LaunchClip's MIT License.
+
 ## Other direct dependencies
 
 At the time of the 0.2.0 release, HyperFrames declares Apache-2.0;

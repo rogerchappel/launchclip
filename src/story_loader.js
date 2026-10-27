@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { typesetProjectStory } from "./math/index.js";
 import { applyProjectStyle } from "./story_style.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 
@@ -53,6 +54,8 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   // A "style" pack is merged first (src/story_style.js), so every reader sees the same story.
   const styled = await applyProjectStyle(JSON.parse(await readFile(storyFile, "utf8")), { projectDir: project });
   const story = styled.story;
+  // Equation scenes carry LaTeX; their glyphs are typeset here, in memory.
+  await typesetProjectStory(story);
   if (typeof module.validateStory === "function") {
     const validation = module.validateStory(story);
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid: ${(validation.errors ?? []).join("; ")}`);
