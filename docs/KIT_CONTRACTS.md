@@ -3245,6 +3245,14 @@ module hides captions (the post's words are on screen).
   speed (0.45–1.4 s for the phrase); the space between highlighted words is
   inside the bar. Time it to a word with a scene hit `{at: "word:…", event:
   "highlight"}`.
+- Hero size: a single post (and the front card of a cascade) fills its
+  rect: the full width of `params.rect`, else 90% of the safe width in 16:9
+  (all of it in 9:16), with body text at 4.2% of that width (at most 72 px,
+  never below 50/54 px), shrunk only as far as the rect's height needs; a
+  card still too tall (an image below the text) narrows, keeping its
+  proportions, down to 40% of the rect. The avatar, initials and every row
+  scale with the body size. Line counts use 0.52 em per character (the
+  registry's body faces set 0.46–0.50 em; `fontWidthScale` widens it).
 - Context cards (the unfocused cards of a list, sorted cards) are compact
   (no time line or divider) and may set below the key-text floor, down to
   `max(min.meta, 0.6 × min.key)`; the focused card and the column labels

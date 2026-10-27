@@ -23,9 +23,10 @@
 
 import {timingRules} from './catalog-b-base.mjs';
 import {hex2} from './catalog-b-view.mjs';
-import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
+import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
 import {el, set, tw} from './catalog-h-view.mjs';
 import {iconNode} from './icons.mjs';
+import {fontWidthScale} from './fonts.mjs';
 
 export const PLATFORMS = Object.freeze(['x', 'threads', 'bluesky', 'linkedin', 'reddit', 'generic']);
 export const LOOKS = Object.freeze(['glass', 'native', 'light']);
@@ -194,13 +195,24 @@ function phraseWords(check, words, phrase, path, taken) {
 // ---------------------------------------------------------------------------
 // Card metrics: sizes from the body size, and the estimated height
 
-function lineCount(text, size, width) {
+// Mean advance (em) of running text, spaces included, in the default body
+// face; measured in Chrome at 0.46–0.50 for the registry's body faces (0.6 is
+// the shared, more cautious model). fontWidthScale widens it for wide faces.
+const BODY_ADVANCE = 0.52;
+
+/** The card's text advance (em per character) in the brand's body face. */
+function advanceOf(fonts) {
+  const family = String(fonts?.body ?? '').split(',')[0].trim().replace(/^['"]|['"]$/g, '');
+  return r2(BODY_ADVANCE * fontWidthScale(family, 'body') * 1000) / 1000;
+}
+
+function lineCount(text, size, width, advance) {
   let total = 0;
-  const space = textWidth(' ', size, 'body');
+  const space = size * advance;
   for (const para of text.split('\n')) {
     let lines = 1, used = 0;
     for (const word of para.split(/\s+/).filter(Boolean)) {
-      const w = textWidth(word, size, 'body');
+      const w = [...word].length * size * advance;
       const wraps = Math.max(1, Math.ceil(w / width));
       if (wraps > 1) { lines += wraps - (used ? 0 : 1); used = w % width; continue; }
       if (used && used + space + w > width) { lines++; used = w; } else used += (used ? space : 0) + w;
@@ -213,24 +225,24 @@ function lineCount(text, size, width) {
 /** Sizes and estimated height of `post` as a card `width` px wide with body text `bs` px. */
 export function cardMetrics(b, post, width, bs, {compact = false} = {}) {
   const meta = r2(Math.max(b.min.meta, bs * 0.68));
-  const s = {compact, bs, meta, name: bs, pad: r2(bs * 0.8), gap: r2(bs * 0.5), avatar: r2(bs * 1.8), icon: r2(meta * 1.12), radius: r2(bs * 0.6), line: 1.3, width};
+  const s = {compact, bs, meta, name: bs, pad: r2(bs * 0.8), gap: r2(bs * 0.5), avatar: r2(bs * 1.8), icon: r2(meta * 1.12), radius: r2(bs * 0.6), line: 1.3, width, advance: advanceOf(b.fonts)};
   s.inner = r2(width - 2 * s.pad);
   const lh = v => v * s.line;
   const linkedin = post.platform === 'linkedin', reddit = post.platform === 'reddit';
   const headerText = linkedin ? lh(s.name) + lh(meta) * (post.headline ? 2 : 1) : post.platform === 'threads' ? lh(s.name) : lh(s.name) + lh(meta);
   s.headerH = r2(Math.max(reddit ? s.avatar * 0.8 : s.avatar, headerText));
   if (reddit) s.headerH = r2(Math.max(s.avatar * 0.8, lh(meta) * 2));
-  s.title = post.title ? {size: r2(bs * 1.12), lines: lineCount(post.title, bs * 1.12, s.inner)} : null;
+  s.title = post.title ? {size: r2(bs * 1.12), lines: lineCount(post.title, bs * 1.12, s.inner, s.advance)} : null;
   const side = post.media?.layout === 'side';
   s.thumbW = side ? r2(s.inner * 0.34) : 0;
   s.textW = r2(s.inner - (side ? s.thumbW + s.gap : 0));
-  s.bodyLines = lineCount(post.text, bs, s.textW);
+  s.bodyLines = lineCount(post.text, bs, s.textW, s.advance);
   s.bodyH = r2(s.bodyLines * lh(bs));
   if (post.media) s.mediaH = side ? r2(s.thumbW / Math.max(1, post.media.aspect) * 1.0) : r2(s.inner / post.media.aspect);
   if (post.quote) {
     s.quoteSize = r2(Math.max(b.min.key, bs * 0.86));
     s.quotePad = r2(bs * 0.5);
-    s.quoteLines = lineCount(post.quote.text, s.quoteSize, s.inner - 2 * s.quotePad);
+    s.quoteLines = lineCount(post.quote.text, s.quoteSize, s.inner - 2 * s.quotePad, s.advance);
     s.quoteH = r2(2 * s.quotePad + lh(meta) * 1.15 + s.gap * 0.4 + s.quoteLines * lh(s.quoteSize) + 2);
   }
   const row = Math.max(s.icon, lh(meta));
@@ -266,6 +278,27 @@ export function fitCard(b, post, width, maxH, preferred, path) {
     if (s.height <= maxH) return s;
   }
   return b.check.fail(path, `does not fit: the card needs more than ${Math.round(maxH)} px at ${Math.ceil(b.min.key)} px text; quote a shorter excerpt (mark cuts with …), drop media or give fewer posts`);
+}
+
+/**
+ * A hero card fills its rect: the full width of params.rect, else 90% of the
+ * safe area in 16:9 (all of it in 9:16), with body text in proportion to that
+ * width (4.2%, at most 72 px, never below the module's old default), shrunk
+ * only as far as the height needs; a card still too tall narrows, keeping
+ * its proportions, down to 40% of the rect.
+ */
+export function heroCard(b, post, maxH, path, {preferred = b.u(b.portrait ? 54 : 50), fill = 0.9} = {}) {
+  const W = b.rect.width;
+  const full = r2(b.portrait || b.params.rect !== undefined ? W : W * fill);
+  // A tall post (an image below the text) narrows until it fits, down to 40% of the rect.
+  for (let width = full; width >= Math.min(full, W * 0.4) - 1e-6; width = r2(width - W * 0.05)) {
+    const size = Math.max(preferred, Math.min(b.u(72), width * 0.042));
+    for (let bs = Math.floor(size); bs >= Math.ceil(b.min.key); bs -= 2) {
+      const s = cardMetrics(b, post, width, bs);
+      if (s.height <= maxH) return s;
+    }
+  }
+  return fitCard(b, post, full, maxH, preferred, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -529,10 +562,11 @@ function postResolve(params, ctx) {
   const focus = b.params.focus === undefined ? b.params.focusAt !== undefined : check.bool(b.params.focus, 'params.focus');
 
   const W = rect.width;
-  const width = r2(b.portrait ? W : Math.min(W, u(1240)));
+
   const sourceSize = r2(Math.max(b.min.meta, u(26)));
   const sourceH = r2(sourceSize * 1.3 + u(22));
-  const s = fitCard(b, post, width, rect.height - sourceH - u(40), u(b.portrait ? 54 : 50), 'params.text');
+  const s = heroCard(b, post, rect.height - sourceH - u(40), 'params.text');
+  const width = s.width;
 
   const buildAt = b.timeOf('build', b.params.at, 'params.at', 0.2, {min: 0});
   const buildEnd = rt(buildAt + 0.9);
@@ -649,12 +683,14 @@ function stackResolve(params, ctx) {
   const src = sourceBlock(b);
   const W = rect.width, H = rect.height - src.h;
   const cascade = b.variant === 'cascade';
-  const width = r2(b.portrait ? W : Math.min(W, u(cascade ? 1180 : 1080)));
+  let width = r2(b.portrait ? W : Math.min(W, u(1080)));
   const peek = r2(u(b.portrait ? 64 : 52));
   const gap = r2(u(28));
   let metrics;
   if (cascade) {
-    const front = fitCard(b, posts[focus], width, H - (n - 1) * peek, u(b.portrait ? 52 : 48), `params.posts[${focus}].text`);
+    // The front card is the hero: it fills the rect as a single post does.
+    const front = heroCard(b, posts[focus], H - (n - 1) * peek, `params.posts[${focus}].text`, {preferred: u(b.portrait ? 52 : 48)});
+    width = front.width;
     metrics = posts.map((post, i) => (i === focus ? front : cardMetrics(b, post, width, front.bs)));
   } else {
     // The focused card keeps key-size text; the others are compact and shrink
