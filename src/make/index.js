@@ -50,6 +50,7 @@ export const MAKE_PATHS = Object.freeze({
   assets: "ASSETS.json",
   brief: "BRIEF.md",
   script: "SCRIPT.json",
+  angle: "ANGLE.json",
   words: "NARRATION.json",
   story: "storyboard.json",
   direction: "DIRECTION.json",
@@ -451,7 +452,7 @@ async function prepareMotion(ctx) {
     const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, repair: { previous: script.narration, errors: first.errors } });
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, repair: { previous: script.narration, errors: first.errors } });
       addCost(report, "script-repair", ctx.model, repaired);
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
@@ -461,7 +462,7 @@ async function prepareMotion(ctx) {
   if (!reuse && needsResize(take.duration, target)) {
     ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
-    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
+    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
     script = { ...resized, passes: [...(script.passes ?? []), { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
     take = await synthesize(ctx, script.narration);
@@ -471,6 +472,8 @@ async function prepareMotion(ctx) {
   script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
+  // The angle the script is written on (a short video's script pass finds it): the agent path's ANGLE.json.
+  if (script.angle) await writeJson(path.join(project, MAKE_PATHS.angle), { schema_version: "launchclip.angle.v1", ...script.angle, source: "script pass" });
   state.script = { hash: scriptHash };
   ctx.script = script;
   ctx.words = take.words;
@@ -479,7 +482,7 @@ async function prepareMotion(ctx) {
   if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, provider: voiceProvider, ...(options.voiceId ? { voice: String(options.voiceId) } : {}) };
-  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
 }
@@ -770,6 +773,10 @@ async function composeBrief(ctx, manifest) {
   const lane = ctx.routing.lane;
   if (lane === "motion") lines.push("## Narration (already synthesised; the word timings are given, so time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "motion" && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}${entry.role ? ` (${entry.role})` : ""}: ${entry.text}`), "");
+  // Titles best first (scored in the script pass): the cover echoes the first.
+  if (lane === "motion" && ctx.script?.title_scores?.length) lines.push("## Titles (best first; the cover echoes the first)", "", ...ctx.script.title_options.map((title, index) => `${index + 1}. ${title}`), "");
+  const angle = ctx.script?.angle;
+  if (lane === "motion" && angle) lines.push("## Angle (the script is written on it; the visuals follow it, never the crowded take)", "", `- Crowded take to avoid: ${angle.crowded}`, `- Angle: ${angle.angles[angle.chosen]?.angle ?? angle.angles[0].angle}`, ...(angle.inventory.length ? [`- What only this subject has (build scenes from these): ${angle.inventory.join("; ")}`] : []), "");
   if (ctx.skeleton) lines.push(`## Skeleton: ${ctx.skeleton.title} (build every scene on it; the structure gate checks the opening image and the key shot)`, "", ...skeletonPlanLines(ctx.skeleton).map((line) => `- ${line}`), "");
   if (lane === "voiceover-motion") lines.push("## Voiceover transcript (the supplied voiceover; time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "footage-led") lines.push("## Recording transcript (the edited base recording; its words are the narration)", "", ctx.narrationText, "", "Dress the recording: overlays and inserts on the strong lines only (10–40% of the runtime); gaps show the speaker.", "");

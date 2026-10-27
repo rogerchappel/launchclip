@@ -37,7 +37,7 @@ export const PLATFORM_LIMITS = Object.freeze({
 });
 
 // Teaser phrasing; a title meant to sell names the concrete outcome instead.
-const TEASERS = /(you won'?t believe|this one (trick|thing)|the secret|wait (for|till) (it|the end)|what happens next|\.\.\.$|…$)/i;
+export const TEASERS = /(you won'?t believe|this one (trick|thing)|the secret|wait (for|till) (it|the end)|what happens next|\.\.\.$|…$)/i;
 const STOP = new Set(["the", "and", "for", "with", "that", "this", "your", "you", "from", "into", "what", "when", "why", "how", "are", "was", "all", "one", "can", "does", "more", "than", "just", "about", "video"]);
 
 /**

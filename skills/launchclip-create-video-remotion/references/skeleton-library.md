@@ -9,14 +9,15 @@ Every short video (90 s or less) meets the same quality rules, and when the brie
 - **Open on an image.** The scene at 0 s shows the hook's subject (a photo, object, chart, character or product scene), never a title card (`hook-title`, `motion-title`, `kinetic-words`, `section-card`, `masthead`, `glass-word`, `emphasis-caption`). A recording that opens the video counts as the image.
 - **A share line.** One spoken line in the last 40% that gives a viewer a reason to send the video or comment: a surprise, a line they recognise themselves in, one small act, a grounded claim to argue with, or a takeaway worth saving. Give it the `share` role in `STORY.json`.
 - **Concrete visuals.** Every beat's `visual_noun` names a thing the viewer can picture, never a bare abstraction ("the gap", "growth").
-- **5 title options**, the best first.
+- **5 title options, scored and best first.** Score each 0-10 on curiosity (a gap that carries self-interest, never a tease), clarity (what the video is, at a glance) and match (it fits the opening image and the hook); order by 0.4 × curiosity + 0.35 × clarity + 0.25 × match, minus 3 for over 70 characters or a tease. `make` records them as `title_scores` in `SCRIPT.json`.
+- **The cover is a thumbnail, not the opening.** Set `story.cover` `{text, number?, kicker?, frame}` with `frame` at the seconds of the strongest image (the key shot), never `"first"`, which would open the video on a text card. `cover.text` echoes the best title; on a library skeleton, build it on the skeleton's cover idea. finish renders it as `video/cover.png`.
 
 `launchclip finish` checks these in its `structure` gate (and the key shot, on a library skeleton); `launchclip cinematic-check` reads the same gate.
 
 ## Using the library on the agent path
 
 1. **Skeleton.** Run `launchclip skeletons choose "<brief>" --medium motion|character|footage|demo --aspect 9:16 --duration 30`, or read the table below. Never use a **blocked** skeleton: the kit cannot draw its key shot, so the video would promise a moment it never shows. No match is fine: use the script format's own skeleton and the short-video rules.
-2. **Angle.** Before the concepts, write `ANGLE.json`: `crowded` (how this topic is usually done, one sentence), `inventory` (eight to twelve concrete things only this subject has) and `angles` (three fresh angles, each saying how it differs from `crowded`). Spread the five concepts across the angles.
+2. **Angle.** Before the concepts, write `ANGLE.json`: `crowded` (how this topic is usually done, one sentence), `inventory` (eight to twelve concrete things only this subject has), `angles` (three fresh angles, each `{angle, differs}`) and `chosen` (the index the story is written on). Spread the five concepts across the angles. `make` writes the same file from its script pass.
 3. **Judge** in a fresh context (a subagent that sees only the brief, evidence, the skeleton and the anonymous concepts), and score `angle_freshness` and `share_strength` with the other criteria.
 4. **Story.** Write `STORY.json` on the skeleton's beats, roles included.
 5. **Storyboard.** Put `"skeleton": {"id": "<id>", "version": "<month>"}` in `storyboard.json`; render the key shot inside its beat.

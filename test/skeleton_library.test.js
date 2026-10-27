@@ -7,7 +7,7 @@ import { LIBRARY_SKELETONS, SKELETON_SCHEMA, TITLE_CARD_MODULES, chooseSkeleton,
 import { SHORT_VIDEO_RULES, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../kit/core/script-formats.mjs";
 import { validateStory } from "../kit/core/story.mjs";
 import { loadSkeletonLibrary, runSkeletonsCommand, structureGate } from "../src/skeletons.js";
-import { writeScript } from "../src/make/script.js";
+import { parseAngle, rankTitles, writeScript } from "../src/make/script.js";
 import { assessCinematicReadiness } from "../src/production_readiness.js";
 
 const story = (scenes, { duration = 30, base = null } = {}) => ({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration }, base, scenes });
@@ -170,4 +170,52 @@ test("cinematic readiness blocks on a failed structure gate and passes when it i
   assert.ok(failed.blockers.some((entry) => /structure gate failed: first_frame/.test(entry.message ?? JSON.stringify(entry))));
   const skipped = assessCinematicReadiness({ ...input, structure: { status: "skipped" } }, { creativeReceipts: false });
   assert.equal(skipped.gates.structure.status, "not-required");
+});
+
+test("a short video's script pass finds the angle and scores the titles in the same call, best first", async () => {
+  let request = null;
+  const client = {
+    provider: "openai",
+    async runStructured(input) {
+      request = input;
+      return { model: "m", usage: {}, value: {
+        title: "Working title", narration: "One. Two.", beats: [{ beat: "hook", text: "One." }, { beat: "share", text: "Two." }],
+        title_options: ["Wait for the end...", "A billion seconds is 31.7 years", "Big numbers", "Million vs billion", "How long is a billion?"],
+        title_scores: [
+          { title: "Wait for the end...", curiosity: 10, clarity: 3, match: 4 },
+          { title: "A billion seconds is 31.7 years", curiosity: 7, clarity: 10, match: 9 },
+          { title: "Big numbers", curiosity: 2, clarity: 4, match: 3 },
+          { title: "Million vs billion", curiosity: 6, clarity: 8, match: 7 },
+          { title: "How long is a billion?", curiosity: 8, clarity: 8, match: 8 }
+        ],
+        angle: { crowded: "A chart of how many zeros a billion has.", inventory: ["a one-dollar coin", "a wall calendar"], angles: [{ angle: "Zeros", differs: "none" }, { angle: "Get paid $1 a second", differs: "personal stake" }], chosen: 1 }
+      } };
+    }
+  };
+  const result = await writeScript({ client, prompt: "How big is a billion", duration: 30, plan: { aspect: "9:16" } });
+  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "angle", "title_scores"]);
+  assert.match(request.instructions, /## Angle \(before you write\)/);
+  assert.match(request.instructions, /title_scores: score every title option 0-10/);
+  // The clear, concrete title wins; the tease (the model's own favourite on curiosity) loses 3 and falls to fourth; the best becomes the title.
+  assert.deepEqual(result.title_options, ["A billion seconds is 31.7 years", "How long is a billion?", "Million vs billion", "Wait for the end...", "Big numbers"]);
+  assert.equal(result.title_scores[3].score, 3.05);
+  assert.equal(result.title, "A billion seconds is 31.7 years");
+  assert.equal(result.title_scores[0].score, 8.55);
+  assert.equal(result.angle.angles[result.angle.chosen].angle, "Get paid $1 a second");
+  // A repair keeps the angle; a long video asks for neither.
+  await writeScript({ client, prompt: "How big is a billion", duration: 30, plan: { aspect: "9:16" }, angle: result.angle, repair: { previous: "One. Two.", errors: ["x"] } });
+  assert.match(request.input, /## Angle \(keep it\)[\s\S]*Get paid \$1 a second/);
+  await writeScript({ client, prompt: "How big is a billion", duration: 300, plan: { aspect: "16:9" } });
+  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats"]);
+  assert.equal(parseAngle({ crowded: "", angles: [] }), null);
+  assert.equal(rankTitles(["x".repeat(80), "short"], [{ title: "x".repeat(80), curiosity: 9, clarity: 9, match: 9 }, { title: "short", curiosity: 7, clarity: 7, match: 7 }])[0].title, "short");
+});
+
+test("a short video's cover is a thumbnail frame, not a text card opening the video", () => {
+  const base = story([scene("s1", "count-up", 0, 30)]);
+  assert.match(storyboardStructureErrors({ ...base, cover: { text: "A billion?" } })[0], /cover card \(cover\.frame "first"\)\. Set cover\.frame to the seconds of the strongest image/);
+  assert.deepEqual(storyboardStructureErrors({ ...base, cover: { text: "A billion?", frame: 12 } }), []);
+  // The resolved story carries the card as a scene: still the cover card.
+  const resolved = story([{ ...scene("cover", "hook-title", 0, 1.5), cover: true }, scene("s1", "count-up", 1.5, 30)]);
+  assert.match(structureCheck(resolved, null, {}).findings[0], /opens on the cover card/);
 });

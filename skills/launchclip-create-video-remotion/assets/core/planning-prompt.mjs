@@ -933,9 +933,9 @@ export function isShortFormat(format) {
 
 export function coverLines() {
   return [
-    `Set cover: {text, number?, kicker?} (frame defaults to "first": the video opens on a ${COVER_SECONDS} s cover card, which is also the thumbnail). It is what the profile grid shows, so it must read on its own.`,
-    `cover.text echoes the hook in at most ${COVER_MAX_WORDS} words: one number or a short question ("100g PROTEIN. ALL AT ONCE?", "10 vs 25: WHICH BUILDS MORE MUSCLE?"). Name the concrete outcome; never tease and never lead with the brand or product name.`,
-    'cover.number: the one huge number when there is one ("100g"); it leads the headline unless the text already says it. cover.kicker: an optional sticker of at most 18 characters.',
-    `Every scene that starts in the first ${COVER_SECONDS} s starts when the cover ends, so the first scene must run past ${COVER_SECONDS + 0.5} s and its param times must fit what is left; or set cover.frame to the seconds of a frame that already reads as the cover.`
+    'Set cover: {text, number?, kicker?, frame}. finish renders it on its own as video/cover.png, the thumbnail to upload; it is what the profile grid shows, so it must read on its own.',
+    `cover.frame: the seconds of the strongest image in the video (the key shot when the brief names one), a frame that already reads as the cover. Never "first": that opens the video on a ${COVER_SECONDS} s text card, and a short video opens on an image.`,
+    `cover.text echoes the best title (the first under "Titles", when the brief lists them) and the hook in at most ${COVER_MAX_WORDS} words: one number or a short question ("100g PROTEIN. ALL AT ONCE?", "10 vs 25: WHICH BUILDS MORE MUSCLE?"). Name the concrete outcome; never tease and never lead with the brand or product name. When the brief names a skeleton's cover idea, build the cover on it.`,
+    'cover.number: the one huge number when there is one ("100g"); it leads the headline unless the text already says it. cover.kicker: an optional sticker of at most 18 characters.'
   ];
 }
