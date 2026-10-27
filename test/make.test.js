@@ -149,7 +149,7 @@ test("--visual-history-dir: the second video plans against the first, varies the
     assert.equal(second.status, "ready-for-review", JSON.stringify(second.stages));
     const request = calls.slice(before).find((call) => call.schemaName === "launchclip_storyboard");
     assert.match(request.input, /## Recent videos \(do not repeat\)\n\nThis video joins a series of 1 earlier video/);
-    assert.match(request.input, /hook "Payouts never match your books\."; opens on hook-title; modules hook-title → media-window → cta; background default; captions word-highlight/);
+    assert.match(request.input, /hook "Payouts never match your books\."; opens on media-window; modules media-window → hook-title → cta; background default; captions word-highlight/);
     const two = JSON.parse(await readFile(path.join(cwd, "two/storyboard.json"), "utf8"));
     assert.notEqual(two.background?.kind ?? "default", "default", "the background changed");
     assert.notEqual(two.overlays[0].style, "word-highlight", "the caption preset changed");
@@ -165,7 +165,7 @@ test("--visual-history-dir: the second video plans against the first, varies the
     const index = JSON.parse(await readFile(path.join(history, "launchclip-history.json"), "utf8"));
     assert.deepEqual(index.entries.map((entry) => path.basename(entry.project)), ["two", "one"]);
     assert.equal(index.entries[0].hook.text, "Payouts never match your books.");
-    assert.deepEqual(index.entries[0].modules, ["hook-title", "media-window", "cta"]);
+    assert.deepEqual(index.entries[0].modules, ["media-window", "hook-title", "cta"]);
     assert.equal(index.entries[0].background.kind, two.background.kind);
 
     // A rerun of the first keeps its plan, is linted against the second only, and replaces its entry.

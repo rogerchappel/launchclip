@@ -30,7 +30,9 @@ import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
-import { chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
+import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "../../kit/core/script-formats.mjs";
+import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStructureErrors } from "../../kit/core/skeleton-library.mjs";
+import { loadSkeletonLibrary } from "../skeletons.js";
 import { runHeadlessCritic } from "./critic.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
@@ -432,20 +434,24 @@ async function prepareMotion(ctx) {
   const notes = await notesText(ctx);
   const rules = rulesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
-  // The planning pass: format, goal and awareness (flags, else the brief's defaults).
-  const plan = chooseScriptPlan({ prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options) });
-  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness], ...(rules ? { rules } : {}), v: 2 });
+  // The skeleton library (docs/VIRAL_FORMATS_RFC.md): a short video whose brief fits a library skeleton is built on it (--skeleton pins one).
+  const skeleton = chooseMakeSkeleton(ctx, target);
+  // The planning pass: format, goal and awareness (flags, else the brief's defaults), on the library skeleton's beats when there is one.
+  const pinned = !skeleton && SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : undefined;
+  const planOptions = { prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options), ...(pinned ? { skeleton: pinned } : {}) };
+  const plan = skeleton ? skeletonScriptPlan(planOptions, skeleton) : chooseScriptPlan(planOptions);
+  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness], skeleton: [plan.skeleton, skeleton?.version ?? null], ...(rules ? { rules } : {}), v: 3 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = script && state.script?.hash === scriptHash && script.narration;
   if (!reuse) {
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, ${plan.format}, about ${plan.word_target} words)`);
-    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan });
+    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
     const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, format: plan.format, goal: plan.goal, awareness: plan.awareness });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, repair: { previous: script.narration, errors: first.errors } });
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, repair: { previous: script.narration, errors: first.errors } });
       addCost(report, "script-repair", ctx.model, repaired);
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
@@ -455,7 +461,7 @@ async function prepareMotion(ctx) {
   if (!reuse && needsResize(take.duration, target)) {
     ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
-    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
+    const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
     script = { ...resized, passes: [...(script.passes ?? []), { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
     take = await synthesize(ctx, script.narration);
@@ -476,6 +482,38 @@ async function prepareMotion(ctx) {
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
+}
+
+// The library skeleton for a motion-lane script: --skeleton <id> | auto
+// (default) | none, from the library (built-in plus ~/.launchclip/skeletons
+// and the project's) for the brief's medium; a script format's own skeleton
+// id (--skeleton call-out-pas) is a pin for chooseScriptPlan instead. Records
+// the choice in MAKE.json and warns when the skeleton wants a better voice
+// than the one in use.
+function chooseMakeSkeleton(ctx, target) {
+  const { options, report, routing, project, voiceProvider } = ctx;
+  const { skeletons, problems } = loadSkeletonLibrary({ project });
+  for (const problem of problems) report.warnings.push(`skeleton library: ${problem}`);
+  const medium = skeletonMedium(ctx);
+  const requested = options.skeleton ?? "auto";
+  const choice = chooseSkeleton({ prompt: ctx.text, duration: target, aspect: routing.aspect, medium, requested: SCRIPT_SKELETONS[requested] ? "none" : requested, skeletons });
+  if (choice.unknown) throw new Error(`unknown skeleton ${choice.unknown}; run launchclip skeletons list (or use auto or none)`);
+  const skeleton = choice.skeleton;
+  report.skeleton = { id: skeleton?.id ?? (SCRIPT_SKELETONS[requested] ? requested : null), library: Boolean(skeleton), version: skeleton?.version ?? null, medium, reasons: SCRIPT_SKELETONS[requested] ? [`skeleton ${requested}: --skeleton`] : choice.reasons, ...(choice.blocked.length ? { blocked: choice.blocked } : {}) };
+  if (skeleton) {
+    ctx.say(`skeleton: ${skeleton.title} (${skeleton.id}); ${choice.reasons[0]}`);
+    if (skeleton.voice.tier === "human-or-premium" && voiceProvider !== "elevenlabs") report.warnings.push(`skeleton ${skeleton.id} needs a human or premium read for the final: this draft uses the ${voiceProvider} voice (record the script yourself, or --voice elevenlabs for the final take only)`);
+  }
+  ctx.skeleton = skeleton;
+  return skeleton;
+}
+
+// What the video is made of, for matching skeletons: a cast story, a product
+// demo or recording, else motion graphics.
+function skeletonMedium(ctx) {
+  if (/\b(characters?|animated|animation|cartoon|cast)\b/i.test(ctx.text ?? "")) return "character";
+  if ((ctx.routing?.media ?? []).some((item) => ["screen-recording", "product-demo"].includes(item.role)) || ctx.demo?.length) return "demo";
+  return "motion";
 }
 
 async function synthesize(ctx, text) {
@@ -505,7 +543,7 @@ async function stageStoryboard(ctx) {
   // shipped one for the routed lane, aspect, duration and platform.
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even
@@ -541,7 +579,7 @@ async function stageStoryboard(ctx) {
     profile,
     maxRepairs,
     ...(history?.prompt ? { history: history.prompt } : {}),
-    extraCheck: (story) => assetErrors(story, allowed)
+    extraCheck: (story) => [...assetErrors(story, allowed), ...storyboardStructureErrors(story, ctx.skeleton)]
   });
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
@@ -605,6 +643,8 @@ export function finalizeStory(storyboard, ctx) {
   if (ctx.routing.music && ctx.options.music == null) story.audio.music = `assets/${ctx.routing.music.path}`;
   else if (typeof story.audio.music === "string" && story.audio.music.startsWith("assets/") && !ctx.routing.music) delete story.audio.music;
   if (!story.title && ctx.script?.title) story.title = ctx.script.title;
+  // The library skeleton the story is built on: finish's structure gate checks its key shot.
+  if (ctx.skeleton) story.skeleton = { id: ctx.skeleton.id, version: ctx.skeleton.version };
   // Loop endings are a Shorts device (portrait, 60 s or less); a landscape or
   // longer video ends on its last scene instead of replaying the hook.
   const { width, height, duration } = story.format ?? {};
@@ -729,7 +769,8 @@ async function composeBrief(ctx, manifest) {
   const lines = [`# ${ctx.script?.title ?? "Video brief"}`, "", ctx.text, ""];
   const lane = ctx.routing.lane;
   if (lane === "motion") lines.push("## Narration (already synthesised; the word timings are given, so time scenes to its words)", "", ctx.narrationText, "");
-  if (lane === "motion" && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}: ${entry.text}`), "");
+  if (lane === "motion" && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}${entry.role ? ` (${entry.role})` : ""}: ${entry.text}`), "");
+  if (ctx.skeleton) lines.push(`## Skeleton: ${ctx.skeleton.title} (build every scene on it; the structure gate checks the opening image and the key shot)`, "", ...skeletonPlanLines(ctx.skeleton).map((line) => `- ${line}`), "");
   if (lane === "voiceover-motion") lines.push("## Voiceover transcript (the supplied voiceover; time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "footage-led") lines.push("## Recording transcript (the edited base recording; its words are the narration)", "", ctx.narrationText, "", "Dress the recording: overlays and inserts on the strong lines only (10–40% of the runtime); gaps show the speaker.", "");
   if (notes.length) lines.push("## Notes", "", ...notes, "");

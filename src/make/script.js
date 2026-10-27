@@ -5,8 +5,10 @@
 // from the prompt, the notes, the asset descriptions and any transcripts. One
 // optional repair pass fixes the script checks' errors (src/script_check.js),
 // and one optional resize pass corrects the length once the real take is
-// measured.
-import { chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../../kit/core/script-formats.mjs";
+// measured. On a library skeleton (kit/core/skeleton-library.mjs) the script
+// is written on its beats; a short video asks for five title options, best first.
+import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../../kit/core/script-formats.mjs";
+import { skeletonScriptPlan } from "../../kit/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 
 export const SCRIPT_VERSION = "launchclip.make-script.v1";
@@ -25,7 +27,7 @@ export const SCRIPT_SCHEMA = Object.freeze({
     narration: { type: "string", description: "The complete voiceover text, plain sentences, no stage directions: the beats' text joined in order." },
     title_options: {
       type: "array",
-      description: "Three publish-ready titles (≤ 70 characters each). For goal=convert the concrete outcome goes in the title; no curiosity bait.",
+      description: "Three publish-ready titles (five, best first, for a video of 90 s or less; ≤ 70 characters each). For goal=convert the concrete outcome goes in the title; no curiosity bait.",
       items: { type: "string" }
     },
     beats: {
@@ -50,14 +52,17 @@ Write narration that will be read aloud by a text-to-speech voice:
 - Plain spoken sentences. No headings, bullet points, emoji, stage directions, sound cues or speaker labels.
 - Each sentence can own a scene: make every one concrete, and keep product names exactly as given.`;
 
-const OUTPUT = `Output:
+const output = (titles) => `Output:
 - narration: the whole script. beats: the same sentences split by beat id, in the plan's order; their text joined is the narration.
-- title: a short working title. title_options: three publish-ready titles the video pays off.
+- title: a short working title. title_options: ${titles} publish-ready titles the video pays off.
 - Hit the word budget within ±10%. Return only the JSON object.`;
 
-/** The script pass instructions for a plan (chooseScriptPlan()). */
+/** How many title options a plan asks for: five, best first, for a short video; else three. */
+export const titleCount = (plan) => (Number(plan?.duration) <= SHORT_VIDEO_SECONDS ? 5 : 3);
+
+/** The script pass instructions for a plan (chooseScriptPlan() or skeletonScriptPlan()). */
 export function scriptInstructions(plan) {
-  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), "", OUTPUT].join("\n");
+  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), "", output(titleCount(plan) === 5 ? "five, the best first," : "three")].join("\n");
 }
 
 /** Target words for a duration at WORDS_PER_MINUTE. */
@@ -67,7 +72,7 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 
 /**
  * options: {client, model, provider, prompt, notes: [text], rules (a collection's RULES.md text), assets: [line], transcripts: [text],
- *   duration, words (target override), plan (a chooseScriptPlan() result, or its
+ *   duration, words (target override), skeleton (a library skeleton: write on its beats), plan (a chooseScriptPlan() result, or its
  *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
  *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
@@ -80,7 +85,8 @@ export async function writeScript(options = {}) {
   const { client, model = null, provider = null, prompt, notes = [], rules = null, assets = [], transcripts = [], duration, resize = null, repair = null } = options;
   if (!client) throw new Error("writeScript needs a model client");
   const given = options.plan ?? {};
-  const plan = chooseScriptPlan({ prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, words: options.words });
+  const planOptions = { prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, words: options.words };
+  const plan = options.skeleton ? skeletonScriptPlan(planOptions, options.skeleton) : chooseScriptPlan({ ...planOptions, skeleton: given.skeleton });
   const words = plan.word_target;
   const lines = [
     `Write the narration for this video, about ${words} words (it should run about ${duration} seconds read at ${plan.wpm} words a minute), as a ${plan.format} script on the ${plan.skeleton} skeleton.`,
@@ -98,24 +104,28 @@ export async function writeScript(options = {}) {
   }
   if (repair?.previous) {
     const errors = [repair.errors ?? []].flat().map((error, index) => `${index + 1}. ${typeof error === "string" ? error : `[${error.id}] ${error.message} Fix: ${error.fix}`}`);
-    lines.push("", "## Repair", "", "Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief, the length), and return the beats and three title options again.", "", ...errors, "", "Previous narration:", "", repair.previous);
+    lines.push("", "## Repair", "", `Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief, the length), and return the beats and ${titleCount(plan) === 5 ? "five title options, best first," : "three title options"} again.`, "", ...errors, "", "Previous narration:", "", repair.previous);
   }
   const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: SCRIPT_SCHEMA, schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : parseText(result?.text);
-  const beats = parseBeats(value?.beats);
+  // Each beat keeps its role from the plan (a library skeleton's share beat is how the structure gate finds it).
+  const beats = parseBeats(value?.beats).map((entry) => {
+    const role = plan.beats.find((item) => item.id === entry.beat)?.role;
+    return role ? { ...entry, role } : entry;
+  });
   const narration = cleanNarration(value?.narration) || cleanNarration(beats.map((entry) => entry.text).join(" "));
   if (!narration) throw new Error("the script pass returned no narration text");
   const usage = result?.usage ?? {};
   const cost = estimateModelUsageCost(provider ?? client?.provider ?? "openai", result?.model ?? model, usage);
   const title = String(value?.title ?? "").trim().slice(0, 80) || "Untitled";
-  const titleOptions = Array.isArray(value?.title_options) ? value.title_options.map((entry) => String(entry ?? "").trim().slice(0, 100)).filter(Boolean).slice(0, 3) : [];
+  const titleOptions = Array.isArray(value?.title_options) ? value.title_options.map((entry) => String(entry ?? "").trim().slice(0, 100)).filter(Boolean).slice(0, titleCount(plan)) : [];
   return {
     schema_version: SCRIPT_VERSION,
     title,
     title_options: titleOptions.length ? titleOptions : [title],
     narration,
     beats,
-    plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons },
+    plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
     word_target: words,
     word_count: narration.split(/\s+/).filter(Boolean).length,
     usage,
