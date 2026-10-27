@@ -10,7 +10,8 @@
 // re-run of the same page gives the same clip.
 //
 // This file has no imports: the player page (src/evidence/player.js) inlines
-// its source, so the browser and the tests run the same code.
+// its source, so the browser and the tests run the same code. The timeline
+// crosses into the page as JSON, so it holds no Infinity, NaN or undefined.
 //
 // Camera. {cx, cy, s}: the page point at the centre of the window and the
 // zoom (1 = the page at its own width). It eases between keys on
@@ -130,7 +131,7 @@ export function buildTimeline({ viewport, chrome = 0, page, beats, duration }) {
       cursorPos = point;
     } else if (beat.action === "select" && box) {
       if (selections.length) selections.at(-1).until = start;
-      selections.push({ t0: start, t1: effectEnd, rects, until: Infinity });
+      selections.push({ t0: start, t1: effectEnd, rects, until: null });
       if (cursorPos) {
         // The cursor drags across the phrase with the selection's head.
         const first = rects[0], last = rects.at(-1);
@@ -205,7 +206,7 @@ export function stateAt(timeline, t) {
   }
   let selection = [];
   for (const sel of timeline.selections) {
-    if (t < sel.t0 || t >= sel.until) continue;
+    if (t < sel.t0 || (sel.until !== null && t >= sel.until)) continue;
     selection = sweepRects(sel.rects, (t - sel.t0) / (sel.t1 - sel.t0));
   }
   const highlights = timeline.highlights.filter((h) => t >= h.t0).map((h) => sweepRects(h.rects.map((r) => ({ x: r.x - MARK_PAD, y: r.y, width: r.width + MARK_PAD * 2, height: r.height })), ease((t - h.t0) / (h.t1 - h.t0))));
