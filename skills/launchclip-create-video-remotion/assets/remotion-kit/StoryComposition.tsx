@@ -35,7 +35,7 @@ import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
 import { placeholderModel, resolveModule } from "../core/modules.mjs";
 // @ts-ignore plain ESM from kit/core
-import { layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs";
+import { holdTime, layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -186,12 +186,13 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; backdrop?: any; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, drift, zoom, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, drift, zoom, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
   const style = layerStyle(layerStateAt(t, tweens, getEase));
-  const content = freeze ? <Freeze frame={0}>{children}</Freeze> : children;
+  // freeze: true holds the first frame (the loop clone), a number holds that frame (an overview hold).
+  const content = freeze === true ? <Freeze frame={0}>{children}</Freeze> : typeof freeze === "number" ? <Freeze frame={freeze}>{children}</Freeze> : children;
   const own = (
     <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate && !transparent ? { backgroundColor: background } : {}) }}>
       {field ? <AmbientField blobs={field} t={t} /> : null}
@@ -470,6 +471,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
         <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && (backdrop || covered))} backdrops={backdrops} background={background}>
           {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
+          {/* Overview holds: a shot the overview frames, frozen on its settled last frame (holdTime), as the HyperFrames held clones. */}
+          {world ? layers.filter((layer: any) => layer.entry.plate && layer.entry.holds?.length).flatMap((layer: any) => layer.entry.holds.map((hold: any, k: number) => (
+            <Sequence key={`${layer.entry.id}-held-${k}`} name={`${layer.entry.id} · held for ${hold.overview}`} from={frames(hold.start)} durationInFrames={Math.max(1, frames(hold.end) - frames(hold.start))} premountFor={fps}>
+              <SceneLayer startFrame={frames(hold.start)} tweens={[]} plate background={background} freeze={frames(holdTime(layer.entry, layer.model, fps)) - frames(layer.entry.start)} placement={plan.placements[layer.entry.id]} transparent>
+                <SceneStartFrame.Provider value={frames(layer.entry.start)}>{layer.render()}</SceneStartFrame.Provider>
+              </SceneLayer>
+            </Sequence>
+          ))) : null}
           {loop ? (
             <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
               <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={world ? null : fieldFor(loop.scene)} backdrop={world ? null : backdropFor(loop.scene)} placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>

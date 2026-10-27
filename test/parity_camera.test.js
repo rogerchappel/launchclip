@@ -34,7 +34,10 @@ export const CAMERA_PARITY = Object.freeze([
   // target zoom on bar 0 handing over to bar 2, at rest inside each zoom and
   // mid-move, through the world camera and through cuts-mode wrappers.
   {id: 'zoom-world-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
-  {id: 'zoom-cuts-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]}
+  {id: 'zoom-cuts-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
+  // The overview move: out over four held, frozen shots plus the incoming
+  // one, the hold, the push in and settled.
+  {id: 'overview-world-9x16', threshold: 0.97, times: [10.0, 16.6, 17.4, 18.2, 19.5]}
 ]);
 
 // Largest luma step between neighbouring columns x0…x1, averaged over 16 rows from y.

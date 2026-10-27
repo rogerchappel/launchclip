@@ -35,15 +35,46 @@
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
 
-/** Whether a transition moves the world camera (push only in world mode). */
+/** Whether a transition moves the world camera (push and overview only in world mode). */
 export function isCameraTransition(transition, mode = 'cuts') {
   const type = transition?.type;
-  return CAMERA_TRANSITION_TYPES.includes(type) || (type === 'push' && mode === 'world');
+  return CAMERA_TRANSITION_TYPES.includes(type) || ((type === 'push' || type === 'overview') && mode === 'world');
+}
+
+/**
+ * The overview move (world mode): the camera pulls back to frame the last
+ * shots and the incoming one, holds, then pushes into the incoming shot.
+ * minDur: the shortest overview (s); gap: the least time between two (s);
+ * span: the shots it frames when a number; cap: the most the camera zooms out
+ * past the incoming shot's rest (past it the framed span shrinks, oldest
+ * first); margin: the share of the frame left around the framed shots.
+ */
+export const OVERVIEW = Object.freeze({ minDur: 2, gap: 60, span: Object.freeze({ min: 3, max: 8 }), cap: 6, margin: 0.08, hold: 0.6 });
+
+/**
+ * The shots an overview into plates[index] frames, oldest first, the
+ * incoming one excluded: span "chapter" is every plate of the chapter that is
+ * ending (story.chapters: the last chapter starting at or before the previous
+ * plate; without chapters, every earlier plate), a number n the last n
+ * plates; at most OVERVIEW.span.max either way. plates: track-0 window
+ * entries in start order. → [entry]
+ */
+export function overviewSpan(story, plates, index) {
+  const transition = plates[index]?.scene?.in;
+  const before = plates.slice(0, index);
+  if (!before.length) return [];
+  let list = before;
+  if (transition?.span === 'chapter' || transition?.span === undefined) {
+    const previous = before.at(-1);
+    const starts = (Array.isArray(story?.chapters) ? story.chapters : []).map((chapter) => Number(chapter?.start)).filter((start) => Number.isFinite(start) && start <= previous.start + EPS);
+    if (starts.length) { const from = Math.max(...starts); list = before.filter((entry) => entry.start >= from - EPS); }
+  } else if (Number.isInteger(transition.span)) list = before.slice(-transition.span);
+  return list.slice(-OVERVIEW.span.max);
 }
 
 /**
@@ -125,6 +156,8 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
   const roles = ['enter', 'exit', 'emphasis', 'move'];
   const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease: grammarEase(grammar, ease, { props: [prop], roles }) });
   if (type === 'cut' || !(d > 0)) return { type: 'cut', duration: 0, in: [], out: [] };
+  // Overview outside world mode (validation refuses it): a plain crossfade.
+  if (type === 'overview' && mode !== 'world') return { type: 'fade', duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: [] };
   if (isCameraTransition(transition, mode)) {
     // The camera travels (camera-world.mjs). A dolly lands on a scene drawn
     // inside (push) or around (pull) the outgoing one, so the two plates
@@ -252,9 +285,14 @@ export function gsapVars(prop, value) {
 
 /**
  * Render windows for every scene of a resolved story.
- * → {scenes: [{id, index, scene, track, plate, start, end, renderEnd, transitionIn, tweens}], loop}
+ * → {scenes: [{id, index, scene, track, plate, start, end, renderEnd, transitionIn, tweens, holds}], loop}
  *   scenes are sorted by track, then start (back-to-front drawing order).
- *   transitionIn: {type, dur, direction, from_object} | null
+ *   transitionIn: {type, dur, direction, from_object} | null (an overview
+ *   adds span: [scene ids], oldest first, and hold: seconds)
+ *   holds: [{start, end, overview}] spans after the scene's render window when
+ *   it is drawn again, frozen (an overview frames it: overviewSpan). The
+ *   previous plate is not held: like any outgoing plate it stays through the
+ *   transition (renderEnd).
  *   tweens: absolute tweens for this layer ({...Tween, at, role: "in"|"out"})
  * plus `loop`: {sceneId, start, end, transitionIn, tweens} | null (the ending).
  */
@@ -269,7 +307,7 @@ export function sceneWindows(story) {
   const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene, index) => {
     if (typeof scene?.start !== 'number' || typeof scene?.end !== 'number') throw new Error(`sceneWindows needs a resolved story; scenes[${index}] has unresolved start/end`);
     const track = Number.isInteger(scene.track) ? scene.track : 0;
-    return { id: scene.id, index, scene, track, plate: track === 0, start: scene.start, end: scene.end, renderEnd: scene.end, transitionIn: null, tweens: [] };
+    return { id: scene.id, index, scene, track, plate: track === 0, start: scene.start, end: scene.end, renderEnd: scene.end, transitionIn: null, tweens: [], holds: [] };
   });
   const plates = scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
   const adjacentPlate = (entry) => plates.filter((other) => other !== entry && other.start < entry.start - EPS && other.end <= entry.start + EPS && entry.start - other.end <= ADJACENT + EPS)
@@ -282,6 +320,14 @@ export function sceneWindows(story) {
     const tweens = transitionTweens(transition, transition.type === 'card-to-card' ? { ...options, fromRect: before ? sceneCardRect(before.scene, width, height) : null, toRect: sceneCardRect(entry.scene, width, height) } : options);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
     if (tweens.camera) entry.transitionIn.camera = true;
+    if (tweens.camera && transition.type === 'overview' && entry.plate) {
+      // The span stays drawn, frozen, while the camera shows it from afar.
+      const span = overviewSpan(story, plates, plates.indexOf(entry));
+      entry.transitionIn.span = span.map((other) => other.id);
+      entry.transitionIn.hold = round(Math.min(Number.isFinite(Number(transition.hold)) ? Number(transition.hold) : OVERVIEW.hold, d(transition) - 1), 6);
+      const end = round(Math.min(duration, entry.start + tweens.duration), 6);
+      for (const other of span) if (other !== before) other.holds.push({ start: entry.start, end, overview: entry.id });
+    }
     entry.tweens.push(...tweens.in.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'in' })));
     if (!entry.plate || tweens.type === 'cut') continue;
     // Only an adjacent plate (gap of at most ADJACENT seconds) is carried
@@ -338,6 +384,17 @@ export function sceneWindows(story) {
 }
 
 /**
+ * The time a held shot (window entry.holds) freezes at: its settled last
+ * frame, one frame before its module starts to exit (model.motion.exitStart)
+ * or before its render window ends.
+ */
+export function holdTime(entry, model, fps = 30) {
+  const exit = Number(model?.motion?.exitStart);
+  const end = Math.min(entry.renderEnd, Number.isFinite(exit) ? exit : entry.renderEnd);
+  return round(Math.max(entry.start, end - 1 / fps), 6);
+}
+
+/**
  * Spans with no plate content on screen: from where one plate's render window
  * ends (or the story starts) to where the next plate's content starts (its
  * start plus sceneLeadIn), when longer than one frame. → [{from, to, before,
@@ -357,6 +414,8 @@ export function emptyPlates(story, windows = sceneWindows(story)) {
   }
   return out;
 }
+
+const d = (transition) => Math.max(0, Number(transition?.dur) || 0);
 
 function round(value, digits = 3) {
   const f = 10 ** digits;
