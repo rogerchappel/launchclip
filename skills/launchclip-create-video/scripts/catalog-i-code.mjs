@@ -394,10 +394,14 @@ export function cardNode(model, card, prefix, x, y, {pal, code: font} = {}) {
  */
 export function cardBuildOps(ops, model, card, prefix, at, {rowStep = 0.07, blur = true} = {}) {
   const {start, unit: u} = model;
-  const from = {opacity: 0, x: 0, y: r2(26 * u), scaleX: 0.97, scaleY: 0.97, ...(blur ? {blur: r2(14 * u)} : {})};
+  // A card that opens the story (model.openingSettled, kit/core/modules.mjs)
+  // is whole on frame 0: panel and header drawn, only its settle and its rows play.
+  const whole = Boolean(model.openingSettled) && at <= model.motion.enterEnd + 0.15;
+  const from = {opacity: whole ? 1 : 0, x: 0, y: r2(26 * u), scaleX: 0.97, scaleY: 0.97, ...(blur ? {blur: whole ? 0 : r2(14 * u)} : {})};
   set(ops, prefix, start, from);
-  tw(ops, prefix, at, 0.55, 'power3.out', from, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1, ...(blur ? {blur: 0} : {})});
+  tw(ops, prefix, whole ? start : at, 0.55, 'power3.out', from, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1, ...(blur ? {blur: 0} : {})});
   card.items.forEach((_, i) => {
+    if (whole) { set(ops, `${prefix}-h-${i}`, start, {opacity: 1}); return; }
     set(ops, `${prefix}-h-${i}`, start, {opacity: 0});
     tw(ops, `${prefix}-h-${i}`, rt(at + 0.15 + Math.min(i, 10) * 0.04), 0.3, 'power1.out', {opacity: 0}, {opacity: 1});
   });

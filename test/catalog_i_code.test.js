@@ -256,3 +256,13 @@ test('a card alone on stage fills its rect and grows its type instead of centrin
     assert.ok(inRect.h <= 700 + 0.01 && inRect.h > 450, `${id} fills most of the rect's height (${inRect.h})`);
   }
 });
+
+test('a code card that opens the story is whole on frame 0; its rows still build', () => {
+  const model = resolve('repo-pr-card', SAMPLES['repo-pr-card'], '16:9');
+  model.openingSettled = true;
+  const first = frameState(catalogHTimeline(model), model.start);
+  assert.equal(first.get('scene-card').opacity, 1);
+  assert.equal(first.get('scene-card').blur, 0);
+  assert.equal(first.get('scene-card-h-0').opacity, 1, 'the header is drawn');
+  assert.equal(first.get('scene-card-row-0').opacity, 0, 'the rows land after');
+});
