@@ -323,3 +323,9 @@ export function fitSize(check, path, text, opts) {
   return fitText(check, path, text, {...opts, preferred: Math.max(opts.preferred, Math.ceil(opts.min))});
 }
 
+/** Hidden (a point) until `t`, then it falls `dropH` px onto its place. */
+export function dropIn(ops, target, start, t, dropH, {duration = 0.6, ease = 'power3.out'} = {}) {
+  set(ops, target, start, {x: 0, y: 0, scaleX: 0.001, scaleY: 0.001});
+  set(ops, target, t, {scaleX: 1, scaleY: 1, y: -dropH});
+  tw(ops, target, t, duration, ease, {y: -dropH}, {y: 0});
+}

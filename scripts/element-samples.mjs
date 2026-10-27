@@ -40,6 +40,7 @@ export const SAMPLES = Object.freeze({
   'number-line': {from: 1, to: 25, unit: 'reps', ranges: [{from: 8, to: 12, label: '= SIZE', tone: 'good'}, {from: 15, to: 25, label: '= JUST CARDIO', tone: 'bad'}]},
   'coin-stack': {title: 'Cost of one finished task', stacks: [{label: 'Nova', value: 1}, {label: 'Atlas', value: 10}], format: {style: 'currency'}, per: 1, highlight: 0, callout: {text: '×10', stack: 1}},
   'rack-shelf': {title: 'The line-up, shelf by shelf', rows: [{label: 'Atlas', value: 10, cells: ['$10', '84 pts'], icon: 'sparkle'}, {label: 'Nova', value: 5, cells: ['$5', '78 pts'], icon: 'sparkle'}, {label: 'Mini', value: 0.5, cells: ['$0.50', '62 pts'], icon: 'sparkle'}], format: {style: 'currency'}, focus: 1},
+  'device-box': {title: 'One inference node, live', name: 'INFERENCE NODE 01', readout: {label: 'requests', to: 1284}, clock: {start: '03:17:42'}},
   'glass-bars-3d': {title: 'Price per 1M output tokens', data: [{label: 'Nova', value: 10, display: '$10'}, {label: 'Atlas', value: 50, display: '$50'}, {label: 'Orbit', value: 20, display: '$20'}], highlight: 1, source: 'Vendor price lists, Oct 2026'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });

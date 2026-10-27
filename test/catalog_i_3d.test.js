@@ -152,3 +152,17 @@ test('rack-shelf: trays stack top-down, the focus slides out; rail cubes glide t
   for (const i of xs.keys()) assert.equal(railEnd.get(`scene-g${i}`).x, 0, `cube ${i} reached its value`);
   assert.throws(() => r({rows: [{label: 'A', value: 5}, {label: 'B', value: 5.2}], variant: 'rail'}, '16:9'), /sits too close/);
 });
+
+test('device-box: the readout counts to its value, the clock ticks on whole seconds, fans spin', () => {
+  const r = params => resolve('device-box', params);
+  assert.throws(() => r({readout: {label: 'requests', to: 5}, clock: {start: '3:7:42'}}), /params\.clock\.start must be H:MM:SS/);
+  assert.throws(() => r({readout: {to: 5}}), /params\.readout/);
+  const model = r(SAMPLES['device-box']);
+  const ops = catalogHTimeline(model);
+  const end = frameState(ops, model.end - 0.06);
+  assert.equal(end.get('scene-read').text, 'requests: 1,284');
+  // Scene starts at 1 s: at 3.5 s, 2 whole seconds have passed since 03:17:42.
+  assert.equal(frameState(ops, 3.5).get('scene-clkt').text, '03:17:44');
+  assert.ok(frameState(ops, 3).get('scene-fan0a').rotation > frameState(ops, 2).get('scene-fan0a').rotation);
+  assert.ok(model.events.some(e => e.name === 'readout'));
+});
