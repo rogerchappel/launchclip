@@ -44,14 +44,15 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // hidden range (a scene that hides captions) now ends at the range start.
 // promo-16x9 was re-pinned by the direction guardrails: its call to action
 // sits clear of the caption band, so the captions now stay on under it.
+// minimal and data-story-9x16 re-pinned for #367: each opens on an editorial
+// scene, which now starts at rest on frame 0 in HyperFrames too
+// ({opacity:1,y:18} on #s1 and #s1-loop); nothing else in them changed.
 const PRE_GRAMMAR_HTML_SHA256 = {
   cooling: "8bc7859b16b4274f74e7f476289344e6f6dc7d5eefdc2b51b0664ffc480b551f",
-  // Re-pinned for #367: minimal opens on an editorial scene, which now starts at
-  // rest on frame 0 in HyperFrames too ({opacity:1,y:18} on #s1 and #s1-loop).
   minimal: "507b5a5424d4bd568b4955c60b300bcd284f710d52ba1774517fe16c34e501ec",
   "promo-16x9": "d78e0141506a6e6fc6411562ebaee893264ad2f104780ead7691519a38db044e",
   "explainer-9x16": "4f3e0efaa1828eeb7731b15e355acee1385dd26038cef0b6d0c5f7962052e936",
-  "data-story-9x16": "728ce9ee594389a6e49f6574f094f84b17b5b94947e4d2d58cc44254d504f21f",
+  "data-story-9x16": "958bb6fff06958778d93c4b428e09520b920c3d560aa484deec0796b31e4851f",
   footage: "547417065ab1483124e958ec9d24bcdada47a80a94a11c6f3e2b37e168488652"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
