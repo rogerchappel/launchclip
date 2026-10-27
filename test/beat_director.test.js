@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { BEAT_MAP_SCHEMA, beatMapEvents, beatMapReportText, beatMapToDirection, beatMapToStory, clauseBeats, directLongForm, dryRunWords, extractFacts, matchEvidence, parseScript, visualKind, windowWords } from "../kit/core/beat-director.mjs";
+import { BEAT_MAP_SCHEMA, GENERIC_MODULES, beatMapEvents, beatMapReportText, beatMapToDirection, beatMapToStory, clauseBeats, directLongForm, dryRunWords, extractFacts, matchEvidence, parseScript, visualKind, windowWords } from "../kit/core/beat-director.mjs";
 import { CADENCE_BENCHMARK, cadenceTarget } from "../kit/core/cadence.mjs";
 import { validateDirection } from "../kit/core/direction.mjs";
 import { longFormChunks } from "../kit/core/long-form.mjs";
@@ -88,7 +88,9 @@ test("beat director: the 16-minute dry run passes the long-form gate", () => {
   for (let i = 1; i < states.length; i += 1) assert.ok(Math.abs(states[i].start - states[i - 1].end) < 1e-6, states[i].id);
   for (const state of states) { assert.ok(state.module && state.params && state.why, state.id); assert.ok(knownModules().includes(state.module), state.module); }
   // Builds inside shots, evidence on most claims, a plate per chapter that never repeats back to back.
-  assert.ok(report.shots.changes.build >= 10, JSON.stringify(report.shots.changes));
+  // Builds add real entries (bars, cards, steps) to a specific module, never key words to a generic card.
+  assert.ok(report.shots.changes.build >= 1, JSON.stringify(report.shots.changes));
+  for (const state of states.filter((entry) => entry.change === "build")) assert.ok(!GENERIC_MODULES.has(state.module), `${state.id} builds on ${state.module}`);
   assert.ok(report.evidence.coverage >= 0.5, JSON.stringify(report.evidence));
   for (let i = 1; i < map.chapters.length; i += 1) assert.notEqual(map.chapters[i].plate.kind, map.chapters[i - 1].plate.kind);
   assert.ok(report.variety.modules >= 15 && report.variety.top[0].share < 0.25, JSON.stringify(report.variety));

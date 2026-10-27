@@ -8,17 +8,17 @@
       "layout": "full",
       "lines": [
         { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): logo-sting" },
-        { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: icon-row" },
+        { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: process-steps, ahead of icon-row" },
         { "words": [27, 36], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-3"], "why": "documents: nothing else fits, a concept card" },
         { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
         { "words": [51, 63], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-1"], "why": "social (evidence c-shares, capture halcyon-2-post): quote-card" },
         { "words": [64, 80], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-2"], "why": "stat (evidence c-unverified-tests): odometer" },
         { "words": [81, 91], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-3"], "why": "concept: particle-text" },
         { "words": [92, 104], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-4"], "why": "concept: motion-title" },
-        { "words": [105, 119], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-1"], "why": "concept: icon-row" },
-        { "words": [120, 137], "intent": "list", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-2"], "why": "list: builds on icon-row (+1 items)" },
-        { "words": [138, 147], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-3"], "why": "concept: builds on icon-row (+1 items)" },
-        { "words": [148, 169], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh4-1"], "why": "concept: kinetic-words" }
+        { "words": [105, 119], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-1"], "why": "concept: kinetic-words" },
+        { "words": [120, 137], "intent": "list", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-2"], "why": "list: nothing else fits, a concept card" },
+        { "words": [138, 147], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-3"], "why": "concept: glass-word" },
+        { "words": [148, 169], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh4-1"], "why": "concept: object-card" }
       ]
     },
     {
@@ -27,19 +27,19 @@
       "layout": "full",
       "lines": [
         { "words": [170, 183], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-1"], "why": "title: particle-text" },
-        { "words": [184, 202], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-2"], "why": "date (evidence c-history-2023): timeline" },
-        { "words": [203, 217], "intent": "list", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-3"], "why": "list (evidence c-long-doc): icon-grid" },
+        { "words": [184, 202], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-2"], "why": "date (evidence c-history-2023): nothing else fits, a concept card" },
+        { "words": [203, 217], "intent": "list", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-3"], "why": "list (evidence c-long-doc): process-steps, ahead of icon-row" },
         { "words": [218, 231], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-1"], "why": "code: code-snippet" },
         { "words": [232, 239], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-2"], "why": "concept: motion-title" },
-        { "words": [240, 257], "intent": "proof", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-3"], "why": "lineage (evidence c-training-cost): nothing else fits, a concept card" },
-        { "words": [258, 267], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-1"], "why": "date: timeline" },
+        { "words": [240, 257], "intent": "proof", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-3"], "why": "list (evidence c-training-cost): checklist, ahead of icon-row" },
+        { "words": [258, 267], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-1"], "why": "date: nothing else fits, a concept card" },
         { "words": [268, 279], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-2"], "why": "map: map-highlight" },
-        { "words": [280, 291], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-3"], "why": "concept (evidence c-training-cost): icon-row" },
+        { "words": [280, 291], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-3"], "why": "concept (evidence c-training-cost): particle-text" },
         { "words": [292, 311], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-4"], "why": "social (evidence c-clip, capture side-by-side-clip): quote-card" },
         { "words": [312, 322], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
-        { "words": [323, 336], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-2"], "why": "concept (evidence c-cluster): kinetic-words" },
+        { "words": [323, 336], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-2"], "why": "concept (evidence c-cluster): excerpt, ahead of kinetic-words" },
         { "words": [337, 344], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-3"], "why": "lineage: nothing else fits, a concept card" },
-        { "words": [345, 363], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-4"], "why": "list: icon-grid" }
+        { "words": [345, 363], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-4"], "why": "list: process-steps, ahead of icon-row" }
       ]
     },
     {
@@ -50,18 +50,18 @@
         { "words": [364, 374], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-1"], "why": "title (evidence c-cutoff): motion-title" },
         { "words": [375, 382], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-2"], "why": "compute (evidence c-cluster): stat-card" },
         { "words": [383, 399], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-3"], "why": "stat: count-up" },
-        { "words": [400, 408], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-4"], "why": "concept: icon-row" },
+        { "words": [400, 408], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-4"], "why": "concept: kinetic-words" },
         { "words": [409, 419], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-1"], "why": "compare (evidence c-training-cost): bar-chart" },
-        { "words": [420, 429], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-2"], "why": "compute: nothing else fits, a concept card" },
-        { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: kinetic-words" },
-        { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: particle-text" },
+        { "words": [420, 429], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-2"], "why": "list: checklist, ahead of icon-row" },
+        { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: builds on checklist (+1 rows)" },
+        { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: builds on checklist (+1 rows)" },
         { "words": [453, 462], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy): cta" },
-        { "words": [485, 494], "intent": "process", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-3"], "why": "process: timeline" },
-        { "words": [495, 512], "intent": "proof", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-1"], "why": "list (evidence c-synthetic): icon-grid" },
+        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy, capture system-card-table-7): cta" },
+        { "words": [485, 494], "intent": "process", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-3"], "why": "process: nothing else fits, a concept card" },
+        { "words": [495, 512], "intent": "proof", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-1"], "why": "concept (evidence c-synthetic): quote-card, ahead of motion-title" },
         { "words": [513, 526], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-2"], "why": "share (evidence c-synthetic): percent-fill" },
-        { "words": [527, 535], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-3"], "why": "concept: icon-row" },
-        { "words": [536, 552], "intent": "problem", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-4"], "why": "concept: builds on icon-row (+1 items)" }
+        { "words": [527, 535], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-3"], "why": "concept: motion-title" },
+        { "words": [536, 552], "intent": "problem", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-4"], "why": "concept: kinetic-words" }
       ]
     },
     {
@@ -69,19 +69,19 @@
       "title": "What Northlight actually announced",
       "layout": "full",
       "lines": [
-        { "words": [553, 562], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-1"], "why": "title (evidence c-history-2023): particle-text" },
+        { "words": [553, 562], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-1"], "why": "title (evidence c-leaderboard): particle-text" },
         { "words": [563, 574], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-2"], "why": "compare (evidence c-latency): bar-chart" },
         { "words": [575, 589], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-3"], "why": "tokens (evidence c-price): kinetic-words" },
         { "words": [590, 608], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-1"], "why": "share (evidence c-coding-internal): unit-grid" },
-        { "words": [609, 616], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-2"], "why": "share (evidence c-coding-internal): percent-fill" },
-        { "words": [617, 625], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-3"], "why": "concept: motion-title" },
-        { "words": [626, 643], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-4"], "why": "concept: icon-row" },
+        { "words": [609, 616], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-2"], "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card" },
+        { "words": [617, 625], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-3"], "why": "concept: glass-word" },
+        { "words": [626, 643], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-4"], "why": "concept: motion-title" },
         { "words": [644, 652], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-1"], "why": "documents: nothing else fits, a concept card" },
         { "words": [653, 670], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-2"], "why": "page (evidence c-cluster, capture system-card-table-7): media-window" },
         { "words": [671, 681], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-3"], "why": "tokens (evidence c-context): kinetic-words" },
-        { "words": [682, 705], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-1"], "why": "list (evidence c-history-2023): icon-grid" },
-        { "words": [706, 719], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-2"], "why": "concept: builds on icon-grid (+1 items)" },
-        { "words": [720, 732], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-3"], "why": "list: builds on icon-grid (+1 items)" }
+        { "words": [682, 705], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-1"], "why": "list (evidence c-cutoff): quote-card" },
+        { "words": [706, 719], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-2"], "why": "concept: object-card" },
+        { "words": [720, 732], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-3"], "why": "list: nothing else fits, a concept card" }
       ]
     },
     {
@@ -90,20 +90,20 @@
       "layout": "full",
       "lines": [
         { "words": [733, 744], "intent": "product", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-1"], "why": "title: particle-text" },
-        { "words": [745, 758], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-2"], "why": "concept: icon-row" },
-        { "words": [759, 779], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-3"], "why": "list: builds on icon-row (+1 items)" },
+        { "words": [745, 758], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-2"], "why": "concept: motion-title" },
+        { "words": [759, 779], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-3"], "why": "list: process-steps, ahead of icon-row" },
         { "words": [780, 791], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-1"], "why": "code: code-snippet" },
-        { "words": [792, 799], "intent": "process", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-2"], "why": "process: timeline" },
+        { "words": [792, 799], "intent": "process", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-2"], "why": "process: nothing else fits, a concept card" },
         { "words": [800, 813], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-3"], "why": "compare (evidence c-latency): bar-chart" },
         { "words": [814, 826], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-4"], "why": "compare (evidence c-tail): compare" },
-        { "words": [827, 834], "intent": "list", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-1"], "why": "list: process-steps" },
-        { "words": [835, 844], "intent": "problem", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-2"], "why": "concept: builds on process-steps (+1 steps)" },
-        { "words": [845, 852], "intent": "proof", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-3"], "why": "concept: builds on process-steps (+1 steps)" },
+        { "words": [827, 834], "intent": "list", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-1"], "why": "list: nothing else fits, a concept card" },
+        { "words": [835, 844], "intent": "problem", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-2"], "why": "concept: kinetic-words" },
+        { "words": [845, 852], "intent": "proof", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-3"], "why": "concept: motion-title" },
         { "words": [853, 873], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-4"], "why": "stat (evidence c-open-bench): stat-card" },
         { "words": [874, 893], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-1"], "why": "social (evidence c-clip, capture side-by-side-clip): quote-card" },
-        { "words": [894, 906], "intent": "list", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-2"], "why": "list: icon-row" },
+        { "words": [894, 906], "intent": "list", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-2"], "why": "list: nothing else fits, a concept card" },
         { "words": [907, 915], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-3"], "why": "stat (evidence c-clip): odometer" },
-        { "words": [916, 932], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-4"], "why": "concept: motion-title" }
+        { "words": [916, 932], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-4"], "why": "concept: glass-word" }
       ]
     },
     {
@@ -111,17 +111,17 @@
       "title": "The context window, doubled",
       "layout": "full",
       "lines": [
-        { "words": [933, 950], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-1"], "why": "title (evidence c-context): particle-text" },
+        { "words": [933, 950], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-1"], "why": "title (evidence c-context, capture system-card-table-7): media-window" },
         { "words": [951, 968], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-2"], "why": "tokens: kinetic-words" },
         { "words": [969, 986], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-3"], "why": "tokens (evidence c-context): kinetic-words" },
         { "words": [987, 997], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-1"], "why": "chain: nothing else fits, a concept card" },
-        { "words": [998, 1015], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-2"], "why": "concept: glass-word" },
-        { "words": [1016, 1028], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-3"], "why": "concept: icon-row" },
+        { "words": [998, 1015], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-2"], "why": "concept: motion-title" },
+        { "words": [1016, 1028], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-3"], "why": "concept: object-card" },
         { "words": [1029, 1047], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-1"], "why": "documents (evidence c-long-doc): excerpt" },
-        { "words": [1048, 1071], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-2"], "why": "page (evidence c-needle, capture system-card-table-7): media-window" },
+        { "words": [1048, 1071], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-2"], "why": "share (evidence c-needle): percent-fill" },
         { "words": [1072, 1092], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [1093, 1100], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-2"], "why": "share: percent-fill" },
-        { "words": [1101, 1111], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-3"], "why": "concept: motion-title" },
+        { "words": [1093, 1100], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-2"], "why": "share: unit-grid" },
+        { "words": [1101, 1111], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-3"], "why": "concept: glass-word" },
         { "words": [1112, 1128], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-4"], "why": "concept: kinetic-words" }
       ]
     },
@@ -132,14 +132,14 @@
       "lines": [
         { "words": [1129, 1145], "intent": "number", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh1-1"], "why": "title (evidence c-price): particle-text" },
         { "words": [1146, 1166], "intent": "number", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh1-2"], "why": "compare: bar-chart" },
-        { "words": [1167, 1175], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-1"], "why": "concept: icon-row" },
+        { "words": [1167, 1175], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-1"], "why": "concept: motion-title" },
         { "words": [1176, 1184], "intent": "turn", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-2"], "why": "money: nothing else fits, a concept card" },
-        { "words": [1185, 1200], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-3"], "why": "concept: glass-word" },
-        { "words": [1201, 1216], "intent": "quote", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-4"], "why": "quote: nothing else fits, a concept card" },
+        { "words": [1185, 1200], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-3"], "why": "list: process-steps, ahead of icon-row" },
+        { "words": [1201, 1216], "intent": "quote", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-4"], "why": "page (evidence c-cluster, capture system-card-table-7): media-window" },
         { "words": [1217, 1230], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-1"], "why": "tokens: kinetic-words" },
-        { "words": [1231, 1243], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-2"], "why": "concept: motion-title" },
-        { "words": [1244, 1254], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-3"], "why": "concept: icon-row" },
-        { "words": [1255, 1265], "intent": "proof", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-4"], "why": "concept: builds on icon-row (+1 items)" },
+        { "words": [1231, 1243], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-2"], "why": "concept: glass-word" },
+        { "words": [1244, 1254], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-3"], "why": "concept: motion-title" },
+        { "words": [1255, 1265], "intent": "proof", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-4"], "why": "concept: object-card" },
         { "words": [1266, 1284], "intent": "number", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-1"], "why": "share (evidence c-rival-cuts): percent-fill" },
         { "words": [1285, 1297], "intent": "turn", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-2"], "why": "money: nothing else fits, a concept card" },
         { "words": [1298, 1314], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh4-3"], "why": "money: nothing else fits, a concept card" }
@@ -152,16 +152,16 @@
       "lines": [
         { "words": [1315, 1333], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh1-1"], "why": "title (evidence c-coding-internal): particle-text" },
         { "words": [1334, 1348], "intent": "proof", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh1-2"], "why": "cta: cta" },
-        { "words": [1349, 1366], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh1-3"], "why": "concept: motion-title" },
+        { "words": [1349, 1366], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh1-3"], "why": "concept: kinetic-words" },
         { "words": [1367, 1376], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [1377, 1396], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-2"], "why": "series (evidence c-swe, capture swe-leaderboard): bar-chart" },
+        { "words": [1377, 1396], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-2"], "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card" },
         { "words": [1397, 1407], "intent": "turn", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-3"], "why": "ranking: nothing else fits, a concept card" },
         { "words": [1408, 1424], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh2-4"], "why": "share (evidence c-long-doc): percent-fill" },
-        { "words": [1425, 1433], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-1"], "why": "concept (evidence c-maths): icon-row" },
+        { "words": [1425, 1433], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-1"], "why": "concept (evidence c-maths): quote-card, ahead of motion-title" },
         { "words": [1434, 1447], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-2"], "why": "share (evidence c-maths): unit-grid" },
-        { "words": [1448, 1459], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-3"], "why": "concept: glass-word" },
+        { "words": [1448, 1459], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh3-3"], "why": "concept: motion-title" },
         { "words": [1460, 1484], "intent": "number", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh4-1"], "why": "stat (evidence c-swe): stat-card" },
-        { "words": [1485, 1506], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh4-2"], "why": "concept: motion-title" }
+        { "words": [1485, 1506], "intent": "claim", "treatment": "insert", "scenes": ["reading-the-benchmarks-honestly-1-sh4-2"], "why": "concept: glass-word" }
       ]
     },
     {
@@ -171,17 +171,17 @@
       "lines": [
         { "words": [1507, 1518], "intent": "list", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-1"], "why": "title: kinetic-words" },
         { "words": [1519, 1534], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-2"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
-        { "words": [1535, 1541], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-3"], "why": "concept: icon-row" },
-        { "words": [1542, 1560], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-4"], "why": "concept: builds on icon-row (+1 items)" },
+        { "words": [1535, 1541], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-3"], "why": "concept: object-card" },
+        { "words": [1542, 1560], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh1-4"], "why": "concept: motion-title" },
         { "words": [1561, 1568], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-1"], "why": "terminal: window-chrome" },
         { "words": [1569, 1588], "intent": "cta", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-2"], "why": "commit (evidence c-fix-commit, capture sdk-fix-commit): commit-card" },
         { "words": [1589, 1597], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh2-3"], "why": "concept: glass-word" },
         { "words": [1598, 1608], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-1"], "why": "social: nothing else fits, a concept card" },
-        { "words": [1609, 1624], "intent": "process", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-2"], "why": "process: timeline" },
+        { "words": [1609, 1624], "intent": "process", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-2"], "why": "process: nothing else fits, a concept card" },
         { "words": [1625, 1634], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-3"], "why": "social: nothing else fits, a concept card" },
         { "words": [1635, 1654], "intent": "number", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh3-4"], "why": "stat (evidence c-price): stat-card" },
         { "words": [1655, 1666], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh4-1"], "why": "concept: motion-title" },
-        { "words": [1667, 1690], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh4-2"], "why": "concept: icon-row" }
+        { "words": [1667, 1690], "intent": "claim", "treatment": "insert", "scenes": ["what-developers-found-in-week-one-1-sh4-2"], "why": "concept: kinetic-words" }
       ]
     },
     {
@@ -191,17 +191,17 @@
       "lines": [
         { "words": [1691, 1701], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-1"], "why": "title: particle-text" },
         { "words": [1702, 1713], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-2"], "why": "page (evidence c-failure-table, capture system-card-table-7): media-window" },
-        { "words": [1714, 1725], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-3"], "why": "concept (evidence c-cutoff): glass-word" },
+        { "words": [1714, 1725], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-3"], "why": "concept (evidence c-cutoff): quote-card, ahead of glass-word" },
         { "words": [1726, 1736], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-4"], "why": "share (evidence c-cutoff): percent-fill" },
-        { "words": [1737, 1746], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-1"], "why": "share: unit-grid" },
-        { "words": [1747, 1761], "intent": "process", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-2"], "why": "process: timeline" },
-        { "words": [1762, 1774], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-3"], "why": "concept: builds on timeline (+1 steps)" },
-        { "words": [1775, 1790], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-4"], "why": "concept: builds on timeline (+1 steps)" },
-        { "words": [1791, 1798], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-1"], "why": "concept: icon-row" },
-        { "words": [1799, 1819], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-2"], "why": "concept: builds on icon-row (+1 items)" },
-        { "words": [1820, 1838], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-3"], "why": "concept: builds on icon-row (+1 items)" },
+        { "words": [1737, 1746], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-1"], "why": "series (evidence c-long-doc): glass-bars-3d" },
+        { "words": [1747, 1761], "intent": "process", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-2"], "why": "process (evidence c-cutoff): excerpt" },
+        { "words": [1762, 1774], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-3"], "why": "concept: glass-word" },
+        { "words": [1775, 1790], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-4"], "why": "concept (evidence c-cutoff): quote-card, ahead of motion-title" },
+        { "words": [1791, 1798], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-1"], "why": "concept: motion-title" },
+        { "words": [1799, 1819], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-2"], "why": "concept (evidence c-repro): excerpt, ahead of kinetic-words" },
+        { "words": [1820, 1838], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-3"], "why": "concept: kinetic-words" },
         { "words": [1839, 1852], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-1"], "why": "ranking: nothing else fits, a concept card" },
-        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list: icon-grid" }
+        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row" }
       ]
     },
     {
@@ -209,16 +209,16 @@
       "title": "How the rivals answered",
       "layout": "full",
       "lines": [
-        { "words": [1867, 1878], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-1"], "why": "title: motion-title" },
+        { "words": [1867, 1878], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-1"], "why": "title (evidence c-unverified-tests): glass-word" },
         { "words": [1879, 1900], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-2"], "why": "share (evidence c-rival-cuts): percent-fill" },
         { "words": [1901, 1921], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-3"], "why": "stat: count-up" },
-        { "words": [1922, 1934], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-1"], "why": "concept: kinetic-words" },
+        { "words": [1922, 1934], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
         { "words": [1935, 1949], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-2"], "why": "concept: particle-text" },
         { "words": [1950, 1968], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-3"], "why": "stat (evidence c-price): stat-card" },
         { "words": [1969, 1985], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-1"], "why": "stat (evidence c-leaderboard): odometer" },
-        { "words": [1986, 2000], "intent": "list", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-2"], "why": "list (evidence c-leaderboard): process-steps" },
-        { "words": [2001, 2012], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-3"], "why": "concept: builds on process-steps (+1 steps)" },
-        { "words": [2013, 2026], "intent": "process", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-4"], "why": "process: builds on process-steps (+1 steps)" },
+        { "words": [1986, 2000], "intent": "list", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-2"], "why": "list (evidence c-leaderboard): quote-card" },
+        { "words": [2001, 2012], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-3"], "why": "concept: motion-title" },
+        { "words": [2013, 2026], "intent": "process", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-4"], "why": "process: nothing else fits, a concept card" },
         { "words": [2027, 2036], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh4-1"], "why": "chain: nothing else fits, a concept card" },
         { "words": [2037, 2055], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh4-2"], "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card" }
       ]
@@ -230,15 +230,15 @@
       "lines": [
         { "words": [2056, 2063], "intent": "number", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-1"], "why": "title: particle-text" },
         { "words": [2064, 2071], "intent": "list", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-2"], "why": "cta: cta" },
-        { "words": [2072, 2085], "intent": "number", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-3"], "why": "concept: motion-title" },
-        { "words": [2086, 2106], "intent": "list", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-4"], "why": "list: icon-grid" },
-        { "words": [2107, 2114], "intent": "list", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-1"], "why": "list: checklist" },
-        { "words": [2115, 2128], "intent": "problem", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-2"], "why": "concept: builds on checklist (+1 rows)" },
-        { "words": [2129, 2146], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-3"], "why": "concept: builds on checklist (+1 rows)" },
+        { "words": [2072, 2085], "intent": "number", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-3"], "why": "concept: kinetic-words" },
+        { "words": [2086, 2106], "intent": "list", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh1-4"], "why": "list: nothing else fits, a concept card" },
+        { "words": [2107, 2114], "intent": "list", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-1"], "why": "list: nothing else fits, a concept card" },
+        { "words": [2115, 2128], "intent": "problem", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-2"], "why": "concept: motion-title" },
+        { "words": [2129, 2146], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh2-3"], "why": "concept: glass-word" },
         { "words": [2147, 2155], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-1"], "why": "money (evidence c-rival-cuts): nothing else fits, a concept card" },
         { "words": [2156, 2172], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-2"], "why": "ranking: nothing else fits, a concept card" },
-        { "words": [2173, 2186], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-3"], "why": "concept: icon-row" },
-        { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: builds on icon-row (+1 items)" },
+        { "words": [2173, 2186], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-3"], "why": "concept: object-card" },
+        { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: kinetic-words" },
         { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: motion-title" },
         { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: glass-word" },
         { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: logo-sting" }

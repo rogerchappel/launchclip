@@ -57,7 +57,8 @@ export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'def
   const timed = dryRunWords(script, { wpm });
   const beatsFile = path.join(folder, 'BEATMAP.json');
   const previous = !fresh && existsSync(beatsFile) ? JSON.parse(await readFile(beatsFile, 'utf8')) : null;
-  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings, ...(channel ? { stingBrand: { ...channel } } : {}) });
+  const tokens = await modelTokens(script);
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format, ...(tokens ? { tokens } : {}) }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings, ...(channel ? { stingBrand: { ...channel } } : {}) });
   const direction = beatMapToDirection(map);
   const check = validateDirection(direction, { words: timed.words, lane: 'motion', deferScenes: true });
   if (!check.ok) throw new Error(`the direction map does not validate:\n${check.errors.slice(0, 5).join('\n')}`);
@@ -69,6 +70,22 @@ export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'def
   await writeFile(path.join(folder, 'DIRECTION.json'), directionJson(direction));
   await writeFile(path.join(folder, 'CADENCE.md'), `# Beat map dry run\n\n${timed.words.length} words at ${wpm} wpm (dry-run timings, no voice), \`node eval/beat-map-dry-run.mjs\`.\n\n\`\`\`text\n${report}\n\`\`\`\n`);
   return { map, shorts, report };
+}
+
+/**
+ * BPE splits of the model ids the script names in code form ("gpt-6.1-terra"),
+ * for the tokenizer module: {[id]: {text, tokens, encoding}}, or null when
+ * there are none or gpt-tokenizer is not installed.
+ */
+export async function modelTokens(script) {
+  const ids = [...new Set(String(script).match(/\b[a-z][a-z0-9]*-\d[\w.]*(?:-[a-z0-9.]+)*\b/g) ?? [])].map((id) => id.replace(/\.$/, ''));
+  if (!ids.length) return null;
+  try {
+    const { tokenizerParams } = await import('../src/tokenizer.js');
+    return Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await tokenizerParams(id)])));
+  } catch {
+    return null;
+  }
 }
 
 /** A Short as SHORTS.json lists it: where it comes from and what it shows. */

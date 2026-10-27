@@ -165,7 +165,10 @@ export function objectsBuilders(h) {
       const stairs = data.length >= 3 && descending(data) && labels.every((label) => label.length <= STEP_CHARS[data.length]);
       // The lit bar is the clause's subject when it names one ("Halcyon 2 scored…"), else the last.
       const subject = data.findIndex((entry) => entry.subject);
-      return { variant: stairs ? 'staircase' : 'bars', title: h.clip(beat.headline, 28), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: subject >= 0 ? subject : data.length - 1 }), ...source(beat) };
+      // A guide the clause draws over the bars ("exactly half", "more than double"): evidence.data.reference from the director's series.
+      const guide = beat.evidence?.data?.reference;
+      const reference = !stairs && guide && Number.isFinite(guide.value) && guide.value > 0 && guide.value <= Math.max(...data.map((entry) => entry.value)) ? { value: guide.value, ...(guide.label ? { label: h.clip(guide.label, 12) } : {}) } : null;
+      return { variant: stairs ? 'staircase' : 'bars', title: h.clip(beat.headline, 28), data: data.map((entry, i) => ({ label: labels[i], value: entry.value, display: entry.display })), ...(stairs ? {} : { highlight: subject >= 0 ? subject : data.length - 1 }), ...(reference ? { reference } : {}), ...source(beat) };
     },
     // Two (to four) money figures in one currency: stacks sized by value, with the ratio beside the larger.
     'coin-stack': (beat) => {

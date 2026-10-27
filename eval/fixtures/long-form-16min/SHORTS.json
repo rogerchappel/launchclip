@@ -1,6 +1,151 @@
 [
  {
-  "id": "short-1-reading-the-benchmarks-honestly",
+  "id": "short-1-how-the-rivals-answered",
+  "title": "Halcyon 2, explained: what a frontier model launch actually changes: How the ri…",
+  "window": {
+   "chapter": "how-the-rivals-answered",
+   "title": "How the rivals answered",
+   "start": 819.715,
+   "end": 864.574,
+   "words": [
+    1879,
+    1985
+   ],
+   "states": [
+    "how-the-rivals-answered-1-sh1-2",
+    "how-the-rivals-answered-1-sh1-3",
+    "how-the-rivals-answered-1-sh2-1",
+    "how-the-rivals-answered-1-sh2-2",
+    "how-the-rivals-answered-1-sh2-3",
+    "how-the-rivals-answered-1-sh3-1"
+   ],
+   "score": 4.397
+  },
+  "skeleton": null,
+  "duration": 45.259,
+  "cadence": {
+   "events": 14,
+   "per_min": 18.56,
+   "gap": {
+    "count": 13,
+    "p10": 2.063,
+    "p50": 2.731,
+    "p90": 4.157,
+    "mean": 2.895
+   },
+   "cuts": 5,
+   "ok": true
+  },
+  "states": [
+   {
+    "shot": "short-1-sh1",
+    "start": 0,
+    "module": "concept-card",
+    "change": "enter",
+    "text": "the largest rival lab cut its prices"
+   },
+   {
+    "shot": "short-1-sh1",
+    "start": 2.657,
+    "module": "percent-fill",
+    "change": "swap",
+    "text": "by 40 percent and published a"
+   },
+   {
+    "shot": "short-1-sh1",
+    "start": 4.873,
+    "module": "kinetic-words",
+    "change": "swap",
+    "text": "blog post comparing its own model favourably on maths."
+   },
+   {
+    "shot": "short-1-sh2",
+    "start": 8.945,
+    "module": "glass-word",
+    "change": "enter",
+    "text": "Five days after the launch,"
+   },
+   {
+    "shot": "short-1-sh2",
+    "start": 11.044,
+    "module": "concept-card",
+    "change": "swap",
+    "text": "a second lab released an updated model"
+   },
+   {
+    "shot": "short-1-sh2",
+    "start": 13.775,
+    "module": "count-up",
+    "change": "swap",
+    "text": "with a faster mode, claiming 1.5 seconds per response."
+   },
+   {
+    "shot": "short-1-sh3",
+    "start": 17.953,
+    "module": "motion-title",
+    "change": "enter",
+    "text": "Ten days after the launch,"
+   },
+   {
+    "shot": "short-1-sh3",
+    "start": 20.016,
+    "module": "object-card",
+    "change": "swap",
+    "text": "an open source group published"
+   },
+   {
+    "shot": "short-1-sh3",
+    "start": 22.081,
+    "module": "particle-text",
+    "change": "swap",
+    "text": "a smaller model that matched Halcyon 1.5"
+   },
+   {
+    "shot": "short-1-sh4",
+    "start": 24.849,
+    "module": "kinetic-words",
+    "change": "enter",
+    "text": "on most public benchmarks and could run on a single workstation."
+   },
+   {
+    "shot": "short-1-sh5",
+    "start": 29.659,
+    "module": "concept-card",
+    "change": "enter",
+    "text": "On the public leaderboard"
+   },
+   {
+    "shot": "short-1-sh5",
+    "start": 31.355,
+    "module": "concept-card",
+    "change": "swap",
+    "text": "that ranks models by blind human votes,"
+   },
+   {
+    "shot": "short-1-sh5",
+    "start": 34.266,
+    "module": "odometer",
+    "change": "swap",
+    "text": "the order shifted three times in two weeks."
+   },
+   {
+    "shot": "short-1-sh6",
+    "start": 37.749,
+    "module": "count-up",
+    "change": "enter",
+    "text": "Halcyon 2 entered at second place,"
+   },
+   {
+    "shot": "short-1-sh6",
+    "start": 40.291,
+    "module": "concept-card",
+    "change": "swap",
+    "text": "briefly took first, then settled at third after the rival updates."
+   }
+  ]
+ },
+ {
+  "id": "short-2-reading-the-benchmarks-honestly",
   "title": "Halcyon 2, explained: what a frontier model launch actually changes: Reading th…",
   "window": {
    "chapter": "reading-the-benchmarks-honestly",
@@ -42,254 +187,109 @@
   },
   "states": [
    {
-    "shot": "short-1-sh1",
+    "shot": "short-2-sh1",
     "start": 0,
     "module": "percent-fill",
     "change": "enter",
     "text": "Halcyon 2 scored 48 percent,"
    },
    {
-    "shot": "short-1-sh1",
+    "shot": "short-2-sh1",
     "start": 2.136,
     "module": "unit-grid",
     "change": "swap",
     "text": "compared with 39 percent"
    },
    {
-    "shot": "short-1-sh1",
+    "shot": "short-2-sh1",
     "start": 3.795,
     "module": "pie-chart",
     "change": "swap",
     "text": "for the previous model and 51 percent for the best rival."
    },
    {
-    "shot": "short-1-sh2",
+    "shot": "short-2-sh2",
     "start": 8.35,
     "module": "concept-card",
     "change": "enter",
     "text": "So it improved, but it did not take the top spot."
    },
    {
-    "shot": "short-1-sh2",
+    "shot": "short-2-sh2",
     "start": 12.756,
     "module": "concept-card",
     "change": "swap",
     "text": "On a long document reading test,"
    },
    {
-    "shot": "short-1-sh2",
+    "shot": "short-2-sh2",
     "start": 15.224,
     "module": "percent-fill",
     "change": "swap",
     "text": "it scored 71 percent, which does lead, by about four points."
    },
    {
-    "shot": "short-1-sh3",
+    "shot": "short-2-sh3",
     "start": 20.176,
     "module": "motion-title",
     "change": "enter",
     "text": "And on a maths test"
    },
    {
-    "shot": "short-1-sh3",
+    "shot": "short-2-sh3",
     "start": 21.839,
-    "module": "icon-row",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "for high school competitions,"
    },
    {
-    "shot": "short-1-sh3",
+    "shot": "short-2-sh3",
     "start": 23.825,
-    "module": "icon-row",
-    "change": "build",
+    "module": "glass-word",
+    "change": "swap",
     "text": "it scored lower than the previous version,"
    },
    {
-    "shot": "short-1-sh4",
+    "shot": "short-2-sh4",
     "start": 26.845,
     "module": "unit-grid",
     "change": "enter",
     "text": "falling from 58 percent to 55 percent."
    },
    {
-    "shot": "short-1-sh4",
+    "shot": "short-2-sh4",
     "start": 29.959,
-    "module": "kinetic-words",
+    "module": "object-card",
     "change": "swap",
     "text": "Northlight mentioned that drop in a footnote."
    },
    {
-    "shot": "short-1-sh4",
+    "shot": "short-2-sh4",
     "start": 33.329,
-    "module": "glass-word",
+    "module": "motion-title",
     "change": "swap",
     "text": "The honest summary is this."
    },
    {
-    "shot": "short-1-sh5",
+    "shot": "short-2-sh5",
     "start": 35.668,
     "module": "count-up",
     "change": "enter",
     "text": "Halcyon 2 is a clear step"
    },
    {
-    "shot": "short-1-sh5",
+    "shot": "short-2-sh5",
     "start": 37.738,
     "module": "concept-card",
     "change": "swap",
     "text": "up on long tasks and long documents,"
    },
    {
-    "shot": "short-1-sh5",
+    "shot": "short-2-sh5",
     "start": 40.539,
-    "module": "timeline",
+    "module": "concept-card",
     "change": "swap",
     "text": "a modest step on coding, and a small step back on maths."
-   }
-  ]
- },
- {
-  "id": "short-2-how-the-rivals-answered",
-  "title": "Halcyon 2, explained: what a frontier model launch actually changes: How the ri…",
-  "window": {
-   "chapter": "how-the-rivals-answered",
-   "title": "How the rivals answered",
-   "start": 819.715,
-   "end": 864.574,
-   "words": [
-    1879,
-    1985
-   ],
-   "states": [
-    "how-the-rivals-answered-1-sh1-2",
-    "how-the-rivals-answered-1-sh1-3",
-    "how-the-rivals-answered-1-sh2-1",
-    "how-the-rivals-answered-1-sh2-2",
-    "how-the-rivals-answered-1-sh2-3",
-    "how-the-rivals-answered-1-sh3-1"
-   ],
-   "score": 4.064
-  },
-  "skeleton": null,
-  "duration": 45.259,
-  "cadence": {
-   "events": 14,
-   "per_min": 18.56,
-   "gap": {
-    "count": 13,
-    "p10": 2.063,
-    "p50": 2.731,
-    "p90": 4.157,
-    "mean": 2.895
-   },
-   "cuts": 5,
-   "ok": true
-  },
-  "states": [
-   {
-    "shot": "short-2-sh1",
-    "start": 0,
-    "module": "icon-row",
-    "change": "enter",
-    "text": "the largest rival lab cut its prices"
-   },
-   {
-    "shot": "short-2-sh1",
-    "start": 2.657,
-    "module": "percent-fill",
-    "change": "swap",
-    "text": "by 40 percent and published a"
-   },
-   {
-    "shot": "short-2-sh1",
-    "start": 4.873,
-    "module": "motion-title",
-    "change": "swap",
-    "text": "blog post comparing its own model favourably on maths."
-   },
-   {
-    "shot": "short-2-sh2",
-    "start": 8.945,
-    "module": "kinetic-words",
-    "change": "enter",
-    "text": "Five days after the launch,"
-   },
-   {
-    "shot": "short-2-sh2",
-    "start": 11.044,
-    "module": "icon-grid",
-    "change": "swap",
-    "text": "a second lab released an updated model"
-   },
-   {
-    "shot": "short-2-sh2",
-    "start": 13.775,
-    "module": "count-up",
-    "change": "swap",
-    "text": "with a faster mode, claiming 1.5 seconds per response."
-   },
-   {
-    "shot": "short-2-sh3",
-    "start": 17.953,
-    "module": "icon-row",
-    "change": "enter",
-    "text": "Ten days after the launch,"
-   },
-   {
-    "shot": "short-2-sh3",
-    "start": 20.016,
-    "module": "icon-row",
-    "change": "build",
-    "text": "an open source group published"
-   },
-   {
-    "shot": "short-2-sh3",
-    "start": 22.081,
-    "module": "icon-row",
-    "change": "build",
-    "text": "a smaller model that matched Halcyon 1.5"
-   },
-   {
-    "shot": "short-2-sh4",
-    "start": 24.849,
-    "module": "motion-title",
-    "change": "enter",
-    "text": "on most public benchmarks and could run on a single workstation."
-   },
-   {
-    "shot": "short-2-sh5",
-    "start": 29.659,
-    "module": "concept-card",
-    "change": "enter",
-    "text": "On the public leaderboard"
-   },
-   {
-    "shot": "short-2-sh5",
-    "start": 31.355,
-    "module": "concept-card",
-    "change": "swap",
-    "text": "that ranks models by blind human votes,"
-   },
-   {
-    "shot": "short-2-sh5",
-    "start": 34.266,
-    "module": "odometer",
-    "change": "swap",
-    "text": "the order shifted three times in two weeks."
-   },
-   {
-    "shot": "short-2-sh6",
-    "start": 37.749,
-    "module": "count-up",
-    "change": "enter",
-    "text": "Halcyon 2 entered at second place,"
-   },
-   {
-    "shot": "short-2-sh6",
-    "start": 40.291,
-    "module": "icon-grid",
-    "change": "swap",
-    "text": "briefly took first, then settled at third after the rival updates."
    }
   ]
  },
@@ -345,7 +345,7 @@
    {
     "shot": "short-3-sh2",
     "start": 7.867,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "The context window doubled,"
    },
@@ -366,7 +366,7 @@
    {
     "shot": "short-3-sh3",
     "start": 14.957,
-    "module": "motion-title",
+    "module": "object-card",
     "change": "swap",
     "text": "Northlight published a short section"
    },
@@ -380,7 +380,7 @@
    {
     "shot": "short-3-sh4",
     "start": 20.006,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "enter",
     "text": "including a table of known failure cases."
    }
@@ -409,7 +409,7 @@
     "inside-the-training-run-1-sh3-1",
     "inside-the-training-run-1-sh3-2"
    ],
-   "score": 3.732
+   "score": 3.62
   },
   "skeleton": {
    "id": "dollar-a-second",
@@ -447,21 +447,21 @@
    {
     "shot": "short-4-sh1",
     "start": 5.599,
-    "module": "icon-row",
+    "module": "motion-title",
     "change": "swap",
     "text": "linked by a network that moves data between them at enormous speed."
    },
    {
     "shot": "short-4-sh2",
     "start": 10.705,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "Running it costs real money."
    },
    {
     "shot": "short-4-sh2",
     "start": 13.081,
-    "module": "kinetic-words",
+    "module": "glass-word",
     "change": "swap",
     "text": "Outside analysts estimate the"
    },
@@ -482,54 +482,54 @@
    {
     "shot": "short-4-sh3",
     "start": 19.639,
-    "module": "concept-card",
+    "module": "process-steps",
     "change": "swap",
     "text": "once you count the chips, the power and the people."
    },
    {
-    "shot": "short-4-sh4",
+    "shot": "short-4-sh3",
     "start": 23.932,
-    "module": "icon-row",
-    "change": "enter",
+    "module": "process-steps",
+    "change": "build",
     "text": "Northlight has not confirmed a number."
    },
    {
     "shot": "short-4-sh4",
     "start": 26.859,
-    "module": "icon-row",
-    "change": "build",
+    "module": "motion-title",
+    "change": "enter",
     "text": "Power is the other constraint."
    },
    {
     "shot": "short-4-sh4",
     "start": 29.308,
-    "module": "icon-row",
-    "change": "build",
+    "module": "particle-text",
+    "change": "swap",
     "text": "The Finnish site was chosen"
    },
    {
-    "shot": "short-4-sh5",
+    "shot": "short-4-sh4",
     "start": 31.264,
-    "module": "motion-title",
-    "change": "enter",
+    "module": "kinetic-words",
+    "change": "swap",
     "text": "because electricity there is cheap,"
    },
    {
     "shot": "short-4-sh5",
     "start": 33.655,
     "module": "glass-word",
-    "change": "swap",
+    "change": "enter",
     "text": "mostly renewable, and the cold climate makes cooling easier."
    },
    {
-    "shot": "short-4-sh6",
+    "shot": "short-4-sh5",
     "start": 38.089,
     "module": "concept-card",
-    "change": "enter",
+    "change": "swap",
     "text": "The system card says the run used"
    },
    {
-    "shot": "short-4-sh6",
+    "shot": "short-4-sh5",
     "start": 40.638,
     "module": "count-up",
     "change": "swap",
@@ -539,7 +539,7 @@
     "shot": "short-4-sh6",
     "start": 43.398,
     "module": "odometer",
-    "change": "swap",
+    "change": "enter",
     "text": "roughly what a town of ten thousand homes uses in a year."
    }
   ]
