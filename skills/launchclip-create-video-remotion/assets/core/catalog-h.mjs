@@ -28,6 +28,8 @@
 //             scale on a canvas painted by kit/core/particles.mjs) and
 //             catalog-i-grids.mjs (grid-race, cell-grid: unit grids at scale)
 //             and catalog-i-tokenizer.mjs (tokenizer: BPE chips and prices)
+//   3D        catalog-i-3d.mjs (catalogue I: glass bars, stacks, shelves,
+//             devices, paper and planets on a CSS 3D rig)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -53,9 +55,11 @@ import {CODE_MODULES} from './catalog-i-code.mjs';
 import {PARTICLE_MODULES} from './catalog-i-particles.mjs';
 import {GRID_MODULES} from './catalog-i-grids.mjs';
 import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
+import {OBJECT_MODULES} from './catalog-i-3d.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES];
+
 
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));

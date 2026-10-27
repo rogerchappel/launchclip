@@ -122,6 +122,12 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Glass: panel {treatment: "rim-glass"} turns every card (stat-card, excerpt, quote-card, …), window-chrome and comparison-table into translucent glass with a cyan (primary) rim and glow. Type stays paper and primary; the accent is for the one brand being discussed.
 - Channel furniture: logo-sting opens and closes (rain, particles or clear); subscribe-cta goes on track 1+ over a card scene for 5–6 s, two or three times in a long video, never over a key figure; channel-watermark goes on the highest track across the main body (decor: scenes pass under it).
 
+## 3D data objects
+
+- Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.
+- Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).
+- Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.
+
 ## Footage layouts (sections)
 
 A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section's scenes in its panel.
@@ -248,6 +254,12 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels | icon-grid |
 | names countries or where something happens ("in 40 countries", "across Europe", "from Brazil to Japan"): a world map that zooms and fills the countries the brief names | map-highlight |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
+| compares a few prices, scores or sizes as a premium 3D beat, or a line-up from top to bottom ("the line-up", "from $50 down to $0.50", "the cheapest of the family"): glass bars grow under an orbiting camera, or a staircase of steps with a score marker hopping between them | glass-bars-3d |
+| compares costs or token counts as piles ("$1 versus $10", "ten times the cost", "three times more tokens"): stacks of coins or token discs drop in, sized by value | coin-stack |
+| lays out a family of models or plans row by row with a score and a price ("model by model", "each tier", "on the shelf"), or places them on a price scale: trays stack in and one slides out, or cubes glide along a price rail | rack-shelf |
+| talks about a server, GPU or box running live ("one GPU", "on a single node", "it has been up for", "requests so far"): the device lands with a screen counting requests and an uptime clock | device-box |
+| walks through a long document, report or paper section by section, with what passed and what failed ("chapter by chapter", "page 14", "the audit found", "red flags"): sections land as a stack and each gets a check or a red flag (books, or a folder that opens, as variants) | paper-stack |
+| introduces a product family from small to large ("the small one, the mid one, the flagship", "three sizes", "light, standard and pro"): each member as a moon, earth, sun or galaxy with its name and tagline, the camera tracking across | planet-family |
 
 ## Modules
 
@@ -1828,6 +1840,108 @@ params:
 events: build, race, total
 variants: panel (default), bare
 
+### glass-bars-3d (keeps captions)
+Extruded glass bars in 3D under a slow orbiting camera: 2–6 values grow in with count-up labels, one bar can glow while the rest drop back, with an optional dashed reference ("half"). The staircase variant lines them up as descending glass steps, price and name on each front face, with a score marker that hops between steps on cue.
+params:
+- data: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value, "$0.50")}] 2–6; for the staircase list them highest first (step heights follow the rank)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the bar that glows (optional)
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- marker: staircase only: {text ≤ 12 ("59.3%"), label? ≤ 24, steps: [index or label] 1–4 (the steps it visits, in order), at?: [seconds]} (events marker-<k>)
+- reference: bars only: {value, label? ≤ 12} a dashed level across the bars ("half")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- highlightTone: the lit bar's tone (default primary)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight, marker-0, marker-1, marker-2, marker-3
+variants: bars (default), staircase
+
+### coin-stack (keeps captions)
+Stacks sized by value under a slow orbiting camera: 1–4 stacks of gold coins ("$1 vs $10"), or of glass token discs (variant cylinders, "×3 more tokens"), each coin dropping onto its stack in turn while the value counts up, with an optional callout ("×10") beside one stack.
+params:
+- stacks: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value), count? 1–16 (coins in the stack; default value / per)}] 1–4
+- per: the value of one coin (default: the tallest stack has 12; at most 16 per stack)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the stack that glows (optional)
+- callout: {text ≤ 10 ("×10"), stack? (index or label, default the last), at?} a big number beside a stack (event callout)
+- tone: coin or glass tone: primary | accent | paper | #rrggbb (default primary for coins, accent for cylinders)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: first drop: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, callout
+variants: coins (default), cylinders
+
+### rack-shelf (keeps captions)
+A stacked server shelf in 3D: 2–6 glass trays, each a labelled row ("model · score · price") with an optional icon, stack in from the bottom while the camera dollies in, then one tray slides out toward the viewer and lights up. The rail variant glides 1–5 glass cubes (name and price on the face) along a price rail to their values, with ticks and a caption under it.
+params:
+- rows: [{label ≤ 24, cells? [≤ 10 chars] up to 3 (rail: 2, the first set large), icon? (icon name), value? (the cube's place on the rail; required by the rail, unused by the rack)}] 2–6 (rail: 1–5)
+- focus: index or label of the tray that slides out (rail: the cube that lights) (optional)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- format: rail only: the tick format, {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- axis: rail only: a caption under the rail ≤ 48 ("Output price per 1M tokens")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus
+variants: rack (default), rail
+
+### device-box (keeps captions)
+A GPU server (or a compact appliance with one big fan) in 3D on a glowing grid floor: compute cards with spinning fans on top, and a screen in front that powers on to a live readout counting up ("requests: 0 → 1,284") beside an uptime clock ticking once a second.
+params:
+- readout: {label ≤ 14 ("requests"), to, from? (default 0), format? ({style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}), at?, duration? (seconds; default to the end of the scene)} the counter on the screen
+- clock: {start "HH:MM:SS", label? ≤ 10 (default "uptime")} a clock that ticks once a second (optional)
+- name: string ≤ 24, a label floating over the device ("INFERENCE NODE 01") (optional)
+- units: server: compute cards on top, 1–8 (default 4)
+- unitLabel: server: the card label ≤ 6 ("GPU" → "GPU 0", "GPU 1"…)
+- tone: glow tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the device lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, readout
+variants: server (default), appliance
+
+### paper-stack (keeps captions)
+Paper in 3D: a stack of labelled document sections ("Chapter 3 · pp. 41–77") landing one on another, then a check or a red flag per row on its cue; the books variant stacks books with their titles on the spines; the folder variant lands a glass folder whose front swings open on its hinge and its files rise out, labelled, each with its check or flag.
+params:
+- items: [{label ≤ 28, detail? ≤ 14 ("pp. 41–77"), status? ok | flag | none, size? 0.5–4 (relative thickness), at? (the status cue)}] 2–7 (folder: 1–5 files); the first is the top of the stack (or the front file)
+- openAt: folder only: the front opens: seconds from scene start (optional; else a matching hit, else a default)
+- tone: glow tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the stack starts landing: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, open, status-0, status-1, status-2, status-3, status-4, status-5, status-6
+variants: sections (default), books, folder
+
+### planet-family (keeps captions)
+A product family as celestial bodies: 2–5 procedural moon, ice world, earth, ringed gas giant, sun or galaxy, each with its name and tagline ("LUNA · light, fast, cheap"), the camera tracking from one to the next on cue over parallax star layers; the lineup variant shows 2–4 side by side and moves the focus while the rest dim. Surfaces turn, coronas and spiral arms spin.
+params:
+- bodies: [{kind (moon | ice | earth | gas | sun | galaxy), name ≤ 16 (set in capitals), tagline? ≤ 28, at? (its cue; the first shows with the build)}] 2–5 (lineup: 2–4), small to large reads best
+- tone: tagline tone: primary | accent | paper | #rrggbb (default accent)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the first body: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, body-0, body-1, body-2, body-3, body-4
+variants: track (default), lineup
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1989,6 +2103,12 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | grid-race | 2 s | 0.5 s | scene − 0.65 s | labels and counters rise from at; the race starts 0.6 s later; the counters and the cells move together, linearly |
 | cell-grid | 2 s | 0.5 s | scene − 0.65 s | grids fill one after another (0.6–1.4 s each, overlapping) from at; ticks, highlight and the ratio follow the last fill |
 | tokenizer | 2 s | 0.5 s | scene − 0.65 s | chips pop in left to right within about 1.5 s of at; counts count with them; the race runs up to 2.6 s, ending by the last event time |
+| glass-bars-3d | 2 s | 0.5 s | scene − 0.65 s | bars grow left to right within about 1.6 s from at; highlight and marker hops follow the build; the camera orbits for the whole scene |
+| coin-stack | 2 s | 0.5 s | scene − 0.65 s | coins drop one per stack level, all stacks together, within about 2 s from at; the callout follows the build |
+| rack-shelf | 2 s | 0.5 s | scene − 0.65 s | trays stack in bottom first (cubes glide in) within about 1.7 s from at; focus follows the build; the camera dollies in over the whole scene |
+| device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
+| paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
+| planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

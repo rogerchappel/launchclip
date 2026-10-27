@@ -173,7 +173,14 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'motion-title', intents: ['hook', 'turn'], when: 'announces or names something in a few words ("announcing", "introducing", "say hello to"): a title built by the style\'s text effect, with a kicker and sub-line', patterns: ['^(announcing|introducing|presenting|say hello to)\\b'] },
   { module: 'icon-grid', intents: ['list', 'product'], when: 'lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels', patterns: ['\\b(works with|integrates with|everything you need|all the features|built-in)\\b'] },
   { module: 'map-highlight', intents: ['number', 'proof'], when: 'names countries or where something happens ("in 40 countries", "across Europe", "from Brazil to Japan"): a world map that zooms and fills the countries the brief names', patterns: ['\\b(countries|worldwide|across (europe|asia|africa|the world|the us)|global(ly)?)\\b', '\\bfrom [A-Z][a-z]+ to [A-Z][a-z]+\\b'] },
-  { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] }
+  { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] },
+  // Catalogue I: 3D data objects (real values from the brief or assets only).
+  { module: 'glass-bars-3d', intents: ['number'], when: 'compares a few prices, scores or sizes as a premium 3D beat, or a line-up from top to bottom ("the line-up", "from $50 down to $0.50", "the cheapest of the family"): glass bars grow under an orbiting camera, or a staircase of steps with a score marker hopping between them', patterns: ['\\b(line-?up|staircase|tiers?)\\b', '\\bfrom \\$?\\d[\\d.,]* (down|up) to \\$?\\d'] },
+  { module: 'coin-stack', intents: ['number'], when: 'compares costs or token counts as piles ("$1 versus $10", "ten times the cost", "three times more tokens"): stacks of coins or token discs drop in, sized by value', patterns: ['\\b(coins?|stack(s|ed)? of|pile of)\\b', '\\b(\\d+|ten|three|five)\\s?(×|x|times) (the cost|more tokens|as much|cheaper|pricier)\\b'] },
+  { module: 'rack-shelf', intents: ['number', 'list'], when: 'lays out a family of models or plans row by row with a score and a price ("model by model", "each tier", "on the shelf"), or places them on a price scale: trays stack in and one slides out, or cubes glide along a price rail', patterns: ['\\b(shelf|rack|row by row|model by model|price rail|price scale)\\b'] },
+  { module: 'device-box', intents: ['product', 'number'], when: 'talks about a server, GPU or box running live ("one GPU", "on a single node", "it has been up for", "requests so far"): the device lands with a screen counting requests and an uptime clock', patterns: ['\\b(gpus?|servers?|nodes?|appliance|hardware|on-?prem)\\b', '\\b(up for|requests so far|uptime)\\b'] },
+  { module: 'paper-stack', intents: ['proof', 'list'], when: 'walks through a long document, report or paper section by section, with what passed and what failed ("chapter by chapter", "page 14", "the audit found", "red flags"): sections land as a stack and each gets a check or a red flag (books, or a folder that opens, as variants)', patterns: ['\\b(chapters?|pages? \\d+|pp\\.|sections? of|red flags?|audit(ed)?|the report|folder|files?)\\b'] },
+  { module: 'planet-family', intents: ['product'], when: 'introduces a product family from small to large ("the small one, the mid one, the flagship", "three sizes", "light, standard and pro"): each member as a moon, earth, sun or galaxy with its name and tagline, the camera tracking across', patterns: ['\\b(family|three sizes|small, medium|lite|flagship|tiers? of)\\b', '\\b(moon|planet|sun|galaxy|universe)\\b'] },
 ].map((row) => Object.freeze({ ...row, patterns: Object.freeze(row.patterns) })));
 
 /** The registry module a phrase-table row maps to (its fallback when the module is planned). */
@@ -420,6 +427,15 @@ export function codeEvidenceLines() {
     'A claim about code ("they are already testing it", "it shipped") lands on its receipt: repo-pr-card (a PR), commit-card (a commit), diff-view (what changed, row by row) or terminal-session (a run). Box the token (a model name, a flag) with highlight and time highlightAt to its word: "highlightAt": "word:terra".',
     'Real data only: map a public PR or commit with `node src/evidence/github.js <url> --token <text>` (cached under assets/evidence/, avatars too) and paste its params; never type or invent repo names, numbers, shas, authors or lines. Lines stay verbatim (cropping round the token is the module\'s job).',
     'Several sources for one name: evidence-chain (2–4 cards, one per beat, the token joined by a dashed connector) or date-pinned-timeline (cards pinned to their dates on a scrubbing day axis; the summary variant is the "why now? N clues in N days" recap). Keep one shot and build it source by source rather than cutting card to card.'
+  ];
+}
+
+// 3D data objects (catalogue I): when they beat a flat chart, and the build-not-cut rule.
+export function objectLines() {
+  return [
+    'Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.',
+    'Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).',
+    'Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.',
   ];
 }
 
@@ -830,6 +846,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
+    ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -929,6 +946,7 @@ export function storyboardModulesReference() {
     ...section('Code evidence (the receipt)', codeEvidenceLines().map((line) => `- ${line}`)),
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
+    ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

@@ -1,0 +1,23 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Catalogue I: staircase and rack shelf",
+  "lane": "motion",
+  "format": {"width": 1920, "height": 1080, "fps": 30, "duration": 15, "platform": "youtube"},
+  "brand": {
+    "colors": {"bg": "#06070d", "primary": "#fdb022", "accent": "#46d4ff", "ink": "#06070d", "paper": "#f2eee6"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "base": null,
+  "scenes": [
+    {"id": "stairs", "module": "glass-bars-3d", "start": 0, "end": 7.5, "params": {
+      "variant": "staircase", "title": "The line-up, by output price", "source": "Vendor price lists, Oct 2026",
+      "data": [{"label": "Atlas Max", "value": 50, "display": "$50"}, {"label": "Atlas", "value": 10, "display": "$10"}, {"label": "Nova", "value": 5, "display": "$5"}, {"label": "Nova Mini", "value": 0.5, "display": "$0.50"}],
+      "highlight": 2, "highlightAt": 5.6, "orbit": 14,
+      "marker": {"text": "59.3%", "label": "best score", "steps": [0, 1, 2], "at": [2.6, 3.7, 4.8]}}},
+    {"id": "rack", "module": "rack-shelf", "start": 7.5, "end": 15, "params": {
+      "title": "Model by model", "source": "Vendor price lists, Oct 2026", "orbit": 10,
+      "rows": [{"label": "Atlas Max", "cells": ["91", "$50"], "icon": "sparkle"}, {"label": "Atlas", "cells": ["84", "$10"], "icon": "sparkle"}, {"label": "Nova", "cells": ["78", "$5"], "icon": "sparkle"}, {"label": "Nova Mini", "cells": ["62", "$0.50"], "icon": "sparkle"}],
+      "focus": 2, "focusAt": 3.6}}
+  ],
+  "overlays": [{"type": "captions", "style": "none"}]
+}
