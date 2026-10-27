@@ -29,7 +29,12 @@ const enabled = process.env.LAUNCHCLIP_PARITY === '1';
 export const CAMERA_PARITY = Object.freeze([
   {id: 'explainer-9x16', threshold: 0.97, times: [3.2, 4.6, 4.7, 4.8, 9.5]},
   {id: 'world-camera-9x16', threshold: 0.97, times: [1.2, 3.0, 3.1, 8.0, 9.4, 12.5, 16.0, 18.0, 20.7, 22.6, 22.8, 22.9],
-    seams: [{time: 8.0, y: 1600, x0: 600, x1: 1000}]}
+    seams: [{time: 8.0, y: 1600, x0: 600, x1: 1000}]},
+  // Zooms inside a shot (kit/core/zooms.mjs): a box zoom on the title and a
+  // target zoom on bar 0 handing over to bar 2, at rest inside each zoom and
+  // mid-move, through the world camera and through cuts-mode wrappers.
+  {id: 'zoom-world-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
+  {id: 'zoom-cuts-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]}
 ]);
 
 // Largest luma step between neighbouring columns x0…x1, averaged over 16 rows from y.
