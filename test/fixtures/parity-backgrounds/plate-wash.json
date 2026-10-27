@@ -1,0 +1,19 @@
+{
+  "describe": "backdrop plate wash on the minimal story (a bright punctuation gradient under rim-glass panels)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "plate": {
+      "kind": "wash",
+      "params": {
+        "intensity": 0.8
+      }
+    },
+    "panel": {
+      "treatment": "rim-glass"
+    }
+  }
+}

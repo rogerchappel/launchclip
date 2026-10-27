@@ -1,0 +1,105 @@
+{
+  "describe": "world camera backdrops on the minimal story: starfield, then a pan right slides a wash in (at rest, mid-slide, at rest after the loop pan)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    3.35,
+    4.6
+  ],
+  "patch": {
+    "camera": {
+      "mode": "world"
+    },
+    "plate": {
+      "kind": "starfield",
+      "cycle": {
+        "every": 1,
+        "plates": [
+          "starfield",
+          "wash"
+        ]
+      }
+    },
+    "panel": {
+      "treatment": "rim-glass"
+    },
+    "scenes": [
+      {
+        "id": "s1",
+        "module": "metric",
+        "start": 0,
+        "end": 3,
+        "energy": 1,
+        "params": {
+          "title": "Build time",
+          "metric": {
+            "mode": "illustration",
+            "unit": "example minutes",
+            "format": "number",
+            "decimals": 0,
+            "values": [
+              {
+                "value": 48,
+                "at": 0.4
+              },
+              {
+                "value": 12,
+                "at": 1.6
+              }
+            ]
+          }
+        },
+        "hits": [
+          {
+            "at": "word:twelve",
+            "event": "settle",
+            "cue": "tick"
+          }
+        ]
+      },
+      {
+        "id": "s2",
+        "module": "checklist",
+        "start": 3,
+        "end": 6,
+        "energy": 2,
+        "in": {
+          "type": "pan",
+          "dur": 0.8,
+          "direction": "right"
+        },
+        "params": {
+          "title": "Three changes",
+          "statusLabels": {
+            "pending": "Next",
+            "active": "Now",
+            "done": "Done"
+          },
+          "rows": [
+            {
+              "label": "Cache dependencies",
+              "status": "done",
+              "at": 0.5
+            },
+            {
+              "label": "Split the test suite",
+              "status": "done",
+              "at": 1.1
+            },
+            {
+              "label": "Ship smaller images",
+              "status": "done",
+              "at": 1.7
+            }
+          ]
+        },
+        "hits": [
+          {
+            "at": "word:three",
+            "event": "rows-start"
+          }
+        ]
+      }
+    ]
+  }
+}
