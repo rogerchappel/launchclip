@@ -387,6 +387,7 @@ export function validateStory(story, { modules } = {}) {
   // frame: the brand frame the compilers draw around scenes (RFC §9.2).
   validateFrame(story.frame, { err, warn, scenes: Array.isArray(story.scenes) ? story.scenes : [] });
   validateDataSources(story, warn);
+  validateSocialSources(story, warn);
 
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
@@ -985,6 +986,23 @@ function validateDataSources(story, warn) {
       return start < b && stop > a;
     });
     if (!covered) warn(`scene ${scene.id} (${scene.module}) shows data with no source: add frame.sources [{text: "<author, year · journal>", scene: "${scene.id}"}] (or params.source); no source, no study claim`);
+  }
+}
+
+// Real posts only: each social card names where its post lives
+// (source.url, the capture lane's launchclip.capture.v1 record). A post
+// marked demo: true is a fictional test account and is exempt.
+const SOCIAL_MODULES = { "social-post": null, "social-stack": "posts", "social-sort": "posts", "social-wall": "posts" };
+function validateSocialSources(story, warn) {
+  for (const scene of Array.isArray(story.scenes) ? story.scenes.filter(isObject) : []) {
+    if (!(scene.module in SOCIAL_MODULES) || !isObject(scene.params)) continue;
+    const key = SOCIAL_MODULES[scene.module];
+    const posts = key === null ? [scene.params] : Array.isArray(scene.params[key]) ? scene.params[key] : [];
+    posts.forEach((post, i) => {
+      if (!isObject(post) || post.demo === true || nonEmpty(post.source?.url)) return;
+      const where = key === null ? "params.source.url" : `params.${key}[${i}].source.url`;
+      warn(`scene ${scene.id} (${scene.module}) shows a post with no ${where}: quote real posts only, with their url (and the capture's screenshot); demo: true marks a fictional test account`);
+    });
   }
 }
 

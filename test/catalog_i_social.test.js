@@ -177,3 +177,16 @@ test('social-wall: a drifting depth field, then the pulled posts come forward sh
   assert.throws(() => resolve('social-wall', {...SAMPLES['social-wall'], focus: [0, 0]}), /two different posts/);
   assert.throws(() => resolve('social-wall', {...SAMPLES['social-wall'], drift: 'sideways'}), /params\.drift/);
 });
+
+test('validateStory warns when a social post has no source.url, but not for demo posts', async () => {
+  const {validateStory} = await import('../kit/core/story.mjs');
+  const story = scenes => ({schema: 'launchclip.story.v1', title: 'Social', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 6, platform: 'youtube'}, brand, base: null, scenes});
+  const real = {platform: 'x', name: 'Ada', handle: 'ada', text: 'Hello'};
+  const warnings = validateStory(story([
+    {id: 's1', module: 'social-post', start: 0, end: 3, params: real},
+    {id: 's2', module: 'social-stack', start: 3, end: 6, params: {posts: [{...real, source: {url: 'https://x.com/ada/status/1'}}, real, DEMO_POSTS.kai]}}
+  ])).warnings.join('\n');
+  assert.match(warnings, /scene s1 \(social-post\) shows a post with no params\.source\.url/);
+  assert.match(warnings, /scene s2 \(social-stack\) shows a post with no params\.posts\[1\]\.source\.url/);
+  assert.doesNotMatch(warnings, /posts\[0\]|posts\[2\]/);
+});
