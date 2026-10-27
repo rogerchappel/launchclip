@@ -46,8 +46,8 @@ function args(argv) {
 }
 
 /** The resolved model of one module variant at one aspect. */
-export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SCENE} = {}) {
-  return {...MODULES[id].resolve({...params, variant}, {id: 's1', start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
+export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SCENE, sceneId = 's1'} = {}) {
+  return {...MODULES[id].resolve({...params, variant}, {id: sceneId, start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
 }
 
 function timeFor(model, at) {
@@ -105,7 +105,8 @@ async function main(argv) {
         }
         let body;
         try {
-          const model = sampleModel(id, variant, aspect);
+          // A scene id per tile, so ids (and the masks they name) never repeat in one page.
+          const model = sampleModel(id, variant, aspect, {sceneId: `s${tiles.length + 1}`});
           const state = frameState(catalogHTimeline(model), timeFor(model, opts.at));
           body = renderNode(stateTree(catalogHView(model), state));
         } catch (error) { body = `<div style="color:#ff6b6b;padding:40px;font:28px monospace;white-space:normal">${escape(error.message)}</div>`; }

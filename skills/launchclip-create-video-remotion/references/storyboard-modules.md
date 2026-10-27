@@ -1418,18 +1418,20 @@ events: build
 variants: stroke (default), duotone, tiles
 
 ### map-highlight (keeps captions)
-A world map that fades in, zooms to the highlighted countries when they sit close together, then fills them one by one with label pills: plain fills, pins that drop on each, or a glow.
+A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.
 params:
-- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, color?}] 1–8
-- focus: "auto" (zoom when the countries are close; default) | "world"
+- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?}] 1–8 (one of highlight or pins, or both)
+- pins: [{lon, lat, label ≤ 28, sub? ≤ 20 ("Ph.D. 2008"), card?: {title ≤ 28, sub? ≤ 32, image? (assets/… photo)}, color?}] 1–4 places; at most two cards (events pin-<i>)
+- route: boolean: a dashed travel path from pin to pin, in order (default false; events route-<i>)
+- focus: "auto" (zoom when the places are close; default) | "world"
 - tone: primary | accent | paper | #rrggbb
 - title: string ≤ 60 (optional)
 - source: string ≤ 80 (optional)
 - at: map lands: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, zoom, highlight-<i>
-variants: fill (default), pins, glow
+events: build, zoom, highlight-<i>, pin-<i>, route-<i>
+variants: fill (default), pins, glow, outline, dots
 
 ### unit-grid (keeps captions)
 An isotype: 1–200 units (a person by default, or any icon) that count in as a grid, then split into 2–3 labelled groups that slide apart and recolour ("49 lifters → 24 heavy, 25 light"), or light up a few and dim the rest ("1 in 10").
@@ -1507,8 +1509,8 @@ variants: glass (default), flat
 ### date-carousel (keeps captions)
 A row of day cards (month, date, weekday) that lands on one date, then rewinds or fast-forwards under a ◀◀ REWIND sign to another, slowing as it arrives; the focus day lights up with a glowing rim and its event chip ("GPT-6.1 released", "Day 1"), and an optional caption ("where it started") rises under it.
 params:
-- start: "YYYY-MM-DD", the day shown first
-- focus: "YYYY-MM-DD", the day it lands on (within 120 days; earlier rewinds, later fast-forwards)
+- from: "YYYY-MM-DD", the day shown first
+- to: "YYYY-MM-DD", the focus day it lands on (within 120 days; earlier rewinds, later fast-forwards)
 - event: {label ≤ 24, sub? ≤ 24, icon?, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)} the chip pinned on the focus day (optional)
 - startEvent: {label, sub?, icon?, tone?} a chip on the start day that clears as the strip moves (optional)
 - caption: string ≤ 40 under the cards after the focus (optional)
@@ -1679,7 +1681,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
-| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
+| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
