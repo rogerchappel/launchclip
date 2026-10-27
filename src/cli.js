@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -224,6 +224,12 @@ export async function runCli(argv, io = {}) {
         return;
       }
       result = report;
+    } else if (command === "research") {
+      const { runResearch } = await import("./research/index.js");
+      result = await runResearch(required(firstArg, "topic or script file"), {
+        out: flags.out, urls: flags.url, claims: flags.claims, media: flags.media, people: flags.people,
+        maxCaptures: flags["max-captures"], maxTables: flags["max-tables"], theme: flags.theme
+      }, { log: (line) => stderr.write(`${line}\n`) });
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
       const { makeOptionsFromFlags } = await import("./make/options.js");
