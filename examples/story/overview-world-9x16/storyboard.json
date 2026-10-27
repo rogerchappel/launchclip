@@ -1,0 +1,154 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "The story so far (golden, 9:16 overview)",
+  "notes": "Renderer-eval golden story for the overview move (in.type overview): four shots in the first chapter, then the camera pulls back over all four plus the incoming end card, holds, and pushes in. The earlier shots are held frozen on their last frame for the overview. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 22,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ff7a59",
+      "accent": "#7ce7ff",
+      "ink": "#0b1020",
+      "paper": "#f5f1ea"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "playful"
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "chapters": [
+    {
+      "id": "c1",
+      "title": "The numbers",
+      "start": 0
+    },
+    {
+      "id": "c2",
+      "title": "So what",
+      "start": 16
+    }
+  ],
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 1,
+      "params": {
+        "headline": "Which model wins on cost?",
+        "emphasis": "cost"
+      }
+    },
+    {
+      "id": "s2",
+      "module": "count-up",
+      "start": 4,
+      "end": 8,
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 0.8,
+        "direction": "right"
+      },
+      "params": {
+        "value": 57.6,
+        "decimals": 1,
+        "suffix": "%",
+        "label": "Astra on the eval"
+      }
+    },
+    {
+      "id": "s3",
+      "module": "bar-chart",
+      "start": 8,
+      "end": 12,
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 0.8,
+        "direction": "down"
+      },
+      "params": {
+        "title": "Score",
+        "data": [
+          {
+            "label": "Astra",
+            "value": 57.6
+          },
+          {
+            "label": "Bolt",
+            "value": 42
+          },
+          {
+            "label": "Comet",
+            "value": 31
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4",
+      "module": "gauge-compare",
+      "start": 12,
+      "end": 16,
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 0.8,
+        "direction": "left"
+      },
+      "params": {
+        "title": "Cost per run",
+        "left": {
+          "label": "Astra",
+          "value": 482,
+          "unit": "\u00a2"
+        },
+        "right": {
+          "label": "Bolt",
+          "value": 29,
+          "unit": "\u00a2",
+          "color": "accent"
+        },
+        "gap": {
+          "label": "Saved",
+          "value": 453,
+          "unit": "\u00a2"
+        },
+        "style": "column"
+      }
+    },
+    {
+      "id": "s5",
+      "module": "cta",
+      "start": 16,
+      "end": 22,
+      "energy": 3,
+      "in": {
+        "type": "overview",
+        "dur": 2.8,
+        "span": "chapter",
+        "hold": 0.6
+      },
+      "params": {
+        "action": "Follow for part two",
+        "emphasis": "part two"
+      }
+    }
+  ]
+}
