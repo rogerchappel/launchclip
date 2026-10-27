@@ -163,3 +163,13 @@ test("HyperFrames draws each scene's plate and the chapter change", async () => 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("segment digests change with a story or chapter plate, and stay put without one", async () => {
+  const { globalSettings, hashValue } = await import("../src/render_segments.js");
+  const plain = resolveStory(story());
+  assert.equal(globalSettings(plain).plate, undefined, "stories without a plate keep their digests");
+  const plated = resolveStory(story({ plate: "silk" }));
+  const other = resolveStory(story({ plate: "silk" }));
+  other.chapters[1].plate = "bokeh";
+  assert.notEqual(hashValue(globalSettings(plated)), hashValue(globalSettings(other)));
+});
