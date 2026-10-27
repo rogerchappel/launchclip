@@ -8,6 +8,7 @@ import test from 'node:test';
 import {MODULES, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from '../kit/core/catalog-d.mjs';
 import {focusAt, focusKeys, shortDate} from '../kit/core/catalog-d-evidence-clip.mjs';
 import {resolveModule} from '../kit/core/modules.mjs';
+import {profileGeometry} from '../kit/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 
@@ -18,14 +19,16 @@ const base = {media: {src: 'assets/evidence/pr-39217.mp4'}, viewport: {width: 16
 const scene = (params = {}) => ({id: 's3', module: 'evidence-clip', start: 2, end: 10, params: {...base, ...params}});
 const resolve = (params, format) => { const s = scene(params); return resolveModule(s, story(s, format)); };
 
-test('the window keeps the capture aspect inside the safe zone, the source tag under it', () => {
+test('the window keeps the capture aspect inside the safe zone, the source tag above it', () => {
   for (const format of [{width: 1920, height: 1080}, {width: 1080, height: 1920}]) {
     const model = resolve({}, format);
     const {rect, source, bezel} = model.content;
     assert.ok(Math.abs(rect.width / rect.height - 1.6) < 0.01);
-    assert.ok(rect.x - bezel >= model.safe.x - 0.01 && rect.x + rect.width + bezel <= model.safe.x + model.safe.width + 0.01);
-    assert.ok(source.box.y >= rect.y + rect.height + bezel);
-    assert.ok(source.box.y + source.box.height <= model.safe.y + model.safe.height + 0.01, 'the tag stays above the caption band');
+    const geometry = profileGeometry(format, format.height > format.width ? 'shorts' : 'landscape');
+    const zone = geometry.safeZone;
+    assert.ok(rect.x - bezel >= zone.x - 0.01 && rect.x + rect.width + bezel <= zone.x + zone.width + 0.01);
+    assert.ok(rect.y - bezel >= zone.y - 0.01 && rect.y + rect.height + bezel <= zone.y + zone.height + 0.01);
+    assert.ok(source.box.y >= zone.y - 0.01 && source.box.y + source.box.height <= rect.y - bezel, 'the tag sits above the window, clear of the capture');
     assert.equal(model.layout.drift, false);
   }
 });

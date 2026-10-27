@@ -2650,7 +2650,7 @@ caption band.
 `evidence-clip` plays a capture of a real public page (`launchclip evidence
 capture`, [EVIDENCE_CAPTURE.md](EVIDENCE_CAPTURE.md)) inside a glass window:
 a translucent bezel, a hairline at the clip's edge and a `brand.colors.accent`
-rim glow, with a `publisher · date` source tag under it. The capture already
+rim glow, with a `publisher · date` source tag just above it. The capture already
 carries its own beats (scroll, selection sweep, focus ring, date pin, cursor);
 the module frames it and can add post moves on top. It keeps captions.
 
@@ -2667,11 +2667,13 @@ the module frames it and can add post moves on top. It keeps captions.
   (the provenance publisher and `published_at` as "Oct 16, 2026", UTC).
 - **`media`:** an `assets/` video (`.mp4`, `.webm`, `.mov`), `sourceStart`
   optional. **`viewport`** (required): the capture's size, for its aspect.
-- **Window:** the capture's aspect fitted in the safe zone above the caption
-  band, less the bezel (14 px at 1080) and the tag. `frame: "none"` drops the
-  bezel and glow.
+- **Window:** the capture's aspect fitted in the whole safe zone, less the
+  bezel (14 px at 1080); captions may sit over its bottom edge, as over
+  `product-demo`'s. `frame: "none"` drops the bezel and glow.
 - **`source`:** `{publisher ≤ 40, date? ≤ 24}` in the meta font, on one line,
-  or publisher and date on two when one line is too wide (portrait).
+  or publisher and date on two when one line is too wide (portrait). The tag
+  sits just above the window, left-aligned like a tab label, so it never
+  covers the capture's URL bar or page and never meets the caption band.
 - **Camera:** a linear push-in `1 → 1 + push` (default 0.04, 0–0.12) about the
   window centre over the whole scene, so the frame never holds still, times
   any `focus` zooms. A focus (`{at, box, scale?, until?}`, ≤ 4, capture px)

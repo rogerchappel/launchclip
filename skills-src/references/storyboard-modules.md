@@ -688,11 +688,11 @@ params:
 events: enter, line-<i>
 
 ### evidence-clip (keeps captions)
-A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date), with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.
+A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date) above it, with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.
 params:
 - media: {src: "assets/evidence/<id>.mp4", sourceStart?: seconds}
 - viewport: {width, height} of the capture in px (from <id>.evidence.json) — build with evidenceClipParams(sidecar) or launchclip evidence scene
-- source: {publisher ≤ 40, date? ≤ 24} the tag under the window (default from the sidecar provenance)
+- source: {publisher ≤ 40, date? ≤ 24} the tag above the window (default from the sidecar provenance)
 - frame: glass|none (default glass)
 - push: 0–0.12, the slow push-in over the scene (default 0.04)
 - focus: [{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture's own beats

@@ -1,6 +1,6 @@
 // Catalogue D module `evidence-clip`: a capture of a real public page
 // (launchclip evidence capture, src/evidence/) playing inside a glass frame
-// with a brand-accent rim glow, a source tag (publisher · date) under it, and
+// with a brand-accent rim glow, a source tag (publisher · date) above it, and
 // optional post moves on top: zooms to boxes in the clip and a cursor that
 // glides between points. Registered in kit/core/catalog-d.mjs. Contract:
 // docs/KIT_CONTRACTS.md ("Evidence clip"); capture side: docs/EVIDENCE_CAPTURE.md.
@@ -124,16 +124,18 @@ function resolveEvidenceClip(params, ctx) {
     source = {lines, size, padX, padY, width: r2(textW + padX * 2 + dot), height: r2(size * 1.25 * lines.length + padY * 2)};
   }
 
-  // Window: the clip's aspect fitted in the safe zone above the caption band, leaving room for the tag and the bezel.
+  // Window: the clip's aspect fitted in the whole safe zone, less the bezel (captions may sit over its
+  // bottom edge, as over product-demo's). The tag sits just above the window, left-aligned like a tab
+  // label: never over the capture's URL bar or page, and never near the caption band.
   const bezel = frame === 'glass' ? u(14) : 0;
-  const gap = source ? u(22) : 0;
-  const zone = b.safe;
+  const zone = b.zone;
   const aspect = viewport.width / viewport.height;
-  const room = {width: zone.width - bezel * 2, height: zone.height - bezel * 2 - (source ? source.height + gap : 0)};
-  const width = Math.min(room.width, room.height * aspect), height = width / aspect;
-  const blockH = height + bezel * 2 + (source ? source.height + gap : 0);
-  const rect = {x: r2(zone.x + (zone.width - width) / 2), y: r2(zone.y + (zone.height - blockH) / 2 + bezel), width: r2(width), height: r2(height)};
-  if (source) source.box = {x: r2(rect.x + rect.width / 2 - source.width / 2), y: r2(rect.y + rect.height + bezel + gap), width: source.width, height: source.height};
+  const lift = source ? source.height + u(12) : 0;
+  const width = Math.min(zone.width - bezel * 2, (zone.height - bezel * 2 - lift) * aspect), height = width / aspect;
+  const blockH = height + bezel * 2 + lift;
+  const top = zone.y + (zone.height - blockH) / 2;
+  const rect = {x: r2(zone.x + (zone.width - width) / 2), y: r2(top + lift + bezel), width: r2(width), height: r2(height)};
+  if (source) source.box = {x: r2(rect.x - bezel + u(8)), y: r2(top), width: source.width, height: source.height};
   const k = rect.width / viewport.width;
   const toCanvas = (pt) => ({x: r2(rect.x + pt.x * k), y: r2(rect.y + pt.y * k)});
   const centre = {x: r2(rect.x + rect.width / 2), y: r2(rect.y + rect.height / 2)};
@@ -187,7 +189,7 @@ function resolveEvidenceClip(params, ctx) {
     b.events.push({id: `${b.id}-source`, name: 'source', time: source.at, endTime: rt(source.at + 0.4), role: 'emphasis'});
   }
   const content = {media, viewport, frame, title, rect, bezel, radius: u(16), accent: colors.accent, surface: theme.bg, paper: theme.paper, muted: theme.muted, source, focus, cursor, keys, samples, push: pushBy, cursorSize: u(34)};
-  const outer = {x: r2(rect.x - bezel), y: r2(rect.y - bezel), width: r2(rect.width + bezel * 2), height: r2(blockH)};
+  const outer = {x: r2(rect.x - bezel), y: r2(top), width: r2(rect.width + bezel * 2), height: r2(blockH)};
   const model = b.finish(content, {rect: outer, role: 'media', minTextPx: source ? source.size : null,
     motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
   // Its own push is the rest motion.
@@ -281,11 +283,11 @@ export function evidenceClipTimeline(model) {
 
 export const evidenceClip = {
   id: 'evidence-clip',
-  describe: 'A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date), with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.',
+  describe: 'A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date) above it, with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.',
   params: {
     media: '{src: "assets/evidence/<id>.mp4", sourceStart?: seconds}',
     viewport: '{width, height} of the capture in px (from <id>.evidence.json) — build with evidenceClipParams(sidecar) or launchclip evidence scene',
-    source: '{publisher ≤ 40, date? ≤ 24} the tag under the window (default from the sidecar provenance)',
+    source: '{publisher ≤ 40, date? ≤ 24} the tag above the window (default from the sidecar provenance)',
     frame: 'glass|none (default glass)',
     push: '0–0.12, the slow push-in over the scene (default 0.04)',
     focus: '[{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture\'s own beats',
