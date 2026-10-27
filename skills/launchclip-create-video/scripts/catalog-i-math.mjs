@@ -265,7 +265,8 @@ function decomposeResolve(params, ctx) {
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: rt(buildAt + step * words.length + 0.4), role: 'emphasis', cue: 'tally'});
   chips.forEach(chip => { chip.time = rt(buildAt + chip.k * step); chip.term = terms.findIndex(term => chip.k >= term.first && chip.k <= term.last); });
   const cues = terms.map((_, i) => ({name: `term-${i}`, path: `params (event term-${i})`, gap: 0.7}));
-  scheduleCues(b, cues, buildAt - b.start + step * words.length + 0.5);
+  // Each term's cell rises 0.45 s after its cue, so the last cue leaves room for it.
+  scheduleCues(b, cues, buildAt - b.start + step * words.length + 0.5, {tail: 0.75});
   // Each connector leaves the term's last line; cells run in the order the
   // connectors leave, so wrapped terms never cross each other's lines.
   const starts = terms.map((_, i) => {

@@ -115,7 +115,7 @@ function annotationList(b, raw, panels) {
 
 /** Cue times: explicit `at` or hit, else defaults squeezed to fit the scene. */
 function scheduleCues(b, cues, first) {
-  const latest = b.lastEvent - 0.2;
+  const latest = b.lastEvent - 0.6;
   const total = cues.reduce((sum, cue) => sum + cue.gap, 0);
   const span = Math.max(0, latest - first);
   const k = total > span && total > 0 ? span / total : 1;
