@@ -55,11 +55,13 @@ export const SAMPLES = Object.freeze({
     {date: '2026-07-16', label: 'Free repairs', kind: 'pr', repo: 'rogerchappel/launchclip', number: 82, state: 'merged', lines: ['+      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };'], startLine: {old: 87, new: 87}, highlight: 'openrouter/free'},
     {date: '2026-07-17', label: 'Model rotation', kind: 'pr', repo: 'rogerchappel/launchclip', number: 89, state: 'merged', lines: ['+  return route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free"));'], startLine: {old: 324, new: 345}, highlight: 'openrouter/free'},
     {date: '2026-07-18', label: 'Repair fallback', kind: 'commit', repo: 'rogerchappel/launchclip', sha: '4bb5d3b42fd3', lines: ['+  if (!repairRoutes.some((route) => /^openrouter:openrouter\\/free(?:@|$)/i.test(route))) repairRoutes.push("openrouter:openrouter/free@none");'], startLine: {old: 82, new: 82}, highlight: {token: 'openrouter/free', row: 0}}]},
+  // A real session in this repo: the commit behind the commit-card sample, the helper's tests, and a full npm test run on this branch (its real totals).
   'terminal-session': {title: 'launchclip — zsh', steps: [
-    {cmd: 'git clone https://github.com/rogerchappel/launchclip.git', output: ["Cloning into 'launchclip'...", 'Resolving deltas: 100% (19468/19468), done.']},
-    {cmd: 'cd launchclip && npm ci --silent', output: []},
-    {cmd: 'node --test test/catalog_i_code.test.js', output: [{text: 'Running 12 tests', tone: 'muted'}, {status: 'PASS', time: '41 ms', text: 'repo-pr-card resolves real PR data'}, {status: 'PASS', time: '28 ms', text: 'commit-card keeps the token in view'}, {status: 'PASS', time: '35 ms', text: 'evidence-chain joins every token'}]}],
-    timer: {to: 95}, highlight: 'rogerchappel/launchclip'},
+    {cmd: 'git show --stat c3ec4a11 --format=%s', output: ['direct: default OpenAI model to gpt-5.5', ' src/director.js | 7 ++++---', ' 1 file changed, 4 insertions(+), 3 deletions(-)']},
+    {cmd: 'node --test test/evidence_github.test.js', output: [{status: 'PASS', time: '9.0 ms', text: 'parseGithubRef reads URLs and short forms'}, {status: 'PASS', time: '17.1 ms', text: 'githubGet caches responses and explains the rate limit'},
+      {status: 'PASS', time: '9.7 ms', text: 'a real PR maps to repo-pr-card params that resolve'}, {status: 'PASS', time: '4.0 ms', text: 'a real commit maps to commit-card and diff-view params'}]},
+    {cmd: 'npm test', output: [{text: 'ℹ tests 2515', tone: 'muted'}, {text: 'ℹ pass 2053', tone: 'add'}, {text: 'ℹ fail 4', tone: 'del'}, {text: 'ℹ duration_ms 219907.9', tone: 'muted'}]}],
+    timer: {to: 220}, highlight: 'c3ec4a11'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 

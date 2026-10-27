@@ -187,15 +187,15 @@ test('terminal-session: commands type, output streams, the timer fast-forwards a
   const s0 = c.steps[0];
   const half = at((s0.time + s0.typeEnd) / 2);
   const typed = [0, 1, 2].map(g => half.get(`scene-ty-0-${g}`)?.text ?? '').join('');
-  assert.ok(typed.length > 0 && 'git clone https://github.com/rogerchappel/launchclip.git'.startsWith(typed) && typed.length < 50, `half typed: ${typed}`);
+  assert.ok(typed.length > 0 && 'git show --stat c3ec4a11 --format=%s'.startsWith(typed) && typed.length < 37, `half typed: ${typed}`);
   const done = at(c.end + 0.01);
-  assert.equal([0, 1, 2].map(g => done.get(`scene-ty-0-${g}`).text).join(''), 'git clone https://github.com/rogerchappel/launchclip.git');
-  assert.equal(done.get('scene-ty-0-1').text, 'rogerchappel/launchclip', 'the highlighted token is its own span');
+  assert.equal([0, 1, 2].map(g => done.get(`scene-ty-0-${g}`).text).join(''), 'git show --stat c3ec4a11 --format=%s');
+  assert.equal(done.get('scene-ty-0-1').text, 'c3ec4a11', 'the highlighted token is its own span');
   // Output rows appear in order, after their command.
   const rows = c.lines.filter(l => l.kind === 'out');
   for (let k = 1; k < rows.length; k++) assert.ok(rows[k].time >= rows[k - 1].time);
   assert.ok(rows.every(r => r.time > c.steps[r.step].typeEnd));
-  assert.equal(done.get('scene-clock').text, '1:35');
+  assert.equal(done.get('scene-clock').text, '3:40');
   assert.equal(at(c.timer.start - 0.01).get('scene-clock').text, '0:00');
   assert.equal(settled(model).get('scene-hlr').strokeDashoffset, 0);
   // Long runs scroll the window.

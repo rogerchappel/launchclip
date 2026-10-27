@@ -35,45 +35,64 @@
           "title": "launchclip — zsh",
           "steps": [
             {
-              "cmd": "git clone https://github.com/rogerchappel/launchclip.git",
+              "cmd": "git show --stat c3ec4a11 --format=%s",
               "output": [
-                "Cloning into 'launchclip'...",
-                "Resolving deltas: 100% (19468/19468), done."
+                "direct: default OpenAI model to gpt-5.5",
+                " src/director.js | 7 ++++---",
+                " 1 file changed, 4 insertions(+), 3 deletions(-)"
               ]
             },
             {
-              "cmd": "cd launchclip && npm ci --silent",
-              "output": []
-            },
-            {
-              "cmd": "node --test test/catalog_i_code.test.js",
+              "cmd": "node --test test/evidence_github.test.js",
               "output": [
                 {
-                  "text": "Running 12 tests",
+                  "status": "PASS",
+                  "time": "9.0 ms",
+                  "text": "parseGithubRef reads URLs and short forms"
+                },
+                {
+                  "status": "PASS",
+                  "time": "17.1 ms",
+                  "text": "githubGet caches responses and explains the rate limit"
+                },
+                {
+                  "status": "PASS",
+                  "time": "9.7 ms",
+                  "text": "a real PR maps to repo-pr-card params that resolve"
+                },
+                {
+                  "status": "PASS",
+                  "time": "4.0 ms",
+                  "text": "a real commit maps to commit-card and diff-view params"
+                }
+              ]
+            },
+            {
+              "cmd": "npm test",
+              "output": [
+                {
+                  "text": "ℹ tests 2515",
                   "tone": "muted"
                 },
                 {
-                  "status": "PASS",
-                  "time": "41 ms",
-                  "text": "repo-pr-card resolves real PR data"
+                  "text": "ℹ pass 2053",
+                  "tone": "add"
                 },
                 {
-                  "status": "PASS",
-                  "time": "28 ms",
-                  "text": "commit-card keeps the token in view"
+                  "text": "ℹ fail 4",
+                  "tone": "del"
                 },
                 {
-                  "status": "PASS",
-                  "time": "35 ms",
-                  "text": "evidence-chain joins every token"
+                  "text": "ℹ duration_ms 219907.9",
+                  "tone": "muted"
                 }
               ]
             }
           ],
           "timer": {
-            "to": 95
+            "to": 220
           },
-          "highlight": "rogerchappel/launchclip",
+          "highlight": "c3ec4a11",
           "variant": "glass"
         }
       }
