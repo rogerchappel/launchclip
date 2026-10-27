@@ -24,6 +24,7 @@
 
 import {propsToStyle, rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
+import {applyShotStates, shotStateView} from './shot-states.mjs';
 import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
 import {FLOWS} from './catalog-h-flows.mjs';
@@ -39,10 +40,13 @@ import {DATA_MODULES} from './catalog-h-data.mjs';
 const ASPECTS = ['9:16', '16:9'];
 const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
 export const VARIANTS = Object.freeze(Object.fromEntries(DEFINITIONS.map(def => [def.id, def.variants])));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
+
+// The module's own view and op list, for the states engine to re-run with a state's params.
+const stateHooks = def => ({view: model => def.view(model), timeline: model => { const ops = []; rootOps(model, ops); def.timeline(model, ops); return ops; }});
 
 function definition(model) {
   const def = model && BY_ID[model.module];
@@ -52,14 +56,18 @@ function definition(model) {
 
 /** Static element tree for a catalogue H model (initial state at scene start). */
 export function catalogHView(model) {
-  return rootNode(model, definition(model).view(model));
+  const def = definition(model);
+  return rootNode(model, shotStateView(model, def.view(model), stateHooks(def)));
 }
 
 /** Renderer-neutral animation ops for a catalogue H model, root first. */
 export function catalogHTimeline(model) {
   const ops = [];
   rootOps(model, ops);
-  definition(model).timeline(model, ops);
+  const def = definition(model);
+  def.timeline(model, ops);
+  // Shot states (kit/core/shot-states.mjs): param changes, reveals, the focus ring.
+  if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
 }
