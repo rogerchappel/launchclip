@@ -411,7 +411,7 @@ function singleCardResolve(id, kind, required) {
     let hlAt = null;
     if (card.tokens.length) {
       hlAt = cueTime(b, 'highlight', highlightAt, 'params.highlightAt', rowsEnd - b.start + 0.4, rowsEnd - b.start);
-      b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55 + (card.tokens.length - 1) * 0.35), role: 'emphasis', cue: 'hit-soft'});
+      b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55 + (card.tokens.length - 1) * 0.35), role: 'emphasis', cue: 'ping-soft'});
     } else if (highlightAt !== undefined) check.fail('params.highlightAt', 'needs params.highlight');
     const content = {variant: b.variant, pal, code: codeFont(b.fonts), card, x, y, buildAt, rowStep, highlightAt: hlAt, buildEnd: rowsEnd};
     return b.finish(content, {minTextPx: card.titleSize ?? b.min.key});
@@ -524,7 +524,7 @@ function diffResolve(params, ctx) {
   let hlAt = null;
   if (code.tokens.length) {
     hlAt = cueTime(b, 'highlight', p.highlightAt, 'params.highlightAt', focus[0].time - b.start + 0.4, settled);
-    b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55), role: 'emphasis', cue: 'hit-soft'});
+    b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55), role: 'emphasis', cue: 'ping-soft'});
   } else if (p.highlightAt !== undefined) check.fail('params.highlightAt', 'needs params.highlight');
   const content = {variant: b.variant, pal, code: codeFont(b.fonts), card, x, y, buildAt, rowStep, focus, highlightAt: hlAt, buildEnd: rowsEnd};
   return b.finish(content, {minTextPx: Math.max(b.min.key, z.code)});
@@ -591,19 +591,35 @@ function chainResolve(params, ctx) {
   const tb = titleBlock(b, {title: p.title, source: p.source});
   const pal = cardPalette(b, b.variant);
   const W = rect.width, H = rect.height - tb.top - tb.bottom;
-  // 9:16 stacks the cards; 16:9 sets two side by side, or cascades three or
-  // four from top left to bottom right (each wider, overlapping in x only).
+  // 9:16 stacks the cards; 16:9 sets two side by side, cascades three from
+  // top left to bottom right (each wider), or sets four in a 2 × 2 grid read
+  // left to right, top to bottom.
   const gap = u(portrait ? 34 : 44), lane = portrait ? u(64) : 0;
-  const cascade = !portrait && n > 2;
+  const cascade = !portrait && n === 3, grid = !portrait && n === 4;
   const cardW = portrait ? r2(W - lane) : cascade ? r2(Math.min(u(980), W * 0.56)) : r2((W - gap) / 2);
-  const maxH = portrait ? (H - gap * (n - 1)) / n : cascade ? H * 0.5 : H;
-  const cards = specs.map((s, i) => fitCard(b, s, `params.sources[${i}]`, {width: cardW, compact: true, maxHeight: maxH, scale: portrait ? 1.4 : cascade ? 1.05 : 1.3}));
+  const maxH = portrait ? (H - gap * (n - 1)) / n : cascade ? H * 0.5 : grid ? (H - u(70)) / 2 : H;
+  let cards = specs.map((s, i) => fitCard(b, s, `params.sources[${i}]`, {width: cardW, compact: true, maxHeight: maxH, scale: portrait ? 1.4 : cascade ? 1.05 : 1.3}));
   if (cascade) {
-    // Later cards may overlap the bottom of earlier ones when the rect is short.
-    const maxCard = Math.max(...cards.map(c => c.h));
-    const step = Math.min(maxCard + u(60), (H - cards.at(-1).h) / (n - 1));
-    const top = tb.top + (H - step * (n - 1) - cards.at(-1).h) / 2;
-    cards.forEach((c, i) => { c.x = r2(i * (W - cardW) / (n - 1)); c.y = r2(top + i * step); });
+    // A later card may overlap the bottom of the one before, never its token
+    // row: each step is at least that token's bottom plus a margin. Cards
+    // shrink (padding to 65%, text never under its floor) until it fits.
+    const needOf = list => list.slice(0, -1).map(c => Math.max(...c.tokens.map(t => t.y + t.h)) + u(14));
+    const roomOf = list => H - list.at(-1).h - needOf(list).reduce((sum, v) => sum + v, 0);
+    for (const k of [0.95, 0.85, 0.75, 0.65]) {
+      if (roomOf(cards) >= 0) break;
+      cards = specs.map((s, i) => layoutCard(b, s, `params.sources[${i}]`, {width: cardW, compact: true, maxHeight: maxH, sizes: cardSizes(b, true, k)}));
+    }
+    const need = needOf(cards), room = roomOf(cards);
+    if (room < 0) check.fail('params.sources', `cascade ${Math.round(H - room)} px tall in ${Math.round(H)} px; use fewer lines or sources, or highlight a token nearer the top of each card`);
+    const steps = need.map((v, i) => Math.min(cards[i].h + u(60), v + room / (n - 1)));
+    const top = tb.top + (room - steps.reduce((sum, v, i) => sum + v - need[i], 0)) / 2;
+    let y = top;
+    cards.forEach((c, i) => { c.x = r2(i * (W - cardW) / (n - 1)); c.y = r2(y); y += steps[i] ?? 0; });
+  } else if (grid) {
+    const rowH = [Math.max(cards[0].h, cards[1].h), Math.max(cards[2].h, cards[3].h)];
+    const vgap = Math.min(u(90), H - rowH[0] - rowH[1]);
+    const top = tb.top + (H - rowH[0] - rowH[1] - vgap) / 2;
+    cards.forEach((c, i) => { const row = i >> 1; c.x = r2((i % 2) * (cardW + gap)); c.y = r2(top + (row ? rowH[0] + vgap : 0) + (rowH[row] - c.h) / 2); });
   } else if (portrait) {
     const total = cards.reduce((sum, c) => sum + c.h, 0) + gap * (n - 1);
     if (total > H) check.fail('params.sources', `stack ${Math.round(total)} px tall in ${Math.round(H)} px; use fewer lines or sources`);
@@ -615,7 +631,7 @@ function chainResolve(params, ctx) {
   const anchor = c => { const t = c.tokens[0]; return {x0: r2(c.x + t.x), x1: r2(c.x + t.x + t.w), y: r2(c.y + t.y + t.h / 2)}; };
   const links = cards.slice(1).map((c, k) => {
     const A = anchor(cards[k]), B = anchor(c);
-    if (cascade) {
+    if (cascade || (grid && k === 1)) {
       // From the bottom of one token's box to the top of the next.
       const ta = cards[k].tokens[0], tb2 = c.tokens[0];
       const a0 = {x: r2(cards[k].x + ta.x + ta.w / 2), y: r2(cards[k].y + ta.y + ta.h)}, b0 = {x: r2(c.x + tb2.x + tb2.w / 2), y: r2(c.y + tb2.y)};
@@ -652,7 +668,7 @@ function chainResolve(params, ctx) {
   timing.forEach((tm, i) => {
     if (i && tm.at < timing[i - 1].at + 0.4 - 1e-6) check.fail(`params.sources[${i}].at`, `must come at least 0.4 s after source ${i - 1} (${r2(timing[i - 1].at - b.start)} s)`);
     b.events.push({id: `${b.id}-source-${i}`, name: `source-${i}`, time: tm.at, endTime: tm.tokenAt, role: 'emphasis', cue: i ? 'whoosh-soft' : 'pop'});
-    if (tm.linkAt) b.events.push({id: `${b.id}-link-${i}`, name: `link-${i}`, time: tm.linkAt, endTime: rt(tm.linkAt + 0.6), role: 'emphasis', cue: 'hit-soft'});
+    if (tm.linkAt) b.events.push({id: `${b.id}-link-${i}`, name: `link-${i}`, time: tm.linkAt, endTime: rt(tm.linkAt + 0.6), role: 'emphasis', cue: 'ping-soft'});
   });
   const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'center', pal, code: codeFont(b.fonts), cards, links, timing, buildAt, buildEnd: timing.at(-1).tokenAt};
   return b.finish(content, {minTextPx: tb.title ? tb.title.size : b.min.key});
@@ -698,7 +714,7 @@ function chainTimeline(model, ops) {
 
 export const evidenceChain = {
   id: 'evidence-chain',
-  describe: 'An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".',
+  describe: 'An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16, cascading or in a 2 × 2 grid for 3–4 in 16:9), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".',
   params: {sources: `[${SOURCE} + at?] 2–4, up to ${MAX_COMPACT_LINES} lines each (events source-<i>, link-<i>)`, token: 'the token to box in every source that sets no highlight (optional)', title: 'string ≤ 60 (optional)',
     source: 'string ≤ 80 (optional)', at: `first source: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['build', 'source-0', 'source-1', 'source-2', 'source-3', 'link-1', 'link-2', 'link-3'],
@@ -746,8 +762,10 @@ function timelineResolve(params, ctx) {
     const areaH = axisY - u(40);
     const cards = entries.map((e, i) => fitCard(b, e.spec, `params.cards[${i}]`, {width: cardW, compact: true, maxHeight: n > 1 ? areaH * 0.62 : areaH, scale: portrait ? 1.4 : 1.25}));
     const maxH = Math.max(...cards.map(c => c.h));
+    // Cards stack lower one by one; a card may cover the one before, never its token row.
+    const tokenFloor = Math.max(0, ...cards.slice(0, -1).map(c => (c.tokens.length ? Math.max(...c.tokens.map(t => t.y + t.h)) : r2(c.sizes.head * 1.6 + c.sizes.pad)) + u(30)));
     const stepY = n > 1 ? Math.min(maxH + u(24), (areaH - maxH) / (n - 1)) : 0;
-    if (n > 1 && stepY < u(70)) check.fail('params.cards', `leave too little room to stack ${n} cards; use fewer lines or cards`);
+    if (n > 1 && stepY < tokenFloor - 1e-6) check.fail('params.cards', `leave too little room to stack ${n} cards without covering a token; use fewer lines or cards`);
     const top = r2((areaH - (maxH + (n - 1) * stepY)) / 2);
     cards.forEach((c, i) => { const dx = xOf(entries[i].date.day); c.x = r2(Math.min(Math.max(0, dx - u(18)), W - cardW)); c.y = r2(top + i * stepY); c.pinX = dx; });
     // The last card's token box must finish drawing before the exit.

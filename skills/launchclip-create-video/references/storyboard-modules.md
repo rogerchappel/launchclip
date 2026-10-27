@@ -1537,7 +1537,7 @@ events: build, focus-0, focus-1, focus-2, focus-3, focus-4, focus-5, highlight
 variants: glass (default), github
 
 ### evidence-chain (keeps captions)
-An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".
+An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16, cascading or in a 2 × 2 grid for 3–4 in 16:9), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".
 params:
 - sources: [{kind: pr | commit | excerpt | announcement, …that kind's fields: pr {repo, number, state?, author?, date?, file?, lines?}, commit {repo, sha, verified?, authors?, date?, file?, lines?}, excerpt {file, sub?, lines, startLine?}, announcement {site, title, text ≤ 320, date?}; highlight} + at?] 2–4, up to 6 lines each (events source-<i>, link-<i>)
 - token: the token to box in every source that sets no highlight (optional)

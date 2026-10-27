@@ -125,7 +125,7 @@ function terminalResolve(params, ctx) {
     s.typeEnd = rt(s.time + tm.typing);
     s.rowTimes = s.output.map((_, k) => rt(s.typeEnd + tm.gap + k * tm.each));
     s.end = rt(s.output.length ? s.rowTimes.at(-1) + 0.3 * scale : s.typeEnd + 0.1);
-    b.events.push({id: `${b.id}-step-${i}`, name: `step-${i}`, time: s.time, endTime: s.end, role: 'emphasis', cue: 'type'});
+    b.events.push({id: `${b.id}-step-${i}`, name: `step-${i}`, time: s.time, endTime: s.end, role: 'emphasis', cue: 'keystroke'});
     prevEnd = s.end;
     delete s.at;
   });
@@ -147,7 +147,7 @@ function terminalResolve(params, ctx) {
     const s = steps[highlight.step];
     const ready = highlight.row === null ? s.typeEnd : s.rowTimes[highlight.row];
     highlight.time = cueTime(b, 'highlight', highlight.at, 'params.highlight.at', ready - b.start + 0.3, ready - b.start);
-    b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: highlight.time, endTime: rt(highlight.time + 0.55), role: 'emphasis', cue: 'hit-soft'});
+    b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: highlight.time, endTime: rt(highlight.time + 0.55), role: 'emphasis', cue: 'ping-soft'});
     const line = lines.findIndex(l => l.step === highlight.step && (highlight.row === null ? l.kind === 'cmd' : l.kind === 'out' && l.row === highlight.row));
     const bx = u(4);
     highlight.box = {line, x: r2(highlight.vcol * adv - bx), y: r2(line * rowH + rowH * 0.1), w: r2(highlight.token.length * adv + 2 * bx), h: r2(rowH * 0.8)};

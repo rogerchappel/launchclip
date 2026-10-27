@@ -224,3 +224,16 @@ test('the planner maps receipt lines to the code-evidence modules and states the
   assert.match(reference, /node src\/evidence\/github\.js/);
   assert.match(reference, /### evidence-chain \(keeps captions\)/);
 });
+
+test('stacked cards never cover the token row of the card before', () => {
+  const four = {...SAMPLES['evidence-chain'], sources: [...SAMPLES['evidence-chain'].sources, {...SAMPLES['date-pinned-timeline'].cards[1], label: undefined}]};
+  delete four.sources[3].label;
+  for (const [id, params] of [['evidence-chain', four], ['date-pinned-timeline', SAMPLES['date-pinned-timeline']]]) {
+    const cards = resolve(id, params, '16:9').content.cards;
+    cards.slice(1).forEach((c, i) => {
+      const prev = cards[i], bottom = prev.y + Math.max(...prev.tokens.map(t => t.y + t.h));
+      const overlapX = c.x < prev.x + prev.w && prev.x < c.x + c.w;
+      assert.ok(!overlapX || c.y >= bottom, `${id}: card ${i + 1} covers card ${i}'s token`);
+    });
+  }
+});
