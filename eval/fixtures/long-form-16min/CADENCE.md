@@ -14,7 +14,7 @@ cadence passed (long-form, default): 157 events, 9.65/min; gaps p10 3.897 / p50 
 states per shot 1–4 (mean 3.29); changes enter 48, swap 86, build 24
 variety: 22 modules; top icon-row 15%, concept-card 11%, timeline 9%, motion-title 9%, glass-word 8%; longest same-module run across cuts 2
 evidence: 55/85 claims shown with a sourced visual (65%), 12 on a capture
-fallbacks (planned modules not registered yet): particle-text→glass-word ×13, title-decompose→motion-title ×8, social-post→feed-frame ×7, paper-stack→excerpt ×6, glass-bars-3d→bar-chart ×6, tokenizer→kinetic-words ×5, evidence-chain→timeline ×4, coin-stack→stat-card ×4, lineage-graph→timeline ×3, repo-pr-card→window-chrome ×2, date-pinned-timeline→timeline ×2, diff-view→excerpt ×2, month-grid→timeline ×1, rack-shelf→stat-card ×1, terminal-session→window-chrome ×1, commit-card→excerpt ×1
+fallbacks (planned modules not registered yet): particle-text→glass-word ×13, title-decompose→motion-title ×8, social-post→quote-card/concept-card ×7, paper-stack→concept-card/excerpt ×6, glass-bars-3d→bar-chart/concept-card ×6, tokenizer→kinetic-words ×5, evidence-chain→timeline ×4, coin-stack→concept-card ×4, lineage-graph→timeline ×3, repo-pr-card→window-chrome ×2, date-pinned-timeline→timeline ×2, diff-view→code-snippet ×2, month-grid→timeline ×1, rack-shelf→concept-card ×1, terminal-session→window-chrome ×1, commit-card→excerpt ×1
 chunks: 12 (0 reused)
 
 shorts: 4 cut for 9:16 at short-form cadence

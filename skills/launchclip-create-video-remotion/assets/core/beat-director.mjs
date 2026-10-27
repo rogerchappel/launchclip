@@ -572,7 +572,11 @@ export function beatMapReport(map, { reused = 0 } = {}) {
   const claims = states.filter(isClaim);
   const sourced = claims.filter((state) => state.evidence?.source);
   const wanted = {};
-  for (const state of states) if (state.fallback) wanted[state.capability] = (wanted[state.capability] ?? 0) + 1;
+  for (const state of states) if (state.fallback) {
+    const entry = (wanted[state.capability] ??= { states: 0, using: {} });
+    entry.states += 1;
+    entry.using[state.module] = (entry.using[state.module] ?? 0) + 1;
+  }
   const changes = {};
   for (const state of states) changes[state.change] = (changes[state.change] ?? 0) + 1;
   const perShot = shots.map((shot) => shot.states.length);
@@ -581,7 +585,7 @@ export function beatMapReport(map, { reused = 0 } = {}) {
     shots: { count: shots.length, states_per_shot: { min: Math.min(...perShot), max: Math.max(...perShot), mean: round(perShot.reduce((a, b) => a + b, 0) / Math.max(1, perShot.length), 2) }, changes },
     variety: { modules: top.length, top: top.slice(0, 5).map(([id, n]) => ({ id, share: round(n / states.length, 3) })), longest_same_module_across_cuts: longestRun },
     evidence: { claims: claims.length, sourced: sourced.length, coverage: claims.length ? round(sourced.length / claims.length, 3) : null, captures: states.filter((state) => state.evidence?.capture).length },
-    fallbacks: Object.entries(wanted).sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ wanted: id, states: n, using: resolveCapability(id).module })),
+    fallbacks: Object.entries(wanted).sort((a, b) => b[1].states - a[1].states).map(([id, entry]) => ({ wanted: id, states: entry.states, using: Object.keys(entry.using).sort((x, y) => entry.using[y] - entry.using[x]) })),
     chunks: { count: map.chunks?.length ?? 0, reused }
   };
 }
@@ -603,7 +607,7 @@ export function beatMapReportText(map) {
   lines.push(`states per shot ${r.shots.states_per_shot.min}–${r.shots.states_per_shot.max} (mean ${r.shots.states_per_shot.mean}); changes ${Object.entries(r.shots.changes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`variety: ${r.variety.modules} modules; top ${r.variety.top.map((entry) => `${entry.id} ${Math.round(entry.share * 100)}%`).join(', ')}; longest same-module run across cuts ${r.variety.longest_same_module_across_cuts}`);
   lines.push(`evidence: ${r.evidence.sourced}/${r.evidence.claims} claims shown with a sourced visual (${r.evidence.coverage === null ? 'n/a' : `${Math.round(r.evidence.coverage * 100)}%`}), ${r.evidence.captures} on a capture`);
-  if (r.fallbacks.length) lines.push(`fallbacks (planned modules not registered yet): ${r.fallbacks.map((entry) => `${entry.wanted}→${entry.using} ×${entry.states}`).join(', ')}`);
+  if (r.fallbacks.length) lines.push(`fallbacks (planned modules not registered yet): ${r.fallbacks.map((entry) => `${entry.wanted}→${entry.using.join('/')} ×${entry.states}`).join(', ')}`);
   lines.push(`chunks: ${r.chunks.count} (${r.chunks.reused} reused)`);
   return lines.join('\n');
 }
