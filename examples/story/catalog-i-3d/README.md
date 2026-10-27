@@ -20,6 +20,13 @@ params in `scripts/element-samples.mjs`):
 
 ![Every catalogue I module and variant in 9:16 and 16:9](modules.sheet.jpg)
 
+glass-bars-3d at hero scale (rows: the Terra prototype's two bars before
+and after, then three bars before and after; columns at 0.4, 0.8, 1.2 and 3 s
+from the scene start): wide bars that span the rect, one-line names, the
+"half" reference as a chip facing the camera, readable height by 0.4 s.
+
+![glass-bars-3d before and after the hero-scale fix](hero-scale.before-after.jpg)
+
 Reproduce it:
 
 ```bash
