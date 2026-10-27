@@ -6,10 +6,14 @@
 // optional repair pass fixes the script checks' errors (src/script_check.js),
 // and one optional resize pass corrects the length once the real take is
 // measured. On a library skeleton (kit/core/skeleton-library.mjs) the script
-// is written on its beats; a short video asks for five title options, best first.
+// is written on its beats. A short video's script pass also finds the angle
+// (the crowded take, the subject inventory, three fresh angles; ANGLE.json)
+// and scores its five title options, in the same call; the titles are then
+// ordered best first by a deterministic score.
 import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../../kit/core/script-formats.mjs";
 import { skeletonScriptPlan } from "../../kit/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { TEASERS } from "../publish_manifest.js";
 
 export const SCRIPT_VERSION = "launchclip.make-script.v1";
 export const WORDS_PER_MINUTE = 150;
@@ -46,6 +50,51 @@ export const SCRIPT_SCHEMA = Object.freeze({
   }
 });
 
+// A short video's script pass also returns the angle and the title scores
+// (docs/VIRAL_FORMATS_RFC.md §4.2, §3.6): same call, no extra cost.
+const ANGLE_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  required: ["crowded", "inventory", "angles", "chosen"],
+  properties: {
+    crowded: { type: "string", description: "How this topic is usually done, in one sentence." },
+    inventory: { type: "array", description: "Eight to twelve concrete things only this subject has: its place, its numbers, its constraint, the objects in its world.", items: { type: "string" } },
+    angles: {
+      type: "array",
+      description: "Three fresh angles, each built from the inventory.",
+      items: { type: "object", additionalProperties: false, required: ["angle", "differs"], properties: { angle: { type: "string", description: "The angle in one sentence." }, differs: { type: "string", description: "How it differs from the crowded take." } } }
+    },
+    chosen: { type: "integer", description: "The index (0-2) of the angle the script is written on." }
+  }
+});
+const TITLE_SCORES_SCHEMA = Object.freeze({
+  type: "array",
+  description: "Every title option scored 0-10 on curiosity (a gap that carries self-interest, never confusion), clarity (what the video is, at a glance) and match (it fits the opening image and the hook).",
+  items: { type: "object", additionalProperties: false, required: ["title", "curiosity", "clarity", "match"], properties: { title: { type: "string" }, curiosity: { type: "number" }, clarity: { type: "number" }, match: { type: "number" } } }
+});
+
+/** The script schema for a plan: a short video's adds the angle and the title scores. */
+export function scriptSchema(plan) {
+  if (!isShort(plan)) return SCRIPT_SCHEMA;
+  return { ...SCRIPT_SCHEMA, required: [...SCRIPT_SCHEMA.required, "angle", "title_scores"], properties: { ...SCRIPT_SCHEMA.properties, angle: ANGLE_SCHEMA, title_scores: TITLE_SCORES_SCHEMA } };
+}
+
+const isShort = (plan) => Number(plan?.duration) <= SHORT_VIDEO_SECONDS;
+
+const ANGLE_LINES = [
+  "## Angle (before you write)",
+  "",
+  "- crowded: how this topic is usually done, in one sentence (the version the viewer has already scrolled past).",
+  "- inventory: eight to twelve concrete things only this subject has (its place, its numbers, its constraint, the objects in its world), from the brief and the assets only.",
+  "- angles: three fresh angles built from the inventory, each saying how it differs from the crowded take. chosen: the strongest one's index. Write the script on it; the hook and the share line come from it."
+];
+
+const TITLE_LINES = [
+  "## Titles",
+  "",
+  "- title_scores: score every title option 0-10 on curiosity (a gap that carries self-interest, never confusion or a tease), clarity (what the video is, at a glance) and match (it fits the opening image and the hook). Be strict; the order is computed from these."
+];
+
 const ROLE = `You write voiceover scripts for short product, explainer and story videos. A planning pass has already chosen the format, goal, awareness and beat skeleton below; write against it.
 
 Write narration that will be read aloud by a text-to-speech voice:
@@ -62,7 +111,35 @@ export const titleCount = (plan) => (Number(plan?.duration) <= SHORT_VIDEO_SECON
 
 /** The script pass instructions for a plan (chooseScriptPlan() or skeletonScriptPlan()). */
 export function scriptInstructions(plan) {
-  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), "", output(titleCount(plan) === 5 ? "five, the best first," : "three")].join("\n");
+  const short = isShort(plan) ? ["", ...ANGLE_LINES, "", ...TITLE_LINES] : [];
+  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), ...short, "", output(titleCount(plan) === 5 ? "five, the best first," : "three")].join("\n");
+}
+
+/**
+ * The title options ordered by score, best first: 0.4 × curiosity + 0.35 ×
+ * clarity + 0.25 × match (0-10 each), minus 3 for a title over 70 characters
+ * and 3 for a tease (publish_manifest TEASERS). Ties keep the model's order.
+ * → [{title, curiosity, clarity, match, score}]
+ */
+export function rankTitles(options, scores = []) {
+  const byTitle = new Map((Array.isArray(scores) ? scores : []).map((entry) => [String(entry?.title ?? "").trim(), entry]));
+  const clamp = (value) => Math.max(0, Math.min(10, Number(value) || 0));
+  return options.map((title, index) => {
+    const entry = byTitle.get(title) ?? {};
+    const parts = { curiosity: clamp(entry.curiosity), clarity: clamp(entry.clarity), match: clamp(entry.match) };
+    const score = 0.4 * parts.curiosity + 0.35 * parts.clarity + 0.25 * parts.match - (title.length > 70 ? 3 : 0) - (TEASERS.test(title) ? 3 : 0);
+    return { title, ...parts, score: Math.round(score * 100) / 100, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index).map(({ index, ...entry }) => entry);
+}
+
+/** The angle a model returned, cleaned; null when it returned none. */
+export function parseAngle(value) {
+  if (!value || typeof value !== "object") return null;
+  const text = (item) => String(item ?? "").trim();
+  const angles = (Array.isArray(value.angles) ? value.angles : []).map((entry) => ({ angle: text(entry?.angle), differs: text(entry?.differs) })).filter((entry) => entry.angle).slice(0, 3);
+  if (!text(value.crowded) || !angles.length) return null;
+  const chosen = Number.isInteger(value.chosen) && value.chosen >= 0 && value.chosen < angles.length ? value.chosen : 0;
+  return { crowded: text(value.crowded), inventory: (Array.isArray(value.inventory) ? value.inventory : []).map(text).filter(Boolean).slice(0, 12), angles, chosen };
 }
 
 /** Target words for a duration at WORDS_PER_MINUTE. */
@@ -72,7 +149,7 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 
 /**
  * options: {client, model, provider, prompt, notes: [text], rules (a collection's RULES.md text), assets: [line], transcripts: [text],
- *   duration, words (target override), skeleton (a library skeleton: write on its beats), plan (a chooseScriptPlan() result, or its
+ *   duration, words (target override), skeleton (a library skeleton: write on its beats), angle (keep this angle: a repair or resize), plan (a chooseScriptPlan() result, or its
  *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
  *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
@@ -99,6 +176,11 @@ export async function writeScript(options = {}) {
   if (rules && String(rules).trim()) lines.push("", RULES_HEADING, "", String(rules).trim().slice(0, 8000));
   if (assets.length) lines.push("", "## Assets the video can show", "", ...assets.map((line) => `- ${line}`));
   if (transcripts.length) lines.push("", "## Transcripts of supplied recordings", "", ...transcripts.map((text) => String(text).trim().slice(0, 4000)));
+  // A repair or resize keeps the angle the first pass chose.
+  if (options.angle?.angles?.length) {
+    const chosen = options.angle.angles[options.angle.chosen] ?? options.angle.angles[0];
+    lines.push("", "## Angle (keep it)", "", `Crowded take to avoid: ${options.angle.crowded}`, `The angle this script is written on: ${chosen.angle} (${chosen.differs})`, "Return the same angle object.");
+  }
   if (resize?.previous) {
     lines.push("", "## Resize", "", `Your previous narration (${resize.measured_words} words) measured ${resize.measured_seconds}s when spoken; the target is ${duration}s. Rewrite it to about ${words} words, keeping its beats, hook and call to action.`, "", resize.previous);
   }
@@ -106,7 +188,7 @@ export async function writeScript(options = {}) {
     const errors = [repair.errors ?? []].flat().map((error, index) => `${index + 1}. ${typeof error === "string" ? error : `[${error.id}] ${error.message} Fix: ${error.fix}`}`);
     lines.push("", "## Repair", "", `Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief, the length), and return the beats and ${titleCount(plan) === 5 ? "five title options, best first," : "three title options"} again.`, "", ...errors, "", "Previous narration:", "", repair.previous);
   }
-  const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: SCRIPT_SCHEMA, schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
+  const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: scriptSchema(plan), schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : parseText(result?.text);
   // Each beat keeps its role from the plan (a library skeleton's share beat is how the structure gate finds it).
   const beats = parseBeats(value?.beats).map((entry) => {
@@ -117,12 +199,21 @@ export async function writeScript(options = {}) {
   if (!narration) throw new Error("the script pass returned no narration text");
   const usage = result?.usage ?? {};
   const cost = estimateModelUsageCost(provider ?? client?.provider ?? "openai", result?.model ?? model, usage);
-  const title = String(value?.title ?? "").trim().slice(0, 80) || "Untitled";
-  const titleOptions = Array.isArray(value?.title_options) ? value.title_options.map((entry) => String(entry ?? "").trim().slice(0, 100)).filter(Boolean).slice(0, titleCount(plan)) : [];
+  let title = String(value?.title ?? "").trim().slice(0, 80) || "Untitled";
+  let titleOptions = Array.isArray(value?.title_options) ? value.title_options.map((entry) => String(entry ?? "").trim().slice(0, 100)).filter(Boolean).slice(0, titleCount(plan)) : [];
+  // Scored titles go best first, and the best becomes the title publish.json leads with.
+  const titleScores = Array.isArray(value?.title_scores) && titleOptions.length ? rankTitles(titleOptions, value.title_scores) : null;
+  if (titleScores) {
+    titleOptions = titleScores.map((entry) => entry.title);
+    title = titleOptions[0];
+  }
+  const angle = parseAngle(value?.angle);
   return {
     schema_version: SCRIPT_VERSION,
     title,
     title_options: titleOptions.length ? titleOptions : [title],
+    ...(titleScores ? { title_scores: titleScores } : {}),
+    ...(angle ? { angle } : {}),
     narration,
     beats,
     plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
