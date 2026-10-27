@@ -8,6 +8,29 @@ series, visual history), [SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) (a look
 per project), the concept tournament (`src/concept_tournament.js` and the
 skill's cinematic production contract)
 
+## 0. Decision: always on, as skeletons (2026-10-28)
+
+Review settled one question before the build: virality is not a mode, it is
+what a good short video is. So nothing here is switched on, and nothing is
+called "viral" in the tool:
+
+- A **format** in this RFC ships as a **library skeleton**
+  (`kit/core/skeleton-library.mjs`): a rich script skeleton next to the
+  script formats' own (`call-out-pas`, `before-after-bridge`, …), with its
+  key shot, opening image, share beat, voice tier and packaging. `make`
+  picks one automatically when the brief matches a skeleton's own cue;
+  `--skeleton <id>` pins one (library or script-format), `--skeleton none`
+  keeps the format's own, and a recipe saves it. `launchclip skeletons
+  list|show|choose` replaces `launchclip formats`.
+- **The short-video rules apply to every video of 90 s or less**, on a
+  library skeleton or not: an image (never a title card) at 0 s, a spoken
+  share line in the last 40%, concrete visual nouns, five title options. A
+  library skeleton adds its key shot.
+- The **format gate** ships as the **structure gate** in `finish` and
+  `cinematic-check`; `storyboard.json` names `"skeleton"`, not `"viral"`.
+
+The rest of this RFC reads with those substitutions.
+
 ## 1. Summary
 
 LaunchClip is free, and its costs are architected down: a local voice, a
