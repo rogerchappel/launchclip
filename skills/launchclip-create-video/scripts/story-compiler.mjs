@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
-import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
+import { gsapVars, holdTime, layerStateAt, sceneWindows } from './transitions.mjs';
 import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
@@ -226,9 +226,9 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
-  const build = (entry, { idSuffix = '', track, clone = false } = {}) => {
+  const build = (entry, { idSuffix = '', track, clone = false, held = false } = {}) => {
     const scene = idSuffix ? { ...entry.scene, id: `${entry.scene.id}${idSuffix}` } : entry.scene;
-    const end = clone ? entry.scene.end : entry.renderEnd;
+    const end = clone && !held ? entry.scene.end : entry.renderEnd;
     let model;
     let reason = null;
     if (scene.module === 'custom') reason = 'custom modules render only in Remotion (remotion/modules/); use a catalogue module for HyperFrames';
@@ -335,6 +335,28 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     }
     if (depth.layer === 'behind') zBehind += 10;
     else z += 10;
+  }
+
+  // Overview holds (transitions.mjs sceneWindows holds): a shot an overview
+  // frames is drawn again at its placement for the overview, frozen on its
+  // settled last frame (holdTime): its module runs on its own paused
+  // timeline, held at that time, as the loop ending holds its clone.
+  if (plan?.mode === 'world') for (const [index, entry] of layers.entries()) {
+    if (!entry.plate || !entry.holds?.length) continue;
+    const at = holdTime(entry, models[index], format.fps);
+    for (const [k, hold] of entry.holds.entries()) {
+      const { out } = build(entry, { idSuffix: `-held${k ? `-${k}` : ''}`, clone: true, held: true });
+      const id = attr(`${entry.id}-held${k ? `-${k}` : ''}`);
+      const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
+      const media = hoistMedia(out.html ?? '');
+      world.push(`<div id="${outer}" class="lc-scene lc-plate lc-held lc-world-plate" data-launchclip-scene="${id}" data-launchclip-held="${attr(entry.id)}" data-launchclip-start="${num(hold.start)}" style="z-index:${z}${plateStyle(entry.id, plan.placements[entry.id])}"><div id="${inner}" class="lc-layer">${unclip(media.html)}</div></div>`);
+      if (media.elements.length) warnings.push(`${entry.id}: root media is not held in the overview (HyperFrames keeps <video>/<audio> on the root)`);
+      css.push(out.css ?? '');
+      motion.push(`// overview ${hold.overview} → ${entry.id} held at ${num(at)}s, ${num(hold.start)}–${num(hold.end)}s`);
+      motion.push(...toggle(`#${outer}`, hold.start, hold.end, D));
+      if (out.motion) motion.push(`{\nconst heldTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(heldTl);\nheldTl.render(${num(at)}, true, true);\ntl.fromTo(heldTl, { time: ${num(at)} }, { time: ${num(at)}, duration: ${num(Math.max(0.001, hold.end - hold.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, hold.start - TOGGLE_LEAD))});\n}`);
+      z += 10;
+    }
   }
 
   // Loop ending: the loop_to scene's first state, held over the final window.

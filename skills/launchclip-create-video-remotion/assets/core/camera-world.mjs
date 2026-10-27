@@ -47,7 +47,7 @@
 // and the compilers emit exactly what they did before.
 
 import { getEase, motionBlurPx } from './motion.mjs';
-import { isCameraTransition } from './transitions.mjs';
+import { OVERVIEW, isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
 import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
 import { shotZooms } from './zooms.mjs';
@@ -277,6 +277,14 @@ export function worldLayout(story, windows, { objects = () => null } = {}) {
         const direction = transition.direction ?? layoutDirection(camera.layout, moves, plates.length);
         const type = transition.type;
         if (type === 'pan' || type === 'whip-pan') placement = besidePlacement(from, direction, { spacing: camera.spacing }, size);
+        // An overview lands on a shot beside the last one, like a pan, on a
+        // side no earlier shot takes: the camera shows them all at once.
+        else if (type === 'overview') {
+          const sides = [direction, ...['right', 'down', 'left', 'up'].filter((side) => side !== direction)];
+          const taken = [...placements.values()].map((other) => placementCentre(other, size));
+          const free = (candidate) => { const c = placementCentre(candidate, size); return taken.every((other) => Math.hypot(other.x - c.x, other.y - c.y) > Math.min(size.width, size.height) * candidate.scale * 0.5); };
+          placement = sides.map((side) => besidePlacement(from, side, { spacing: camera.spacing }, size)).find(free) ?? besidePlacement(from, direction, { spacing: camera.spacing }, size);
+        }
         else if (type === 'orbit') placement = besidePlacement(from, direction, { spacing: camera.spacing, rotate: direction === 'left' || direction === 'up' ? -ORBIT_DEGREES : ORBIT_DEGREES }, size);
         else if (type === 'push' || type === 'pull') {
           const [sceneId, name] = typeof transition.from_object === 'string' ? transition.from_object.split('.') : [previous.id, null];
@@ -309,6 +317,33 @@ export function worldLayout(story, windows, { objects = () => null } = {}) {
     else loop = { ...(placements.get(windows.loop.sceneId) ?? ORIGIN) };
   }
   return { placements, loop, order: plates.map((entry) => entry.id) };
+}
+
+/** A placement's four corners in world px. */
+function placementCorners(placement, { width, height }) {
+  return [[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => worldPoint(placement, { x, y }));
+}
+
+/**
+ * The camera framing an overview: the bounding box of the span's placements
+ * plus the incoming one, with OVERVIEW.margin around it. Past OVERVIEW.cap
+ * (the zoom-out over the incoming shot's rest) the oldest shots drop out of
+ * the frame until it fits. span: [placement] oldest first; incoming: the
+ * incoming placement. → {state: {x, y, zoom, rotation}, framed: n (how many
+ * of the span it frames, the newest), ratio (incoming rest zoom / overview zoom)}
+ */
+export function overviewFrame(span, incoming, size) {
+  const rest = restState(incoming, size);
+  for (let first = 0; ; first += 1) {
+    const points = [...span.slice(first), incoming].flatMap((placement) => placementCorners(placement, size));
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const zoom = Math.min(size.width / (x1 - x0), size.height / (y1 - y0)) * (1 - 2 * OVERVIEW.margin);
+    const ratio = rest.zoom / zoom;
+    if (ratio <= OVERVIEW.cap + 1e-9 || first >= span.length) {
+      return { state: { x: round((x0 + x1) / 2, 4), y: round((y0 + y1) / 2, 4), zoom: round(Math.max(zoom, rest.zoom / OVERVIEW.cap), 6), rotation: rest.rotation }, framed: span.length - first, ratio: round(Math.min(ratio, OVERVIEW.cap), 4) };
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +383,8 @@ export function waveSegments(axis, duration) {
  *    moves: [{sceneId, type, start, duration, ease, blur, from, to, zoom?}]
  *    (world mode: a shot's zooms are moves of type "zoom" with zoom: true),
  *    warnings: [zooms dropped, kit/core/zooms.mjs],
+ *    overviews: [{sceneId, start, end, hold, span, framed, ratio, state}]
+ *    (an overview is two moves of type "overview": out to state, in to the shot),
  *    drift: {x, y, scale} | null, parallax: {background, overlay} | null,
  *    depth: background layer speed (world mode: 0.3 with parallax, 1 without;
  *    cuts: null, the plates are opaque), background: backgroundKeys | null,
@@ -394,11 +431,22 @@ export function cameraPlan(story, { windows, objects } = {}) {
       for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });
     }
   }
+  const overviews = [];
   for (let i = 1; i < plates.length; i += 1) {
     const entry = plates[i];
     if (!entry.transitionIn?.camera) continue;
     const from = restState(layout.placements.get(plates[i - 1].id), size);
     const to = restState(layout.placements.get(entry.id), size);
+    if (entry.transitionIn.type === 'overview') {
+      // Out to the span, a hold, then into the incoming shot: two moves.
+      const ids = entry.transitionIn.span ?? [plates[i - 1].id];
+      const frame = overviewFrame(ids.map((id) => layout.placements.get(id)), layout.placements.get(entry.id), size);
+      const hold = Number(entry.transitionIn.hold) || 0, half = (entry.transitionIn.dur - hold) / 2;
+      moveFor(entry.id, { ...entry.transitionIn, dur: half }, entry.start, from, frame.state);
+      moveFor(entry.id, { ...entry.transitionIn, dur: half }, entry.start + half + hold, frame.state, to);
+      overviews.push({ sceneId: entry.id, start: round(entry.start, 6), end: round(entry.start + entry.transitionIn.dur, 6), hold: round(hold, 6), span: ids, framed: ids.slice(ids.length - frame.framed), ratio: frame.ratio, state: frame.state });
+      continue;
+    }
     moveFor(entry.id, entry.transitionIn, entry.start, from, to);
   }
   if (windows.loop?.transitionIn?.camera && layout.loop) {
@@ -421,7 +469,7 @@ export function cameraPlan(story, { windows, objects } = {}) {
     mode: camera.mode, width, height, fps, duration, grammar: grammar.id, camera,
     placements: Object.fromEntries(layout.placements), loop: layout.loop, order: layout.order,
     home: restState(layout.placements.get(plates[0]?.id) ?? ORIGIN, size),
-    moves, drift, warnings,
+    moves, drift, warnings, overviews,
     parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null,
     // World plates are transparent, so world mode always has a background
     // layer: parallax false only makes it travel with the plates.

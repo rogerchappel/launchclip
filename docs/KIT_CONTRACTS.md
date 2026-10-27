@@ -1753,6 +1753,55 @@ export function zoomOps(keys, size)        // cuts-mode ops on "zoom" and "pan"
 // kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
 ```
 
+## The overview move (`in: {type: "overview"}`)
+
+The camera pulls back until the story so far shows as a map of shots, holds a
+beat, then dives into the incoming shot. World mode only.
+
+```json
+"in": {"type": "overview", "dur": 2.6, "span": "chapter", "hold": 0.6}
+```
+
+- `span`: `"chapter"` (default: every shot of the chapter that is ending, the
+  last chapter in `story.chapters` that starts at or before the outgoing
+  shot; without chapters every earlier shot) or 3–8 (the last n shots). At
+  most `OVERVIEW.span.max` (8) shots either way (`overviewSpan`,
+  `kit/core/transitions.mjs`).
+- `hold`: seconds at the wide frame (default 0.6, at most `dur − 1`). The rest
+  of `dur` splits evenly into the move out and the move in, both with the
+  grammar's camera ease.
+- Placement: the incoming shot sits beside the outgoing one like a pan (its
+  `direction`, else the layout's), on the first side (`direction`, right,
+  down, left, up) that no earlier shot takes, so the map never stacks two
+  shots.
+- Framing (`overviewFrame`, `kit/core/camera-world.mjs`): the bounding box of
+  the span's placements plus the incoming one, with `OVERVIEW.margin` (8 %)
+  around it. The zoom-out is capped at `OVERVIEW.cap` (6×) past the incoming
+  shot's rest; past it the oldest shots drop out of the frame until it fits.
+  `plan.overviews[]` records `{sceneId, start, end, hold, span, framed,
+  ratio, state}`; the two moves are `plan.moves` of type `overview`.
+- Held shots (`sceneWindows` `holds`): every shot of the span except the
+  outgoing one (held through the transition like any outgoing plate) gets
+  `holds: [{start, end, overview}]` over the overview. Both compilers draw it
+  again at its placement for that span, frozen on its settled last frame
+  (`holdTime`: one frame before `model.motion.exitStart`, else before its
+  render end), its module resolved with the same render end:
+  - HyperFrames: `#lc-scene-<id>-held` inside the camera, its module motion on
+    its own paused timeline held at that time (as the loop ending's clone).
+  - Remotion: a `Sequence` over the hold with `SceneLayer freeze={frame}`
+    (`<Freeze>`), which also holds an evidence clip's video frame.
+    HyperFrames keeps root `<video>` on the root (it never follows the world
+    camera), so a held evidence clip warns and is not repeated there.
+- World backdrops: the depth layer never scales, so several backdrop regions
+  cannot be in view at once. An overview's backdrop segment change
+  crossfades during the move out (the incoming shot's backdrop shows through
+  the wide frame), never slides.
+- Captions dip during the overview (it zooms: `sweepingMove`).
+
+Validation (`kit/core/story.mjs`): `camera.mode: "world"`; track 0; `dur` ≥ 2
+s; `span` "chapter" or 3–8; `hold` 0 … `dur − 1`; never into the first shot;
+at most one overview per 60 s.
+
 ## Footage-led lane (RFC phase 6)
 
 The `footage-led` lane plays a recording full-frame under the story. It uses
