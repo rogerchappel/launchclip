@@ -13,6 +13,10 @@
 //                    short-form cadence and each state's module
 //
 //   node eval/beat-map-dry-run.mjs [folder] [--wpm 155] [--style default] [--fresh]
+//     [--ctas 210,580,900] [--no-stings]
+//
+// The fixture's structure: mid-roll subscribe calls at 3:30, 9:40 and 15:00
+// and a logo sting at the open and the close (the reference's).
 //
 // A BEATMAP.json already there is passed back as `previous`, so chunks whose
 // words, history and settings are unchanged are reused (--fresh plans all).
@@ -39,12 +43,14 @@ export async function loadFixture(folder) {
   return { script, ledger, captures };
 }
 
-export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 } } = {}) {
+export const DEFAULT_CTAS = Object.freeze([210, 580, 900]);
+
+export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 }, ctas = DEFAULT_CTAS, stings = true } = {}) {
   const { script, ledger, captures } = await loadFixture(folder);
   const timed = dryRunWords(script, { wpm });
   const beatsFile = path.join(folder, 'BEATMAP.json');
   const previous = !fresh && existsSync(beatsFile) ? JSON.parse(await readFile(beatsFile, 'utf8')) : null;
-  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous, ctas: ctas.map((at) => ({ at, action: 'Subscribe for the next breakdown' })), stings });
   const direction = beatMapToDirection(map);
   const check = validateDirection(direction, { words: timed.words, lane: 'motion', deferScenes: true });
   if (!check.ok) throw new Error(`the direction map does not validate:\n${check.errors.slice(0, 5).join('\n')}`);
@@ -77,7 +83,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
   const folder = args.find((arg, i) => !arg.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? DEFAULT_FIXTURE;
-  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh') });
+  const { map, report } = await dryRun(path.resolve(folder), { wpm: Number(flag('wpm', 155)), style: flag('style', 'default'), fresh: args.includes('--fresh'), ctas: flag('ctas', null) ? flag('ctas').split(',').map(Number) : DEFAULT_CTAS, stings: !args.includes('--no-stings') });
   console.log(report);
   // The planning gate: a plan that misses its cadence target fails the run.
   if (!map.report.cadence.gate.ok) process.exitCode = 1;

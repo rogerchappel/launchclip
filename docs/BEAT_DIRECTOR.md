@@ -42,6 +42,8 @@ states (module, params, change) → shots of 2–4 states → chapters on a plat
 - the seconds between hard cuts;
 - the number of states per shot.
 
+Each band also sets **words per event**: spoken words per visual event. Long form is 10–20; the reference is ~15, at 2,547 words in 975 s, about one event per clause. Unlike seconds, this target holds whatever the voice's pace. `eventStats(…, {words})` measures it, and the gate checks it when the word count is known.
+
 `cadenceTarget(format, style)` scales the seconds for a style: `calm` ×1.3, `default` ×1, `energetic` ×0.8. Rates scale the other way. The long-form band contains the benchmark: a p50 of 4–6.5 s, a p90 under 10.5 s, a longest static run under 14 s and cuts 15–25 s apart.
 
 `cadenceGate(eventStats(events, {duration, cuts}), target)` checks:
@@ -103,6 +105,24 @@ states (module, params, change) → shots of 2–4 states → chapters on a plat
 - **Shots.** States group into shots. A shot closes at four states, past 25 s, or once it has held 15 s and 2 states and the next clause is either a topic shift (a sentence end into another family) or past the 20 s midpoint.
 - **Plates.** Each chapter gets a backdrop plate in `kit/core/plates.mjs` terms (`hex-shell`, `silk`, `strands`, `bokeh`, each with a tint). The same plate is never used for two chapters in a row, nor reused among the last three. Each plate also names a `story.background` kind to use until plates are registered.
 - **Never invented.** Number modules get params only from the clause's own numbers. A clause with no number never gets a stat card with a placeholder figure.
+
+## Structure
+
+- **Mid-roll calls to action.** `directLongForm(…, {ctas})` takes seconds, or `{at, action, detail, handle}`. The clause under each time becomes a `cta` state, drawn by the `cta` module.
+- **Logo stings.** `stings: true` makes the first and last clause a `sting`: `logo-sting` when it is registered, else `brand-lockup` when `stingBrand {mark, wordmark}` is given, else the video's title.
+- **The fixture's structure.** The dry run uses the reference's structure: calls at 3:30, 9:40 and 15:00, with stings at both ends.
+- **Story arcs.** The reference tells three stories in one video, each a claim → evidence → audit → verdict arc (about 8.5, 4.5 and 3 min). Planning with arc roles is a follow-up. For now, chapters carry the stories.
+
+**Checked on a real transcript.** The planner was run locally on the reference's own Whisper word timings and its chapter times. The transcript is someone else's script, so it is not committed. The result:
+
+| Measure | Planner | Reference |
+|---|---|---|
+| Visual events | 173 | 170 |
+| States (one at 0 s, then one per event) | 174 | — |
+| Median gap | 5.4 s | 5.2 s |
+| p90 gap | 7.7 s | 9.8 s |
+| Hard cuts | 51 | 50 |
+| Words per event | 15.1 | ~15 |
 
 ## Scale and resume
 

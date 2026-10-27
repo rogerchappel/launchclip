@@ -18,7 +18,7 @@ import { knownModules } from './modules.mjs';
 export const VISUAL_KINDS = Object.freeze([
   'title', 'concept', 'stat', 'money', 'compute', 'compare', 'share', 'series', 'ranking', 'list', 'process',
   'timeline', 'date', 'month', 'quote', 'social', 'code', 'terminal', 'pr', 'commit', 'diff', 'chain', 'lineage',
-  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page'
+  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting'
 ]);
 
 // Capture kinds (launchclip.capture.v1) and the visual kind that shows each.
@@ -87,7 +87,11 @@ export const CAPABILITIES = Object.freeze([
   cap('kinetic-words', ['title', 'concept', 'tokens'], ['concept-card']),
   cap('glass-word', ['concept', 'title'], ['concept-card']),
   cap('concept-card', ['concept', 'title', 'stat'], []),
-  cap('object-card', ['concept'], ['concept-card'])
+  cap('object-card', ['concept'], ['concept-card']),
+  // Structure: a mid-roll call to action, and the logo sting at the open and the close.
+  cap('cta', ['cta'], ['concept-card']),
+  cap('logo-sting', ['sting'], ['brand-lockup', 'motion-title'], { planned: true }),
+  cap('brand-lockup', ['sting'], ['motion-title'])
 ]);
 
 const BY_ID = new Map(CAPABILITIES.map((entry) => [entry.id, entry]));
@@ -231,6 +235,9 @@ const BUILDERS = {
   'code-snippet': (beat) => ({ title: clip(beat.headline, 32), code: { language: 'text', typing: true, lines: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 24), type: i ? 'string' : 'keyword' }] })) } }),
   'window-chrome': (beat) => ({ title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: excerptLines(beat).map((line) => (typeof line === 'string' ? line : line.text)), caption: clip(beat.headline, 36), variant: 'mac' }),
   'media-window': (beat) => ({ title: clip(beat.evidence?.source?.title ?? beat.headline, 54), media: { kind: 'video', src: beat.evidence?.capture?.out } }),
+  'cta': (beat) => ({ action: clip(beat.cta?.action ?? 'Subscribe for the next one', 40), ...(beat.cta?.detail ? { detail: clip(beat.cta.detail, 80) } : {}), ...(beat.cta?.handle ? { handle: beat.cta.handle, icon: 'bell' } : {}) }),
+  // A sting needs the brand's own mark and wordmark (beat.brand); without them the title carries the open.
+  'brand-lockup': (beat) => (beat.brand?.mark && beat.brand?.wordmark ? { mark: beat.brand.mark, wordmark: beat.brand.wordmark, tint: 'paper', headline: clip(beat.brand.headline ?? beat.headline, 40) } : null),
   'equation-lockup': (beat) => ({ name: clip(beat.headline, 30), equation: clip(beat.facts?.equation ?? beat.headline, 30) }),
   'map-highlight': (beat) => ({ title: clip(beat.headline, 36), highlight: (beat.facts?.places ?? []).slice(0, 4).map((country) => ({ country })), variant: 'fill' })
 };

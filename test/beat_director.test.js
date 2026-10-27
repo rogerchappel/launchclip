@@ -15,7 +15,9 @@ const ledger = JSON.parse(readFileSync(path.join(FIXTURE, "research", "evidence.
 const captures = readdirSync(path.join(FIXTURE, "research", "captures")).sort().map((name) => JSON.parse(readFileSync(path.join(FIXTURE, "research", "captures", name), "utf8")));
 const timed = dryRunWords(script, { wpm: 155 });
 let cached = null;
-const plan = () => (cached ??= directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title }));
+// The fixture's structure (eval/beat-map-dry-run.mjs): subscribe calls at 3:30, 9:40 and 15:00, stings at both ends.
+const STRUCTURE = { ctas: [210, 580, 900].map((at) => ({ at, action: "Subscribe for the next breakdown" })), stings: true };
+const plan = () => (cached ??= directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title }, STRUCTURE));
 
 test("beat director: a script parses into chapters and dry-run timings", () => {
   const parsed = parseScript(script);
@@ -89,6 +91,20 @@ test("beat director: the 16-minute dry run passes the long-form gate", () => {
   assert.ok(report.variety.longest_same_module_across_cuts <= 2);
 });
 
+test("beat director: mid-roll calls to action and logo stings, and words per event", () => {
+  const map = plan();
+  const states = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
+  const ctas = states.filter((state) => state.kind === "cta");
+  assert.deepEqual(ctas.map((state) => state.module), ["cta", "cta", "cta"]);
+  for (const [i, at] of [210, 580, 900].entries()) assert.ok(ctas[i].start <= at + 0.6 && ctas[i].end > at, `${ctas[i].start}–${ctas[i].end} for ${at}`);
+  assert.equal(states[0].kind, "sting");
+  assert.equal(states.at(-1).kind, "sting");
+  assert.equal(states[0].params.text, "Halcyon 2, explained");
+  const wpe = map.report.cadence.words_per_event;
+  assert.ok(wpe >= 10 && wpe <= 20, String(wpe));
+  assert.ok(map.report.cadence.gate.checks.some((check) => check.id === "words_per_event" && check.ok));
+});
+
 test("beat director: the committed fixture is the planner's current output", () => {
   const committed = JSON.parse(readFileSync(path.join(FIXTURE, "BEATMAP.json"), "utf8"));
   const map = plan();
@@ -98,14 +114,14 @@ test("beat director: the committed fixture is the planner's current output", () 
 
 test("beat director: chunks resume, and a changed chapter replans only from there", () => {
   const map = plan();
-  const again = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title }, { previous: map });
+  const again = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title }, { ...STRUCTURE, previous: map });
   assert.equal(again.report.chunks.reused, map.chunks.length);
   assert.deepEqual(again.chapters, map.chapters);
   // Edit one word in chapter 7: chunks before it are reused, it and later ones replan.
   const words = timed.words.map((word) => ({ ...word }));
   const at = words.findIndex((word) => word.start >= map.chapters[6].start + 5);
   words[at].text = "remarkably";
-  const edited = directLongForm({ words, chapters: timed.chapters, ledger, captures, title: timed.title }, { previous: map });
+  const edited = directLongForm({ words, chapters: timed.chapters, ledger, captures, title: timed.title }, { ...STRUCTURE, previous: map });
   const changed = edited.chunks.findIndex((chunk, i) => chunk.key !== map.chunks[i].key);
   assert.ok(changed > 0 && edited.report.chunks.reused === changed, `${changed} / ${edited.report.chunks.reused}`);
   assert.deepEqual(longFormChunks(timed.chapters, timed.words, { chunkSeconds: 40 }).every((chunk) => chunk.end - chunk.start <= 40), true);

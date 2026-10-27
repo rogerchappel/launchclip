@@ -333,8 +333,15 @@ export function directChunk(chunk, options) {
     }
     if (evidence) draft.evidence = evidence;
     const opener = chunk.first && i === 0 && beat.words[0] !== 0;
-    draft.kind = opener ? 'title' : visualKind(draft);
-    draft.headline = headlineOf(beat.text);
+    // The clause under a call-to-action time (or just after it, in a pause) carries it.
+    const cta = (options.structure?.ctas ?? []).find((entry) => beat.start - 0.6 <= entry.at && entry.at < beat.end);
+    const sting = options.structure?.stings && (beat.words[0] === 0 || beat.words[1] === total - 1);
+    if (cta) draft.cta = cta;
+    if (sting && options.structure.brand) draft.brand = options.structure.brand;
+    draft.kind = sting ? 'sting' : cta ? 'cta' : opener ? 'title' : visualKind(draft);
+    // Without the brand's mark, the sting is the video's title.
+    if (sting && !draft.brand && options.structure?.title) draft.headline = options.structure.title.split(/[:—–]/)[0].trim();
+    draft.headline ??= headlineOf(beat.text);
     if (opener) draft.kicker = `Chapter ${chunk.chapter.index + 1}`;
     const n = facts.numbers[0];
     if (n?.label) draft.label = n.label;
@@ -479,6 +486,9 @@ function makeChecker(format, brand) {
  * ([launchclip.capture.v1]), format ({width, height}), title}. options:
  * {cadence: 'long-form', style: 'default', chunkSeconds: 180, previous (an
  * earlier beat map: matching chunks are reused), avoid (historyAvoid()),
+ * ctas (mid-roll calls to action: seconds or {at, action, detail, handle};
+ * the clause at that time becomes a cta state), stings (true: a logo sting
+ * opens and closes the video; stingBrand {mark, wordmark} for the brand's own),
  * registered (module ids; knownModules() by default), brand, onChunk}.
  * → the beat map, with its report.
  */
@@ -496,7 +506,9 @@ export function directLongForm(input, options = {}) {
   const reuse = new Map((options.previous?.chunks ?? []).map((chunk) => [chunk.key, chunk]));
   const previousShots = new Map();
   for (const chapter of options.previous?.chapters ?? []) for (const shot of chapter.shots ?? []) previousShots.set(shot.id, shot);
-  const settings = { cadence, style, format, registered: [...registered].sort(), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
+  // Structure: mid-roll calls to action (seconds, or {at, action, detail, handle}) and logo stings at the open and close.
+  const structure = { ctas: (options.ctas ?? []).map((entry) => (typeof entry === 'number' ? { at: entry } : { ...entry })).sort((a, b) => a.at - b.at), stings: options.stings === true, brand: options.stingBrand ?? null, title: input.title ?? null };
+  const settings = { structure: { ctas: structure.ctas, stings: structure.stings }, cadence, style, format, registered: [...registered].sort(), ledger: input.ledger?.claims?.map((claim) => [claim.id, claim.status, claim.text]) ?? null, captures: (input.captures ?? []).map((entry) => [entry.id, entry.kind, entry.url]) };
   const settingsKey = hashText(JSON.stringify(settings));
 
   let history = emptyHistory();
@@ -519,7 +531,7 @@ export function directLongForm(input, options = {}) {
       result = { shots: hit.shots.map((id) => previousShots.get(id)), history: hit.history };
       reused += 1;
     } else {
-      result = directChunk(chunk, { words, history, target, ledger: input.ledger ?? null, captures: input.captures ?? [], registered, format, brand: options.brand, avoidWeights: weights });
+      result = directChunk(chunk, { words, history, target, ledger: input.ledger ?? null, captures: input.captures ?? [], registered, format, brand: options.brand, avoidWeights: weights, structure });
     }
     // The chunk before holds until this one starts.
     const lastBefore = chapters.flatMap((entry) => entry.shots).at(-1);
@@ -556,7 +568,9 @@ export function beatMapEvents(map) {
  */
 export function beatMapReport(map, { reused = 0 } = {}) {
   const { events, cuts, duration } = beatMapEvents(map);
-  const stats = eventStats(events, { duration, cuts });
+  const states0 = (map.chapters ?? []).flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
+  const words = states0.length ? states0.at(-1).words[1] - states0[0].words[0] + 1 : null;
+  const stats = eventStats(events, { duration, cuts, words });
   const target = cadenceTarget(map.cadence?.format ?? 'long-form', map.cadence?.style ?? 'default');
   const gate = cadenceGate(stats, target);
   const states = (map.chapters ?? []).flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
@@ -601,7 +615,7 @@ export function beatMapReportText(map) {
   const c = r.cadence;
   const lines = [
     `beat map: ${map.title ?? 'untitled'} — ${round(map.duration / 60, 1)} min, ${map.chapters.length} chapters, ${r.shots.count} shots, ${c.events + 1} states`,
-    `cadence ${c.gate.ok ? 'passed' : 'FAILED'} (${c.gate.format}, ${c.gate.style}): ${c.events} events, ${c.per_min}/min; gaps p10 ${c.gap.p10} / p50 ${c.gap.p50} / p90 ${c.gap.p90} s; longest static ${c.longest_static.seconds} s; ${c.cuts} cuts, median ${c.cut_gap?.p50} s apart`
+    `cadence ${c.gate.ok ? 'passed' : 'FAILED'} (${c.gate.format}, ${c.gate.style}): ${c.events} events, ${c.per_min}/min, ${c.words_per_event} words per event; gaps p10 ${c.gap.p10} / p50 ${c.gap.p50} / p90 ${c.gap.p90} s; longest static ${c.longest_static.seconds} s; ${c.cuts} cuts, median ${c.cut_gap?.p50} s apart`
   ];
   for (const check of c.gate.checks) lines.push(`  ${check.ok ? 'ok  ' : 'FAIL'} ${check.id.padEnd(15)} ${String(check.value).padStart(7)}  want ${check.want}`);
   lines.push(`states per shot ${r.shots.states_per_shot.min}–${r.shots.states_per_shot.max} (mean ${r.shots.states_per_shot.mean}); changes ${Object.entries(r.shots.changes).map(([k, v]) => `${k} ${v}`).join(', ')}`);

@@ -294,165 +294,7 @@
   ]
  },
  {
-  "id": "short-3-inside-the-training-run",
-  "title": "Halcyon 2, explained: what a frontier model launch actually changes: Inside the…",
-  "window": {
-   "chapter": "inside-the-training-run",
-   "title": "Inside the training run",
-   "start": 163.723,
-   "end": 211.413,
-   "words": [
-    375,
-    484
-   ],
-   "states": [
-    "inside-the-training-run-1-sh1-2",
-    "inside-the-training-run-1-sh1-3",
-    "inside-the-training-run-1-sh1-4",
-    "inside-the-training-run-1-sh2-1",
-    "inside-the-training-run-1-sh2-2",
-    "inside-the-training-run-1-sh2-3",
-    "inside-the-training-run-1-sh2-4",
-    "inside-the-training-run-1-sh3-1",
-    "inside-the-training-run-1-sh3-2"
-   ],
-   "score": 3.843
-  },
-  "skeleton": {
-   "id": "dollar-a-second",
-   "family": "scale"
-  },
-  "duration": 48.09,
-  "cadence": {
-   "events": 15,
-   "per_min": 18.71,
-   "gap": {
-    "count": 14,
-    "p10": 1.966,
-    "p50": 2.499,
-    "p90": 4.392,
-    "mean": 2.842
-   },
-   "cuts": 5,
-   "ok": true
-  },
-  "states": [
-   {
-    "shot": "short-3-sh1",
-    "start": 0,
-    "module": "odometer",
-    "change": "enter",
-    "text": "The new cluster holds about 30 thousand accelerators,"
-   },
-   {
-    "shot": "short-3-sh1",
-    "start": 3.609,
-    "module": "count-up",
-    "change": "swap",
-    "text": "arranged in racks of 64,"
-   },
-   {
-    "shot": "short-3-sh1",
-    "start": 5.599,
-    "module": "icon-row",
-    "change": "swap",
-    "text": "linked by a network that moves data between them at enormous speed."
-   },
-   {
-    "shot": "short-3-sh2",
-    "start": 10.705,
-    "module": "glass-word",
-    "change": "enter",
-    "text": "Running it costs real money."
-   },
-   {
-    "shot": "short-3-sh2",
-    "start": 13.081,
-    "module": "motion-title",
-    "change": "swap",
-    "text": "Outside analysts estimate the"
-   },
-   {
-    "shot": "short-3-sh2",
-    "start": 14.923,
-    "module": "concept-card",
-    "change": "swap",
-    "text": "training run alone cost between"
-   },
-   {
-    "shot": "short-3-sh3",
-    "start": 17.025,
-    "module": "bar-chart",
-    "change": "enter",
-    "text": "400 million and 600 million dollars,"
-   },
-   {
-    "shot": "short-3-sh3",
-    "start": 19.639,
-    "module": "concept-card",
-    "change": "swap",
-    "text": "once you count the chips, the power and the people."
-   },
-   {
-    "shot": "short-3-sh4",
-    "start": 23.932,
-    "module": "icon-row",
-    "change": "enter",
-    "text": "Northlight has not confirmed a number."
-   },
-   {
-    "shot": "short-3-sh4",
-    "start": 26.859,
-    "module": "icon-row",
-    "change": "build",
-    "text": "Power is the other constraint."
-   },
-   {
-    "shot": "short-3-sh4",
-    "start": 29.308,
-    "module": "icon-row",
-    "change": "build",
-    "text": "The Finnish site was chosen"
-   },
-   {
-    "shot": "short-3-sh5",
-    "start": 31.264,
-    "module": "motion-title",
-    "change": "enter",
-    "text": "because electricity there is cheap,"
-   },
-   {
-    "shot": "short-3-sh5",
-    "start": 33.655,
-    "module": "glass-word",
-    "change": "swap",
-    "text": "mostly renewable, and the cold climate makes cooling easier."
-   },
-   {
-    "shot": "short-3-sh6",
-    "start": 38.089,
-    "module": "concept-card",
-    "change": "enter",
-    "text": "The system card says the run used"
-   },
-   {
-    "shot": "short-3-sh6",
-    "start": 40.638,
-    "module": "count-up",
-    "change": "swap",
-    "text": "about 120 gigawatt hours of electricity,"
-   },
-   {
-    "shot": "short-3-sh6",
-    "start": 43.398,
-    "module": "odometer",
-    "change": "swap",
-    "text": "roughly what a town of ten thousand homes uses in a year."
-   }
-  ]
- },
- {
-  "id": "short-4-what-northlight-actually-announced",
+  "id": "short-3-what-northlight-actually-announced",
   "title": "Halcyon 2, explained: what a frontier model launch actually changes: What North…",
   "window": {
    "chapter": "what-northlight-actually-announced",
@@ -487,60 +329,218 @@
   },
   "states": [
    {
-    "shot": "short-4-sh1",
+    "shot": "short-3-sh1",
     "start": 0,
     "module": "odometer",
     "change": "enter",
     "text": "Halcyon 2 was trained on a new cluster in Finland,"
    },
    {
-    "shot": "short-4-sh1",
+    "shot": "short-3-sh1",
     "start": 3.872,
     "module": "number-line",
     "change": "swap",
     "text": "using roughly 30 thousand accelerators over eleven weeks."
    },
    {
-    "shot": "short-4-sh2",
+    "shot": "short-3-sh2",
     "start": 7.867,
     "module": "icon-row",
     "change": "enter",
     "text": "The context window doubled,"
    },
    {
-    "shot": "short-4-sh2",
+    "shot": "short-3-sh2",
     "start": 9.78,
     "module": "kinetic-words",
     "change": "swap",
     "text": "from 200 thousand tokens to 400 thousand."
    },
    {
-    "shot": "short-4-sh3",
+    "shot": "short-3-sh3",
     "start": 13.003,
     "module": "concept-card",
     "change": "enter",
     "text": "And for the first time,"
    },
    {
-    "shot": "short-4-sh3",
+    "shot": "short-3-sh3",
     "start": 14.957,
     "module": "motion-title",
     "change": "swap",
     "text": "Northlight published a short section"
    },
    {
-    "shot": "short-4-sh3",
+    "shot": "short-3-sh3",
     "start": 17.241,
     "module": "glass-word",
     "change": "swap",
     "text": "on what the model still gets wrong,"
    },
    {
-    "shot": "short-4-sh4",
+    "shot": "short-3-sh4",
     "start": 20.006,
     "module": "icon-row",
     "change": "enter",
     "text": "including a table of known failure cases."
+   }
+  ]
+ },
+ {
+  "id": "short-4-inside-the-training-run",
+  "title": "Halcyon 2, explained: what a frontier model launch actually changes: Inside the…",
+  "window": {
+   "chapter": "inside-the-training-run",
+   "title": "Inside the training run",
+   "start": 163.723,
+   "end": 211.413,
+   "words": [
+    375,
+    484
+   ],
+   "states": [
+    "inside-the-training-run-1-sh1-2",
+    "inside-the-training-run-1-sh1-3",
+    "inside-the-training-run-1-sh1-4",
+    "inside-the-training-run-1-sh2-1",
+    "inside-the-training-run-1-sh2-2",
+    "inside-the-training-run-1-sh2-3",
+    "inside-the-training-run-1-sh2-4",
+    "inside-the-training-run-1-sh3-1",
+    "inside-the-training-run-1-sh3-2"
+   ],
+   "score": 3.732
+  },
+  "skeleton": {
+   "id": "dollar-a-second",
+   "family": "scale"
+  },
+  "duration": 48.09,
+  "cadence": {
+   "events": 15,
+   "per_min": 18.71,
+   "gap": {
+    "count": 14,
+    "p10": 1.966,
+    "p50": 2.499,
+    "p90": 4.392,
+    "mean": 2.842
+   },
+   "cuts": 5,
+   "ok": true
+  },
+  "states": [
+   {
+    "shot": "short-4-sh1",
+    "start": 0,
+    "module": "odometer",
+    "change": "enter",
+    "text": "The new cluster holds about 30 thousand accelerators,"
+   },
+   {
+    "shot": "short-4-sh1",
+    "start": 3.609,
+    "module": "count-up",
+    "change": "swap",
+    "text": "arranged in racks of 64,"
+   },
+   {
+    "shot": "short-4-sh1",
+    "start": 5.599,
+    "module": "icon-row",
+    "change": "swap",
+    "text": "linked by a network that moves data between them at enormous speed."
+   },
+   {
+    "shot": "short-4-sh2",
+    "start": 10.705,
+    "module": "glass-word",
+    "change": "enter",
+    "text": "Running it costs real money."
+   },
+   {
+    "shot": "short-4-sh2",
+    "start": 13.081,
+    "module": "motion-title",
+    "change": "swap",
+    "text": "Outside analysts estimate the"
+   },
+   {
+    "shot": "short-4-sh2",
+    "start": 14.923,
+    "module": "concept-card",
+    "change": "swap",
+    "text": "training run alone cost between"
+   },
+   {
+    "shot": "short-4-sh3",
+    "start": 17.025,
+    "module": "bar-chart",
+    "change": "enter",
+    "text": "400 million and 600 million dollars,"
+   },
+   {
+    "shot": "short-4-sh3",
+    "start": 19.639,
+    "module": "concept-card",
+    "change": "swap",
+    "text": "once you count the chips, the power and the people."
+   },
+   {
+    "shot": "short-4-sh4",
+    "start": 23.932,
+    "module": "icon-row",
+    "change": "enter",
+    "text": "Northlight has not confirmed a number."
+   },
+   {
+    "shot": "short-4-sh4",
+    "start": 26.859,
+    "module": "icon-row",
+    "change": "build",
+    "text": "Power is the other constraint."
+   },
+   {
+    "shot": "short-4-sh4",
+    "start": 29.308,
+    "module": "icon-row",
+    "change": "build",
+    "text": "The Finnish site was chosen"
+   },
+   {
+    "shot": "short-4-sh5",
+    "start": 31.264,
+    "module": "motion-title",
+    "change": "enter",
+    "text": "because electricity there is cheap,"
+   },
+   {
+    "shot": "short-4-sh5",
+    "start": 33.655,
+    "module": "glass-word",
+    "change": "swap",
+    "text": "mostly renewable, and the cold climate makes cooling easier."
+   },
+   {
+    "shot": "short-4-sh6",
+    "start": 38.089,
+    "module": "concept-card",
+    "change": "enter",
+    "text": "The system card says the run used"
+   },
+   {
+    "shot": "short-4-sh6",
+    "start": 40.638,
+    "module": "count-up",
+    "change": "swap",
+    "text": "about 120 gigawatt hours of electricity,"
+   },
+   {
+    "shot": "short-4-sh6",
+    "start": 43.398,
+    "module": "odometer",
+    "change": "swap",
+    "text": "roughly what a town of ten thousand homes uses in a year."
    }
   ]
  }
