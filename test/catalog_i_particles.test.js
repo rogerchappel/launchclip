@@ -78,7 +78,7 @@ test('dot-field: one dot per unit, a counter that lands on the count, a pull-bac
 test('particle-text, particle-logo and particle-cloud validate what they draw', () => {
   assert.throws(() => resolve('particle-text', {text: 'café'}), /dot-matrix face does not draw/);
   assert.throws(() => resolve('particle-text', {text: '42', dissolveAt: 3}), /needs params\.mode "dissolve" or "both"/);
-  const both = resolve('particle-text');
+  const both = resolve('particle-text', {...SAMPLES['particle-text'], mode: 'both'});
   assert.deepEqual(both.events.map(e => e.name).filter(n => n !== 'enter'), ['assemble', 'dissolve']);
   assert.throws(() => resolve('particle-logo', {logos: [{label: 'X'}]}), /needs exactly one of icon or path/);
   assert.throws(() => resolve('particle-logo', {logos: [{label: 'X', path: {d: 'M0 0 url(x)', viewBox: '0 0 24 24'}}]}), /must be SVG path data/);

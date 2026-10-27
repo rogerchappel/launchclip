@@ -106,10 +106,11 @@ function raceResolve(params, ctx) {
     return {label: check.str(r.label, `${path}.label`, 28), sub: r.sub === undefined ? null : check.str(r.sub, `${path}.sub`, 40), total, cells: Math.ceil(total / unit - 1e-9), spend,
       color: dataTone(b, r.tone, `${path}.tone`, i ? 'accent' : 'primary')};
   });
-  const tb = titleBlock(b, {title: p.title, source: p.source});
   const W = rect.width, stacked = b.variant === 'stacked';
-  // stacked: one row per racer; in landscape the text sits in a column left of the grid.
+  // stacked: one row per racer; in landscape the text sits in a column left of
+  // the grid and the ratio note at the top right, beside the title.
   const side = stacked && !b.portrait;
+  const tb = titleBlock(b, {title: p.title, source: p.source, width: side && p.ratio !== undefined ? r2(W * 0.55) : W});
   const gap = u(stacked ? 0 : b.portrait ? 48 : 96);
   const colW = stacked ? W : (W - gap) / 2;
   const infoW = side ? r2(W * 0.34) : colW, gridW = side ? r2(W - infoW - u(48)) : colW;
@@ -121,10 +122,11 @@ function raceResolve(params, ctx) {
   const headH = r2(labelSize * 1.2 + (hasSub ? subSize * 1.3 : 0) + u(18));
   const footH = r2(u(18) + counterSize * 1.1 + (hasSpend ? spendSize * 1.25 : 0));
   const legendSize = r2(Math.max(b.min.meta, u(28)));
-  const ratio = p.ratio === undefined ? null : ratioOf(b, p.ratio, W);
-  const ratioH = ratio ? ratio.height + u(24) : 0;
+  const ratio = p.ratio === undefined ? null : ratioOf(b, p.ratio, side ? r2(W * 0.42) : W);
+  const ratioH = ratio && !side ? ratio.height + u(24) : 0;
+  const top = side && ratio ? Math.max(tb.top, r2(ratio.height + u(16))) : tb.top;
   const legendH = r2(legendSize * 1.3 + u(20));
-  const blockH = rect.height - tb.top - tb.bottom - legendH - ratioH;
+  const blockH = rect.height - top - tb.bottom - legendH - ratioH;
   const infoH = r2(headH + footH - u(4));
   const areaH = side ? (blockH - u(40)) / 2 : stacked ? (blockH - 2 * (headH + footH) - u(40)) / 2 : blockH - headH - footH;
   if (areaH < u(90)) check.fail('params', 'leaves too little height for the grids; drop the title or the ratio, or enlarge rect');
@@ -134,7 +136,7 @@ function raceResolve(params, ctx) {
   if (pitch < 3) check.fail('params.unit', `makes ${max} cells, under 3 px each here; use a larger unit`);
   const gridH = r2(Math.ceil(max / shape.cols) * pitch);
   const rowH = side ? Math.max(infoH, gridH) : headH + gridH + footH;
-  const y0 = r2(tb.top + (blockH - (stacked ? 2 * rowH + u(40) : rowH)) / 2);
+  const y0 = r2(top + (blockH - (stacked ? 2 * rowH + u(40) : rowH)) / 2);
 
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
   const latest = b.start + b.lastEvent - (ratio ? 0.6 : 0.1);
@@ -162,7 +164,7 @@ function raceResolve(params, ctx) {
   if (ratio) {
     ratio.time = b.timeOf('ratio', ratio.at, 'params.ratio.at', Math.min(t1 - b.start + 0.35, b.lastEvent), {min: Math.min(t1 - b.start, b.lastEvent)});
     b.events.push({id: `${b.id}-ratio`, name: 'ratio', time: ratio.time, endTime: rt(ratio.time + 0.5), role: 'emphasis', cue: 'pop'});
-    Object.assign(ratio, {x: 0, y: r2(y0 + (stacked ? 2 * rowH + u(40) : rowH) + u(24)), width: W, align: 'center'});
+    Object.assign(ratio, side ? {x: r2(W * 0.58), y: 0, width: r2(W * 0.42), align: 'right'} : {x: 0, y: r2(y0 + (stacked ? 2 * rowH + u(40) : rowH) + u(24)), width: W, align: 'center'});
     delete ratio.at;
   }
   const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'left', racers, labelSize, subSize, counterSize, spendSize, colW: r2(infoW), legend, legendSize, legendColor: racers[0].color,

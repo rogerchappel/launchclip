@@ -75,7 +75,7 @@ function fieldResolve(params, ctx) {
   const total = fmt.format(count);
   const legendSize = r2(Math.max(b.min.meta, u(30)));
   const legendW = r2(textWidth(legend, legendSize, 'meta') + legendSize * 1.2);
-  const counterSize = fitText(check, 'params.count', total, {family: 'display', width: (W - legendW) * 0.55, preferred: u(b.portrait ? 120 : 104), min: b.min.key}).size;
+  const counterSize = fitText(check, 'params.count', total, {family: 'display', width: b.portrait ? W : (W - legendW) * 0.55, preferred: u(b.portrait ? 120 : 104), min: b.min.key}).size;
   const counterW = r2(textWidth(total, counterSize, 'display') + u(8));
   const labelFit = text ? fitText(check, 'params.label', text, {family: 'body', width: W - legendW - u(48), preferred: u(44), min: b.min.key}) : null;
   const headerH = r2(counterSize * 1.1 + (labelFit ? labelFit.size * 1.3 : 0));
