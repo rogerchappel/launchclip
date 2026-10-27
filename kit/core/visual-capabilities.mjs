@@ -6,7 +6,7 @@
 // modules (social-post, repo-pr-card, glass-bars-3d, …).
 //
 //   VISUAL_KINDS                       what a clause can ask to be shown as
-//   CAPABILITIES                       [{id, kinds, evidence, fallback, wide?, planned?}]
+//   CAPABILITIES                       [{id, kinds, evidence, fallback, wide?}]
 //   capabilitiesFor(kind, {evidence})  → capability ids, best first
 //   resolveCapability(id, {registered}) → {module, wanted, fallback: bool, chain}
 //   capabilityParams(module, beat)     → params for that module from a beat's facts
@@ -14,6 +14,12 @@
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/visual-capabilities.mjs.
 
 import { knownModules } from './modules.mjs';
+import { socialBuilders } from './capability-builders-social.mjs';
+import { codeBuilders } from './capability-builders-code.mjs';
+import { particlesBuilders } from './capability-builders-particles.mjs';
+import { objectsBuilders } from './capability-builders-objects.mjs';
+import { explainBuilders } from './capability-builders-explain.mjs';
+import { channelBuilders } from './capability-builders-channel.mjs';
 
 export const VISUAL_KINDS = Object.freeze([
   'title', 'concept', 'stat', 'money', 'compute', 'compare', 'share', 'series', 'ranking', 'list', 'process',
@@ -24,66 +30,66 @@ export const VISUAL_KINDS = Object.freeze([
 // Capture kinds (launchclip.capture.v1) and the visual kind that shows each.
 export const CAPTURE_KIND_VISUALS = Object.freeze({ post: 'social', pr: 'pr', commit: 'commit', diff: 'diff', repo: 'pr', page: 'page', article: 'page', 'model-card': 'page', chart: 'series' });
 
-const cap = (id, kinds, fallback, extra = {}) => Object.freeze({ id, kinds: Object.freeze(kinds), fallback: Object.freeze(fallback), evidence: Object.freeze(extra.evidence ?? []), ...(extra.wide ? { wide: true } : {}), ...(extra.planned ? { planned: true } : {}) });
+const cap = (id, kinds, fallback, extra = {}) => Object.freeze({ id, kinds: Object.freeze(kinds), fallback: Object.freeze(fallback), evidence: Object.freeze(extra.evidence ?? []), ...(extra.wide ? { wide: true } : {}) });
 
 // Order inside a kind is preference: the director walks it and skips what the
-// visual history says it has used too often. `planned` marks a module the
-// director has no params builder for yet: it gets the neutral bag below, the
-// story builder rejects it, and `fallback` is walked (as it is when a module
-// is not registered).
+// visual history says it has used too often. A module with no params builder
+// (here or in a capability-builders-*.mjs family file) is planned (isPlanned):
+// it gets the neutral bag below, the story builder rejects it, and `fallback`
+// is walked (as it is when a module is not registered).
 export const CAPABILITIES = Object.freeze([
   // Evidence modules (planned): a real post, PR, commit, diff or page.
-  cap('social-post', ['social', 'quote'], ['feed-frame', 'quote-card'], { evidence: ['post'], planned: true }),
-  cap('social-stack', ['social'], ['quote-card', 'feed-frame'], { evidence: ['post'], planned: true }),
-  cap('social-wall', ['social', 'grid'], ['proof-wall', 'icon-grid'], { evidence: ['post'], planned: true }),
-  cap('repo-pr-card', ['pr'], ['window-chrome', 'excerpt'], { evidence: ['pr', 'repo'], planned: true }),
-  cap('commit-card', ['commit'], ['excerpt', 'window-chrome'], { evidence: ['commit'], planned: true }),
-  cap('diff-view', ['diff', 'code'], ['excerpt', 'code-snippet'], { evidence: ['diff'], planned: true }),
-  cap('evidence-chain', ['chain'], ['timeline', 'process-steps'], { planned: true }),
-  cap('date-pinned-timeline', ['timeline', 'date'], ['timeline'], { planned: true }),
-  cap('terminal-session', ['terminal', 'code'], ['window-chrome', 'excerpt'], { planned: true }),
+  cap('social-post', ['social', 'quote'], ['feed-frame', 'quote-card'], { evidence: ['post'] }),
+  cap('social-stack', ['social'], ['quote-card', 'feed-frame'], { evidence: ['post'] }),
+  cap('social-wall', ['social', 'grid'], ['proof-wall', 'icon-grid'], { evidence: ['post'] }),
+  cap('repo-pr-card', ['pr'], ['window-chrome', 'excerpt'], { evidence: ['pr', 'repo'] }),
+  cap('commit-card', ['commit'], ['excerpt', 'window-chrome'], { evidence: ['commit'] }),
+  cap('diff-view', ['diff', 'code'], ['excerpt', 'code-snippet'], { evidence: ['diff'] }),
+  cap('evidence-chain', ['chain'], ['timeline', 'process-steps']),
+  cap('date-pinned-timeline', ['timeline', 'date'], ['timeline']),
+  cap('terminal-session', ['terminal', 'code'], ['window-chrome', 'excerpt']),
   cap('media-window', ['page'], ['excerpt'], { evidence: ['page', 'article', 'model-card', 'repo'] }),
   // Numbers.
   cap('stat-card', ['stat', 'money', 'compute'], ['concept-card']),
   cap('count-up', ['stat', 'money'], ['stat-card']),
   cap('odometer', ['stat', 'compute', 'money'], ['count-up', 'stat-card']),
-  cap('glass-bars-3d', ['compare', 'series'], ['bar-chart'], { planned: true }),
-  cap('coin-stack', ['money'], ['stat-card'], { planned: true }),
-  cap('rack-shelf', ['compute'], ['stat-card'], { planned: true }),
+  cap('glass-bars-3d', ['compare', 'series'], ['bar-chart']),
+  cap('coin-stack', ['money'], ['stat-card']),
+  cap('rack-shelf', ['compute'], ['stat-card']),
   cap('percent-fill', ['share'], ['stat-card']),
   cap('unit-grid', ['share'], ['percent-fill']),
-  cap('dot-field', ['share', 'grid'], ['unit-grid'], { planned: true }),
+  cap('dot-field', ['share', 'grid'], ['unit-grid']),
   cap('pie-chart', ['share'], ['percent-fill']),
   cap('bar-chart', ['series', 'compare', 'ranking'], ['leaderboard']),
   cap('leaderboard', ['ranking'], ['bar-chart']),
-  cap('small-multiples', ['series', 'grid'], ['bar-chart'], { planned: true }),
+  cap('small-multiples', ['series', 'grid'], ['bar-chart']),
   cap('compare', ['compare'], ['icon-row']),
   cap('gauge-compare', ['compare'], ['compare']),
   cap('comparison-table', ['compare', 'ranking'], ['compare'], { wide: true }),
   cap('number-line', ['share', 'stat'], ['percent-fill']),
   // Time.
-  cap('date-carousel', ['date', 'timeline'], ['timeline'], { planned: true }),
-  cap('month-grid', ['month', 'date'], ['timeline'], { planned: true }),
+  cap('date-carousel', ['date', 'timeline'], ['timeline']),
+  cap('month-grid', ['month', 'date'], ['timeline']),
   cap('timeline', ['timeline', 'process', 'date'], ['icon-row']),
   // Structure.
   cap('icon-row', ['list', 'concept'], ['concept-card']),
   cap('icon-grid', ['list', 'grid'], ['icon-row']),
   cap('process-steps', ['process', 'list'], ['timeline']),
   cap('checklist', ['list'], ['icon-row']),
-  cap('lineage-graph', ['lineage', 'family'], ['timeline'], { planned: true }),
-  cap('planet-family', ['family'], ['icon-row'], { planned: true }),
-  cap('paper-stack', ['documents'], ['excerpt'], { planned: true }),
-  cap('equation', ['equation'], ['equation-lockup'], { planned: true }),
+  cap('lineage-graph', ['lineage', 'family'], ['timeline']),
+  cap('planet-family', ['family'], ['icon-row']),
+  cap('paper-stack', ['documents'], ['excerpt']),
+  cap('equation', ['equation'], ['equation-lockup']),
   cap('equation-lockup', ['equation'], ['concept-card']),
   cap('map-highlight', ['map'], ['icon-row']),
-  cap('tokenizer', ['tokens'], ['kinetic-words'], { planned: true }),
+  cap('tokenizer', ['tokens'], ['kinetic-words']),
   // Words.
   cap('quote-card', ['quote', 'social'], ['concept-card']),
   cap('excerpt', ['documents', 'code', 'quote'], ['quote-card']),
   cap('code-snippet', ['code'], ['excerpt']),
   cap('window-chrome', ['terminal', 'code'], ['excerpt']),
-  cap('title-decompose', ['title'], ['motion-title'], { planned: true }),
-  cap('particle-text', ['title', 'concept'], ['glass-word', 'motion-title'], { planned: true }),
+  cap('title-decompose', ['title'], ['motion-title']),
+  cap('particle-text', ['title', 'concept'], ['glass-word', 'motion-title']),
   cap('motion-title', ['title', 'concept'], ['concept-card']),
   cap('kinetic-words', ['title', 'concept', 'tokens'], ['concept-card']),
   cap('glass-word', ['concept', 'title'], ['concept-card']),
@@ -91,7 +97,7 @@ export const CAPABILITIES = Object.freeze([
   cap('object-card', ['concept'], ['concept-card']),
   // Structure: a mid-roll call to action, and the logo sting at the open and the close.
   cap('cta', ['cta'], ['concept-card']),
-  cap('logo-sting', ['sting'], ['brand-lockup', 'motion-title'], { planned: true }),
+  cap('logo-sting', ['sting'], ['brand-lockup', 'motion-title']),
   cap('brand-lockup', ['sting'], ['motion-title'])
 ]);
 
@@ -285,6 +291,16 @@ function excerptLines(beat) {
   return lines.map((line) => (key && line.includes(key) ? { text: line, highlight: true } : line));
 }
 
+// The family files (capability-builders-*.mjs) add their modules' builders.
+const HELPERS = Object.freeze({ clip, keyTerms, numbersOf, itemsOf, percentOf, seriesOf, sidesOf, timelineSteps, quoteOf, excerptLines, formatValue, sourceOf, iconFor, round });
+const FAMILIES = [socialBuilders, codeBuilders, particlesBuilders, objectsBuilders, explainBuilders, channelBuilders].map((family) => family(HELPERS));
+for (const family of FAMILIES) Object.assign(BUILDERS, family.builders);
+
+/** The family files' sample beats (with evidence.data), for tests and sample sheets. */
+export function capabilitySamples() {
+  return FAMILIES.flatMap((family) => family.samples ?? []);
+}
+
 /**
  * Params for a module from a beat ({id, text, headline, label?, sub?, kicker?,
  * facts: {numbers, items, dates, quote, sides, places}, evidence?}). Unknown
@@ -314,14 +330,21 @@ const ADDITIONS = {
  * What a clause adds to a module that is already on screen (a build state):
  * {key, items} or null when the module does not build or the clause adds nothing.
  */
+for (const family of FAMILIES) Object.assign(ADDITIONS, family.additions);
+
 export function capabilityAdditions(module, beat) {
   const add = ADDITIONS[module]?.(beat);
   return add?.items?.length ? strip(add) : null;
 }
 
-/** Whether the table has a params builder for a module (otherwise it is a planned module's neutral bag). */
+/** Whether the table has a params builder for a module (otherwise it gets the neutral bag). */
 export function hasParamsBuilder(module) {
   return Object.hasOwn(BUILDERS, module);
+}
+
+/** Whether a capability has no params builder yet, so the director always falls back from it. */
+export function isPlanned(id) {
+  return Boolean(capability(id)) && !hasParamsBuilder(id);
 }
 
 function strip(value) {
