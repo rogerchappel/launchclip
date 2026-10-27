@@ -1472,6 +1472,38 @@ params:
 events: build, range-0, range-1, range-2, marker, points, zoom
 variants: ruler (default), track
 
+### race-bars (keeps captions)
+A race: 2–5 rows fill like progress bars at their own speeds, each timer counting to its finish, the fastest ticking first; then an "N× faster" badge lands on the winner ("3× faster", "1h 26m vs 4h 10m").
+params:
+- rows: [{label ≤ 24, time (how long it takes, any unit), tone? (good | bad | neutral | primary | accent | paper | #rrggbb), icon?}] 2–5
+- badge: string ≤ 24 on the winner (optional; default "N× faster" from the times; false for none)
+- format: the timers: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- race: seconds the slowest row takes to fill (optional; default up to 3.2 s, fitting the scene)
+- badgeAt: the badge: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, finish-<i>, badge
+variants: bars (default), lanes
+
+### small-multiples (keeps captions)
+A benchmark dashboard: 2–6 mini bar charts (one per test) in a grid of glass cards under one shared legend; the bars grow panel by panel, then each panel lights its winning bar with a glow and its value while the rest dim.
+params:
+- series: [label | {label ≤ 20, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)}] 2–4, the shared legend (one bar per series in every panel)
+- panels: [{title ≤ 24, values: [number per series], highlight? (series index; default the largest), note? ≤ 16}] 2–6
+- columns: integer (optional; default 1–2 in portrait, 2–3 in landscape)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), flat
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1613,6 +1645,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
+| race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
+| small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

@@ -18,6 +18,8 @@
 //   icons     catalog-h-icons.mjs (icon-grid, stroke or duotone)
 //   data      catalog-h-data.mjs (unit-grid, number-line: the data-explainer
 //             isotype and ruler)
+//   explain   catalog-i-explain.mjs (catalogue I: the explainer modules,
+//             drawn with these same helpers)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -37,9 +39,10 @@ import {TEXT} from './catalog-h-text.mjs';
 import {ICON_MODULES} from './catalog-h-icons.mjs';
 import {MAPS} from './catalog-h-map.mjs';
 import {DATA_MODULES} from './catalog-h-data.mjs';
+import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...SCATTER, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES];
+const DEFINITIONS = [...CHARTS, ...SCATTER, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...EXPLAIN_MODULES];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
