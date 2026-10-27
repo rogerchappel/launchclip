@@ -42,14 +42,25 @@ function cueTime(b, name, value, path, fallback, min) {
   return b.timeOf(name, value, path, Math.max(min, Math.min(fallback, b.lastEvent)), {min: Math.max(0, min - 1e-6)});
 }
 
-/** Sizes of a full card (one card on stage) or a compact one (several). */
+/**
+ * Sizes of a full card (one card on stage) or a compact one (several), at
+ * scale k. Above 1 (a hero), code type shrinks at most 20% to fit its longest
+ * line (codeFloor) before rows are cropped.
+ */
 function cardSizes(b, compact, k = 1) {
-  const {u, min} = b;
-  const m = v => r2(Math.max(min.meta, u(v * k)));
-  return compact
-    ? {pad: u(22 * k), head: m(30), meta: m(26), title: m(32), code: m(28), chipH: u(40 * k), chipText: m(22), bar: u(40 * k), avatar: u(34 * k), body: m(28)}
-    : {pad: u(30 * k), head: m(36), meta: m(28), title: r2(Math.max(min.key, u(48 * k))), code: m(34), chipH: u(48 * k), chipText: m(26), bar: u(50 * k), avatar: u(42 * k), body: m(32)};
+  const {min} = b;
+  // Above 1x the code (the evidence) grows at full rate, the chrome round it at half.
+  const c = k > 1 ? 1 + (k - 1) / 2 : k;
+  const u = v => b.u(v * c), m = v => r2(Math.max(min.meta, b.u(v * c)));
+  const code = v => r2(Math.max(min.meta, b.u(v * k)));
+  const z = compact
+    ? {pad: u(22), head: m(30), meta: m(26), title: m(32), code: code(28), chipH: u(40), chipText: m(22), bar: u(40), avatar: u(34), body: m(28)}
+    : {pad: u(30), head: m(36), meta: m(28), title: r2(Math.max(min.key, u(48))), code: code(34), chipH: u(48), chipText: m(26), bar: u(50), avatar: u(42), body: m(32)};
+  return {...z, codeFloor: k > 1 ? r2(Math.max(min.meta, z.code * 0.8)) : min.meta, lead: k > 1 ? 1.45 : 1.62};
 }
+
+// The largest scale a card alone on stage tries (repo-pr-card, commit-card, diff-view).
+const HERO_SCALE = 1.5;
 
 /**
  * layoutCard at the largest scale from `scale` (default 1) down to 80% in
@@ -150,7 +161,7 @@ function wrapProse(text, token, size, width) {
  * tokens (card coordinates), headerCount}. compact: the small header used when
  * several cards share the stage.
  */
-function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), maxHeight = Infinity}) {
+function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), maxHeight = Infinity, urlBar = true}) {
   const {u, check} = b;
   const z = sizes, P = z.pad, W = width;
   const items = [];
@@ -164,6 +175,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
       items.push({t: 'mark', x: P, y: r2(y + (h - z.head) / 2), s: z.head, c: 'fg'});
       const rw = W - 2 * P - z.head * 1.4 - (rightText ? textWidth(rightText, z.meta, 'meta') + u(16) : 0);
       text(P + z.head * 1.4, y + (h - z.head * 1.25) / 2, rw, s.repo, z.head, 'body', 'fg', {wt: 650, clip: true});
+      if (s.repo.length * z.head * proseAdvance(b.fonts.body) > rw) items.cropped = (items.cropped ?? 0) + 1;
     }
     if (rightText) right(rightText, z.meta, rightFont, 'muted', y, h);
     y += h;
@@ -186,16 +198,21 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     list.forEach((p, i) => items.push({t: 'avatar', x: r2(x + i * size * 0.62), y: r2(yy), s: size, p}));
     return r2(x + (list.length - 1) * size * 0.62 + size + u(12));
   };
-  const titleFit = (v, w, preferred, minSize, lines) => fitText(check, `${path}.${s.kind === 'commit' ? 'message' : 'title'}`, v, {family: 'body', width: w, preferred, min: minSize, maxLines: lines});
+  // fitText's advance is conservative; the height reserved follows the body
+  // face's own advance (+6%), so a title that sets on one line takes one.
+  const titleFit = (v, w, preferred, minSize, lines) => {
+    const fit = fitText(check, `${path}.${s.kind === 'commit' ? 'message' : 'title'}`, v, {family: 'body', width: w, preferred, min: minSize, maxLines: lines});
+    return {...fit, lines: Math.min(fit.lines, wrapCount(v, fit.size * proseAdvance(b.fonts.body) * 1.06, w))};
+  };
 
   if (s.kind === 'pr') {
-    if (!compact) bar(`github.com/${s.repo}/pull/${s.number}`);
+    if (!compact && urlBar) bar(`github.com/${s.repo}/pull/${s.number}`);
     y += P * 0.7;
     markRow(`#${s.number}`);
     if (s.title && !compact) {
       y += u(10);
       const fit = titleFit(s.title, W - 2 * P, z.title, b.min.key, 3);
-      text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.18});
+      text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.18, box: r2(fit.size * 1.18 * fit.lines)});
       items.titleSize = fit.size;
       y += fit.size * 1.18 * fit.lines + u(14);
     } else y += u(6);
@@ -209,7 +226,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     y += h;
     fileRow();
   } else if (s.kind === 'commit') {
-    if (!compact) bar(`github.com/${s.repo}/commit/${s.sha}`);
+    if (!compact && urlBar) bar(`github.com/${s.repo}/commit/${s.sha}`);
     y += P * 0.7;
     markRow(compact ? `commit ${s.sha}` : null);
     if (!compact) {
@@ -245,7 +262,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
       const fit = titleFit(`${s.message}${tail}`, W - 2 * P - u(36), z.title, b.min.key, 3);
       const boxH = r2(fit.size * 1.18 * fit.lines + u(30));
       items.push({t: 'box', x: P, y: r2(y), w: r2(W - 2 * P), h: boxH});
-      text(P + u(18), y + u(15), W - 2 * P - u(36), tail ? [{v: s.message, c: 'fg'}, {v: tail, c: 'accent'}] : s.message, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.18});
+      text(P + u(18), y + u(15), W - 2 * P - u(36), tail ? [{v: s.message, c: 'fg'}, {v: tail, c: 'accent'}] : s.message, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.18, box: r2(fit.size * 1.18 * fit.lines)});
       items.titleSize = fit.size;
       y += boxH;
     }
@@ -264,7 +281,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     bar(s.site);
     y += P * 0.8;
     const fit = titleFit(s.title, W - 2 * P, r2(z.title * 1.1), Math.min(z.title, b.min.meta * 1.1), 2);
-    text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: fit.lines > 1, lh: 1.15});
+    text(P, y, W - 2 * P, s.title, fit.size, 'body', 'fg', {wt: 700, wrap: true, lh: 1.15, box: r2(fit.size * 1.15 * fit.lines)});
     y += fit.size * 1.15 * fit.lines + u(8);
     if (s.date) { text(P, y, W - 2 * P, s.date.long, z.meta, 'body', 'muted'); y += z.meta * 1.3 + u(12); }
     const size = z.body, lh = r2(size * 1.45);
@@ -284,7 +301,7 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     y += P * 0.8;
     const h = r2(y);
     if (h > maxHeight) check.fail(path, `is ${Math.round(h)} px tall, taller than the ${Math.round(maxHeight)} px it has; shorten text or the title`);
-    return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code: null, codeTop: null, tokens: tokenBox ? [tokenBox] : [], sizes: z};
+    return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code: null, codeTop: null, tokens: tokenBox ? [tokenBox] : [], sizes: z, cropped: items.cropped ?? 0};
   }
 
   let code = null, codeTop = null, tokens = [];
@@ -293,18 +310,30 @@ function layoutCard(b, s, path, {width, compact, sizes = cardSizes(b, compact), 
     if (!s.file) items.push({t: 'rule', y: r2(y)});
     y += u(6);
     codeTop = r2(y);
-    code = layoutCode(b, s.rows, s.tokens, {width: W, preferred: z.code, min: b.min.meta, gutters: !s.numbered ? 0 : compact ? 1 : 2, diff: s.diff, path: `${path}.lines`});
+    code = layoutCode(b, s.rows, s.tokens, {width: W, preferred: z.code, min: b.min.meta, floor: z.codeFloor, lead: z.lead, gutters: !s.numbered ? 0 : compact ? 1 : 2, diff: s.diff, path: `${path}.lines`});
     tokens = code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h}));
     y += code.height + u(6);
   }
   y += P * 0.6;
   const h = r2(y);
   if (h > maxHeight) check.fail(path, `is ${Math.round(h)} px tall, taller than the ${Math.round(maxHeight)} px it has; use fewer lines${compact ? ' or fewer sources' : ''}, or give the module a larger rect`);
-  return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code, codeTop, tokens, sizes: z};
+  // How much the card cuts (a clipped repo name, cropped code rows): a larger scale must not cut more.
+  const cropped = (items.cropped ?? 0) + (code ? code.rows.filter(r => /^…|…$/.test(r.text)).length : 0);
+  return {kind: s.kind, w: r2(W), h, items, titleSize: items.titleSize ?? null, code, codeTop, tokens, sizes: z, cropped};
 }
 
 // ---------------------------------------------------------------------------
 // Card view and ops
+
+/** Lines `text` wraps to at `advance` px per character in `width` px (greedy, by word). */
+function wrapCount(text, advance, width) {
+  let lines = 1, used = 0;
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    const w = word.length * advance;
+    if (used && used + advance + w > width) { lines += 1; used = w; } else used += (used ? advance : 0) + w;
+  }
+  return lines;
+}
 
 /** Mean lowercase advance (em) of the body font, for prose estimates; 0.56 when it is not registered. */
 function proseAdvance(stack) {
@@ -342,10 +371,12 @@ export function cardNode(model, card, prefix, x, y, {pal, code: font} = {}) {
             background: hex2(pal.accent, 0.14), boxShadow: `0 0 ${r2(10 * u)}px ${hex2(pal.accent, 0.6)}`, boxSizing: 'border-box', clipPath: 'inset(0% 100% 0% 0%)'})]),
         it.after]));
     } else {
-      const extra = {opacity: 0, ...(it.clip ? {overflow: 'hidden', textOverflow: 'ellipsis'} : {})};
+      // A box: the text centres in the height reserved for it (its line count is an estimate).
+      const extra = {opacity: 0, ...(it.clip ? {overflow: 'hidden', textOverflow: 'ellipsis'} : {}), ...(it.box ? {height: it.box, display: 'flex', alignItems: 'center'} : {})};
       const opts = {size: it.s, family: family(it.f), color: colorOf(pal, it.c), align: it.al ?? 'left', weight: it.wt, lineHeight: it.lh ?? 1.25, wrap: !!it.wrap, extra};
       const node = label(id, it.x, it.y, it.w, '', opts);
-      node.children = Array.isArray(it.v) ? it.v.map(p => el('span', null, {color: colorOf(pal, p.c)}, [p.v])) : [it.v];
+      const parts = Array.isArray(it.v) ? it.v.map(p => el('span', null, {color: colorOf(pal, p.c)}, [p.v])) : [it.v];
+      node.children = it.box ? [el('div', null, null, parts)] : parts;
       kids.push(node);
     }
   });
@@ -363,10 +394,14 @@ export function cardNode(model, card, prefix, x, y, {pal, code: font} = {}) {
  */
 export function cardBuildOps(ops, model, card, prefix, at, {rowStep = 0.07, blur = true} = {}) {
   const {start, unit: u} = model;
-  const from = {opacity: 0, x: 0, y: r2(26 * u), scaleX: 0.97, scaleY: 0.97, ...(blur ? {blur: r2(14 * u)} : {})};
+  // A card that opens the story (model.openingSettled, kit/core/modules.mjs)
+  // is whole on frame 0: panel and header drawn, only its settle and its rows play.
+  const whole = Boolean(model.openingSettled) && at <= model.motion.enterEnd + 0.15;
+  const from = {opacity: whole ? 1 : 0, x: 0, y: r2(26 * u), scaleX: 0.97, scaleY: 0.97, ...(blur ? {blur: whole ? 0 : r2(14 * u)} : {})};
   set(ops, prefix, start, from);
-  tw(ops, prefix, at, 0.55, 'power3.out', from, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1, ...(blur ? {blur: 0} : {})});
+  tw(ops, prefix, whole ? start : at, 0.55, 'power3.out', from, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1, ...(blur ? {blur: 0} : {})});
   card.items.forEach((_, i) => {
+    if (whole) { set(ops, `${prefix}-h-${i}`, start, {opacity: 1}); return; }
     set(ops, `${prefix}-h-${i}`, start, {opacity: 0});
     tw(ops, `${prefix}-h-${i}`, rt(at + 0.15 + Math.min(i, 10) * 0.04), 0.3, 'power1.out', {opacity: 0}, {opacity: 1});
   });
@@ -400,8 +435,13 @@ function singleCardResolve(id, kind, required) {
     const {highlightAt, at: atIn, rect: _rect, ...fields} = p;
     const spec = sourceSpec(b, fields, 'params', {kind});
     const pal = cardPalette(b, b.variant);
-    const width = r2(Math.min(rect.width, u(b.portrait ? 1000 : 1360)));
-    const card = fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height});
+    // Alone on stage, the card takes the rect's width (the safe area by
+    // default) at the largest scale, up to 1.5x, whose height fits.
+    const width = r2(rect.width);
+    // The URL bar repeats the repo row: it goes when that buys a larger scale.
+    const withBar = fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height, scale: HERO_SCALE});
+    const bare = withBar.code && withBar.sizes.code < b.u(34 * HERO_SCALE) ? fitCard(b, spec, 'params', {width, compact: false, maxHeight: rect.height, scale: HERO_SCALE, urlBar: false}) : null;
+    const card = bare && bare.code.size > withBar.code.size ? bare : withBar;
     const x = r2((rect.width - width) / 2), y = r2((rect.height - card.h) / 2);
     const buildAt = b.timeOf('build', atIn, 'params.at', 0.5);
     const rows = card.code?.rows.length ?? 0;
@@ -483,28 +523,33 @@ function diffResolve(params, ctx) {
     return {a, z, at: f.at};
   });
   const pal = cardPalette(b, b.variant);
-  const z = cardSizes(b, false);
-  const width = r2(Math.min(rect.width, u(b.portrait ? 1000 : 1500)));
-  // Files-changed header: chevron, path, +/− stats and the stat blocks.
-  const items = [];
-  const hh = r2(z.head * 1.9);
-  items.push({t: 'band', h: hh});
-  items.push({t: 'icon', n: 'chevron-down', x: z.pad, y: r2((hh - z.meta) / 2), s: z.meta, c: 'muted'});
-  const statsV = [{v: `+${spec.additions}`, c: 'add'}, {v: ` −${spec.deletions}`, c: 'del'}];
-  const statsW = (String(spec.additions).length + String(spec.deletions).length + 3) * z.meta * CODE_ADVANCE;
-  const blocksW = 5 * z.meta * 0.62;
-  const room = Math.floor((width - 2 * z.pad - z.meta * 1.5 - statsW - blocksW - u(24)) / (z.code * CODE_ADVANCE));
-  const fileText = spec.file.length > room ? `…${spec.file.slice(spec.file.length - room + 1)}` : spec.file;
-  items.push({t: 'text', x: r2(z.pad + z.meta * 1.5), y: r2((hh - z.code * 1.25) / 2), w: r2(width - 2 * z.pad - statsW - blocksW), v: fileText, s: z.code, f: 'code', c: 'fg', wt: 600});
-  items.push({t: 'text', x: z.pad, y: r2((hh - z.meta * 1.25) / 2), w: r2(width - 2 * z.pad - blocksW - u(14)), v: statsV, s: z.meta, f: 'code', c: 'muted', al: 'right'});
-  const total = spec.additions + spec.deletions || 1, greens = Math.round(5 * spec.additions / total);
-  const reds = spec.additions + spec.deletions ? 5 - greens : 0;
-  for (let k = 0; k < 5; k++) items.push({t: 'box', x: r2(width - z.pad - blocksW + k * z.meta * 0.62), y: r2((hh - z.meta * 0.5) / 2), w: r2(z.meta * 0.5), h: r2(z.meta * 0.5), fill: k < greens ? 'add' : k < greens + reds ? 'del' : 'faint'});
-  const codeTop = r2(hh + u(10));
-  const code = layoutCode(b, spec.rows, spec.tokens, {width, preferred: z.code, min: b.min.meta, gutters: 2, diff: true, path: 'params.lines'});
-  const h = r2(codeTop + code.height + u(16));
-  if (h > rect.height) check.fail('params.lines', `make a ${Math.round(h)} px diff, taller than the ${Math.round(rect.height)} px rect; use fewer lines`);
-  const card = {kind: 'diff', w: width, h, items, titleSize: null, code, codeTop, tokens: code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h})), sizes: z};
+  // Alone on stage: the rect's width, at the largest scale (up to 1.5x) whose height fits.
+  const width = r2(rect.width);
+  const layoutDiff = z => {
+    // Files-changed header: chevron, path, +/− stats and the stat blocks.
+    const items = [];
+    const hh = r2(z.head * 1.9);
+    items.push({t: 'band', h: hh});
+    items.push({t: 'icon', n: 'chevron-down', x: z.pad, y: r2((hh - z.meta) / 2), s: z.meta, c: 'muted'});
+    const statsV = [{v: `+${spec.additions}`, c: 'add'}, {v: ` −${spec.deletions}`, c: 'del'}];
+    const statsW = (String(spec.additions).length + String(spec.deletions).length + 3) * z.meta * CODE_ADVANCE;
+    const blocksW = 5 * z.meta * 0.62;
+    const room = Math.floor((width - 2 * z.pad - z.meta * 1.5 - statsW - blocksW - u(24)) / (z.code * CODE_ADVANCE));
+    const fileText = spec.file.length > room ? `…${spec.file.slice(spec.file.length - room + 1)}` : spec.file;
+    items.push({t: 'text', x: r2(z.pad + z.meta * 1.5), y: r2((hh - z.code * 1.25) / 2), w: r2(width - 2 * z.pad - statsW - blocksW), v: fileText, s: z.code, f: 'code', c: 'fg', wt: 600});
+    items.push({t: 'text', x: z.pad, y: r2((hh - z.meta * 1.25) / 2), w: r2(width - 2 * z.pad - blocksW - u(14)), v: statsV, s: z.meta, f: 'code', c: 'muted', al: 'right'});
+    const total = spec.additions + spec.deletions || 1, greens = Math.round(5 * spec.additions / total);
+    const reds = spec.additions + spec.deletions ? 5 - greens : 0;
+    for (let k = 0; k < 5; k++) items.push({t: 'box', x: r2(width - z.pad - blocksW + k * z.meta * 0.62), y: r2((hh - z.meta * 0.5) / 2), w: r2(z.meta * 0.5), h: r2(z.meta * 0.5), fill: k < greens ? 'add' : k < greens + reds ? 'del' : 'faint'});
+    const codeTop = r2(hh + u(10));
+    const code = layoutCode(b, spec.rows, spec.tokens, {width, preferred: z.code, min: b.min.meta, floor: z.codeFloor, lead: z.lead, gutters: 2, diff: true, path: 'params.lines'});
+    const h = r2(codeTop + code.height + u(16));
+    return {kind: 'diff', w: width, h, items, titleSize: null, code, codeTop, tokens: code.tokens.map(t => ({x: t.x, y: r2(codeTop + t.y), w: t.w, h: t.h})), sizes: z};
+  };
+  let card = null;
+  for (let k = HERO_SCALE; k > 1 - 1e-9 && !(card && card.h <= rect.height); k = Math.round((k - 0.1) * 100) / 100) card = layoutDiff(cardSizes(b, false, k));
+  if (card.h > rect.height) check.fail('params.lines', `make a ${Math.round(card.h)} px diff, taller than the ${Math.round(rect.height)} px rect; use fewer lines`);
+  const {h, codeTop, code} = card;
   const x = r2((rect.width - width) / 2), y = r2((rect.height - h) / 2);
 
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
@@ -527,7 +572,7 @@ function diffResolve(params, ctx) {
     b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: hlAt, endTime: rt(hlAt + 0.55), role: 'emphasis', cue: 'ping-soft'});
   } else if (p.highlightAt !== undefined) check.fail('params.highlightAt', 'needs params.highlight');
   const content = {variant: b.variant, pal, code: codeFont(b.fonts), card, x, y, buildAt, rowStep, focus, highlightAt: hlAt, buildEnd: rowsEnd};
-  return b.finish(content, {minTextPx: Math.max(b.min.key, z.code)});
+  return b.finish(content, {minTextPx: Math.max(b.min.key, card.sizes.code)});
 }
 
 function diffNodes(model) {
@@ -758,27 +803,53 @@ function timelineResolve(params, ctx) {
     const xOf = d => r2(pad + (d - from.day) / days * axisW);
     const every = EVERY_DAY.find(k => (axisW / days) * k >= labelW + u(8)) ?? days;
     const axisY = r2(H - daySize * 1.3 - u(30)), labelY = r2(axisY + u(22));
-    const cardW = r2(portrait ? W * 0.9 : Math.min(u(860), W * 0.5));
+    // Cards never overlap: side by side above the axis in 16:9 (date order,
+    // bottoms aligned), stacked in 9:16, at the largest scale (up to 1.6x)
+    // that fits. A curved dashed stem joins each date to its card.
     const areaH = axisY - u(40);
-    const cards = entries.map((e, i) => fitCard(b, e.spec, `params.cards[${i}]`, {width: cardW, compact: true, maxHeight: n > 1 ? areaH * 0.62 : areaH, scale: portrait ? 1.4 : 1.25}));
-    const maxH = Math.max(...cards.map(c => c.h));
-    // Cards stack lower one by one; a card may cover the one before, never its token row.
-    const tokenFloor = Math.max(0, ...cards.slice(0, -1).map(c => (c.tokens.length ? Math.max(...c.tokens.map(t => t.y + t.h)) : r2(c.sizes.head * 1.6 + c.sizes.pad)) + u(30)));
-    const stepY = n > 1 ? Math.min(maxH + u(24), (areaH - maxH) / (n - 1)) : 0;
-    if (n > 1 && stepY < tokenFloor - 1e-6) check.fail('params.cards', `leave too little room to stack ${n} cards without covering a token; use fewer lines or cards`);
-    const top = r2((areaH - (maxH + (n - 1) * stepY)) / 2);
-    cards.forEach((c, i) => { const dx = xOf(entries[i].date.day); c.x = r2(Math.min(Math.max(0, dx - u(18)), W - cardW)); c.y = r2(top + i * stepY); c.pinX = dx; });
-    // The last card's token box must finish drawing before the exit.
-    const lag = c => r2(0.35 + 0.35 + Math.max(0, (c.code?.rows.length ?? 0) - 1) * 0.06 + 0.32 + 0.1);
-    const first = buildAt - b.start + 0.9, last = Math.max(first, Math.min(b.lastEvent, b.motion.exitStart - b.start - lag(cards.at(-1)) - 0.65));
-    const step = n > 1 ? Math.max(0.4, Math.min(2.4, (last - first) / (n - 1))) : 0;
+    const gap = u(portrait ? 28 : 40), stemMin = u(portrait ? 40 : 70);
+    const cardW = r2(portrait ? W : n === 1 ? Math.min(W, u(1100)) : (W - gap * (n - 1)) / n);
+    const fits = list => (portrait ? list.reduce((sum, c) => sum + c.h, 0) + gap * (n - 1) : Math.max(...list.map(c => c.h))) <= areaH - stemMin;
+    const at = k => entries.map((e, i) => layoutCard(b, e.spec, `params.cards[${i}]`, {width: cardW, compact: true, sizes: cardSizes(b, true, k)}));
+    const cuts = list => list.reduce((sum, c) => sum + c.cropped, 0);
+    const base = cuts(at(1));
+    let cards = null;
+    for (let k = 1.6; k > 0.8 - 1e-9; k = Math.round((k - 0.1) * 100) / 100) {
+      try { cards = at(k); }
+      catch (error) { if (!/characters per line|cannot show/.test(error.message)) throw error; cards = null; continue; }
+      // Larger only while it fits and cuts no more than 1x does.
+      if (fits(cards) && (k <= 1 || cuts(cards) <= base)) break;
+      cards = null;
+    }
+    if (!cards) check.fail('params.cards', `do not fit above the axis; use fewer lines or cards`);
+    if (portrait) {
+      const total = cards.reduce((sum, c) => sum + c.h, 0) + gap * (n - 1);
+      let y = r2(Math.max(0, (areaH - stemMin - total) / 2));
+      cards.forEach(c => { c.x = 0; c.y = y; y = r2(y + c.h + gap); });
+    } else {
+      const maxH = Math.max(...cards.map(c => c.h));
+      const bottom = r2(axisY - Math.min(u(200), Math.max(stemMin, (axisY - maxH) * 0.4)));
+      const x0 = n === 1 ? Math.min(Math.max(0, xOf(entries[0].date.day) - cardW / 2), W - cardW) : 0;
+      cards.forEach((c, i) => { c.x = r2(x0 + i * (cardW + gap)); c.y = r2(bottom - c.h); });
+    }
+    cards.forEach((c, i) => { c.pinX = xOf(entries[i].date.day); });
+    // Cards land fast: the first while the axis draws, then each on its cue.
+    const lag = c => r2(0.15 + 0.35 + Math.max(0, (c.code?.rows.length ?? 0) - 1) * 0.06 + 0.32 + 0.1);
+    const first = buildAt - b.start + 0.35, last = Math.max(first, Math.min(b.lastEvent, b.motion.exitStart - b.start - lag(cards.at(-1)) - 0.65));
+    const step = n > 1 ? Math.max(0.4, Math.min(1.6, (last - first) / (n - 1))) : 0;
     const pins = entries.map((e, i) => {
-      const t = cueTime(b, `card-${i}`, e.at, `params.cards[${i}].at`, first + i * step, buildAt - b.start + 0.6);
+      const t = cueTime(b, `card-${i}`, e.at, `params.cards[${i}].at`, first + i * step, buildAt - b.start + 0.3);
       if (i && t < cards[i - 1].at + 0.4 - 1e-6) check.fail(`params.cards[${i}].at`, 'must come at least 0.4 s after the card before');
       cards[i].at = t;
       const tokenAt = rt(t + lag(cards[i]));
       b.events.push({id: `${b.id}-card-${i}`, name: `card-${i}`, time: t, endTime: tokenAt, role: 'emphasis', cue: 'pop'});
-      return {x: cards[i].pinX, top: r2(cards[i].y + cards[i].h), at: t, cardAt: rt(t + 0.3), tokenAt, day: e.date.day - from.day};
+      const c = cards[i];
+      // The stem: from the date on the axis up to the card's bottom (its centre, or above the date in 9:16).
+      const cx = portrait ? c.pinX : r2(Math.min(Math.max(c.pinX, c.x + u(40)), c.x + c.w - u(40)));
+      const top = r2(c.y + c.h), x1 = Math.min(c.pinX, cx) - u(6), x2 = Math.max(c.pinX, cx) + u(6);
+      const box = {x: r2(x1), y: top, w: r2(x2 - x1), h: r2(axisY - top)};
+      const ax = r2(c.pinX - box.x), bx = r2(cx - box.x);
+      return {x: c.pinX, top, box, d: `M${ax} ${box.h} C${ax} ${r2(box.h * 0.45)} ${bx} ${r2(box.h * 0.55)} ${bx} 0`, at: t, cardAt: rt(t + 0.15), tokenAt, day: e.date.day - from.day};
     });
     const ticks = Array.from({length: days + 1}, (_, k) => ({x: xOf(from.day + k), dom: new Date((from.day + k) * 864e5).getUTCDate(), label: k % every === 0 || pins.some(pin => pin.day === k), lit: pins.findIndex(pin => pin.day === k)}));
     b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: rt(buildAt + 0.8), role: 'emphasis', cue: 'whoosh-soft'});
@@ -839,7 +910,8 @@ function timelineView(model) {
   const W = model.rect.width;
   const kids = [];
   if (c.variant === 'axis') {
-    c.pins.forEach((pin, i) => kids.push(el('div', `${id}-pin-${i}`, abs(r2(pin.x - 1 * u), pin.top, r2(2 * u), r2(c.axisY - pin.top), {borderLeft: `${r2(2 * u)}px dashed ${hex2(pal.accent, 0.8)}`, clipPath: 'inset(100% 0% 0% 0%)'}))));
+    c.pins.forEach((pin, i) => kids.push(el('svg', `${id}-pin-${i}`, abs(pin.box.x, pin.box.y, pin.box.w, pin.box.h, {overflow: 'visible', clipPath: 'inset(100% 0% 0% 0%)'}),
+      [el('path', null, null, [], {d: pin.d, stroke: hex2(pal.accent, 0.8), strokeWidth: r2(2 * u), strokeDasharray: `${r2(6 * u)} ${r2(6 * u)}`, fill: 'none'})], {width: pin.box.w, height: pin.box.h, viewBox: `0 0 ${pin.box.w} ${pin.box.h}`, fill: 'none'})));
     kids.push(el('div', `${id}-axis`, abs(c.pad, r2(c.axisY - 1.5 * u), c.axisW, r2(3 * u), {background: hex2(pal.fg, 0.35), transform: 'scale(0, 1)', transformOrigin: '0% 50%'})));
     c.ticks.forEach((t, k) => {
       if (t.label) kids.push(label(`${id}-day-${k}`, r2(t.x - c.labelW / 2), c.labelY, c.labelW, String(t.dom), {size: c.daySize, family: fonts.display, color: pal.muted, align: 'center', extra: {opacity: 0}}));
@@ -883,7 +955,11 @@ function timelineTimeline(model, ops) {
     let x = 0;
     c.pins.forEach((pin, i) => {
       const nx = r2(pin.x - c.pad);
-      tw(ops, `${id}-head`, rt(pin.at - 0.7), 0.7, 'power2.inOut', {x, y: 0, scaleX: 1, scaleY: 1}, {x: nx, y: 0, scaleX: 1, scaleY: 1});
+      // The playhead leaves a date only after its card has pinned, and reaches
+      // the next as that card pins (in 0.15–0.6 s, from the axis build at the earliest).
+      const after = i ? rt(c.pins[i - 1].cardAt + 0.1) : rt(c.buildAt + 0.3);
+      const from = Math.min(Math.max(after, rt(pin.at - 0.6)), rt(pin.at - 0.15));
+      if (nx !== x) tw(ops, `${id}-head`, from, rt(pin.at - from), 'power2.inOut', {x, y: 0, scaleX: 1, scaleY: 1}, {x: nx, y: 0, scaleX: 1, scaleY: 1});
       x = nx;
       const k = c.ticks.findIndex(t => t.lit === i);
       set(ops, `${id}-dayl-${k}`, start, {opacity: 0});
@@ -891,7 +967,7 @@ function timelineTimeline(model, ops) {
       popOps(ops, `${id}-node-${k}`, start, pin.at, {from: 0.2, duration: 0.35, ease: 'back.out(2.4)'});
       const closed = {clipT: 100, clipR: 0, clipB: 0, clipL: 0};
       set(ops, `${id}-pin-${i}`, start, closed);
-      tw(ops, `${id}-pin-${i}`, rt(pin.at + 0.05), 0.35, 'power2.out', closed, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});
+      tw(ops, `${id}-pin-${i}`, rt(pin.at - 0.05), 0.3, 'power2.out', closed, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});
       cardBuildOps(ops, model, c.cards[i], `${id}-c${i}`, pin.cardAt, {rowStep: 0.06});
       cardTokenOps(ops, model, c.cards[i], `${id}-c${i}`, pin.tokenAt);
     });

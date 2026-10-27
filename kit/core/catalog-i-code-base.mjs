@@ -187,12 +187,13 @@ export function shortSha(check, value, path) {
 }
 
 /**
- * Lay out the code block of a card: font size (largest in [min, preferred]
- * that fits the longest row, else min with rows cropped round their tokens),
+ * Lay out the code block of a card: font size (largest in [floor, preferred]
+ * that fits the longest row, else floor with rows cropped round their tokens;
+ * floor defaults to min, a hero card keeps its type large and crops instead),
  * gutters, row height and each token's box. → {size, rowH, gutter, codeX,
  * rows: [{…, y, text}], tokens: [{row, x, y, w, h}], height}.
  */
-export function layoutCode(b, rows, tokens, {width, preferred, min, gutters = 2, diff = true, path = 'params.lines'}) {
+export function layoutCode(b, rows, tokens, {width, preferred, min, floor = min, lead = 1.62, gutters = 2, diff = true, path = 'params.lines'}) {
   const {u} = b;
   const digits = Math.max(2, ...rows.map(r => String(Math.max(r.old ?? 0, r.new ?? 0)).length));
   const longest = Math.max(...rows.map(r => r.text.length), 8);
@@ -202,12 +203,13 @@ export function layoutCode(b, rows, tokens, {width, preferred, min, gutters = 2,
     const signW = diff ? 2 * adv : 0;
     return {adv, gw, signW, avail: Math.floor((width - 2 * pad - gutters * gw - signW - u(6)) / adv)};
   };
+  const lowest = Math.ceil(Math.max(min, floor));
   let size = Math.floor(preferred);
-  for (; size > Math.ceil(min); size -= 2) if (cols(size).avail >= longest) break;
-  size = Math.max(size, Math.ceil(min));
+  for (; size > lowest; size -= 2) if (cols(size).avail >= longest) break;
+  size = Math.max(size, lowest);
   const {adv, gw, signW, avail} = cols(size);
   if (avail < 12) b.check.fail(path, `leave room for only ${avail} characters per line in a ${Math.round(width)} px card; give the module more width or fewer cards`);
-  const rowH = r2(size * 1.62);
+  const rowH = r2(size * lead);
   const codeX = r2(pad + gutters * gw + signW);
   const out = rows.map((r, i) => {
     const mine = tokens.filter(t => t.row === i);

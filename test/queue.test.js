@@ -61,7 +61,8 @@ test("a killed holder's lock is reclaimed by the job waiting behind it", async (
     const holder = startJob(env, "render", "acme/killed", 60_000);
     await holder.acquiredPromise;
     const waiter = startJob(env, "render", "acme/next", 50);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Wait for the waiter to report the holder (a fixed sleep misses it when the machine is busy).
+    for (let t = 0; t < 10_000 && !/waiting for a render slot/.test(waiter.stderr); t += 25) await new Promise((resolve) => setTimeout(resolve, 25));
     assert.equal(waiter.acquired, null, "the waiter waits while the holder lives");
     assert.match(waiter.stderr, /waiting for a render slot: 1 of 1 in use by acme\/killed/);
     holder.child.kill("SIGKILL");
