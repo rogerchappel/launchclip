@@ -205,3 +205,32 @@ test("found on the Terra run: prices are not TeX, and a model name is not a pers
   assert.ok(!claim.entities.some((entity) => entity.kind === "person" && /Opus/.test(entity.name)));
   assert.ok(claim.entities.some((entity) => entity.name === "Andrew Curran" && entity.kind === "person"));
 });
+
+test("found on the Terra run: a lone PR claim's card shows the file with the model id the research names, not the PR's first file", async () => {
+  const { modelIds } = await import("../src/research/evidence_data.js");
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-evidence-data-"));
+  try {
+    const dir = path.join(root, "assets", "evidence");
+    await mkdir(dir, { recursive: true });
+    const put = (name, data) => writeFile(path.join(dir, name), JSON.stringify({ url: "cached", fetchedAt: "2026-10-27T00:00:00Z", data }));
+    await put("github-dotnet-efcore-pull-39217.json", PULL);
+    await put("github-dotnet-efcore-pull-39217-files.json", [
+      { filename: ".agents/skills/code-review/SKILL.md", additions: 2, deletions: 1, patch: "@@ -1,3 +1,4 @@\n # Code review\n- Review the change.\n+ Review the provided pull request.\n+ Ask for clarification." },
+      { filename: "eng/harness-evaluation/skills/code-review/eval.yaml", additions: 1, deletions: 1, patch: "@@ -3,3 +3,3 @@\n judge:\n-  model: gpt-5.6-terra\n+  model: gpt-6.1-terra\n timeout: 600" }
+    ]);
+    const ledger = { claims: [
+      { id: "c001", status: "verified", text: "On October 16, 2026, pull request 39217 was merged in dotnet/efcore.", sources: [{ ...SOURCE, url: "https://github.com/dotnet/efcore/pull/39217" }] },
+      { id: "c003", status: "verified", text: "The model doing the tasks moved from gpt-5.6-sol to gpt-6.1-sol.", sources: [SOURCE] },
+      { id: "c011", status: "verified", text: "Developers can call GPT-6.1 Terra in the API as gpt-6.1-terra.", sources: [SOURCE] },
+      { id: "c012", status: "verified", text: "GPT-6.1 Terra came to GitHub Copilot.", sources: [SOURCE] }
+    ] };
+    // The id most claims are about leads, though another is written as code first.
+    assert.deepEqual(modelIds(ledger).slice(0, 2), ["gpt-6.1-terra", "gpt-5.6-sol"]);
+    const out = await attachEvidenceData({ ledger, captures: [] }, { root }, { fetch: noNetwork });
+    const params = out.ledger.claims[0].data.params;
+    assert.equal(params.file, "eng/harness-evaluation/skills/code-review/eval.yaml");
+    assert.equal(params.highlight, "gpt-6.1-terra");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
