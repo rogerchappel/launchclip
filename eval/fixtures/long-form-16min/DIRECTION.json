@@ -56,7 +56,7 @@
         { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: builds on process-steps (+1 steps)" },
         { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: builds on process-steps (+1 steps)" },
         { "words": [453, 462], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy, capture system-card-table-7): media-window" },
+        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy, capture system-card-table-7): cta" },
         { "words": [485, 494], "intent": "process", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-3"], "why": "process: timeline" },
         { "words": [495, 512], "intent": "proof", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-1"], "why": "concept (evidence c-synthetic): icon-row" },
         { "words": [513, 526], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-2"], "why": "share (evidence c-synthetic): percent-fill" },

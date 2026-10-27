@@ -1370,15 +1370,11 @@
        "text": "says the run used about 120 gigawatt hours of electricity, roughly what a town of ten thousand homes uses in a year.",
        "intent": "quote",
        "kind": "cta",
-       "capability": "media-window",
-       "module": "media-window",
+       "capability": "cta",
+       "module": "cta",
        "change": "swap",
        "params": {
-        "title": "Halcyon 2 system card",
-        "media": {
-         "kind": "video",
-         "src": "assets/evidence/system-card-table-7.mp4"
-        }
+        "action": "Subscribe for the next breakdown"
        },
        "evidence": {
         "claim": "c-energy",
@@ -1397,7 +1393,7 @@
          "out": "assets/evidence/system-card-table-7.mp4"
         }
        },
-       "why": "cta (evidence c-energy, capture system-card-table-7): media-window"
+       "why": "cta (evidence c-energy, capture system-card-table-7): cta"
       },
       {
        "id": "inside-the-training-run-1-sh3-3",
@@ -6042,7 +6038,7 @@
     "recent": [
      "process-steps",
      "concept-card",
-     "media-window",
+     "cta",
      "timeline",
      "icon-row",
      "percent-fill",
@@ -6064,10 +6060,11 @@
      "code-snippet": 1,
      "process-steps": 4,
      "map-highlight": 1,
-     "media-window": 2,
+     "media-window": 1,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 1,
+     "cta": 1,
      "percent-fill": 1
     },
     "plates": [
@@ -6105,7 +6102,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "090cec8d4e1d0bff",
+   "key": "fbb7054e1246019c",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -6138,10 +6135,11 @@
      "code-snippet": 1,
      "process-steps": 4,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 2,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 2,
+     "cta": 1,
      "percent-fill": 1,
      "unit-grid": 1
     },
@@ -6186,7 +6184,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "2c3df25d1de4c4e3",
+   "key": "ec0d37d780ec50ad",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6219,10 +6217,11 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 2,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
+     "cta": 1,
      "percent-fill": 1,
      "unit-grid": 1,
      "compare": 1
@@ -6273,7 +6272,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "91bddebfc9ab6551",
+   "key": "ff00b77d8f4dc637",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6306,10 +6305,11 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 4,
+     "media-window": 3,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
+     "cta": 1,
      "percent-fill": 2,
      "unit-grid": 2,
      "compare": 1,
@@ -6367,7 +6367,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "ace413b40cc5c5b2",
+   "key": "9b5e8598ef3929ba",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6400,10 +6400,11 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 5,
+     "media-window": 4,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 4,
+     "cta": 1,
      "percent-fill": 3,
      "unit-grid": 2,
      "compare": 1,
@@ -6466,7 +6467,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "e7017855fc3c1e5f",
+   "key": "bb13361b8da9823d",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6499,16 +6500,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 5,
+     "media-window": 4,
      "stat-card": 3,
      "count-up": 1,
      "bar-chart": 5,
+     "cta": 2,
      "percent-fill": 4,
      "unit-grid": 3,
      "compare": 1,
      "glass-word": 2,
-     "excerpt": 1,
-     "cta": 1
+     "excerpt": 1
     },
     "plates": [
      {
@@ -6571,7 +6572,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "20c436610ef58317",
+   "key": "96fd5fbd3f8f6187",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6604,16 +6605,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 5,
+     "media-window": 4,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
+     "cta": 2,
      "percent-fill": 4,
      "unit-grid": 3,
      "compare": 1,
      "glass-word": 3,
      "excerpt": 1,
-     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1
     },
@@ -6684,7 +6685,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "6d376f1a9417e0a8",
+   "key": "13031d7e1cf2c340",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6717,16 +6718,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 6,
+     "media-window": 5,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
+     "cta": 2,
      "percent-fill": 5,
      "unit-grid": 4,
      "compare": 1,
      "glass-word": 4,
      "excerpt": 1,
-     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1
     },
@@ -6802,7 +6803,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "19b30e25ab6bdd8b",
+   "key": "d9c2725783585ccd",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6835,16 +6836,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 7,
+     "media-window": 6,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
+     "cta": 2,
      "percent-fill": 6,
      "unit-grid": 4,
      "compare": 1,
      "glass-word": 4,
      "excerpt": 1,
-     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1,
      "checklist": 3
@@ -6926,7 +6927,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "6632aeb218906340",
+   "key": "09f57f1a5d55e534",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6959,16 +6960,16 @@
      "code-snippet": 2,
      "process-steps": 10,
      "map-highlight": 1,
-     "media-window": 7,
+     "media-window": 6,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
+     "cta": 3,
      "percent-fill": 6,
      "unit-grid": 4,
      "compare": 1,
      "glass-word": 5,
      "excerpt": 1,
-     "cta": 2,
      "window-chrome": 1,
      "commit-card": 1,
      "checklist": 3

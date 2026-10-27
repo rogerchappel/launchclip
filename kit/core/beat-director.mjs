@@ -552,6 +552,8 @@ function familyOf(kind) {
   return kind;
 }
 
+const STRUCTURE_KINDS = new Set(['cta', 'sting']);
+
 // The module, params and state change for one clause.
 function decide(state, previous, { history, avoid, registered, wide, check }) {
   // A build: the module on screen takes this clause's entries (a bar arrives, then a second bar).
@@ -561,7 +563,9 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
     if (params && check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `${state.kind}: builds on ${previous.module} (+${add.items.length} ${add.key})` };
   }
   const known = new Set(registered);
-  const candidates = capabilitiesFor(state.kind, { evidence: state.evidence?.capture?.kind ?? null, wide });
+  // A call to action or a sting is structure: it never plays the clause's capture.
+  const capture = STRUCTURE_KINDS.has(state.kind) ? null : state.evidence?.capture ?? null;
+  const candidates = capabilitiesFor(state.kind, { evidence: capture?.kind ?? null, wide });
   const scored = candidates.map((id, order) => {
     const resolved = resolveCapability(id, { registered });
     const recentIndex = history.recent.lastIndexOf(resolved.module);
@@ -571,7 +575,7 @@ function decide(state, previous, { history, avoid, registered, wide, check }) {
     score -= 0.12 * (history.counts[resolved.module] ?? 0);
     score -= 2 * (avoid[resolved.module] ?? 0);
     if (previous?.module === resolved.module) score -= 3;
-    if (state.evidence?.capture && capability(id)?.evidence.includes(state.evidence.capture.kind)) score += 3;
+    if (capture && capability(id)?.evidence.includes(capture.kind)) score += 3;
     if (!resolved.fallback && isPlanned(id)) score += 0.5;
     return { id, resolved, score };
   }).sort((a, b) => b.score - a.score);
