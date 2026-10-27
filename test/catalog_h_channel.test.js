@@ -137,3 +137,12 @@ test('a story with a sting, a mid-video CTA over a card and a watermark passes t
     await rm(dir, {recursive: true, force: true});
   }
 });
+
+test('subscribe-cta never shows both button labels at once', () => {
+  const model = resolve('subscribe-cta');
+  const ops = catalogHTimeline(model);
+  for (let t = model.content.click - 0.1; t < model.content.click + 0.5; t += 1 / 60) {
+    const state = frameState(ops, t);
+    assert.ok(Math.min(state.get('scene-sub').opacity, state.get('scene-done').opacity) < 0.02, `both labels at ${t}`);
+  }
+});

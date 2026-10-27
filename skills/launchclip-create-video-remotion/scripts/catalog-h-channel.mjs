@@ -290,10 +290,11 @@ function ctaTimeline(model, ops) {
   set(ops, `${id}-button`, start, {scaleX: 1, scaleY: 1});
   tw(ops, `${id}-button`, c.click, 0.08, 'power2.in', {scaleX: 1, scaleY: 1}, {scaleX: 0.93, scaleY: 0.93});
   tw(ops, `${id}-button`, rt(c.click + 0.08), 0.35, 'back.out(2.4)', {scaleX: 0.93, scaleY: 0.93}, {scaleX: 1, scaleY: 1});
+  // Out, then in: the two labels differ in length, so they never show at once.
   set(ops, `${id}-sub`, start, {opacity: 1});
-  tw(ops, `${id}-sub`, rt(c.click + 0.06), 0.22, 'power1.out', {opacity: 1}, {opacity: 0});
+  tw(ops, `${id}-sub`, rt(c.click + 0.04), 0.1, 'power1.in', {opacity: 1}, {opacity: 0});
   set(ops, `${id}-done`, start, {opacity: 0});
-  tw(ops, `${id}-done`, rt(c.click + 0.06), 0.22, 'power1.out', {opacity: 0}, {opacity: 1});
+  tw(ops, `${id}-done`, rt(c.click + 0.14), 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
   set(ops, `${id}-ripple`, start, {opacity: 0, scaleX: 1, scaleY: 1});
   tw(ops, `${id}-ripple`, c.click, 0.5, 'power2.out', {opacity: 0.8, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1.18, scaleY: 1.5});
   if (c.bellBox) {
