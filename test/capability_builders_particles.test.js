@@ -56,6 +56,8 @@ test("particle-text: the key number, else the key word, in the dot-matrix face",
   assert.equal(word.text, "AGENTS");
   assert.equal(word.sub, "Agents arrive");
   resolves("particle-text", word);
+  // A figure with nothing to say what it measures is not shown on its own.
+  assert.equal(capabilityParams("particle-text", beat("Prices fell by 60%.", { headline: "Prices fell", kind: "concept" })), null);
   // A name in the clause, else nothing: filler is never the word, and a bare digit is a name, not a figure.
   assert.equal(capabilityParams("particle-text", beat("Halcyon 2 will land hard on the market.", { headline: "Halcyon lands hard", kind: "concept" })), null, "a name at the start of a sentence is not told from a capital");
   assert.equal(capabilityParams("particle-text", beat("The new Halcyon model will land hard.", { headline: "Lands hard", kind: "concept" })).text, "HALCYON");

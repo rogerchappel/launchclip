@@ -38,7 +38,7 @@ const RUNS_ON = new Set(['that', 'which', 'who', 'to', 'into', 'over', 'from', '
 const FILLER = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'for', 'with']);
 const MEASURES = new Set(['times', 'dollars', 'euros', 'pounds', 'hours', 'minutes', 'seconds', 'days', 'weeks', 'months', 'years', 'percent', 'gigawatt', 'megawatt', 'kilowatt', 'miles', 'kilometres', 'kilometers', 'pages']);
 // Words too vague to be the one word on screen.
-const WEAK = new Set(['those', 'these', 'see', 'lot', 'lots', 'rest', 'version', 'model', 'models', 'thing', 'part', 'kind', 'make', 'made', 'take', 'get', 'got', 'said', 'says', 'like', 'well', 'really', 'actually', 'change', 'number', 'first', 'second', 'third', 'next', 'last', 'other', 'another', 'where', 'while', 'there', 'their', 'chapter']);
+const WEAK = new Set(['those', 'these', 'see', 'lot', 'lots', 'rest', 'version', 'model', 'models', 'thing', 'part', 'kind', 'make', 'made', 'take', 'get', 'got', 'said', 'says', 'like', 'well', 'really', 'actually', 'change', 'number', 'first', 'second', 'third', 'next', 'last', 'other', 'another', 'where', 'while', 'there', 'their', 'chapter', 'sounds', 'looks', 'seems', 'means', 'matters', 'remember', 'known']);
 // The fact extractor's scale words, written compact.
 const COMPACT = { thousand: 'K', k: 'K', million: 'M', m: 'M', billion: 'B', bn: 'B', b: 'B', trillion: 'T', t: 'T' };
 
@@ -105,14 +105,15 @@ export function particlesBuilders(h) {
   // capitalised mid-sentence: HALCYON, FINNISH), else on a title beat its
   // longest content word. Filler ("those", "lot") is never the word; null
   // when there is none, and the director picks another module.
+  const vague = (term) => WEAK.has(term.toLowerCase()) || MEASURES.has(term.toLowerCase());
   const keyWordOf = (beat) => {
     const text = String(beat.text ?? '');
     const named = (term) => new RegExp(`(?<![.!?]\\s|^)\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text) && /^\p{Lu}/u.test(term);
-    const terms = [...h.keyTerms(beat.headline), ...h.keyTerms(text)].filter((term, i, all) => all.findIndex((t) => t.toLowerCase() === term.toLowerCase()) === i && !WEAK.has(term.toLowerCase()) && matrix(term));
+    const terms = [...h.keyTerms(beat.headline), ...h.keyTerms(text)].filter((term, i, all) => all.findIndex((t) => t.toLowerCase() === term.toLowerCase()) === i && !vague(term) && matrix(term));
     const name = terms.find(named);
     if (name) return matrix(name);
     if (beat.kind !== 'title') return null;
-    const longest = h.keyTerms(beat.headline).filter((term) => term.length >= 5 && !WEAK.has(term.toLowerCase()) && matrix(term)).sort((x, y) => y.length - x.length)[0];
+    const longest = h.keyTerms(beat.headline).filter((term) => term.length >= 5 && !vague(term) && matrix(term)).sort((x, y) => y.length - x.length)[0];
     return longest ? matrix(longest) : null;
   };
 
@@ -138,11 +139,12 @@ export function particlesBuilders(h) {
         const one = noun.length > 3 && /s$/i.test(noun) && !/ss$/i.test(noun) ? noun.slice(0, -1) : noun;
         return { count: count.value, label: h.clip(count.label, 40), legend: h.clip(`1 dot = 1 ${one.toLowerCase()}`, 32), variant: 'pull-back' };
       },
-      // The clause's key number ("60%", "$3.2B"), else its key word, assembling from particles.
+      // The clause's key number with what it measures ("60%" over "on the hard
+      // set"), else its key word, assembling from particles.
       'particle-text': (beat) => {
-        const number = h.numbersOf(beat).filter((entry) => whole(beat, entry) && !bare(entry)).map((entry) => ({ entry, text: matrix(figure(entry)) })).find((n) => n.text);
+        const number = h.numbersOf(beat).filter((entry) => entry.label && whole(beat, entry) && !bare(entry)).map((entry) => ({ entry, text: matrix(figure(entry)) })).find((n) => n.text);
         if (number) {
-          const sub = number.entry.label ?? beat.label ?? beat.headline;
+          const sub = number.entry.label;
           return { text: number.text, ...(beat.kicker ? { kicker: h.clip(beat.kicker, 40) } : {}), ...(sub ? { sub: h.clip(sub, 60) } : {}), mode: 'assemble' };
         }
         const word = keyWordOf(beat);
