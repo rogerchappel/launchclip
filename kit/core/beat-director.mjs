@@ -35,7 +35,7 @@ import { knownModules, resolveModule } from './modules.mjs';
 import { CAPTURE_KIND_VISUALS, capabilitiesFor, capability, capabilityAdditions, capabilityParams, fallbackChain, keyTerms, resolveCapability } from './visual-capabilities.mjs';
 
 export const BEAT_MAP_SCHEMA = 'launchclip.beat-map.v1';
-export const BEAT_MAP_FILE = 'BEATS.json';
+export const BEAT_MAP_FILE = 'BEATMAP.json';
 export const STATE_CHANGES = Object.freeze(['enter', 'build', 'swap']);
 // Backdrop plates (kit/core/plates.mjs, when registered) and the story
 // background each falls back to.

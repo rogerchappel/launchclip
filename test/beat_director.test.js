@@ -90,7 +90,7 @@ test("beat director: the 16-minute dry run passes the long-form gate", () => {
 });
 
 test("beat director: the committed fixture is the planner's current output", () => {
-  const committed = JSON.parse(readFileSync(path.join(FIXTURE, "BEATS.json"), "utf8"));
+  const committed = JSON.parse(readFileSync(path.join(FIXTURE, "BEATMAP.json"), "utf8"));
   const map = plan();
   assert.equal(committed.report.cadence.events, map.report.cadence.events, "re-run node eval/beat-map-dry-run.mjs --fresh");
   assert.deepEqual(committed.chunks.map((chunk) => chunk.key), map.chunks.map((chunk) => chunk.key), "re-run node eval/beat-map-dry-run.mjs --fresh");

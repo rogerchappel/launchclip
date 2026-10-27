@@ -5,7 +5,7 @@
 // captures beside it. Writes, into the fixture folder:
 //
 //   NARRATION.json   the dry-run word timings
-//   BEATS.json       the beat map (launchclip.beat-map.v1)
+//   BEATMAP.json     the beat map (launchclip.beat-map.v1)
 //   DIRECTION.json   the same plan as a direction map
 //   CADENCE.md       the planning report (cadence gate, variety, evidence),
 //                    and the Shorts cut from it
@@ -14,7 +14,7 @@
 //
 //   node eval/beat-map-dry-run.mjs [folder] [--wpm 155] [--style default] [--fresh]
 //
-// A BEATS.json already there is passed back as `previous`, so chunks whose
+// A BEATMAP.json already there is passed back as `previous`, so chunks whose
 // words, history and settings are unchanged are reused (--fresh plans all).
 
 import { existsSync, readdirSync } from 'node:fs';
@@ -41,7 +41,7 @@ export async function loadFixture(folder) {
 export async function dryRun(folder = DEFAULT_FIXTURE, { wpm = 155, style = 'default', fresh = false, format = { width: 1920, height: 1080 } } = {}) {
   const { script, ledger, captures } = await loadFixture(folder);
   const timed = dryRunWords(script, { wpm });
-  const beatsFile = path.join(folder, 'BEATS.json');
+  const beatsFile = path.join(folder, 'BEATMAP.json');
   const previous = !fresh && existsSync(beatsFile) ? JSON.parse(await readFile(beatsFile, 'utf8')) : null;
   const map = directLongForm({ words: timed.words, chapters: timed.chapters, ledger, captures, title: timed.title, format }, { style, previous });
   const direction = beatMapToDirection(map);

@@ -8,7 +8,7 @@ import { TITLE_CARD_MODULES } from "../kit/core/skeleton-library.mjs";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
 
 const FIXTURE = path.resolve("eval/fixtures/long-form-16min");
-const map = JSON.parse(readFileSync(path.join(FIXTURE, "BEATS.json"), "utf8"));
+const map = JSON.parse(readFileSync(path.join(FIXTURE, "BEATMAP.json"), "utf8"));
 const words = JSON.parse(readFileSync(path.join(FIXTURE, "NARRATION.json"), "utf8")).words;
 
 test("shorts: windows open on a hook-able clause, one per chapter, never overlapping", () => {
