@@ -1,0 +1,106 @@
+{
+  "schema": "launchclip.capture.v1",
+  "id": "hf-deepseek-v4-1-flash-1017",
+  "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "kind": "model-card",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "theme": "dark",
+  "beats": [
+    {
+      "at": 0,
+      "action": "wait",
+      "target": null,
+      "dur": 0.6,
+      "label": "page settles"
+    },
+    {
+      "at": 0.6,
+      "action": "scroll",
+      "target": {
+        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering substantial improvements across reasoning, coding, agentic"
+      },
+      "dur": 1.2,
+      "label": "to the passage"
+    },
+    {
+      "at": 1.8,
+      "action": "highlight",
+      "target": {
+        "text": "DeepSeek-V4.1-Flash-1017 is a minor update to DeepSeek-V4.1-Flash, delivering substantial improvements across reasoning, coding, agentic"
+      },
+      "dur": 2.2,
+      "label": "DeepSeek calls it a minor update to DeepSeek-V4.1-Flash,…"
+    },
+    {
+      "at": 4,
+      "action": "scroll",
+      "target": {
+        "text": "Terminal-Bench 4.0"
+      },
+      "dur": 1.2,
+      "label": "to Terminal-Bench 4.0"
+    },
+    {
+      "at": 5.2,
+      "action": "focus-ring",
+      "target": {
+        "text": "Terminal-Bench 4.0"
+      },
+      "dur": 1,
+      "label": "Terminal-Bench 4.0"
+    },
+    {
+      "at": 6.2,
+      "action": "highlight",
+      "target": {
+        "text": "42.3"
+      },
+      "dur": 1.8,
+      "label": "On Terminal-Bench 4.0 the new checkpoint scores 42.3, up…"
+    },
+    {
+      "at": 8,
+      "action": "scroll",
+      "target": {
+        "text": "DeepSWE v1.1"
+      },
+      "dur": 1.2,
+      "label": "to DeepSWE v1.1"
+    },
+    {
+      "at": 9.2,
+      "action": "focus-ring",
+      "target": {
+        "text": "DeepSWE v1.1"
+      },
+      "dur": 1,
+      "label": "DeepSWE v1.1"
+    },
+    {
+      "at": 10.2,
+      "action": "highlight",
+      "target": {
+        "text": "77.0"
+      },
+      "dur": 1.8,
+      "label": "On DeepSWE v1.1 DeepSeek-V4.1-Flash-1017 scores 77.0, ahead…"
+    },
+    {
+      "at": 12,
+      "action": "pin",
+      "target": null,
+      "dur": 1.2,
+      "label": "Hugging Face · deepseek-ai"
+    }
+  ],
+  "out": "assets/evidence/hf-deepseek-v4-1-flash-1017.mp4",
+  "provenance": {
+    "source_title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+    "fetched_at": "2026-10-27T05:11:45.950Z",
+    "publisher": "Hugging Face · deepseek-ai",
+    "published_at": "2026-10-17T02:40:38.000Z"
+  }
+}

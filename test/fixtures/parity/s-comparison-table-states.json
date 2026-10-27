@@ -1,0 +1,93 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Shot states parity: s-comparison-table-states",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7.5,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#070b14",
+        "primary": "#8a94ff",
+        "accent": "#3fe0ff",
+        "ink": "#070b14",
+        "paper": "#eef3ff"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "compare",
+        "module": "comparison-table",
+        "start": 0,
+        "end": 7.5,
+        "params": {
+          "title": "What changed",
+          "columns": [
+            "New model",
+            "Last model"
+          ],
+          "rows": [
+            {
+              "label": "Price per task",
+              "values": [
+                "$0.80",
+                "$2.40"
+              ]
+            },
+            {
+              "label": "Context window",
+              "values": [
+                "1M",
+                "256K"
+              ]
+            },
+            {
+              "label": "Tool calls in parallel",
+              "values": [
+                true,
+                false
+              ]
+            },
+            {
+              "label": "Runs on a laptop",
+              "values": [
+                false,
+                false
+              ]
+            }
+          ]
+        },
+        "states": [
+          {
+            "at": 2.7,
+            "set": {
+              "focus": "row-0"
+            }
+          },
+          {
+            "at": 4.7,
+            "set": {
+              "focus": "row-2",
+              "glow": "row-2"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "sceneId": "compare",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

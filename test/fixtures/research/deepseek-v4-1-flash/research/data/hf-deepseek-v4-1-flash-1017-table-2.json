@@ -1,0 +1,101 @@
+{
+  "schema": "launchclip.research-data.v1",
+  "id": "hf-deepseek-v4-1-flash-1017-table-2",
+  "kind": "table",
+  "title": "Recommended sampling parameters:",
+  "source": {
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "title": "deepseek-ai/DeepSeek-V4.1-Flash-1017 · model card",
+    "publisher": "Hugging Face · deepseek-ai",
+    "published_at": "2026-10-17T02:40:38.000Z",
+    "fetched_at": "2026-10-27T05:11:45.950Z",
+    "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a"
+  },
+  "columns": [
+    "Parameter",
+    "Value"
+  ],
+  "rows": [
+    {
+      "label": "temperature",
+      "values": {
+        "Value": 1
+      },
+      "raw": [
+        "temperature",
+        "1.0"
+      ]
+    },
+    {
+      "label": "top_p",
+      "values": {
+        "Value": 1
+      },
+      "raw": [
+        "top_p",
+        "1.0"
+      ]
+    },
+    {
+      "label": "context_window",
+      "values": {
+        "Value": 1
+      },
+      "raw": [
+        "context_window",
+        "1M tokens"
+      ]
+    },
+    {
+      "label": "max_tokens",
+      "values": {
+        "Value": null
+      },
+      "raw": [
+        "max_tokens",
+        "≥ 256K"
+      ]
+    }
+  ],
+  "notes": [],
+  "claims": [
+    "c006"
+  ],
+  "views": [
+    {
+      "module": "comparison-table",
+      "props": {
+        "columns": [
+          "Parameter",
+          "Value"
+        ],
+        "rows": [
+          {
+            "label": "temperature",
+            "values": [
+              "1.0"
+            ]
+          },
+          {
+            "label": "top_p",
+            "values": [
+              "1.0"
+            ]
+          },
+          {
+            "label": "context_window",
+            "values": [
+              "1M tokens"
+            ]
+          },
+          {
+            "label": "max_tokens",
+            "values": [
+              "≥ 256K"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
