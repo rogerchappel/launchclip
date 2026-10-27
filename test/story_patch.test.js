@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {applyJsonPatch, applyStoryPatch, formatPointer, messagePointer, parsePointer} from '../kit/core/story-patch.mjs';
+import {diffSegments} from '../src/story_patch.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (file) => JSON.parse(readFileSync(path.join(ROOT, file), 'utf8'));
@@ -126,6 +127,47 @@ test('applyStoryPatch reports layout findings against the scene', () => {
 test('applyStoryPatch refuses a story newer than the engine before patching', () => {
   const result = applyStoryPatch({...promo(), engine: {revision: 5}}, []);
   assert.deepEqual(result.errors.map(({stage}) => stage), ['migrate']);
+});
+
+test('diffSegments: a param edit invalidates only the segments that show the scene', async () => {
+  const before = patchPromo([]).resolved;
+  const after = patchPromo([{op: 'replace', path: `/scenes/${HOOK}/params/headline`, value: NEW_HEADLINE}]).resolved;
+  const same = await diffSegments(before, before);
+  assert.deepEqual(same.invalidated, []);
+  assert.equal(same.frames.invalidated, 0);
+  const diff = await diffSegments(before, after);
+  assert.ok(diff.invalidated.length >= 1);
+  assert.ok(diff.invalidated.length < diff.segments.length, 'other segments stay cached');
+  for (const segment of diff.segments) {
+    if (segment.scenes.includes('s1')) { assert.equal(segment.status, 'changed', segment.id); assert.deepEqual(segment.parts, ['layers']); }
+    else assert.equal(segment.status, 'unchanged', segment.id);
+  }
+  assert.equal(diff.global, false);
+  assert.ok(diff.frames.invalidated > 0 && diff.frames.invalidated < diff.frames.total);
+  assert.equal(diff.removed.length, diff.invalidated.length);
+});
+
+test('diffSegments: a global setting invalidates every segment; notes never reach a frame', async () => {
+  const story = promo();
+  const before = patchPromo([]).resolved;
+  const color = Object.keys(story.brand.colors)[0];
+  const after = patchPromo([{op: 'replace', path: `/brand/colors/${color}`, value: '#123456'}]).resolved;
+  const diff = await diffSegments(before, after);
+  assert.equal(diff.global, true);
+  assert.equal(diff.invalidated.length, diff.segments.length);
+  assert.ok(diff.segments.every((segment) => segment.parts.includes('global')));
+  const noted = patchPromo([{op: 'add', path: '/notes', value: 'tighten the hook'}]).resolved;
+  assert.deepEqual((await diffSegments(before, noted)).invalidated, []);
+});
+
+test('diffSegments: moving a cut re-plans the segments around it', async () => {
+  const before = patchPromo([]).resolved;
+  const after = patchPromo([{op: 'replace', path: '/scenes/1/end', value: 8.5}, {op: 'replace', path: '/scenes/2/start', value: 8.5}]).resolved;
+  const diff = await diffSegments(before, after);
+  const touched = diff.segments.filter((segment) => segment.status !== 'unchanged');
+  assert.ok(touched.length >= 2);
+  assert.ok(touched.every((segment) => segment.scenes.some((id) => ['s2', 's3'].includes(id))), JSON.stringify(touched.map((segment) => segment.id)));
+  assert.ok(diff.segments.some((segment) => segment.status === 'unchanged'));
 });
 
 test('story-patch.mjs and story-migrations.mjs stay pure ESM: sibling kit/core imports only', () => {
