@@ -13,7 +13,7 @@ cadence passed (long-form, default): 157 events, 9.65/min, 14.18 words per event
   ok   words_per_event   14.18  want 10–20 words
   ok   cut_gap_p50      20.607  want 15–25 s
 states per shot 1–4 (mean 3.29); changes enter 48, swap 88, build 22
-variety: 27 modules; top icon-row 16%, concept-card 12%, motion-title 8%, kinetic-words 6%, process-steps 6%; longest same-module run across cuts 1
+variety: 28 modules; top icon-row 16%, concept-card 13%, motion-title 8%, kinetic-words 6%, process-steps 6%; longest same-module run across cuts 1
 evidence: 60/86 claims shown with a sourced visual (70%), 16 on a capture
 chunks: 12 (0 reused)
 

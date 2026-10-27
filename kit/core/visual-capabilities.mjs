@@ -256,8 +256,14 @@ function percentOf(beat) {
 
 // Two or more of the clause's own numbers as labelled bars (null when it has fewer).
 function seriesOf(beat, least = 2) {
+  // A series the director paired across clauses (or research data) comes first.
+  const paired = Array.isArray(beat.evidence?.data?.series) ? beat.evidence.data.series.filter((entry) => entry && typeof entry.label === 'string' && Number.isFinite(entry.value)) : [];
+  if (paired.length >= least) return paired.slice(0, 5).map((entry) => ({ label: cap1(clip(entry.label, 14)), value: entry.value }));
   const numbers = numbersOf(beat);
   if (numbers.length < least) return null;
+  // Bars share one unit: a clause's $10 beside its 2 million is two facts, not a series.
+  const unitOf = (entry) => `${entry.prefix ?? ''}|${entry.unit ?? ''}`;
+  if (new Set(numbers.map(unitOf)).size > 1) return null;
   const terms = keyTerms(beat.text);
   return numbers.slice(0, 5).map((entry, i) => ({ label: cap1(clip(entry.label ?? terms[i] ?? formatValue(entry), 14)), value: entry.value }));
 }

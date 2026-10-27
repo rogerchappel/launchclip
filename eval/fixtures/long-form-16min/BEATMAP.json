@@ -3718,32 +3718,12 @@
        "text": "Halcyon 2 scored 48 percent, compared with 39 percent for the previous model and 51 percent for the best rival.",
        "intent": "number",
        "kind": "series",
-       "capability": "bar-chart",
-       "module": "bar-chart",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "title": "Halcyon scored percent",
-        "data": [
-         {
-          "label": "Scored",
-          "value": 2
-         },
-         {
-          "label": "Scored",
-          "value": 48
-         },
-         {
-          "label": "For the previ…",
-          "value": 39
-         },
-         {
-          "label": "For the best…",
-          "value": 51
-         }
-        ],
-        "highlight": 3,
-        "source": "Open SWE benchmark, 2026-03-15",
-        "variant": "bars"
+        "text": "Halcyon scored percent",
+        "icon": "globe"
        },
        "evidence": {
         "claim": "c-swe",
@@ -3762,7 +3742,7 @@
          "out": "assets/evidence/swe-leaderboard.mp4"
         }
        },
-       "why": "series (evidence c-swe, capture swe-leaderboard): bar-chart"
+       "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh2-3",
@@ -4657,26 +4637,27 @@
        "end": 760.755,
        "text": "Next is arithmetic on long numbers, at about 18 percent.",
        "intent": "number",
-       "kind": "share",
-       "capability": "unit-grid",
-       "module": "unit-grid",
+       "kind": "series",
+       "capability": "glass-bars-3d",
+       "module": "glass-bars-3d",
        "change": "enter",
        "params": {
+        "variant": "bars",
         "title": "Next arithmetic long",
-        "count": 100,
-        "groups": [
+        "data": [
          {
-          "count": 18,
-          "label": "18 in 100",
-          "tone": "primary"
+          "label": "Time",
+          "value": 30,
+          "display": "30%"
          },
          {
-          "count": 82,
-          "label": "The rest",
-          "tone": "accent"
+          "label": "Next",
+          "value": 18,
+          "display": "18%"
          }
         ],
-        "variant": "dots"
+        "highlight": 1,
+        "source": "Introducing Halcyon 2, 2026-03-10"
        },
        "evidence": {
         "claim": "c-long-doc",
@@ -4688,9 +4669,23 @@
          "title": "Introducing Halcyon 2",
          "date": "2026-03-10"
         },
-        "quote": "71% on long-document QA"
+        "quote": "71% on long-document QA",
+        "data": {
+         "series": [
+          {
+           "label": "time",
+           "value": 30,
+           "unit": "%"
+          },
+          {
+           "label": "Next",
+           "value": 18,
+           "unit": "%"
+          }
+         ]
+        }
        },
-       "why": "share (evidence c-long-doc): unit-grid"
+       "why": "series (evidence c-long-doc): glass-bars-3d"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh2-2",
@@ -6476,7 +6471,7 @@
    ],
    "history": {
     "recent": [
-     "bar-chart",
+     "concept-card",
      "concept-card",
      "percent-fill",
      "icon-row",
@@ -6488,7 +6483,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 18,
-     "concept-card": 12,
+     "concept-card": 13,
      "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
@@ -6503,7 +6498,7 @@
      "media-window": 4,
      "stat-card": 3,
      "count-up": 1,
-     "bar-chart": 5,
+     "bar-chart": 4,
      "cta": 2,
      "percent-fill": 4,
      "unit-grid": 3,
@@ -6572,7 +6567,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "96fd5fbd3f8f6187",
+   "key": "040d67ca4bca59b0",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6593,7 +6588,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 21,
-     "concept-card": 14,
+     "concept-card": 15,
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
@@ -6608,7 +6603,7 @@
      "media-window": 4,
      "stat-card": 4,
      "count-up": 1,
-     "bar-chart": 5,
+     "bar-chart": 4,
      "cta": 2,
      "percent-fill": 4,
      "unit-grid": 3,
@@ -6685,7 +6680,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "13031d7e1cf2c340",
+   "key": "899ff86e2ae2e430",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6706,7 +6701,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 23,
-     "concept-card": 15,
+     "concept-card": 16,
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
@@ -6721,15 +6716,16 @@
      "media-window": 5,
      "stat-card": 4,
      "count-up": 1,
-     "bar-chart": 5,
+     "bar-chart": 4,
      "cta": 2,
      "percent-fill": 5,
-     "unit-grid": 4,
+     "unit-grid": 3,
      "compare": 1,
      "glass-word": 4,
      "excerpt": 1,
      "window-chrome": 1,
-     "commit-card": 1
+     "commit-card": 1,
+     "glass-bars-3d": 1
     },
     "plates": [
      {
@@ -6803,7 +6799,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "d9c2725783585ccd",
+   "key": "a65fab167e9bb58c",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6824,7 +6820,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 23,
-     "concept-card": 17,
+     "concept-card": 18,
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
@@ -6839,15 +6835,16 @@
      "media-window": 6,
      "stat-card": 5,
      "count-up": 2,
-     "bar-chart": 5,
+     "bar-chart": 4,
      "cta": 2,
      "percent-fill": 6,
-     "unit-grid": 4,
+     "unit-grid": 3,
      "compare": 1,
      "glass-word": 4,
      "excerpt": 1,
      "window-chrome": 1,
      "commit-card": 1,
+     "glass-bars-3d": 1,
      "checklist": 3
     },
     "plates": [
@@ -6927,7 +6924,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "09f57f1a5d55e534",
+   "key": "0dc700b5ecf9f877",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6948,7 +6945,7 @@
     "counts": {
      "logo-sting": 2,
      "icon-row": 25,
-     "concept-card": 19,
+     "concept-card": 20,
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
@@ -6963,15 +6960,16 @@
      "media-window": 6,
      "stat-card": 5,
      "count-up": 2,
-     "bar-chart": 5,
+     "bar-chart": 4,
      "cta": 3,
      "percent-fill": 6,
-     "unit-grid": 4,
+     "unit-grid": 3,
      "compare": 1,
      "glass-word": 5,
      "excerpt": 1,
      "window-chrome": 1,
      "commit-card": 1,
+     "glass-bars-3d": 1,
      "checklist": 3
     },
     "plates": [
@@ -7145,7 +7143,7 @@
    }
   },
   "variety": {
-   "modules": 27,
+   "modules": 28,
    "top": [
     {
      "id": "icon-row",
@@ -7153,7 +7151,7 @@
     },
     {
      "id": "concept-card",
-     "share": 0.12
+     "share": 0.127
     },
     {
      "id": "motion-title",

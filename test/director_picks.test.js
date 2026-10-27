@@ -2,7 +2,8 @@
 // real long-form script (written inline; the script itself is not in the repo).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { entityAliases, extractFacts, matchEvidence, visualKind } from "../kit/core/beat-director.mjs";
+import { entityAliases, extractFacts, matchEvidence, pairSeries, visualKind } from "../kit/core/beat-director.mjs";
+import { capabilityParams } from "../kit/core/visual-capabilities.mjs";
 
 const kind = (text) => visualKind({ text, facts: extractFacts(text) });
 
@@ -58,4 +59,34 @@ test("picks: a capture shown within the last minute weighs against its claim", (
   const after = matchEvidence(beat(text), { ledger: LEDGER, captures: CAPTURES, at: 40, played: { changelog: 10 } });
   const later = matchEvidence(beat(text), { ledger: LEDGER, captures: CAPTURES, at: 200, played: { changelog: 10 } });
   assert.ok(after === null || after.score < later.score, JSON.stringify({ after, later }));
+});
+
+const clauses = (texts, names = null) => texts.map((text, i) => ({ text, start: i * 5, end: i * 5 + 5, kind: "concept", headline: "Price", facts: extractFacts(text), ...(i === 0 && names ? { evidence: { claim: "c", names } } : {}) }));
+
+test("picks: prices across clauses pair into one series, with the half guide", () => {
+  const states = pairSeries(clauses(["The price is $1 per million input tokens and $5 per million output tokens.", "Cached input drops to $0.05 per million. GPT-6.1 Sol costs $2 in and $10 out.", "So Terra is exactly half the price of Sol, on both sides."], ["Terra"]));
+  assert.deepEqual(states.map((state) => state.kind), ["series", "series", "series"]);
+  assert.deepEqual(states[1].evidence.data.series.map((row) => `${row.label} ${row.value}`), ["Terra in 1", "Terra out 5", "Sol in 2", "Sol out 10"]);
+  assert.deepEqual(states[2].evidence.data.reference, { value: 5, label: "half" });
+  const bars = capabilityParams("glass-bars-3d", { ...states[2], headline: "Half the price" });
+  assert.deepEqual(bars.data.map((row) => row.display), ["$1", "$5", "$2", "$10"]);
+  assert.deepEqual(bars.reference, { value: 5, label: "half" });
+});
+
+test("picks: a count across clauses pairs, and its first figure leads a stat", () => {
+  const states = pairSeries(clauses(["Picture $10 of output. On Sol, that buys 1 million tokens.", "On Terra, the same $10 buys 2 million. For an agent that writes a lot,"]));
+  assert.equal(states[0].kind, "stat");
+  assert.equal(states[0].facts.numbers[0].value, 1);
+  assert.deepEqual(states[1].evidence.data.series.map((row) => `${row.label} ${row.value}`), ["Sol 1", "Terra 2"]);
+  // A bar chart reads the pair, never the clause's own $10 beside its 2 million.
+  assert.deepEqual(capabilityParams("bar-chart", states[1]).data.map((row) => row.value), [1, 2]);
+  assert.equal(capabilityParams("bar-chart", { ...states[1], evidence: undefined }), null);
+});
+
+test("picks: scores across clauses pair, and \"more than double\" draws the 2× guide", () => {
+  const states = pairSeries(clauses(["On Terminal-Bench 4.0, which measures agents working in a command line, Terra scores 50.3%.", "GPT-5.6 Terra scored 21.5%. That is more than double in one generation."]));
+  assert.equal(states[0].kind, "share");
+  assert.deepEqual(states[1].evidence.data.series, [{ label: "Terra", value: 50.3, unit: "%" }, { label: "GPT-5.6 Terra", value: 21.5, unit: "%" }]);
+  assert.deepEqual(states[1].evidence.data.reference, { value: 43, label: "2×" });
+  assert.deepEqual(extractFacts("GPT-5.6 Terra scored 21.5%.").numbers.map((entry) => entry.value), [21.5]);
 });

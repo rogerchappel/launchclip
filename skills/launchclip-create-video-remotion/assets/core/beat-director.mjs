@@ -136,6 +136,8 @@ export function extractFacts(text) {
     // A number in a name ("Halcyon 2", "version 1.5", "GPT-4") is not a figure.
     const before = value.slice(0, match.index);
     if (!currency && !unitWord && (/[a-z,]\s[A-Z][\w-]*[\s-]$/.test(before) || /\b(version|v|model|release|chapter|part|step|section|table|footnote|row|request|issue|pr|commit|build|run)\s#?$/i.test(before) || /#$/.test(before))) continue;
+    // A model id ("GPT-5.6", "Llama-3") is a name.
+    if (!currency && !unitWord && /[A-Za-z]-$/.test(before)) continue;
     // A status code ("a 404 page", "returns 503") is not a count.
     if (!currency && !unitWord && /^[45]\d\d$/.test(digits) && /\b(error|status|page|code|returns?|not found|http)\b/i.test(value)) continue;
     const unit = !unitWord ? undefined : /^(%|percent|per cent)$/.test(unitWord) ? '%' : /^(x|×|times)$/.test(unitWord) ? '×' : unitWord;
@@ -401,6 +403,8 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
     score: round(best.score),
     source: source ? { url: source.url, ...(source.title ? { title: source.title } : {}), ...(source.publisher ? { publisher: source.publisher } : {}), ...(source.published_at ?? source.date ? { date: String(source.published_at ?? source.date).slice(0, 10) } : {}) } : null,
     ...(source?.quote?.text ? { quote: source.quote.text } : {}),
+    // The claim's subjects, shortest first ("Terra" before "GPT-6.1"): who a figure belongs to when the clause does not say.
+    ...((claim.entities ?? []).some((e) => e?.kind === 'name') ? { names: (claim.entities ?? []).filter((e) => e?.kind === 'name' && e.name).map((e) => e.name).sort((a, b) => a.length - b.length) } : {}),
     ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {}),
     // Module-ready data for the evidence builders (capability-builders-*.mjs): the capture's, else the claim's.
     ...(capture?.data ?? claim.data ? { data: capture?.data ?? claim.data } : {})
@@ -487,6 +491,7 @@ export function directChunk(chunk, options) {
     return draft;
   });
   if (beats.length && beats.at(-1).words[1] === total - 1 && states.at(-1).intent !== 'cta') states.at(-1).closing = true;
+  pairSeries(states);
 
   // Shots: 2–4 states, cut near the target cut gap, at a topic shift when one is close.
   const groups = [];
@@ -554,8 +559,157 @@ function familyOf(kind) {
 
 const STRUCTURE_KINDS = new Set(['cta', 'sting']);
 
+// ---------------------------------------------------------------------------
+// Series across clauses
+
+// Words that compare two figures already on screen, and the guide each draws.
+const RATIO = [
+  [/\b(exactly |about |roughly )?half\b/i, (rows) => ({ value: round(Math.max(...rows.map((r) => r.value)) / 2, 4), label: 'half' })],
+  [/\b(more than |over |nearly |almost )?(double|twice)\b/i, (rows) => ({ value: round(Math.min(...rows.map((r) => r.value)) * 2, 4), label: '2×' })],
+  [/\b(\d+(?:\.\d+)?)\s*(?:x|×|times)\b/i, (rows, match) => ({ value: round(Math.min(...rows.map((r) => r.value)) * Number(match[1]), 4), label: `${Number(match[1])}×` })]
+];
+const QUALIFIER = [[/\bcached\b/i, 'cached'], [/\b(in|input)\b/i, 'in'], [/\b(out|output)\b/i, 'out']];
+
+// The side a figure is on (in, out, cached): the words just after it, else the three just before it in its sentence ("Cached input drops to $0.05").
+function sideOf(text, figure) {
+  const after = String(figure.label ?? '').split(/\s+/).slice(0, 3).join(' ');
+  const raw = String(figure.raw ?? figure.value);
+  const at = text.indexOf(raw);
+  const before = at >= 0 ? text.slice(0, at).split(/[.!?]\s+/).at(-1).split(/\s+/).slice(-4).join(' ') : '';
+  return QUALIFIER.find(([regex]) => regex.test(after))?.[1] ?? QUALIFIER.find(([regex]) => regex.test(before))?.[1] ?? null;
+}
+const NAME_TOKEN = /^(?:[A-Z][\w.]*(?:-[\w.]+)*|[a-z]+-\d[\w.-]*)$/;
+const NOT_NAMES = new Set(['The', 'On', 'In', 'So', 'That', 'This', 'It', 'And', 'But', 'A', 'An', 'Now', 'Then', 'If', 'For', 'At', 'By', 'Picture', 'Cached', 'Each', 'One', 'We', 'You', 'They']);
+const MAX_SERIES = 6;
+
+// What a figure counts: money in one currency, a share, or a scaled count of one thing; null for anything else.
+function figureFamily(entry, running = null) {
+  if (entry.prefix) return `money:${entry.prefix}`;
+  if (entry.unit === '%') return 'share';
+  if (['million', 'billion', 'thousand', 'trillion'].includes(entry.unit)) {
+    const noun = String(entry.label ?? '').split(/\s+/).find((word) => /^[a-z]{3,}$/i.test(word) && !/^(per|of|for|the|and)$/i.test(word));
+    // "2 million" after "1 million tokens" counts the same thing.
+    return noun ? `count:${noun.toLowerCase().replace(/s$/, '')}` : running?.startsWith('count:') ? running : null;
+  }
+  return null;
+}
+
+// The name a figure belongs to: "GPT-5.6 Terra scored 21.5%", "for GPT-5.6 Terra", "On Sol, that buys 1 million".
+function figureSubject(text, entry) {
+  const raw = String(entry.raw ?? entry.value).replace(/%$/, '');
+  const at = text.indexOf(raw.replace(/^[$€£]/, '')) >= 0 ? text.indexOf(raw.replace(/^[$€£]/, '')) : -1;
+  if (at < 0) return null;
+  const after = text.slice(at + raw.length).match(/^%?\s*(?:\w+\s){0,2}?(?:for|on|by)\s+((?:[A-Z][\w.-]*|[a-z]+-\d[\w.-]*)(?:\s[A-Z][\w.-]*)?)/);
+  if (after) return after[1];
+  const sentence = text.slice(0, at).split(/[.!?]\s+/).at(-1);
+  const tokens = sentence.split(/\s+/).map((token) => token.replace(/[,;:]$/, '')).filter(Boolean);
+  for (let i = tokens.length - 1; i >= 0; i -= 1) {
+    if (!NAME_TOKEN.test(tokens[i]) || NOT_NAMES.has(tokens[i])) continue;
+    let j = i;
+    while (j > 0 && NAME_TOKEN.test(tokens[j - 1]) && !NOT_NAMES.has(tokens[j - 1])) j -= 1;
+    return tokens.slice(j, i + 1).join(' ');
+  }
+  return null;
+}
+
+/**
+ * Figures that belong together across neighbouring clauses become one series
+ * ("$1 in and $5 out … Sol costs $2 in and $10 out … exactly half"): up to
+ * three clauses in a row with figures of one family (money in one currency,
+ * shares, or a count of one thing), or a clause that compares them (half,
+ * double, N times) right after. Each clause then carries the series so far
+ * (evidence.data.series, the rows labelled by the name each figure belongs
+ * to and its side: in, out), and a comparing clause adds a guide
+ * (evidence.data.reference). The clauses become `series` states, so a 3D bar
+ * build shows it rather than a card per clause. A one-off qualifier
+ * (cached) beside a pair of others stays out.
+ */
+export function pairSeries(states) {
+  let run = null;
+  const runs = [];
+  const close = () => { if (run) runs.push(run); run = null; };
+  for (const state of states) {
+    if (STRUCTURE_KINDS.has(state.kind) || state.kind === 'title') { close(); continue; }
+    // A run takes at most three clauses in 25 s.
+    if (run && (run.states.length >= 3 || state.end - run.states[0].state.start > 25)) close();
+    const all = (state.facts?.numbers ?? []).map((entry) => ({ entry, family: figureFamily(entry, run?.family) })).filter((figure) => figure.family);
+    // One family per clause: the run's when the clause has it, else its last figure's ("$10 … buys 1 million tokens" counts tokens).
+    const family = run && all.some((figure) => figure.family === run.family) ? run.family : all.at(-1)?.family ?? null;
+    const figures = all.filter((figure) => figure.family === family);
+    const ratio = RATIO.map(([regex, guide]) => ({ match: state.text.match(regex), guide })).find((entry) => entry.match);
+    if (run && (figures.length ? family === run.family : ratio)) { run.states.push({ state, figures, ratio }); continue; }
+    close();
+    if (figures.length) run = { family, states: [{ state, figures, ratio }] };
+  }
+  close();
+  for (const entry of runs) {
+    // Before the clauses name one, the figures belong to the matched claim's subject.
+    let subject = entry.states[0].state.evidence?.names?.[0] ?? null;
+    const rows = [];
+    for (const step of entry.states) {
+      step.rows = [];
+      for (const { entry: figure } of step.figures) {
+        subject = figureSubject(step.state.text, figure) ?? subject;
+        const side = sideOf(step.state.text, figure);
+        const name = subject ?? (side ? null : tidyLabel(figure.label));
+        if (!name && !side) continue;
+        const row = { label: [name, side].filter(Boolean).join(' ').replace(/^./, (c) => c.toUpperCase()), name, value: figure.value, side, ...(figure.unit === '%' ? { unit: '%' } : figure.prefix === '$' ? { unit: 'USD' } : figure.prefix === '€' ? { unit: 'EUR' } : figure.prefix === '£' ? { unit: 'GBP' } : figure.unit ? { unit: { million: 'M', billion: 'B', thousand: 'K', trillion: 'T' }[figure.unit] } : {}) };
+        if (!rows.some((other) => other.label.toLowerCase() === row.label.toLowerCase())) { rows.push(row); step.rows.push(row); }
+      }
+    }
+    // A side only one figure has (cached) beside sides that pair up (in, out) stays out.
+    const sides = {};
+    for (const row of rows) if (row.side) sides[row.side] = (sides[row.side] ?? 0) + 1;
+    const lone = Object.values(sides).some((n) => n >= 2) ? new Set(Object.keys(sides).filter((side) => sides[side] === 1)) : new Set();
+    const kept = rows.filter((row) => !lone.has(row.side));
+    if (kept.length < 2 || new Set(kept.map((row) => row.label)).size < 2) continue;
+    // A name's last word when it alone tells the rows apart ("GPT-6.1 Sol" → "Sol" beside "Terra").
+    const names = [...new Set(kept.map((row) => row.name).filter(Boolean))];
+    const short = names.map((name) => name.split(' ').at(-1));
+    if (new Set(short).size === names.length) for (const row of kept) if (row.name) row.label = [row.name.split(' ').at(-1), row.side].filter(Boolean).join(' ');
+    let shown = [];
+    for (const step of entry.states) {
+      shown = [...shown, ...step.rows.filter((row) => kept.includes(row))].slice(-MAX_SERIES);
+      // A run's first figure on its own is a stat; the series builds from the next clause.
+      if (shown.length < 2) {
+        if (shown.length === 1) {
+          step.state.kind = entry.family === 'share' ? 'share' : 'stat';
+          // Its figure leads, so the stat shows the run's number ("1 million tokens", not the "$10" before it).
+          const lead = step.figures.map((figure) => figure.entry);
+          step.state.facts = { ...step.state.facts, numbers: [...lead, ...step.state.facts.numbers.filter((entry) => !lead.includes(entry))] };
+        }
+        continue;
+      }
+      const series = shown.map(({ label, value, unit }) => ({ label, value, ...(unit ? { unit } : {}) }));
+      const guide = step.ratio ? step.ratio.guide(series, step.ratio.match) : null;
+      const reference = guide && guide.value > 0 && guide.value <= Math.max(...series.map((row) => row.value)) ? guide : null;
+      const evidence = { ...(step.state.evidence ?? {}) };
+      // The series is the visual: a capture of the page it came from waits for another clause.
+      delete evidence.capture;
+      evidence.data = { ...(isPlain(evidence.data) ? evidence.data : {}), series, ...(reference ? { reference } : {}) };
+      step.state.evidence = evidence;
+      step.state.kind = 'series';
+      step.state.paired = entry.states.indexOf(step);
+    }
+  }
+  return states;
+}
+
+const isPlain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// A figure's label as a bar name: its first words, prepositions off ("per million input tokens" → null).
+function tidyLabel(label) {
+  const words = String(label ?? '').split(/\s+/).filter((word) => word && !/^(per|of|on|in|to|for|the|a|an|and|is|was|that|which)$/i.test(word));
+  return words.length && words.length <= 2 ? words.join(' ') : null;
+}
+
 // The module, params and state change for one clause.
 function decide(state, previous, { history, avoid, registered, wide, check }) {
+  // A paired clause rebuilds the series on screen with its own figures (and guide) added.
+  if (previous && state.paired > 0 && previous.kind === 'series') {
+    const params = capabilityParams(previous.module, state);
+    if (check(previous.module, params)) return { capability: previous.capability, module: previous.module, fallback: previous.fallback === true, params, change: 'build', why: `series: builds on ${previous.module} (${state.evidence.data.series.length} values${state.evidence.data.reference ? `, ${state.evidence.data.reference.label} guide` : ''})` };
+  }
   // A build: the module on screen takes this clause's entries (a bar arrives, then a second bar).
   if (previous && !state.evidence?.capture && previous.builds < 2 && familyOf(state.kind) === familyOf(previous.kind)) {
     const add = capabilityAdditions(previous.module, state);
