@@ -955,8 +955,10 @@ function timelineTimeline(model, ops) {
     let x = 0;
     c.pins.forEach((pin, i) => {
       const nx = r2(pin.x - c.pad);
-      // The playhead reaches the date as the card pins (in 0.15–0.6 s, from the axis build at the earliest).
-      const from = Math.min(Math.max(rt(c.buildAt + 0.3), rt(pin.at - 0.6)), rt(pin.at - 0.15));
+      // The playhead leaves a date only after its card has pinned, and reaches
+      // the next as that card pins (in 0.15–0.6 s, from the axis build at the earliest).
+      const after = i ? rt(c.pins[i - 1].cardAt + 0.1) : rt(c.buildAt + 0.3);
+      const from = Math.min(Math.max(after, rt(pin.at - 0.6)), rt(pin.at - 0.15));
       if (nx !== x) tw(ops, `${id}-head`, from, rt(pin.at - from), 'power2.inOut', {x, y: 0, scaleX: 1, scaleY: 1}, {x: nx, y: 0, scaleX: 1, scaleY: 1});
       x = nx;
       const k = c.ticks.findIndex(t => t.lit === i);
