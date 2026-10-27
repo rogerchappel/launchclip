@@ -82,3 +82,8 @@ test("cells and tables parse the source's own spelling", () => {
   assert.deepEqual(table.columns, ["a", "b"]);
   assert.equal(table.rows.length, 2);
 });
+
+test("a claim verified only by API facts is checked but never captured", () => {
+  const ledger = { claims: [{ id: "c001", status: "verified", text: "Nimbus-7B was released on October 20, 2026.", values: [], entities: [], sources: [{ url: SOURCE.url, title: SOURCE.title, publisher: SOURCE.publisher, fetched_at: SOURCE.fetched_at, primary: true, supports: true, confidence: 0.9, kind: "model-card", quote: { text: "Hugging Face API: Model: nimbus-ai/Nimbus-7B; Created: 2026-10-20T10:00:00.000Z.", start: 0, end: 10 } }] }] };
+  assert.deepEqual(buildCaptureRequests(ledger).requests, []);
+});

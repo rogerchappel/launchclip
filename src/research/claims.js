@@ -19,6 +19,7 @@ const NUMBER_PATTERN = /(?<![\w.])(\$|€|£)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)
 const QUOTE_PATTERN = /[“"]([^”"]{12,400})[”"]/g;
 const SKIP_NUMBER_CONTEXT = /^(?:step|part|chapter|scene|beat|section)$/i;
 const STOP_ENTITIES = new Set(["The", "This", "That", "These", "Those", "It", "Its", "And", "But", "So", "Then", "Now", "Here", "There", "What", "Why", "How", "When", "Where", "Who", "We", "You", "They", "I", "In", "On", "At", "For", "With", "From", "By", "Of", "A", "An", "If", "Or", "As", "Today", "Tomorrow", "Yesterday", "First", "Second", "Third", "Next", "Last", "Finally", "Also", "Just", "Not", "No", "Yes", "All", "Every", "Some", "Most", "One", "Two", "Three", "Ten", "Meanwhile", "However", "According", "Still", "Even", "Only", "Our", "My", "Your", "Their", "His", "Her", "Let", "Let's", "Is", "Are", "Was", "Were", "Be", "Do", "Does", "Did", "Can", "Could", "Would", "Should", "Will", "May", "Might", "Must", "Imagine", "Picture", "Think", "Look", "See", "Watch", "Remember", "Because", "While", "After", "Before", "Since", "Until", "Unlike", "Like"]);
+const BENCHMARK_NAME = /bench|eval|mmlu|swe|exam|arena|gpqa|aime|hle\b|math|leaderboard|humaneval|livecode|mmmu|ifeval|bfcl|tau-?bench/i;
 const ROLE_WORDS = new Set(["CEO", "CTO", "CFO", "COO", "Founder", "Co-founder", "President", "Chairman", "Professor", "Dr", "Mr", "Ms", "Mrs", "Director", "Chief", "Head", "Lead", "Senior", "Principal"]);
 const PERSON_CUES = /\b(?:CEO|CTO|founder|co-founder|researcher|scientist|engineer|professor|director|lead|head of|chief|author|said|says|wrote|writes|posted|tweeted|told|according to|announced)\b/i;
 const ORG_SUFFIX = /\b(?:AI|Labs?|Inc|Corp|Research|University|Institute|Foundation|Technologies|Systems|DeepMind|Group)\b/;
@@ -117,14 +118,22 @@ export function extractEntities(sentence) {
   }
   // Model-like names: a capitalised word joined to a version (DeepSeek-V4.1, GPT-5.5, Llama 4, Qwen3.8-27B).
   for (const match of withoutUrls.matchAll(/\b([A-Z][A-Za-z]+(?:[- ][A-Z][A-Za-z]+)?(?:[- ]?[vV]?\d+(?:\.\d+)*[A-Za-z]*)(?:[- ][A-Za-z0-9.]+)*?)(?=[\s,.;:!?)"”']|$)/g)) {
-    if (/\d/.test(match[1]) && !/^(?:19|20)\d{2}$/.test(match[1]) && !new RegExp(`^(?:${MONTHS})\\b`).test(match[1])) add(match[1], "model");
+    const words = match[1].split(" ");
+    while (words.length > 1 && STOP_ENTITIES.has(words[0])) words.shift();
+    // "HumanEval Nimbus-7B": a benchmark word run into the model after it.
+    if (words.length > 1 && BENCHMARK_NAME.test(words[0]) && !/\d/.test(words[0]) && /^[A-Z][a-z]/.test(words[1])) add(words.shift(), "benchmark");
+    const name = words.join(" ");
+    if (!/\d/.test(name) || /^(?:19|20)\d{2}$/.test(name) || new RegExp(`^(?:${MONTHS})\\b`).test(name)) continue;
+    // "On Terminal-Bench 4.0", "MMLU-Pro", "DeepSWE v1.1": a benchmark is what a model is measured on, not a model.
+    const measuredOn = /\b(?:on|in)\s*$/i.test(withoutUrls.slice(0, match.index + match[1].indexOf(name)));
+    add(name, BENCHMARK_NAME.test(name) || measuredOn ? "benchmark" : "model");
   }
   // Capitalised runs: people and organisations.
   for (const match of withoutUrls.matchAll(/\b([A-Z][a-zA-Z&'’-]+(?:\s+(?:[A-Z][a-zA-Z&'’-]+|of|de|van|von|der|la)){0,4})/g)) {
     const words = match[1].split(/\s+/).filter((word, index, all) => !(index === all.length - 1 && /^(?:of|de|van|von|der|la)$/.test(word)));
     while (words.length && (STOP_ENTITIES.has(words[0]) || ROLE_WORDS.has(words[0]) || /^[a-z]/.test(words[0]))) words.shift();
     if (!words.length) continue;
-    const name = words.join(" ");
+    const name = words.join(" ").replace(/['’]s$/, "");
     // Inside a longer entity (DeepSeek in DeepSeek-V4.1) only counts when it also stands alone.
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (entities.some((entity) => entity.name === name) || (entities.some((entity) => entity.name.includes(name)) && !new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`).test(withoutUrls))) continue;
@@ -132,7 +141,8 @@ export function extractEntities(sentence) {
     // Start of sentence with a single ordinary word is not an entity.
     if (words.length === 1 && match.index === 0 && !ORG_SUFFIX.test(name) && !/[A-Z].*[A-Z]/.test(name)) continue;
     if (words.length === 1 && name.length < 3) continue;
-    const kind = ORG_SUFFIX.test(name) || /[A-Z].*[A-Z]/.test(words[0]) && words.length === 1 ? "org"
+    const kind = BENCHMARK_NAME.test(name) ? "benchmark"
+      : ORG_SUFFIX.test(name) || /[A-Z].*[A-Z]/.test(words[0]) && words.length === 1 ? "org"
       : words.length >= 2 && words.length <= 3 && words.every((word) => /^[A-Z][a-z'’-]+$/.test(word)) && PERSON_CUES.test(sentence) ? "person"
       : "name";
     add(name, kind);

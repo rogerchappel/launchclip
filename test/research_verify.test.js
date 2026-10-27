@@ -105,3 +105,15 @@ test("URL classes, HTML text and arXiv entries", () => {
   const [entry] = parseArxiv("<feed><entry><id>http://arxiv.org/abs/2501.01234v2</id><title>A Paper</title><summary> About it. </summary><published>2026-01-02T00:00:00Z</published><author><name>Ada Byron</name></author></entry></feed>");
   assert.deepEqual([entry.id, entry.title, entry.authors], ["2501.01234", "A Paper", ["Ada Byron"]]);
 });
+
+test("each number is checked in the column of the model it belongs to", () => {
+  const card = "| Benchmark | Nimbus-7B | Rival-8B | Titan 2 |\n| :--- | :---: | :---: | :---: |\n| HumanEval | 72.5 | 70.1 | 80.4 |";
+  const source = snapshot({ url: "https://huggingface.co/nimbus/Nimbus-7B", text: card });
+  const [comparison] = extractClaims("On HumanEval Nimbus-7B scores 72.5, ahead of Rival-8B at 70.1.");
+  assert.equal(verifyClaim(comparison, [source]).status, "verified");
+  // "X beats Titan 2 with 80.4" gives X the 80.4, which is Titan 2's.
+  const [boast] = extractClaims("On HumanEval Nimbus-7B also beats Titan 2 with 80.4.");
+  const verdict = verifyClaim(boast, [source]);
+  assert.equal(verdict.status, "contradicted");
+  assert.match(verdict.flag.message, /72\.5 \(Nimbus-7B; 80\.4 is Titan 2\)/);
+});

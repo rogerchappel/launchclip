@@ -126,7 +126,8 @@ export async function searchHuggingFace(http, name, orgs = []) {
     .sort((a, b) => Number(orgWords.some((org) => normalise(b.id.split("/")[0]).includes(org))) - Number(orgWords.some((org) => normalise(a.id.split("/")[0]).includes(org))) || (b.likes ?? 0) - (a.likes ?? 0));
   // When the named org published it, a re-upload by anyone else is not the primary source.
   const byOrg = ranked.filter((model) => orgWords.some((org) => normalise(model.id.split("/")[0]).includes(org)));
-  return (byOrg.length ? byOrg : ranked).slice(0, 2).map((model) => model.id);
+  // Without the org, only a repo people actually use counts: anyone can name an upload after a closed model.
+  return (byOrg.length ? byOrg : ranked.filter((model) => (model.likes ?? 0) >= 25)).slice(0, 2).map((model) => model.id);
 }
 
 export async function huggingFaceModel(http, id) {

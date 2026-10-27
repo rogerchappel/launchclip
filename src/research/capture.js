@@ -15,14 +15,18 @@ export function buildCaptureRequests(ledger, options = {}) {
   const groups = new Map();
   for (const claim of ledger.claims) {
     if (claim.status !== "verified") continue;
-    const source = claim.sources.find((entry) => entry.supports && entry.primary) ?? claim.sources.find((entry) => entry.supports);
-    if (!source?.quote?.text) continue;
-    const group = groups.get(source.url) ?? { source, claims: [] };
-    if (group.claims.length < MAX_CLAIMS_PER_CAPTURE) group.claims.push({ claim, quote: source.quote });
-    groups.set(source.url, group);
+    // Only a passage the page itself shows can be highlighted; API facts (sources.js) are checked, never captured.
+    const visible = claim.sources.filter((entry) => entry.supports && entry.quote?.text && !isApiFact(entry.quote.text));
+    const source = visible.find((entry) => entry.primary) ?? visible[0];
+    if (!source) continue;
+    // A source that backs many claims is shown more than once, a few claims per capture.
+    const chunks = groups.get(source.url) ?? [];
+    if (!chunks.length || chunks.at(-1).claims.length >= MAX_CLAIMS_PER_CAPTURE) chunks.push({ source, claims: [] });
+    chunks.at(-1).claims.push({ claim, quote: source.quote });
+    groups.set(source.url, chunks);
   }
   // Primary sources first, then those that carry the most claims.
-  const ordered = [...groups.values()].sort((a, b) => Number(b.source.primary) - Number(a.source.primary) || b.claims.length - a.claims.length).slice(0, max);
+  const ordered = [...groups.values()].flat().sort((a, b) => Number(b.source.primary) - Number(a.source.primary) || b.claims.length - a.claims.length).slice(0, max);
   const requests = [];
   const byClaim = {};
   const used = new Set();
@@ -53,6 +57,10 @@ export function buildCaptureRequests(ledger, options = {}) {
     });
   }
   return { requests, byClaim };
+}
+
+export function isApiFact(text) {
+  return /^(?:Hugging Face|GitHub) API:/.test(String(text).trim());
 }
 
 /** One claim's beats: scroll to the passage, ring the row (tables), highlight the figure or sentence. */

@@ -49,3 +49,12 @@ test("model or agent claims merge by text and keep their search hint", () => {
   assert.equal(merged[1].kind, "statement");
   assert.equal(merged[1].id, "c002");
 });
+
+test("benchmarks are not models, and a possessive is not part of the name", () => {
+  const [claim] = extractClaims("On Terminal-Bench 4.0 DeepSeek's DeepSeek-V4.1-Flash-1017 scores 42.3 on MMLU-Pro.");
+  const kinds = Object.fromEntries(claim.entities.map((entity) => [entity.name, entity.kind]));
+  assert.equal(kinds["Terminal-Bench 4.0"], "benchmark");
+  assert.equal(kinds["MMLU-Pro"], "benchmark");
+  assert.equal(kinds["DeepSeek-V4.1-Flash-1017"], "model");
+  assert.ok(!claim.entities.some((entity) => entity.name.startsWith("On ")));
+});

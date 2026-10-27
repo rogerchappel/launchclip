@@ -110,15 +110,22 @@ export function matchSnapshot(claim, snapshot) {
     const keywordShare = keywords.length ? keywordHits.length / keywords.length : 0;
     const entitiesHere = entityNames.filter((name) => looseIncludes(passageLower, name));
     // In a table the model is the column, not the row: the number must sit in the column headed by the claim's model.
+    // Each number is checked in the column of the entity it belongs to (ownerOf).
     let cell = null;
     if (passage.row && numbersFound.length) {
-      cell = tableCell(passage, numbersFound[0], entityNames);
-      if (cell?.mismatch) {
-        // The row is the claim's measure but the number is another model's: the claim's own column is the conflict.
-        if (keywordShare >= 0.25 && !mismatch) mismatch = { passage, cell };
+      const cells = numbersFound.map((value) => {
+        const owner = ownerOf(claim, value);
+        return tableCell(passage, value, owner ? [owner] : entityNames);
+      });
+      const wrong = cells.find((entry) => entry?.mismatch);
+      if (wrong) {
+        // The row is the claim's measure but the number is another model's: the owner's own column is the conflict.
+        const rowNamed = entityNames.some((name) => looseIncludes(String(passage.cells?.[0] ?? "").toLowerCase(), name));
+        if ((keywordShare >= 0.25 || rowNamed) && !mismatch) mismatch = { passage, cell: wrong, value: numbersFound[cells.indexOf(wrong)] };
         continue;
       }
-      if (cell?.header) entitiesHere.push(cell.header);
+      cell = cells.find(Boolean) ?? null;
+      for (const entry of cells) if (entry?.header) entitiesHere.push(entry.header);
     }
     const anchors = values.length + (claim.dates?.length ?? 0);
     const anchorsFound = numbersFound.length + datesFound.length;
@@ -140,7 +147,7 @@ export function matchSnapshot(claim, snapshot) {
   if (best) return best;
   if (mismatch?.cell.expected) {
     const { passage, cell } = mismatch;
-    return { supports: false, score: 0.7, quote: { text: passage.text, start: passage.start, end: passage.end, row: { label: cell.label, cell: cell.expected.text, column: cell.expected.header } }, conflict: { claimed: values.map((value) => value.raw).join(", "), found: `${cell.expected.text} (${cell.expected.header}; ${cell.text} is ${cell.header})` } };
+    return { supports: false, score: 0.7, quote: { text: passage.text, start: passage.start, end: passage.end, row: { label: cell.label, cell: cell.expected.text, column: cell.expected.header } }, conflict: { claimed: mismatch.value.raw, found: `${cell.expected.text} (${cell.expected.header}; ${cell.text} is ${cell.header})` } };
   }
   // Conflict: a passage about the same measure (claim words plus the unit) with a different number.
   for (const value of values.filter((entry) => entry.unit)) {
@@ -188,6 +195,26 @@ export function passagesOf(text) {
     }
   }
   return passages;
+}
+
+/**
+ * Whose number it is: the model named right before it with "at", "'s", "(" or
+ * ":" ("GPT-5.6 Sol at 73.0"), else the sentence's first model (its subject:
+ * "X beats Opus 5 with 51.8" is X's score). → entity name or null.
+ */
+export function ownerOf(claim, value) {
+  const models = (claim.entities ?? []).filter((entity) => entity.kind === "model" || entity.kind === "repo");
+  if (!models.length) return null;
+  const at = claim.text.indexOf(value.raw);
+  if (at > 0) {
+    const before = claim.text.slice(0, at);
+    for (const model of models) {
+      const escaped = model.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // "GPT-5.6 Sol at 73.0": the name may run on a word or two past the entity the patterns caught.
+      if (new RegExp(`${escaped}(?:\\s+[A-Z][\\w.-]*){0,2}\\s*(?:at|['’]s|\\(|:|=)\\s*$`).test(before)) return model.name;
+    }
+  }
+  return [...models].sort((a, b) => claim.text.indexOf(a.name) - claim.text.indexOf(b.name))[0].name;
 }
 
 export function splitRow(row) {
