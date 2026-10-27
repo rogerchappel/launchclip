@@ -72,7 +72,7 @@
    {
     "shot": "short-1-sh2",
     "start": 12.756,
-    "module": "quote-card",
+    "module": "concept-card",
     "change": "swap",
     "text": "On a long document reading test,"
    },
@@ -135,7 +135,7 @@
    {
     "shot": "short-1-sh5",
     "start": 37.738,
-    "module": "quote-card",
+    "module": "concept-card",
     "change": "swap",
     "text": "up on long tasks and long documents,"
    },
@@ -431,7 +431,7 @@
    {
     "shot": "short-3-sh6",
     "start": 38.089,
-    "module": "feed-frame",
+    "module": "concept-card",
     "change": "enter",
     "text": "The system card says the run used"
    },

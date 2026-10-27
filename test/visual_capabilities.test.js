@@ -9,8 +9,8 @@ const BEAT = {
   text: "Training compute grew from 40 percent to 3.2 billion dollars across France, Japan and Brazil in 2024 and 2025.",
   headline: "Compute grew tenfold",
   label: "of the budget",
-  facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"] },
-  evidence: { claim: "c1", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, capture: { out: "assets/evidence/x.mp4" } }
+  facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },
+  evidence: { claim: "c1", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" } }
 };
 
 test("capabilities: every kind has a module and every planned module falls back to a registered one", () => {
@@ -42,6 +42,14 @@ test("capabilities: number modules never invent a number", () => {
   for (const id of ["stat-card", "count-up", "odometer", "percent-fill", "unit-grid", "pie-chart", "number-line", "bar-chart", "leaderboard", "gauge-compare", "comparison-table"]) assert.equal(capabilityParams(id, bare), null, id);
   assert.equal(capabilityParams("bar-chart", SERIES).data.length, 4);
   assert.deepEqual(capabilityParams("gauge-compare", SERIES).left, { label: "Old", value: 39, unit: "%", color: "primary" });
+});
+
+test("capabilities: narration is never dressed as a quote, a post or a sourced excerpt", () => {
+  const plain = { id: "b3", text: "On a long document reading test, it leads.", headline: "Long document test", facts: { numbers: [], dates: [], items: [] } };
+  for (const id of ["quote-card", "feed-frame", "excerpt", "proof-wall"]) assert.equal(capabilityParams(id, plain), null, id);
+  const quoted = { ...plain, evidence: { claim: "c", source: { url: "https://x.example", title: "Lab report" }, quote: "71% on long-document QA" } };
+  assert.equal(capabilityParams("quote-card", quoted).quote, "71% on long-document QA");
+  assert.equal(capabilityParams("quote-card", quoted).author, "Lab report");
 });
 
 test("capabilities: every params builder resolves in 16:9 and 9:16", () => {

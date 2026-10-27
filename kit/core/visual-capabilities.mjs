@@ -223,10 +223,11 @@ const BUILDERS = {
   'icon-grid': (beat) => { const items = itemsOf(beat, 4, 6); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' } : null; },
   'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
   'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
-  'quote-card': (beat) => ({ quote: clip(beat.facts?.quote ?? beat.text, 90), author: clip(beat.evidence?.source?.title ?? beat.speaker ?? 'From the source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) }),
-  'feed-frame': (beat) => ({ handle: clip(beat.facts?.handle ?? '@source', 20), caption: clip(beat.headline, 26) }),
-  'proof-wall': (beat) => !itemsOf(beat, 3, 4) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
-  'excerpt': (beat) => ({ type: 'text', title: clip(beat.evidence?.source?.title ?? beat.headline, 40), source: clip(sourceOf(beat) ?? 'Source', 40), lines: excerptLines(beat) }),
+  // Quotes, posts and excerpts show only words someone said or wrote: a quote in the clause, or the source's own quote. Narration is never dressed as a quote.
+  'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.facts?.quote ? beat.speaker ?? beat.evidence?.source?.title ?? 'Quoted' : beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
+  'feed-frame': (beat) => (beat.facts?.handle ? { handle: clip(beat.facts.handle, 20), caption: clip(beat.headline, 26) } : null),
+  'proof-wall': (beat) => !itemsOf(beat, 3, 4) || !sourceOf(beat) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
+  'excerpt': (beat) => (quoteOf(beat) && sourceOf(beat) ? { type: 'text', title: clip(beat.evidence.source.title ?? beat.headline, 40), source: clip(sourceOf(beat), 40), lines: excerptLines(beat) } : null),
   'code-snippet': (beat) => ({ title: clip(beat.headline, 32), code: { language: 'text', typing: true, lines: keyTerms(beat.text).slice(0, 3).map((text, i) => ({ at: round(0.5 + i * 0.9), typeDuration: 0.7, tokens: [{ text: clip(text, 24), type: i ? 'string' : 'keyword' }] })) } }),
   'window-chrome': (beat) => ({ title: clip(beat.evidence?.source?.title ?? 'terminal', 30), lines: excerptLines(beat).map((line) => (typeof line === 'string' ? line : line.text)), caption: clip(beat.headline, 36), variant: 'mac' }),
   'media-window': (beat) => ({ title: clip(beat.evidence?.source?.title ?? beat.headline, 54), media: { kind: 'video', src: beat.evidence?.capture?.out } }),
@@ -263,8 +264,12 @@ function timelineSteps(beat) {
   return (dates.length >= 2 ? dates : itemsOf(beat, 3, 3) ?? []).slice(0, 4).map((label) => clip(label, 14));
 }
 
+function quoteOf(beat) {
+  return beat.facts?.quote ?? beat.evidence?.quote ?? null;
+}
+
 function excerptLines(beat) {
-  const text = beat.evidence?.quote ?? beat.facts?.quote ?? beat.text;
+  const text = quoteOf(beat) ?? beat.text;
   const words = String(text).split(/\s+/);
   const lines = [];
   for (let i = 0; i < words.length && lines.length < 3; i += 6) lines.push(words.slice(i, i + 6).join(' '));

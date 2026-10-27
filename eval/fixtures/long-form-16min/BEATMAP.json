@@ -119,14 +119,14 @@
        "intent": "claim",
        "kind": "documents",
        "capability": "paper-stack",
-       "module": "quote-card",
+       "module": "concept-card",
        "fallback": true,
        "change": "swap",
        "params": {
-        "quote": "There was a blog post, a forty page system card,",
-        "author": "From the source"
+        "text": "Blog post forty",
+        "icon": "database"
        },
-       "why": "documents: paper-stack (→ quote-card until paper-stack is registered)"
+       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-4",
@@ -189,12 +189,13 @@
        "intent": "number",
        "kind": "social",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "quote-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "handle": "@source",
-        "caption": "Within six hours"
+        "quote": "Shared 90,412 times",
+        "author": "Northlight Labs on Social",
+        "role": "2026-03-10"
        },
        "evidence": {
         "claim": "c-shares",
@@ -213,7 +214,7 @@
          "out": "assets/evidence/halcyon-2-post.mp4"
         }
        },
-       "why": "social (evidence c-shares, capture halcyon-2-post): social-post (→ feed-frame until social-post is registered)"
+       "why": "social (evidence c-shares, capture halcyon-2-post): social-post (→ quote-card until social-post is registered)"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh2-2",
@@ -839,12 +840,13 @@
        "intent": "number",
        "kind": "social",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "quote-card",
        "fallback": true,
        "change": "swap",
        "params": {
-        "handle": "@source",
-        "caption": "Version descended before"
+        "quote": "2.1M views",
+        "author": "Side-by-side clip",
+        "role": "2026-03-11"
        },
        "evidence": {
         "claim": "c-clip",
@@ -863,7 +865,7 @@
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ feed-frame until social-post is registered)"
+       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ quote-card until social-post is registered)"
       }
      ]
     },
@@ -1302,14 +1304,14 @@
        "intent": "claim",
        "kind": "documents",
        "capability": "paper-stack",
-       "module": "quote-card",
+       "module": "concept-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "quote": "and the cold climate makes cooling easier. The system card",
-        "author": "From the source"
+        "text": "Cold climate makes",
+        "icon": "key"
        },
-       "why": "documents: paper-stack (→ quote-card until paper-stack is registered)"
+       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
       },
       {
        "id": "inside-the-training-run-1-sh3-2",
@@ -1323,12 +1325,13 @@
        "intent": "quote",
        "kind": "quote",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "quote-card",
        "fallback": true,
        "change": "swap",
        "params": {
-        "handle": "@source",
-        "caption": "Says run used"
+        "quote": "approximately 120 GWh",
+        "author": "Halcyon 2 system card",
+        "role": "2026-03-10"
        },
        "evidence": {
         "claim": "c-energy",
@@ -1342,7 +1345,7 @@
         },
         "quote": "approximately 120 GWh"
        },
-       "why": "quote (evidence c-energy): social-post (→ feed-frame until social-post is registered)"
+       "why": "quote (evidence c-energy): social-post (→ quote-card until social-post is registered)"
       },
       {
        "id": "inside-the-training-run-1-sh3-3",
@@ -1848,14 +1851,14 @@
        "intent": "claim",
        "kind": "documents",
        "capability": "paper-stack",
-       "module": "quote-card",
+       "module": "concept-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "quote": "The system card fills in some of the detail.",
-        "author": "From the source"
+        "text": "System card fills",
+        "icon": "cpu"
        },
-       "why": "documents: paper-stack (→ quote-card until paper-stack is registered)"
+       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
       },
       {
        "id": "what-northlight-actually-announced-1-sh3-2",
@@ -2521,12 +2524,13 @@
        "intent": "claim",
        "kind": "social",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "quote-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "handle": "@source",
-        "caption": "Another developer posted"
+        "quote": "2.1M views",
+        "author": "Side-by-side clip",
+        "role": "2026-03-11"
        },
        "evidence": {
         "claim": "c-clip",
@@ -2545,7 +2549,7 @@
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ feed-frame until social-post is registered)"
+       "why": "social (evidence c-clip, capture side-by-side-clip): social-post (→ quote-card until social-post is registered)"
       },
       {
        "id": "why-speed-changed-everything-1-sh4-2",
@@ -2994,14 +2998,14 @@
        "intent": "claim",
        "kind": "documents",
        "capability": "paper-stack",
-       "module": "quote-card",
+       "module": "concept-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "quote": "That is a real improvement. The harder test asks the model to connect two facts that are…",
-        "author": "From the source"
+        "text": "Real improvement harder",
+        "icon": "scale"
        },
-       "why": "documents: paper-stack (→ quote-card until paper-stack is registered)"
+       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
       },
       {
        "id": "the-context-window-doubled-1-sh4-2",
@@ -3277,14 +3281,14 @@
        "intent": "quote",
        "kind": "quote",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "concept-card",
        "fallback": true,
        "change": "swap",
        "params": {
-        "handle": "@source",
-        "caption": "Northlight says mostly"
+        "text": "Northlight says mostly",
+        "icon": "cpu"
        },
-       "why": "quote: social-post (→ feed-frame until social-post is registered)"
+       "why": "quote: social-post (→ concept-card until social-post is registered)"
       }
      ]
     },
@@ -3648,14 +3652,14 @@
        "intent": "claim",
        "kind": "documents",
        "capability": "paper-stack",
-       "module": "quote-card",
+       "module": "concept-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "quote": "On the open software engineering test that most labs report,",
-        "author": "From the source"
+        "text": "Open software engineering",
+        "icon": "search"
        },
-       "why": "documents: paper-stack (→ quote-card until paper-stack is registered)"
+       "why": "documents: paper-stack (→ concept-card until paper-stack is registered)"
       },
       {
        "id": "reading-the-benchmarks-honestly-1-sh2-2",
@@ -4232,14 +4236,14 @@
        "intent": "claim",
        "kind": "social",
        "capability": "social-post",
-       "module": "feed-frame",
+       "module": "concept-card",
        "fallback": true,
        "change": "enter",
        "params": {
-        "handle": "@source",
-        "caption": "Camp posted demos"
+        "text": "Camp posted demos",
+        "icon": "gauge"
        },
-       "why": "social: social-post (→ feed-frame until social-post is registered)"
+       "why": "social: social-post (→ concept-card until social-post is registered)"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh3-2",
@@ -4282,15 +4286,15 @@
        "text": "The other camp posted failures: confident wrong answers, invented citations,",
        "intent": "claim",
        "kind": "social",
-       "capability": "social-stack",
-       "module": "quote-card",
+       "capability": "social-post",
+       "module": "concept-card",
        "fallback": true,
        "change": "swap",
        "params": {
-        "quote": "The other camp posted failures: confident wrong answers, invented citations,",
-        "author": "From the source"
+        "text": "Other camp posted",
+        "icon": "scale"
        },
-       "why": "social: social-stack (→ quote-card until social-stack is registered)"
+       "why": "social: social-post (→ concept-card until social-post is registered)"
       },
       {
        "id": "what-developers-found-in-week-one-1-sh3-4",
@@ -5835,7 +5839,7 @@
    ],
    "history": {
     "recent": [
-     "feed-frame",
+     "quote-card",
      "odometer",
      "glass-word",
      "motion-title",
@@ -5847,9 +5851,9 @@
     "counts": {
      "timeline": 1,
      "icon-row": 4,
-     "quote-card": 1,
+     "concept-card": 1,
      "window-chrome": 1,
-     "feed-frame": 1,
+     "quote-card": 1,
      "odometer": 1,
      "glass-word": 1,
      "motion-title": 1,
@@ -5878,7 +5882,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "f2f1c78a3e8e0470",
+   "key": "2db711d016ae9f2a",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5890,7 +5894,7 @@
      "timeline",
      "map-highlight",
      "icon-row",
-     "feed-frame",
+     "quote-card",
      "media-window",
      "motion-title",
      "timeline",
@@ -5899,9 +5903,9 @@
     "counts": {
      "timeline": 6,
      "icon-row": 5,
-     "quote-card": 1,
+     "concept-card": 1,
      "window-chrome": 1,
-     "feed-frame": 2,
+     "quote-card": 2,
      "odometer": 1,
      "glass-word": 2,
      "motion-title": 3,
@@ -5941,7 +5945,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "db11a325041fc0a3",
+   "key": "cce7698b718ec5dd",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5951,8 +5955,8 @@
    "history": {
     "recent": [
      "kinetic-words",
+     "concept-card",
      "quote-card",
-     "feed-frame",
      "process-steps",
      "icon-grid",
      "percent-fill",
@@ -5962,9 +5966,9 @@
     "counts": {
      "timeline": 6,
      "icon-row": 8,
-     "quote-card": 2,
+     "concept-card": 3,
      "window-chrome": 1,
-     "feed-frame": 3,
+     "quote-card": 3,
      "odometer": 1,
      "glass-word": 3,
      "motion-title": 4,
@@ -5976,7 +5980,6 @@
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 1,
-     "concept-card": 1,
      "process-steps": 1,
      "percent-fill": 1
     },
@@ -6015,7 +6018,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "32ebced143b41773",
+   "key": "ee806388b77a36b2",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -6026,7 +6029,7 @@
     "recent": [
      "glass-word",
      "icon-row",
-     "quote-card",
+     "concept-card",
      "media-window",
      "kinetic-words",
      "icon-grid",
@@ -6036,9 +6039,9 @@
     "counts": {
      "timeline": 6,
      "icon-row": 9,
-     "quote-card": 3,
+     "concept-card": 4,
      "window-chrome": 1,
-     "feed-frame": 3,
+     "quote-card": 3,
      "odometer": 1,
      "glass-word": 4,
      "motion-title": 5,
@@ -6050,7 +6053,6 @@
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 2,
-     "concept-card": 1,
      "process-steps": 1,
      "percent-fill": 2,
      "unit-grid": 1
@@ -6095,7 +6097,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "5dbb18609179fbf2",
+   "key": "9763f4d8e54a780e",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6108,7 +6110,7 @@
      "process-steps",
      "process-steps",
      "stat-card",
-     "feed-frame",
+     "quote-card",
      "icon-row",
      "odometer",
      "glass-word"
@@ -6116,9 +6118,9 @@
     "counts": {
      "timeline": 7,
      "icon-row": 11,
-     "quote-card": 3,
+     "concept-card": 4,
      "window-chrome": 1,
-     "feed-frame": 4,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 6,
      "motion-title": 6,
@@ -6130,7 +6132,6 @@
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
-     "concept-card": 1,
      "process-steps": 4,
      "percent-fill": 2,
      "unit-grid": 1,
@@ -6181,7 +6182,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "d2d0f70536f9f5a7",
+   "key": "b6dba6e63f3ec230",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6194,7 +6195,7 @@
      "timeline",
      "excerpt",
      "media-window",
-     "quote-card",
+     "concept-card",
      "percent-fill",
      "icon-row",
      "icon-row"
@@ -6202,9 +6203,9 @@
     "counts": {
      "timeline": 10,
      "icon-row": 13,
-     "quote-card": 4,
+     "concept-card": 5,
      "window-chrome": 1,
-     "feed-frame": 4,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 6,
      "motion-title": 7,
@@ -6216,7 +6217,6 @@
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
-     "concept-card": 1,
      "process-steps": 4,
      "percent-fill": 3,
      "unit-grid": 1,
@@ -6273,7 +6273,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "4239d13cf9a0a086",
+   "key": "4cb61a26da0063e0",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6282,7 +6282,7 @@
    ],
    "history": {
     "recent": [
-     "feed-frame",
+     "concept-card",
      "kinetic-words",
      "icon-row",
      "icon-row",
@@ -6294,9 +6294,9 @@
     "counts": {
      "timeline": 10,
      "icon-row": 16,
-     "quote-card": 4,
+     "concept-card": 9,
      "window-chrome": 1,
-     "feed-frame": 5,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 7,
      "motion-title": 8,
@@ -6308,7 +6308,6 @@
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 4,
-     "concept-card": 4,
      "process-steps": 4,
      "percent-fill": 4,
      "unit-grid": 1,
@@ -6370,7 +6369,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "1792d9adc0fe2a77",
+   "key": "d10865daf5f91d74",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6391,9 +6390,9 @@
     "counts": {
      "timeline": 10,
      "icon-row": 17,
-     "quote-card": 5,
+     "concept-card": 11,
      "window-chrome": 1,
-     "feed-frame": 5,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 9,
      "motion-title": 10,
@@ -6405,7 +6404,6 @@
      "stat-card": 3,
      "count-up": 1,
      "bar-chart": 5,
-     "concept-card": 5,
      "process-steps": 4,
      "percent-fill": 5,
      "unit-grid": 2,
@@ -6473,7 +6471,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "4308fc0dedad4f13",
+   "key": "cf0080e2600413e0",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6484,9 +6482,9 @@
     "recent": [
      "excerpt",
      "glass-word",
-     "feed-frame",
+     "concept-card",
      "process-steps",
-     "quote-card",
+     "concept-card",
      "stat-card",
      "motion-title",
      "icon-row"
@@ -6494,9 +6492,9 @@
     "counts": {
      "timeline": 10,
      "icon-row": 20,
-     "quote-card": 6,
+     "concept-card": 13,
      "window-chrome": 3,
-     "feed-frame": 6,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 10,
      "motion-title": 11,
@@ -6508,7 +6506,6 @@
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
-     "concept-card": 5,
      "process-steps": 5,
      "percent-fill": 5,
      "unit-grid": 2,
@@ -6582,7 +6579,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "31cdd02ffc27e285",
+   "key": "0c846227f619a209",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6603,9 +6600,9 @@
     "counts": {
      "timeline": 13,
      "icon-row": 23,
-     "quote-card": 6,
+     "concept-card": 14,
      "window-chrome": 3,
-     "feed-frame": 6,
+     "quote-card": 4,
      "odometer": 2,
      "glass-word": 11,
      "motion-title": 11,
@@ -6617,7 +6614,6 @@
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
-     "concept-card": 6,
      "process-steps": 5,
      "percent-fill": 6,
      "unit-grid": 3,
@@ -6696,7 +6692,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "14a4ae965ccabfa4",
+   "key": "80f049ef13338381",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6717,9 +6713,9 @@
     "counts": {
      "timeline": 14,
      "icon-row": 23,
-     "quote-card": 6,
+     "concept-card": 15,
      "window-chrome": 3,
-     "feed-frame": 6,
+     "quote-card": 4,
      "odometer": 3,
      "glass-word": 12,
      "motion-title": 12,
@@ -6731,7 +6727,6 @@
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
-     "concept-card": 7,
      "process-steps": 8,
      "percent-fill": 7,
      "unit-grid": 3,
@@ -6815,7 +6810,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "4b1eda63c331af89",
+   "key": "a4d7c21874edf682",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6836,9 +6831,9 @@
     "counts": {
      "timeline": 14,
      "icon-row": 24,
-     "quote-card": 6,
+     "concept-card": 17,
      "window-chrome": 3,
-     "feed-frame": 6,
+     "quote-card": 4,
      "odometer": 3,
      "glass-word": 13,
      "motion-title": 14,
@@ -6850,7 +6845,6 @@
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
-     "concept-card": 9,
      "process-steps": 9,
      "percent-fill": 7,
      "unit-grid": 3,
@@ -7020,11 +7014,15 @@
    }
   },
   "variety": {
-   "modules": 23,
+   "modules": 22,
    "top": [
     {
      "id": "icon-row",
      "share": 0.152
+    },
+    {
+     "id": "concept-card",
+     "share": 0.108
     },
     {
      "id": "timeline",
@@ -7036,10 +7034,6 @@
     },
     {
      "id": "glass-word",
-     "share": 0.082
-    },
-    {
-     "id": "kinetic-words",
      "share": 0.082
     }
    ],
@@ -7063,14 +7057,14 @@
     "using": "motion-title"
    },
    {
+    "wanted": "social-post",
+    "states": 7,
+    "using": "feed-frame"
+   },
+   {
     "wanted": "paper-stack",
     "states": 6,
     "using": "excerpt"
-   },
-   {
-    "wanted": "social-post",
-    "states": 6,
-    "using": "feed-frame"
    },
    {
     "wanted": "glass-bars-3d",
@@ -7131,11 +7125,6 @@
     "wanted": "commit-card",
     "states": 1,
     "using": "excerpt"
-   },
-   {
-    "wanted": "social-stack",
-    "states": 1,
-    "using": "quote-card"
    }
   ],
   "chunks": {
