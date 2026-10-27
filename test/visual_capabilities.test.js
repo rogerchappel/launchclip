@@ -22,9 +22,9 @@ test("capabilities: every kind has a module and every planned module falls back 
     assert.ok(known.has(resolved.module), `${entry.id} resolves to ${resolved.module}, which is not registered`);
     if (!entry.planned) assert.ok(known.has(entry.id), `${entry.id} is not planned, so it must be registered`);
   }
-  // Registered later (another session merged first), the planned module is used as is.
-  assert.deepEqual(resolveCapability("social-post", { registered: [...known, "social-post"] }), { module: "social-post", wanted: "social-post", fallback: false, chain: ["social-post"] });
-  assert.equal(resolveCapability("social-post").fallback, true);
+  // Registered, a module is used as is; without it, its fallback chain is walked.
+  assert.deepEqual(resolveCapability("social-post"), { module: "social-post", wanted: "social-post", fallback: false, chain: ["social-post"] });
+  assert.equal(resolveCapability("social-post", { registered: [...known].filter((id) => id !== "social-post") }).fallback, true);
   assert.equal(fallbackChain("glass-bars-3d")[0], "bar-chart");
 });
 

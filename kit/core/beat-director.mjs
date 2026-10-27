@@ -567,7 +567,7 @@ export function beatMapEvents(map) {
 /**
  * The planning report: the cadence gate against the map's format and style,
  * module variety, evidence coverage (claims shown with a sourced visual),
- * fallbacks (planned modules not registered yet) and chunk reuse.
+ * fallbacks (modules without params yet, or not registered) and chunk reuse.
  */
 export function beatMapReport(map, { reused = 0 } = {}) {
   const { events, cuts, duration } = beatMapEvents(map);
@@ -624,7 +624,7 @@ export function beatMapReportText(map) {
   lines.push(`states per shot ${r.shots.states_per_shot.min}–${r.shots.states_per_shot.max} (mean ${r.shots.states_per_shot.mean}); changes ${Object.entries(r.shots.changes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`variety: ${r.variety.modules} modules; top ${r.variety.top.map((entry) => `${entry.id} ${Math.round(entry.share * 100)}%`).join(', ')}; longest same-module run across cuts ${r.variety.longest_same_module_across_cuts}`);
   lines.push(`evidence: ${r.evidence.sourced}/${r.evidence.claims} claims shown with a sourced visual (${r.evidence.coverage === null ? 'n/a' : `${Math.round(r.evidence.coverage * 100)}%`}), ${r.evidence.captures} on a capture`);
-  if (r.fallbacks.length) lines.push(`fallbacks (planned modules not registered yet): ${r.fallbacks.map((entry) => `${entry.wanted}→${entry.using.join('/')} ×${entry.states}`).join(', ')}`);
+  if (r.fallbacks.length) lines.push(`fallbacks (modules without params yet, or not registered): ${r.fallbacks.map((entry) => `${entry.wanted}→${entry.using.join('/')} ×${entry.states}`).join(', ')}`);
   lines.push(`chunks: ${r.chunks.count} (${r.chunks.reused} reused)`);
   return lines.join('\n');
 }

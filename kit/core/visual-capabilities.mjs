@@ -27,9 +27,10 @@ export const CAPTURE_KIND_VISUALS = Object.freeze({ post: 'social', pr: 'pr', co
 const cap = (id, kinds, fallback, extra = {}) => Object.freeze({ id, kinds: Object.freeze(kinds), fallback: Object.freeze(fallback), evidence: Object.freeze(extra.evidence ?? []), ...(extra.wide ? { wide: true } : {}), ...(extra.planned ? { planned: true } : {}) });
 
 // Order inside a kind is preference: the director walks it and skips what the
-// visual history says it has used too often. `planned` capabilities are
-// modules other sessions are adding; `fallback` is walked when one is not
-// registered (and when its params do not resolve).
+// visual history says it has used too often. `planned` marks a module the
+// director has no params builder for yet: it gets the neutral bag below, the
+// story builder rejects it, and `fallback` is walked (as it is when a module
+// is not registered).
 export const CAPABILITIES = Object.freeze([
   // Evidence modules (planned): a real post, PR, commit, diff or page.
   cap('social-post', ['social', 'quote'], ['feed-frame', 'quote-card'], { evidence: ['post'], planned: true }),
