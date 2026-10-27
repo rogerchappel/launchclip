@@ -106,6 +106,23 @@ Each band also sets **words per event**: spoken words per visual event. Long for
 - **Plates.** Each chapter gets a backdrop plate in `kit/core/plates.mjs` terms (`hex-shell`, `silk`, `strands`, `bokeh`, each with a tint). The same plate is never used for two chapters in a row, nor reused among the last three. Each plate also names a `story.background` kind to use until plates are registered.
 - **Never invented.** Number modules get params only from the clause's own numbers. A clause with no number never gets a stat card with a placeholder figure.
 
+## Honesty
+
+The director shows what the research supports, says what the narration says, and nothing else.
+
+- **Unverified claims.** A claim that is unverified (or contradicted) keeps its source line only (`gateEvidence`): no capture, no research data, no quote. It never becomes a quote card, a post, a capture or a hero stat. Its figures appear on an attributed claim card instead: "3×" over "faster than Astra: OpenAI's claim, not verified". The speaker comes from "OpenAI says …" in the clause or the claim.
+- **Quotes.** A quote is the verified source's own supporting quote span, verbatim and prose (`isQuotable`). Never an API record ("GitHub API: …"), a table row ("| … |"), a heading, a list item or code. A quote in the narration ("a 'not found' page") becomes a quote card only when that span says it, and the card credits the source.
+- **Code and terminals.** These show only lines the evidence holds. Kinetic type and title cards show a line the narration says, verbatim (`verbatimHeadline`): a short whole sentence, a full proper name, the stressed end of the sentence or clause, or the phrase the clause opens on. Never stopword-stripped key words ("Surface routine updated", "ENTITY"). A chapter opens on its own title. Lines take turns across motion-title, kinetic-words and concept-card.
+- **Holds.** When a clause says nothing worth setting, the card on screen carries on, as one of these states (`EXTENDS`):
+  - `focus`: a step through its items, for a module with shot states;
+  - `guide`: a guide line the clause draws over a chart ("exactly half");
+  - `hold`: the card simply holds. A hold is no event, and a shot's state limit and the variety share count only the states that change the picture.
+
+  A call to action or a sting is never carried on. `beatMapToStory` turns a hold into a longer scene and a focus or guide into one of its shot states. Only when a hold would push a static run past the format's limit may the clause's own words (two to four, from a content word) carry the next event.
+- **Pointing back.** A clause that points back ("that repository …") is about the claim of the repo or benchmark named last.
+- **Paired figures.** A paired series is titled by what it measures ("Price per million tokens", "Tokens for $10", "Terminal-Bench 4.0"), never a clause fragment. What one budget buys from two options is a grid race of what it buys. A hero figure is labelled by what it measures or who it belongs to.
+- **Code in PRs.** A PR or commit card shows the file whose patch holds the model id the research names (`src/research/evidence_data.js`, `modelIds`), highlighted. It's no longer the PR's first file.
+
 ## Structure
 
 - **Mid-roll calls to action.** `directLongForm(…, {ctas})` takes seconds, or `{at, action, detail, handle}`. The clause under each time becomes a `cta` state, drawn by the `cta` module.
