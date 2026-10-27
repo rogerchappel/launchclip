@@ -1504,6 +1504,43 @@ params:
 events: build, highlight
 variants: glass (default), flat
 
+### date-carousel (keeps captions)
+A row of day cards (month, date, weekday) that lands on one date, then rewinds or fast-forwards under a ◀◀ REWIND sign to another, slowing as it arrives; the focus day lights up with a glowing rim and its event chip ("GPT-6.1 released", "Day 1"), and an optional caption ("where it started") rises under it.
+params:
+- start: "YYYY-MM-DD", the day shown first
+- focus: "YYYY-MM-DD", the day it lands on (within 120 days; earlier rewinds, later fast-forwards)
+- event: {label ≤ 24, sub? ≤ 24, icon?, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)} the chip pinned on the focus day (optional)
+- startEvent: {label, sub?, icon?, tone?} a chip on the start day that clears as the strip moves (optional)
+- caption: string ≤ 40 under the cards after the focus (optional)
+- moveAt: the move: seconds from scene start (optional; else a matching hit, else a default)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, move, focus
+variants: glass (default), flat
+
+### month-grid (keeps captions)
+A month calendar of glass day cells (weekday header, date, "DAY n") whose cells fill one after another across a run of days ("Codex · 28 days"), with marks pinned on given days ("−50% faster", "both") and legend chips under the grid.
+params:
+- from: "YYYY-MM-DD", the run's first day
+- days: integer 1–42, the run's length (the grid shows the whole weeks around it)
+- weekStart: "mon" (default) | "sun"
+- tone: the fill (good | bad | neutral | primary | accent | paper | #rrggbb; default accent)
+- marks: [{day (1–days), label ≤ 16, icon? (shown alone where the label is too wide for the cell), tone?}] up to 8, landing as the fill reaches them
+- legend: [{label ≤ 28, icon?, tone?}] 1–3 chips under the grid (optional; event legend)
+- fillAt: the fill: seconds from scene start (optional; else a matching hit, else a default)
+- legendAt: the legend: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 ("Codex · 28 days")
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, fill, legend
+variants: glass (default), flat
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1647,6 +1684,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
 | small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
+| date-carousel | 2 s | 0.5 s | scene − 0.65 s | the move starts about 0.9 s after at and runs 0.7–2.4 s (longer for more days); the focus lands as the move ends |
+| month-grid | 2 s | 0.5 s | scene − 0.65 s | the grid lands in 0.7 s from at; the fill runs up to 90 ms a day (2.2 s at most); the legend follows the fill |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

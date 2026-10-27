@@ -4,7 +4,9 @@
 // them). Shared pieces are in catalog-i-base.mjs.
 //
 //   data       catalog-i-data.mjs (race-bars, small-multiples)
+//   calendars  catalog-i-calendar.mjs (date-carousel, month-grid)
 
 import {DATA_I} from './catalog-i-data.mjs';
+import {CALENDARS} from './catalog-i-calendar.mjs';
 
-export const EXPLAIN_MODULES = [...DATA_I];
+export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS];
