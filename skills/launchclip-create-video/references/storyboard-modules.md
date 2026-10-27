@@ -98,6 +98,12 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Keep a near-empty stage and add or transform one element per beat rather than cutting to a new card: the belief is a number-line whose ranges light up on their words, the study is a unit-grid that counts in and then splits into its groups (split on the word that names them), the result lands on those groups (bar-chart, gauge-compare or stat-card), stacked fragments ("same program", "12 weeks", "every set to failure") are kinetic-words.
 - No source, no study claim: a study, survey or "researchers found" line needs its citation in the brief or assets. Show it as a source note that stays along the bottom across the data scenes: frame.sources [{text ≤ 90 ("Morton et al., 2016 · J Appl Physiol"), scene | start, until? | end?}] (keep any other frame fields; with no brand frame write frame: {kicker: false, sections: false, sources: [...]}). Every unit-grid or number-line scene sits under a note or sets params.source. Never invent an author, year or journal; without one, cut the claim.
 
+## Long-form look (plates and glass)
+
+- Backdrop plates: plate {kind: hex-shell | silk | strands | bokeh, params?: {focus, intensity, speed, depth 0–1 (speed 0–2), tint: neutral | primary | accent}, cycle?} sets a dark, out-of-focus plate that drifts under every scene; it holds across a chapter and changes at the next (cycle: true walks the kinds per chapter, or set chapters[j].plate). scenes[i].plate overrides one scene ("none" for the story background). Build a chapter as several states over one plate rather than cutting to new backgrounds.
+- Glass: panel {treatment: "rim-glass"} turns every card (stat-card, excerpt, quote-card, …), window-chrome and comparison-table into translucent glass with a cyan (primary) rim and glow. Type stays paper and primary; the accent is for the one brand being discussed.
+- Channel furniture: logo-sting opens and closes (rain, particles or clear); subscribe-cta goes on track 1+ over a card scene for 5–6 s, two or three times in a long video, never over a key figure; channel-watermark goes on the highest track across the main body (decor: scenes pass under it).
+
 ## Footage layouts (sections)
 
 A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section's scenes in its panel.
@@ -149,6 +155,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
+| asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
+| opens or closes a channel's video on its name ("welcome back to …", "see you in the next one"): the channel's glass logo sting, 3–5 s, as the first or last scene | logo-sting |
 | names a claim, a problem or a turn in a few words ("the problem is", "here's the thing", "too slow"): a big word or phrase with an icon and a sub-line (on a card beside the presenter, or full frame) | concept-card |
 | lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word | icon-row |
 | opens a new section or chapter ("part two", "first, the problem", "chapter", "let's start with"): the brand frame's kicker and the section title (usually an insert) | section-card |
@@ -1462,6 +1470,46 @@ params:
 events: build, range-0, range-1, range-2, marker
 variants: ruler (default), track
 
+### logo-sting (hides captions)
+A channel intro or outro: a glass logo tile drops onto a reflective, lit floor in falling rain (or rising particles, or clear air), a shine sweeps it, and the channel name resolves out of a blur with an optional tagline. Hides captions.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3 (default: the name's initials)
+- tagline: string ≤ 48 under the name (optional)
+- at: seconds from the scene start the logo lands (default 0.6)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: logo, name
+variants: rain (default), particles, clear
+
+### subscribe-cta (keeps captions)
+A subscribe prompt for mid-video: a glass pill (avatar, channel name, Subscribe button, bell, like) slides in, a pointer clicks the button, it turns to Subscribed, the bell rings and the like fills, then the pill slides out. Sits above the captions; put it on an overlay track (track 1+) over a scene.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3 (default: the name's initials)
+- label: button text ≤ 14 (default Subscribe)
+- done: after the click ≤ 14 (default Subscribed)
+- position: left | center | right (default center)
+- bell: true | false (default true)
+- like: true | false (default true; false in compact and portrait)
+- at: seconds from the scene start of the click (default 42% of the scene, at least 1.3)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: in, click, bell, out
+variants: pill (default), compact
+
+### channel-watermark (keeps captions)
+A small corner watermark of the channel's mark (glass chip or bare), held at low opacity across the scenes it spans; put it on a high overlay track over the whole video.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3
+- corner: top-right | top-left | bottom-right | bottom-left (default top-right)
+- opacity: 0.3–1 (default 0.7)
+- showName: true | false: the name beside the mark (default false)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+variants: glass (default), bare
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1603,6 +1651,9 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| logo-sting | 2 s | 0.5 s | scene − 0.65 s | — |
+| subscribe-cta | 2 s | 0.5 s | scene − 0.65 s | — |
+| channel-watermark | 2 s | 0.5 s | scene − 0.65 s | — |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

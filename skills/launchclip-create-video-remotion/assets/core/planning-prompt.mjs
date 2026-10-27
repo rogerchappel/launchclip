@@ -94,6 +94,9 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'photo-scene', lanes: ['motion', 'voiceover-motion'], when: 'sets a scene or mood with a real photo or clip (assets/… image or video, full bleed)', patterns: ['\\b(picture|imagine|out (in|on) the|on location|at the|scene|landscape|outdoors?|in the field)\\b'] },
   { module: 'brand-lockup', when: 'names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card)', patterns: ['\\b(introducing|meet|presenting)\\b', '\\b(app store|google play|download (it|now|today))\\b'] },
   { module: 'cta', when: 'calls to action, or the loop ending', patterns: ['\\b(follow|subscribe|try it|get started|star|download|sign up|learn more|link in bio)\\b'] },
+  // Channel furniture: the subscribe prompt mid-video and the channel's sting at the open and close.
+  { module: 'subscribe-cta', when: 'asks the viewer to subscribe, like or ring the bell partway through a long video ("if you\'re new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word', patterns: ['\\bsubscribe\\b', '\\b(hit|smash|tap) (the|that) (like|bell|subscribe)', '\\bnotification bell\\b'] },
+  { module: 'logo-sting', when: 'opens or closes a channel\'s video on its name ("welcome back to …", "see you in the next one"): the channel\'s glass logo sting, 3–5 s, as the first or last scene', patterns: ['\\bwelcome (back )?to\\b', '\\bsee you (in the )?next (one|video|time)\\b', '\\bthanks for watching\\b'] },
   { module: 'concept-card', intents: ['claim', 'problem', 'turn'], when: 'names a claim, a problem or a turn in a few words ("the problem is", "here\'s the thing", "too slow"): a big word or phrase with an icon and a sub-line (on a card beside the presenter, or full frame)', patterns: ['\\bthe (problem|secret|catch|trick|key|point) is\\b', '\\b(here\'s the thing|the truth is|bottom line|the real reason)\\b', '\\btoo (slow|hard|expensive|complex|long)\\b'] },
   { module: 'icon-row', intents: ['list', 'process'], when: 'lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word', patterns: ['\\w[^,.;]{0,24}, \\w[^,.;]{0,24},? (and|or) \\w', '\\b(two|three|four|five|2|3|4|5) (things|ways|reasons|features|tools|steps|parts)\\b'] },
   { module: 'section-card', intents: [], when: 'opens a new section or chapter ("part two", "first, the problem", "chapter", "let\'s start with"): the brand frame\'s kicker and the section title (usually an insert)', patterns: ['\\b(part|chapter|section) (one|two|three|four|five|\\d+)\\b', '\\b(let\'s start with|first up|moving on|next up)\\b'] },
@@ -378,6 +381,16 @@ function captionLines(lane) {
     `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
+  ];
+}
+
+// The long-form explainer look (VISUAL_GAP_MAP C1, D5, C5): one blurred
+// plate per chapter, glass panels, and the channel's furniture.
+export function glassLookLines() {
+  return [
+    'Backdrop plates: plate {kind: hex-shell | silk | strands | bokeh, params?: {focus, intensity, speed, depth 0–1 (speed 0–2), tint: neutral | primary | accent}, cycle?} sets a dark, out-of-focus plate that drifts under every scene; it holds across a chapter and changes at the next (cycle: true walks the kinds per chapter, or set chapters[j].plate). scenes[i].plate overrides one scene ("none" for the story background). Build a chapter as several states over one plate rather than cutting to new backgrounds.',
+    'Glass: panel {treatment: "rim-glass"} turns every card (stat-card, excerpt, quote-card, …), window-chrome and comparison-table into translucent glass with a cyan (primary) rim and glow. Type stays paper and primary; the accent is for the one brand being discussed.',
+    'Channel furniture: logo-sting opens and closes (rain, particles or clear); subscribe-cta goes on track 1+ over a card scene for 5–6 s, two or three times in a long video, never over a key figure; channel-watermark goes on the highest track across the main body (decor: scenes pass under it).'
   ];
 }
 
@@ -766,6 +779,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -861,6 +875,7 @@ export function storyboardModulesReference() {
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
+    ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
