@@ -328,7 +328,7 @@ export function focusRingStyle(rect, {color, unit = 1, pad = 12}) {
 
 /**
  * The travelling focus ring, for any module drawn from a view tree and an op
- * list. steps: [{at, rect: {x, y, width, height} | null, dim?: [ids]}] in the
+ * list. steps: [{at, rect: {x, y, width, height} | null, dim?: [ids], dimTo?}] in the
  * coordinates of the node the rings are inserted into; rect null hides the
  * ring. → {nodes (insert after the targets, so the ring draws on top),
  * apply(ops)}: apply appends the ring's travel and the dims, reading current
@@ -364,18 +364,19 @@ export function focusDevice({id, steps, color, unit = 1, dimTo = FOCUS_DIM, star
         shown = ring;
       }
       // Dims: restore what leaves the set, dim what joins it.
-      const want = new Set(step.rect && dimTo !== false ? step.dim ?? [] : []);
+      const level = step.dimTo ?? dimTo;
+      const want = new Set(step.rect && level !== false ? step.dim ?? [] : []);
       const state = frameState(ops, T);
       for (const [target, base] of [...dimmed]) {
         if (want.has(target)) continue;
-        const now = state.get(target)?.opacity ?? base * dimTo;
+        const now = state.get(target)?.opacity ?? base;
         ops.push({type: 'tween', target, start: T, duration: 0.35, ease: 'power1.out', from: {opacity: now}, to: {opacity: base}});
         dimmed.delete(target);
       }
       for (const target of want) {
         if (dimmed.has(target)) continue;
         const base = state.get(target)?.opacity ?? 1;
-        ops.push({type: 'tween', target, start: T, duration: 0.35, ease: 'power1.out', from: {opacity: base}, to: {opacity: r2(base * dimTo)}});
+        ops.push({type: 'tween', target, start: T, duration: 0.35, ease: 'power1.out', from: {opacity: base}, to: {opacity: r2(base * level)}});
         dimmed.set(target, base);
       }
     });
@@ -437,9 +438,9 @@ function statePlan(model, children, view) {
     if (f) focus = {rect: rectOf(f.entries, state.index), dim: f.siblings.map(entry => entry.id)};
     else if (state.set.focus === null) focus = null;
     else if (!focus) continue;
-    steps.push({at: state.at, rect: focus?.rect ?? null, dim: focus?.dim ?? []});
+    steps.push({at: state.at, rect: focus?.rect ?? null, dim: focus?.dim ?? [], dimTo});
   }
-  const device = focusDevice({id: model.id, steps, color, unit: u, dimTo, start: model.start});
+  const device = focusDevice({id: model.id, steps, color, unit: u, start: model.start});
 
   // Glows, guides and notes: built hidden, shown at their state, cleared by a later clear.
   const overlays = [];
@@ -493,7 +494,9 @@ function statePlan(model, children, view) {
       const nid = `${model.id}-ss-note-${k}`;
       const padX = r2(16 * u), h = r2(textSize * 1.2 + 14 * u), w = r2(textWidth(state.set.note.text, textSize, 'body') + padX * 2);
       const above = (state.set.note.side ?? 'above') === 'above' ? rect.y - h - 14 * u >= 0 || rect.y + rect.height + h + 14 * u > H : false;
-      const x = r2(Math.min(Math.max(0, rect.x + rect.width / 2 - w / 2), Math.max(0, W - w)));
+      // A wide target (a table row) takes the chip at its right end, clear of its cells' text.
+      const anchorX = rect.width > w * 3 ? rect.x + rect.width - w : rect.x + rect.width / 2 - w / 2;
+      const x = r2(Math.min(Math.max(0, anchorX), Math.max(0, W - w)));
       const y = r2(above ? Math.max(0, rect.y - h - 14 * u) : Math.min(H - h, rect.y + rect.height + 14 * u));
       overlays.push({node: el('div', nid, abs(x, y, w, h, {boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: r2(h / 2), background: color, color: ink, fontFamily: model.fonts?.body, fontSize: textSize, fontWeight: 700, lineHeight: '1.2', whiteSpace: 'nowrap', opacity: 0, transformOrigin: '50% 50%'}), [state.set.note.text]),
         ops: ops => { ops.push({type: 'set', target: nid, time: model.start, props: {opacity: 0, scaleX: 0.8, scaleY: 0.8}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.25, ease: 'power1.out', from: {opacity: 0}, to: {opacity: 1}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.45, ease: 'back.out(2)', from: {scaleX: 0.8, scaleY: 0.8}, to: {scaleX: 1, scaleY: 1}}); }});

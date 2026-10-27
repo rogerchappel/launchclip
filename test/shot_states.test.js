@@ -170,3 +170,10 @@ test('each state is a module event with a soft cue', () => {
   assert.deepEqual(events.map(event => [event.name, event.time, event.cue]), [['state-1', 3, 'hit-soft'], ['state-2', 6, 'hit-soft']]);
   assert.ok(H_EMITTERS['bar-chart'](m).events.some(event => event.name === 'state-2'));
 });
+
+test('dim: false on a later state stops dimming from then on, not before', () => {
+  const m = model(barScene([{at: 3, set: {focus: 1}}, {at: 6, set: {focus: [0, 1], dim: false}}]));
+  const ops = catalogHTimeline(m);
+  assert.equal(frameState(ops, 4).get('cost-bar-0').opacity, FOCUS_DIM);
+  assert.equal(frameState(ops, 7).get('cost-bar-0').opacity, 1);
+});
