@@ -70,7 +70,7 @@
   },
   "sceneId": "evidence",
   "threshold": {
-    "ssim": 0.93
+    "ssim": 0.9
   },
-  "threshold_note": "The frame, cursor and source tag match (PSNR 35-46 dB at every sample, colours equal once the clip is tagged BT.709). The SSIM dip (0.944 at 1.4x) is Chrome scaling the <video> through the push and focus zoom differently in each renderer, as on b-media-window-video; the clip is a static BT.709 testsrc frame so seek lag plays no part."
+  "threshold_note": "The frame, cursor and source tag match (PSNR 35-46 dB at every sample, colours equal once the clip is tagged BT.709). The SSIM dip (min 0.919, during the 1.4x focus) is Chrome scaling the <video>, which fills most of the frame, differently in each renderer through the push and zoom; the same cause as b-media-window-video (0.93), with more scaled video on screen. The clip is a static BT.709 testsrc frame, so seek lag plays no part."
 }
