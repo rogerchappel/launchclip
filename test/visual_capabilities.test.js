@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { CAPABILITIES, VISUAL_KINDS, capabilitiesFor, capabilityParams, fallbackChain, hasParamsBuilder, resolveCapability } from "../kit/core/visual-capabilities.mjs";
+import { knownModules, resolveModule } from "../kit/core/modules.mjs";
+
+const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
+const BEAT = {
+  id: "b1",
+  text: "Training compute grew from 40 percent to 3.2 billion dollars across France, Japan and Brazil in 2024 and 2025.",
+  headline: "Compute grew tenfold",
+  label: "of the budget",
+  facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"] },
+  evidence: { claim: "c1", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, capture: { out: "assets/evidence/x.mp4" } }
+};
+
+test("capabilities: every kind has a module and every planned module falls back to a registered one", () => {
+  const known = new Set(knownModules());
+  for (const kind of VISUAL_KINDS) assert.ok(capabilitiesFor(kind).length, `no capability shows "${kind}"`);
+  for (const entry of CAPABILITIES) {
+    const resolved = resolveCapability(entry.id);
+    assert.ok(known.has(resolved.module), `${entry.id} resolves to ${resolved.module}, which is not registered`);
+    if (!entry.planned) assert.ok(known.has(entry.id), `${entry.id} is not planned, so it must be registered`);
+  }
+  // Registered later (another session merged first), the planned module is used as is.
+  assert.deepEqual(resolveCapability("social-post", { registered: [...known, "social-post"] }), { module: "social-post", wanted: "social-post", fallback: false, chain: ["social-post"] });
+  assert.equal(resolveCapability("social-post").fallback, true);
+  assert.equal(fallbackChain("glass-bars-3d")[0], "bar-chart");
+});
+
+test("capabilities: evidence leads, and portrait drops wide-only modules", () => {
+  assert.equal(capabilitiesFor("quote", { evidence: "post" })[0], "social-post");
+  assert.equal(capabilitiesFor("concept", { evidence: "pr" })[0], "repo-pr-card");
+  assert.ok(capabilitiesFor("compare").includes("comparison-table"));
+  assert.ok(!capabilitiesFor("compare", { wide: false }).includes("comparison-table"));
+});
+
+test("capabilities: every params builder resolves in 16:9 and 9:16", () => {
+  for (const [width, height] of [[1920, 1080], [1080, 1920]]) {
+    const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 } };
+    for (const id of [...CAPABILITIES.map((entry) => entry.id), "feed-frame", "proof-wall"]) {
+      if (!hasParamsBuilder(id)) { assert.ok(CAPABILITIES.find((entry) => entry.id === id)?.planned, `${id} has no params builder`); continue; }
+      const scene = { id: "s", module: id, start: 1, end: 5, params: capabilityParams(id, BEAT) };
+      assert.doesNotThrow(() => resolveModule(scene, { ...story, scenes: [scene] }), `${id} at ${width}x${height}`);
+    }
+  }
+  // A planned module gets a neutral bag of facts.
+  assert.deepEqual(Object.keys(capabilityParams("coin-stack", BEAT)).sort(), ["evidence", "text", "title", "values"]);
+});
