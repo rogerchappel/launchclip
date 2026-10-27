@@ -90,6 +90,15 @@ The rules, all enforced by `validateLedger`:
   shares enough of its words; a quote must appear verbatim (case and
   punctuation aside). That passage is the quote span. A date may match the
   source's own publish date. A verified claim always has a supporting quote.
+- **The passage must name what the claim names**: every benchmark it
+  mentions, and every other entity but one when it names three or more
+  (one-word fragments such as "Flash" aside). In a table row a model counts
+  when a column is headed by it. A release date on a page about the model
+  does not verify a launch date on another product.
+- **Units must agree**: a multiple or a currency needs the same unit in the
+  source ("9x" is not the 9 in "July 9", "$1" is not a bare 1); a percentage
+  may match a bare table figure. Versions inside model and benchmark names
+  ("Claude Opus 5.5", "Terminal-Bench 4.0") are never quantities.
 - **In a table, a number belongs to a model**: the model named right before it
   with "at", "'s", "(" or ":", else the sentence's subject. The number must sit
   in that model's column. "X beats Y with 51.8", where 51.8 is Y's score, is
