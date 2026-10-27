@@ -228,7 +228,8 @@ const contentSet = (text) => new Set(keyTerms(text).map((word) => word.toLowerCa
 
 /**
  * The best claim in the research ledger (launchclip.evidence.v1) for a
- * clause, and the capture (launchclip.capture.v1) that shows it: the claim
+ * clause, and the capture (launchclip.capture.v1) that shows it (claim.capture,
+ * as src/research writes it, then capture.claim(s), then a source URL): the claim
  * whose content words and numbers overlap the clause most, at least 0.3.
  * Contradicted claims never match. → {claim, status, kind, source, quote?,
  * capture?: {id, kind, out}} | null
@@ -256,7 +257,9 @@ export function matchEvidence(beat, { ledger = null, captures = [] } = {}) {
   const claim = best.claim;
   const source = (claim.sources ?? []).filter((entry) => entry?.supports !== false).sort((a, b) => Number(b.primary) - Number(a.primary) || (b.confidence ?? 0) - (a.confidence ?? 0))[0] ?? null;
   const urls = new Set((claim.sources ?? []).map((entry) => entry?.url).filter(Boolean));
-  const capture = captures.find((entry) => entry?.claim === claim.id || (Array.isArray(entry?.claims) && entry.claims.includes(claim.id)))
+  // The research stage writes claim.capture (the capture's id); a capture may also name its claims, or share a source URL.
+  const capture = (claim.capture ? captures.find((entry) => entry?.id === claim.capture) : null)
+    ?? captures.find((entry) => entry?.claim === claim.id || (Array.isArray(entry?.claims) && entry.claims.includes(claim.id)))
     ?? captures.find((entry) => urls.has(entry?.url));
   return {
     claim: claim.id,

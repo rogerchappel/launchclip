@@ -90,7 +90,7 @@ Each band also sets **words per event**: spoken words per visual event. Long for
   8. otherwise `concept`.
 
   A chapter's first clause is a `title`.
-- **Evidence first.** `matchEvidence` finds the ledger claim that shares at least two content words, or a number, with the clause. Contradicted claims never match. The match picks the claim's best supporting source (primary first, then by confidence). It finds the claim's capture by `capture.claim`, `capture.claims[]` or a matching source URL. A capture plays again only after 24 states; until then the claim keeps its source line. A capture moves the modules that render that capture kind to the front (post → `social-post`, PR → `repo-pr-card`, page → `media-window` playing `assets/evidence/<id>.mp4`).
+- **Evidence first.** `matchEvidence` finds the ledger claim that shares at least two content words, or a number, with the clause. Contradicted claims never match. The match picks the claim's best supporting source (primary first, then by confidence). It finds the claim's capture by `claim.capture` (as `launchclip research` writes it), then `capture.claim` or `capture.claims[]`, then a matching source URL. A capture plays again only after 24 states; until then the claim keeps its source line. A capture moves the modules that render that capture kind to the front (post → `social-post`, PR → `repo-pr-card`, page → `media-window` playing `assets/evidence/<id>.mp4`).
 - **Modules.** Candidates come from `capabilitiesFor(kind, {evidence, wide})`, so portrait canvases drop wide-only modules. Each candidate is scored by:
   - its order in the table;
   - a penalty for modules in the last eight states;

@@ -62,6 +62,9 @@ test("beat director: evidence first, by words and numbers, never by chance", () 
   assert.equal(hit.claim, "c-swe");
   assert.equal(hit.capture.id, "swe-leaderboard");
   assert.equal(hit.source.url, "https://leaderboard.example/swe");
+  // As src/research writes it: the claim names its capture.
+  const linked = { ...ledger, claims: ledger.claims.map((claim) => (claim.id === "c-latency" ? { ...claim, capture: "system-card-table-7" } : claim)) };
+  assert.equal(matchEvidence(beat("answering a typical request in about 1.8 seconds instead of 4.1 seconds"), { ledger: linked, captures }).capture.id, "system-card-table-7");
   assert.equal(matchEvidence(beat("That second number is the one developers felt."), { ledger, captures }), null);
   assert.equal(matchEvidence(beat("Totally unrelated sentence about gardening."), { ledger, captures }), null);
 });
