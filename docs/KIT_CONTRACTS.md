@@ -3266,7 +3266,9 @@ model stays JSON and both renderers draw the same tree. Shared pieces are in
   `assets/evidence/avatars/`, and fails a rate-limited call with its reset
   time. `node src/evidence/github.js <ref> [--module repo-pr-card |
   commit-card | diff-view | source] [--token text] [--file path] [--lines n]`.
+
 | Module | Variants | Params (beyond at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
 | `repo-pr-card` | glass, github | `repo` "owner/name", `number`, `title` ≤ 140, `state` (merged, open, closed, draft), `author` (login or `{login, avatar}`), `date` "YYYY-MM-DD", `file`, `additions`, `deletions`, `lines` 1–14, `startLine`, `highlight`, `highlightAt` | build, highlight | URL bar, repo with GitHub's mark and `#n`, the title (up to 3 lines), the state chip, avatar and "merged on …", the file row with +/−, then the rows; the token box strokes on 0.4 s after the rows (or on its hit), boxes 0.35 s apart |
 | `commit-card` | glass, github | `repo`, `sha` (shown as 7), `verified`, `authors` 1–3, `message` ≤ 140, `number` (shown "(#n)"), `date`, `file`, `additions`, `deletions`, `lines`, `startLine`, `highlight`, `highlightAt` | build, highlight | "Commit" with the sha chip and a Verified chip, overlapping avatars and "a and b authored on …", the message in a box, the file row, the hunk; token boxes as above |
 | `diff-view` | glass, github | `file`, `lines` 2–18, `startLine`, `additions`, `deletions`, `focus` 1–6 `{row \| rows: [a, b] \| line (new-file number), at?}`, `highlight`, `highlightAt` | build, focus-&lt;i&gt;, highlight | A Files-changed header (chevron, path, +/−, five stat blocks), rows with both gutters; each focus state slides and resizes the cyan ring from the last state's rows (0.42 s, power3.inOut) while every other row dims to 30%; default states follow the build up to 1.6 s apart |
