@@ -143,3 +143,24 @@ test("an overview lands on a free side: never on top of an earlier shot it frame
     assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > W / 2, `s5 overlaps ${id}`);
   }
 });
+
+test("after a push into an object, the overview's shot lands beside the whole map at its largest scale, clear of every shot", () => {
+  const story = overviewStory({ mutate: (s) => {
+    s.scenes[3] = { id: "s4", module: "gauge-compare", start: 12, end: 16, in: { type: "pan", dur: 0.8, direction: "left" }, params: { left: { label: "Cold", value: 2400, unit: "ms" }, right: { label: "Warm", value: 300, unit: "ms" }, gap: { label: "Saved", value: 2100, unit: "ms" }, style: "column" } };
+    s.scenes.splice(4, 0, { id: "s4b", module: "hook-title", start: 16, end: 18, in: { type: "push", dur: 0.9, from_object: "s4.gap-bracket" }, params: { headline: "Inside" } });
+    s.scenes[5] = { ...s.scenes[5], start: 18, end: 23, in: { type: "overview", dur: 2.6, span: 5 } };
+    s.chapters = undefined;
+    return s;
+  } });
+  assert.deepEqual(validateStory(story).errors, []);
+  const plan = planFor(story);
+  assert.ok(plan.placements.s4b.scale < 1, "s4b is pushed inside s4");
+  assert.equal(plan.placements.s5.scale, 1);
+  const box = (p) => ({ x0: p.x, y0: p.y, x1: p.x + W * p.scale, y1: p.y + H * p.scale });
+  const b = box(plan.placements.s5);
+  for (const id of ["s1", "s2", "s3", "s4", "s4b"]) {
+    const a = box(plan.placements[id]);
+    assert.ok(b.x1 <= a.x0 + 1e-3 || b.x0 >= a.x1 - 1e-3 || b.y1 <= a.y0 + 1e-3 || b.y0 >= a.y1 - 1e-3, `s5 overlaps ${id}`);
+  }
+  assert.deepEqual(plan.overviews[0].framed, ["s1", "s2", "s3", "s4", "s4b"]);
+});
