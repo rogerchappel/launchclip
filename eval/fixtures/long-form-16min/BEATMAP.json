@@ -159,7 +159,6 @@
          "title": "northlight/sdk#1842: default to halcyon-2",
          "date": "2026-03-10"
         },
-        "quote": "612 comments",
         "capture": {
          "id": "sdk-pr-1842",
          "kind": "pr",
@@ -245,23 +244,24 @@
        "end": 35.175,
        "text": "Within two days, developers had pushed over four thousand projects that called the new model by name.",
        "intent": "number",
-       "kind": "stat",
-       "capability": "odometer",
-       "module": "odometer",
+       "kind": "claim",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "value": 4000,
-        "label": "projects that called the",
-        "variant": "mechanical"
+        "text": "4 thousand",
+        "icon": "key",
+        "sub": "projects that called the new model: reported, not verified"
        },
        "evidence": {
         "claim": "c-unverified-tests",
         "status": "unverified",
         "kind": "number",
         "score": 1.35,
-        "source": null
+        "source": null,
+        "unverified": true
        },
-       "why": "stat (evidence c-unverified-tests): odometer"
+       "why": "claim (evidence c-unverified-tests): concept-card"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh2-3",
@@ -656,8 +656,7 @@
          "url": "https://analysts.example/frontier-costs",
          "title": "Frontier training costs, 2026",
          "date": "2026-04-02"
-        },
-        "quote": "$400M–$600M estimate"
+        }
        },
        "why": "list (evidence c-training-cost): checklist, ahead of icon-row"
       }
@@ -744,8 +743,7 @@
          "url": "https://analysts.example/frontier-costs",
          "title": "Frontier training costs, 2026",
          "date": "2026-04-02"
-        },
-        "quote": "$400M–$600M estimate"
+        }
        },
        "why": "concept (evidence c-training-cost): particle-text"
       },
@@ -760,13 +758,12 @@
        "text": "Each version descended from the one before, but the jump from 1.5 to 2 is the largest in the family.",
        "intent": "number",
        "kind": "social",
-       "capability": "quote-card",
-       "module": "quote-card",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "quote": "2.1M views",
-        "author": "Side-by-side clip",
-        "role": "2026-03-11"
+        "text": "Version descended before",
+        "icon": "layers"
        },
        "evidence": {
         "claim": "c-clip",
@@ -778,14 +775,13 @@
          "title": "Side-by-side clip",
          "date": "2026-03-11"
         },
-        "quote": "2.1M views",
         "capture": {
          "id": "side-by-side-clip",
          "kind": "post",
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): quote-card"
+       "why": "social (evidence c-clip, capture side-by-side-clip): nothing else fits, a concept card"
       }
      ]
     },
@@ -845,19 +841,13 @@
        "text": "Version 1.5 could read about five hundred. Version 2 can read roughly a thousand.",
        "intent": "number",
        "kind": "concept",
-       "capability": "excerpt",
-       "module": "excerpt",
+       "capability": "quote-card",
+       "module": "quote-card",
        "change": "swap",
        "params": {
-        "type": "text",
-        "title": "Halcyon 2 system card",
-        "source": "Halcyon 2 system card, 2026-03-10",
-        "lines": [
-         {
-          "text": "approximately 30,000 accelerators for eleven weeks",
-          "highlight": true
-         }
-        ]
+        "quote": "approximately 30,000 accelerators for eleven weeks",
+        "author": "Halcyon 2 system card",
+        "role": "2026-03-10"
        },
        "evidence": {
         "claim": "c-cluster",
@@ -871,7 +861,7 @@
         },
         "quote": "approximately 30,000 accelerators for eleven weeks"
        },
-       "why": "concept (evidence c-cluster): excerpt, ahead of kinetic-words"
+       "why": "concept (evidence c-cluster): quote-card, ahead of kinetic-words"
       },
       {
        "id": "a-short-history-of-halcyon-1-sh4-3",
@@ -1113,8 +1103,7 @@
          "url": "https://analysts.example/frontier-costs",
          "title": "Frontier training costs, 2026",
          "date": "2026-04-02"
-        },
-        "quote": "$400M–$600M estimate"
+        }
        },
        "why": "compare (evidence c-training-cost): bar-chart"
       },
@@ -1498,8 +1487,7 @@
          "url": "https://arena.example/leaderboard",
          "title": "Blind-vote leaderboard history",
          "date": "2026-03-24"
-        },
-        "quote": "#2 → #1 → #3"
+        }
        },
        "why": "title (evidence c-leaderboard): particle-text"
       },
@@ -2111,7 +2099,7 @@
         "title": "Northlight's own chart",
         "data": [
          {
-          "label": "Seconds to",
+          "label": "Seconds",
           "value": 4.1
          },
          {
@@ -2153,7 +2141,7 @@
        "change": "swap",
        "params": {
         "left": {
-         "title": "Seconds to",
+         "title": "Seconds",
          "items": [
           "11"
          ]
@@ -2277,7 +2265,7 @@
        "change": "swap",
        "params": {
         "value": "2.1",
-        "label": "seconds on average across",
+        "label": "seconds on average across three regions",
         "icon": "search",
         "source": "Open latency benchmark run 41, 2026-03-12"
        },
@@ -2313,13 +2301,12 @@
        "text": "Another developer posted a side by side recording of the old model and the new one completing the same task.",
        "intent": "claim",
        "kind": "social",
-       "capability": "quote-card",
-       "module": "quote-card",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "enter",
        "params": {
-        "quote": "2.1M views",
-        "author": "Side-by-side clip",
-        "role": "2026-03-11"
+        "text": "Another developer posted",
+        "icon": "database"
        },
        "evidence": {
         "claim": "c-clip",
@@ -2331,14 +2318,13 @@
          "title": "Side-by-side clip",
          "date": "2026-03-11"
         },
-        "quote": "2.1M views",
         "capture": {
          "id": "side-by-side-clip",
          "kind": "post",
          "out": "assets/evidence/side-by-side-clip.mp4"
         }
        },
-       "why": "social (evidence c-clip, capture side-by-side-clip): quote-card"
+       "why": "social (evidence c-clip, capture side-by-side-clip): nothing else fits, a concept card"
       },
       {
        "id": "why-speed-changed-everything-1-sh4-2",
@@ -2389,8 +2375,7 @@
          "url": "https://social.example/devtester/status/22",
          "title": "Side-by-side clip",
          "date": "2026-03-11"
-        },
-        "quote": "2.1M views"
+        }
        },
        "why": "stat (evidence c-clip): odometer"
       },
@@ -2687,7 +2672,7 @@
        "change": "swap",
        "params": {
         "value": 97,
-        "label": "of the time at",
+        "label": "of the time at full length",
         "variant": "bar"
        },
        "evidence": {
@@ -3243,7 +3228,7 @@
        "params": {
         "text": "62%",
         "kicker": "Chapter 8",
-        "sub": "on its own coding",
+        "sub": "on its own coding benchmark",
         "mode": "assemble"
        },
        "evidence": {
@@ -3559,7 +3544,7 @@
        "change": "enter",
        "params": {
         "value": "2",
-        "label": "is a clear step",
+        "label": "is a clear step up on",
         "icon": "sparkles",
         "source": "Open SWE benchmark, 2026-03-15"
        },
@@ -3697,7 +3682,6 @@
          "title": "northlight/sdk#1842: default to halcyon-2",
          "date": "2026-03-10"
         },
-        "quote": "612 comments",
         "capture": {
          "id": "sdk-pr-1842",
          "kind": "pr",
@@ -4529,8 +4513,7 @@
          "url": "https://arena.example/leaderboard",
          "title": "Blind-vote leaderboard history",
          "date": "2026-03-24"
-        },
-        "quote": "#2 → #1 → #3"
+        }
        },
        "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row"
       }
@@ -4578,7 +4561,8 @@
         "status": "unverified",
         "kind": "number",
         "score": 0.589,
-        "source": null
+        "source": null,
+        "unverified": true
        },
        "why": "title (evidence c-unverified-tests): glass-word"
       },
@@ -4773,8 +4757,7 @@
          "url": "https://arena.example/leaderboard",
          "title": "Blind-vote leaderboard history",
          "date": "2026-03-24"
-        },
-        "quote": "#2 → #1 → #3"
+        }
        },
        "why": "stat (evidence c-leaderboard): odometer"
       },
@@ -4789,13 +4772,12 @@
        "text": "The spread between first and fifth place is now smaller than it has ever been.",
        "intent": "list",
        "kind": "list",
-       "capability": "quote-card",
-       "module": "quote-card",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "quote": "#2 → #1 → #3",
-        "author": "Blind-vote leaderboard history",
-        "role": "2026-03-24"
+        "text": "Spread between first",
+        "icon": "brain"
        },
        "evidence": {
         "claim": "c-leaderboard",
@@ -4806,10 +4788,9 @@
          "url": "https://arena.example/leaderboard",
          "title": "Blind-vote leaderboard history",
          "date": "2026-03-24"
-        },
-        "quote": "#2 → #1 → #3"
+        }
        },
-       "why": "list (evidence c-leaderboard): quote-card"
+       "why": "list (evidence c-leaderboard): nothing else fits, a concept card"
       },
       {
        "id": "how-the-rivals-answered-1-sh3-3",
@@ -5305,7 +5286,7 @@
    "history": {
     "recent": [
      "quote-card",
-     "odometer",
+     "concept-card",
      "particle-text",
      "motion-title",
      "kinetic-words",
@@ -5316,10 +5297,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 1,
-     "concept-card": 2,
+     "concept-card": 3,
      "repo-pr-card": 1,
      "quote-card": 1,
-     "odometer": 1,
      "particle-text": 1,
      "motion-title": 1,
      "kinetic-words": 1,
@@ -5349,7 +5329,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "96833095a9dd70c3",
+   "key": "2dfb5b32e3e94b50",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5361,19 +5341,18 @@
      "concept-card",
      "map-highlight",
      "particle-text",
-     "quote-card",
+     "concept-card",
      "media-window",
-     "excerpt",
+     "quote-card",
      "concept-card",
      "process-steps"
     ],
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "concept-card": 5,
+     "concept-card": 7,
      "repo-pr-card": 1,
      "quote-card": 2,
-     "odometer": 1,
      "particle-text": 3,
      "motion-title": 2,
      "kinetic-words": 1,
@@ -5382,8 +5361,7 @@
      "code-snippet": 1,
      "checklist": 1,
      "map-highlight": 1,
-     "media-window": 1,
-     "excerpt": 1
+     "media-window": 1
     },
     "plates": [
      {
@@ -5415,7 +5393,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "23c093f2c410b000",
+   "key": "aadf4116763ec0bc",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5436,10 +5414,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "concept-card": 7,
+     "concept-card": 9,
      "repo-pr-card": 1,
      "quote-card": 3,
-     "odometer": 1,
      "particle-text": 3,
      "motion-title": 4,
      "kinetic-words": 3,
@@ -5449,7 +5426,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 1,
-     "excerpt": 1,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 1,
@@ -5491,7 +5467,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "fd3524ef4f5b4ec1",
+   "key": "3d485df56c19cf63",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5512,10 +5488,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 3,
-     "concept-card": 10,
+     "concept-card": 12,
      "repo-pr-card": 1,
      "quote-card": 4,
-     "odometer": 1,
      "particle-text": 4,
      "motion-title": 5,
      "kinetic-words": 5,
@@ -5525,7 +5500,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 2,
-     "excerpt": 1,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 2,
@@ -5574,7 +5548,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "98140313db8a9d81",
+   "key": "8b66de4b2ca655b5",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -5587,7 +5561,7 @@
      "kinetic-words",
      "motion-title",
      "stat-card",
-     "quote-card",
+     "concept-card",
      "concept-card",
      "odometer",
      "glass-word"
@@ -5595,10 +5569,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 4,
-     "concept-card": 13,
+     "concept-card": 16,
      "repo-pr-card": 1,
-     "quote-card": 5,
-     "odometer": 2,
+     "quote-card": 4,
      "particle-text": 5,
      "motion-title": 7,
      "kinetic-words": 6,
@@ -5608,14 +5581,14 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 2,
-     "excerpt": 1,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
      "cta": 1,
      "percent-fill": 1,
      "unit-grid": 1,
-     "compare": 1
+     "compare": 1,
+     "odometer": 1
     },
     "plates": [
      {
@@ -5663,7 +5636,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "fcc8e8ce97825248",
+   "key": "da625b190bf7bc2f",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -5684,10 +5657,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 4,
-     "concept-card": 15,
+     "concept-card": 18,
      "repo-pr-card": 1,
-     "quote-card": 5,
-     "odometer": 2,
+     "quote-card": 4,
      "particle-text": 5,
      "motion-title": 8,
      "kinetic-words": 9,
@@ -5697,14 +5669,15 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 3,
-     "excerpt": 2,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
      "cta": 1,
      "percent-fill": 2,
      "unit-grid": 2,
-     "compare": 1
+     "compare": 1,
+     "odometer": 1,
+     "excerpt": 1
     },
     "plates": [
      {
@@ -5757,7 +5730,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "23d30052058b7a88",
+   "key": "d657ebae827ed1a4",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -5778,10 +5751,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 5,
-     "concept-card": 18,
+     "concept-card": 21,
      "repo-pr-card": 1,
-     "quote-card": 5,
-     "odometer": 2,
+     "quote-card": 4,
      "particle-text": 6,
      "motion-title": 10,
      "kinetic-words": 10,
@@ -5791,14 +5763,15 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 4,
-     "excerpt": 2,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 4,
      "cta": 1,
      "percent-fill": 3,
      "unit-grid": 2,
-     "compare": 1
+     "compare": 1,
+     "odometer": 1,
+     "excerpt": 1
     },
     "plates": [
      {
@@ -5856,7 +5829,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "cf5ca26d546eb6db",
+   "key": "ae39ad20c0b9e20a",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -5877,10 +5850,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 5,
-     "concept-card": 21,
+     "concept-card": 24,
      "repo-pr-card": 1,
-     "quote-card": 6,
-     "odometer": 2,
+     "quote-card": 5,
      "particle-text": 7,
      "motion-title": 11,
      "kinetic-words": 11,
@@ -5890,14 +5862,15 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 4,
-     "excerpt": 2,
      "stat-card": 3,
      "count-up": 1,
      "bar-chart": 4,
      "cta": 2,
      "percent-fill": 4,
      "unit-grid": 3,
-     "compare": 1
+     "compare": 1,
+     "odometer": 1,
+     "excerpt": 1
     },
     "plates": [
      {
@@ -5960,7 +5933,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "f468f4b25cf20308",
+   "key": "dd19f54296cfeb14",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -5981,10 +5954,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 5,
-     "concept-card": 24,
+     "concept-card": 27,
      "repo-pr-card": 2,
-     "quote-card": 6,
-     "odometer": 2,
+     "quote-card": 5,
      "particle-text": 7,
      "motion-title": 13,
      "kinetic-words": 13,
@@ -5994,7 +5966,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 4,
-     "excerpt": 2,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 4,
@@ -6002,6 +5973,8 @@
      "percent-fill": 4,
      "unit-grid": 3,
      "compare": 1,
+     "odometer": 1,
+     "excerpt": 1,
      "window-chrome": 1,
      "commit-card": 1
     },
@@ -6072,7 +6045,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "c6047f87466cffd1",
+   "key": "7f3be18b1ae2ae4d",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6093,10 +6066,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 6,
-     "concept-card": 25,
+     "concept-card": 28,
      "repo-pr-card": 2,
-     "quote-card": 8,
-     "odometer": 2,
+     "quote-card": 7,
      "particle-text": 8,
      "motion-title": 14,
      "kinetic-words": 14,
@@ -6106,7 +6078,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 5,
-     "excerpt": 4,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 4,
@@ -6114,6 +6085,8 @@
      "percent-fill": 5,
      "unit-grid": 3,
      "compare": 1,
+     "odometer": 1,
+     "excerpt": 3,
      "window-chrome": 1,
      "commit-card": 1,
      "glass-bars-3d": 1
@@ -6190,7 +6163,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "626189e44f07f166",
+   "key": "66f67c06c9d621f4",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6202,7 +6175,7 @@
      "particle-text",
      "stat-card",
      "odometer",
-     "quote-card",
+     "concept-card",
      "motion-title",
      "concept-card",
      "concept-card",
@@ -6211,10 +6184,9 @@
     "counts": {
      "logo-sting": 1,
      "process-steps": 6,
-     "concept-card": 28,
+     "concept-card": 32,
      "repo-pr-card": 2,
-     "quote-card": 9,
-     "odometer": 3,
+     "quote-card": 7,
      "particle-text": 9,
      "motion-title": 15,
      "kinetic-words": 14,
@@ -6224,7 +6196,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 6,
-     "excerpt": 4,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 4,
@@ -6232,6 +6203,8 @@
      "percent-fill": 6,
      "unit-grid": 3,
      "compare": 1,
+     "odometer": 2,
+     "excerpt": 3,
      "window-chrome": 1,
      "commit-card": 1,
      "glass-bars-3d": 1
@@ -6313,7 +6286,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "959dd0dc46553fc2",
+   "key": "519a65c508e61ac3",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6334,10 +6307,9 @@
     "counts": {
      "logo-sting": 2,
      "process-steps": 6,
-     "concept-card": 32,
+     "concept-card": 36,
      "repo-pr-card": 2,
-     "quote-card": 9,
-     "odometer": 3,
+     "quote-card": 7,
      "particle-text": 10,
      "motion-title": 17,
      "kinetic-words": 16,
@@ -6347,7 +6319,6 @@
      "checklist": 4,
      "map-highlight": 1,
      "media-window": 6,
-     "excerpt": 4,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 4,
@@ -6355,6 +6326,8 @@
      "percent-fill": 6,
      "unit-grid": 3,
      "compare": 1,
+     "odometer": 2,
+     "excerpt": 3,
      "window-chrome": 1,
      "commit-card": 1,
      "glass-bars-3d": 1
@@ -6534,7 +6507,7 @@
    "top": [
     {
      "id": "concept-card",
-     "share": 0.203
+     "share": 0.228
     },
     {
      "id": "motion-title",

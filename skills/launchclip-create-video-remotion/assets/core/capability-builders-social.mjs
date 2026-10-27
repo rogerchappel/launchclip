@@ -104,7 +104,8 @@ export function sharedPhrase(post, beat, h) {
   const words = post.text.split(/\s+/).filter(Boolean);
   const keys = words.map(norm);
   let best = null;
-  for (const source of [h.quoteOf(beat), beat.text].filter(Boolean)) {
+  // The words to find in the post (only the post's own words are shown): a verified quote, the narration's quote, the clause.
+  for (const source of [h.quoteOf(beat), beat.facts?.quote, beat.text].filter(Boolean)) {
     const want = String(source).split(/\s+/).map(norm).filter(Boolean);
     for (let i = 0; i < keys.length; i++) for (let j = 0; j < want.length; j++) {
       let n = 0;

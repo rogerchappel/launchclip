@@ -191,13 +191,15 @@ function listItems(text) {
   return [head, middle, last].map((item) => item.join(' ')).filter((item) => item.length > 1 && item.split(' ').length <= 3);
 }
 
-// The words after a number, up to four, stopping at punctuation and the next number.
+// The words after a number, up to six, stopping at punctuation and the next number.
 function labelAfter(text, index) {
   const words = [];
   for (const word of text.slice(index).split(/[.,;:!?—–]/)[0].trim().split(/\s+/).filter(Boolean)) {
-    if (/^\d|^(percent|and)$/i.test(word) || words.length === 4) break;
+    if (/^\d|^(percent|and)$/i.test(word) || words.length === 6) break;
     words.push(word);
   }
+  // Not a dangling "than" or "of": the label ends on a content word.
+  while (words.length > 1 && /^(than|of|to|for|per|the|a|an|by|with)$/i.test(words.at(-1))) words.pop();
   return words.join(' ');
 }
 
@@ -252,6 +254,19 @@ export function visualKind(beat) {
 // Evidence
 
 const contentSet = (text) => new Set(keyTerms(text).map((word) => word.toLowerCase()));
+
+/**
+ * Whether a source's quote span can be shown as a quote: prose, not an API
+ * record ("GitHub API: …"), a table row ("| a | b |"), a heading, a list item
+ * or a code line, and long enough to say something.
+ */
+export function isQuotable(text) {
+  const value = String(text ?? '').trim();
+  if (value.length < 12 || value.length > 280) return false;
+  if (/^(GitHub|Hugging Face) API:/.test(value)) return false;
+  if (/\|/.test(value) || /^(#{1,6}\s|[-*+]\s|\d+\.\s|>|```|\{|\[|<)/.test(value)) return false;
+  return /\p{L}{3,}/u.test(value) && value.split(/\s+/).length >= 3;
+}
 
 // Entity kinds a clause names with a common noun.
 const ENTITY_HINTS = [['repo', /\b(repositor(y|ies)|repo|codebase)\b/], ['benchmark', /\b(benchmark|leaderboard)\b/]];
@@ -403,8 +418,8 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
     kind: claim.kind ?? 'statement',
     score: round(best.score),
     source: source ? { url: source.url, ...(source.title ? { title: source.title } : {}), ...(source.publisher ? { publisher: source.publisher } : {}), ...(source.published_at ?? source.date ? { date: String(source.published_at ?? source.date).slice(0, 10) } : {}) } : null,
-    // The source's supporting quote, else the quote the claim itself reports (not an API record).
-    ...((source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text)) || claim.quote ? { quote: source?.quote?.text && !/^(GitHub|Hugging Face) API:/.test(source.quote.text) ? source.quote.text : claim.quote } : {}),
+    // A quote only from a verified claim's supporting source, verbatim, and only prose (never an API record or a table row).
+    ...(claim.status === 'verified' && source?.supports === true && isQuotable(source?.quote?.text) ? { quote: source.quote.text.trim() } : {}),
     // The claim's subjects, shortest first ("Terra" before "GPT-6.1"): who a figure belongs to when the clause does not say.
     ...((claim.entities ?? []).some((e) => e?.kind === 'name') ? { names: (claim.entities ?? []).filter((e) => e?.kind === 'name' && e.name).map((e) => e.name).sort((a, b) => a.length - b.length) } : {}),
     ...(capture ? { capture: { id: capture.id, kind: capture.kind, out: capture.out ?? `assets/evidence/${capture.id}.mp4` } } : {}),
@@ -415,6 +430,28 @@ export function matchEvidence(beat, { ledger = null, captures = [], at = null, p
 
 // ---------------------------------------------------------------------------
 // Directing a chunk
+
+/**
+ * What an unverified claim may put on screen: its source line at most. Its
+ * capture, its data and any quote stay off, so a reported claim never shows
+ * as a quote, a post or proof; the director shows its figures as an
+ * attributed claim card instead (kind `claim`).
+ */
+export function gateEvidence(evidence) {
+  if (!evidence || evidence.status === 'verified') return evidence;
+  const { capture, data, quote, ...rest } = evidence;
+  return { ...rest, unverified: true };
+}
+
+// The one who makes a claim: "OpenAI also says …", "Salio reported …".
+const SPEAKER = /\b([A-Z][\w'.-]*(?:\s[A-Z][\w'.-]*)?)\s+(?:also\s+)?(?:says|said|claims|claimed|reports|reported|writes|wrote|estimates|estimated|told)\b/;
+function speakerOf(...texts) {
+  for (const text of texts) {
+    const name = String(text ?? '').match(SPEAKER)?.[1];
+    if (name && !/^(It|This|That|He|She|They|We|The)$/.test(name)) return name.replace(/'s$/, '');
+  }
+  return null;
+}
 
 /** A fresh visual history (what the director carries across chunks). */
 export function emptyHistory() {
@@ -476,7 +513,10 @@ export function directChunk(chunk, options) {
       if (finite(last) && beat.start - last < CAPTURE_GAP_SECONDS) delete evidence.capture;
       else history.captures = { ...(history.captures ?? {}), [evidence.capture.id]: beat.start };
     }
-    if (evidence) draft.evidence = evidence;
+    if (evidence) draft.evidence = gateEvidence(evidence);
+    // A quote in the narration ("a 'not found' page") is the narrator's words, not a source's: it is shown as a
+    // quote only when the verified source's own quote span says it.
+    if (facts.quote && !(draft.evidence?.quote && draft.evidence.quote.toLowerCase().includes(facts.quote.toLowerCase()))) delete facts.quote;
     const opener = chunk.first && i === 0 && beat.words[0] !== 0;
     // The clause under a call-to-action time (or just after it, in a pause) carries it.
     const cta = (options.structure?.ctas ?? []).find((entry) => beat.start - 0.6 <= entry.at && entry.at < beat.end);
@@ -514,6 +554,18 @@ export function directChunk(chunk, options) {
     }
   }
   pairSeries(states);
+  // A figure from an unverified claim is never a hero stat: it is an attributed claim card ("OpenAI's claim, not verified").
+  let speaker = null;
+  for (const state of states) {
+    if (STRUCTURE_KINDS.has(state.kind)) continue;
+    const claimText = ledger?.claims?.find((claim) => claim.id === state.evidence?.claim)?.text;
+    speaker = speakerOf(state.text, claimText) ?? (state.evidence?.unverified ? speaker : null);
+    const figure = state.facts?.numbers?.[0];
+    if (!state.evidence?.unverified || !figure || familyOf(state.kind) !== 'number') continue;
+    state.kind = 'claim';
+    state.headline = figure.unit === '×' ? `${figure.value}×` : String(figure.raw ?? figure.value);
+    state.sub = clip(`${figure.label ? `${figure.label}: ` : ''}${speaker ? `${speaker}'s claim` : 'reported'}, not verified`, 64);
+  }
 
   // Shots: 2–4 states, cut near the target cut gap, at a topic shift when one is close.
   const groups = [];

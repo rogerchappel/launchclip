@@ -12,7 +12,7 @@
         { "words": [27, 36], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-3"], "why": "documents: nothing else fits, a concept card" },
         { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
         { "words": [51, 63], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-1"], "why": "social (evidence c-shares, capture halcyon-2-post): quote-card" },
-        { "words": [64, 80], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-2"], "why": "stat (evidence c-unverified-tests): odometer" },
+        { "words": [64, 80], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-2"], "why": "claim (evidence c-unverified-tests): concept-card" },
         { "words": [81, 91], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-3"], "why": "concept: particle-text" },
         { "words": [92, 104], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-4"], "why": "concept: motion-title" },
         { "words": [105, 119], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh3-1"], "why": "concept: kinetic-words" },
@@ -35,9 +35,9 @@
         { "words": [258, 267], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-1"], "why": "date: nothing else fits, a concept card" },
         { "words": [268, 279], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-2"], "why": "map: map-highlight" },
         { "words": [280, 291], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-3"], "why": "concept (evidence c-training-cost): particle-text" },
-        { "words": [292, 311], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-4"], "why": "social (evidence c-clip, capture side-by-side-clip): quote-card" },
+        { "words": [292, 311], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-4"], "why": "social (evidence c-clip, capture side-by-side-clip): nothing else fits, a concept card" },
         { "words": [312, 322], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
-        { "words": [323, 336], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-2"], "why": "concept (evidence c-cluster): excerpt, ahead of kinetic-words" },
+        { "words": [323, 336], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-2"], "why": "concept (evidence c-cluster): quote-card, ahead of kinetic-words" },
         { "words": [337, 344], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-3"], "why": "lineage: nothing else fits, a concept card" },
         { "words": [345, 363], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-4"], "why": "list: process-steps, ahead of icon-row" }
       ]
@@ -100,7 +100,7 @@
         { "words": [835, 844], "intent": "problem", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-2"], "why": "concept: kinetic-words" },
         { "words": [845, 852], "intent": "proof", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-3"], "why": "concept: motion-title" },
         { "words": [853, 873], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh3-4"], "why": "stat (evidence c-open-bench): stat-card" },
-        { "words": [874, 893], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-1"], "why": "social (evidence c-clip, capture side-by-side-clip): quote-card" },
+        { "words": [874, 893], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-1"], "why": "social (evidence c-clip, capture side-by-side-clip): nothing else fits, a concept card" },
         { "words": [894, 906], "intent": "list", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-2"], "why": "list: nothing else fits, a concept card" },
         { "words": [907, 915], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-3"], "why": "stat (evidence c-clip): odometer" },
         { "words": [916, 932], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh4-4"], "why": "concept: glass-word" }
@@ -216,7 +216,7 @@
         { "words": [1935, 1949], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-2"], "why": "concept: particle-text" },
         { "words": [1950, 1968], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-3"], "why": "stat (evidence c-price): stat-card" },
         { "words": [1969, 1985], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-1"], "why": "stat (evidence c-leaderboard): odometer" },
-        { "words": [1986, 2000], "intent": "list", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-2"], "why": "list (evidence c-leaderboard): quote-card" },
+        { "words": [1986, 2000], "intent": "list", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-2"], "why": "list (evidence c-leaderboard): nothing else fits, a concept card" },
         { "words": [2001, 2012], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-3"], "why": "concept: motion-title" },
         { "words": [2013, 2026], "intent": "process", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-4"], "why": "process: nothing else fits, a concept card" },
         { "words": [2027, 2036], "intent": "claim", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh4-1"], "why": "chain: nothing else fits, a concept card" },

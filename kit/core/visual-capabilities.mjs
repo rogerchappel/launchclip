@@ -24,7 +24,7 @@ import { channelBuilders } from './capability-builders-channel.mjs';
 export const VISUAL_KINDS = Object.freeze([
   'title', 'concept', 'stat', 'money', 'compute', 'compare', 'share', 'series', 'ranking', 'list', 'process',
   'timeline', 'date', 'month', 'quote', 'social', 'code', 'terminal', 'pr', 'commit', 'diff', 'chain', 'lineage',
-  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting'
+  'equation', 'map', 'tokens', 'documents', 'family', 'grid', 'page', 'cta', 'sting', 'claim'
 ]);
 
 // Capture kinds (launchclip.capture.v1) and the visual kind that shows each.
@@ -93,7 +93,7 @@ export const CAPABILITIES = Object.freeze([
   cap('motion-title', ['title', 'concept'], ['concept-card']),
   cap('kinetic-words', ['title', 'concept', 'tokens'], ['concept-card']),
   cap('glass-word', ['concept', 'title'], ['concept-card']),
-  cap('concept-card', ['concept', 'title', 'stat'], []),
+  cap('concept-card', ['concept', 'title', 'stat', 'claim'], []),
   cap('object-card', ['concept'], ['concept-card']),
   // Structure: a mid-roll call to action, and the logo sting at the open and the close.
   cap('cta', ['cta'], ['concept-card']),
@@ -208,7 +208,7 @@ const formatValue = (entry) => entry.raw ?? `${entry.value}${entry.unit ? ` ${en
 const sourceOf = (beat) => beat.evidence?.source ? clip(`${beat.evidence.source.title ?? beat.evidence.source.publisher ?? new URL(beat.evidence.source.url).hostname}${beat.evidence.source.date ? `, ${beat.evidence.source.date}` : ''}`, 60) : undefined;
 
 const BUILDERS = {
-  'concept-card': (beat) => ({ text: clip(beat.headline, 26), icon: iconFor(beat), ...(beat.sub ? { sub: clip(beat.sub, 40) } : {}) }),
+  'concept-card': (beat) => ({ text: clip(beat.headline, 26), icon: iconFor(beat), ...(beat.sub ? { sub: clip(beat.sub, 64) } : {}) }),
   'glass-word': (beat) => ({ word: clip(keyTerms(beat.headline)[0] ?? beat.headline, 12) }),
   'object-card': (beat) => ({ object: 'box', caption: clip(beat.headline, 30), label: clip(keyTerms(beat.text)[0] ?? 'Note', 12) }),
   'motion-title': (beat) => ({ text: clip(beat.headline, 34), ...(beat.kicker ? { kicker: clip(beat.kicker, 24) } : {}), highlight: keyTerms(beat.headline)[0] }),
@@ -234,7 +234,7 @@ const BUILDERS = {
   'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
   'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
   // Quotes, posts and excerpts show only words someone said or wrote: a quote in the clause, or the source's own quote. Narration is never dressed as a quote.
-  'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.facts?.quote ? beat.speaker ?? beat.evidence?.source?.title ?? 'Quoted' : beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
+  'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.evidence.source?.publisher ?? beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
   'feed-frame': (beat) => (beat.facts?.handle ? { handle: clip(beat.facts.handle, 20), caption: clip(beat.headline, 26) } : null),
   'proof-wall': (beat) => !itemsOf(beat, 3, 4) || !sourceOf(beat) ? null : ({ items: itemsOf(beat, 3, 4).map((text) => ({ text: clip(text, 32), source: clip(sourceOf(beat) ?? 'Source', 20) })), hero: { text: clip(beat.headline, 32), highlight: keyTerms(clip(beat.headline, 32))[0] ?? clip(beat.headline, 32).split(' ')[0], source: clip(sourceOf(beat) ?? 'Source', 20) } }),
   'excerpt': (beat) => (quoteOf(beat) && sourceOf(beat) ? { type: 'text', title: clip(beat.evidence.source.title ?? beat.headline, 40), source: clip(sourceOf(beat), 40), lines: excerptLines(beat) } : null),
@@ -283,8 +283,9 @@ function timelineSteps(beat) {
   return (dates.length >= 2 ? dates : itemsOf(beat, 3, 3) ?? []).slice(0, 4).map((label) => clip(label, 14));
 }
 
+// A quote is a verified source's own quote span (the director gates it); the narration's own quotes never are.
 function quoteOf(beat) {
-  return beat.facts?.quote ?? beat.evidence?.quote ?? null;
+  return beat.evidence?.status === 'verified' && beat.evidence.quote ? beat.evidence.quote : null;
 }
 
 function excerptLines(beat) {
