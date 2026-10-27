@@ -10,7 +10,7 @@ const BEAT = {
   headline: "Compute grew tenfold",
   label: "of the budget",
   brand: { mark: "assets/brand/mark.png", wordmark: { src: "assets/brand/wordmark.png", ratio: 7.5 } },
-  facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },
+  facts: { numbers: [{ value: 40, unit: "%", raw: "40%", label: "Before" }, { value: 3.2, unit: "B", prefix: "$", raw: "$3.2B", label: "After" }], items: ["data", "compute", "talent", "energy"], dates: [{ label: "2024" }, { label: "2025" }], places: ["France", "Japan", "Brazil"], handle: "@lab" },
   evidence: { claim: "c1", source: { url: "https://example.com/a", title: "Lab report", date: "2026-03-01" }, quote: "compute grew tenfold", capture: { out: "assets/evidence/x.mp4" } }
 };
 
