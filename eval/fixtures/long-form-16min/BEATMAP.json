@@ -55,7 +55,7 @@
         "claim": "c-history-2023",
         "status": "verified",
         "kind": "date",
-        "score": 0.383,
+        "score": 0.51,
         "source": {
          "url": "https://northlight.example/blog/halcyon-preview",
          "title": "Halcyon research preview",
@@ -156,7 +156,7 @@
         "claim": "c-pr-comments",
         "status": "verified",
         "kind": "number",
-        "score": 0.55,
+        "score": 0.895,
         "source": {
          "url": "https://code.example/northlight/sdk/pull/1842",
          "title": "northlight/sdk#1842: default to halcyon-2",
@@ -599,7 +599,7 @@
         "claim": "c-long-doc",
         "status": "verified",
         "kind": "number",
-        "score": 0.383,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2",
@@ -723,7 +723,7 @@
         "claim": "c-training-cost",
         "status": "verified",
         "kind": "number",
-        "score": 0.336,
+        "score": 0.671,
         "source": {
          "url": "https://analysts.example/frontier-costs",
          "title": "Frontier training costs, 2026",
@@ -835,7 +835,7 @@
         "claim": "c-training-cost",
         "status": "verified",
         "kind": "number",
-        "score": 0.336,
+        "score": 0.778,
         "source": {
          "url": "https://analysts.example/frontier-costs",
          "title": "Frontier training costs, 2026",
@@ -915,7 +915,7 @@
         "claim": "c-cutoff",
         "status": "verified",
         "kind": "number",
-        "score": 0.383,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card, table 7",
@@ -967,7 +967,7 @@
         "claim": "c-cluster",
         "status": "verified",
         "kind": "number",
-        "score": 0.383,
+        "score": 0.668,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card",
@@ -1088,7 +1088,7 @@
         "claim": "c-cutoff",
         "status": "verified",
         "kind": "number",
-        "score": 0.383,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card, table 7",
@@ -1122,7 +1122,7 @@
         "claim": "c-cluster",
         "status": "verified",
         "kind": "number",
-        "score": 1.2,
+        "score": 1.4,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card",
@@ -1370,11 +1370,15 @@
        "text": "says the run used about 120 gigawatt hours of electricity, roughly what a town of ten thousand homes uses in a year.",
        "intent": "quote",
        "kind": "cta",
-       "capability": "cta",
-       "module": "cta",
+       "capability": "media-window",
+       "module": "media-window",
        "change": "swap",
        "params": {
-        "action": "Subscribe for the next breakdown"
+        "title": "Halcyon 2 system card",
+        "media": {
+         "kind": "video",
+         "src": "assets/evidence/system-card-table-7.mp4"
+        }
        },
        "evidence": {
         "claim": "c-energy",
@@ -1386,9 +1390,14 @@
          "title": "Halcyon 2 system card",
          "date": "2026-03-10"
         },
-        "quote": "approximately 120 GWh"
+        "quote": "approximately 120 GWh",
+        "capture": {
+         "id": "system-card-table-7",
+         "kind": "model-card",
+         "out": "assets/evidence/system-card-table-7.mp4"
+        }
        },
-       "why": "cta (evidence c-energy): cta"
+       "why": "cta (evidence c-energy, capture system-card-table-7): media-window"
       },
       {
        "id": "inside-the-training-run-1-sh3-3",
@@ -1464,7 +1473,7 @@
         "claim": "c-synthetic",
         "status": "verified",
         "kind": "number",
-        "score": 0.45,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card, data",
@@ -1605,18 +1614,18 @@
         "mode": "assemble"
        },
        "evidence": {
-        "claim": "c-history-2023",
+        "claim": "c-leaderboard",
         "status": "verified",
-        "kind": "date",
-        "score": 0.383,
+        "kind": "statement",
+        "score": 0.639,
         "source": {
-         "url": "https://northlight.example/blog/halcyon-preview",
-         "title": "Halcyon research preview",
-         "date": "2023-06-01"
+         "url": "https://arena.example/leaderboard",
+         "title": "Blind-vote leaderboard history",
+         "date": "2026-03-24"
         },
-        "quote": "a research preview for partners"
+        "quote": "#2 → #1 → #3"
        },
-       "why": "title (evidence c-history-2023): particle-text"
+       "why": "title (evidence c-leaderboard): particle-text"
       },
       {
        "id": "what-northlight-actually-announced-1-sh1-2",
@@ -1751,7 +1760,7 @@
         "claim": "c-coding-internal",
         "status": "verified",
         "kind": "number",
-        "score": 1.257,
+        "score": 1.285,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2",
@@ -1771,28 +1780,32 @@
        "end": 271.576,
        "text": "compared with 41 percent for the previous model.",
        "intent": "number",
-       "kind": "share",
-       "capability": "percent-fill",
-       "module": "percent-fill",
+       "kind": "series",
+       "capability": "concept-card",
+       "module": "concept-card",
        "change": "swap",
        "params": {
-        "value": 41,
-        "label": "for the previous model",
-        "variant": "bar"
+        "text": "Compared percent previous",
+        "icon": "globe"
        },
        "evidence": {
-        "claim": "c-coding-internal",
+        "claim": "c-swe",
         "status": "verified",
         "kind": "number",
-        "score": 0.9,
+        "score": 0.8,
         "source": {
-         "url": "https://northlight.example/blog/halcyon-2",
-         "title": "Introducing Halcyon 2",
-         "date": "2026-03-10"
+         "url": "https://leaderboard.example/swe",
+         "title": "Open SWE benchmark",
+         "date": "2026-03-15"
         },
-        "quote": "62% on our multi-step coding suite, up from 41%"
+        "quote": "Halcyon 2: 48.0; Halcyon 1.5: 39.2; best: 51.3",
+        "capture": {
+         "id": "swe-leaderboard",
+         "kind": "chart",
+         "out": "assets/evidence/swe-leaderboard.mp4"
+        }
        },
-       "why": "share (evidence c-coding-internal): percent-fill"
+       "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card"
       },
       {
        "id": "what-northlight-actually-announced-1-sh2-3",
@@ -2030,18 +2043,18 @@
         "variant": "duotone"
        },
        "evidence": {
-        "claim": "c-history-2023",
+        "claim": "c-cutoff",
         "status": "verified",
-        "kind": "date",
-        "score": 0.383,
+        "kind": "number",
+        "score": 0.506,
         "source": {
-         "url": "https://northlight.example/blog/halcyon-preview",
-         "title": "Halcyon research preview",
-         "date": "2023-06-01"
+         "url": "https://northlight.example/halcyon-2/system-card",
+         "title": "Halcyon 2 system card, table 7",
+         "date": "2026-03-10"
         },
-        "quote": "a research preview for partners"
+        "quote": "post-cutoff events: 30% error"
        },
-       "why": "list (evidence c-history-2023): icon-grid"
+       "why": "list (evidence c-cutoff): icon-grid"
       },
       {
        "id": "what-northlight-actually-announced-1-sh4-2",
@@ -2361,7 +2374,7 @@
         "claim": "c-latency",
         "status": "verified",
         "kind": "number",
-        "score": 0.6,
+        "score": 0.61,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2",
@@ -2580,7 +2593,7 @@
         "claim": "c-clip",
         "status": "verified",
         "kind": "number",
-        "score": 0.383,
+        "score": 0.475,
         "source": {
          "url": "https://social.example/devtester/status/22",
          "title": "Side-by-side clip",
@@ -2665,7 +2678,7 @@
         "claim": "c-clip",
         "status": "verified",
         "kind": "number",
-        "score": 1.2,
+        "score": 1.4,
         "source": {
          "url": "https://social.example/devtester/status/22",
          "title": "Side-by-side clip",
@@ -2741,28 +2754,34 @@
        "text": "The context window is how much text the model can hold in mind at once, measured in tokens.",
        "intent": "claim",
        "kind": "title",
-       "capability": "particle-text",
-       "module": "particle-text",
+       "capability": "media-window",
+       "module": "media-window",
        "change": "enter",
        "params": {
-        "text": "CONTEXT",
-        "kicker": "Chapter 6",
-        "sub": "Context window text",
-        "mode": "assemble"
+        "title": "Halcyon 2 system card",
+        "media": {
+         "kind": "video",
+         "src": "assets/evidence/system-card-table-7.mp4"
+        }
        },
        "evidence": {
         "claim": "c-context",
         "status": "verified",
         "kind": "number",
-        "score": 0.65,
+        "score": 0.686,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card",
          "date": "2026-03-10"
         },
-        "quote": "context length: 400K tokens (previously 200K)"
+        "quote": "context length: 400K tokens (previously 200K)",
+        "capture": {
+         "id": "system-card-table-7",
+         "kind": "model-card",
+         "out": "assets/evidence/system-card-table-7.mp4"
+        }
        },
-       "why": "title (evidence c-context): particle-text"
+       "why": "title (evidence c-context, capture system-card-table-7): media-window"
       },
       {
        "id": "the-context-window-doubled-1-sh1-2",
@@ -2836,7 +2855,7 @@
         "claim": "c-context",
         "status": "verified",
         "kind": "number",
-        "score": 1.2,
+        "score": 1.175,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card",
@@ -2948,7 +2967,7 @@
         "claim": "c-long-doc",
         "status": "verified",
         "kind": "number",
-        "score": 0.55,
+        "score": 0.674,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2",
@@ -2968,16 +2987,14 @@
        "end": 465.131,
        "text": "On that test, Halcyon 2 found the fact 97 percent of the time at full length, compared with 84 percent for the previous model.",
        "intent": "number",
-       "kind": "page",
-       "capability": "media-window",
-       "module": "media-window",
+       "kind": "share",
+       "capability": "percent-fill",
+       "module": "percent-fill",
        "change": "swap",
        "params": {
-        "title": "Halcyon 2 system card, long context",
-        "media": {
-         "kind": "video",
-         "src": "assets/evidence/system-card-table-7.mp4"
-        }
+        "value": 97,
+        "label": "of the time at",
+        "variant": "bar"
        },
        "evidence": {
         "claim": "c-needle",
@@ -2989,14 +3006,9 @@
          "title": "Halcyon 2 system card, long context",
          "date": "2026-03-10"
         },
-        "quote": "97% retrieval at 400K (previous 84%)",
-        "capture": {
-         "id": "system-card-table-7",
-         "kind": "model-card",
-         "out": "assets/evidence/system-card-table-7.mp4"
-        }
+        "quote": "97% retrieval at 400K (previous 84%)"
        },
-       "why": "page (evidence c-needle, capture system-card-table-7): media-window"
+       "why": "share (evidence c-needle): percent-fill"
       }
      ]
     },
@@ -3036,15 +3048,27 @@
        "text": "There, the score drops to about 70 percent.",
        "intent": "number",
        "kind": "share",
-       "capability": "percent-fill",
-       "module": "percent-fill",
+       "capability": "unit-grid",
+       "module": "unit-grid",
        "change": "swap",
        "params": {
-        "value": 70,
-        "label": "Score drops percent",
-        "variant": "bar"
+        "title": "Score drops percent",
+        "count": 100,
+        "groups": [
+         {
+          "count": 70,
+          "label": "70 in 100",
+          "tone": "primary"
+         },
+         {
+          "count": 30,
+          "label": "The rest",
+          "tone": "accent"
+         }
+        ],
+        "variant": "dots"
        },
-       "why": "share: percent-fill"
+       "why": "share: unit-grid"
       },
       {
        "id": "the-context-window-doubled-1-sh4-3",
@@ -3306,15 +3330,35 @@
        "end": 528.463,
        "text": "Northlight says it is mostly the first. The new cluster uses a newer generation of chips,",
        "intent": "quote",
-       "kind": "quote",
-       "capability": "concept-card",
-       "module": "concept-card",
+       "kind": "page",
+       "capability": "media-window",
+       "module": "media-window",
        "change": "swap",
        "params": {
-        "text": "Northlight says mostly",
-        "icon": "cpu"
+        "title": "Halcyon 2 system card",
+        "media": {
+         "kind": "video",
+         "src": "assets/evidence/system-card-table-7.mp4"
+        }
        },
-       "why": "quote: nothing else fits, a concept card"
+       "evidence": {
+        "claim": "c-cluster",
+        "status": "verified",
+        "kind": "number",
+        "score": 0.573,
+        "source": {
+         "url": "https://northlight.example/halcyon-2/system-card",
+         "title": "Halcyon 2 system card",
+         "date": "2026-03-10"
+        },
+        "quote": "approximately 30,000 accelerators for eleven weeks",
+        "capture": {
+         "id": "system-card-table-7",
+         "kind": "model-card",
+         "out": "assets/evidence/system-card-table-7.mp4"
+        }
+       },
+       "why": "page (evidence c-cluster, capture system-card-table-7): media-window"
       }
      ]
     },
@@ -3591,7 +3635,7 @@
         "claim": "c-coding-internal",
         "status": "verified",
         "kind": "number",
-        "score": 0.686,
+        "score": 0.717,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2",
@@ -3819,7 +3863,7 @@
         "claim": "c-maths",
         "status": "verified",
         "kind": "number",
-        "score": 0.55,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2 (footnote 4)",
@@ -3864,7 +3908,7 @@
         "claim": "c-maths",
         "status": "verified",
         "kind": "number",
-        "score": 0.9,
+        "score": 0.8,
         "source": {
          "url": "https://northlight.example/blog/halcyon-2",
          "title": "Introducing Halcyon 2 (footnote 4)",
@@ -3924,7 +3968,7 @@
         "claim": "c-swe",
         "status": "verified",
         "kind": "number",
-        "score": 0.525,
+        "score": 0.533,
         "source": {
          "url": "https://leaderboard.example/swe",
          "title": "Open SWE benchmark",
@@ -4557,7 +4601,7 @@
         "claim": "c-cutoff",
         "status": "verified",
         "kind": "number",
-        "score": 0.764,
+        "score": 0.878,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card, table 7",
@@ -4638,7 +4682,19 @@
         ],
         "variant": "dots"
        },
-       "why": "share: unit-grid"
+       "evidence": {
+        "claim": "c-long-doc",
+        "status": "verified",
+        "kind": "number",
+        "score": 0.8,
+        "source": {
+         "url": "https://northlight.example/blog/halcyon-2",
+         "title": "Introducing Halcyon 2",
+         "date": "2026-03-10"
+        },
+        "quote": "71% on long-document QA"
+       },
+       "why": "share (evidence c-long-doc): unit-grid"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh2-2",
@@ -4670,7 +4726,19 @@
          }
         ]
        },
-       "why": "process: timeline"
+       "evidence": {
+        "claim": "c-cutoff",
+        "status": "verified",
+        "kind": "number",
+        "score": 0.533,
+        "source": {
+         "url": "https://northlight.example/halcyon-2/system-card",
+         "title": "Halcyon 2 system card, table 7",
+         "date": "2026-03-10"
+        },
+        "quote": "post-cutoff events: 30% error"
+       },
+       "why": "process (evidence c-cutoff): timeline"
       },
       {
        "id": "the-failure-table-and-what-it-admits-1-sh2-3",
@@ -4746,7 +4814,7 @@
         "claim": "c-cutoff",
         "status": "verified",
         "kind": "number",
-        "score": 0.3,
+        "score": 1.05,
         "source": {
          "url": "https://northlight.example/halcyon-2/system-card",
          "title": "Halcyon 2 system card, table 7",
@@ -4936,7 +5004,19 @@
         ],
         "variant": "duotone"
        },
-       "why": "list: icon-grid"
+       "evidence": {
+        "claim": "c-leaderboard",
+        "status": "verified",
+        "kind": "statement",
+        "score": 1.05,
+        "source": {
+         "url": "https://arena.example/leaderboard",
+         "title": "Blind-vote leaderboard history",
+         "date": "2026-03-24"
+        },
+        "quote": "#2 → #1 → #3"
+       },
+       "why": "list (evidence c-leaderboard): icon-grid"
       }
      ]
     }
@@ -4993,7 +5073,14 @@
         "layout": "stack",
         "variant": "rise"
        },
-       "why": "title: kinetic-words"
+       "evidence": {
+        "claim": "c-unverified-tests",
+        "status": "unverified",
+        "kind": "number",
+        "score": 0.589,
+        "source": null
+       },
+       "why": "title (evidence c-unverified-tests): kinetic-words"
       },
       {
        "id": "how-the-rivals-answered-1-sh1-2",
@@ -5018,7 +5105,7 @@
         "claim": "c-rival-cuts",
         "status": "verified",
         "kind": "number",
-        "score": 0.775,
+        "score": 0.85,
         "source": {
          "url": "https://news.example/ai/price-war",
          "title": "The model price war",
@@ -5065,14 +5152,35 @@
        "end": 842.941,
        "text": "Ten days after the launch, an open source group published a smaller model",
        "intent": "number",
-       "kind": "concept",
-       "capability": "glass-word",
-       "module": "glass-word",
+       "kind": "page",
+       "capability": "media-window",
+       "module": "media-window",
        "change": "enter",
        "params": {
-        "word": "Ten"
+        "title": "Halcyon 2 system card, table 7",
+        "media": {
+         "kind": "video",
+         "src": "assets/evidence/system-card-table-7.mp4"
+        }
        },
-       "why": "concept: glass-word"
+       "evidence": {
+        "claim": "c-cutoff",
+        "status": "verified",
+        "kind": "number",
+        "score": 0.533,
+        "source": {
+         "url": "https://northlight.example/halcyon-2/system-card",
+         "title": "Halcyon 2 system card, table 7",
+         "date": "2026-03-10"
+        },
+        "quote": "post-cutoff events: 30% error",
+        "capture": {
+         "id": "system-card-table-7",
+         "kind": "model-card",
+         "out": "assets/evidence/system-card-table-7.mp4"
+        }
+       },
+       "why": "page (evidence c-cutoff, capture system-card-table-7): media-window"
       },
       {
        "id": "how-the-rivals-answered-1-sh2-2",
@@ -5208,7 +5316,7 @@
         "claim": "c-leaderboard",
         "status": "verified",
         "kind": "statement",
-        "score": 0.336,
+        "score": 0.696,
         "source": {
          "url": "https://arena.example/leaderboard",
          "title": "Blind-vote leaderboard history",
@@ -5349,7 +5457,7 @@
         "claim": "c-swe",
         "status": "verified",
         "kind": "number",
-        "score": 0.3,
+        "score": 1.05,
         "source": {
          "url": "https://leaderboard.example/swe",
          "title": "Open SWE benchmark",
@@ -5625,7 +5733,7 @@
         "claim": "c-rival-cuts",
         "status": "verified",
         "kind": "number",
-        "score": 0.45,
+        "score": 1.05,
         "source": {
          "url": "https://news.example/ai/price-war",
          "title": "The model price war",
@@ -5763,29 +5871,13 @@
        "text": "If this breakdown helped, the full source list is in the description,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "kinetic-words",
-       "module": "kinetic-words",
+       "capability": "glass-word",
+       "module": "glass-word",
        "change": "swap",
        "params": {
-        "words": [
-         {
-          "text": "breakdown",
-          "at": 0.2
-         },
-         {
-          "text": "helped",
-          "at": 0.9
-         },
-         {
-          "text": "full",
-          "at": 1.6,
-          "emphasis": true
-         }
-        ],
-        "layout": "stack",
-        "variant": "rise"
+        "word": "Breakdown"
        },
-       "why": "concept: kinetic-words"
+       "why": "concept: glass-word"
       },
       {
        "id": "what-this-means-for-the-next-year-1-sh4-3",
@@ -5859,8 +5951,8 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021
     },
     "states": 12
    }
@@ -5874,7 +5966,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "46ebb2bdb774f35f",
+   "key": "dbade095d472381f",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5922,10 +6014,10 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 21,
-     "system-card-table-7": 22
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 126.391,
+     "system-card-table-7": 134.302
     },
     "states": 26
    }
@@ -5939,7 +6031,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "ca635cd62c402768",
+   "key": "50b8a3d05d3c0106",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5950,7 +6042,7 @@
     "recent": [
      "process-steps",
      "concept-card",
-     "cta",
+     "media-window",
      "timeline",
      "icon-row",
      "percent-fill",
@@ -5972,11 +6064,10 @@
      "code-snippet": 1,
      "process-steps": 4,
      "map-highlight": 1,
-     "media-window": 1,
+     "media-window": 2,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 1,
-     "cta": 1,
      "percent-fill": 1
     },
     "plates": [
@@ -5997,10 +6088,10 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 21,
-     "system-card-table-7": 22
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 126.391,
+     "system-card-table-7": 202.957
     },
     "states": 41
    }
@@ -6014,7 +6105,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "a88574caf47a0b3c",
+   "key": "090cec8d4e1d0bff",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -6035,7 +6126,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 9,
-     "concept-card": 4,
+     "concept-card": 5,
      "repo-pr-card": 1,
      "quote-card": 2,
      "odometer": 1,
@@ -6047,12 +6138,11 @@
      "code-snippet": 1,
      "process-steps": 4,
      "map-highlight": 1,
-     "media-window": 2,
+     "media-window": 3,
      "stat-card": 1,
      "count-up": 1,
      "bar-chart": 2,
-     "cta": 1,
-     "percent-fill": 2,
+     "percent-fill": 1,
      "unit-grid": 1
     },
     "plates": [
@@ -6078,10 +6168,11 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 21,
-     "system-card-table-7": 49
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 126.391,
+     "system-card-table-7": 287.073,
+     "swe-leaderboard": 267.91
     },
     "states": 54
    }
@@ -6095,7 +6186,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "dfc79eec0206c8b6",
+   "key": "2c3df25d1de4c4e3",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6116,7 +6207,7 @@
     "counts": {
      "logo-sting": 1,
      "icon-row": 12,
-     "concept-card": 4,
+     "concept-card": 5,
      "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
@@ -6128,12 +6219,11 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 2,
+     "media-window": 3,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
-     "cta": 1,
-     "percent-fill": 2,
+     "percent-fill": 1,
      "unit-grid": 1,
      "compare": 1
     },
@@ -6165,10 +6255,11 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 49
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 287.073,
+     "swe-leaderboard": 267.91
     },
     "states": 69
    }
@@ -6182,7 +6273,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "e6c978f401c25e32",
+   "key": "91bddebfc9ab6551",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6194,20 +6285,20 @@
      "motion-title",
      "glass-word",
      "excerpt",
-     "media-window",
-     "concept-card",
      "percent-fill",
+     "concept-card",
+     "unit-grid",
      "icon-row",
      "icon-row"
     ],
     "counts": {
      "logo-sting": 1,
      "icon-row": 14,
-     "concept-card": 6,
+     "concept-card": 7,
      "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
-     "particle-text": 5,
+     "particle-text": 4,
      "motion-title": 5,
      "kinetic-words": 7,
      "timeline": 4,
@@ -6215,13 +6306,12 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 4,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 3,
-     "cta": 1,
-     "percent-fill": 3,
-     "unit-grid": 1,
+     "percent-fill": 2,
+     "unit-grid": 2,
      "compare": 1,
      "glass-word": 1,
      "excerpt": 1
@@ -6259,10 +6349,11 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 76
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 408.665,
+     "swe-leaderboard": 267.91
     },
     "states": 81
    }
@@ -6276,7 +6367,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "1075f79bc6000b89",
+   "key": "ace413b40cc5c5b2",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6285,7 +6376,7 @@
    ],
    "history": {
     "recent": [
-     "concept-card",
+     "media-window",
      "kinetic-words",
      "icon-row",
      "icon-row",
@@ -6301,7 +6392,7 @@
      "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
-     "particle-text": 6,
+     "particle-text": 5,
      "motion-title": 6,
      "kinetic-words": 8,
      "timeline": 4,
@@ -6309,13 +6400,12 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 5,
      "stat-card": 2,
      "count-up": 1,
      "bar-chart": 4,
-     "cta": 1,
-     "percent-fill": 4,
-     "unit-grid": 1,
+     "percent-fill": 3,
+     "unit-grid": 2,
      "compare": 1,
      "glass-word": 1,
      "excerpt": 1
@@ -6358,10 +6448,11 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 76
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 521.663,
+     "swe-leaderboard": 267.91
     },
     "states": 94
    }
@@ -6375,7 +6466,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "95281388325f1772",
+   "key": "e7017855fc3c1e5f",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6400,7 +6491,7 @@
      "repo-pr-card": 1,
      "quote-card": 3,
      "odometer": 2,
-     "particle-text": 7,
+     "particle-text": 6,
      "motion-title": 8,
      "kinetic-words": 8,
      "timeline": 4,
@@ -6408,16 +6499,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 5,
      "stat-card": 3,
      "count-up": 1,
      "bar-chart": 5,
-     "cta": 2,
-     "percent-fill": 5,
-     "unit-grid": 2,
+     "percent-fill": 4,
+     "unit-grid": 3,
      "compare": 1,
      "glass-word": 2,
-     "excerpt": 1
+     "excerpt": 1,
+     "cta": 1
     },
     "plates": [
      {
@@ -6462,11 +6553,11 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 3,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 76,
-     "swe-leaderboard": 98
+     "sdk-pr-1842": 16.14,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 521.663,
+     "swe-leaderboard": 598.317
     },
     "states": 106
    }
@@ -6480,7 +6571,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "db824b564d981064",
+   "key": "20c436610ef58317",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6505,7 +6596,7 @@
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
-     "particle-text": 7,
+     "particle-text": 6,
      "motion-title": 9,
      "kinetic-words": 9,
      "timeline": 5,
@@ -6513,16 +6604,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 3,
+     "media-window": 5,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
-     "cta": 2,
-     "percent-fill": 5,
-     "unit-grid": 2,
+     "percent-fill": 4,
+     "unit-grid": 3,
      "compare": 1,
      "glass-word": 3,
      "excerpt": 1,
+     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1
     },
@@ -6574,12 +6665,12 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 107,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 76,
-     "swe-leaderboard": 98,
-     "sdk-fix-commit": 111
+     "sdk-pr-1842": 659.767,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 521.663,
+     "swe-leaderboard": 598.317,
+     "sdk-fix-commit": 682.277
     },
     "states": 119
    }
@@ -6593,7 +6684,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "84416243ba1fcec5",
+   "key": "6d376f1a9417e0a8",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6618,7 +6709,7 @@
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 2,
-     "particle-text": 8,
+     "particle-text": 7,
      "motion-title": 10,
      "kinetic-words": 9,
      "timeline": 8,
@@ -6626,16 +6717,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 4,
+     "media-window": 6,
      "stat-card": 4,
      "count-up": 1,
      "bar-chart": 5,
-     "cta": 2,
-     "percent-fill": 6,
-     "unit-grid": 3,
+     "percent-fill": 5,
+     "unit-grid": 4,
      "compare": 1,
      "glass-word": 4,
      "excerpt": 1,
+     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1
     },
@@ -6692,12 +6783,12 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 107,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 120,
-     "swe-leaderboard": 98,
-     "sdk-fix-commit": 111
+     "sdk-pr-1842": 659.767,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 741.061,
+     "swe-leaderboard": 598.317,
+     "sdk-fix-commit": 682.277
     },
     "states": 132
    }
@@ -6711,7 +6802,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "f5af0830b5056a56",
+   "key": "19b30e25ab6bdd8b",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6736,7 +6827,7 @@
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
-     "particle-text": 9,
+     "particle-text": 8,
      "motion-title": 10,
      "kinetic-words": 10,
      "timeline": 8,
@@ -6744,16 +6835,16 @@
      "code-snippet": 2,
      "process-steps": 7,
      "map-highlight": 1,
-     "media-window": 4,
+     "media-window": 7,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
-     "cta": 2,
-     "percent-fill": 7,
-     "unit-grid": 3,
+     "percent-fill": 6,
+     "unit-grid": 4,
      "compare": 1,
-     "glass-word": 5,
+     "glass-word": 4,
      "excerpt": 1,
+     "cta": 1,
      "window-chrome": 1,
      "commit-card": 1,
      "checklist": 3
@@ -6816,12 +6907,12 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 107,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 120,
-     "swe-leaderboard": 143,
-     "sdk-fix-commit": 111
+     "sdk-pr-1842": 659.767,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 837.668,
+     "swe-leaderboard": 887.273,
+     "sdk-fix-commit": 682.277
     },
     "states": 144
    }
@@ -6835,7 +6926,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "a519db6f767630dd",
+   "key": "6632aeb218906340",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6850,7 +6941,7 @@
      "icon-row",
      "icon-row",
      "motion-title",
-     "kinetic-words",
+     "glass-word",
      "logo-sting"
     ],
     "counts": {
@@ -6860,24 +6951,24 @@
      "repo-pr-card": 2,
      "quote-card": 3,
      "odometer": 3,
-     "particle-text": 10,
+     "particle-text": 9,
      "motion-title": 12,
-     "kinetic-words": 11,
+     "kinetic-words": 10,
      "timeline": 8,
      "icon-grid": 9,
      "code-snippet": 2,
      "process-steps": 10,
      "map-highlight": 1,
-     "media-window": 4,
+     "media-window": 7,
      "stat-card": 5,
      "count-up": 2,
      "bar-chart": 5,
-     "cta": 3,
-     "percent-fill": 7,
-     "unit-grid": 3,
+     "percent-fill": 6,
+     "unit-grid": 4,
      "compare": 1,
      "glass-word": 5,
      "excerpt": 1,
+     "cta": 2,
      "window-chrome": 1,
      "commit-card": 1,
      "checklist": 3
@@ -6945,12 +7036,12 @@
      }
     ],
     "captures": {
-     "sdk-pr-1842": 107,
-     "halcyon-2-post": 4,
-     "side-by-side-clip": 65,
-     "system-card-table-7": 120,
-     "swe-leaderboard": 143,
-     "sdk-fix-commit": 111
+     "sdk-pr-1842": 659.767,
+     "halcyon-2-post": 22.021,
+     "side-by-side-clip": 383.345,
+     "system-card-table-7": 837.668,
+     "swe-leaderboard": 887.273,
+     "sdk-fix-commit": 682.277
     },
     "states": 158
    }
@@ -7069,20 +7160,20 @@
     },
     {
      "id": "kinetic-words",
-     "share": 0.07
+     "share": 0.063
     },
     {
-     "id": "particle-text",
+     "id": "process-steps",
      "share": 0.063
     }
    ],
    "longest_same_module_across_cuts": 1
   },
   "evidence": {
-   "claims": 84,
-   "sourced": 55,
-   "coverage": 0.655,
-   "captures": 12
+   "claims": 86,
+   "sourced": 60,
+   "coverage": 0.698,
+   "captures": 16
   },
   "fallbacks": [],
   "chunks": {

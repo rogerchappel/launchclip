@@ -56,7 +56,7 @@
         { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: builds on process-steps (+1 steps)" },
         { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: builds on process-steps (+1 steps)" },
         { "words": [453, 462], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy): cta" },
+        { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy, capture system-card-table-7): media-window" },
         { "words": [485, 494], "intent": "process", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-3"], "why": "process: timeline" },
         { "words": [495, 512], "intent": "proof", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-1"], "why": "concept (evidence c-synthetic): icon-row" },
         { "words": [513, 526], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh4-2"], "why": "share (evidence c-synthetic): percent-fill" },
@@ -69,17 +69,17 @@
       "title": "What Northlight actually announced",
       "layout": "full",
       "lines": [
-        { "words": [553, 562], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-1"], "why": "title (evidence c-history-2023): particle-text" },
+        { "words": [553, 562], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-1"], "why": "title (evidence c-leaderboard): particle-text" },
         { "words": [563, 574], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-2"], "why": "compare (evidence c-latency): bar-chart" },
         { "words": [575, 589], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh1-3"], "why": "tokens (evidence c-price): kinetic-words" },
         { "words": [590, 608], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-1"], "why": "share (evidence c-coding-internal): unit-grid" },
-        { "words": [609, 616], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-2"], "why": "share (evidence c-coding-internal): percent-fill" },
+        { "words": [609, 616], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-2"], "why": "series (evidence c-swe, capture swe-leaderboard): nothing else fits, a concept card" },
         { "words": [617, 625], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-3"], "why": "concept: icon-row" },
         { "words": [626, 643], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh2-4"], "why": "concept: builds on icon-row (+1 items)" },
         { "words": [644, 652], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-1"], "why": "documents: nothing else fits, a concept card" },
         { "words": [653, 670], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-2"], "why": "page (evidence c-cluster, capture system-card-table-7): media-window" },
         { "words": [671, 681], "intent": "number", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh3-3"], "why": "tokens (evidence c-context): kinetic-words" },
-        { "words": [682, 705], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-1"], "why": "list (evidence c-history-2023): icon-grid" },
+        { "words": [682, 705], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-1"], "why": "list (evidence c-cutoff): icon-grid" },
         { "words": [706, 719], "intent": "claim", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-2"], "why": "concept: builds on icon-grid (+1 items)" },
         { "words": [720, 732], "intent": "list", "treatment": "insert", "scenes": ["what-northlight-actually-announced-1-sh4-3"], "why": "list: builds on icon-grid (+1 items)" }
       ]
@@ -111,16 +111,16 @@
       "title": "The context window, doubled",
       "layout": "full",
       "lines": [
-        { "words": [933, 950], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-1"], "why": "title (evidence c-context): particle-text" },
+        { "words": [933, 950], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-1"], "why": "title (evidence c-context, capture system-card-table-7): media-window" },
         { "words": [951, 968], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-2"], "why": "tokens: kinetic-words" },
         { "words": [969, 986], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh1-3"], "why": "tokens (evidence c-context): kinetic-words" },
         { "words": [987, 997], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-1"], "why": "chain: nothing else fits, a concept card" },
         { "words": [998, 1015], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-2"], "why": "concept: motion-title" },
         { "words": [1016, 1028], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh2-3"], "why": "concept: glass-word" },
         { "words": [1029, 1047], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-1"], "why": "documents (evidence c-long-doc): excerpt" },
-        { "words": [1048, 1071], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-2"], "why": "page (evidence c-needle, capture system-card-table-7): media-window" },
+        { "words": [1048, 1071], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh3-2"], "why": "share (evidence c-needle): percent-fill" },
         { "words": [1072, 1092], "intent": "claim", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-1"], "why": "documents: nothing else fits, a concept card" },
-        { "words": [1093, 1100], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-2"], "why": "share: percent-fill" },
+        { "words": [1093, 1100], "intent": "number", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-2"], "why": "share: unit-grid" },
         { "words": [1101, 1111], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-3"], "why": "concept: icon-row" },
         { "words": [1112, 1128], "intent": "turn", "treatment": "insert", "scenes": ["the-context-window-doubled-1-sh4-4"], "why": "concept: builds on icon-row (+1 items)" }
       ]
@@ -135,7 +135,7 @@
         { "words": [1167, 1175], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-1"], "why": "concept: motion-title" },
         { "words": [1176, 1184], "intent": "turn", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-2"], "why": "money: nothing else fits, a concept card" },
         { "words": [1185, 1200], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-3"], "why": "list: icon-grid" },
-        { "words": [1201, 1216], "intent": "quote", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-4"], "why": "quote: nothing else fits, a concept card" },
+        { "words": [1201, 1216], "intent": "quote", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-4"], "why": "page (evidence c-cluster, capture system-card-table-7): media-window" },
         { "words": [1217, 1230], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-1"], "why": "tokens: kinetic-words" },
         { "words": [1231, 1243], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-2"], "why": "concept: icon-row" },
         { "words": [1244, 1254], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-3"], "why": "concept: builds on icon-row (+1 items)" },
@@ -193,15 +193,15 @@
         { "words": [1702, 1713], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-2"], "why": "page (evidence c-failure-table, capture system-card-table-7): media-window" },
         { "words": [1714, 1725], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-3"], "why": "concept (evidence c-cutoff): glass-word" },
         { "words": [1726, 1736], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh1-4"], "why": "share (evidence c-cutoff): percent-fill" },
-        { "words": [1737, 1746], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-1"], "why": "share: unit-grid" },
-        { "words": [1747, 1761], "intent": "process", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-2"], "why": "process: timeline" },
+        { "words": [1737, 1746], "intent": "number", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-1"], "why": "share (evidence c-long-doc): unit-grid" },
+        { "words": [1747, 1761], "intent": "process", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-2"], "why": "process (evidence c-cutoff): timeline" },
         { "words": [1762, 1774], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-3"], "why": "concept: builds on timeline (+1 steps)" },
         { "words": [1775, 1790], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh2-4"], "why": "concept: builds on timeline (+1 steps)" },
         { "words": [1791, 1798], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-1"], "why": "concept: motion-title" },
         { "words": [1799, 1819], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-2"], "why": "concept (evidence c-repro): icon-row" },
         { "words": [1820, 1838], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-3"], "why": "concept: builds on icon-row (+1 items)" },
         { "words": [1839, 1852], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-1"], "why": "ranking: nothing else fits, a concept card" },
-        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list: icon-grid" }
+        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list (evidence c-leaderboard): icon-grid" }
       ]
     },
     {
@@ -209,10 +209,10 @@
       "title": "How the rivals answered",
       "layout": "full",
       "lines": [
-        { "words": [1867, 1878], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-1"], "why": "title: kinetic-words" },
+        { "words": [1867, 1878], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-1"], "why": "title (evidence c-unverified-tests): kinetic-words" },
         { "words": [1879, 1900], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-2"], "why": "share (evidence c-rival-cuts): percent-fill" },
         { "words": [1901, 1921], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh1-3"], "why": "stat: count-up" },
-        { "words": [1922, 1934], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-1"], "why": "concept: glass-word" },
+        { "words": [1922, 1934], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
         { "words": [1935, 1949], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-2"], "why": "concept: particle-text" },
         { "words": [1950, 1968], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh2-3"], "why": "stat (evidence c-price): stat-card" },
         { "words": [1969, 1985], "intent": "number", "treatment": "insert", "scenes": ["how-the-rivals-answered-1-sh3-1"], "why": "stat (evidence c-leaderboard): odometer" },
@@ -240,7 +240,7 @@
         { "words": [2173, 2186], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-3"], "why": "concept: icon-row" },
         { "words": [2187, 2196], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh3-4"], "why": "concept: builds on icon-row (+1 items)" },
         { "words": [2197, 2206], "intent": "product", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-1"], "why": "concept: motion-title" },
-        { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: kinetic-words" },
+        { "words": [2207, 2218], "intent": "claim", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-2"], "why": "concept: glass-word" },
         { "words": [2219, 2240], "intent": "process", "treatment": "insert", "scenes": ["what-this-means-for-the-next-year-1-sh4-3"], "why": "sting: logo-sting" }
       ]
     }

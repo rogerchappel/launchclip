@@ -51,8 +51,8 @@ export const BACKDROP_PLATES = Object.freeze([
 ]);
 const MAX_ITEMS = { data: 5, items: 4, steps: 4, entries: 6, rows: 4 };
 const RECENT = 8;
-// States between two plays of the same evidence capture.
-const CAPTURE_GAP = 24;
+// Seconds between two plays of the same evidence capture.
+const CAPTURE_GAP_SECONDS = 60;
 // A phrase can break before these when a sentence runs long.
 const PHRASE_STARTS = new Set(['in', 'on', 'with', 'that', 'who', 'from', 'to', 'for', 'by', 'over', 'across', 'after', 'before', 'into', 'about', 'than', 'compared', 'including', 'using', 'down', 'up']);
 const CONJUNCTIONS = new Set(['and', 'but', 'so', 'because', 'which', 'while', 'then', 'when', 'where', 'until', 'though', 'although', 'as', 'or', 'yet', 'since', 'unless']);
@@ -250,30 +250,139 @@ export function visualKind(beat) {
 
 const contentSet = (text) => new Set(keyTerms(text).map((word) => word.toLowerCase()));
 
+// Entity kinds a clause names with a common noun.
+const ENTITY_HINTS = [['repo', /\b(repositor(y|ies)|repo|codebase)\b/], ['benchmark', /\b(benchmark|leaderboard)\b/]];
+// The research ledger as the matcher reads it: content words, numbers, days and entity counts per claim (built once).
+const LEDGER_INDEX = new WeakMap();
+function ledgerIndex(ledger, claims) {
+  const cached = LEDGER_INDEX.get(ledger);
+  if (cached) return cached;
+  const df = new Map(), entityDf = new Map(), words = new Map(), facts = new Map(), byName = new Map();
+  for (const claim of claims) {
+    const set = contentSet(claim.text);
+    words.set(claim.id, set);
+    for (const word of set) df.set(word, (df.get(word) ?? 0) + 1);
+    const parsed = extractFacts(claim.text);
+    const values = (claim.values ?? []).map((entry) => entry?.value).filter(finite);
+    facts.set(claim.id, { numbers: [...parsed.numbers.map((entry) => entry.value), ...values], days: parsed.dates.filter((entry) => entry.month && entry.day).map((entry) => `${entry.month}-${entry.day}`) });
+    for (const e of claim.entities ?? []) {
+      if (!e?.name) continue;
+      const key = e.name.toLowerCase();
+      entityDf.set(key, (entityDf.get(key) ?? 0) + 1);
+      if (!byName.has(key)) byName.set(key, { name: e.name, kind: e.kind });
+    }
+  }
+  // Specific: a repo or a benchmark, or any name at most two claims share.
+  const entities = [...byName.entries()].map(([key, e]) => ({ ...e, specific: ['repo', 'benchmark'].includes(e.kind) || entityDf.get(key) <= 2 })).filter((e) => e.name.length > 2);
+  const index = { n: claims.length, df, entityDf, words, facts, entities };
+  LEDGER_INDEX.set(ledger, index);
+  return index;
+}
+
+/**
+ * Words the narration uses for the ledger's specific entities: a capitalised
+ * word (not opening its sentence) that appears beside exactly one repo or
+ * benchmark, in four or fewer sentences in all, and is neither an entity
+ * nor a word two claims use. "Start with dotnet/efcore, …
+ * Microsoft's …" makes "Microsoft" an alias of dotnet/efcore, so "a Microsoft
+ * repository" earlier points at it. → Map(entity name lower case → Set(alias))
+ */
+export function entityAliases(ledger, words) {
+  const claims = (ledger?.claims ?? []).filter((claim) => claim?.id);
+  if (!claims.length) return new Map();
+  const index = ledgerIndex(ledger, claims);
+  const specific = index.entities.filter((e) => ['repo', 'benchmark'].includes(e.kind));
+  // A word that is itself an entity, or that two claims use, already speaks for itself.
+  const own = (token) => index.entities.some((e) => e.name.toLowerCase() === token.toLowerCase()) || (index.df.get(token.toLowerCase()) ?? 0) >= 2;
+  const sentences = narrationWords(words).map((word) => word.text).join(' ').split(/(?<=[.!?])\s+/);
+  const seen = new Map(), beside = new Map();
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase();
+    const caps = new Set(sentence.split(/\s+/).slice(1).map((token) => token.replace(/['’]s$/, '').replace(/[^\p{L}\p{N}-]+/gu, '')).filter((token) => /^\p{Lu}[\p{Ll}]{2,}$/u.test(token) && !STOP_CAPS.has(token.toLowerCase())));
+    const here = specific.filter((e) => mentions(lower, e.name)).map((e) => e.name.toLowerCase());
+    for (const token of caps) {
+      seen.set(token, (seen.get(token) ?? 0) + 1);
+      const set = beside.get(token) ?? new Set();
+      for (const name of here) set.add(name);
+      beside.set(token, set);
+    }
+  }
+  const out = new Map();
+  for (const [token, names] of beside) {
+    if (names.size !== 1 || seen.get(token) > 4 || own(token) || specific.some((e) => e.name.toLowerCase().includes(token.toLowerCase()))) continue;
+    const [name] = names;
+    if (!out.has(name)) out.set(name, new Set());
+    out.get(name).add(token.toLowerCase());
+  }
+  return out;
+}
+const STOP_CAPS = new Set(['the', 'this', 'that', 'then', 'and', 'but', 'so', 'on', 'in', 'it', 'its', 'we', 'you', 'they', 'start', 'one', 'each', 'every']);
+
+function mentions(text, name) {
+  const escaped = String(name).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^\\w.-])${escaped}(?![\\w-]|\\.\\d)`).test(text);
+}
+
 /**
  * The best claim in the research ledger (launchclip.evidence.v1) for a
  * clause, and the capture (launchclip.capture.v1) that shows it (claim.capture,
  * as src/research writes it, then capture.claim(s), then a source URL): the claim
  * whose content words and numbers overlap the clause most, at least 0.3.
+ * Words are weighed by how few claims use them ("Terra" in ten claims counts
+ * little), a named entity by how few claims share it, a repo or benchmark
+ * named in passing ("a … repository") points at the claim about one, a
+ * benchmark the claim does not cover counts against it, and so does a
+ * capture already shown within a minute (at, played: {captureId: seconds}).
  * Contradicted claims never match. → {claim, status, kind, source, quote?,
  * capture?: {id, kind, out}, data?} | null (data: capture.data, else claim.data)
  */
-export function matchEvidence(beat, { ledger = null, captures = [] } = {}) {
+export function matchEvidence(beat, { ledger = null, captures = [], at = null, played = null, aliases = null } = {}) {
   const claims = (ledger?.claims ?? []).filter((claim) => claim?.id && claim.status !== 'contradicted');
   if (!claims.length) return null;
+  const index = ledgerIndex(ledger, claims);
   const words = contentSet(beat.text);
   const numbers = new Set((beat.facts?.numbers ?? []).map((entry) => entry.value));
+  const days = new Set((beat.facts?.dates ?? []).filter((entry) => entry.month && entry.day).map((entry) => `${entry.month}-${entry.day}`));
+  const text = String(beat.text ?? '').toLowerCase();
+  // The specific names the clause says (a repo, a benchmark, a model that few claims share).
+  const named = index.entities.filter((entity) => entity.specific && (mentions(text, entity.name) || [...(aliases?.get(entity.name.toLowerCase()) ?? [])].some((alias) => mentions(text, alias))));
+  const idf = (word) => Math.log((index.n + 1) / ((index.df.get(word) ?? 0) + 0.5));
+  const known = [...words].filter((word) => index.df.has(word));
+  const beatWeight = known.reduce((sum, word) => sum + idf(word), 0);
   let best = null;
   for (const claim of claims) {
-    const other = contentSet(claim.text);
-    const shared = [...words].filter((word) => other.has(word)).length;
-    const claimNumbers = extractFacts(claim.text).numbers.map((entry) => entry.value);
-    const sameNumber = claimNumbers.some((n) => numbers.has(n));
-    // One shared word is chance ("second" place, the "second" number); a number or two words are not.
-    if (shared < 2 && !sameNumber) continue;
-    let score = shared / Math.max(1, Math.min(words.size, other.size));
+    const other = index.words.get(claim.id);
+    const shared = [...words].filter((word) => other.has(word));
+    const claimWeight = [...other].reduce((sum, word) => sum + idf(word), 0);
+    const facts = index.facts.get(claim.id);
+    const sameNumber = facts.numbers.some((n) => numbers.has(n));
+    const sameDay = facts.days.some((day) => days.has(day));
+    const entities = claim.entities ?? [];
+    // An entity the clause names, weighted by how few claims share it.
+    let entity = 0;
+    for (const e of entities) {
+      if (!e?.name) continue;
+      const key = e.name.toLowerCase();
+      if (mentions(text, e.name)) entity += 0.6 / (index.entityDf.get(key) ?? 1);
+      // Or a word the narration uses for it ("Microsoft" for dotnet/efcore).
+      else if ([...(aliases?.get(key) ?? [])].some((alias) => mentions(text, alias))) entity += 0.6 / (index.entityDf.get(key) ?? 1);
+    }
+    // A kind the clause names in passing: "a … repository" points at the claim about a repo.
+    // When the clause names one (directly or by an alias), only that one's claims take the hint.
+    for (const [kind, regex] of ENTITY_HINTS) if (regex.test(text) && !named.some((e) => e.kind === kind) && entities.some((e) => e?.kind === kind)) entity += 0.45;
+    // One shared word is chance; a number, a date, two words or a named entity are not.
+    if (shared.length < 2 && !sameNumber && !sameDay && entity < 0.3) continue;
+    let score = shared.reduce((sum, word) => sum + idf(word), 0) / Math.max(1e-6, Math.min(beatWeight, claimWeight)) + Math.min(entity, 0.9);
     if (sameNumber) score += 0.35;
-    else if (numbers.size && claimNumbers.length) score -= 0.25;
+    else if (numbers.size && facts.numbers.length) score -= 0.25;
+    if (sameDay) score += 0.35;
+    // The clause names (or aliases) a benchmark or repo this claim does not have, and the claim names another of that kind.
+    const has = (e) => entities.some((own) => own?.name?.toLowerCase() === e.name.toLowerCase());
+    for (const e of named) if (!has(e) && entities.some((own) => own?.kind === e.kind)) score -= 0.5;
+    // A claim about none of the clause's named repos or benchmarks is about something else.
+    if (named.length && !named.some(has)) score -= 0.3;
+    // A capture shown within the last minute weighs against its claim.
+    if (claim.capture && finite(at) && finite(played?.[claim.capture]) && at - played[claim.capture] < CAPTURE_GAP_SECONDS) score -= 0.3;
     if (claim.status === 'verified') score += 0.05;
     if (score >= 0.3 && (!best || score > best.score)) best = { score, claim };
   }
@@ -349,16 +458,17 @@ export function directChunk(chunk, options) {
   const factor = (target.gap.p50_min + target.gap.p50_max) / 2 / 5.25;
   const beats = clauseBeats(words, { from: chunk.words[0], to: chunk.words[1], min: 3 * factor, max: 10 * factor, weight: 0.65 / factor, target: target.gap.p50_min + 0.15 * (target.gap.p50_max - target.gap.p50_min) });
   const total = narrationWords(words).length;
+  const aliases = ledger ? entityAliases(ledger, words) : null;
   const states = beats.map((beat, i) => {
     const facts = extractFacts(beat.text);
     const intent = beat.words[0] === 0 ? classifyIntent(beat.text, { index: 0 }) : classifyIntent(beat.text, { index: 1 });
     const draft = { ...beat, intent, facts };
-    const evidence = matchEvidence(draft, { ledger, captures });
+    const evidence = matchEvidence(draft, { ledger, captures, at: beat.start, played: history.captures, aliases });
     if (evidence?.capture) {
-      // A capture plays once in a while: shown again within CAPTURE_GAP states, the claim keeps its source line instead.
+      // A capture plays once a minute at most: shown again sooner, the claim keeps its source line instead.
       const last = history.captures?.[evidence.capture.id];
-      if (last !== undefined && history.states + i - last < CAPTURE_GAP) delete evidence.capture;
-      else history.captures = { ...(history.captures ?? {}), [evidence.capture.id]: history.states + i };
+      if (finite(last) && beat.start - last < CAPTURE_GAP_SECONDS) delete evidence.capture;
+      else history.captures = { ...(history.captures ?? {}), [evidence.capture.id]: beat.start };
     }
     if (evidence) draft.evidence = evidence;
     const opener = chunk.first && i === 0 && beat.words[0] !== 0;
