@@ -7,7 +7,7 @@
 export const STORY_SCHEMA = "launchclip.story.v1";
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -421,6 +421,7 @@ export function validateStory(story, { modules } = {}) {
   };
   const timing = [];
   const fromObjects = [];
+  const overviews = [];
   for (const [index, scene] of (scenes ?? []).entries()) {
     const path = `scenes[${index}]`;
     if (!isObject(scene)) { err(`${path} must be an object`); timing.push(null); continue; }
@@ -485,6 +486,7 @@ export function validateStory(story, { modules } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
+        if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
 
@@ -523,6 +525,11 @@ export function validateStory(story, { modules } = {}) {
     if (scene.zooms !== undefined) validateZooms(scene, { path, label, start, end, track, err, anchorField, format: story.format });
     timing.push({ index, id: scene.id, label, start, end, track: Number.isInteger(track) ? track : 0 });
   }
+
+  // The overview move (kit/core/transitions.mjs OVERVIEW, kept here so this
+  // file stays import-free): world mode, at least 2 s, never into the first
+  // shot, at most one a minute.
+  validateOverviews(overviews, { err, camera, timing });
 
   // from_object must name an earlier scene: "s2.gap-bracket" → scene "s2".
   for (const ref of fromObjects) {
@@ -1058,10 +1065,33 @@ function validateCamera(camera, { err, warn, lane }) {
 
 function cameraTransitionRules(transition, path, { err, lane, camera, track }) {
   const type = transition.type;
-  const moving = STORY_CAMERA_TRANSITIONS.includes(type) || (type === "push" && camera === "world");
+  const moving = STORY_CAMERA_TRANSITIONS.includes(type) || ((type === "push" || type === "overview") && camera === "world");
   if (!moving) return;
   if (lane === "footage-led") err(`${path}.type "${type}" moves a world camera; footage-led stories keep cuts and punch-ins`);
   else if (track !== 0) err(`${path}.type "${type}" moves the camera between track-0 scenes; overlays (track ≥ 1) cannot use it`);
+}
+
+// ---------------------------------------------------------------------------
+// The overview move: in {type: "overview", dur, span?: "chapter" | 3–8, hold?}
+
+export const STORY_OVERVIEW = Object.freeze({ minDur: 2, gap: 60, span: [3, 8] });
+
+function validateOverviews(overviews, { err, camera, timing }) {
+  const plates = timing.filter((entry) => entry && entry.track === 0);
+  const firstStart = plates.length && plates.every((entry) => entry.start !== null) ? Math.min(...plates.map((entry) => entry.start)) : null;
+  let last = null;
+  for (const { path, label, transition, start, track } of [...overviews].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))) {
+    if (camera !== "world") err(`${path}.type "overview" needs camera.mode "world": the camera pulls back over the shots laid out in the world`);
+    if (track !== 0) continue;
+    if (typeof transition.dur === "number" && transition.dur < STORY_OVERVIEW.minDur - EPS) err(`${path}.dur must be at least ${STORY_OVERVIEW.minDur} s for an overview (out, hold, in)`);
+    const span = transition.span;
+    if (span !== undefined && span !== "chapter" && !(Number.isInteger(span) && span >= STORY_OVERVIEW.span[0] && span <= STORY_OVERVIEW.span[1])) err(`${path}.span must be "chapter" or a whole number of shots from ${STORY_OVERVIEW.span[0]} to ${STORY_OVERVIEW.span[1]}`);
+    if (transition.hold !== undefined && !(typeof transition.hold === "number" && transition.hold >= 0 && (typeof transition.dur !== "number" || transition.hold <= transition.dur - 1 + EPS))) err(`${path}.hold must be 0 or more seconds, leaving at least 1 s of the overview to move`);
+    if (start === null) continue;
+    if (firstStart !== null && start <= firstStart + EPS) err(`${path}: an overview needs shots before it to show; ${label} is the first shot`);
+    if (last !== null && start - last < STORY_OVERVIEW.gap - EPS) err(`${path}: overviews at ${round3(last)} s and ${round3(start)} s are ${round3(start - last)} s apart; use at most one per ${STORY_OVERVIEW.gap} s`);
+    last = start;
+  }
 }
 
 // ---------------------------------------------------------------------------
