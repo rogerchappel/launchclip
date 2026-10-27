@@ -1,0 +1,57 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-cell-grid-highlight",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "cell-grid",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "legend": "1 cell = 1 question",
+          "order": "reading",
+          "grids": [
+            {
+              "label": "Answered correctly",
+              "count": 198,
+              "value": "124 of 198",
+              "highlight": {
+                "count": 124
+              }
+            }
+          ],
+          "source": "Example benchmark, Oct 2026",
+          "variant": "bars"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
