@@ -155,3 +155,11 @@ test('countText counts between numbers in the same frame and swaps other text', 
   countText(swap, 't', 1, 'Before', 'After');
   assert.deepEqual(swap, [{type: 'set', target: 't', time: 1 + STATE_MOVE / 2, props: {text: 'After'}}]);
 });
+
+test('the planner and the storyboard reference teach builds, the ring and the depth transitions', async () => {
+  const {buildLines, storyboardModulesReference} = await import('../kit/core/planning-prompt.mjs');
+  const lines = buildLines().join('\n');
+  for (const id of Object.keys(STATE_MODULES)) assert.match(lines, new RegExp(id), id);
+  assert.match(lines, /rack-focus.*card-to-card.*glow-wipe/s);
+  assert.match(storyboardModulesReference(), /## Builds, not cuts \(shot states\)/);
+});
