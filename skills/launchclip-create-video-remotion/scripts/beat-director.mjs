@@ -135,7 +135,9 @@ export function extractFacts(text) {
     if (!currency && !unitWord && /^(1[89]|20)\d{2}$/.test(digits)) { dates.push({ label: digits, year: n }); continue; }
     // A number in a name ("Halcyon 2", "version 1.5", "GPT-4") is not a figure.
     const before = value.slice(0, match.index);
-    if (!currency && !unitWord && (/[a-z,]\s[A-Z][\w-]*[\s-]$/.test(before) || /\b(version|v|model|release|chapter|part|step|section|table|footnote|row)\s$/i.test(before))) continue;
+    if (!currency && !unitWord && (/[a-z,]\s[A-Z][\w-]*[\s-]$/.test(before) || /\b(version|v|model|release|chapter|part|step|section|table|footnote|row|request|issue|pr|commit|build|run)\s#?$/i.test(before) || /#$/.test(before))) continue;
+    // A status code ("a 404 page", "returns 503") is not a count.
+    if (!currency && !unitWord && /^[45]\d\d$/.test(digits) && /\b(error|status|page|code|returns?|not found|http)\b/i.test(value)) continue;
     const unit = !unitWord ? undefined : /^(%|percent|per cent)$/.test(unitWord) ? '%' : /^(x|×|times)$/.test(unitWord) ? '×' : unitWord;
     const after = labelAfter(value, match.index + raw.length);
     numbers.push({ value: n, ...(unit ? { unit } : {}), ...(currency ? { prefix: currency } : {}), raw: raw.trim().replace(/\s*percent$/i, '%').replace(/\s*per cent$/i, '%'), ...(SCALE[unit] ? { scaled: n * SCALE[unit] } : {}), ...(after ? { label: after } : {}) });
@@ -152,8 +154,7 @@ export function extractFacts(text) {
     if (match[1].toLowerCase() === 'may' && !match[2]) continue;
     dates.push({ label: `${match[1].charAt(0).toUpperCase()}${match[1].slice(1, 3).toLowerCase()}${match[2] ? ` ${match[2]}` : ''}`, month: MONTHS.indexOf(match[1].toLowerCase()) + 1, ...(match[2] ? { day: Number(match[2]) } : {}) });
   }
-  const list = value.match(/([\p{L}\p{N}'-]+(?: [\p{L}\p{N}'-]+)?), ([\p{L}\p{N}'-]+(?: [\p{L}\p{N}'-]+)?),? (?:and|or) ([\p{L}\p{N}'-]+(?: [\p{L}\p{N}'-]+)?)/u);
-  const items = list ? [list[1].split(' ').at(-1), list[2], list[3].split(' ')[0]].filter((item) => item.length > 1) : [];
+  const items = listItems(value);
   const quote = value.match(/["“]([^"”]{8,})["”]/)?.[1];
   const sides = value.match(/\b([\p{L}\p{N}.-]+) (?:versus|vs\.?|against|compared (?:to|with)) ([\p{L}\p{N}.-]+)/iu);
   const places = PLACES.filter((place) => new RegExp(`\\b${place}\\b`).test(value));
@@ -167,6 +168,25 @@ export function extractFacts(text) {
     ...(handle ? { handle } : {}),
     ...(equation ? { equation } : {})
   };
+}
+
+// "A, B and C": each item a short noun phrase, articles off ("a leak, a price
+// sheet and a rival that…" → leak, price sheet, rival). The first item is the
+// last word before its comma unless an article opens it; the last stops at
+// a relative word or the clause's end.
+const ARTICLE = /^(a|an|the|its|their|our|your|his|her|this|that)$/i;
+const ITEM_STOP = /^(that|which|who|whose|where|when|to|for|with|in|on|at|from|by|of)$/i;
+function listItems(text) {
+  const match = String(text).match(/((?:[\p{L}\p{N}'-]+ ){0,3}[\p{L}\p{N}'-]+), ((?:[\p{L}\p{N}'-]+ ){0,3}[\p{L}\p{N}'-]+),? (?:and|or) ((?:[\p{L}\p{N}'-]+ ?){1,6})/u);
+  if (!match) return [];
+  const words = (part) => part.trim().split(/\s+/).filter(Boolean);
+  const first = words(match[1]);
+  const article = first.findLastIndex((word) => ARTICLE.test(word));
+  const head = article >= 0 && article < first.length - 1 ? first.slice(article + 1) : first.slice(-1);
+  const middle = words(match[2]).filter((word, i) => !(i === 0 && ARTICLE.test(word)));
+  const last = [];
+  for (const [i, word] of words(match[3]).entries()) { if (i === 0 && ARTICLE.test(word)) continue; if (ITEM_STOP.test(word) || last.length === 3) break; last.push(word); }
+  return [head, middle, last].map((item) => item.join(' ')).filter((item) => item.length > 1 && item.split(' ').length <= 3);
 }
 
 // The words after a number, up to four, stopping at punctuation and the next number.
@@ -217,8 +237,10 @@ export function visualKind(beat) {
   if (facts.dates?.length === 1) return facts.dates[0].month && !facts.dates[0].day ? 'month' : 'date';
   if (facts.places?.length >= 2) return 'map';
   if (facts.sides) return 'compare';
+  // A clause that lists three things is a list, whatever its words ("a leak, a price sheet and a rival").
+  if (facts.items?.length >= 3) return 'list';
   for (const [kind, regex] of RULES.slice(7)) if (regex.test(beat.text)) return kind;
-  if (facts.items?.length >= 3 || beat.intent === 'list') return 'list';
+  if (beat.intent === 'list') return 'list';
   if (beat.intent === 'process') return 'process';
   return 'concept';
 }

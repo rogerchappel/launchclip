@@ -409,7 +409,7 @@
     "inside-the-training-run-1-sh3-1",
     "inside-the-training-run-1-sh3-2"
    ],
-   "score": 3.732
+   "score": 3.62
   },
   "skeleton": {
    "id": "dollar-a-second",
@@ -482,22 +482,22 @@
    {
     "shot": "short-4-sh3",
     "start": 19.639,
-    "module": "concept-card",
+    "module": "icon-grid",
     "change": "swap",
     "text": "once you count the chips, the power and the people."
    },
    {
-    "shot": "short-4-sh4",
+    "shot": "short-4-sh3",
     "start": 23.932,
-    "module": "icon-row",
-    "change": "enter",
+    "module": "icon-grid",
+    "change": "build",
     "text": "Northlight has not confirmed a number."
    },
    {
     "shot": "short-4-sh4",
     "start": 26.859,
     "module": "icon-row",
-    "change": "build",
+    "change": "enter",
     "text": "Power is the other constraint."
    },
    {
@@ -508,28 +508,28 @@
     "text": "The Finnish site was chosen"
    },
    {
-    "shot": "short-4-sh5",
+    "shot": "short-4-sh4",
     "start": 31.264,
-    "module": "motion-title",
-    "change": "enter",
+    "module": "icon-row",
+    "change": "build",
     "text": "because electricity there is cheap,"
    },
    {
     "shot": "short-4-sh5",
     "start": 33.655,
-    "module": "glass-word",
-    "change": "swap",
+    "module": "motion-title",
+    "change": "enter",
     "text": "mostly renewable, and the cold climate makes cooling easier."
    },
    {
-    "shot": "short-4-sh6",
+    "shot": "short-4-sh5",
     "start": 38.089,
     "module": "concept-card",
-    "change": "enter",
+    "change": "swap",
     "text": "The system card says the run used"
    },
    {
-    "shot": "short-4-sh6",
+    "shot": "short-4-sh5",
     "start": 40.638,
     "module": "count-up",
     "change": "swap",
@@ -539,7 +539,7 @@
     "shot": "short-4-sh6",
     "start": 43.398,
     "module": "odometer",
-    "change": "swap",
+    "change": "enter",
     "text": "roughly what a town of ten thousand homes uses in a year."
    }
   ]
