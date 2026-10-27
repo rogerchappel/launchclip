@@ -97,7 +97,7 @@ function resolve(params, ctx) {
       level: r2(valueY(g.value)), ticks: tickMarks, time, endTime: rt(time + fillDuration), duration: fillDuration, ease: fillEase, samples};
   });
   for (const g of gauges) {
-    b.events.push({id: `${id}-${g.name}-fill`, name: `${g.name}-fill`, time: g.time, endTime: g.endTime, role: 'emphasis', cue: 'riser-short'});
+    b.events.push({id: `${id}-${g.name}-fill`, name: `${g.name}-fill`, time: g.time, endTime: g.endTime, role: 'emphasis', cue: 'tally'});
   }
   let bracket = null;
   if (gap) {
@@ -120,7 +120,7 @@ function resolve(params, ctx) {
     const rectCanvas = {x: r2(rect.x + Math.min(pill.x, x - cap)), y: r2(rect.y + Math.min(yTop, pill.y)), width: r2(Math.max(pill.width, cap + pill.width / 2)), height: r2(Math.max(yBottom, pill.y + pill.height) - Math.min(yTop, pill.y))};
     bracket.rectCanvas = rectCanvas;
     b.model.objects[gap.object] = {rect: rectCanvas, color: b.theme.paper, time: gapTime};
-    b.events.push({id: `${id}-gap-bracket`, name: 'gap-bracket', time: gapTime, endTime: bracket.endTime, role: 'emphasis', cue: 'riser-short', object: gap.object});
+    b.events.push({id: `${id}-gap-bracket`, name: 'gap-bracket', time: gapTime, endTime: bracket.endTime, role: 'emphasis', cue: 'tally', object: gap.object});
   }
   const content = {style, title: titleFit ? {text: title, size: titleFit.size} : null, scale: {min: scaleMin, max: scaleMax}, unit, decimals, gauges, bracket,
     tubeFill: b.theme.panel, tubeBorder: b.theme.border, tubeBorderWidth: r2(u(3))};

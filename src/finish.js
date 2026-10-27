@@ -53,7 +53,7 @@ import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, userLibraryDir } from "./sfx/library.js";
-import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, ambienceForWorld } from "../kit/core/sound/options.mjs";
+import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "../kit/core/sound/options.mjs";
 import { musicChoice } from "../kit/core/sound/music.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
@@ -123,12 +123,12 @@ export const PATHS = Object.freeze({
 export const CUE_LEVELS = Object.freeze({
   impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3, click: 0.3, keystroke: 0.3, "keystroke-space": 0.34, "keystroke-enter": 0.36,
   // The palette families (kit/core/sound/families.mjs).
-  swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
+  tally: 0.3, swipe: 0.35, slide: 0.35, snap: 0.32, thud: 0.45, chime: 0.3, ding: 0.3, ping: 0.28, glitch: 0.3, "tape-stop": 0.35, "page-turn": 0.35,
   "pen-scribble": 0.3, "camera-shutter": 0.32, cash: 0.3, notification: 0.3, "error-buzz": 0.28, success: 0.32, boing: 0.32, sparkle: 0.28, footstep: 0.35, door: 0.4
 });
 export const CUE_DURATIONS = Object.freeze({
   whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8, click: 0.06, keystroke: 0.11, "keystroke-space": 0.16, "keystroke-enter": 0.15,
-  swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
+  tally: TALLY_LANDS_AT + 0.35, swipe: 0.3, slide: 0.5, snap: 0.16, thud: 0.5, chime: 1.6, ding: 1.3, ping: 0.8, glitch: 0.4, "tape-stop": 0.7, "page-turn": 0.6,
   "pen-scribble": 0.9, "camera-shutter": 0.42, cash: 1.3, notification: 0.9, "error-buzz": 0.6, success: 1.4, boing: 0.8, sparkle: 1.2, footstep: 0.32, door: 1
 });
 const CUE_SPACING = 0.12;
@@ -137,7 +137,10 @@ const CUE_SPACING = 0.12;
 export const AMBIENCE_VOLUME = 0.5;
 const WHOOSH_TRANSITIONS = new Set(["push", "whip", "zoom"]);
 const EVENT_CUES = [
-  [/riser|rise|build|count|tension/, "riser"],
+  // A count or a build gets tonal blips that land on it; a riser is kept for a
+  // deliberate build of tension into a payoff.
+  [/tally|count|build|fill|climb/, "tally"],
+  [/riser|rise|tension/, "riser"],
   [/impact|slam|stamp|lock|headline|reveal-hard|hit|plunge/, "impact"],
   [/whoosh|push|whip|zoom|swipe|pan|transition|flow/, "whoosh"],
   [/shimmer|insight|resolve|equilibrium|sparkle/, "shimmer"],
@@ -255,7 +258,9 @@ export function bindCues(story, { models, palette = false } = {}) {
       continue;
     }
     // A riser builds into its moment: it ends on the event (or its endTime).
-    const anchor = kit.cue === "riser" ? (entry.end ?? entry.at) - CUE_DURATIONS.riser * (kit.modifiers.includes("short") ? 0.6 : 0.95) : entry.at;
+    // A tally's landing chord sounds on it.
+    const anchor = kit.cue === "riser" ? (entry.end ?? entry.at) - CUE_DURATIONS.riser * (kit.modifiers.includes("short") ? 0.6 : 0.95)
+      : kit.cue === "tally" ? (entry.end ?? entry.at) - TALLY_LANDS_AT : entry.at;
     const at = round3(Math.max(0, anchor));
     if (Number.isFinite(duration) && at >= duration - 0.05) {
       warnings.push(`${entry.shot}: cue ${kit.cue} at ${at}s falls after the end of the video; skipped`);

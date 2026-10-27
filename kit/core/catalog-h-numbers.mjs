@@ -48,7 +48,7 @@ function captionOps(model, ops, time) {
   if (c.caption.sub) riseOps(ops, `${id}-sub`, start, rt(time + 0.15), r2(10 * u));
 }
 
-function startEvent(b, p, name, fallback = 0.5, cue = 'riser-short', span = 1) {
+function startEvent(b, p, name, fallback = 0.5, cue = 'tally', span = 1) {
   const time = b.timeOf(name, p.at, 'params.at', fallback);
   b.events.push({id: `${b.id}-${name}`, name, time, endTime: rt(time + span), role: 'emphasis', cue});
   return time;
@@ -87,7 +87,7 @@ function odometerResolve(params, ctx) {
   const total = widthFor(size);
   const y = r2((rect.height - h - caption.height) / 2);
   const duration = p.span === undefined ? 1.6 : check.num(p.span, 'params.span', 0.4, 4);
-  const t0 = startEvent(b, p, 'count', 0.5, 'riser-short', duration);
+  const t0 = startEvent(b, p, 'count', 0.5, 'tally', duration);
   let x = (W - total) / 2, k = 0;
   const digitCount = finalDigits.length;
   const cells = chars.map(ch => {
@@ -558,7 +558,7 @@ function fillResolve(params, ctx) {
   const W = rect.width;
   const caption = captionBlock(b, p, W);
   const frac = value / max;
-  const t0 = startEvent(b, p, 'fill', 0.5, 'riser', duration);
+  const t0 = startEvent(b, p, 'fill', 0.5, 'tally', duration);
   const room = rect.height - caption.height;
   let shape;
   if (b.variant === 'liquid') { const d = r2(Math.min(W, room - u(10), u(720))); shape = {width: d, height: d}; }

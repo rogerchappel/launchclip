@@ -826,7 +826,7 @@ function resolveCountUp(params, ctx) {
     }
   }
   const events = [
-    {id: `${base.id}-count`, time: countStart, endTime: hitTime, role: 'count', cue: 'riser'},
+    {id: `${base.id}-count`, time: countStart, endTime: hitTime, role: 'count', cue: 'tally'},
     {id: `${base.id}-hit`, time: hitTime, role: 'hit', cue: 'impact'}
   ];
   const styles = {
