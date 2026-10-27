@@ -1,0 +1,16 @@
+{
+  "describe": "backdrop plate strands on the minimal story (dark palette, rim-glass panels)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "plate": {
+      "kind": "strands"
+    },
+    "panel": {
+      "treatment": "rim-glass"
+    }
+  }
+}

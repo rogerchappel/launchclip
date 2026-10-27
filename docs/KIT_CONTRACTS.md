@@ -65,6 +65,8 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 - `ambient` (story) and `scenes[i].ambient` are a level (`off | subtle |
   standard | lively`) or `{level?, background?, drift?}`; see
   [Ambient motion](#ambient-motion-kitcoreambientmjs).
+- `plate` (story), `chapters[j].plate` and `scenes[i].plate` set the blurred
+  backdrop plate; see [Backdrop plates](#backdrop-plates-kitcoreplatesmjs).
 
 Exports:
 
@@ -1239,7 +1241,8 @@ order: translate, then rotate, then scale.
 { "panel": { "treatment": "soft-shadow", "radius": 18, "fill": { "kind": "icon-pattern", "params": { "opacity": 0.08, "fade": "center" } } } }
 ```
 
-`treatment` is one of `solid`, `glass`, `paper`, `outline` and `soft-shadow`.
+`treatment` is one of `solid`, `glass`, `paper`, `outline`, `soft-shadow` and
+`rim-glass`.
 `radius` runs from 0 to 48 px at a 1080 px short side; the default is 32.
 `panelSurfaceStyle(treatment, {colors, unit, border, radius})` returns the
 surface CSS. Every treatment follows the theme: `panelTheme(colors)` reads
@@ -1254,11 +1257,23 @@ the background's side of the contrast.
 | `paper` | a sheet a shade off bg, with a crisp edge shadow |
 | `outline` | a 3 px primary border over a 35% bg wash, no shadow |
 | `soft-shadow` | an opaque card with no border, lifted by a wide soft shadow |
+| `rim-glass` | the long-form explainer's glass: a translucent fill with a breath of `primary`, a 24 px backdrop blur, a 1.5 px `primary` rim with a 22 px outer glow, a top-lit sheen and a 1 px inner highlight |
 
 `resolveModule` copies `storyPanel(story)` onto the model as `model.panel`.
 Catalogue G's `cardSurface` (the card behind `surface: "card"` modules, which
 is the default over footage) draws it in both renderers. Without
 `story.panel`, the card is today's card.
+
+Catalogue H modules that draw their own frame opt into `rim-glass` through
+`glassSurface(model, {radius})` (`panels.mjs`), which returns the surface CSS
+under `rim-glass` and null otherwise, so the module keeps its own look under
+every other treatment. `window-chrome`'s window becomes a glass pane (its
+title bar a faint band with a rim-coloured rule); `comparison-table` sits on
+one glass sheet that rises in with the build (its `cards` variant turns each
+column card to glass). Seeded styles (`SEED_PANEL_TREATMENTS`) leave
+`rim-glass` out, so every existing seed draws as before; the
+`glass-explainer` starter (`kit/styles/glass-explainer.json`) sets it with a
+cycling plate.
 
 `fill` (optional) is a background `{kind, params}`, any kind but blobs
 (`panelFillErrors`). It is drawn by the same layer renderer and clipped to
@@ -1308,6 +1323,67 @@ colour, at the canvas's px scale.
   light and a dark palette into `qa/background-sheet/sheet.png`. It also
   writes split-layout panel fills (an icon pattern and a linen texture, on
   both palettes) to `panels.png`.
+
+## Backdrop plates (`kit/core/plates.mjs`)
+
+The persistent, heavily out-of-focus plate a long-form explainer builds its
+shots over (VISUAL_GAP_MAP C1). A plate holds across every scene of a chapter
+and changes at the next, so builds land on a backdrop that never cuts. Plates
+are procedural SVG (no binary assets), blurred inside the image by
+`feGaussianBlur`, and drawn in the backgrounds kit's layer shape, so both
+renderers draw them with the code that draws `story.background`
+(`.lc-bg-layer` divs with GSAP wave tweens in HyperFrames, `BackgroundField`
+in Remotion). `plates.mjs` imports only `./ambient.mjs`, `./backgrounds.mjs`
+and `./panels.mjs`.
+
+```json
+{ "plate": { "kind": "hex-shell", "cycle": true, "params": { "focus": 0.6, "intensity": 0.5, "tint": "neutral" } } }
+```
+
+| Kind | Subject | Default tint |
+|---|---|---|
+| `hex-shell` | a sphere of hexagonal cells wrapped orthographically, each shaded by its normal against a light from the upper left, with a bright lip | neutral |
+| `silk` | folded ribbons between wandering curves, shaded dark → lit fold → dark, laid diagonally, over a softer far bank | neutral |
+| `strands` | double helices of glossy beads joined by rungs: one in focus, one faint far, one huge and soft near | primary |
+| `bokeh` | a starfield: pinpoints far, soft ringed discs mid and near | primary |
+
+Params: `focus` 0–1 (how out of focus; 0.6), `intensity` 0–1 (0.5), `speed`
+0–2 (1), `depth` 0–1 (parallax spread; 0.5) and `tint` (`neutral` is paper,
+a silver on a dark style; `primary`; `accent`). Each plate is an atmosphere
+lift, two or three depth layers (far: most blur, least travel; subject: the
+plate's focus; near: large and very soft, travelling most) and a vignette.
+Every axis is an ambient wave of absolute time, so any seek gives the same
+pixels; the ambient level scales the speed and `off` stills it.
+
+**Where the plate comes from** (`scenePlateSpec`, first match wins):
+`scenes[i].plate` (a kind, `{kind, params?}`, or `"none"` for the story's
+background), then `chapters[j].plate` for the chapter the scene starts in,
+then `story.plate`; with `story.plate.cycle: true`, chapter j takes
+`PLATE_KINDS[(k + j) % 4]` (k the story kind's index). A plate replaces
+`story.background` on the scenes it covers. No plate is drawn when
+`ambient.background` is false for the story or scene, or on a footage-led
+story. One plan is memoised per story and plate, so a cut inside a chapter
+shows the same drifting pixels on both sides. In `camera.mode` "world" the
+story's own plate is the camera's one backdrop.
+
+**Contrast.** Every colour a layer lays is clamped (`safeAlpha`) on every
+tone laid before it, so paper text keeps 4.5:1 anywhere on the plate, on dark
+and light palettes. Pinpoints finer than a letter's stroke (the bokeh's far
+stars) are clamped but add no tone.
+
+A style pack's `plate` fills a story that has none (`applyStyle`), checked by
+`plateErrors`; `validateStory` checks the story, chapter and scene values
+with the same rules (`STORY_PLATE_KINDS`, kept in step by
+`test/plates.test.js`).
+
+`node scripts/plate-sheet.mjs [--renderer hyperframes|remotion]` renders
+`qa/plate-sheet/sheet.png`: every plate under three glass card types
+(stat-card, excerpt, window-chrome) with the `glass-explainer` look.
+`examples/story/glass-plates-16x9` is a 10 s clip of glass cards building
+over one drifting plate, with the watermark. Parity: `plate-<kind>` (each
+kind on the minimal story with rim-glass panels) and `plate-glass-example`
+in `test/fixtures/parity-backgrounds/`, run by
+`node scripts/parity-backgrounds.mjs --only plate-…`.
 
 ## Medium (`kit/core/medium.mjs`)
 
@@ -1569,7 +1645,7 @@ full-canvas root. `layout.rect` is the occupied box.
 | `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s; or `steps [{at, scale}]` 1–4 (scale 1–1.35, the first ≥ 1.06, ≥ 0.3 s apart) instead of `at`/`scale`; `blur` true (14 px at 1080) or 2–30 px | `punch` (whoosh), `step-<i>` (whoosh, or whoosh-soft stepping out), `release` | Camera only; layout role `decor`; ≥ 0.8 s. Blur is velocity-shaped (`motionBlurPx` of the frame edge's speed), 0 once settled; samples carry `blur` |
 | `zoom-through` | `at` (the cut; default the base cut nearest the scene's middle, else the middle), `scale` 1.6–3.5 (2.6), `rush` 0.15–0.6 s (0.3), `burst` 0.2–0.8 s (0.4), `focus` (default the presenter's face), `blur` (default on, 24 px at 1080) | `rush` (whoosh), `cut` (impact) | Camera only: power3.in to `scale` at the cut, power3.out back after it, velocity-shaped blur either side; `camera.onCut` says whether it sits on a real base cut; ≥ 0.8 s |
 | `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
-| `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary, `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
+| `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary/pill (the name in bold capitals in a glowing brand pill, the role on its own line under it), `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
 | `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
 | `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `baseline` 0–0.35, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline `baseline` × the height of `ctx.subject.head` (or a default medium head) down the head; by default as deep as 0.35 while the head covers at most 30% of the cap height, never shrinking the letters below 150 px to get there. Letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px, and fails when a measured head hides most of the word (more than half its letters under 60% visible, e.g. a short word inside the head's column on a close-up), so a re-resolve against the real framing refuses it early. `content.covered` is the share of cap height the head covers, `content.baseline` the depth used; `MODULES.masthead.glyphs(model)` gives the key glyph boxes; ≥ 1.5 s |
 | `dolly-zoom` | `direction` push/pull, `scale` 1.12–1.6 (1.3), `move` 1–2.5 s, `release` 0.3–1 s (push), `at` | `move` (riser), `release` | Layer `behind`, needs the subject. Scales the matte's room plate (`ctx.subject.plate`) about the head centre; `subjectCamera` holds the presenter at identity. Fails on a close-up; without a plate it draws nothing; ≥ 1.8 s |
@@ -2119,6 +2195,27 @@ A style can define named segment templates, so a series looks like a series: a "
 - **The map.** `draftDirectionMap` over the Short, keeping the long form's intents for the same lines, with the profile `short-talking-head`.
 - **`--model`.** `planStoryboard` re-plans the section's words with the planner against the same profile (paid). The cut keeps the base edit, and the loop returns to the first scene.
 - **Output.** `storyboard.json`, `DIRECTION.json`, `NARRATION.json` and `CUTDOWN.json` (`launchclip.cutdown.v1`). The receipt holds `{source, to, section, window, duration, trim, planner, hook, loop_to, carried, added, profile: {id, status, measures, errors}, warnings}`. The command checks the Short with `checkStoryboard` and the coverage gate, and its status is `ready` when the Short passes the profile. Then run `launchclip finish` on the Short.
+
+### The beat director (`kit/core/beat-director.mjs`, docs/BEAT_DIRECTOR.md)
+
+The beat director gives every 3–10 s clause of a long video a visual decision. Each decision has a module from the capability table (`kit/core/visual-capabilities.mjs`), params built from the clause's own facts or evidence, and a state change (`enter`, `build` or `swap`). Decisions are grouped into shots of 2–4 states over a per-chapter plate.
+
+- **Output.** `directLongForm({words, chapters, ledger, captures, format}, {cadence, style, previous, avoid})` returns a `launchclip.beat-map.v1` map (`BEATMAP.json`, never `BEATS.json`, which holds music beats).
+- **The gate.** `beatMapReport` checks the map against `cadenceTarget(format, style)` from `kit/core/cadence.mjs`. That file also holds `CADENCE_BENCHMARK` (170 events in 975 s; gaps p10 2.5, p50 5.2 and p90 9.8 s; 50 cuts), a `CADENCE_TARGETS` band for each of `long-form`, `short-form`, `talking-head`, `art-direction`, `motion-graphics` and `animated`, the style factors (`calm`, `default` and `energetic`), and `eventStats`, `cadenceGate` and `cadenceReport`.
+- **Chunks.** `longFormChunks` splits the work into resumable chunks of at most 180 s, keyed by their words, settings and the visual history they start from.
+- **Conversions.** `beatMapToDirection` returns a direction map. `beatMapToStory(map, {from, to})` returns a storyboard for any window.
+- **Evidence.** Claims are matched against `research/evidence.json` (`launchclip.evidence.v1`) first. A capture (`launchclip.capture.v1`) is linked by `claim`, `claims[]` or a source URL.
+- **Fallbacks.** A planned module that is not registered falls back down its chain. Number modules never get a placeholder figure.
+
+### Shorts from a beat map (`kit/core/cutdown.mjs`)
+
+`cutShorts(map, words, {count})` returns 3–5 Shorts, one per chapter, never overlapping.
+
+- **Windows.** Each window is 20–50 s of whole clauses. It opens on a number, a quote or evidence.
+- **Re-direction.** Each window is re-directed at the `short-form` cadence on 1080×1920. The long form's evidence carries over.
+- **The first frame.** A Short opens on an image, never a title card.
+- **Structure.** A library skeleton is attached when one fits. Each Short has word captions and loops back to its hook.
+- **Output.** `{id, title, window, skeleton, map, story, words, report: {cadence, gate}}`.
 
 ### Exports
 
@@ -2763,6 +2860,58 @@ caption band.
     `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
     same tree and ops.
 
+## Evidence clip (catalogue D, `kit/core/catalog-d-evidence-clip.mjs`)
+
+`evidence-clip` plays a capture of a real public page (`launchclip evidence
+capture`, [EVIDENCE_CAPTURE.md](EVIDENCE_CAPTURE.md)) inside a glass window:
+a translucent bezel, a hairline at the clip's edge and a `brand.colors.accent`
+rim glow, with a `publisher · date` source tag just above it. The capture already
+carries its own beats (scroll, selection sweep, focus ring, date pin, cursor);
+the module frames it and can add post moves on top. It keeps captions.
+
+```json
+{ "module": "evidence-clip", "params": {
+  "media": { "src": "assets/evidence/pr-39217.mp4" }, "viewport": { "width": 1600, "height": 1000 },
+  "source": { "publisher": "GitHub · dotnet/efcore", "date": "Oct 16, 2026" },
+  "focus": [{ "at": 3.2, "box": { "x": 345, "y": 560, "width": 1222, "height": 44 } }],
+  "cursor": [{ "at": 2.4, "x": 900, "y": 300 }, { "at": 3.1, "x": 700, "y": 575, "click": true }] } }
+```
+
+- **Params from the sidecar:** `evidenceClipParams(record)` (or `launchclip
+  evidence scene <id>.evidence.json`) gives `media`, `viewport` and `source`
+  (the provenance publisher and `published_at` as "Oct 16, 2026", UTC).
+- **`media`:** an `assets/` video (`.mp4`, `.webm`, `.mov`), `sourceStart`
+  optional. **`viewport`** (required): the capture's size, for its aspect.
+- **Window:** the capture's aspect fitted in the whole safe zone, less the
+  bezel (14 px at 1080); captions may sit over its bottom edge, as over
+  `product-demo`'s. `frame: "none"` drops the bezel and glow.
+- **`source`:** `{publisher ≤ 40, date? ≤ 24}` in the meta font, on one line,
+  or publisher and date on two when one line is too wide (portrait). The tag
+  sits just above the window, left-aligned like a tab label, so it never
+  covers the capture's URL bar or page and never meets the caption band.
+- **Camera:** a linear push-in `1 → 1 + push` (default 0.04, 0–0.12) about the
+  window centre over the whole scene, so the frame never holds still, times
+  any `focus` zooms. A focus (`{at, box, scale?, until?}`, ≤ 4, capture px)
+  eases in over 0.8 s to `scale` (default: the box at 0.6 of the canvas,
+  1.15–2×), holds until `until` (default 2 s after landing) and eases out over
+  0.7 s, or pans straight to the next focus when it starts first;
+  easeInOutSine, scale in log space (`focusKeys`, `focusAt`,
+  `evidenceTransform`). One sample per frame becomes a set on both the video
+  and the overlay's camera layer.
+- **`cursor`:** `[{at, x, y, click?}]` ≤ 12, at least 0.2 s apart, capture
+  px: an arrow (two clip-path polygons, so both renderers draw it from style
+  alone) that fades in at the first point and glides to each next on
+  `sine.inOut`, landing on the point's time; `click` dips it to 0.86.
+- **Ambient:** `layout.drift` is false: the push is the rest motion.
+- **Layout:** `role: "media"`, rect = the bezel plus the tag.
+- **Events:** `enter`, `source`, `focus-<i>` (cue `whoosh-soft`),
+  `click-<i>` (cue `click`).
+- **Compilers:** root media, as `product-demo`: the HyperFrames emitter returns
+  `{html: <video>, overlay}` and the story compiler hoists both, the overlay
+  one z-index above. Remotion (`kit/remotion/catalog/EvidenceClip.tsx`) draws
+  an `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
+  same tree and ops.
+
 ## Icon set (`kit/core/icons.mjs`)
 
 One family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):
@@ -2966,7 +3115,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `stacked-bar` | columns, bars | `categories` 2–7, `series` 2–5 `{label, values, color?}`, `totals` | build | Each category builds series by series; legend and totals pop |
 | `pie-chart` | donut, pie, half | `data` 2–6, `percent`, `center` `{value?, label?}` or false, `highlight` | build, highlight | Slices sweep as one continuous turn (each slice linear over its share of an eased sweep); the centre counts to the total |
 | `area-chart` | gradient, line, steps | `labels` 3–16, `series` 1–3 `{values, label?, color?}`, `min`, `max` | build | The plot reveals left to right through a clip; the end value lands |
-| `scatter-plot` | dots, bubbles, rings | `points` 3–60 `{x, y, size?, label?, color?}`, `xLabel`, `yLabel`, `x`/`y` `{min, max}`, `trend`, `tone`, `highlight` | build, highlight | Axes draw, points pop in x order, the least-squares line draws, the highlight gets a label chip |
+| `scatter-plot` (`catalog-h-scatter.mjs`) | dots, bubbles, rings | one of `points` 3–60 `{x, y, size?, label?, color?}` (with `trend`, `highlight`), `series` 1–5 `{points 1–24, label?, color?, line?, at?}` or `panels` (exactly 2 `{title ≤ 32, series}`, side by side in landscape, stacked in portrait); `x`/`y` `{min?, max?, scale: linear/log}`, `format`/`xFormat`, `xLabel`, `yLabel`, `focus` (a series index) and `focusAt`, `annotations` 1–6 `{type: guide/callout/placeholder, id?, panel?, series + index or x + y, text?, label?, at?}`, `tone` | build, panel-1, series-&lt;i&gt;, focus, highlight, reveal-&lt;id&gt; | Axes draw with tick labels (round steps, or 1-2-5 decades on a log axis); each series line draws on (0.9 s) on its cue with its points popping as the line passes; the focus series glows while the others dim to 30%; each annotation lands on its own cue: a guide draws dashed lines from the point to both axes and pops value pills, a placeholder pops a dashed "?" dot with its caption, a callout draws a leader to a glass card. Annotation ids are reveal ids for multi-state shots. Default cues follow the build 0.45–0.8 s apart and squeeze to fit |
 | `radar-chart` | polygon, circles, dots | `axes` 3–8, `series` 1–3, `max` | build | The grid lands, each shape grows from the centre |
 | `sparkline` | line, area, bars | `values` 4–60, `label`, `value`, `delta` (or false), `tone` | build | A KPI card: the value counts along the trend, the line reveals, the delta chip pops |
 | `progress-ring` | ring, thick, segmented, half | `value`, `max` (100), `label`, `sub`, `tone` | build | The arc draws to the fraction (or segments light) while the centre counts |
@@ -2975,7 +3124,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
 | `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
-| `map-highlight` | fill, pins, glow | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, color?}`), `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others); pins drop, or the fill glows |
+| `map-highlight` | fill, pins, glow, outline, dots | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, badge? ≤ 8, color?}`) and/or `pins` 1–4 `{lon, lat, label, sub?, card? {title, sub?, image?}, color?}` (at most two cards), `route`, `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt;, pin-&lt;i&gt;, route-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' and pins' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others) and its ×badge; then pins (projected with the same Equal Earth, `projectLonLat`) drop with a pulse and a label, cards land on the far side of the map, and a dashed route draws leg by leg. pins drop on countries, glow fills with a glow, outline traces the country's glowing outline then tints it, dots draws the land as a dot matrix (point in polygon on the vendored paths, about 13 px apart at the final zoom, at most about 9,000 dots) lighting the highlighted countries' dots, with a slow push-in |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
 ### Counters (`catalog-h-numbers.mjs`)
@@ -3028,7 +3177,7 @@ role or hex (`dataTone`). The study's citation is the frame's source note
 | Module | Variants | Params (beyond title, source, at, rect) | Events | Motion |
 | --- | --- | --- | --- | --- |
 | `unit-grid` | solid, stroke, dots | `count` 1–200, `icon` (`person`, the module's isotype silhouette, or any icon name), `tone`, `columns`, `groups` 2–3 `{count, label ≤ 24, tone?}` adding up to `count`, `splitAt`, or `highlight` `{count, label?, tone?}` and `highlightAt` (not both) | build, split, highlight | Units pop in reading order within about 1.1 s in the largest square cells that fit; on split each unit slides and scales (0.75 s, power3.inOut, a 12 ms ripple) into its group's own grid, side by side, recolouring as it moves, while each group's count rises and counts up over its label; a highlight lights the first `count` units with a pulse, dims the rest to 28% and raises the label |
-| `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value. Default cues follow the build up to 1 s apart |
+| `number-line` | ruler, track | `from`, `to`, `step` (default a round step for about 25 ticks, at most 100), `labelEvery` (default the closest that fits; range ends are always labelled), at least one of `ranges` 1–3 `{from, to, label ≤ 28, tone?, at?}` (no overlaps), `marker` `{value, label?, tone?, at?}` or `points` 1–8 `{value, label?, tone?}` with `pointsAt`; `zoom` `{from, to (at most half the line), step?, label? ≤ 40, at?}`, `unit`, `format` | build, range-&lt;i&gt;, marker, points, zoom | The line draws and ticks pop left to right; each range on its own cue wipes in a tinted zone, grows a band along the line, lights its tick numbers and raises its label (labels stack into up to three rows so neighbours never collide); the marker drops onto its value; points pop as glowing dots with labels stacked under the tick numbers; the zoom brackets its slice, dashed connectors wipe down to a second ruler over that slice, its label rises and the slice's points re-land on the finer scale ("wins by less than 1 point"). Default cues follow the build up to 1 s apart, in that order |
 
 ### Social cards (`catalog-i-social.mjs`)
 
@@ -3079,6 +3228,162 @@ module hides captions (the post's words are on screen).
 Samples: `scripts/element-samples.mjs` (`DEMO_POSTS`, `SOCIAL_SAMPLES`);
 contact sheet over a soft backdrop: `node scripts/social-sheet.mjs`.
 
+### Code evidence (`catalog-i-code.mjs`, `catalog-i-terminal.mjs`)
+The receipt beat of an explainer: a real PR, commit, diff or terminal run
+rebuilt in house style, its key token boxed on its word. Every card is laid
+out into plain data (`content.card` / `content.cards`: header items, code
+rows, token boxes in card coordinates) and drawn by one `cardNode`, so the
+model stays JSON and both renderers draw the same tree. Shared pieces are in
+`catalog-i-code-base.mjs`:
+- Lines are unified-diff lines, verbatim: `"@@ -13,7 +13,7 @@"` (a hunk
+  header, which also sets the line numbers), `"+added"`, `"-removed"`,
+  `" context"`, or `{text, type?, old?, new?}`; `startLine` (`n` or `{old,
+  new}`) numbers lines without a header. Common indent is dropped and tabs
+  become two spaces. A PR or commit card shows two gutters (old, new), a
+  compact card one, an excerpt one only with `startLine`.
+- `highlight`: `"token"`, `{token, row?}` or up to 3 of them. The default row
+  is the first added row that has the token, then context, then removed. A
+  token that is not in a line fails. Long rows are cropped with `…` round the
+  token, never wrapped.
+- Code is set in the brand meta font when it is a registered monospace face
+  with a 0.6 em advance, else JetBrains Mono (`codeFont`), so the token box (an
+  SVG rect that strokes on via `pathLength`) and the chain connectors land on
+  the glyphs without measuring the DOM. Prose tokens (an announcement) are an
+  inline span with a box child that wipes in (clip), and the word that holds
+  the token starts its line.
+- Text floors: card titles and messages are key text (≥ `minKeyText`); code,
+  header and chip text are detail at ≥ `minMetaText`. Cards that do not fit
+  retry at 90% and 80% before failing with the height they need.
+- Looks: `glass` (a translucent panel, a 1.5 px rim and outer glow in the
+  brand accent, backdrop blur) or `github` (GitHub's own dark or light
+  surface by the brand background). Diff green and red are GitHub's; the
+  token box is always the accent. Cards rack into focus (blur 14 → 0, rise,
+  0.55 s) and their rows land top to bottom.
+- Real data only: `src/evidence/github.js` maps a public PR or commit (URL,
+  `owner/repo#n` or `owner/repo@sha`) into these params through the
+  unauthenticated REST API (`GITHUB_TOKEN` raises the limit), caches every
+  response in `assets/evidence/github-*.json`, saves avatars to
+  `assets/evidence/avatars/`, and fails a rate-limited call with its reset
+  time. `node src/evidence/github.js <ref> [--module repo-pr-card |
+  commit-card | diff-view | source] [--token text] [--file path] [--lines n]`.
+
+| Module | Variants | Params (beyond at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `repo-pr-card` | glass, github | `repo` "owner/name", `number`, `title` ≤ 140, `state` (merged, open, closed, draft), `author` (login or `{login, avatar}`), `date` "YYYY-MM-DD", `file`, `additions`, `deletions`, `lines` 1–14, `startLine`, `highlight`, `highlightAt` | build, highlight | URL bar, repo with GitHub's mark and `#n`, the title (up to 3 lines), the state chip, avatar and "merged on …", the file row with +/−, then the rows; the token box strokes on 0.4 s after the rows (or on its hit), boxes 0.35 s apart |
+| `commit-card` | glass, github | `repo`, `sha` (shown as 7), `verified`, `authors` 1–3, `message` ≤ 140, `number` (shown "(#n)"), `date`, `file`, `additions`, `deletions`, `lines`, `startLine`, `highlight`, `highlightAt` | build, highlight | "Commit" with the sha chip and a Verified chip, overlapping avatars and "a and b authored on …", the message in a box, the file row, the hunk; token boxes as above |
+| `diff-view` | glass, github | `file`, `lines` 2–18, `startLine`, `additions`, `deletions`, `focus` 1–6 `{row \| rows: [a, b] \| line (new-file number), at?}`, `highlight`, `highlightAt` | build, focus-&lt;i&gt;, highlight | A Files-changed header (chevron, path, +/−, five stat blocks), rows with both gutters; each focus state slides and resizes the cyan ring from the last state's rows (0.42 s, power3.inOut) while every other row dims to 30%; default states follow the build up to 1.6 s apart |
+| `evidence-chain` | glass, github | `sources` 2–4 `{kind: pr \| commit \| excerpt \| announcement, …that kind's fields, highlight, at?}` (≤ 6 lines each), `token` (the highlight of every source that sets none), `title`, `source` | build, source-&lt;i&gt;, link-&lt;i&gt; | 9:16 stacks the cards; 16:9 sets two side by side, cascades three from top left to bottom right (a card may cover the bottom of the one before, never its token row), or sets four in a 2 × 2 grid. Each source racks in on its cue, its rows land and its token boxes; then a dashed, glowing connector wipes from the previous token to this one (0.6 s) with a dot at each end. Defaults space sources 0.4–2.6 s apart so the last connector lands before the exit |
+| `date-pinned-timeline` | axis, summary | `from`, `to` (1–45 days), `cards` 1–4 in date order `{date, label?, at?, …a source}`, `title`, `subtitle` (summary only) | build, card-&lt;i&gt; | axis: the day axis draws, a glowing playhead scrubs to each date as its node pops, the day lights, a dashed stem grows and the card racks in and stacks lower; summary: a glass "why now?" panel with "N clues in N days" and one dot per day (clue days lit) over the clue thumbnails, each with its date and label, joined by dashed curves |
+| `terminal-session` | glass, solid | `title`, `prompt`, `steps` 1–8 `{cmd, output? ≤ 30 (string, {status: PASS \| FAIL \| OK \| ERROR \| SKIP, time?, text} or {text, tone?}), typing?, at?}`, `stream` (s per row, default 0.12), `timer` `{to, from?, step?}`, `highlight` (`"token"` or `{token, step?, row?, at?}`) | build, step-&lt;i&gt;, timer, highlight | Each command types character by character (min(1.4, max(0.25, chars / 28)) s) with a block cursor, 0.25 s for enter, then its rows stream; the window scrolls once rows outgrow it; the ⏩ timer counts `from` → `to` (m:ss) over the timed step's output; the box strokes on round the token; the last prompt blinks. Defaults that would run past the exit compress to fit (to 35%) |
+Parity: `test/fixtures/parity/h-{repo-pr-card,commit-card,diff-view,evidence-chain,date-pinned-timeline,terminal-session}-*.json`
+(real data from rogerchappel/launchclip PRs #82, #88, #89 and commits
+c3ec4a11, 4bb5d3b4; the avatar is under `test/fixtures/parity/assets/evidence/`).
+
+### Particles and grids at scale: catalogue I (`catalog-i-*.mjs`)
+
+Catalogue I modules register in catalogue H (`catalog-h.mjs`), so both
+renderers draw them through catalogue H's emitters. The modules lean on one
+extra mechanism: paint plans.
+
+**Paint plans** (`kit/core/particles.mjs`). A model may carry
+`content.paint: {<canvas id>: plan}`, where each key is a `<canvas>` node in
+its view tree, the size of the module rect. A plan is plain JSON:
+`{width, height, layers: [...], glow?: {alpha, blur}}`. Its layers are drawn
+in order:
+
+- `field`: a token bitmap of `cols × rows` with 1 px = 1 token. It fills
+  `count` tokens in a seeded Fisher–Yates order between `t0` and `t1`,
+  through zoom keys `[{t, s, fx, fy}]`. At ≥ 4 px per token each token is a
+  round dot; below that the bitmap is scaled, which gives honest density.
+- `swarm`: target points (`pts`, or a `shape` SVG path sampled with `Path2D`
+  at paint time). They fly in from a scatter (`assemble`), dissolve out
+  (`dissolve`) and shimmer.
+- `ring`: an orbiting tilted ellipse, drawn as a `back` half and a `front`
+  half so a mark can sit between them.
+- `cloud`: particles hugging a box, drifting and twinkling, optionally
+  streaming in from a `from` point.
+- `cells`: unit grids. Each grid has `x, y, cols, rows, cell, gap, count,
+  slots, order (reading | bottom-up), t0, t1`, plus optional `segs` (colour by
+  index range), `tick` (checkmarks) and `hl` (a lit subset with the rest
+  dimmed).
+
+`paintParticles(ctx, plan, t)` takes the absolute composition time. It is a
+closed-form function of (plan, t). Every random choice is
+`particleHash(index, seed)`, and nothing is integrated frame to frame. What
+it caches (sampled shapes, the field bitmap and its fill order) derives from
+the plan alone and rebuilds on a backwards seek. HyperFrames inlines the
+painter once per page (`PARTICLE_RUNTIME`, which defines
+`window.lcPaintParticles`). It drives each canvas from a linear proxy tween
+over the scene, `tl.fromTo(clock, {t: start}, {t: end, onUpdate})`, on the
+paused root timeline (`paintMotion`, `kit/hyperframes/catalog-h.mjs`).
+Remotion paints the same plan in a layout effect (`PaintCanvas.tsx`). The
+painter is never seeded from the wall clock, and particle text uses the
+built-in 5 × 7 dot-matrix face (`dotMatrixPoints`), so no font has to load
+first. Budget: ~4 ms per layer at 1080p in Chromium (a 1,050,000-token field,
+about 30k swarm particles, 10k cells). Labels, counters and notes stay DOM
+nodes on the op list.
+
+| Module | Variants | Params (beyond title, source, at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `dot-field` | pull-back, still | `count` 100–2,000,000, `label`, `legend` (default "1 dot = 1 token"), `tone`, `order` (scatter, reading), `format`, `fillDuration` | build, filled | The bracket and counter rise. The field fills one dot per unit as the counter counts linearly. pull-back starts on dots about 7 px wide at the field's corner and eases (in log scale) to the whole field by 85% of the fill |
+| `particle-text` | led, dust | `text` ≤ 14 (A–Z, 0–9, `$%.,+-×≈/:!?#'`), `kicker`, `sub`, `mode` (assemble, dissolve, both), `tone`, `dissolveAt` | assemble, dissolve | Particles swirl in from a scatter onto dot-matrix LEDs (4 × 4 each; dust uses 6 × 6, looser) over about 1.8 s with a bloom. A dissolve blows them up and away over 1.7 s, and loose dust drifts round the text |
+| `particle-logo` | ring, halo | `logos` 1–2 `{icon | path {d, viewBox, rule?}, label, sub?, tone?}` | build | Each ring spins up as its mark assembles from it, and a second logo follows 0.35 s later. Real third-party marks only when the scene shows that party's real evidence |
+| `particle-cloud` | stairs, single | `target {label, sub?}`, `steps` 1–4 (lowest first; stairs draws them), `tone`, `cloudAt` | build, cloud | Steps rise 0.28 s apart. A cloud streams up from the first step and gathers round the dashed target box, which shows inside it, with a low haze along the steps |
+| `grid-race` | columns, stacked | `unit`, `racers` 2 `{label, sub?, total, spend? {total, format?}, tone?}`, `legend` (default "1 cell = &lt;unit&gt;"), `format`, `suffix`, `spendLabel`, `pace` (together, same-rate), `ratio {text ≤ 8, sub?, tone?, at?}`, `raceDuration` | build, race, finish, ratio | Labels rise, then both grids fill in reading order with their counters and spend counters, linearly and in step. Empty slots show up to the larger total. The ratio pops after the finish. In portrait it hides captions (a dense comparison); stacked puts the text left of each grid in landscape |
+| `cell-grid` | bars, blocks | `legend` ("1 cell = $0.01"), `grids` 1–3 `{label, sub?, count ≤ 10,000, value?, tone?, columns?, segments? [{count, tone, label?}], ticks? {count, tone?, at?}, highlight? {count, tone?, at?}}`, `order` (bottom-up, reading), `ratio` | build, fill-&lt;i&gt;, ticks, highlight, ratio | Grids share one cell pitch, so heights compare like bars, and fill one after another (0.6–1.4 s each). A segment boundary with a label draws a dashed rule as the fill passes it. Ticks turn cells into checkmarks; a highlight lights the first cells and dims the rest to 30%. The ratio sits over the shortest grid |
+| `tokenizer` | panel, bare | `text` ≤ 160, `tokens` (the BPE split, joining back to `text`; precompute with `node src/tokenizer.js "<text>"`, o200k_base or cl100k_base), `encoding`, `models` 1–2 `{label, price (USD / 1M output tokens), tone?}`, `output` (default 1,000,000), `raceAt` | build, race, total | Chips pop in left to right as the token and character counts count. Each chip's per-token prices rise under it. The output counter races each model's bill on a segmented bar (bars scaled to the dearest model) to its total. In portrait it hides captions |
+
+`validateStory` treats `cell-grid` and `grid-race` like `unit-grid`: benchmark
+data needs `params.source` or a frame source note on screen.
+
+### Catalogue I: 3D data objects (`catalog-i-3d.mjs`)
+
+Rendered 3D objects driven by data (visual gap map B2, C2), registered with
+catalogue H so both renderers draw them from the same view tree and op list.
+The 3D is CSS 3D transforms on one rig (`catalog-i-3d-base.mjs`), never
+WebGL:
+
+- `cam` (2D zoom and pan of the flattened render) → `stage` (`perspective`
+  P px, origin at the pivot) → `tilt` (static `rotateX(T)`: the floor leans
+  back, the camera looks down at 90 − T°) → `turn` (animated `rotation`, the
+  orbit about the world vertical) → per object a `slot` (floor point; its
+  x, y slide it) → `stand` (static `rotateX(-90deg)`: a vertical plane where
+  −y is up, so `scaleY` on a child grows a bar and `y` drops a coin).
+- Every animated element is a 2D transform the op list already has (x, y,
+  scale, rotation, opacity), so GSAP and `frameState` move it the same way.
+  A label faces the camera by counter-rotating with the turn (`billboard`);
+  a lid or flap turns about a horizontal axis with `hinge` (an in-plane
+  rotation conjugated by `rotateY(±90deg)`).
+- Rules the tests enforce: an element the ops move carries no static
+  transform (GSAP owns it), and an element that fades holds no
+  `preserve-3d` children (opacity flattens the 3D context), so dims fade
+  faces and labels one by one. Only `set` and `tween` ops; continuous
+  motion (orbit, fans, a ticking clock) is a pure function of the playhead.
+- `project()` mirrors the chain in JS. `fitScene` picks the largest world
+  scale whose projection, labels included, stays inside the rect at every
+  camera state (orbit ends and middle × zoom ends), centred; text is set in
+  face px as key size over the smallest projected scale of its face
+  (`minScale`, `faceScale`, `faceWidthScale`), and slabs, trays and steps
+  grow until their text fits. A module fails with a param error when copy
+  cannot keep key size.
+- Glass reads from style roles: fill in the module's tone (default
+  `accent`), rims in `accent` mixed toward `paper`, the lit item in
+  `primary` (or `accent` when the tone is `primary`), so any pack with the
+  five roles works.
+
+| Module | Variants | Params (beyond title, source, at, orbit, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `glass-bars-3d` | bars, staircase | `data` 2–6 `{label ≤ 24, value, display?}`, `format`, `highlight` (index or label), `highlightAt`, `tone`, `highlightTone`; bars: `reference` `{value, label?}`; staircase: `marker` `{text ≤ 12, label?, steps [1–4], at?}` | build, highlight, marker-&lt;k&gt; | Bars grow by scaleY (0.75 s, staggered) with count-up value labels on billboards; the lit bar glows and the rest drop to 42%; the staircase sets price and name on each step's front face (step heights by rank) and the marker's chip hops step to step with its dashed leader rescaling; the camera orbits 10–14° and pushes in 5% over the scene |
+| `coin-stack` | coins, cylinders | `stacks` 1–4 `{label, value, display?, count? 1–16}`, `per` (value of one coin), `format`, `highlight`, `callout` `{text ≤ 10, stack?, at?}`, `tone` | build, callout | Each coin is hidden until its turn, then falls from above its stack (bounce.out, 0.42 s) while the stack's value counts up; faceted cylinders shaded by facet angle; the callout pops beside its stack |
+| `rack-shelf` | rack, rail | `rows` 2–6 (rail 1–5) `{label ≤ 24, cells? ≤ 3 (rail 2), icon?, value? (rail)}`, `focus`, `focusAt`; rail: `format`, `axis` ≤ 48 | build, focus | Trays drop in bottom first while the camera dollies in 10%; the focus tray slides out toward the viewer (0.8 s) and its rim lights while the rest drop back; the rail glides cubes from its left end to their values, farthest first, with ticks and a caption under it |
+| `device-box` | server, appliance | `readout` `{label ≤ 14, to, from?, format?, at?, duration?}`, `clock` `{start "HH:MM:SS", label?}`, `name` ≤ 24, `units` 1–8, `unitLabel` ≤ 6, `tone` | build, readout | The device and its screen land; the screen flickers on, the readout counts (linear) and the clock ticks on whole scene seconds; fans spin at a constant rate and LEDs blink in a fixed pattern; the clock moves under the readout when both do not fit across |
+| `paper-stack` | sections, books, folder | `items` 2–7 (folder 1–5) `{label ≤ 28, detail? ≤ 14, status? ok · flag · none, size? 0.5–4, at?}`, `openAt` (folder), `tone` | build, open, status-&lt;i&gt; | Slabs land bottom first; each status pops (check in the good tone, flag in the bad red) on its cue, a flagged section also tints red; landscape labels rows beside the stack on leaders, portrait on the slabs' front edges; books carry titles on their spines; the folder's front swings open on its hinge (−78°) and the files rise to show their strips |
+| `planet-family` | track, lineup | `bodies` 2–5 (lineup 2–4) `{kind moon · ice · earth · gas · sun · galaxy, name ≤ 16, tagline? ≤ 28, at?}`, `tone` | build, body-&lt;i&gt; | Procedural bodies (CSS gradients, no images): surfaces slide (a turning sphere), coronas and spiral arms spin; track pans a world strip body to body on each cue (0.75 s, at least 0.75 s apart) over two seeded star layers at 0.18× and 0.42×; lineup veils all but the focus body |
+
+Parity fixtures: `test/fixtures/parity/h-{glass-bars-3d,coin-stack,rack-shelf,device-box,paper-stack,planet-family}-*.json`
+(every variant in portrait, the default in landscape, plus the staircase
+marker, token discs and price rail cases).
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its
@@ -3104,6 +3409,20 @@ plate), `tone`, `speed` (0.5–2), `at`. Event `title`. The build must end
 before the exit; long text fails naming the effect, so lengthen the scene,
 shorten the text or raise `speed`.
 
+### Channel furniture (`catalog-h-channel.mjs`)
+
+The pieces a channel puts round its videos (VISUAL_GAP_MAP C5). Every surface
+is the `rim-glass` panel whatever the story's own panel; the logo is
+`params.logo` (an `assets/` image) or a monogram (`params.monogram`, default
+the name's initials). Rain and particles are seek-safe `loop` ops on tiled
+SVG sheets.
+
+| Module | Variants | Params (beyond name, logo, monogram) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `logo-sting` | rain, particles, clear | `tagline` ≤ 48, `at` (the landing, default 0.6 s) | logo, name | Weather fades in over the whole canvas (two depths); the floor line draws; the glass tile drops out of a 16 px blur onto the floor as its masked reflection rises to meet it; a shine sweeps both; the name resolves out of a blur, the tagline rises. Hides captions |
+| `subscribe-cta` | pill, compact | `label` (Subscribe), `done` (Subscribed), `position` left/center/right, `bell`, `like` (off in compact and portrait), `at` (the click, default 42% of the scene) | in, click, bell, out | The pill slides up with back.out; a pointer glides in and presses; the accent button crossfades to a glass Subscribed under a ripple; the bell swings to rest; the like fills in `primary`; the pill slides back down. Sits above the captions at the bottom of its rect; its layout box is the pill, so it collides only where it covers. Needs 1.1 s between the click and the slide out |
+| `channel-watermark` | glass, bare | `corner` (top-right), `opacity` 0.3–1 (0.7), `showName` | — | Fades in to its opacity and holds. Its layout role is `decor`, so scenes pass under it; put it on the highest track across the main body |
+
 ### Tools
 
 - `scripts/element-samples.mjs`: sample params for every module, plus
@@ -3116,3 +3435,48 @@ shorten the text or raise `speed`.
   variant in portrait, the default in landscape) and renders them with one
   Remotion bundle. The fixtures also run in `LAUNCHCLIP_PARITY=1 node --test
   test/parity.test.js`.
+## Catalogue I (`kit/core/catalog-i-explain.mjs`)
+
+The explainer vocabulary for faceless long-form (the gap map in
+`reference/ai-revolution-terra/VISUAL_GAP_MAP.md`: builds inside one shot,
+glass panels with a rim glow, one element added per beat). Catalogue I
+modules are drawn with catalogue H's view tree and op list, so they share its
+emitters, Remotion components, variants, palette and number formats;
+`catalog-h.mjs` registers them through `catalog-i-explain.mjs`. The shared
+pieces are in `catalog-i-base.mjs`: `glassCard`/`glassStyle` (a translucent
+panel, a 2 px rim and an outer glow), `pillNode`, `dashedPath` (a dashed
+path under a mask whose solid copy draws on, `drawMaskOps` on `<id>-m`),
+`scheduleCues` (explicit `at` or a hit, else defaults that walk forward and
+squeeze to fit before the exit), `revealId` and UTC date helpers.
+
+**Reveal ids.** Parts that land on their own cue carry an id and an event:
+scatter-plot annotations (`reveal-<id>`), lineage-graph people
+(`node-<id>`), equation terms (`term-<n>`) and boxes (`box-<n>`). A
+multi-state shot switches them on by those names.
+
+| Module | File | Variants | Params (beyond title, source, at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- | --- |
+| `race-bars` | `catalog-i-data.mjs` | bars, lanes | `rows` 2–5 `{label, time, tone?, icon?}`, `badge` (default "N× faster" from the times; false for none), `race`, `badgeAt`, `format` | build, race, finish-&lt;i&gt;, badge | Rows rise; at the race each fill runs at constant speed and finishes in proportion to its time (the slowest takes `race`, up to 3.2 s) while its timer counts; the winner gets a check and the badge pops beside its label |
+| `small-multiples` | `catalog-i-data.mjs` | glass, flat | `series` 2–4 (the shared legend), `panels` 2–6 `{title, values per series, highlight?, note?}`, `columns`, `format`, `highlightAt` | build, highlight | Glass cards land up to 0.18 s apart and their bars grow; at the highlight every panel's winning bar (default the largest) gets a glowing frame and its value while the others dim to 38% |
+| `date-carousel` | `catalog-i-calendar.mjs` | glass, flat | `from`, `to` ("YYYY-MM-DD", within 120 days), `event` and `startEvent` `{label, sub?, icon?, tone?}`, `caption`, `moveAt`, `focusAt` | build, move, focus | Day cards land on `from` under a glowing lens; the strip runs (power3.inOut, 0.7–2.4 s) to `to` under a REWIND (or FAST FORWARD) sign while the start chip clears; the lens pops back on the focus day, its event chip lands and the caption rises |
+| `month-grid` | `catalog-i-calendar.mjs` | glass, flat | `from`, `days` 1–42, `weekStart` mon/sun, `tone`, `marks` up to 8 `{day, label, icon?, tone?}`, `legend` 1–3 `{label, icon?, tone?}`, `fillAt`, `legendAt` | build, fill, legend | The whole weeks around the run land in a diagonal wave (days outside it dimmed); the run's cells fill one after another (up to 90 ms a day, 2.2 s at most) with "DAY n"; marks land as the fill reaches them (icon only where a portrait cell is too narrow for the label); legend chips follow |
+| `person-id` | `catalog-i-people.mjs` | pill, card | `name` ≤ 28, `role`, `image` (an `assets/` photo of that person; else an initials tile), `align`, `tone`, `nameAt` | build, name | The framed photo rises with its rim glow; the name slides in, in capitals in a glow pill across the frame's foot (card: inside a glass card), and the role rises under it |
+| `lineage-graph` | `catalog-i-people.mjs` | circles, frames | `people` 2–5 `{name, role?, image?, id?, at?}`, `links` 1–6 `{from, to (index or id), label?}` (no loops), `tone` | build, node-&lt;id&gt; | People are laid out by generation (left to right in landscape; a list, photo then name, in portrait) and pop generation by generation; each dashed link draws into the next person with its role label |
+| `equation` | `catalog-i-math.mjs` | plain, glass | `latex` (marks `\term{…}`, `\add{…}`, `\del{…}`, one level), `typeset` (generated), `boxes` 1–4 `{mark, label?, tone?, at?}`, `diffAt`, `size`, `tone` | build, term-&lt;n&gt;, diff, box-&lt;n&gt; | The base wipes in left to right (0.7 s); each `\term` rises on its cue; at the diff each `\del` swaps to its red copy and a strike draws through it while each `\add` lands in green; boxes pop a glowing frame round their mark with a label under it |
+| `title-decompose` | `catalog-i-math.mjs` | chips, underline | `text` ≤ 120 (the title), `citation`, `terms` 1–5 `{text (a run of its words), gloss, sub?, icon?}`, `tone` | build, term-&lt;i&gt; | The citation rises and the words pop as chips in reading order; each term in title order lights its chips, draws a dashed connector down and raises its icon, gloss and sub; cells sit in the order their connectors leave the title, so wrapped terms never cross |
+| `feynman-diagram` | `catalog-i-math.mjs` | glow, ink | `preset` self-energy/exchange/annihilation, or `points` (`{name: [x, y]}` on a 12 × 6 grid) and `lines` 1–12 `{from, to, type: fermion/antifermion/photon/gluon/scalar/graviton, bend −1–1, label?, at?}`, `caption`, `tone` | build, line-&lt;i&gt; | Lines draw on in order (0.6 s each, about 0.55 s apart): fermions straight or bent with a mid-line arrow, photons and gravitons as waves, gluons as curls, scalars dashed; vertices pop as the first line reaches them; labels rise beside each line, away from the centre |
+
+**Typesetting.** `equation` draws plain data: `params.typeset`, made from
+`params.latex` by `src/math/typeset.js` with MathJax 3.2.2 (TeX input, SVG
+output, vendored as `src/math/mathjax-tex-svg.js` by
+`scripts/vendor-mathjax.mjs`). The typesetter flattens MathJax's SVG into
+the glyph outlines it uses (`glyphs`), glyph and rule uses with absolute
+matrices (`layers`: the base, then one per mark) and each mark's box
+(`boxes`), all in MathJax's viewBox units (1 em = 1000). `readProjectStory`
+and `finish` typeset every equation scene in memory before validation and
+render (MathJax loads only when a story has one); storyboard.json keeps only
+the LaTeX. The module refuses a missing or stale `typeset` (its `latex` must
+equal `params.latex`), reports a kept TeX error against the scene, and
+accepts only SVG path data as glyphs. Glyph outlines sit once, in the base
+layer's `<defs>`, under ids scoped to the scene (`<id>-g-<key>`).
+

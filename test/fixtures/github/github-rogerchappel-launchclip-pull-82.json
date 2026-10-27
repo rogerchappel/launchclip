@@ -1,0 +1,22 @@
+{
+  "url": "https://api.github.com/repos/rogerchappel/launchclip/pulls/82",
+  "fetchedAt": "2026-10-27T05:07:33.442Z",
+  "data": {
+    "number": 82,
+    "title": "feat: support OpenRouter free repairs",
+    "state": "closed",
+    "draft": false,
+    "merged_at": "2026-07-16T00:20:38Z",
+    "closed_at": "2026-07-16T00:20:38Z",
+    "created_at": "2026-07-16T00:19:03Z",
+    "user": {
+      "login": "rogerchappel",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2165615?v=4"
+    },
+    "base": {
+      "repo": {
+        "full_name": "rogerchappel/launchclip"
+      }
+    }
+  }
+}

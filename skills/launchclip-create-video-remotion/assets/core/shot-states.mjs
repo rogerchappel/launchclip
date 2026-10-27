@@ -80,7 +80,7 @@ function barGuide(model, value, params) {
  */
 export const STATE_MODULES = Object.freeze({
   'bar-chart': {params: ['data', 'max', 'highlight', 'format'], items: ['bar', 'label', 'value', 'dot'], guide: barGuide},
-  'scatter-plot': {params: ['points', 'highlight'], items: ['dot']},
+  'scatter-plot': {params: ['points', 'series', 'highlight', 'focus'], items: ['dot']},
   'comparison-table': {params: ['rows', 'highlight'], items: ['row']},
   leaderboard: {params: ['entries', 'highlight'], items: ['row']},
   'unit-grid': {params: ['highlight'], items: ['u']},

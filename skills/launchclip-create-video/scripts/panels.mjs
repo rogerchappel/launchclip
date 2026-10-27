@@ -9,6 +9,10 @@
 //   paper        a sheet a shade off the background, with a crisp edge shadow
 //   outline      no fill to speak of: a primary-colour border over a faint wash
 //   soft-shadow  an opaque card with no border, lifted by a wide, soft shadow
+//   rim-glass    the long-form explainer's glass: a translucent, blurred
+//                fill, a 1 px primary rim with an outer glow and a soft inner
+//                highlight; catalogue H frames and tables opt in through
+//                glassSurface() (VISUAL_GAP_MAP D5)
 //
 // Every treatment follows the theme: panelTheme() reads light or dark from the
 // background, and shadows, borders and glass tints change with it. Text on a
@@ -16,7 +20,7 @@
 // background's side of the contrast; panelFill() says what text sits on, for
 // the contrast gate (kit/core/backgrounds.mjs backgroundContrastFindings).
 
-export const PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper', 'outline', 'soft-shadow']);
+export const PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper', 'outline', 'soft-shadow', 'rim-glass']);
 export const PANEL_RADIUS = Object.freeze({ min: 0, max: 48 });
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -103,6 +107,8 @@ export function panelFill(treatment, colors) {
   const light = panelTheme(colors) === 'light';
   switch (treatment) {
     case 'glass': return { color: light ? mix(bg, '#ffffff', 0.35) : bg, alpha: light ? 0.7 : 0.66 };
+    // A breath of the rim colour in the glass, so the panel reads as lit by its own edge.
+    case 'rim-glass': return { color: light ? mix(bg, '#ffffff', 0.4) : mix(bg, colors.primary ?? paper, 0.06), alpha: light ? 0.72 : 0.58 };
     case 'paper': return { color: mix(bg, paper, light ? 0.03 : 0.06), alpha: 1 };
     case 'outline': return { color: bg, alpha: 0.35 };
     case 'soft-shadow': return { color: mix(bg, paper, light ? 0.02 : 0.04), alpha: 1 };
@@ -130,6 +136,15 @@ export function panelSurfaceStyle(treatment, { colors, unit = 1, border, radius 
     case 'glass':
       return { ...base, backdropFilter: `blur(${u(18)}px)`, border: `${u(1.5)}px solid ${light ? withAlpha('#ffffff', 0.7) : withAlpha(colors.paper, 0.22)}`,
         boxShadow: `0 ${u(16)}px ${u(44)}px ${withAlpha(shadowInk, light ? 0.14 : 0.4)}` };
+    case 'rim-glass': {
+      const rim = colors.primary ?? colors.paper;
+      // The sheen: a top-lit gradient over the fill; the inner highlight is a
+      // hairline along the top edge and a faint inner wash of the rim colour.
+      return { ...base, background: `linear-gradient(180deg, ${withAlpha('#ffffff', light ? 0.3 : 0.07)} 0%, ${withAlpha('#ffffff', 0)} 38%), ${background}`,
+        backdropFilter: `blur(${u(24)}px) saturate(1.2)`, border: `${u(1.5)}px solid ${withAlpha(rim, light ? 0.85 : 0.78)}`,
+        boxShadow: [`inset 0 ${u(1)}px 0 ${withAlpha('#ffffff', light ? 0.6 : 0.16)}`, `inset 0 0 ${u(28)}px ${withAlpha(rim, light ? 0.06 : 0.1)}`,
+          `0 0 ${u(2)}px ${withAlpha(rim, 0.55)}`, `0 0 ${u(22)}px ${withAlpha(rim, light ? 0.22 : 0.32)}`, `0 ${u(26)}px ${u(64)}px ${withAlpha(shadowInk, light ? 0.16 : 0.5)}`].join(', ') };
+    }
     case 'paper':
       return { ...base, border: `${u(1)}px solid ${mix(colors.bg, colors.paper, light ? 0.1 : 0.14)}`,
         boxShadow: `0 ${u(2)}px 0 ${withAlpha(shadowInk, light ? 0.12 : 0.5)}, 0 ${u(10)}px ${u(22)}px ${withAlpha(shadowInk, light ? 0.1 : 0.35)}` };
@@ -140,4 +155,15 @@ export function panelSurfaceStyle(treatment, { colors, unit = 1, border, radius 
     default:
       return { ...base, border: `${u(2)}px solid ${border}`, boxShadow: `0 ${u(18)}px ${u(48)}px #00000073` };
   }
+}
+
+/**
+ * The glass role for a module that draws its own frame (a window, a table, a
+ * card group): the rim-glass surface CSS when the story's panel is rim-glass
+ * (model.panel, copied by resolveModule), else null and the module keeps its
+ * own look. radius in px at 1080 (default: the panel's, else 24).
+ */
+export function glassSurface(model, { radius } = {}) {
+  if (model?.panel?.treatment !== 'rim-glass' || !model.theme) return null;
+  return panelSurfaceStyle('rim-glass', { colors: model.theme, unit: model.unit ?? 1, radius: radius ?? model.panel.radius ?? 24 });
 }

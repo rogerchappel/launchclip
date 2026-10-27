@@ -70,6 +70,7 @@ qa/sfx/
 qa/parity-footage/
 qa/parity-backgrounds/
 qa/background-sheet/
+qa/plate-sheet/
 qa/seams/
 qa/blind/
 qa/blind2/
@@ -83,3 +84,6 @@ qa/subject/
 qa/cast-styles/
 qa/social/
 qa/parity-social/
+
+# Format scorecard (npm run eval:formats)
+qa/format-eval*/

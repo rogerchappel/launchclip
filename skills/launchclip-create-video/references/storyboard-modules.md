@@ -29,6 +29,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - world? (optional): {kind: office | home-desk | kitchen | living-room | classroom | cafe | workshop | server-room | studio | gym | city-street | shopfronts | crossing | alley | rooftop | skyline | park | beach | mountains | forest | space | abstract-stage, time?: day | dusk | night, props?: [prop ids]}. The default for every world scene; a style may set it. Pick the place that fits the topic (cooking → kitchen or cafe, fitness → gym or park, developer tools → home-desk or server-room) and the time the story is set at.
 - A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
+- Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -103,12 +104,30 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - A post on screen is a real post: its words verbatim (an excerpt marks cuts with …), its author, handle and date as posted, and a source block {url, captured_at, screenshot} from the capture (schema launchclip.capture.v1). validateStory warns on a post without source.url; never write a post someone did not post, and never fill a wall with made-up accounts.
 - Sweep the phrase the narration reads (highlight: "<words of the post>"), timed with a scene hit on that word: hits [{at: "word:<text>", event: "highlight"}]. One card per beat; build the next card in the same shot (social-stack, social-sort) rather than cutting.
 
+## Code evidence (the receipt)
+
+- A claim about code ("they are already testing it", "it shipped") lands on its receipt: repo-pr-card (a PR), commit-card (a commit), diff-view (what changed, row by row) or terminal-session (a run). Box the token (a model name, a flag) with highlight and time highlightAt to its word: "highlightAt": "word:terra".
+- Real data only: map a public PR or commit with `node src/evidence/github.js <url> --token <text>` (cached under assets/evidence/, avatars too) and paste its params; never type or invent repo names, numbers, shas, authors or lines. Lines stay verbatim (cropping round the token is the module's job).
+- Several sources for one name: evidence-chain (2–4 cards, one per beat, the token joined by a dashed connector) or date-pinned-timeline (cards pinned to their dates on a scrubbing day axis; the summary variant is the "why now? N clues in N days" recap). Keep one shot and build it source by source rather than cutting card to card.
+
 ## Builds, not cuts (shot states)
 
 - Builds, not cuts: a data or proof shot runs 2–4 states timed to the clauses on one plate (scene.states [{at: <anchor>, set: {...}}], 1–5 after the scene itself), so each line gets a new visual without a cut. Nothing holds one state longer than about 10 s, and nothing stands still over 3 s (the holds and states gates).
 - A state sets any of: params (the module's state params, merged; arrays keep their length, so list every item and hold the later ones back with reveal), reveal [item], focus item | "<element id>" | null (a ring in the focus colour travels there and the rest dims to 30 %), glow item, guide {value, label} (bar-chart) or {target, edge, label}, note {text ≤ 32, target}, clear true. Items are indexes (bar 0, row 2); element ids drop the scene prefix ("cell-1-2", "line-3").
 - States run on bar-chart (data, max, highlight), scatter-plot (points, highlight), comparison-table (rows, highlight), leaderboard (entries, highlight), unit-grid (highlight), process-steps (steps) and excerpt (lines). Example on bar-chart: the first bar ($1) → the second grows in (reveal [1]) → a dashed "half" guide → focus and glow on the winner.
 - Between shots: "rack-focus" (the card blurs back while the next sharpens forward) is the default between builds; "card-to-card" when one card becomes the next; "glow-wipe" only for chapter breaks.
+
+## Long-form look (plates and glass)
+
+- Backdrop plates: plate {kind: hex-shell | silk | strands | bokeh, params?: {focus, intensity, speed, depth 0–1 (speed 0–2), tint: neutral | primary | accent}, cycle?} sets a dark, out-of-focus plate that drifts under every scene; it holds across a chapter and changes at the next (cycle: true walks the kinds per chapter, or set chapters[j].plate). scenes[i].plate overrides one scene ("none" for the story background). Build a chapter as several states over one plate rather than cutting to new backgrounds.
+- Glass: panel {treatment: "rim-glass"} turns every card (stat-card, excerpt, quote-card, …), window-chrome and comparison-table into translucent glass with a cyan (primary) rim and glow. Type stays paper and primary; the accent is for the one brand being discussed.
+- Channel furniture: logo-sting opens and closes (rain, particles or clear); subscribe-cta goes on track 1+ over a card scene for 5–6 s, two or three times in a long video, never over a key figure; channel-watermark goes on the highest track across the main body (decor: scenes pass under it).
+
+## 3D data objects
+
+- Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.
+- Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).
+- Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.
 
 ## Footage layouts (sections)
 
@@ -138,11 +157,24 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | says "big X → fast, small X → slow" | flow-compare |
 | counts people or things in a study or survey, or splits them into groups ("49 trained lifters", "split into two groups", "1 in 10 people"): one icon per unit counts in, then the grid splits into labelled groups or lights a few up | unit-grid |
 | states a range, rule or threshold on a scale ("8–12 reps for size", "above 15 is cardio", "between 7 and 9 hours"): a ruler whose ranges light up one at a time, each with its label | number-line |
+| states a huge count of small things to feel its size ("1,050,000 tokens in context", "a million rows", "2 million parameters"): one dot per unit fills a bracketed field as the counter counts, pulling back from close-up dots | dot-field |
+| compares what the same budget or time buys from two options ("same $10 of output", "for the same money", "per dollar"): two unit grids fill side by side under live counters, "1 cell = X" | grid-race |
+| compares costs, money or task counts as amounts ("$1.01 vs $7.15 per task", "24 of 100 tasks passed", "grew $200,000 to $1M"): grids at one cell size whose heights compare, with ticks, a lit subset, stacked segments and a ratio ("≈9× cheaper") | cell-grid |
+| explains tokens or prices per token ("a token is part of a word", "$10 per million output tokens"): a real sentence split into token chips with each token's price, then the bills race to their totals | tokenizer |
+| reveals a headline number or word that should feel computed or leaked ("60%", "6.1", "AGI?"): it assembles from (or dissolves into) glowing particles | particle-text |
+| pits two labs, companies or products against each other by name ("OpenAI and Anthropic", "X takes on Y"): each mark drawn in particles inside an orbiting ring, side by side | particle-logo |
+| points at what comes next after a line-up ("the next flagship", "what's coming", "the model after this"): steps rise to a dashed box that a particle cloud gathers round | particle-cloud |
 | cites a study, survey or researchers ("according to", "a 2016 study", "researchers found", "et al."): a source note (author, year · journal) that stays along the bottom while the data scenes play (story.frame.sources, not a scene); no source in the brief, no study claim | frame.sources (story overlay, not a scene module) |
 | quotes one real post, tweet or reply ("one user wrote", "he tweeted", "posted on X"): the post as a card, its key phrase swept with a highlight on the word | social-post |
 | gathers a few reactions to one thing ("people were quick to respond", "the replies poured in"): 2–5 posts cascade in, one in front | social-stack |
 | splits reactions into camps ("some can't wait, others are tired of it"): posts fly into labelled columns | social-sort |
 | says a topic took over the feeds ("the internet exploded", "everyone was talking about it"): a drifting wall of posts, one or two pulled forward | social-wall |
+| names a pull request or a change merged into a repo ("a PR in dotnet/efcore", "merged on Oct 16", "pull request #39217"): the PR rebuilt as a card, the token boxed on its word | repo-pr-card |
+| names a commit, a sha or who committed what ("a commit by Copilot", "commit cc44805", "co-authored by"): the commit card with sha, Verified, co-authors and the hunk | commit-card |
+| walks through what a change did line by line ("they swapped sol for terra", "the diff shows", "this line changed"): a Files-changed diff whose focus ring steps through the rows | diff-view |
+| finds the same name in several places ("the same model name shows up in three repos", "and again here"): the sources side by side, the token joined by a dashed connector | evidence-chain |
+| dates the clues ("on Oct 16 … then Oct 24", "three clues in nine days", "why now?"): a day axis that scrubs while each source pins to its date, or the why-now summary | date-pinned-timeline |
+| runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs | terminal-session |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
 | lists steps, features or duties | checklist |
@@ -152,6 +184,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | cites history, a source or a quote | archive-card |
 | names a specific date or launch day | date-card |
 | shows the product in use: a recorded flow (assets/demo/<flow>.mp4 with <flow>.actions.json from launchclip demo record) [motion, voiceover-motion] | product-demo |
+| shows a real public page as proof: a PR or diff, a model card, an announcement, an article (assets/evidence/<id>.mp4 with <id>.evidence.json from launchclip evidence capture) [motion, voiceover-motion] | evidence-clip |
 | shows a product, site or repo (real capture) | media-window (planned module ui-showcase; use media-window) |
 | shows a command or a few lines of code | code-snippet |
 | names platforms or integrations | logo-row |
@@ -165,6 +198,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
+| asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
+| opens or closes a channel's video on its name ("welcome back to …", "see you in the next one"): the channel's glass logo sting, 3–5 s, as the first or last scene | logo-sting |
 | names a claim, a problem or a turn in a few words ("the problem is", "here's the thing", "too slow"): a big word or phrase with an icon and a sub-line (on a card beside the presenter, or full frame) | concept-card |
 | lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word | icon-row |
 | opens a new section or chapter ("part two", "first, the problem", "chapter", "let's start with"): the brand frame's kicker and the section title (usually an insert) | section-card |
@@ -220,6 +255,23 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | announces or names something in a few words ("announcing", "introducing", "say hello to"): a title built by the style's text effect, with a kicker and sub-line | motion-title |
 | lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels | icon-grid |
 | names countries or where something happens ("in 40 countries", "across Europe", "from Brazil to Japan"): a world map that zooms and fills the countries the brief names | map-highlight |
+| states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
+| compares a few prices, scores or sizes as a premium 3D beat, or a line-up from top to bottom ("the line-up", "from $50 down to $0.50", "the cheapest of the family"): glass bars grow under an orbiting camera, or a staircase of steps with a score marker hopping between them | glass-bars-3d |
+| compares costs or token counts as piles ("$1 versus $10", "ten times the cost", "three times more tokens"): stacks of coins or token discs drop in, sized by value | coin-stack |
+| lays out a family of models or plans row by row with a score and a price ("model by model", "each tier", "on the shelf"), or places them on a price scale: trays stack in and one slides out, or cubes glide along a price rail | rack-shelf |
+| talks about a server, GPU or box running live ("one GPU", "on a single node", "it has been up for", "requests so far"): the device lands with a screen counting requests and an uptime clock | device-box |
+| walks through a long document, report or paper section by section, with what passed and what failed ("chapter by chapter", "page 14", "the audit found", "red flags"): sections land as a stack and each gets a check or a red flag (books, or a folder that opens, as variants) | paper-stack |
+| introduces a product family from small to large ("the small one, the mid one, the flagship", "three sizes", "light, standard and pro"): each member as a moon, earth, sun or galaxy with its name and tagline, the camera tracking across | planet-family |
+| reads an official benchmark chart or a score against cost or size ("on the chart", "cost per task", "the official numbers vs the re-run"): series lines draw on, one glows, guides and callouts land one at a time, an official chart and a re-run side by side | scatter-plot |
+| says one thing is N times faster or finishes first ("3× faster", "in half the time"): rows fill like progress bars at their own speeds and the winner gets its badge | race-bars |
+| walks through several benchmarks or tests at once ("across four benchmarks", "wins 18 of 20"): a dashboard of mini bar charts with one legend, each lighting its winner | small-multiples |
+| goes back or forward to a date ("rewind to October 5th", "three weeks earlier", "on launch day"): day cards rewind under a REWIND sign and land on the day with its event | date-carousel |
+| counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter | month-grid |
+| introduces a real person by name and role in an explainer ("Professor X at Y", "the paper's author", "her advisor"): their photo with a glowing name pill and role | person-id |
+| traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
+| shows or changes a formula ("the equation", "a sign error", "this term"): typeset LaTeX that reveals term by term, boxes the term in question and diffs red to green | equation |
+| unpacks a paper or report title word by word ("the paper's title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss | title-decompose |
+| describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line | feynman-diagram |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -639,9 +691,9 @@ events: point, sticker
 Footage-led: a name and title bar that slides in above the caption band.
 params:
 - name: string ≤ 32
-- title: string ≤ 48 (optional)
+- title: string ≤ 48 (optional; the role)
 - align: left|center
-- tone: dark|primary
+- tone: dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: name, title
 
@@ -700,6 +752,19 @@ params:
 - align: left|center (default left)
 - title: string ≤ 60, the photo's alt text (optional)
 events: enter, line-<i>
+
+### evidence-clip (keeps captions)
+A capture of a real public page (launchclip evidence capture: a PR diff, a model card, an announcement, an article) playing in a glass window with an accent rim glow and a source tag (publisher · date) above it, with optional post zooms to boxes in the clip and a gliding cursor. Keeps captions.
+params:
+- media: {src: "assets/evidence/<id>.mp4", sourceStart?: seconds}
+- viewport: {width, height} of the capture in px (from <id>.evidence.json) — build with evidenceClipParams(sidecar) or launchclip evidence scene
+- source: {publisher ≤ 40, date? ≤ 24} the tag above the window (default from the sidecar provenance)
+- frame: glass|none (default glass)
+- push: 0–0.12, the slow push-in over the scene (default 0.04)
+- focus: [{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture's own beats
+- cursor: [{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time
+- title: string ≤ 60 (optional, for logs)
+events: enter, source, focus-<i>, click-<i>
 
 ### feed-frame (hides captions, needs the subject)
 Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
@@ -999,26 +1064,6 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
 variants: gradient (default), line, steps
-
-### scatter-plot (keeps captions)
-Points (or sized bubbles) pop onto two axes in x order, with an optional fitted trend line and one labelled highlight.
-params:
-- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60
-- xLabel: string ≤ 32
-- yLabel: string ≤ 32
-- x: {min, max} (optional)
-- y: {min, max} (optional)
-- trend: boolean: draw the least-squares line (default false)
-- tone: dot colour (primary | accent | paper | #rrggbb)
-- highlight: point index to call out (optional)
-- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
-- title: string ≤ 60 (optional)
-- source: string ≤ 80, where the numbers come from (optional)
-- at: build start: seconds from scene start (optional; else a matching hit, else a default)
-- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
-- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, highlight
-variants: dots (default), bubbles, rings
 
 ### radar-chart (keeps captions)
 Radar (spider) chart: the grid lands, then each series' shape grows out from the centre; 3–8 labelled axes.
@@ -1427,18 +1472,20 @@ events: build
 variants: stroke (default), duotone, tiles
 
 ### map-highlight (keeps captions)
-A world map that fades in, zooms to the highlighted countries when they sit close together, then fills them one by one with label pills: plain fills, pins that drop on each, or a glow.
+A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.
 params:
-- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, color?}] 1–8
-- focus: "auto" (zoom when the countries are close; default) | "world"
+- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?}] 1–8 (one of highlight or pins, or both)
+- pins: [{lon, lat, label ≤ 28, sub? ≤ 20 ("Ph.D. 2008"), card?: {title ≤ 28, sub? ≤ 32, image? (assets/… photo)}, color?}] 1–4 places; at most two cards (events pin-<i>)
+- route: boolean: a dashed travel path from pin to pin, in order (default false; events route-<i>)
+- focus: "auto" (zoom when the places are close; default) | "world"
 - tone: primary | accent | paper | #rrggbb
 - title: string ≤ 60 (optional)
 - source: string ≤ 80 (optional)
 - at: map lands: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, zoom, highlight-<i>
-variants: fill (default), pins, glow
+events: build, zoom, highlight-<i>, pin-<i>, route-<i>
+variants: fill (default), pins, glow, outline, dots
 
 ### unit-grid (keeps captions)
 An isotype: 1–200 units (a person by default, or any icon) that count in as a grid, then split into 2–3 labelled groups that slide apart and recolour ("49 lifters → 24 heavy, 25 light"), or light up a few and dim the rest ("1 in 10").
@@ -1460,13 +1507,16 @@ events: build, split, highlight
 variants: solid (default), stroke, dots
 
 ### number-line (keeps captions)
-A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, and an optional marker that drops onto a value.
+A ruler over a range (1–25 reps, 0–100%) with 1–3 highlighted ranges, each with its label and tone ("8–12 = SIZE" in gold, "15+ = JUST CARDIO" in red), that light up one at a time on their cues, an optional marker that drops onto a value, glowing value points ("+0.3", "+23.0"), and a zoom inset that re-plots a slice of the line at a finer scale under dashed connectors ("wins by less than 1 point").
 params:
 - from: number, the start of the line
 - to: number > from, the end
 - step: tick spacing (optional; default a round step for about 25 ticks, at most 100)
 - labelEvery: integer: label every n-th tick (optional; default the closest that fits; range ends are always labelled)
-- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>)
+- ranges: [{from, to, label ≤ 28, tone? (good | bad | neutral | primary | accent | paper | #rrggbb), at?}] 1–3, inside the line, not overlapping; each lights up on its own cue (event range-<i>) (one of ranges, points or marker)
+- points: [{value, label? ≤ 24, tone? (default accent)}] 1–8 glowing dots on the line, labels under the tick numbers (optional; event points)
+- pointsAt: the points: seconds from scene start (optional; else a matching hit, else a default)
+- zoom: {from, to (at most half the line), step?, label? ≤ 40, at?} a second ruler under the line re-plotting that slice and its points, joined by dashed connectors (optional; event zoom, last)
 - marker: {value, label? ≤ 24, tone?, at?} a pin that drops onto one value (optional; event marker)
 - unit: string ≤ 12 under the line's end ("reps") (optional)
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
@@ -1475,7 +1525,7 @@ params:
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, range-0, range-1, range-2, marker
+events: build, range-0, range-1, range-2, marker, points, zoom
 variants: ruler (default), track
 
 ### social-post (keeps captions)
@@ -1550,6 +1600,529 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, pull, highlight, highlight-2, highlight-3
+
+### logo-sting (hides captions)
+A channel intro or outro: a glass logo tile drops onto a reflective, lit floor in falling rain (or rising particles, or clear air), a shine sweeps it, and the channel name resolves out of a blur with an optional tagline. Hides captions.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3 (default: the name's initials)
+- tagline: string ≤ 48 under the name (optional)
+- at: seconds from the scene start the logo lands (default 0.6)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: logo, name
+variants: rain (default), particles, clear
+
+### subscribe-cta (keeps captions)
+A subscribe prompt for mid-video: a glass pill (avatar, channel name, Subscribe button, bell, like) slides in, a pointer clicks the button, it turns to Subscribed, the bell rings and the like fills, then the pill slides out. Sits above the captions; put it on an overlay track (track 1+) over a scene.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3 (default: the name's initials)
+- label: button text ≤ 14 (default Subscribe)
+- done: after the click ≤ 14 (default Subscribed)
+- position: left | center | right (default center)
+- bell: true | false (default true)
+- like: true | false (default true; false in compact and portrait)
+- at: seconds from the scene start of the click (default 42% of the scene, at least 1.3)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: in, click, bell, out
+variants: pill (default), compact
+
+### channel-watermark (keeps captions)
+A small corner watermark of the channel's mark (glass chip or bare), held at low opacity across the scenes it spans; put it on a high overlay track over the whole video.
+params:
+- name: string ≤ 32, the channel name
+- logo: assets/… image (optional; default: a monogram)
+- monogram: string ≤ 3
+- corner: top-right | top-left | bottom-right | bottom-left (default top-right)
+- opacity: 0.3–1 (default 0.7)
+- showName: true | false: the name beside the mark (default false)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+variants: glass (default), bare
+
+### repo-pr-card (keeps captions)
+A GitHub pull request rebuilt as a glass card: repo, PR number, title, merged/open state chip, author avatar and date, and a −/+ excerpt with line numbers; a box draws round the highlighted token (a model name, a flag) on its word. Real data only: map a PR with src/evidence/github.js.
+params:
+- repo: "owner/name"
+- number: PR number
+- title: PR title ≤ 140
+- state: merged | open | closed | draft (default open)
+- author: "login" | {login, avatar? (assets/ image)}
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 1–14
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- file: path of the file the lines are from ≤ 160 (optional)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- date: "YYYY-MM-DD" (optional)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), github
+
+### commit-card (keeps captions)
+A GitHub commit rebuilt as a glass card: repo, short sha, a Verified chip, co-author avatars and names, the message, the file path and the diff hunk; a box draws round the highlighted token on its word. Real data only (src/evidence/github.js).
+params:
+- repo: "owner/name"
+- sha: 7–40 hex (shown as 7)
+- verified: boolean (default false)
+- authors: ["login" | {login, avatar?}] 1–3
+- message: the commit message's first line ≤ 140
+- number: the PR number it came from (optional, shown "(#n)")
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 1–14
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- file: path of the file the lines are from ≤ 160 (optional)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- date: "YYYY-MM-DD" (optional)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), github
+
+### diff-view (keeps captions)
+A Files-changed file diff (path, +/− stats, two line-number gutters, red and green rows) where a cyan focus ring steps through rows in 1–6 states on their cues, sliding and resizing from one to the next while the other rows dim to 30%. Real diffs only (src/evidence/github.js).
+params:
+- file: path ≤ 160
+- lines: [string | {text, type?, old?, new?}] unified-diff lines verbatim: "@@ -13,7 +13,7 @@" (a hunk header, sets the line numbers), "+added", "-removed", " context", 2–18
+- startLine: first line number: n or {old, new} (optional; a hunk header line sets it too)
+- additions: integer (optional; default: counted from lines)
+- deletions: integer (optional; default: counted from lines)
+- focus: [{row | rows: [from, to] | line (new-file number), at?}] 1–6 states (events focus-<i>)
+- highlight: "token" | {token, row?} | [… ≤ 3]: text exactly as in a line; a box draws round it (default row: the first added line that has it)
+- highlightAt: the token boxes draw on: seconds from scene start (optional; else a matching hit, else a default)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus-0, focus-1, focus-2, focus-3, focus-4, focus-5, highlight
+variants: glass (default), github
+
+### evidence-chain (keeps captions)
+An evidence chain: 2–4 sources (a PR, a commit, a file excerpt, an announcement) side by side (stacked in 9:16, cascading or in a 2 × 2 grid for 3–4 in 16:9), built one at a time, the same highlighted token boxed in each and joined to the previous one by an animated dashed connector: "the same name in three places".
+params:
+- sources: [{kind: pr | commit | excerpt | announcement, …that kind's fields: pr {repo, number, state?, author?, date?, file?, lines?}, commit {repo, sha, verified?, authors?, date?, file?, lines?}, excerpt {file, sub?, lines, startLine?}, announcement {site, title, text ≤ 320, date?}; highlight} + at?] 2–4, up to 6 lines each (events source-<i>, link-<i>)
+- token: the token to box in every source that sets no highlight (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: first source: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, source-0, source-1, source-2, source-3, link-1, link-2, link-3
+variants: glass (default), github
+
+### date-pinned-timeline (keeps captions)
+Evidence on a date axis: a day axis (Oct 16 → 25) whose playhead scrubs to each date while 1–4 source cards (PR, commit, excerpt, announcement) pin to it with a dashed stem and stack; or (variant summary) the "why now? 3 clues in 9 days" layout: a glass title panel with one dot per day over the clue thumbnails, each with its date and label.
+params:
+- from: "YYYY-MM-DD", the first day
+- to: "YYYY-MM-DD", the last (1–45 days on)
+- cards: [{date, label? ≤ 32 (summary caption), at?, …{kind: pr | commit | excerpt | announcement, …that kind's fields: pr {repo, number, state?, author?, date?, file?, lines?}, commit {repo, sha, verified?, authors?, date?, file?, lines?}, excerpt {file, sub?, lines, startLine?}, announcement {site, title, text ≤ 320, date?}; highlight}}] 1–4 in date order (events card-<i>)
+- title: summary only: ≤ 40 (default "why now?")
+- subtitle: summary only: ≤ 60 (default "N clues in N days")
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, card-0, card-1, card-2, card-3
+variants: axis (default), summary
+
+### terminal-session (keeps captions)
+A terminal that types: each command types character by character after the prompt, then its output streams row by row (plain lines, or PASS/FAIL rows with timings), scrolling when it outgrows the window; a ⏩ timer in the title bar fast-forwards the elapsed time while a long run streams, and a box draws round a path or token. For "git clone, pip install, run_all" proof beats.
+params:
+- title: window title ≤ 60 (default "zsh")
+- prompt: string ≤ 6 (default "$")
+- steps: [{cmd ≤ 160, output?: [string | {status: PASS | FAIL | OK | ERROR | SKIP, time? ≤ 10 ("10.0 s"), text} | {text, tone?: fg | muted | accent | add | del}] ≤ 30, typing? (seconds), at?}] 1–8 (events step-<i>)
+- stream: seconds between output rows (default 0.12)
+- timer: {to (seconds of real time shown), from? (default 0), step? (default the last with output)}: the ⏩ elapsed timer runs over that step's output (event timer)
+- highlight: "token" | {token, step?, row? (an output row), at?}: a box draws round it (event highlight)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, step-0, step-1, step-2, step-3, step-4, step-5, step-6, step-7, timer, highlight
+variants: glass (default), solid
+
+### dot-field (keeps captions)
+A huge count shown honestly ("1,050,000 tokens in context, 1 dot = 1 token"): one dot per unit (up to 2,000,000) fills a bracketed field in a scatter as the counter counts up, pulling back from close-up dots to a density field.
+params:
+- count: integer 100–2000000, one dot each
+- label: string ≤ 40 beside the counter ("tokens in context") (optional)
+- legend: string ≤ 32 at the top right (default "1 dot = 1 token")
+- tone: the dots: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- order: "scatter" (default; dots land all over) or "reading" (left to right, top to bottom)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- fillDuration: seconds the fill and the counter take (default: to just before the exit, 1.2–4.5 s)
+- at: field in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, filled
+variants: pull-back (default), still
+
+### particle-text (keeps captions)
+A number or short word (≤ 14 characters) in a dot-matrix face that assembles from a swirl of glowing particles, dissolves into drifting dust, or both ("60%" streaming in, then blowing away), with an optional kicker above and a line under.
+params:
+- text: string ≤ 14: A–Z, 0–9, space and $ % . , + - × ≈ / : ! ? # '
+- kicker: string ≤ 40 above (optional)
+- sub: string ≤ 60 under (optional)
+- mode: "assemble" (default), "dissolve" (starts whole) or "both"
+- tone: the particles: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- at: assemble start: seconds from scene start (optional; else a matching hit, else a default)
+- dissolveAt: the dissolve: seconds from scene start (optional; else a matching hit, else a default) (mode dissolve or both; default about 1.2 s before the exit)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: assemble, dissolve
+variants: led (default), dust
+
+### particle-logo (keeps captions)
+One or two marks drawn in glowing particles, each inside a tilted ring of orbiting particles, side by side with a name under each (two labs, two products). A mark is an icon, or a brand's own SVG path when the scene shows that party's real evidence.
+params:
+- logos: [{icon? (an icon name) | path? {d, viewBox "minX minY w h", rule? nonzero|evenodd}, label ≤ 24, sub? ≤ 36, tone?}] 1–2
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: ring (default), halo
+
+### particle-cloud (keeps captions)
+Up to four ascending steps (a model line-up) leading to a dashed target box ("Next flagship") that a drifting cloud of glowing particles streams up the steps to gather round; or the target alone, wrapped in its cloud.
+params:
+- target: {label ≤ 24, sub? ≤ 32} the dashed box the cloud gathers round
+- steps: [{label ≤ 24, sub? ≤ 32}] 1–4 steps below it, lowest first (the stairs variant draws them)
+- tone: the particles: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- at: first step in: seconds from scene start (optional; else a matching hit, else a default)
+- cloudAt: the cloud: seconds from scene start (optional; else a matching hit, else a default) (default 0.45 s after the last step)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, cloud
+variants: stairs (default), single
+
+### grid-race (keeps captions)
+Two unit grids racing side by side ("Same $10 of output": 1,000,000 vs 960,000 tokens), each cell one unit ("1 cell = 10,000 tokens"), up to 10000 cells a side, under live counters (and an optional spend counter) that count with the fill, then an optional ratio ("2× the tokens").
+params:
+- unit: number, what one cell stands for (10000)
+- racers: [{label ≤ 28, sub? ≤ 40, total (a multiple of unit up to 10,000 cells), spend? {total, format?}, tone?}] exactly 2
+- legend: string ≤ 40 (default "1 cell = <unit>")
+- format: the counters: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- suffix: string ≤ 16 after each counter ("tokens") (optional)
+- spendLabel: string ≤ 16 before each spend counter (default "spent")
+- pace: "together" (default: both finish together) or "same-rate" (one cell per unit of time; the bigger total takes longer)
+- ratio: {text ≤ 8 ("2×"), sub? ≤ 40, tone?, at?} after the finish (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- raceDuration: seconds (default: to just before the exit, 1–4 s)
+- at: labels in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, finish, ratio
+variants: columns (default), stacked
+
+### cell-grid (keeps captions)
+1–3 unit grids at one cell size (up to 10000 cells each), so their heights compare like bars ("1 cell = $0.01": $1.01 vs $7.15 a task), with stacked colour segments (a $200,000 stake under the growth), cells that tick to checkmarks (tasks passed), a lit subset, and a ratio note ("≈9× cheaper").
+params:
+- legend: string ≤ 40, what one cell is ("1 cell = $0.01")
+- grids: [{label ≤ 28, sub? ≤ 36, count (1–10000), value? ≤ 16 shown over the grid ("$7.15"), tone?, columns?, segments? [{count, tone, label? ≤ 28}] 1–4 from the first cell, ticks? {count, tone?, at?}, highlight? {count, tone?, at?}}] 1–3
+- order: "bottom-up" (default; cells stack like a bar) or "reading" (top row first, for task grids)
+- ratio: {text ≤ 8 ("≈9×"), sub? ≤ 40 ("cheaper per completed task"), tone?, at?} over the shortest grid (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, fill-0, fill-1, fill-2, ticks, highlight, ratio
+variants: bars (default), blocks
+
+### tokenizer (keeps captions)
+A sentence split into coloured token chips (a real BPE split, up to 48 tokens) with each token's output price under it for 1–2 models, token and character counts, then an output-token counter racing the models' bills to their totals on segmented bars ("1,000,000 tokens: $10.00 vs $5.00").
+params:
+- text: string ≤ 160, the sentence
+- tokens: [string] 1–48, its BPE split, joining back to text exactly (precompute: node src/tokenizer.js "<text>")
+- encoding: string ≤ 24 shown in the header ("o200k_base") (optional)
+- models: [{label ≤ 24, price (USD per 1M output tokens), tone?}] 1–2
+- output: integer, the output tokens the race counts to (default 1,000,000)
+- title: string ≤ 32 (default "Tokenizer")
+- source: string ≤ 60 at the top right, where the text is from (optional)
+- at: chips start: seconds from scene start (optional; else a matching hit, else a default)
+- raceAt: the race: seconds from scene start (optional; else a matching hit, else a default) (default 0.5 s after the chips)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, total
+variants: panel (default), bare
+
+### glass-bars-3d (keeps captions)
+Extruded glass bars in 3D under a slow orbiting camera: 2–6 values grow in with count-up labels, one bar can glow while the rest drop back, with an optional dashed reference ("half"). The staircase variant lines them up as descending glass steps, price and name on each front face, with a score marker that hops between steps on cue.
+params:
+- data: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value, "$0.50")}] 2–6; for the staircase list them highest first (step heights follow the rank)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the bar that glows (optional)
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- marker: staircase only: {text ≤ 12 ("59.3%"), label? ≤ 24, steps: [index or label] 1–4 (the steps it visits, in order), at?: [seconds]} (events marker-<k>)
+- reference: bars only: {value, label? ≤ 12} a dashed level across the bars ("half")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- highlightTone: the lit bar's tone (default primary)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight, marker-0, marker-1, marker-2, marker-3
+variants: bars (default), staircase
+
+### coin-stack (keeps captions)
+Stacks sized by value under a slow orbiting camera: 1–4 stacks of gold coins ("$1 vs $10"), or of glass token discs (variant cylinders, "×3 more tokens"), each coin dropping onto its stack in turn while the value counts up, with an optional callout ("×10") beside one stack.
+params:
+- stacks: [{label ≤ 24, value ≥ 0, display? ≤ 10 (the label text instead of the formatted value), count? 1–16 (coins in the stack; default value / per)}] 1–4
+- per: the value of one coin (default: the tallest stack has 12; at most 16 per stack)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlight: index or label of the stack that glows (optional)
+- callout: {text ≤ 10 ("×10"), stack? (index or label, default the last), at?} a big number beside a stack (event callout)
+- tone: coin or glass tone: primary | accent | paper | #rrggbb (default primary for coins, accent for cylinders)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: first drop: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, callout
+variants: coins (default), cylinders
+
+### rack-shelf (keeps captions)
+A stacked server shelf in 3D: 2–6 glass trays, each a labelled row ("model · score · price") with an optional icon, stack in from the bottom while the camera dollies in, then one tray slides out toward the viewer and lights up. The rail variant glides 1–5 glass cubes (name and price on the face) along a price rail to their values, with ticks and a caption under it.
+params:
+- rows: [{label ≤ 24, cells? [≤ 10 chars] up to 3 (rail: 2, the first set large), icon? (icon name), value? (the cube's place on the rail; required by the rail, unused by the rack)}] 2–6 (rail: 1–5)
+- focus: index or label of the tray that slides out (rail: the cube that lights) (optional)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- format: rail only: the tick format, {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- axis: rail only: a caption under the rail ≤ 48 ("Output price per 1M tokens")
+- tone: glass tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, focus
+variants: rack (default), rail
+
+### device-box (keeps captions)
+A GPU server (or a compact appliance with one big fan) in 3D on a glowing grid floor: compute cards with spinning fans on top, and a screen in front that powers on to a live readout counting up ("requests: 0 → 1,284") beside an uptime clock ticking once a second.
+params:
+- readout: {label ≤ 14 ("requests"), to, from? (default 0), format? ({style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}), at?, duration? (seconds; default to the end of the scene)} the counter on the screen
+- clock: {start "HH:MM:SS", label? ≤ 10 (default "uptime")} a clock that ticks once a second (optional)
+- name: string ≤ 24, a label floating over the device ("INFERENCE NODE 01") (optional)
+- units: server: compute cards on top, 1–8 (default 4)
+- unitLabel: server: the card label ≤ 6 ("GPU" → "GPU 0", "GPU 1"…)
+- tone: glow tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the device lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, readout
+variants: server (default), appliance
+
+### paper-stack (keeps captions)
+Paper in 3D: a stack of labelled document sections ("Chapter 3 · pp. 41–77") landing one on another, then a check or a red flag per row on its cue; the books variant stacks books with their titles on the spines; the folder variant lands a glass folder whose front swings open on its hinge and its files rise out, labelled, each with its check or flag.
+params:
+- items: [{label ≤ 28, detail? ≤ 14 ("pp. 41–77"), status? ok | flag | none, size? 0.5–4 (relative thickness), at? (the status cue)}] 2–7 (folder: 1–5 files); the first is the top of the stack (or the front file)
+- openAt: folder only: the front opens: seconds from scene start (optional; else a matching hit, else a default)
+- tone: glow tone: primary | accent | paper | #rrggbb (default accent)
+- orbit: degrees the camera orbits over the scene, 0–30 (optional; 0 holds it still)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the stack starts landing: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, open, status-0, status-1, status-2, status-3, status-4, status-5, status-6
+variants: sections (default), books, folder
+
+### planet-family (keeps captions)
+A product family as celestial bodies: 2–5 procedural moon, ice world, earth, ringed gas giant, sun or galaxy, each with its name and tagline ("LUNA · light, fast, cheap"), the camera tracking from one to the next on cue over parallax star layers; the lineup variant shows 2–4 side by side and moves the focus while the rest dim. Surfaces turn, coronas and spiral arms spin.
+params:
+- bodies: [{kind (moon | ice | earth | gas | sun | galaxy), name ≤ 16 (set in capitals), tagline? ≤ 28, at? (its cue; the first shows with the build)}] 2–5 (lineup: 2–4), small to large reads best
+- tone: tagline tone: primary | accent | paper | #rrggbb (default accent)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the first body: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, body-0, body-1, body-2, body-3, body-4
+variants: track (default), lineup
+
+### scatter-plot (keeps captions)
+Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
+params:
+- points: [{x, y, size? (bubbles), label? ≤ 22, color? (primary | accent | paper | #rrggbb)}] 3–60 (one of points, series or panels)
+- series: [{points: [{x, y, label?, size?}] 1–24, label? ≤ 22, color? (primary | accent | paper | #rrggbb), line? (default true with 2+ points), at?}] 1–5; each draws on its own cue (event series-<i>)
+- panels: [{title ≤ 32, series}] exactly 2, side by side (stacked in portrait) on shared axes ("Official chart" | "Independent re-run"); their series count on in one sequence (series-<i>), the second panel lands on event panel-1
+- focus: series index to glow while the others dim (optional; in both panels; event focus)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- annotations: [{type: "guide" | "callout" | "placeholder", id? (a reveal id; default a<i>), panel?, series? + index? (a series point) | x + y, text? (callout text ≤ 40, guide tag, placeholder glyph ≤ 3, default "?"), label? ≤ 24 (placeholder caption), at?}] 1–6; each lands on its own cue (event reveal-<id>)
+- x: {min?, max?, scale?: "linear" | "log"} (optional)
+- y: {min?, max?, scale?: "linear" | "log"} (optional)
+- format: y values: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- xFormat: x values: as format
+- xLabel: string ≤ 32
+- yLabel: string ≤ 32
+- trend: boolean: draw the least-squares line through points (default false)
+- tone: dot colour (primary | accent | paper | #rrggbb)
+- highlight: points index to call out (optional; with points)
+- highlightAt: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80, where the numbers come from (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, panel-1, series-<i>, focus, highlight, reveal-<id>
+variants: dots (default), bubbles, rings
+
+### race-bars (keeps captions)
+A race: 2–5 rows fill like progress bars at their own speeds, each timer counting to its finish, the fastest ticking first; then an "N× faster" badge lands on the winner ("3× faster", "1h 26m vs 4h 10m").
+params:
+- rows: [{label ≤ 24, time (how long it takes, any unit), tone? (good | bad | neutral | primary | accent | paper | #rrggbb), icon?}] 2–5
+- badge: string ≤ 24 on the winner (optional; default "N× faster" from the times; false for none)
+- format: the timers: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- race: seconds the slowest row takes to fill (optional; default up to 3.2 s, fitting the scene)
+- badgeAt: the badge: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, race, finish-<i>, badge
+variants: bars (default), lanes
+
+### small-multiples (keeps captions)
+A benchmark dashboard: 2–6 mini bar charts (one per test) in a grid of glass cards under one shared legend; the bars grow panel by panel, then each panel lights its winning bar with a glow and its value while the rest dim.
+params:
+- series: [label | {label ≤ 20, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)}] 2–4, the shared legend (one bar per series in every panel)
+- panels: [{title ≤ 24, values: [number per series], highlight? (series index; default the largest), note? ≤ 16}] 2–6
+- columns: integer (optional; default 1–2 in portrait, 2–3 in landscape)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- highlightAt: the highlight: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, highlight
+variants: glass (default), flat
+
+### date-carousel (keeps captions)
+A row of day cards (month, date, weekday) that lands on one date, then rewinds or fast-forwards under a ◀◀ REWIND sign to another, slowing as it arrives; the focus day lights up with a glowing rim and its event chip ("GPT-6.1 released", "Day 1"), and an optional caption ("where it started") rises under it.
+params:
+- from: "YYYY-MM-DD", the day shown first
+- to: "YYYY-MM-DD", the focus day it lands on (within 120 days; earlier rewinds, later fast-forwards)
+- event: {label ≤ 24, sub? ≤ 24, icon?, tone? (good | bad | neutral | primary | accent | paper | #rrggbb)} the chip pinned on the focus day (optional)
+- startEvent: {label, sub?, icon?, tone?} a chip on the start day that clears as the strip moves (optional)
+- caption: string ≤ 40 under the cards after the focus (optional)
+- moveAt: the move: seconds from scene start (optional; else a matching hit, else a default)
+- focusAt: the focus: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, move, focus
+variants: glass (default), flat
+
+### month-grid (keeps captions)
+A month calendar of glass day cells (weekday header, date, "DAY n") whose cells fill one after another across a run of days ("Codex · 28 days"), with marks pinned on given days ("−50% faster", "both") and legend chips under the grid.
+params:
+- from: "YYYY-MM-DD", the run's first day
+- days: integer 1–42, the run's length (the grid shows the whole weeks around it)
+- weekStart: "mon" (default) | "sun"
+- tone: the fill (good | bad | neutral | primary | accent | paper | #rrggbb; default accent)
+- marks: [{day (1–days), label ≤ 16, icon? (shown alone where the label is too wide for the cell), tone?}] up to 8, landing as the fill reaches them
+- legend: [{label ≤ 28, icon?, tone?}] 1–3 chips under the grid (optional; event legend)
+- fillAt: the fill: seconds from scene start (optional; else a matching hit, else a default)
+- legendAt: the legend: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 ("Codex · 28 days")
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, fill, legend
+variants: glass (default), flat
+
+### person-id (keeps captions)
+Who is speaking or being cited: a photo in a rounded frame with a glowing rim, the name in bold capitals inside a glow pill across its foot and the role under it ("Physics professor, ITU"); or the same as a glass card. Without a photo, an initials tile. Use real photos only of the real person named.
+params:
+- name: string ≤ 28
+- role: string ≤ 40 (optional)
+- image: assets/… photo or video still of that person (optional; else an initials tile)
+- align: "left" | "center" (default) | "right"
+- tone: the pill and rim: primary | accent (default) | paper | #rrggbb
+- nameAt: the name: seconds from scene start (optional; else a matching hit, else a default)
+- title: string ≤ 60 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, name
+variants: pill (default), card
+
+### lineage-graph (keeps captions)
+A lineage: 2–5 people as photos (or initials tiles) linked by dashed connectors with role labels ("doctoral advisor", "co-author"), laid out by generation (left to right in landscape, top to bottom in portrait) and drawn in order, each link drawing into the next person.
+params:
+- people: [{name ≤ 24, role? ≤ 28, image? (assets/… photo of that person), id? (a reveal id; default p<i>), at?}] 2–5 (events node-<id>)
+- links: [{from, to (index or id), label? ≤ 24}] 1–6, parent → child, no loops
+- tone: connector and rim colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, node-<id>
+variants: circles (default), frames
+
+### equation (keeps captions)
+Typeset LaTeX (MathJax glyphs, drawn the same in both renderers) that wipes in, then reveals its \term{…} marks one at a time, boxes marked terms with a glowing frame and a label ("first quantum correction"), and runs a red/green diff: \del{…} turns red and is struck through while \add{…} lands in green.
+params:
+- latex: string ≤ 400, display-style TeX; mark parts with \term{…} (reveals on its own cue), \add{…} or \del{…} (the diff); marks do not nest
+- typeset: generated from latex by src/math/typeset.js (launchclip fills it in; never write it by hand)
+- boxes: [{mark (index of a \term/\add/\del mark, from 0), label? ≤ 32, tone?, at?}] 1–4 (events box-<n>)
+- diffAt: the diff: seconds from scene start (optional; else a matching hit, else a default)
+- size: px per em (optional; default the largest that fits, at most 120)
+- tone: box colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<n>, diff, box-<n>
+variants: plain (default), glass
+
+### title-decompose (keeps captions)
+A paper (or any) title set as word chips under its citation; each marked term in turn lights its chips, a dashed connector drops from them, and an icon with a plain gloss lands under it ("Self-Mass" → "the field's own mass"), building a glossary row.
+params:
+- text: string ≤ 120, the title
+- citation: string ≤ 80 over it ("Kahya & Woodard, Phys. Rev. D 76 (2007)") (optional)
+- terms: [{text (a run of words in the title), gloss ≤ 24, sub? ≤ 28, icon?}] 1–5, glossed left to right (events term-<i>)
+- tone: primary | accent (default) | paper | #rrggbb
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, term-<i>
+variants: chips (default), underline
+
+### feynman-diagram (keeps captions)
+A Feynman diagram that draws itself line by line: fermions (straight, with an arrow), photons (wavy), gluons (curly), scalars (dashed) and gravitons (double wave), bent into loops where asked, vertices popping as lines meet them and labels (e⁻, γ, φ) landing beside the lines. Presets: self-energy (a one-loop correction), exchange, annihilation.
+params:
+- preset: self-energy | exchange | annihilation (or give points and lines)
+- points: {name: [x, y]} on a 12 × 6 grid, y down (optional with a preset)
+- lines: [{from, to (point names), type? (fermion | antifermion | photon | gluon | scalar | graviton; default fermion), bend? −1–1 (a loop or arc), label? ≤ 12, at?}] 1–12, drawn in order (events line-<i>)
+- tone: boson and glow colour: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- caption: string ≤ 80 under it (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, line-<i>
+variants: glow (default), ink
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
@@ -1636,6 +2209,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
+| evidence-clip | 2 s | 0 s | scene − 0.3 s | focus[].at in order; each zooms in over 0.8 s, holds to until (default 2 s after landing) and eases out over 0.7 s unless the next starts first; cursor[].at at least 0.2 s apart; each glide takes up to 0.7 s and lands on the point's time |
 | feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
 | pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |
@@ -1660,7 +2234,6 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | stacked-bar | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | pie-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | area-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
-| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | radar-chart | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | sparkline | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
 | progress-ring | 2 s | 0.5 s | scene − 0.65 s | the build runs about 1.2–1.6 s from at; highlight.at comes after the build |
@@ -1689,13 +2262,45 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
-| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
+| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
-| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges (then the marker) follow the build, up to 1 s apart by default |
+| number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | social-post | 2 s | 0.5 s | scene − 0.65 s | the card builds in about 0.9 s from at (default 0.2 s); the highlight sweeps 0.45–1.4 s across the phrase (default 0.35 s after the build); focus follows the highlight by 0.4 s |
 | social-stack | 2 s | 0.5 s | scene − 0.65 s | cards land stagger s apart from at (default 0.2 s, 0.45 s apart); focus follows the last card; the highlight 0.5 s after the focus |
 | social-sort | 2 s | 0.5 s | scene − 0.65 s | cards pile in 0.3 s apart from at (default 0.2 s); the sort follows the pile by 0.5 s; cards fly 0.14 s apart |
 | social-wall | 2 s | 0.5 s | scene − 0.65 s | the field fades in over about 1.4 s from at (default 0 s) and drifts for the whole scene; the pull follows the build by 0.6 s and takes 1.1 s; the highlight 1.2 s after the pull |
+| logo-sting | 2 s | 0.5 s | scene − 0.65 s | — |
+| subscribe-cta | 2 s | 0.5 s | scene − 0.65 s | — |
+| channel-watermark | 2 s | 0.5 s | scene − 0.65 s | — |
+| repo-pr-card | 2 s | 0.5 s | scene − 0.65 s | the card racks into focus at at; rows land top to bottom within about 0.8 s; the token boxes draw 0.4 s after the rows (or on the highlight hit) |
+| commit-card | 2 s | 0.5 s | scene − 0.65 s | the card racks into focus at at; rows land within about 0.8 s; the token boxes draw 0.4 s after the rows (or on the highlight hit) |
+| diff-view | 2 s | 0.5 s | scene − 0.65 s | rows land within about 0.7 s from at; focus states follow the build up to 1.6 s apart (at least 0.3 s); the token box draws 0.4 s after the first focus |
+| evidence-chain | 2 s | 0.5 s | scene − 0.65 s | each source racks in, its rows land, then its token box draws; the connector from the previous token follows 0.25 s later; sources are spaced evenly, 0.4–2.6 s apart, the last connector ending before the exit when the scene is long enough (about 2.5 s per source) |
+| date-pinned-timeline | 2 s | 0.5 s | scene − 0.65 s | the axis (or title panel) builds in about 0.8 s from at; cards follow, 0.4–2.4 s apart (axis) or up to 1.2 s (summary), the last token finishing before the exit when the scene is long enough |
+| terminal-session | 2 s | 0.5 s | scene − 0.65 s | each command types in min(1.4, max(0.25, chars / 28)) s, 0.25 s for enter, then one output row every stream s; the next step follows the last row by 0.3 s; defaults that would run past the exit compress to fit (to 35%) |
+| dot-field | 2 s | 0.5 s | scene − 0.65 s | the field and bracket appear at at; the fill and the counter run together from 0.3 s later; pull-back starts on dots about 7 px wide and ends on the whole field at 85% of the fill |
+| particle-text | 2 s | 0.5 s | scene − 0.65 s | particles fly in over about 1.8 s from at; the dissolve takes about 1.7 s and must start after the text has assembled |
+| particle-logo | 2 s | 0.5 s | scene − 0.65 s | each ring spins up and its mark assembles over about 1.8 s; a second logo follows 0.35 s later |
+| particle-cloud | 2 s | 0.5 s | scene − 0.65 s | steps rise 0.28 s apart from at; the cloud streams in after them and the target box shows inside it |
+| grid-race | 2 s | 0.5 s | scene − 0.65 s | labels and counters rise from at; the race starts 0.6 s later; the counters and the cells move together, linearly |
+| cell-grid | 2 s | 0.5 s | scene − 0.65 s | grids fill one after another (0.6–1.4 s each, overlapping) from at; ticks, highlight and the ratio follow the last fill |
+| tokenizer | 2 s | 0.5 s | scene − 0.65 s | chips pop in left to right within about 1.5 s of at; counts count with them; the race runs up to 2.6 s, ending by the last event time |
+| glass-bars-3d | 2 s | 0.5 s | scene − 0.65 s | bars grow left to right within about 1.6 s from at; highlight and marker hops follow the build; the camera orbits for the whole scene |
+| coin-stack | 2 s | 0.5 s | scene − 0.65 s | coins drop one per stack level, all stacks together, within about 2 s from at; the callout follows the build |
+| rack-shelf | 2 s | 0.5 s | scene − 0.65 s | trays stack in bottom first (cubes glide in) within about 1.7 s from at; focus follows the build; the camera dollies in over the whole scene |
+| device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
+| paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
+| planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
+| scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
+| race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
+| small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
+| date-carousel | 2 s | 0.5 s | scene − 0.65 s | the move starts about 0.9 s after at and runs 0.7–2.4 s (longer for more days); the focus lands as the move ends |
+| month-grid | 2 s | 0.5 s | scene − 0.65 s | the grid lands in 0.7 s from at; the fill runs up to 90 ms a day (2.2 s at most); the legend follows the fill |
+| person-id | 2 s | 0.5 s | scene − 0.65 s | the frame rises from at; the name slides in 0.45 s later and the role follows |
+| lineage-graph | 2 s | 0.5 s | scene − 0.65 s | people land generation by generation about 0.9 s apart (squeezed to fit); each link draws in 0.6 s just before its child |
+| equation | 2 s | 0.5 s | scene − 0.65 s | the equation wipes in over 0.7 s from at; terms, the diff and the boxes follow 0.75–0.9 s apart (squeezed to fit) |
+| title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
+| feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

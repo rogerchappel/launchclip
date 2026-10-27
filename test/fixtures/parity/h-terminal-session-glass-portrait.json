@@ -1,0 +1,105 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-terminal-session-glass-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "terminal-session",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "title": "launchclip — zsh",
+          "steps": [
+            {
+              "cmd": "git show --stat c3ec4a11 --format=%s",
+              "output": [
+                "direct: default OpenAI model to gpt-5.5",
+                " src/director.js | 7 ++++---",
+                " 1 file changed, 4 insertions(+), 3 deletions(-)"
+              ]
+            },
+            {
+              "cmd": "node --test test/evidence_github.test.js",
+              "output": [
+                {
+                  "status": "PASS",
+                  "time": "9.0 ms",
+                  "text": "parseGithubRef reads URLs and short forms"
+                },
+                {
+                  "status": "PASS",
+                  "time": "17.1 ms",
+                  "text": "githubGet caches responses and explains the rate limit"
+                },
+                {
+                  "status": "PASS",
+                  "time": "9.7 ms",
+                  "text": "a real PR maps to repo-pr-card params that resolve"
+                },
+                {
+                  "status": "PASS",
+                  "time": "4.0 ms",
+                  "text": "a real commit maps to commit-card and diff-view params"
+                }
+              ]
+            },
+            {
+              "cmd": "npm test",
+              "output": [
+                {
+                  "text": "ℹ tests 2515",
+                  "tone": "muted"
+                },
+                {
+                  "text": "ℹ pass 2053",
+                  "tone": "add"
+                },
+                {
+                  "text": "ℹ fail 4",
+                  "tone": "del"
+                },
+                {
+                  "text": "ℹ duration_ms 219907.9",
+                  "tone": "muted"
+                }
+              ]
+            }
+          ],
+          "timer": {
+            "to": 220
+          },
+          "highlight": "c3ec4a11",
+          "variant": "glass"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

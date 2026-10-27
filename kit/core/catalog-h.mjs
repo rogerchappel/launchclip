@@ -3,7 +3,8 @@
 // Contract: docs/KIT_CONTRACTS.md ("Catalogue H").
 //
 //   charts    catalog-h-charts.mjs (bar-chart, stacked-bar, pie-chart,
-//             area-chart, scatter-plot, radar-chart, sparkline, progress-ring)
+//             area-chart, radar-chart, sparkline, progress-ring),
+//             catalog-h-scatter.mjs (scatter-plot: series, guides, log axes)
 //             and catalog-h-flows.mjs (funnel-chart, waterfall, sankey,
 //             heatmap, leaderboard, comparison-table), catalog-h-map.mjs
 //             (map-highlight, on kit/core/world-110m.mjs)
@@ -19,6 +20,19 @@
 //             isotype and ruler)
 //   social    catalog-i-social.mjs (social-post, social-stack, social-sort,
 //             social-wall: real posts as cards, each with its source line)
+//   channel   catalog-h-channel.mjs (logo-sting, subscribe-cta,
+//             channel-watermark: the furniture round a channel's videos)
+//   code      catalog-i-code.mjs (repo-pr-card, commit-card, diff-view,
+//             evidence-chain, date-pinned-timeline) and catalog-i-terminal.mjs
+//             (terminal-session): rebuilt GitHub evidence and a typing terminal
+//   particles catalog-i-particles.mjs (catalogue I: particles and grids at
+//             scale on a canvas painted by kit/core/particles.mjs) and
+//             catalog-i-grids.mjs (grid-race, cell-grid: unit grids at scale)
+//             and catalog-i-tokenizer.mjs (tokenizer: BPE chips and prices)
+//   3D        catalog-i-3d.mjs (catalogue I: glass bars, stacks, shelves,
+//             devices, paper and planets on a CSS 3D rig)
+//   explain   catalog-i-explain.mjs (catalogue I: the explainer modules,
+//             drawn with these same helpers)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -29,6 +43,7 @@ import {grammarTweens} from './grammar.mjs';
 import {applyShotStates, shotStateView} from './shot-states.mjs';
 import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
+import {SCATTER} from './catalog-h-scatter.mjs';
 import {FLOWS} from './catalog-h-flows.mjs';
 import {NUMBERS} from './catalog-h-numbers.mjs';
 import {FRAMES} from './catalog-h-frames.mjs';
@@ -39,9 +54,19 @@ import {ICON_MODULES} from './catalog-h-icons.mjs';
 import {MAPS} from './catalog-h-map.mjs';
 import {DATA_MODULES} from './catalog-h-data.mjs';
 import {SOCIAL_MODULES} from './catalog-i-social.mjs';
+import {CHANNEL_MODULES} from './catalog-h-channel.mjs';
+import {CODE_MODULES} from './catalog-i-code.mjs';
+import {PARTICLE_MODULES} from './catalog-i-particles.mjs';
+import {GRID_MODULES} from './catalog-i-grids.mjs';
+import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
+import {OBJECT_MODULES} from './catalog-i-3d.mjs';
+import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...SCATTER, ...EXPLAIN_MODULES];
+
+
+
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */

@@ -12,7 +12,7 @@ import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
 import {knownModules, resolveModule} from '../kit/core/modules.mjs';
 import {PHRASE_MODULE_TABLE, phraseRowModule, planningPrompt, storyboardModulesReference, suggestModules} from '../kit/core/planning-prompt.mjs';
-import {SAMPLES} from '../scripts/element-samples.mjs';
+import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const light = {colors: {bg: '#f5f1e8', primary: '#b7791f', accent: '#1f6feb', ink: '#f5f1e8', paper: '#14161c'}, fonts: brand.fonts};
@@ -122,6 +122,31 @@ test('number-line: range, step, ranges and marker are validated', () => {
   assert.throws(() => r({from: 1, to: 25, ranges: [{from: 12, to: 8, label: 'A'}]}), /params\.ranges\[0\]\.to must be greater/);
   assert.throws(() => r({from: 1, to: 25, step: 0.1, ranges}), /params\.step/);
   assert.throws(() => r({from: 1, to: 25, ranges, marker: {value: 40}}), /params\.marker\.value/);
+  assert.throws(() => r({from: 1, to: 25}), /params needs ranges, points or a marker/);
+  assert.throws(() => r({from: 0, to: 10, points: [{value: 11}]}), /params\.points\[0\]\.value/);
+  assert.throws(() => r({from: 0, to: 10, points: [{value: 1}], zoom: {from: 0, to: 8}}), /params\.zoom must cover at most half the line/);
+  assert.throws(() => r({from: 0, to: 10, points: [{value: 1}], zoom: {from: 2, to: 1}}), /params\.zoom\.to must be greater/);
+  assert.throws(() => r({from: 1, to: 25, ranges, pointsAt: 2}), /params\.pointsAt needs params\.points/);
+});
+
+test('number-line: value points land, then the zoom inset re-plots the slice under its connectors', () => {
+  const params = EXTRA_SAMPLES.find(e => e.name === 'number-line-zoom').params;
+  for (const aspect of ['16:9', '9:16']) {
+    const model = resolve('number-line', params, aspect, {duration: 6});
+    const c = model.content;
+    assert.deepEqual(model.events.map(e => e.name), ['enter', 'build', 'points', 'zoom']);
+    assert.equal(c.points.length, 4);
+    assert.deepEqual(c.zoom.points.map(pt => pt.value), [0.3, 0.7, 0.8], 'only the points inside the slice are re-plotted');
+    assert.deepEqual(c.zoom.ticks.map(t => t.text), ['0.0', '0.5', '1.0', '1.5', '2.0']);
+    assert.ok(c.zoom.lineY > c.lineY, 'the inset sits under the line');
+    assert.ok(c.zoom.tickY + c.tickSize * 1.2 <= model.rect.height, `${aspect}: the inset fits the rect`);
+    const state = settled(model);
+    assert.equal(state.get('scene-zlink').clipB, 0, 'the connectors are drawn');
+    assert.equal(state.get('scene-zp-1').opacity, 1);
+    assert.equal(state.get('scene-zlabel').opacity, 1);
+    const out = EMITTERS['number-line'](model);
+    assert.doesNotMatch(out.html + out.motion, /undefined|NaN/);
+  }
 });
 
 test('number-line: defaults, labelled range ends, and ranges lighting up one at a time', () => {

@@ -1,0 +1,48 @@
+{
+  "schema": "launchclip.format-briefs.v1",
+  "description": "Golden briefs for npm run eval:formats: one short sample per format, rendered and scored against the format's cadence target (kit/core/cadence.mjs CADENCE_TARGETS) and the scorecard's metric targets (eval/scorecard.mjs). A sample is an example project (dir), a window of the long-form beat-map fixture (beat-map), or a Short cut from it (short).",
+  "briefs": [
+    {
+      "id": "short-form",
+      "format": "short-form",
+      "label": "Short form",
+      "brief": "A 9:16 Short cut from the long-form explainer: opens on a number or a piece of evidence, never a title card; a visual event every 2–3 s; word captions on; loops back to the hook.",
+      "sample": { "kind": "short", "fixture": "eval/fixtures/long-form-16min", "index": 0 }
+    },
+    {
+      "id": "talking-head",
+      "format": "talking-head",
+      "label": "Talking-head base edit",
+      "brief": "A presenter recording, trimmed, with graphics dressed beside the face and full-frame inserts for the numbers; the face holds the personal lines.",
+      "sample": { "kind": "dir", "dir": "examples/story/footage" }
+    },
+    {
+      "id": "art-direction",
+      "format": "art-direction",
+      "label": "Full art direction",
+      "brief": "A narrated product story with a designed world: brand palette and type on every frame, cinematic transitions, a hero shot per beat.",
+      "sample": { "kind": "dir", "dir": "examples/story/cinematic-16x9" }
+    },
+    {
+      "id": "long-form",
+      "format": "long-form",
+      "label": "Long-form explainer",
+      "brief": "One minute of the 16-minute explainer's direction map: builds of 2–4 states over a chapter plate, a hard cut every 15–25 s, every claim on a sourced visual.",
+      "sample": { "kind": "beat-map", "fixture": "eval/fixtures/long-form-16min", "chapter": "why-speed-changed-everything", "seconds": 60 }
+    },
+    {
+      "id": "motion-graphics",
+      "format": "motion-graphics",
+      "label": "Motion graphics",
+      "brief": "A short design-led promo where motion is the message: kinetic type, a stat hit, a process, a logo row, a call to action.",
+      "sample": { "kind": "dir", "dir": "examples/story/promo-16x9" }
+    },
+    {
+      "id": "animated",
+      "format": "animated",
+      "label": "Animated short and long form",
+      "brief": "A character-led story: cast acting the key action of each beat in a set, with narration and captions.",
+      "sample": { "kind": "dir", "dir": "examples/story/characters-16x9" }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-title-decompose-chips-landscape",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "title-decompose",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "citation": "A. Ruiz & S. Okafor, J. Example Phys. 12 (2008)",
+          "text": "Quantum Gravity Corrections to the One Loop Scalar Self-Mass during Inflation",
+          "terms": [
+            {
+              "text": "Quantum Gravity",
+              "gloss": "Quantum gravity",
+              "sub": "gravitons",
+              "icon": "audio-waveform"
+            },
+            {
+              "text": "Scalar",
+              "gloss": "Scalar",
+              "sub": "the simplest field",
+              "icon": "circle-dot"
+            },
+            {
+              "text": "Self-Mass",
+              "gloss": "Self-mass",
+              "sub": "the field's own mass",
+              "icon": "atom"
+            },
+            {
+              "text": "One Loop",
+              "gloss": "One loop",
+              "sub": "first correction",
+              "icon": "refresh-cw"
+            }
+          ],
+          "variant": "chips"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

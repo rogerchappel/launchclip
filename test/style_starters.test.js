@@ -9,7 +9,7 @@ import { stylePromptLines, validateStylePack } from "../kit/core/style.mjs";
 import { DRAWING_STYLES } from "../kit/core/characters/cues.mjs";
 
 const pack = (name) => JSON.parse(readFileSync(new URL(`../kit/styles/${name}.json`, import.meta.url), "utf8"));
-const STARTERS = ["bold-creator", "editorial-dark", "minimal-tech", "neon-explainer", "warm-documentary"];
+const STARTERS = ["bold-creator", "editorial-dark", "glass-explainer", "minimal-tech", "neon-explainer", "warm-documentary"];
 // The playful creative set: catalogue F modules tagged playful.
 const PLAYFUL = Object.entries(CATALOG_F).filter(([, def]) => def.mood?.includes("playful")).map(([id]) => id).sort();
 

@@ -22,6 +22,7 @@ import {frameState} from '../kit/core/catalog-b-view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {copyProjectFonts, projectFontFaces} from '../kit/hyperframes/story-compiler.mjs';
 import {SAMPLES} from './element-samples.mjs';
+import {PARTICLE_RUNTIME} from '../kit/core/particles.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const BRAND = Object.freeze({colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}});
@@ -46,8 +47,8 @@ function args(argv) {
 }
 
 /** The resolved model of one module variant at one aspect. */
-export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SCENE} = {}) {
-  return {...MODULES[id].resolve({...params, variant}, {id: 's1', start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
+export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SCENE, sceneId = 's1'} = {}) {
+  return {...MODULES[id].resolve({...params, variant}, {id: sceneId, start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
 }
 
 function timeFor(model, at) {
@@ -84,7 +85,7 @@ async function main(argv) {
   const ids = opts.modules ?? Object.keys(MODULES);
   const work = await mkdtemp(path.join(os.tmpdir(), 'launchclip-elements-'));
   try {
-    const rows = [];
+    const rows = [], paints = [];
     let maxWidth = 0;
     for (const id of ids) {
       if (!MODULES[id]) throw new Error(`unknown catalogue H module ${id}`);
@@ -103,13 +104,19 @@ async function main(argv) {
           tiles.push({name: `${name} · ssim ${report.minSsim.toFixed(3)}`, width: width * scale, html: `<img src="${pathToFileURL(path.join(dir, still.hyperframes)).href}" style="width:${width * scale}px;height:${TILE_H}px">`});
           continue;
         }
-        let body;
+        let body, paint = '';
+        const tile = paints.length;
         try {
-          const model = sampleModel(id, variant, aspect);
-          const state = frameState(catalogHTimeline(model), timeFor(model, opts.at));
+          // A scene id per tile, so ids (and the masks they name) never repeat in one page.
+          const model = sampleModel(id, variant, aspect, {sceneId: `s${tiles.length + 1}`});
+          const t = timeFor(model, opts.at);
+          const state = frameState(catalogHTimeline(model), t);
           body = renderNode(stateTree(catalogHView(model), state));
+          // Paint plans (kit/core/particles.mjs): painted at the same time, in this tile.
+          for (const [canvasId, plan] of Object.entries(model.content.paint ?? {})) paint += `window.lcPaintParticles(document.querySelector('[data-tile="${tile}"] canvas[id="${canvasId}"]').getContext('2d'), ${JSON.stringify(plan)}, ${t});\n`;
         } catch (error) { body = `<div style="color:#ff6b6b;padding:40px;font:28px monospace;white-space:normal">${escape(error.message)}</div>`; }
-        tiles.push({name, width: width * scale, html: `<div style="position:relative;width:${width}px;height:${height}px;transform:scale(${scale});transform-origin:0 0;background:${BRAND.colors.bg};overflow:hidden">${body}</div>`});
+        paints.push(paint);
+        tiles.push({name, width: width * scale, html: `<div data-tile="${tile}" style="position:relative;width:${width}px;height:${height}px;transform:scale(${scale});transform-origin:0 0;background:${BRAND.colors.bg};overflow:hidden">${body}</div>`});
       }
       const rowWidth = tiles.reduce((sum, tile) => sum + tile.width + 16, 16);
       maxWidth = Math.max(maxWidth, rowWidth);
@@ -121,7 +128,7 @@ async function main(argv) {
 body{margin:0;padding:16px;background:#14151c;color:#f2eee6;font:18px/1.3 ui-monospace,Menlo,monospace;width:${Math.ceil(maxWidth)}px}
 h2{margin:18px 0 8px;font-size:22px} .row{display:flex;gap:16px;align-items:flex-start}
 figure{margin:0} .tile{height:${TILE_H}px;overflow:hidden;border-radius:8px;background:${BRAND.colors.bg}} figcaption{opacity:.7;margin-top:6px}
-svg{display:block}</style><body>${rows.join('')}</body>`;
+svg{display:block}</style><body>${rows.join('')}${paints.some(Boolean) ? `<script>${PARTICLE_RUNTIME}\n${paints.join('')}</script>` : ''}</body>`;
     const file = path.join(work, 'sheet.html');
     await writeFile(file, html);
     await mkdir(path.dirname(opts.out), {recursive: true});

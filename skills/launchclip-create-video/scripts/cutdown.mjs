@@ -17,9 +17,22 @@
 // dressed until it lands in the Shorts profile's coverage band. It has word
 // captions (Shorts are watched muted).
 //
+// Shorts from a long-form beat map (kit/core/beat-director.mjs), for faceless
+// long form with no base edit to trim:
+//
+//   chooseShortWindows(map, words, {count, min, max}) → 3–5 windows, one per
+//     chapter at most, each opening on a hook-able clause
+//   shortFromBeatMap(map, words, window, {registered}) → {id, map, story,
+//     words, skeleton, report}: the window re-directed at short-form cadence
+//     for 9:16, opening on an image (never a title card) and looping back
+//   cutShorts(map, words, {count}) → every Short, best first
+//
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/cutdown.mjs.
 
-import { isGraphicScene, storyboardMeasures } from './cadence.mjs';
+import { cadenceGate, cadenceTarget, eventStats, isGraphicScene, storyboardMeasures } from './cadence.mjs';
+import { beatMapToStory, directChunk, emptyHistory, windowWords } from './beat-director.mjs';
+import { TITLE_CARD_MODULES, chooseSkeleton } from './skeleton-library.mjs';
+import { capabilitiesFor, capabilityParams, resolveCapability } from './visual-capabilities.mjs';
 import { draftDirectionMap, narrationWords } from './direction.mjs';
 import { PROMISE_ID } from './long-form.mjs';
 import { resolveModule } from './modules.mjs';
@@ -333,3 +346,119 @@ function round(value, places = 3) {
   return Math.round(value * factor) / factor;
 }
 
+
+// ---------------------------------------------------------------------------
+// Shorts from a beat map
+
+export const SHORTS_FORMAT = Object.freeze({ width: 1080, height: 1920, platform: 'youtube-shorts' });
+const SHORT_HOOK_KINDS = new Set(['stat', 'money', 'compute', 'share', 'compare', 'series', 'ranking', 'social', 'quote', 'pr', 'commit', 'page']);
+
+/**
+ * The windows a long video's Shorts tell: runs of whole states of min–max
+ * seconds inside one chapter, opening on a clause a Short can open on (a
+ * hook, a number, a quote, evidence), scored for evidence and numbers, at
+ * most one per chapter and never overlapping. → [{chapter, title, start,
+ * end, words: [a, b], states: [ids], score}], best first.
+ */
+export function chooseShortWindows(map, words, { count = 4, min = 20, max = 50, perChapter = 1 } = {}) {
+  const list = narrationWords(words);
+  const candidates = [];
+  for (const chapter of map.chapters ?? []) {
+    const states = chapter.shots.flatMap((shot) => shot.states);
+    for (let i = 0; i < states.length; i += 1) {
+      const opener = states[i];
+      const hookable = HOOK_INTENTS.has(opener.intent) || SHORT_HOOK_KINDS.has(opener.kind) || Boolean(opener.evidence);
+      if (!hookable || /^(and|but|so|or|then|which)\b/i.test(opener.text)) continue;
+      for (let j = i; j < states.length; j += 1) {
+        const span = list[states[j].words[1]].end - list[opener.words[0]].start;
+        if (span > max) break;
+        if (span < min || !/[.!?]["”')]?$/.test(states[j].text)) continue;
+        const own = states.slice(i, j + 1);
+        const evidence = own.filter((state) => state.evidence?.source).length / own.length;
+        const numbers = own.filter((state) => SHORT_HOOK_KINDS.has(state.kind)).length / own.length;
+        const score = (opener.evidence ? 1 : 0) + (SHORT_HOOK_KINDS.has(opener.kind) ? 1 : 0) + evidence + numbers + span / max;
+        candidates.push({ chapter: chapter.id, title: chapter.title, start: round(list[opener.words[0]].start), end: round(list[states[j].words[1]].end), words: [opener.words[0], states[j].words[1]], states: own.map((state) => state.id), score: round(score) });
+      }
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score || a.start - b.start);
+  const picked = [];
+  for (const candidate of candidates) {
+    if (picked.length >= count) break;
+    if (picked.filter((entry) => entry.chapter === candidate.chapter).length >= perChapter) continue;
+    if (perChapter === 1 && picked.some((entry) => candidate.start < entry.end && candidate.end > entry.start)) continue;
+    picked.push(candidate);
+  }
+  return picked;
+}
+
+/**
+ * One Short from a window of the long form: its clauses re-directed at the
+ * short-form cadence on a 9:16 canvas (wide-only modules swap for portrait
+ * ones, layouts re-flow), a library skeleton when one fits (the viral formats
+ * RFC), the first frame an image rather than a title card, word captions,
+ * and the ending looping back to the hook. The short's map and story run on
+ * its own clock; its states keep their long-form word indexes.
+ * → {id, title, window, skeleton, map, story, words, report: {cadence, gate}}
+ */
+export function shortFromBeatMap(map, words, window, { registered = null, brand = undefined, style = 'default', index = 0 } = {}) {
+  const target = cadenceTarget('short-form', style);
+  const chapter = map.chapters.find((entry) => entry.id === window.chapter);
+  const chunk = { id: `short-${index + 1}`, chapter: { id: chapter.id, title: chapter.title, index: 0 }, words: window.words, first: false };
+  const { shots } = directChunk(chunk, { words, history: emptyHistory(), target, format: SHORTS_FORMAT, brand, ...(registered ? { registered } : {}), ledger: null, captures: [] });
+  // Evidence carries over from the long form's decisions on the same words.
+  const longStates = chapter.shots.flatMap((shot) => shot.states);
+  const states = shots.flatMap((shot) => shot.states);
+  for (const state of states) {
+    const source = longStates.find((entry) => entry.words[0] <= state.words[0] && entry.words[1] >= state.words[0] && entry.evidence);
+    if (source && !state.evidence) state.evidence = source.evidence;
+  }
+  // The first frame is an image, never a title card.
+  const first = states[0];
+  if (TITLE_CARD_MODULES.includes(first.module)) {
+    for (const id of capabilitiesFor(first.kind === 'title' ? 'concept' : first.kind, { wide: false })) {
+      const module = resolveCapability(id, registered ? { registered } : {}).module;
+      if (TITLE_CARD_MODULES.includes(module)) continue;
+      const params = capabilityParams(module, first);
+      if (params) { Object.assign(first, { capability: id, module, params, why: `${first.why}; the first frame is an image, not a title card` }); break; }
+    }
+  }
+  const text = narrationWords(words).slice(window.words[0], window.words[1] + 1).map((word) => word.text).join(' ');
+  const skeleton = chooseSkeleton({ prompt: text, duration: window.end - window.start, aspect: '9:16', medium: 'motion' }).skeleton;
+  const shift = (t) => round(Math.max(0, t - window.start));
+  for (const shot of shots) { shot.start = shift(shot.start); shot.end = shift(shot.end); for (const state of shot.states) { state.start = shift(state.start); state.end = shift(state.end); } }
+  const duration = round(window.end - window.start + 0.4);
+  shots.at(-1).end = duration;
+  shots.at(-1).states.at(-1).end = duration;
+  const id = `short-${index + 1}-${slug(window.chapter)}`.slice(0, 48);
+  const short = { schema: map.schema, title: fitText(`${map.title ?? 'Short'}: ${window.title}`, 80), format: SHORTS_FORMAT, cadence: { format: 'short-form', style }, duration, source: { chapter: window.chapter, start: window.start, end: window.end, words: window.words }, chapters: [{ id: chapter.id, title: chapter.title, start: 0, end: duration, plate: chapter.plate, background: chapter.background, shots }] };
+  const events = states.filter((state) => state.start > 0).map((state) => state.start);
+  const cuts = shots.filter((shot) => shot.start > 0).map((shot) => shot.start);
+  const stats = eventStats(events, { duration, cuts });
+  const local = windowWords(words, window.start, window.end + 0.4);
+  const story = beatMapToStory(short, { from: 0, to: duration, title: short.title, chapters: false, brand, format: SHORTS_FORMAT });
+  if (story.scenes.length) story.ending = { loop_to: story.scenes[0].id };
+  return { id, title: short.title, window, skeleton: skeleton ? { id: skeleton.id, family: skeleton.family } : null, map: short, story, words: local, report: { cadence: stats, gate: cadenceGate(stats, target) } };
+}
+
+/**
+ * 3–5 Shorts from a long-form beat map, best first: the best-scoring window
+ * per chapter whose Short passes the short-form cadence gate (the best
+ * window when none does), never overlapping.
+ */
+export function cutShorts(map, words, { count = 4, min = 20, max = 50, registered = null, brand = undefined } = {}) {
+  const want = Math.max(3, Math.min(5, count));
+  const windows = chooseShortWindows(map, words, { count: Infinity, min, max, perChapter: Infinity });
+  const byChapter = new Map();
+  for (const window of windows) {
+    const entry = byChapter.get(window.chapter) ?? { best: null, passing: null, tried: 0 };
+    if (entry.passing || entry.tried >= 6) continue;
+    entry.tried += 1;
+    const short = shortFromBeatMap(map, words, window, { registered, brand });
+    entry.best ??= short;
+    if (short.report.gate.ok) entry.passing = short;
+    byChapter.set(window.chapter, entry);
+  }
+  const ranked = [...byChapter.values()].map((entry) => entry.passing ?? entry.best).sort((a, b) => Number(b.report.gate.ok) - Number(a.report.gate.ok) || b.window.score - a.window.score);
+  return ranked.slice(0, want).map((short, index) => ({ ...shortFromBeatMap(map, words, short.window, { registered, brand, index }) }));
+}

@@ -16,6 +16,7 @@
     "parity:ci": "node ./scripts/parity-ci.mjs",
     "eval:production": "node ./src/production_eval.js",
     "eval:renderers": "node ./src/renderer_eval.js",
+    "eval:formats": "node ./eval/formats.mjs",
     "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke",
     "skills:sync": "node ./scripts/sync-skills.mjs",
@@ -119,6 +120,7 @@
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {
+    "gpt-tokenizer": "3.4.0",
     "kokoro-js": "1.2.1",
     "onnxruntime-node": "1.27.0",
     "playwright": "1.64.1"
