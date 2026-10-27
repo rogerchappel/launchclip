@@ -3,6 +3,7 @@
 // The browser run itself is exercised by the samples in docs/EVIDENCE_CAPTURE.md.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mediaSkip } from "./helpers/media.js";
 import { CAPTURE_SCHEMA, normalizeTarget, requestDuration, validateCaptureRequest } from "../src/evidence/request.js";
 import { buildTimeline, cameraAt, clampCamera, stateAt, toWindow, viewOf } from "../src/evidence/timeline.js";
 import { assertPublicUrl, blockReason, captureRegion, isRejectLabel, regionTiles } from "../src/evidence/capture.js";
@@ -27,6 +28,12 @@ test("a valid request normalises: defaults filled, beats sorted, targets as obje
   assert.equal(r.beats[0].dur, 1.2);
   assert.equal(requestDuration(r), 2.5 + 1.2);
   assert.deepEqual(normalizeTarget({ text: "x", closest: "tr", nth: 2 }), { text: "x", closest: "tr", nth: 2 });
+  // Alternatives and a nearby phrase, for pages that render a price differently from the fetched text.
+  const priced = validateCaptureRequest(request({ beats: [{ at: 0, action: "highlight", target: { any: [{ text: "costs $1.00/M input tokens" }, { text: "$1.00", near: "Input" }] } }, { at: 1, action: "focus-ring", target: { any: [{ text: "$1.00", closest: "tr" }, "td.price"] } }] }));
+  assert.deepEqual(priced.errors, []);
+  assert.deepEqual(priced.request.beats[0].target.any[1], { text: "$1.00", near: "Input" });
+  assert.match(validateCaptureRequest(request({ beats: [{ at: 0, action: "highlight", target: { any: [{ text: "a" }, "td"] } }] })).errors.join(), /needs a \{text\} target/);
+  assert.match(validateCaptureRequest(request({ beats: [{ at: 0, action: "zoom", target: { any: [] } }] })).errors.join(), /any: \[1–6/);
 });
 
 test("the validator names each problem", () => {
@@ -239,4 +246,32 @@ test("routes: X posts open the public embed, GitHub files open their own diff an
   assert.throws(() => resolveRoute({ url: "https://example.com/a", file: "a.js" }), /needs a GitHub pull request or commit URL/);
   assert.equal(resolveRoute({ url: "https://example.com/a" }).name, "page");
   assert.match(validateCaptureRequest(request({ file: "/etc/passwd" })).errors.join(), /file must be a repository path/);
+});
+
+test("targets in a real page: hidden text fails with what the page renders; near and any pick the shown element", async (t) => {
+  const { recorderAvailability } = await import("../src/demo/record.js");
+  const { measureTarget } = await import("../src/evidence/capture.js");
+  const available = await recorderAvailability();
+  const skip = mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`);
+  if (skip) return t.skip(skip);
+  const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  await page.setContent(`<style>body{font:16px sans-serif;margin:0}.faq{height:0;overflow:hidden}td{padding:6px 20px}</style>
+    <h1>Model</h1><p>In/out price <b id="head">$1 / $5</b> per 1M</p>
+    <table><tr id="row-a"><td>OpenAI</td><td>$1.00</td><td>$5.00</td><td>$0.05</td></tr>
+    <tr id="row-b"><td>OpenAI Flex</td><td>$0.50</td><td>$2.50</td><td>$0.025</td></tr></table>
+    <div style="height:900px"></div><p>Fast</p><p>$0.05 elsewhere</p>
+    <details><summary>How much does it cost?</summary></details>
+    <div class="faq">It costs $1.00/M input tokens and $5.00/M output tokens.</div>`);
+  await assert.rejects(measureTarget(page, { text: "It costs $1.00/M input tokens" }, "b"), /on the page but hidden .*the page renders "…[^"]*OpenAI\$1\.00\$5\.00/s);
+  await assert.rejects(measureTarget(page, { text: "Nowhere $9.99/M" }, "b"), /is not on the page/);
+  const row = await measureTarget(page, { text: "$1.00", near: "OpenAI", closest: "tr" }, "b");
+  assert.equal(Math.round(row.rects[0].y), Math.round(await page.evaluate(() => document.getElementById("row-a").getBoundingClientRect().top)));
+  // Of the two "$0.05", the one beside "$5.00", not the one further down the page.
+  const cache = await measureTarget(page, { text: "$0.05", near: "$5.00" }, "b");
+  assert.ok(cache.rects[0].y < 200, JSON.stringify(cache.rects));
+  const alt = await measureTarget(page, { any: [{ text: "It costs $1.00/M input tokens" }, { text: "$1 / $5" }] }, "b");
+  assert.equal(alt.via, 'any[1] "$1 / $5"');
+  await assert.rejects(measureTarget(page, { any: [{ text: "gone" }, { selector: "#nope" }] }, "b"), /none of 2 alternatives.*any\[0\].*any\[1\]/s);
 });

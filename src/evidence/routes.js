@@ -67,7 +67,7 @@ export function resolveRoute(request) {
 export function retarget(target, route) {
   if (!target) return { target };
   let out = target;
-  if (route.scope && !out.within && !out.any) out = { ...out, within: route.scope };
+  if (route.scope && !out.within) out = { ...out, within: route.scope };
   if (route.name === "x-embed" && typeof out.text === "string") {
     const text = out.text.replace(/^(.{0,80}?\s)?on (X|Twitter): ["“]/u, "").replace(/["”]\s*(\/\s*X)?\s*$/u, "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
     if (text && text !== out.text) return { target: { ...out, text }, note: `"${out.text}" → "${text}"` };

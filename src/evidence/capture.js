@@ -222,14 +222,40 @@ const docHeightOf = (page) => page.evaluate(() => Math.max(document.documentElem
 function measureInPage(target) {
   const scope = target.within ? document.querySelector(target.within) : document.body;
   if (!scope) return { error: `within ${target.within} matched nothing` };
+  // near: of several matches, the one whose centre is closest to the first visible match of a phrase.
+  let anchor = null;
+  if (target.near) {
+    const found = (() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const want = target.near.toLowerCase(); for (let n = w.nextNode(); n; n = w.nextNode()) { const i = n.nodeValue.toLowerCase().indexOf(want); if (i < 0 || !n.parentElement?.getClientRects().length) continue; const r = document.createRange(); r.setStart(n, i); r.setEnd(n, Math.min(n.nodeValue.length, i + want.length)); const b = r.getBoundingClientRect(); if (b.width && b.height) return b; } return null; })();
+    if (!found) return { error: `near "${target.near}": that phrase is not on the page` };
+    anchor = { x: found.left + found.width / 2, y: found.top + found.height / 2 };
+  }
+  const nearest = (items) => items.sort((a, b) => Math.hypot(a.r.left + a.r.width / 2 - anchor.x, a.r.top + a.r.height / 2 - anchor.y) - Math.hypot(b.r.left + b.r.width / 2 - anchor.x, b.r.top + b.r.height / 2 - anchor.y))[0];
   const px = (r) => ({ x: Math.round((r.left + scrollX) * 10) / 10, y: Math.round((r.top + scrollY) * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 });
   const visible = (node) => { const el = node.nodeType === 1 ? node : node.parentElement; if (!el) return false; const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || Number(s.opacity) === 0) return false; return el.getClientRects().length > 0; };
+  // Whether a rect inside `el` is really on screen: not clipped away by an ancestor that hides its
+  // overflow (a collapsed accordion answer, a 0-height disclosure, a truncated card). Half must show.
+  const shown = (rect, el) => {
+    let x0 = rect.left, y0 = rect.top, x1 = rect.right, y1 = rect.bottom;
+    for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (Number(s.opacity) === 0 || s.visibility === "hidden") return false;
+      // Only overflow that hides content clips it; an auto or scroll box's content is reachable.
+      const cx = /hidden|clip/.test(s.overflowX), cy = /hidden|clip/.test(s.overflowY);
+      if (!cx && !cy) continue;
+      const b = a.getBoundingClientRect();
+      if (cx) { x0 = Math.max(x0, b.left); x1 = Math.min(x1, b.right); }
+      if (cy) { y0 = Math.max(y0, b.top); y1 = Math.min(y1, b.bottom); }
+      if (x1 <= x0 || y1 <= y0) return false;
+    }
+    return (x1 - x0) * (y1 - y0) >= 0.5 * rect.width * rect.height;
+  };
   if (target.selector !== undefined) {
     let nodes;
     try { nodes = [...scope.querySelectorAll(target.selector)].filter(visible); } catch (error) { return { error: `invalid selector ${target.selector}: ${error.message}` }; }
-    const node = nodes[target.nth ?? 0];
+    const node = target.near ? nearest(nodes.map((n) => ({ n, r: n.getBoundingClientRect() })).filter((c) => shown(c.r, c.n)))?.n : nodes[target.nth ?? 0];
     if (!node) return { error: `no visible element matches ${target.selector}${target.nth ? ` (nth ${target.nth} of ${nodes.length})` : ""}` };
     const r = node.getBoundingClientRect();
+    if (!shown(r, node)) return { error: `${target.selector} is on the page but hidden (collapsed or clipped by an ancestor)` };
     return { rects: [px(r)], text: (node.innerText || "").replace(/\s+/g, " ").trim().slice(0, 200) };
   }
   const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
@@ -251,11 +277,35 @@ function measureInPage(target) {
     }
   }
   const want = target.text.replace(/\s+/g, " ").trim();
-  const find = (hay, needle) => { const hits = []; let at = hay.indexOf(needle); while (at >= 0 && hits.length <= (target.nth ?? 0)) { hits.push(at); at = hay.indexOf(needle, at + 1); } return hits; };
+  const limit = target.near ? 60 : (target.nth ?? 0);
+  const find = (hay, needle) => { const hits = []; let at = hay.indexOf(needle); while (at >= 0 && hits.length <= limit) { hits.push(at); at = hay.indexOf(needle, at + 1); } return hits; };
   let hits = find(joined, want);
   if (!hits.length) hits = find(joined.toLowerCase(), want.toLowerCase());
-  const at = hits[target.nth ?? 0];
-  if (at === undefined) return { error: `text "${want}" is not on the page${target.nth ? ` (wanted match ${target.nth}, found ${hits.length})` : ""}` };
+  const rangeAt = (i) => { const [a, ao] = map[i], [b, bo] = map[i + want.length - 1]; const r = document.createRange(); r.setStart(nodes[a], ao); r.setEnd(nodes[b], bo + 1); return r; };
+  const at = target.near && hits.length ? nearest(hits.map((i) => ({ i, r: rangeAt(i).getBoundingClientRect() })).filter((h) => h.r.width && h.r.height && shown(h.r, nodes[map[h.i][0]].parentElement)))?.i : hits[target.nth ?? 0];
+  const renderedHint = () => {
+    // Say what the page does render: the phrases round the target's numbers (or its longest words), so a
+    // request written from fetched text can be pointed at the rendered element.
+    // A price is tried as written ("$1.00/M") and bare ("$1.00"), as pages often split the unit off.
+    const keys = [...new Set((want.match(/\$?\d[\d.,]*(?:\s*\/\s*M)?%?/g) ?? []).flatMap((k) => [k, k.replace(/\s*\/\s*M$/, "")]))].filter((k) => k.length >= 2);
+    const money = keys.filter((k) => k.startsWith("$"));
+    const words = money.length ? money : keys.length ? keys : want.split(/\s+/).filter((w) => w.length >= 6).sort((a, b) => b.length - a.length).slice(0, 2);
+    const seen = new Set();
+    for (const key of words) {
+      let i = joined.indexOf(key);
+      while (i >= 0 && seen.size < 4) {
+        const r = document.createRange(); r.setStart(nodes[map[i][0]], map[i][1]); r.setEnd(nodes[map[i + key.length - 1][0]], map[i + key.length - 1][1] + 1);
+        const b = r.getBoundingClientRect();
+        if (b.width && b.height && shown(b, nodes[map[i][0]].parentElement)) seen.add(joined.slice(Math.max(0, i - 24), i + key.length + 24).trim());
+        i = joined.indexOf(key, i + key.length);
+      }
+    }
+    return seen.size ? `; the page renders ${[...seen].slice(0, 4).map((s) => `"…${s}…"`).join(", ")}: target one of those (by text, {text, near}, a selector, or {any: [...]})` : "";
+  };
+  if (at === undefined) {
+    const hint = renderedHint();
+    return { error: `text "${want}" is not on the page${target.nth ? ` (wanted match ${target.nth}, found ${hits.length})` : ""}${hint}` };
+  }
   const [n0, o0] = map[at], [n1, o1] = map[at + want.length - 1];
   const range = document.createRange();
   range.setStart(nodes[n0], o0);
@@ -269,6 +319,9 @@ function measureInPage(target) {
     else lines.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
   }
   if (!lines.length) return { error: `text "${want}" is on the page but not visible` };
+  if (!lines.some((l) => shown({ left: l.left, top: l.top, right: l.right, bottom: l.bottom, width: l.right - l.left, height: l.bottom - l.top }, nodes[n0].parentElement))) {
+    return { error: `text "${want}" is on the page but hidden (a collapsed section or clipped box, such as an accordion answer)${renderedHint() || "; target what the page shows instead"}` };
+  }
   if (target.closest) {
     // The element round the phrase (a diff row, a table row, a card) instead of the phrase itself.
     const start = nodes[n0].parentElement?.closest(target.closest);
@@ -281,6 +334,16 @@ function measureInPage(target) {
 /** Measure a target on the page. Throws when it is missing. */
 export async function measureTarget(page, target, where = "target") {
   await page.evaluate(() => scrollTo(0, 0));
+  if (target.any) {
+    // Alternatives in order; the first found wins, and a miss lists why each failed.
+    const misses = [];
+    for (const [i, alt] of target.any.entries()) {
+      const result = await page.evaluate(measureInPage, { within: target.within, ...alt });
+      if (!result.error) return { ...result, via: `any[${i}] ${targetLabel(alt)}` };
+      misses.push(`any[${i}] ${targetLabel(alt)}: ${result.error}`);
+    }
+    throw new Error(`${where}: none of ${target.any.length} alternatives is on the page:\n  - ${misses.join("\n  - ")}`);
+  }
   const result = await page.evaluate(measureInPage, target);
   if (result.error) throw new Error(`${where} ${targetLabel(target)}: ${result.error}`);
   return result;
@@ -432,7 +495,7 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
       beats: timeline.effects.map((effect) => {
         const beat = measured.find((entry) => entry.index === effect.index);
         const box = effect.box ? { ...effect.box, y: Math.round((effect.box.y + pageRegion.y0) * 10) / 10 } : null;
-        return { index: effect.index, action: effect.action, at: beat.at, dur: beat.dur, target: targetLabel(beat.target), ...(beat.label ? { label: beat.label } : {}), ...(beat.text ? { matched: beat.text } : {}), start: effect.start, end: effect.end, box };
+        return { index: effect.index, action: effect.action, at: beat.at, dur: beat.dur, target: targetLabel(beat.target), ...(beat.label ? { label: beat.label } : {}), ...(beat.text ? { matched: beat.text } : {}), ...(beat.via ? { via: beat.via } : {}), start: effect.start, end: effect.end, box };
       })
     };
     const sidecar = `${base}.evidence.json`;
