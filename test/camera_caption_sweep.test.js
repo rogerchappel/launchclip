@@ -116,6 +116,10 @@ test("the HyperFrames compiler dips #lc-captions for sweeping moves", async () =
     const html = (await compile(story())).html;
     const dips = html.match(/tl\.fromTo\('#lc-captions'/g) ?? [];
     assert.equal(dips.length, 6, "three sweeping moves, two ramps each");
+    // Each dip out ends in a hard kill at its end (HyperFrames' StaticGuard asks for one at a shot's start).
+    const outs = [...html.matchAll(/tl\.fromTo\('#lc-captions', \{ opacity: 1 \}, \{ opacity: 0, duration: ([\d.]+), ease: 'none', immediateRender: false \}, ([\d.]+)\);\n\s*tl\.set\('#lc-captions', \{ opacity: 0 \}, ([\d.]+)\);/g)];
+    assert.equal(outs.length, 3);
+    for (const [, dur, at, kill] of outs) assert.ok(Math.abs(Number(at) + Number(dur) - Number(kill)) < 1e-3);
     assert.equal((await compile(story({ hide: false }))).html.includes("tl.fromTo('#lc-captions'"), false);
   } finally {
     await rm(dir, { recursive: true, force: true });
