@@ -61,7 +61,7 @@ test("an evidence clip's video rides the world camera and is held in the overvie
   assert.doesNotMatch(held.slice(0, held.indexOf("</div></div>")), /<video/);
 });
 
-test("the held evidence frame is written with the project", async () => {
+test("the held and last evidence frames are written with the project", async () => {
   const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-held-"));
   try {
     const source = path.join(work, "story");
@@ -73,6 +73,13 @@ test("the held evidence frame is written with the project", async () => {
     assert.deepEqual(warnings.filter((warning) => /held frame/.test(warning)), []);
     assert.ok(files.includes("held/"));
     assert.ok(existsSync(path.join(work, "hf", "held", "s2-held.png")));
+    // The 8 s clip ends at 11 s, inside its 3–12.3 s window: its last frame
+    // shows from then, under the video, moved by the module's own sets.
+    const html = await readFile(path.join(work, "hf", "index.html"), "utf8");
+    assert.ok(existsSync(path.join(work, "hf", "held", "s2-media-tail.png")));
+    assert.match(html, /<img id="s2-media-tail" class="lc-media-tail" src="held\/s2-media-tail\.png"[^>]*visibility:hidden"><video id="s2-media"/);
+    assert.match(html, /tl\.fromTo\("#s2-media-tail", \{ visibility: 'hidden' \}, \{ visibility: 'visible', duration: 0, immediateRender: false \}, 10\.9667\);/);
+    assert.match(html, /tl\.set\("#s2-media, #s2-media-tail", /);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

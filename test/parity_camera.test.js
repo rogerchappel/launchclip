@@ -39,12 +39,13 @@ export const CAMERA_PARITY = Object.freeze([
   // one, the hold, the push in and settled.
   {id: 'overview-world-9x16', threshold: 0.97, times: [10.0, 16.6, 17.4, 18.2, 19.5]},
   // An evidence clip on a world plate: mid-push in, settled, inside a 1.5×
-  // zoom in the shot, mid-pull out, and the overview with the clip held on
-  // its last frame. Its <video> now rides the camera in HyperFrames (it was
+  // zoom in the shot, after its 8 s source has run out (it holds the last
+  // frame, as Remotion's <OffthreadVideo>), mid-pull out, and the overview
+  // with the clip held. Its <video> now rides the camera in HyperFrames (it was
   // left full-size on the root: 0.31 in the zoom). 0.9 as the d-evidence-clip
   // fixture: Chrome scales the testsrc <video> differently in each renderer
   // (0.948 settled, 0.910 at 1.5×); the frame, tag and cursor match.
-  {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 10.4, 15.8, 16.6, 17.4],
+  {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
     files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);
 
