@@ -19,6 +19,7 @@ import { mkdir, open, readFile, readdir, rm, stat, unlink, writeFile } from "nod
 import os from "node:os";
 import path from "node:path";
 import { SLOT_KINDS, resolveSlots } from "./capacity.js";
+import { pinnedHome } from "./state_dirs.js";
 
 const MUTEX = ".mutex";
 const MUTEX_STALE_MS = 10_000;
@@ -28,6 +29,8 @@ const owned = new Set();
 let exitHookInstalled = false;
 
 export function queueDir(env = process.env) {
+  const pinned = pinnedHome("queue");
+  if (pinned) return pinned;
   if (env.LAUNCHCLIP_QUEUE_DIR) return path.resolve(env.LAUNCHCLIP_QUEUE_DIR);
   return path.join(env.LAUNCHCLIP_HOME ?? path.join(os.homedir(), ".launchclip"), "queue");
 }

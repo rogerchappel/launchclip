@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createStructuredClient } from "./model_provider.js";
+import { pinnedHome } from "./state_dirs.js";
 
 const STATE_SCHEMA_VERSION = "launchclip.openrouter-free-models.v1";
 const DEFAULT_ROLE = "visual-code-author";
@@ -24,11 +25,11 @@ const CODING_WEIGHT = .10;
 const VISION_PROBE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAIAAAAt/+nTAAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PMQ2AUBTAQEhwwYoNJKD/L4hBxeOWnoAm3c9nbZPe6x7tH6P1HzSgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oH1/WgL6gdNJ4QAAAABJRU5ErkJggg==";
 
 export function defaultFreeModelStatePath(env = process.env) {
-  return path.resolve(env.LAUNCHCLIP_FREE_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-models.json"));
+  return pinnedHome("openrouter-free-models.json") ?? path.resolve(env.LAUNCHCLIP_FREE_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-models.json"));
 }
 
 export function defaultFreeVisionModelStatePath(env = process.env) {
-  return path.resolve(env.LAUNCHCLIP_FREE_VISION_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-vision-models.json"));
+  return pinnedHome("openrouter-free-vision-models.json") ?? path.resolve(env.LAUNCHCLIP_FREE_VISION_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-vision-models.json"));
 }
 
 export function rankOpenRouterFreeModels(models, benchmarkItems = [], options = {}) {

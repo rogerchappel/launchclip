@@ -13,6 +13,7 @@ import { copyFile, mkdir, readFile, rename } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { copyFileAtomic, writeFileAtomic } from "../atomic_write.js";
+import { pinnedCache } from "../state_dirs.js";
 
 export const DEFAULT_NARRATION_PROVIDER = "kokoro";
 // Provider defaults when audio.narration leaves voice or speed out.
@@ -49,7 +50,7 @@ export function narrationCacheKey(request) {
 /** <project>/.launchclip/voice, else $LAUNCHCLIP_CACHE/voice, else ~/.cache/launchclip/voice. */
 export function voiceCacheDir(project, env = process.env) {
   if (project) return path.join(project, ".launchclip", "voice");
-  return env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "voice") : path.join(os.homedir(), ".cache", "launchclip", "voice");
+  return pinnedCache("voice") ?? (env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "voice") : path.join(os.homedir(), ".cache", "launchclip", "voice"));
 }
 
 /**

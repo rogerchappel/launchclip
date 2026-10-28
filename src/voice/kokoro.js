@@ -28,6 +28,7 @@ import {
   detectOnsets, finalizeWords, normalizeWord, onsetError, proportionalAlign,
   rmsEnvelope, envelopeLevels, snapOnsets, tokenizeText, writeWav
 } from "./words.js";
+import { pinnedCache } from "../state_dirs.js";
 
 export const KOKORO_JS_VERSION = "1.2.1";
 export const DEFAULT_KOKORO_MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX-timestamped";
@@ -44,7 +45,7 @@ let announcedDownload = false;
 
 /** Model cache directory: $LAUNCHCLIP_CACHE/kokoro, else ~/.cache/launchclip/kokoro. */
 export function kokoroCacheDir(env = process.env) {
-  return env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "kokoro") : path.join(os.homedir(), ".cache", "launchclip", "kokoro");
+  return pinnedCache("kokoro") ?? (env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "kokoro") : path.join(os.homedir(), ".cache", "launchclip", "kokoro"));
 }
 
 export async function isKokoroModelCached({ model = DEFAULT_KOKORO_MODEL, dtype = "fp32", cacheDir = kokoroCacheDir() } = {}) {

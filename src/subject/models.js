@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { pinnedHome } from "../state_dirs.js";
 
 // input: how a frame becomes the model's tensor.
 //   size: {width, height} fixed, or {shortEdge, multiple} keeping the aspect.
@@ -87,6 +88,7 @@ export function subjectPipeline(id = DEFAULT_SUBJECT_MODEL) {
 
 /** ~/.launchclip/models, or $LAUNCHCLIP_HOME/models. */
 export function modelsDir({ home, env = process.env } = {}) {
+  if (!home && pinnedHome("models")) return pinnedHome("models");
   return path.join(home ?? env.LAUNCHCLIP_HOME ?? path.join(os.homedir(), ".launchclip"), "models");
 }
 

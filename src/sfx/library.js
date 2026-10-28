@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { writeFileAtomic } from "../atomic_write.js";
 import { densityValue } from "@launchclip/core/sound/options.mjs";
+import { pinnedHome } from "../state_dirs.js";
 
 export const LIBRARY_SCHEMA = "launchclip.sfx-library.v1";
 export const LIBRARY_FILE = "library.json";
@@ -40,7 +41,7 @@ export function expandFamilies(list) {
 }
 
 export function userLibraryDir({ home = os.homedir(), env = process.env } = {}) {
-  return env.LAUNCHCLIP_SFX_HOME ? path.resolve(env.LAUNCHCLIP_SFX_HOME) : path.join(home, ".launchclip", "sfx");
+  return pinnedHome("sfx") ?? (env.LAUNCHCLIP_SFX_HOME ? path.resolve(env.LAUNCHCLIP_SFX_HOME) : path.join(home, ".launchclip", "sfx"));
 }
 
 export function emptyManifest(now = new Date().toISOString()) {
