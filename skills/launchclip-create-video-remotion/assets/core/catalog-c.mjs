@@ -442,15 +442,26 @@ function calloutTimeline(model, ops) {
 // pill: the name in bold capitals inside a glowing brand pill, the role on
 // its own line under it (the explainer's person ID over footage).
 const LOWER_THIRD_TONES = ['dark', 'primary', 'pill'];
+// Designed variants (docs/SEEDED_STYLES_RFC.md §3.2), the default first: bar
+// (the dark panel with a primary bar, the original look), band (the primary
+// panel), pill, and outline (the dark panel ringed in primary, with an
+// underline that draws across instead of the bar). params.variant wins, then
+// the style's variants["lower-third"]; an explicit params.tone wins over the
+// variant's tone.
+export const LOWER_THIRD_VARIANTS = Object.freeze(['bar', 'band', 'pill', 'outline']);
+const VARIANT_TONE = Object.freeze({bar: 'dark', band: 'primary', pill: 'pill', outline: 'dark'});
 
 function resolveLowerThird(params, ctx) {
-  const b = createFootageBase('lower-third', params, ctx, {allowed: ['name', 'title', 'at', 'align', 'tone'], required: ['name'], minDuration: CATALOG_C_TIMING['lower-third'].minDuration});
+  const b = createFootageBase('lower-third', params, ctx, {allowed: ['name', 'title', 'at', 'align', 'tone', 'variant'], required: ['name'], minDuration: CATALOG_C_TIMING['lower-third'].minDuration});
   const {check, u, safe, colors, theme, end, duration} = b;
   const p = b.params;
   const name = check.str(p.name, 'params.name', 32);
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ['left', 'center']);
-  const tone = p.tone === undefined ? 'dark' : check.oneOf(p.tone, 'params.tone', LOWER_THIRD_TONES);
+  const styled = ctx.variants && typeof ctx.variants === 'object' ? ctx.variants['lower-third'] : undefined;
+  const variant = check.oneOf(p.variant ?? styled ?? LOWER_THIRD_VARIANTS[0], p.variant !== undefined ? 'params.variant' : 'style variants.lower-third', LOWER_THIRD_VARIANTS);
+  const tone = p.tone === undefined ? VARIANT_TONE[variant] : check.oneOf(p.tone, 'params.tone', LOWER_THIRD_TONES);
+  const outline = variant === 'outline' && tone !== 'pill';
   if (tone === 'pill') return resolveLowerThirdPill(b, name, title, align);
   const panel = tone === 'dark' ? colors.bg : colors.primary;
   const nameInk = tone === 'dark' ? colors.paper : colors.ink;
@@ -458,7 +469,7 @@ function resolveLowerThird(params, ctx) {
   const bar = tone === 'dark' ? colors.primary : colors.ink;
   b.requireContrast('name/panel', nameInk, panel, `params.name on the ${tone} panel`);
   if (title) b.requireContrast('title/panel', titleInk, panel, `params.title on the ${tone} panel`);
-  const barW = u(12), padL = u(30), padR = u(40), padY = u(24);
+  const barW = outline ? 0 : u(12), padL = outline ? u(36) : u(30), padR = u(40), padY = u(24);
   const maxText = safe.width - barW - padL - padR;
   const nameFit = fitText(check, 'params.name', name, {family: 'body', width: maxText, preferred: u(62), min: b.min.key, maxLines: 1});
   const titleFit = title ? fitText(check, 'params.title', title, {family: 'body', width: maxText, preferred: u(44), min: b.min.key, maxLines: 1}) : null;
@@ -472,7 +483,7 @@ function resolveLowerThird(params, ctx) {
   const exitStart = rt(end - 0.32);
   b.events.push({id: `${b.id}-name`, name: 'name', time: t0, endTime: rt(t0 + 0.55), role: 'title', cue: 'whoosh'});
   if (title) b.events.push({id: `${b.id}-title`, name: 'title', time: rt(t0 + 0.3), endTime: rt(t0 + 0.65), role: 'subtitle'});
-  const content = {name, title, align, tone, panel, nameInk, titleInk, bar, barW, padL, padR, padY, gapLines, nameSize: nameFit.size, titleSize: titleFit?.size ?? null,
+  const content = {name, title, align, tone, outline, ring: outline ? colors.primary : null, line: u(6), panel, nameInk, titleInk, bar: outline ? colors.primary : bar, barW, padL, padR, padY, gapLines, nameSize: nameFit.size, titleSize: titleFit?.size ?? null,
     box: {x, y, width, height}, slide: u(60), radius: u(10), times: {bar: t0, panel: rt(t0 + 0.08), name: rt(t0 + 0.18), title: rt(t0 + 0.3)}};
   return b.finish(content, {rect: {x, y, width, height}, role: 'text', minTextPx: Math.min(nameFit.size, titleFit?.size ?? Infinity),
     motion: {enterEnd: rt(t0 + 0.65), exitStart, exitTo: {opacity: 0, x: -u(40)}}});
@@ -521,11 +532,13 @@ function lowerThirdView(model) {
   const {id, fonts} = model;
   const c = model.content, B = c.box;
   const kids = [
-    el('div', `${id}-panel`, abs(B.x, B.y, B.width, B.height, {boxSizing: 'border-box', borderRadius: c.radius, background: c.panel, boxShadow: `0 ${12 * model.unit}px ${32 * model.unit}px #00000066`, opacity: 0, transform: transformString({x: -c.slide})}), [
+    el('div', `${id}-panel`, abs(B.x, B.y, B.width, B.height, {boxSizing: 'border-box', borderRadius: c.radius, background: c.panel, ...(c.outline ? {border: `${r2(3 * model.unit)}px solid ${c.ring}`} : {}), boxShadow: `0 ${12 * model.unit}px ${32 * model.unit}px #00000066`, opacity: 0, transform: transformString({x: -c.slide})}), [
       el('div', `${id}-name`, abs(c.barW + c.padL, c.padY, B.width - c.barW - c.padL - c.padR, undefined, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.body, fontWeight: 700, fontSize: c.nameSize, lineHeight: '1.15', color: c.nameInk, opacity: 0, transform: transformString({y: 16 * model.unit})}), [c.name]),
       ...(c.title ? [el('div', `${id}-title`, abs(c.barW + c.padL, c.padY + c.nameSize * 1.15 + c.gapLines, B.width - c.barW - c.padL - c.padR, undefined, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.body, fontWeight: 500, fontSize: c.titleSize, lineHeight: '1.2', color: c.titleInk, opacity: 0, transform: transformString({y: 16 * model.unit})}), [c.title])] : [])
     ]),
-    el('div', `${id}-bar`, abs(B.x, B.y, c.barW, B.height, {background: c.bar, borderRadius: `${c.radius}px 0 0 ${c.radius}px`, transform: transformString({scaleY: 0}), transformOrigin: '50% 100%'}))
+    c.outline
+      ? el('div', `${id}-bar`, abs(B.x + c.padL, B.y + B.height + c.line, B.width - c.padL - c.padR, c.line, {background: c.bar, borderRadius: c.line, transform: transformString({scaleX: 0}), transformOrigin: '0% 50%'}))
+      : el('div', `${id}-bar`, abs(B.x, B.y, c.barW, B.height, {background: c.bar, borderRadius: `${c.radius}px 0 0 ${c.radius}px`, transform: transformString({scaleY: 0}), transformOrigin: '50% 100%'}))
   ];
   return kids;
 }
@@ -533,7 +546,10 @@ function lowerThirdView(model) {
 function lowerThirdTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content, T = c.times, lift = 16 * model.unit;
-  if (c.tone !== 'pill') {
+  if (c.outline) {
+    set(ops, `${id}-bar`, start, {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-bar`, T.title ?? T.name, 0.4, 'power3.inOut', {scaleX: 0}, {scaleX: 1});
+  } else if (c.tone !== 'pill') {
     set(ops, `${id}-bar`, start, {scaleX: 1, scaleY: 0});
     tw(ops, `${id}-bar`, T.bar, 0.3, 'power3.out', {scaleY: 0}, {scaleY: 1});
   }
@@ -814,8 +830,8 @@ const DEFINITIONS = [
     params: {text: 'claim ≤ 42 chars, up to 2 lines', label: 'kicker ≤ 24 (optional)', point: '{x, y} canvas fractions 0.04–0.96 (the anchored spot)', side: 'auto|above|below|left|right', tone: 'primary|paper|dark', tilt: 'degrees −6–6 (default −2)', at},
     events: ['point', 'sticker'], resolve: resolveCallout, view: calloutView, timeline: calloutTimeline},
   {id: 'lower-third', describe: 'Footage-led: a name and title bar that slides in above the caption band.',
-    params: {name: 'string ≤ 32', title: 'string ≤ 48 (optional; the role)', align: 'left|center', tone: 'dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)', at},
-    events: ['name', 'title'], resolve: resolveLowerThird, view: lowerThirdView, timeline: lowerThirdTimeline},
+    params: {name: 'string ≤ 32', title: 'string ≤ 48 (optional; the role)', align: 'left|center', tone: 'dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it; default: the variant\'s)', variant: 'bar|band|pill|outline (optional; default: the style\'s variants["lower-third"], else bar); usually leave it to the style', at},
+    events: ['name', 'title'], variants: LOWER_THIRD_VARIANTS, resolve: resolveLowerThird, view: lowerThirdView, timeline: lowerThirdTimeline},
   {id: 'emphasis-caption', describe: 'Footage-led: one to three big words that pop over the footage; hides the captions while on screen.',
     params: {text: '1–3 words, ≤ 24 chars', color: 'primary|accent|paper or #hex (≥ 3:1 on the bg outline)', position: 'center|upper|lower', stagger: 'seconds between words (default 0.09)', at},
     events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline},
@@ -830,7 +846,7 @@ const DEFINITIONS = [
 ];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve,
-  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {}), ...(def.glyphs ? {glyphs: def.glyphs} : {})}]));
+  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {}), ...(def.glyphs ? {glyphs: def.glyphs} : {}), ...(def.variants ? {variants: def.variants} : {})}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {
