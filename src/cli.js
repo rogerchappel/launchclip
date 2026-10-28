@@ -104,7 +104,7 @@ export async function runCli(argv, io = {}) {
     } else if (command === "skills") {
       result = await runSkillsCommand(skillsInvocation.action, skillsInvocation.name, flags, skillOptions);
     } else if (command === "style") {
-      result = await runStyleCommand(styleInvocation.action, styleInvocation.name, flags);
+      result = await runStyleCommand(styleInvocation.action, styleInvocation.name, flags, styleInvocation.names);
     } else if (command === "profile") {
       const { runProfileCommand } = await import("./profile_cli.js");
       result = await runProfileCommand(profileInvocation.action, profileInvocation.target, flags, productionAdapters.profile ?? {});
@@ -424,16 +424,19 @@ function parseStoryInvocation(action, rest) {
   return { action, file: required(file, action === "compile" || action === "long-form" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
 }
 
-async function runStyleCommand(action, name, flags) {
+async function runStyleCommand(action, name, flags, names = []) {
   const root = flags.root ?? flags["style-root"];
   if (action === "create" && (flags["from-reference"] || flags["from-images"])) {
     return createStyleFromReferences(required(name, "style name"), flags, { root });
   }
   if (action === "upgrade") return upgradeStylePack(required(name, "style name"), { root });
-  if (action === "generate" || action === "reroll" || action === "keep") {
-    const { styleGenerateCommand, styleKeepCommand, styleRerollCommand } = await import("./style_seed_store.js");
+  if (["generate", "reroll", "keep", "pin", "preview", "distance"].includes(action)) {
+    const { styleDistanceCommand, styleGenerateCommand, styleKeepCommand, stylePinCommand, stylePreviewCommand, styleRerollCommand } = await import("./style_seed_store.js");
     if (action === "generate") return styleGenerateCommand(flags);
     if (action === "reroll") return styleRerollCommand(name, flags);
+    if (action === "pin") return stylePinCommand(name, flags);
+    if (action === "preview") return stylePreviewCommand(required(name, "style (style.json, project or name)"), flags);
+    if (action === "distance") return styleDistanceCommand(names);
     return styleKeepCommand(required(name, "project path"), flags);
   }
   if (action === "check") return checkStyleCommand(required(name, "project path"), flags, { root });
@@ -470,11 +473,14 @@ function parseCastInvocation(action, rest) {
 }
 
 function parseStyleInvocation(action, rest) {
-  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade, check, generate, reroll or keep");
-  if (!new Set(["create", "save", "list", "show", "upgrade", "check", "generate", "reroll", "keep"]).has(action)) throw new Error(`Unknown style action: ${action}`);
+  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade, check, generate, reroll, keep, pin, preview or distance");
+  if (!new Set(["create", "save", "list", "show", "upgrade", "check", "generate", "reroll", "keep", "pin", "preview", "distance"]).has(action)) throw new Error(`Unknown style action: ${action}`);
   const takesName = action !== "list" && action !== "generate";
+  // distance takes every leading style: launchclip style distance a b c
+  const leading = rest.findIndex((token) => token.startsWith("--"));
+  const names = action === "distance" ? rest.slice(0, leading < 0 ? rest.length : leading) : [];
   const hasName = takesName && rest[0] && !rest[0].startsWith("--");
-  const flagArgs = hasName ? rest.slice(1) : rest;
+  const flagArgs = action === "distance" ? rest.slice(names.length) : hasName ? rest.slice(1) : rest;
   // --from-reference a.mp4 b.mp4 / --from-images x.png y.png take several files.
   const expanded = [];
   let multi = null;
@@ -483,7 +489,7 @@ function parseStyleInvocation(action, rest) {
     if (multi && expanded.at(-1) !== multi) expanded.push(multi);
     expanded.push(token);
   }
-  return { action, name: hasName ? rest[0] : null, flagArgs: expanded };
+  return { action, name: hasName ? rest[0] : null, names, flagArgs: expanded };
 }
 
 function parseModuleInvocation(action, rest) {
@@ -501,7 +507,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models" || name === "capacity" || name === "still") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still") {
       flags[name] = true;
       continue;
     }
