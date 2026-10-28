@@ -37,6 +37,9 @@ export function remotionToolInfo() {
 export function createRemotionRenderer(defaults = {}) {
   const option = (opts, name) => opts[name] ?? defaults[name];
   const runner = (opts) => option(opts, "run") ?? runCommand;
+  // browserExecutable: the Chrome to render with; unset falls back to
+  // LAUNCHCLIP_REMOTION_BROWSER, null is Remotion's own download.
+  const browser = (opts = {}) => { const value = option(opts, "browserExecutable"); return value === undefined ? remotionBrowserExecutable() : value; };
   const remotion = (run, args, project) => {
     const invocation = remotionInvocation(args);
     return captureCommand(run, invocation.command, invocation.args, { cwd: remotionRoot(project) });
@@ -71,15 +74,16 @@ export function createRemotionRenderer(defaults = {}) {
       return { project, propsFile, props, format, entry: adapter.resolveEntry(project, opts), story: loaded };
     },
 
-    renderArgs({ entry, propsFile, project }, outFile, { quality = "draft", concurrency } = {}) {
-      const args = ["render", entry, COMPOSITION_ID, path.resolve(outFile), ...sharedArgs(propsFile, project), "--codec", "h264"];
+    renderArgs({ entry, propsFile, project }, outFile, opts = {}) {
+      const { quality = "draft", concurrency } = opts;
+      const args = ["render", entry, COMPOSITION_ID, path.resolve(outFile), ...sharedArgs(propsFile, project, browser(opts)), "--codec", "h264"];
       if (quality === "draft") args.push("--crf", "28", "--x264-preset", "veryfast");
       if (concurrency != null && concurrency !== "auto") args.push("--concurrency", String(concurrency));
       return args;
     },
 
-    stillArgs({ entry, propsFile, project, format }, seconds, outFile) {
-      return ["still", entry, COMPOSITION_ID, path.resolve(outFile), ...sharedArgs(propsFile, project), `--frame=${frameAt(seconds, format)}`];
+    stillArgs({ entry, propsFile, project, format }, seconds, outFile, opts = {}) {
+      return ["still", entry, COMPOSITION_ID, path.resolve(outFile), ...sharedArgs(propsFile, project, browser(opts)), `--frame=${frameAt(seconds, format)}`];
     },
 
     // --quiet prints only the composition ids, one per line.
@@ -100,7 +104,7 @@ export function createRemotionRenderer(defaults = {}) {
     // segments: [{startFrame, endFrame (exclusive), output}]; opts.story as in prepare.
     async renderSegments(projectDir, segments, opts = {}) {
       const prepared = await adapter.prepare(projectDir, opts);
-      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency });
+      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency, browserExecutable: browser(opts) });
     },
 
     segmentEncoder: () => ({ ...MEZZANINE }),
@@ -111,7 +115,7 @@ export function createRemotionRenderer(defaults = {}) {
     // The whole soundtrack as Remotion mixes it (audio-only render).
     async renderAudio(projectDir, output, opts = {}) {
       const prepared = await adapter.prepare(projectDir, opts);
-      return renderRemotionAudio({ entry: prepared.entry, project: prepared.project, props: prepared.props, output, kitHash: opts.kitHash });
+      return renderRemotionAudio({ entry: prepared.entry, project: prepared.project, props: prepared.props, output, kitHash: opts.kitHash, browserExecutable: browser(opts) });
     },
 
     async still(projectDir, seconds, outFile, opts = {}) {
@@ -119,7 +123,7 @@ export function createRemotionRenderer(defaults = {}) {
       if (!Number.isFinite(at) || at < 0) throw new Error(`Invalid still time: ${seconds}`);
       const prepared = await adapter.prepare(projectDir, opts);
       await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
-      const args = adapter.stillArgs(prepared, at, outFile);
+      const args = adapter.stillArgs(prepared, at, outFile, opts);
       const result = await remotion(runner(opts), args, prepared.project);
       if (!result.ok) throw adapterError("Remotion still", result);
       return { renderer: "remotion", output: path.resolve(outFile), seconds: at, frame: frameAt(at, prepared.format), raw: result };
@@ -159,7 +163,7 @@ export function createRemotionRenderer(defaults = {}) {
     // Run adapter.prepare(projectDir) first so the props file exists.
     previewCommand(projectDir, opts = {}) {
       const project = path.resolve(projectDir);
-      const args = ["studio", adapter.resolveEntry(project, opts), ...sharedArgs(path.join(project, RESOLVED_STORY), project).filter((arg) => arg !== "--overwrite")];
+      const args = ["studio", adapter.resolveEntry(project, opts), ...sharedArgs(path.join(project, RESOLVED_STORY), project, browser(opts)).filter((arg) => arg !== "--overwrite")];
       if (opts.port != null) args.push("--port", String(opts.port));
       const invocation = remotionInvocation(args);
       return [invocation.command, ...invocation.args];
@@ -176,8 +180,7 @@ async function injectedStory(story, storyModule) {
   return { file: null, story, resolved: story, format: module.storyFormat(story), module };
 }
 
-function sharedArgs(propsFile, project) {
-  const browser = remotionBrowserExecutable();
+function sharedArgs(propsFile, project, browser = remotionBrowserExecutable()) {
   return ["--props", propsFile, "--public-dir", project, "--overwrite", "--log", "warn", ...(browser ? ["--browser-executable", browser] : [])];
 }
 

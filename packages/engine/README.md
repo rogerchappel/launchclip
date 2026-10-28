@@ -243,6 +243,14 @@ your command once, through the shell, for the length of the plan:
 Remotion adapters (`src/renderers`). `notice: (line) → void` receives progress
 lines (default: stderr).
 
+The default Remotion adapter renders with Remotion's own chrome-headless-shell
+download. To choose the Chrome yourself (a pinned build, or one that avoids a
+crash in Remotion's), pass its executable as `env.LAUNCHCLIP_REMOTION_BROWSER`:
+
+```js
+const engine = createEngine({ workDir, cacheDir, env: { LAUNCHCLIP_REMOTION_BROWSER: '/opt/chrome/chrome-headless-shell' } });
+```
+
 ## State and folders
 
 - **Projects.** Projects live under `workDir`. Each keeps its own working

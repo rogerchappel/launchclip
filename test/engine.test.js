@@ -108,6 +108,21 @@ test("without an llm adapter the default needs a model route in the engine's env
   assert.equal(typeof createEngine({ workDir, cacheDir, env: { LAUNCHCLIP_PLANNER_MODEL: "openai:gpt-5.6-luna", OPENAI_API_KEY: "test" } }).adapters.llm().runStructured, "function");
 });
 
+test("the default Remotion renderer takes its Chrome from the engine's env, not process.env", async (t) => {
+  const { workDir, cacheDir } = await folders(t);
+  const saved = process.env.LAUNCHCLIP_REMOTION_BROWSER;
+  process.env.LAUNCHCLIP_REMOTION_BROWSER = "/app/own/chrome";
+  t.after(() => { if (saved === undefined) delete process.env.LAUNCHCLIP_REMOTION_BROWSER; else process.env.LAUNCHCLIP_REMOTION_BROWSER = saved; });
+  const prepared = { entry: "/p/remotion/entry.tsx", propsFile: "/p/props.json", project: "/p", format: { fps: 30 } };
+  const browserOf = (args) => args.includes("--browser-executable") ? args[args.indexOf("--browser-executable") + 1] : null;
+  const isolated = createEngine({ workDir, cacheDir }).adapters.renderer("remotion");
+  assert.equal(browserOf(isolated.renderArgs(prepared, "/p/out.mp4")), null);
+  const chosen = createEngine({ workDir, cacheDir, env: { LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome/chrome-headless-shell" } }).adapters.renderer("remotion");
+  assert.equal(browserOf(chosen.renderArgs(prepared, "/p/out.mp4")), "/opt/chrome/chrome-headless-shell");
+  assert.equal(browserOf(chosen.stillArgs(prepared, 1, "/p/s.png")), "/opt/chrome/chrome-headless-shell");
+  assert.equal(createEngine({ workDir, cacheDir }).adapters.renderer("hyperframes").name, "hyperframes");
+});
+
 test("finish and recording adapters route narration, music and transcription to the app", async () => {
   const tts = { name: "app-voice", async synthesize() { return { file: "voice.wav" }; } };
   const music = { name: "app-music", paid: true, request: () => ({}), cacheStatus: async () => ({ cached: false }), generate: async () => ({ file: "bed.wav", cached: false }) };

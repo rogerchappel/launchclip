@@ -328,6 +328,8 @@ test("LAUNCHCLIP_REMOTION_BROWSER picks the Chrome that Remotion renders with", 
     process.env.LAUNCHCLIP_REMOTION_BROWSER = "/opt/chrome/chrome-headless-shell";
     const args = remotion.renderArgs(prepared, "/p/out.mp4");
     assert.equal(args[args.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
+    const still = remotionStillArgs({ serveUrl: "/b", propsFile: "/p/props.json", project: "/p", frame: 3, output: "/p/s.png" });
+    assert.equal(still[still.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
   } finally {
     if (previous === undefined) delete process.env.LAUNCHCLIP_REMOTION_BROWSER; else process.env.LAUNCHCLIP_REMOTION_BROWSER = previous;
   }
