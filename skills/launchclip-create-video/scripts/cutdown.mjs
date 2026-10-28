@@ -40,7 +40,7 @@ import { parseAnchor, resolveAnchor, storyBase, storySections } from './story.mj
 
 export const CUTDOWN_SCHEMA = 'launchclip.cutdown.v1';
 export const CUTDOWN_TARGETS = Object.freeze({
-  shorts: Object.freeze({ width: 1080, height: 1920, platform: 'youtube-shorts', profile: 'short-talking-head', max: 58, min: 15 })
+  shorts: Object.freeze({ width: 1080, height: 1920, platform: 'youtube-shorts', profile: 'short-talking-head', motionProfile: 'short-motion', max: 58, min: 15 })
 });
 // Intents a Short can open on.
 const HOOK_INTENTS = new Set(['hook', 'problem', 'number', 'claim', 'turn', 'quote', 'proof']);
@@ -81,7 +81,74 @@ export function chooseCutWindow(map, words, { section = null, max = CUTDOWN_TARG
   }
   if (!best) throw new Error(`no run of lines between ${min} and ${max} s${section ? ` in section "${section}"` : ''} to cut a Short from`);
   const { score, ...window } = best;
-  return window;
+  return { ...window, segments: [{ start: window.start, end: window.end, words: window.words }] };
+}
+
+/**
+ * The narration a Short tells, picked by hand: lines (1-based across the
+ * map's sections, "23-28" or "64,71-74,78") or seconds of the long form
+ * ("120-150,212.5-230"), the ranges snapped to the whole words inside them.
+ * Lines next to each other join into one segment; a Short of several
+ * segments is spliced from them, in order.
+ * → {section, title, start, end, words, lines, segments: [{start, end, words: [first, last]}]}
+ */
+export function pickCutWindow(map, words, { lines = null, range = null } = {}) {
+  const list = narrationWords(words);
+  const all = (map?.sections ?? []).flatMap((entry) => (entry.lines ?? []).map((line) => ({ ...line, section: entry })));
+  const usable = (line) => Array.isArray(line?.words) && list[line.words[0]] && list[line.words[1]];
+  let picked;
+  if (lines !== null && lines !== undefined) {
+    const numbers = spanList(lines, 'lines', { integers: true });
+    picked = numbers.map((n) => {
+      if (!(n >= 1 && n <= all.length)) throw new Error(`--lines ${n} is not a line of the direction map (1–${all.length})`);
+      if (!usable(all[n - 1])) throw new Error(`--lines ${n} has no words in the narration`);
+      return { ...all[n - 1], n };
+    });
+  } else if (range !== null && range !== undefined) {
+    const spans = spanList(range, 'range');
+    const inside = list.map((word, index) => ({ word, index })).filter(({ word }) => spans.some(([a, b]) => word.start >= a - 1e-6 && word.end <= b + 1e-6));
+    if (!inside.length) throw new Error(`--range ${range} holds no narration words`);
+    // Each run of consecutive words is a line of its own, its intent from the map line it falls in.
+    picked = [];
+    for (const { index } of inside) {
+      const last = picked.at(-1);
+      const owner = all.find((line) => usable(line) && line.words[0] <= index && line.words[1] >= index);
+      if (last && last.words[1] === index - 1 && last.owner === owner) last.words = [last.words[0], index];
+      else picked.push({ words: [index, index], intent: owner?.intent, section: owner?.section ?? map?.sections?.[0] ?? {}, owner, n: owner ? all.indexOf(owner) + 1 : null });
+    }
+  } else throw new Error('pickCutWindow needs lines or range');
+  picked.sort((a, b) => a.words[0] - b.words[0]);
+  const own = picked.map((line) => ({ words: line.words, intent: line.intent, start: list[line.words[0]].start, end: list[line.words[1]].end }));
+  const segments = [];
+  for (const line of own) {
+    const last = segments.at(-1);
+    if (last && line.words[0] <= last.words[1] + 1) { last.words = [last.words[0], Math.max(last.words[1], line.words[1])]; last.end = list[last.words[1]].end; }
+    else segments.push({ start: line.start, end: line.end, words: [...line.words] });
+  }
+  const section = picked[0].section ?? {};
+  return { section: section.id ?? 's1', title: section.title ?? null, start: segments[0].start, end: segments.at(-1).end, words: [segments[0].words[0], segments.at(-1).words[1]], lines: own, segments };
+}
+
+// "23-28" or "64,71-74,78" (or an array of numbers) → numbers; with integers
+// false, "12.5-40,60-71" → [[12.5, 40], [60, 71]].
+function spanList(value, flag, { integers = false } = {}) {
+  const parts = Array.isArray(value) ? value.map(String) : String(value).split(',');
+  const out = [];
+  for (const part of parts.map((entry) => entry.trim()).filter(Boolean)) {
+    const match = part.match(/^(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?$/);
+    if (!match) throw new Error(`--${flag} takes ${integers ? 'line numbers like 23-28 or 64,71-74,78' : 'seconds like 120-150 or 120-150,212.5-230'}; got "${part}"`);
+    const a = Number(match[1]), b = match[2] === undefined ? a : Number(match[2]);
+    if (b < a) throw new Error(`--${flag} ${part} runs backwards`);
+    if (integers) {
+      if (!Number.isInteger(a) || !Number.isInteger(b)) throw new Error(`--${flag} takes whole line numbers; got "${part}"`);
+      for (let n = a; n <= b; n += 1) if (!out.includes(n)) out.push(n);
+    } else {
+      if (match[2] === undefined) throw new Error(`--${flag} takes start-end seconds; got "${part}"`);
+      out.push([a, b]);
+    }
+  }
+  if (!out.length) throw new Error(`--${flag} is empty`);
+  return out;
 }
 
 /** The base's kept source ranges inside [start, end] of the long form's timeline, back to back from 0. */
@@ -247,10 +314,16 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
   }
   cut.scenes.sort((x, y) => Number(sceneTime(x.start, local)) - Number(sceneTime(y.start, local)));
 
-  // The map: the window's lines with their intents, the first a hook,
-  // treatments read from what the Short now shows.
-  const draft = draftDirectionMap(withNumbers(cut, local), local, { profile: profile?.id ?? target.profile, sectionSeconds: Infinity });
-  const intents = new Map(lines.map((line) => [`${line.words[0] - window.words[0]},${line.words[1] - window.words[0]}`, line.intent]));
+  const draft = shortMap(cut, local, window, lines.map((line) => ({ ...line, words: line.words.map((index) => index - window.words[0]) })), profile?.id ?? target.profile);
+  return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, warnings };
+}
+
+// The Short's map: the window's lines with their intents (word indexes on the
+// Short's narration), the first a hook, treatments read from what the Short
+// now shows.
+function shortMap(cut, local, window, lines, profile) {
+  const draft = draftDirectionMap(withNumbers(cut, local), local, { profile, sectionSeconds: Infinity });
+  const intents = new Map(lines.map((line) => [line.words.join(','), line.intent]));
   for (const line of draft.sections[0]?.lines ?? []) {
     const intent = intents.get(line.words.join(','));
     if (intent) line.intent = intent;
@@ -260,7 +333,207 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
     draft.sections[0].id = slug(window.section) || 's1';
     if (window.title) draft.sections[0].title = window.title;
   }
-  return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, warnings };
+  return draft;
+}
+
+// Below this a carried shot is a flash, not a shot.
+const MOTION_KEEP_SECONDS = 0.8;
+// The image a Short opens on when its first shot is a title card, held this long.
+const OPENING_SECONDS = 1.5;
+// A title card that keeps less than this after the opening image leaves.
+const CARD_KEEP_SECONDS = 1;
+// Optional text a carried shot drops before it leaves a 9:16 Short, first to last.
+const SHED_PARAMS = ['source', 'title', 'sub', 'eyebrow'];
+
+/**
+ * A Short from a voiceover-motion story: the window's narration (one or more
+ * segments of the long form, spliced back to back), its words, shots, beats
+ * (hits) and state changes re-timed onto the Short's clock, laid out again by
+ * each module at 9:16. The shots butt-join so every second is drawn, the
+ * first frame is an image (a title card that opened the window follows it)
+ * and the ending loops back to it. Chapter structure (section cards, the
+ * promise, the progress line) stays behind.
+ * → {story, map, words, segments: [{start, end, offset}] (the long form's
+ *   seconds each piece of narration comes from), hook, carried, added, warnings}
+ */
+export function cutdownMotionStory(resolved, { story = resolved, words, window, profile = null, target = CUTDOWN_TARGETS.shorts } = {}) {
+  const warnings = [];
+  const fps = Number(resolved.format?.fps ?? 30);
+  const segments = [];
+  let clock = 0;
+  for (const segment of window.segments ?? [window]) {
+    const { start, end } = paddedWindow(segment, words, fps);
+    segments.push({ start, end, offset: round(clock, 6), words: segment.words });
+    clock += end - start;
+  }
+  const duration = round(clock);
+  const local = segments.flatMap((segment) => cutWords(words, segment.start, segment.end).map((word) => ({ ...word, start: round(word.start + segment.offset), end: round(word.end + segment.offset) })));
+  const raw = new Map((story?.scenes ?? []).map((scene) => [scene?.id, scene]));
+
+  // Every piece of a shot inside a segment, on the Short's clock; pieces of one shot that meet are one.
+  const pieces = [];
+  for (const scene of resolved.scenes ?? []) {
+    const a = Number(scene.start), b = Number(scene.end);
+    if (scene.id === PROMISE_ID || scene.module === 'section-card') continue;
+    const source = raw.get(scene.id) ?? scene;
+    for (const segment of segments) {
+      const from = Math.max(a, segment.start), to = Math.min(b, segment.end);
+      if (to - from < MOTION_KEEP_SECONDS - 1e-6) continue;
+      const shift = segment.start - segment.offset;
+      const at = (written, seconds) => mapTime(written, seconds, shift, local);
+      const copy = JSON.parse(JSON.stringify(source));
+      copy.start = from === a ? at(source.start, a) : round(from - shift);
+      copy.end = to === b ? at(source.end, b) : round(to - shift);
+      for (const key of ['hits', 'states']) {
+        if (!Array.isArray(scene[key])) continue;
+        copy[key] = scene[key].map((entry, i) => ({ entry, written: source[key]?.[i] ?? entry })).filter(({ entry }) => finite(Number(entry.at)) && entry.at >= from - 1e-6 && entry.at <= to + 1e-6)
+          .map(({ entry, written }) => ({ ...written, at: at(written.at, Number(entry.at)) }));
+        if (!copy[key].length) delete copy[key];
+      }
+      const last = pieces.at(-1);
+      if (last?.source === scene.id && Math.abs(sceneTime(last.scene.end, local) - sceneTime(copy.start, local)) < 1e-3) {
+        last.scene.end = copy.end;
+        for (const key of ['hits', 'states']) if (copy[key]) last.scene[key] = [...(last.scene[key] ?? []), ...copy[key]];
+        continue;
+      }
+      const repeat = pieces.filter((piece) => piece.source === scene.id).length;
+      if (repeat) copy.id = `${scene.id}-${repeat + 1}`;
+      pieces.push({ source: scene.id, scene: copy });
+    }
+  }
+  const carried = [...new Set(pieces.map((piece) => piece.source))];
+
+  const audio = { ...(isObject(story.audio) ? story.audio : {}), voice: CUTDOWN_VOICE, words: 'NARRATION.json' };
+  for (const key of ['mix', 'narration']) delete audio[key];
+  const frame = isObject(story.frame) ? { ...story.frame } : story.frame;
+  if (isObject(frame)) { delete frame.progress; delete frame.labels; }
+  const cut = {
+    schema: story.schema,
+    title: fitText(`${story.title ?? 'Short'}${window.title ? `: ${window.title}` : ''}`, 80),
+    lane: resolved.lane,
+    format: { width: target.width, height: target.height, fps, duration, platform: target.platform },
+    ...(story.style !== undefined ? { style: story.style } : {}),
+    brand: story.brand,
+    audio,
+    scenes: pieces.map((piece) => piece.scene),
+    ...(frame !== undefined ? { frame } : {}),
+    overlays: (Array.isArray(story.overlays) ? story.overlays.filter((overlay) => overlay?.start === undefined && overlay?.end === undefined) : [])
+  };
+  if (!cut.overlays.some((overlay) => overlay?.type === 'captions')) cut.overlays.push({ type: 'captions' });
+  for (const key of ['motion', 'camera', 'ambient', 'cast']) if (story[key] !== undefined) cut[key] = JSON.parse(JSON.stringify(story[key]));
+
+  // The shots the 9:16 canvas cannot take (a module's own limits, a length it
+  // no longer has) leave, and the rest butt-join again, until all resolve.
+  const added = [];
+  let opening = null;
+  for (let pass = 0; pass < 12; pass += 1) {
+    opening = openOnImage(cut, local, opening, added, warnings);
+    chainShots(cut, local, duration);
+    const numbered = withNumbers(cut, local);
+    const failed = [];
+    let shed = false;
+    for (const scene of numbered.scenes) {
+      if (scene.module === 'custom') continue;
+      try { resolveModule(scene, numbered); }
+      catch (error) {
+        const why = String(error?.message ?? error).split('\n')[0];
+        // A shot that only misses on its optional text sheds it (the line the error names, else the source, then the title).
+        const own = cut.scenes.find((entry) => entry.id === scene.id);
+        const named = SHED_PARAMS.find((key) => new RegExp(`params\\.${key}\\b`).test(why));
+        const key = named && own.params?.[named] !== undefined ? named : SHED_PARAMS.slice(0, 2).find((entry) => own.params?.[entry] !== undefined);
+        if (key) { delete own.params[key]; warnings.push(`${scene.id}: params.${key} dropped to fit 9:16 (${why})`); shed = true; }
+        else failed.push({ id: scene.id, why });
+      }
+    }
+    if (!failed.length && !shed) break;
+    for (const { id, why } of failed) {
+      warnings.push(`${id} left out: ${why}`);
+      cut.scenes = cut.scenes.filter((entry) => entry.id !== id);
+      const index = carried.indexOf(id);
+      if (index >= 0) carried.splice(index, 1);
+      if (id === opening?.id) { opening = null; added.splice(added.indexOf(id), 1); }
+    }
+  }
+  chainShots(cut, local, duration);
+  if (!shots(cut).length) throw new Error('none of the window\'s shots fits a 9:16 canvas; pick other lines');
+  cut.scenes.sort((x, y) => sceneTime(x.start, local) - sceneTime(y.start, local) || (x.track ?? 0) - (y.track ?? 0));
+  const first = shots(cut)[0];
+  cut.ending = { loop_to: first.id };
+
+  const lines = window.lines.map((line) => ({ ...line, words: line.words.map((index) => localIndex(segments, index)) })).filter((line) => line.words.every((index) => index !== null));
+  const hookLine = lines[0];
+  const hookText = local.slice(hookLine.words[0], hookLine.words[1] + 1).map((word) => word.text).join(' ');
+  const draft = shortMap(cut, local, window, lines, profile?.id ?? target.motionProfile);
+  return { story: cut, map: draft, words: local, segments: segments.map(({ start, end, offset }) => ({ start, end, offset })), hook: { id: first.id, text: hookText, line: hookLine.words }, carried, added, warnings };
+}
+
+/** Where a Short's narration is written, in its own project. */
+export const CUTDOWN_VOICE = 'assets/audio/narration.wav';
+
+// A long-form word index → its index in the Short's narration, or null.
+function localIndex(segments, index) {
+  let before = 0;
+  for (const segment of segments) {
+    const [a, b] = segment.words;
+    if (index >= a && index <= b) return before + index - a;
+    before += b - a + 1;
+  }
+  return null;
+}
+
+// The full-frame shots (track 0), in order.
+function shots(story) {
+  return story.scenes.filter((scene) => (scene.track ?? 0) === 0);
+}
+
+// Each shot runs to the next one's start, the first from 0, the last to the
+// end; a transition longer than its shot is dropped.
+function chainShots(story, words, duration) {
+  const list = shots(story).sort((x, y) => sceneTime(x.start, words) - sceneTime(y.start, words));
+  list.forEach((scene, i) => {
+    if (i === 0) scene.start = 0;
+    scene.end = i + 1 < list.length ? list[i + 1].start : duration;
+    const length = sceneTime(scene.end, words) - sceneTime(scene.start, words);
+    if (isObject(scene.in) && !(scene.in.dur < length)) delete scene.in;
+    if (i === 0) delete scene.in;
+  });
+}
+
+// The first frame is an image (the structure gate's first_frame): when the
+// first shot is a title card, one of the window's images opens the Short for
+// the shortest hold its module takes (from OPENING_SECONDS) and the card
+// follows. → the opening scene, or false when none fits (so it is not tried again).
+function openOnImage(story, words, opening, added, warnings) {
+  if (opening !== null) return opening;
+  const list = shots(story).sort((x, y) => sceneTime(x.start, words) - sceneTime(y.start, words));
+  const card = list[0];
+  if (!card || !TITLE_CARD_MODULES.includes(card.module)) return null;
+  const images = list.filter((scene) => !TITLE_CARD_MODULES.includes(scene.module)).slice(0, 3);
+  if (!images.length) { warnings.push('every shot in the window is a title card, so the Short opens on one'); return false; }
+  const until = sceneTime(card.end, words);
+  for (const image of images) {
+    for (const hold of [OPENING_SECONDS, 2, 2.5, 3].map((value) => round(Math.min(value, until)))) {
+      const { hits, states, in: transition, ...rest } = JSON.parse(JSON.stringify(image));
+      const scene = { ...rest, id: 'opening', start: 0, end: hold };
+      const keepCard = until - hold >= CARD_KEEP_SECONDS;
+      const others = story.scenes.filter((entry) => entry !== card).map((entry) => ({ ...entry, start: sceneTime(entry.start, words), end: sceneTime(entry.end, words) }));
+      const trial = { ...withNumbers(story, words), scenes: [...others, ...(keepCard ? [{ ...card, start: hold, end: until }] : []), scene] };
+      try {
+        resolveModule(scene, trial);
+        if (keepCard) resolveModule({ ...card, start: hold, end: until }, trial);
+      } catch { continue; }
+      if (keepCard) card.start = hold;
+      else {
+        warnings.push(`${card.id} left out: the opening image (${image.id}) holds its ${round(until)} s`);
+        story.scenes = story.scenes.filter((entry) => entry.id !== card.id);
+      }
+      story.scenes.push(scene);
+      added.push(scene.id);
+      return scene;
+    }
+  }
+  warnings.push(`no image in the window fits the opening before ${card.id}, so the Short opens on a title card`);
+  return false;
 }
 
 // The window padded to breathe: a beat before the first word, a little after

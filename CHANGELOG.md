@@ -86,6 +86,15 @@
   style pack, so a style can keep its accent for something else. It is used
   when it reads at 3:1 on the background; otherwise the ring keeps the
   accent, as before.
+- `launchclip cutdown` cuts voiceover-motion videos too. It splices the
+  Short's narration from the long form's voice, moves the shots, beats,
+  states and captions onto the Short's clock, lets each module lay itself out
+  again at 9:16 (dropping a source line or title that no longer fits before
+  dropping a shot), and opens on an image rather than a title card, so the
+  structure gate's first-frame check passes. `--lines 23-28` or
+  `--lines 64,71-74,78` (direction-map lines) and `--range 120-150` (seconds)
+  pick the narration by hand, several stretches at once.
+
 ### Fixed
 
 - `waterfall` draws a step's + or − half as large again. Condensed display
