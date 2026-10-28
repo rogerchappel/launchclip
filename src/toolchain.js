@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { hyperframesEnv } from "./renderers/hyperframes_env.js";
 
 const require = createRequire(import.meta.url);
 const HYPERFRAMES_CLI = require.resolve("hyperframes/dist/cli.js");
@@ -14,7 +15,7 @@ export function hyperframesInvocation(args = []) {
 
 export function runHyperframes(run, args = [], options = {}) {
   const invocation = hyperframesInvocation(args);
-  return run(invocation.command, invocation.args, options);
+  return run(invocation.command, invocation.args, { env: hyperframesEnv(), ...options });
 }
 
 export function hyperframesToolInfo() {
