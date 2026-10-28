@@ -3,25 +3,24 @@ import os from "node:os";
 import path from "node:path";
 import { hyperframesInvocation } from "../toolchain.js";
 import { adapterError, captureCommand, runCommand, structuredOk } from "./command.js";
+import { HYPERFRAMES_FFMPEG_TIMEOUT_MS, hyperframesEnv } from "./hyperframes_env.js";
 
 // HyperFrames renderer adapter (docs/KIT_CONTRACTS.md "Renderer adapter").
 // It wraps the same CLI invocations used by production_render.js,
 // temporal_evidence.js and cinematic_check.js.
-// HyperFrames kills an ffmpeg frame extraction after FFMPEG_PROCESS_TIMEOUT_MS
-// (5 minutes by default) and then renders that video as black, with no error.
-// A long 4K recording takes longer than that to decode, so renders give it
-// 30 minutes unless the caller set the variable.
-export const HYPERFRAMES_FFMPEG_TIMEOUT_MS = 30 * 60 * 1000;
+// Every call runs with LaunchClip's HyperFrames timeouts (hyperframes_env.js):
+// 30 minutes for ffmpeg frame extraction, 3 minutes for a snapshot's page load.
+export { HYPERFRAMES_FFMPEG_TIMEOUT_MS };
 
 export function hyperframesRenderEnv(env = process.env) {
-  return env.FFMPEG_PROCESS_TIMEOUT_MS ? env : { ...env, FFMPEG_PROCESS_TIMEOUT_MS: String(HYPERFRAMES_FFMPEG_TIMEOUT_MS) };
+  return hyperframesEnv(env);
 }
 
 export function createHyperframesRenderer(defaults = {}) {
   const runner = (opts) => opts.run ?? defaults.run ?? runCommand;
   const hf = (run, args, options) => {
     const invocation = hyperframesInvocation(args);
-    return captureCommand(run, invocation.command, invocation.args, options);
+    return captureCommand(run, invocation.command, invocation.args, { env: hyperframesEnv(), ...options });
   };
 
   return {

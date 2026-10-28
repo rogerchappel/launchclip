@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildTemporalEvidenceSchedule, parseDeclaredSequenceBoundaries } from '../cinematic_evidence.js';
+import { hyperframesEnv } from '../renderers/hyperframes_env.js';
 import { remotionRoot } from '../renderers/remotion_segments.js';
 
 const HYPERFRAMES_VERSION = '0.7.58';
@@ -33,10 +34,11 @@ const hasExactFile = (dir, name) => existsSync(dir) && readdirSync(dir).includes
 let COMMANDS = {};
 
 function hyperframes(args) {
-  if (COMMANDS.hyperframes) return execFileSync(COMMANDS.hyperframes[0], [...COMMANDS.hyperframes.slice(1), ...args], { stdio: 'ignore' });
+  const options = { stdio: 'ignore', env: hyperframesEnv() };
+  if (COMMANDS.hyperframes) return execFileSync(COMMANDS.hyperframes[0], [...COMMANDS.hyperframes.slice(1), ...args], options);
   const bin = process.env.HYPERFRAMES_BIN;
-  if (bin) return execFileSync(bin, args, { stdio: 'ignore' });
-  return execFileSync('npx', ['--yes', `hyperframes@${HYPERFRAMES_VERSION}`, ...args], { stdio: 'ignore' });
+  if (bin) return execFileSync(bin, args, options);
+  return execFileSync('npx', ['--yes', `hyperframes@${HYPERFRAMES_VERSION}`, ...args], options);
 }
 
 // options: execFileSync options, e.g. {cwd} for a bundle.

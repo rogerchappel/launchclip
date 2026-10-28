@@ -102,6 +102,11 @@
 
 ### Fixed
 
+- HyperFrames snapshots, evidence and gates work on long compositions. A
+  page load had HyperFrames' 10 s navigation timeout, which an 8.5-minute
+  explainer exceeds, so evidence failed although the render worked. Every
+  HyperFrames call LaunchClip makes now sets
+  `PRODUCER_PAGE_NAVIGATION_TIMEOUT_MS` to 3 minutes unless you set it.
 - `waterfall` draws a step's + or − half as large again. Condensed display
   faces like Anton draw them short and thin, and in a draft render of AI
   Rider's first episode a +0.5¢ step read as −0.5¢.
