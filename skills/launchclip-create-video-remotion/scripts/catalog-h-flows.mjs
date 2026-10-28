@@ -153,7 +153,9 @@ function waterfallResolve(params, ctx) {
   } catch { layout = 'horizontal'; }
   let bars, baseline;
   if (layout === 'vertical') {
-    const top = r2(tb.top + valueSize * 1.25 + u(8)), bottom = r2(rect.height - tb.bottom - labelSize * 2.4 - u(18));
+    // A bar that ends below where it starts carries its value under it: room for that above the labels.
+    const below = cols.some(c => c.to < c.from) ? valueSize * 1.25 + u(8) : 0;
+    const top = r2(tb.top + valueSize * 1.25 + u(8)), bottom = r2(rect.height - tb.bottom - labelSize * 2.4 - u(18) - below);
     if (bottom - top < u(240)) check.fail('params', 'leaves too little height for the columns; drop the title or enlarge rect');
     const Y = v => r2(top + (bottom - top) * (1 - (v - lo) / (hi - lo)));
     const barW = r2(Math.min(slot * 0.66, u(150)));
@@ -162,7 +164,7 @@ function waterfallResolve(params, ctx) {
       const y1 = Y(Math.max(c.from, c.to)), y2 = Y(Math.min(c.from, c.to));
       const grows = c.to >= c.from ? 'up' : 'down';
       return {label: c.label, text: c.text, kind: c.kind, color: colors[c.kind], x: r2(slot * i + (slot - barW) / 2), y: y1, width: barW, height: r2(Math.max(u(4), y2 - y1)), origin: grows === 'up' ? '50% 100%' : '50% 0%', time: starts[i],
-        labelBox: {x: r2(slot * i + u(4)), y: r2(bottom + u(14)), width: r2(slot - u(8)), align: 'center'}, value: {x: r2(slot * i), y: r2(grows === 'up' || c.kind === 'total' ? y1 - valueSize * 1.2 - u(4) : y2 + u(6)), width: r2(slot), align: 'center'},
+        labelBox: {x: r2(slot * i + u(4)), y: r2(bottom + below + u(14)), width: r2(slot - u(8)), align: 'center'}, value: {x: r2(slot * i), y: r2(grows === 'up' ? y1 - valueSize * 1.2 - u(4) : y2 + u(6)), width: r2(slot), align: 'center'},
         connector: i < n - 1 ? {x: r2(slot * i + (slot + barW) / 2), y: Y(c.to), width: r2(slot - barW), height: r2(2 * u(1))} : null};
     });
   } else {
@@ -201,10 +203,19 @@ function waterfallView(model) {
       transformOrigin: C.vertical ? '50% 0%' : '0% 50%', transform: transformString(C.vertical ? {scaleY: 0} : {scaleX: 0})})));
     kids.push(el('div', `${id}-bar-${i}`, {...abs(bar.x, bar.y, bar.width, bar.height), borderRadius: r2(c.variant === 'floating' ? 14 * u : 6 * u), background: bar.color,
       ...(c.variant === 'floating' && bar.kind !== 'total' ? {boxShadow: `0 ${r2(14 * u)}px ${r2(30 * u)}px #00000080`} : {}), transformOrigin: bar.origin, transform: transformString(bar.horizontal ? {scaleX: 0} : {scaleY: 0})}));
-    kids.push(label(`${id}-value-${i}`, bar.value.x, bar.value.y, bar.value.width, bar.text, {size: c.valueSize, family: fonts.display, color: bar.kind === 'total' ? c.ink : bar.color, align: bar.value.align, extra: {opacity: 0}}));
+    kids.push(signedLabel(label(`${id}-value-${i}`, bar.value.x, bar.value.y, bar.value.width, bar.text, {size: c.valueSize, family: fonts.display, color: bar.kind === 'total' ? c.ink : bar.color, align: bar.value.align, extra: {opacity: 0}}), c.valueSize));
     kids.push(label(`${id}-label-${i}`, bar.labelBox.x, bar.labelBox.y, bar.labelBox.width, bar.label, {size: c.labelSize, family: fonts.body, color: c.muted, align: bar.labelBox.align, weight: 600, wrap: !bar.horizontal, extra: {opacity: 0}}));
   });
   return kids;
+}
+
+// A step's sign drawn half as large again: condensed display faces (Anton)
+// draw + and − short and thin, and at a draft render's size a + read as −.
+function signedLabel(node, size) {
+  const [value] = node.children;
+  if (typeof value !== 'string' || !/^[+−]/.test(value)) return node;
+  const sign = el('span', null, {display: 'inline-block', transform: 'scale(1.5)', marginRight: r2(size * 0.12)}, [value[0]]);
+  return {...node, children: [sign, value.slice(1)]};
 }
 
 function waterfallTimeline(model, ops) {

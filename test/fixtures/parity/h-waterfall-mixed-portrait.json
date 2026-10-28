@@ -1,0 +1,69 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-waterfall-mixed-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "waterfall",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "title": "Margin per job",
+          "opening": {
+            "label": "Price",
+            "value": 0.4
+          },
+          "steps": [
+            {
+              "label": "Tokens",
+              "delta": -0.9
+            },
+            {
+              "label": "Cache",
+              "delta": 0.3
+            },
+            {
+              "label": "Retries",
+              "delta": -0.1
+            }
+          ],
+          "total": "Net",
+          "format": {
+            "style": "currency",
+            "currency": "USD",
+            "decimals": 2
+          },
+          "variant": "bridge"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
