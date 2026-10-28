@@ -1,0 +1,140 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Evidence through the world camera (golden, 16:9)",
+  "notes": "Renderer-eval golden story for an evidence clip on a world plate: the camera pushes into the clip, zooms inside the shot, pulls out to the next shot, then an overview pulls back over the chapter with the clip held on its last frame. The clip (assets/evidence-static.mp4) is the parity fixtures' static BT.709 testsrc frame, written in by the parity test. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 22
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d12",
+      "primary": "#5b4dff",
+      "accent": "#22c3ee",
+      "paper": "#f4efe6",
+      "ink": "#0b0d12"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "editorial"
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "chapters": [
+    {
+      "id": "c1",
+      "title": "The receipts",
+      "start": 0
+    },
+    {
+      "id": "c2",
+      "title": "So what",
+      "start": 15
+    }
+  ],
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 3,
+      "energy": 1,
+      "params": {
+        "headline": "The fix shipped on Oct 16",
+        "emphasis": "Oct 16"
+      }
+    },
+    {
+      "id": "s2",
+      "module": "evidence-clip",
+      "start": 3,
+      "end": 10,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 1
+      },
+      "zooms": [
+        {
+          "at": 5.5,
+          "box": {
+            "x": 560,
+            "y": 300,
+            "width": 800,
+            "height": 450
+          },
+          "scale": 1.5,
+          "until": 8
+        }
+      ],
+      "params": {
+        "media": {
+          "src": "assets/evidence-static.mp4"
+        },
+        "viewport": {
+          "width": 1600,
+          "height": 1000
+        },
+        "source": {
+          "publisher": "GitHub · dotnet/efcore",
+          "date": "Oct 16, 2026"
+        },
+        "cursor": [
+          {
+            "at": 4.5,
+            "x": 1100,
+            "y": 300
+          },
+          {
+            "at": 5.2,
+            "x": 700,
+            "y": 460,
+            "click": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "module": "count-up",
+      "start": 10,
+      "end": 15,
+      "energy": 2,
+      "in": {
+        "type": "pull",
+        "dur": 0.8
+      },
+      "params": {
+        "value": 38,
+        "suffix": "%",
+        "label": "Faster queries"
+      }
+    },
+    {
+      "id": "s4",
+      "module": "cta",
+      "start": 15,
+      "end": 22,
+      "energy": 3,
+      "in": {
+        "type": "overview",
+        "dur": 2.8,
+        "span": "chapter",
+        "hold": 0.6
+      },
+      "params": {
+        "action": "Read the PR",
+        "emphasis": "PR"
+      }
+    }
+  ]
+}
