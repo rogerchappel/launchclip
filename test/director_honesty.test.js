@@ -3,8 +3,8 @@
 // reaches the screen as fact, and a quote is a verified source's own words.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { directLongForm, extractFacts, gateEvidence, isQuotable, matchEvidence } from "../kit/core/beat-director.mjs";
-import { capabilityParams } from "../kit/core/visual-capabilities.mjs";
+import { directLongForm, extractFacts, gateEvidence, isQuotable, matchEvidence } from "@launchclip/core/beat-director.mjs";
+import { capabilityParams } from "@launchclip/core/visual-capabilities.mjs";
 
 const source = (url, title, quote) => ({ url, title, primary: true, confidence: 0.9, supports: true, fetched_at: "2026-10-27T00:00:00Z", ...(quote ? { quote: { text: quote } } : {}) });
 const LEDGER = {
@@ -71,8 +71,8 @@ test("honesty: on a real script's clauses, reported figures are attributed claim
   assert.notEqual(at("not found").module, "quote-card");
 });
 
-import { GENERIC_MODULES, beatMapToStory, verbatimHeadline } from "../kit/core/beat-director.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { GENERIC_MODULES, beatMapToStory, verbatimHeadline } from "@launchclip/core/beat-director.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 
 test("honesty: a generic card says a line the narration says, never its stripped key words", () => {
   // The clauses behind "Surface routine updated", "Mid October Microsoft", "Showed commit GitHub", "Model tested real", "Numbers" vs "Anything".
@@ -121,7 +121,7 @@ test("honesty: a focus step carries the card on as one of its shot states", () =
   assert.doesNotThrow(() => resolveModule(story.scenes[0], { ...story, resolved: { duration: 12, fps: 30 } }));
 });
 
-import { pairSeries } from "../kit/core/beat-director.mjs";
+import { pairSeries } from "@launchclip/core/beat-director.mjs";
 
 const clauses = (texts) => texts.map((text, i) => ({ text, start: i * 5, end: i * 5 + 5, kind: "concept", headline: "x", facts: extractFacts(text) }));
 

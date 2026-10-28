@@ -2,8 +2,8 @@
 // props and time that fit them, for art direction.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {WORLD_KINDS, PROP_IDS, TOPIC_FIT, suggestWorld} from '../kit/core/worlds/index.mjs';
-import {planningPrompt} from '../kit/core/planning-prompt.mjs';
+import {WORLD_KINDS, PROP_IDS, TOPIC_FIT, suggestWorld} from '@launchclip/core/worlds/index.mjs';
+import {planningPrompt} from '@launchclip/core/planning-prompt.mjs';
 
 test('topic fit: suggestWorld maps prompts to fitting worlds, props and time', () => {
   const fit = prompt => suggestWorld(prompt);

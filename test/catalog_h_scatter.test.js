@@ -4,8 +4,8 @@
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-import {MODULES, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 

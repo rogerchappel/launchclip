@@ -21,8 +21,8 @@
 // Pure: the runner (eval/formats.mjs) renders and runs ffmpeg; this file only
 // reads what they produce.
 
-import { CADENCE_BENCHMARK, cadenceGate, cadenceTarget, distribution, eventStats, mergeEvents, unionIntervals } from '../kit/core/cadence.mjs';
-import { isClaim } from '../kit/core/beat-director.mjs';
+import { CADENCE_BENCHMARK, cadenceGate, cadenceTarget, distribution, eventStats, mergeEvents, unionIntervals } from '@launchclip/core/cadence.mjs';
+import { isClaim } from '@launchclip/core/beat-director.mjs';
 
 export const SCORECARD_SCHEMA = 'launchclip.format-scorecard.v1';
 export const SCENE_THRESHOLDS = Object.freeze([0.04, 0.08, 0.15]);

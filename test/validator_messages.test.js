@@ -1,9 +1,9 @@
 // Validator messages the blind test hit: each must say what to change.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveEditorialModule } from "../kit/core/editorial-core.mjs";
-import { MODULES as CATALOG_A } from "../kit/core/catalog-a.mjs";
-import { MODULES as CATALOG_B } from "../kit/core/catalog-b.mjs";
+import { resolveEditorialModule } from "@launchclip/core/editorial-core.mjs";
+import { MODULES as CATALOG_A } from "@launchclip/core/catalog-a.mjs";
+import { MODULES as CATALOG_B } from "@launchclip/core/catalog-b.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };
 const PORTRAIT = { width: 1080, height: 1920, fps: 30, duration: 30 };

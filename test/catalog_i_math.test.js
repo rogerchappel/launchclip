@@ -2,8 +2,8 @@
 // and diff; title-decompose chips and glossary; feynman-diagram lines.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {typesetLatex} from '../src/math/typeset.js';
 import {SAMPLES} from '../scripts/element-samples.mjs';

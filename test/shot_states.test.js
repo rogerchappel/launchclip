@@ -3,14 +3,14 @@
 // shared view tree and op list.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveStory, validateStory} from '../kit/core/story.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {catalogBTimeline, catalogBView} from '../kit/core/catalog-b.mjs';
-import {catalogGTimeline, catalogGView} from '../kit/core/catalog-g.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {resolveStory, validateStory} from '@launchclip/core/story.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {catalogBTimeline, catalogBView} from '@launchclip/core/catalog-b.mjs';
+import {catalogGTimeline, catalogGView} from '@launchclip/core/catalog-g.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS as H_EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
-import {FOCUS_DIM, STATE_MODULES, STATE_MOVE, countText, focusDevice, indexView, shotStateErrors} from '../kit/core/shot-states.mjs';
+import {FOCUS_DIM, STATE_MODULES, STATE_MOVE, countText, focusDevice, indexView, shotStateErrors} from '@launchclip/core/shot-states.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -165,7 +165,7 @@ test('countText counts between numbers in the same frame and swaps other text', 
 });
 
 test('the planner and the storyboard reference teach builds, the ring and the depth transitions', async () => {
-  const {buildLines, storyboardModulesReference} = await import('../kit/core/planning-prompt.mjs');
+  const {buildLines, storyboardModulesReference} = await import('@launchclip/core/planning-prompt.mjs');
   const lines = buildLines().join('\n');
   for (const id of Object.keys(STATE_MODULES)) assert.match(lines, new RegExp(id), id);
   assert.match(lines, /rack-focus.*card-to-card.*glow-wipe/s);

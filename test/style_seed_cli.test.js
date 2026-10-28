@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { generateStyle } from "../kit/core/style-seed.mjs";
+import { generateStyle } from "@launchclip/core/style-seed.mjs";
 import { runCli } from "../src/cli.js";
 import { generateProjectStyle, promptConstraints, styleKeepCommand, styleRerollCommand } from "../src/style_seed_store.js";
 import { planStoryCommand } from "../src/story_cli.js";

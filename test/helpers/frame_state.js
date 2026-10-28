@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import {runInNewContext} from 'node:vm';
 import gsap from 'gsap';
-import {frameState} from '../../kit/core/catalog-b-view.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 
 /** Run emitted GSAP code against a real paused GSAP timeline on plain objects. */
 export function gsapHarness(motion) {

@@ -3,7 +3,7 @@
 // HyperFrames inlines drawing exactly what Remotion's import draws.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PARTICLE_RUNTIME, dotMatrixColumns, dotMatrixPoints, fillOrder, paintParticles, particleHash} from '../kit/core/particles.mjs';
+import {PARTICLE_RUNTIME, dotMatrixColumns, dotMatrixPoints, fillOrder, paintParticles, particleHash} from '@launchclip/core/particles.mjs';
 
 /** A 2D context that records every call and property write, in order. */
 function recorder(width = 800, height = 600) {

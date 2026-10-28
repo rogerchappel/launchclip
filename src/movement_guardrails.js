@@ -7,26 +7,26 @@
 //
 // Each gate → {status, findings: [{rule, severity, at, ids, detail}]}.
 
-import { catalogBTimeline } from "../kit/core/catalog-b.mjs";
-import { catalogCTimeline } from "../kit/core/catalog-c.mjs";
-import { catalogETimeline } from "../kit/core/catalog-e.mjs";
-import { catalogFTimeline } from "../kit/core/catalog-f.mjs";
-import { catalogGTimeline } from "../kit/core/catalog-g.mjs";
-import { catalogHTimeline } from "../kit/core/catalog-h.mjs";
-import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
-import { worldTimeline } from "../kit/core/catalog-world.mjs";
-import { productDemoTimeline } from "../kit/core/catalog-d.mjs";
-import { photoSceneTimeline } from "../kit/core/catalog-d-photo-scene.mjs";
-import { MODULES as B } from "../kit/core/catalog-b.mjs";
-import { MODULES as C } from "../kit/core/catalog-c.mjs";
-import { MODULES as E } from "../kit/core/catalog-e.mjs";
-import { MODULES as F } from "../kit/core/catalog-f.mjs";
-import { MODULES as G } from "../kit/core/catalog-g.mjs";
-import { MODULES as H } from "../kit/core/catalog-h.mjs";
-import { MODULES as CHARACTERS } from "../kit/core/catalog-characters.mjs";
-import { MODULES as WORLD } from "../kit/core/catalog-world.mjs";
-import { driftEligible } from "../kit/core/ambient.mjs";
-import { stateTimes } from "../kit/core/shot-states.mjs";
+import { catalogBTimeline } from "@launchclip/core/catalog-b.mjs";
+import { catalogCTimeline } from "@launchclip/core/catalog-c.mjs";
+import { catalogETimeline } from "@launchclip/core/catalog-e.mjs";
+import { catalogFTimeline } from "@launchclip/core/catalog-f.mjs";
+import { catalogGTimeline } from "@launchclip/core/catalog-g.mjs";
+import { catalogHTimeline } from "@launchclip/core/catalog-h.mjs";
+import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
+import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
+import { productDemoTimeline } from "@launchclip/core/catalog-d.mjs";
+import { photoSceneTimeline } from "@launchclip/core/catalog-d-photo-scene.mjs";
+import { MODULES as B } from "@launchclip/core/catalog-b.mjs";
+import { MODULES as C } from "@launchclip/core/catalog-c.mjs";
+import { MODULES as E } from "@launchclip/core/catalog-e.mjs";
+import { MODULES as F } from "@launchclip/core/catalog-f.mjs";
+import { MODULES as G } from "@launchclip/core/catalog-g.mjs";
+import { MODULES as H } from "@launchclip/core/catalog-h.mjs";
+import { MODULES as CHARACTERS } from "@launchclip/core/catalog-characters.mjs";
+import { MODULES as WORLD } from "@launchclip/core/catalog-world.mjs";
+import { driftEligible } from "@launchclip/core/ambient.mjs";
+import { stateTimes } from "@launchclip/core/shot-states.mjs";
 import { renderedModels } from "./direction_guardrails.js";
 
 // Thresholds (docs/DIRECTION_GUARDRAILS.md §7).

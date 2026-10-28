@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { EDITORIAL_STYLE } from "../kit/core/editorial-core.mjs";
-import { CATALOG_B_STYLE } from "../kit/core/catalog-b.mjs";
-import { fontFaceRule, fontStack, projectFontFamilies, registryFontFaces } from "../kit/core/fonts.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
+import { EDITORIAL_STYLE } from "@launchclip/core/editorial-core.mjs";
+import { CATALOG_B_STYLE } from "@launchclip/core/catalog-b.mjs";
+import { fontFaceRule, fontStack, projectFontFamilies, registryFontFaces } from "@launchclip/core/fonts.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");

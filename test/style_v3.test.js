@@ -6,10 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { applyStyle, brandFrameErrors, cadenceProfileErrors, dialChoices, dialTargets, packCaptionsFor, STYLE_SCHEMA, STYLE_V2_SCHEMA, STYLE_V3_DEFAULTS, styleDials, stylePromptLines, upgradeV2Pack, validateStylePack } from "../kit/core/style.mjs";
-import { captionDefaultPreset, captionPlan, captionPresetName, chunkWords } from "../kit/core/captions.mjs";
-import { validateStory } from "../kit/core/story.mjs";
-import { planningPrompt } from "../kit/core/planning-prompt.mjs";
+import { applyStyle, brandFrameErrors, cadenceProfileErrors, dialChoices, dialTargets, packCaptionsFor, STYLE_SCHEMA, STYLE_V2_SCHEMA, STYLE_V3_DEFAULTS, styleDials, stylePromptLines, upgradeV2Pack, validateStylePack } from "@launchclip/core/style.mjs";
+import { captionDefaultPreset, captionPlan, captionPresetName, chunkWords } from "@launchclip/core/captions.mjs";
+import { validateStory } from "@launchclip/core/story.mjs";
+import { planningPrompt } from "@launchclip/core/planning-prompt.mjs";
 import { listBuiltinStyles, resolveStyleV2, upgradeStylePack } from "../src/style_store.js";
 
 const v2 = (overrides = {}) => ({

@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { applyStyle, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
+import { applyStyle, STYLE_V3_DEFAULTS } from "@launchclip/core/style.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 import { brandOverrides, primaryShare, primaryUses, storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
 import { vividHues } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";

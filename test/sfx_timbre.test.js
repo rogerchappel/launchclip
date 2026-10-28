@@ -7,7 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { bindCues, defaultCueFor, resolveCueFiles } from "../src/finish.js";
 import { guardCueTimbre, measureTimbre, timbreProblem } from "../src/sfx/timbre.js";
-import { TALLY_LANDS_AT } from "../kit/core/sound/options.mjs";
+import { TALLY_LANDS_AT } from "@launchclip/core/sound/options.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
 const SR = 48000;

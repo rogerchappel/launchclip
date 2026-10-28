@@ -3,12 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {MODULES, catalogGTimeline, catalogGView} from '../kit/core/catalog-g.mjs';
-import {OBJECTS} from '../kit/core/catalog-g-cards.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogGTimeline, catalogGView} from '@launchclip/core/catalog-g.mjs';
+import {OBJECTS} from '@launchclip/core/catalog-g-cards.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-g.mjs';
-import {knownModules, resolveModule} from '../kit/core/modules.mjs';
-import {isIcon} from '../kit/core/icons.mjs';
+import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
+import {isIcon} from '@launchclip/core/icons.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const PORTRAIT = {width: 1080, height: 1920, fps: 30, duration: 30};
@@ -143,7 +143,7 @@ test('resolveModule passes the insert flag and the lane through', () => {
 });
 
 test('the phrase table suggests each card for its intent', async () => {
-  const {PHRASE_MODULE_TABLE, suggestModules} = await import('../kit/core/planning-prompt.mjs');
+  const {PHRASE_MODULE_TABLE, suggestModules} = await import('@launchclip/core/planning-prompt.mjs');
   const lines = {
     'concept-card': 'The problem is editing takes too long.',
     'icon-row': 'You get your repo, your clips and your brand.',
@@ -155,14 +155,14 @@ test('the phrase table suggests each card for its intent', async () => {
     if (id !== 'section-card') assert.ok(PHRASE_MODULE_TABLE.find(row => row.module === id).intents.length, `${id} names its intents`);
   }
   // Row intents are the direction map's intents (section-card is picked at section starts, not by intent).
-  const {DIRECTION_INTENTS} = await import('../kit/core/direction.mjs');
+  const {DIRECTION_INTENTS} = await import('@launchclip/core/direction.mjs');
   for (const row of PHRASE_MODULE_TABLE.filter(entry => entry.intents)) for (const intent of row.intents) assert.ok(DIRECTION_INTENTS.includes(intent), `${row.module}: ${intent}`);
 });
 
 test('in a footage layout section, a card places inside the layout panel', async () => {
   const story = {schema: 'launchclip.story.v1', lane: 'footage-led', format: {width: 1920, height: 1080, fps: 30, duration: 6}, brand, base: {src: 'assets/recording.mp4'},
     sections: [{id: 'a', start: 0, end: 6, layout: 'split-right'}], scenes: [{id: 'c', module: 'concept-card', track: 1, start: 0.5, end: 4, params: SAMPLES['concept-card']}]};
-  const {layoutAt} = await import('../kit/core/footage-layout.mjs');
+  const {layoutAt} = await import('@launchclip/core/footage-layout.mjs');
   const panel = layoutAt(story, 0.5).safe;
   const model = resolveModule(story.scenes[0], story);
   assert.equal(model.placement, 'panel');
@@ -178,7 +178,7 @@ test('a brand frame narrows where a card may go', () => {
 });
 
 test('in a panel or rect, a list fills the room and its title reads at 4.5:1', async () => {
-  const {contrastRatio} = await import('../kit/core/catalog-b-base.mjs');
+  const {contrastRatio} = await import('@launchclip/core/catalog-b-base.mjs');
   const rect = {x: 96, y: 132, width: 898, height: 689};
   const items = [{icon: 'code', label: 'Code templates'}, {icon: 'play-circle', label: 'Live builds'}, {icon: 'users', label: 'Direct help'}];
   const model = resolve('icon-row', {title: 'You get', layout: 'list', items, rect}, {format: LANDSCAPE, aspect: '16:9'});
@@ -217,7 +217,7 @@ test('every card lands with its first content: no empty box at the entrance', ()
 });
 
 test('the hero bob chains end to start in floating point too (no overlap for HyperFrames lint)', async () => {
-  const {bob} = await import('../kit/core/catalog-g-base.mjs');
+  const {bob} = await import('@launchclip/core/catalog-g-base.mjs');
   const ops = [];
   bob(ops, 'hero', 107.09, 112, 6);
   assert.ok(ops.length > 4);

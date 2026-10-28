@@ -18,7 +18,7 @@
 // that is still illegible after that.
 
 import { spawn } from "node:child_process";
-import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions } from "../kit/core/captions.mjs";
+import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {applyJsonPatch, applyStoryPatch, formatPointer, messagePointer, parsePointer} from '../kit/core/story-patch.mjs';
+import {applyJsonPatch, applyStoryPatch, formatPointer, messagePointer, parsePointer} from '@launchclip/core/story-patch.mjs';
 import {diffSegments} from '../src/story_patch.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');

@@ -35,8 +35,8 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
-import { FONT_REGISTRY } from "../kit/core/fonts.mjs";
+import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "@launchclip/core/style.mjs";
+import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
 import { analyzeRenderMotion } from "./render_motion_analysis.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 

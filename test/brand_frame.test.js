@@ -8,11 +8,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameSources, frameWindows, intersectRects, storyFrame } from "../kit/core/brand-frame.mjs";
-import { captionStateAt, indexCaptionTweens } from "../kit/core/captions.mjs";
-import { profileGeometry } from "../kit/core/layout-check.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
+import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameSources, frameWindows, intersectRects, storyFrame } from "@launchclip/core/brand-frame.mjs";
+import { captionStateAt, indexCaptionTweens } from "@launchclip/core/captions.mjs";
+import { profileGeometry } from "@launchclip/core/layout-check.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { brandFrameFindings } from "../src/layout_check.js";
 
@@ -176,7 +176,7 @@ test("source notes: timed from scenes, a bottom band out of the safe area, valid
   assert.equal(at(8.5).get("lc-frame-src-01").opacity, 0, "and is gone after b");
   assert.ok(at(11).get("lc-frame-src-02").opacity > 0.8);
   // Validation: shape, scene ids, and the no-source warning for data modules.
-  const { validateStory } = await import("../kit/core/story.mjs");
+  const { validateStory } = await import("@launchclip/core/story.mjs");
   const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 },
     scenes: [{ id: "a", module: "unit-grid", start: 0, end: 4, params: { count: 10 } }, { id: "b", module: "number-line", start: 4, end: 8, params: { from: 1, to: 25, ranges: [{ from: 8, to: 12, label: "Size" }] } }] };
   const check = (frame) => validateStory({ ...base, ...(frame === undefined ? {} : { frame }) });
@@ -192,7 +192,7 @@ test("source notes: timed from scenes, a bottom band out of the safe area, valid
   assert.match(all, /frame\.sources\[1\]\.end must be seconds after its start/);
   assert.match(all, /frame\.sources\[2\]\.nope is not supported/);
   assert.match(all, /frame\.sources\[2\]\.scene "zz" is not a scene id/);
-  const { brandFrameErrors } = await import("../kit/core/style.mjs");
+  const { brandFrameErrors } = await import("@launchclip/core/style.mjs");
   assert.deepEqual(brandFrameErrors({ sources: [] }), [], "a style's sources are accepted (and ignored)");
 });
 
@@ -211,7 +211,7 @@ test("layout-check warns when key text overlaps the frame", () => {
 
 test("inside a footage layout panel, model.frame.safe is the panel safe area narrowed by the frame", async () => {
   const { readProjectStory } = await import("../src/story_loader.js");
-  const { layoutAt } = await import("../kit/core/footage-layout.mjs");
+  const { layoutAt } = await import("@launchclip/core/footage-layout.mjs");
   const { resolved } = await readProjectStory(path.join(ROOT, "examples/story/layouts-wide"));
   const framed = { ...resolved, frame: { kicker: { label: "Layouts" } } };
   const scene = framed.scenes.find((entry) => entry.id === "list");
@@ -222,8 +222,8 @@ test("inside a footage layout panel, model.frame.safe is the panel safe area nar
 });
 
 test("per-scene colour: the frame swaps to a contrasting colour on light cast sets, a label colour overrides it, and both renderers agree", async () => {
-  const { frameColorSpans, frameBackdrop, FRAME_MIN_CONTRAST } = await import("../kit/core/brand-frame.mjs");
-  const { contrastRatio } = await import("../kit/core/catalog-b-base.mjs");
+  const { frameColorSpans, frameBackdrop, FRAME_MIN_CONTRAST } = await import("@launchclip/core/brand-frame.mjs");
+  const { contrastRatio } = await import("@launchclip/core/catalog-b-base.mjs");
   const cast = (id, start, end) => ({ id, module: "cast-scene", start, end });
   const plate = (id, start, end) => ({ id, module: "hook-title", start, end });
   const s = story({ progress: true, labels: [{ start: 0, label: "Take 1" }, { scene: "c", label: "Take 2", color: "accent" }] }, {
@@ -238,7 +238,7 @@ test("per-scene colour: the frame swaps to a contrasting colour on light cast se
   assert.notEqual(at(1).underline, "#ffe14d", "the yellow underline swaps too");
   assert.equal(at(5).text, "#ffffff", "paper again on the dark plate");
   assert.equal(at(10).text, "#ff3d7f", "frame.labels[].color overrides while its label shows");
-  const { validateStory } = await import("../kit/core/story.mjs");
+  const { validateStory } = await import("@launchclip/core/story.mjs");
   const valid = (color) => validateStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, scenes: [{ id: "a", module: "hook-title", start: 0, end: 4, params: { headline: "Hi" } }], frame: { labels: [{ scene: "a", label: "Take 1", color }] } }).errors.join("\n");
   assert.doesNotMatch(valid("ink"), /frame\.labels/);
   assert.doesNotMatch(valid("#112233"), /frame\.labels/);

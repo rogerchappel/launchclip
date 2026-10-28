@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { resolveStory } from '../kit/core/story.mjs';
+import { resolveStory } from '@launchclip/core/story.mjs';
 import { buildMix, normalizeCues } from '../skills/launchclip-create-video/scripts/build-mix.mjs';
 import { SFX } from '../skills/launchclip-create-video/scripts/synth-audio-kit.mjs';
 

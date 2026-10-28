@@ -6,11 +6,11 @@ import test from "node:test";
 import gsap from "gsap";
 import {
   blurAt, cameraPlan, cameraStateAt, containerState, overviewFrame, restState, sceneObjectLookup, screenPoint, worldPoint
-} from "../kit/core/camera-world.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { OVERVIEW, holdTime, sceneWindows } from "../kit/core/transitions.mjs";
-import { worldBackdrops } from "../kit/core/world-backdrops.mjs";
+} from "@launchclip/core/camera-world.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { OVERVIEW, holdTime, sceneWindows } from "@launchclip/core/transitions.mjs";
+import { worldBackdrops } from "@launchclip/core/world-backdrops.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const W = 1080, H = 1920;

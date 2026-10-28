@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applySubjectFallback, MATTE_GATE, matteQuality, subjectFallbackLines, subjectMatteGate} from '../src/cinematic_check.js';
-import {resolveStory} from '../kit/core/story.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {readStorySubject} from '../src/subject/project.js';
 
 const PROJECT = fileURLToPath(new URL('../examples/story/subject', import.meta.url));

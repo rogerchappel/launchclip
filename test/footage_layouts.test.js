@@ -7,11 +7,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {deriveBoundaries, resolveStory, validateStory} from '../kit/core/story.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '../kit/core/footage-layout.mjs';
-import {captionPlan, captionZoneIndex} from '../kit/core/captions.mjs';
-import {elementsFromStory, profileGeometry} from '../kit/core/layout-check.mjs';
+import {deriveBoundaries, resolveStory, validateStory} from '@launchclip/core/story.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '@launchclip/core/footage-layout.mjs';
+import {captionPlan, captionZoneIndex} from '@launchclip/core/captions.mjs';
+import {elementsFromStory, profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {readProjectStory} from '../src/story_loader.js';
 import {checkLayoutProject} from '../src/layout_check.js';
@@ -254,7 +254,7 @@ test('a scene that starts a moment before its section takes the section layout, 
 });
 
 test('a fitting error names the section a scene fell outside', async () => {
-  const {sectionFitHint} = await import('../kit/core/modules.mjs');
+  const {sectionFitHint} = await import('@launchclip/core/modules.mjs');
   const value = resolveStory(story([{id: 's5', start: 2, end: 8, layout: 'split-left'}], {scenes: [{id: 'card', module: 'lower-third', track: 1, start: 0.5, end: 2.5, params: {name: 'Ada'}}]}));
   assert.equal(sectionFitHint(value.scenes[0], value), '; it was placed in the full frame because it falls outside section s5 (split-left, 2–8 s): it starts 1.5 s before it; move it inside s5');
   assert.equal(sectionFitHint({...value.scenes[0], start: 1.9, end: 6}, value), '', 'snapped into the section: no hint');

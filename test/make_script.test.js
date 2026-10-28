@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { chooseScriptPlan } from "../kit/core/script-formats.mjs";
+import { chooseScriptPlan } from "@launchclip/core/script-formats.mjs";
 import { runCli } from "../src/cli.js";
 import { runMake } from "../src/make/index.js";
 import { SCRIPT_SCHEMA, scriptInstructions, writeScript } from "../src/make/script.js";

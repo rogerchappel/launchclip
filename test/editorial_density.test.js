@@ -7,9 +7,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {DENSITY, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
+import {DENSITY, resolveEditorialModule} from '@launchclip/core/editorial-core.mjs';
 import {buildEditorialModule} from '../kit/hyperframes/editorial-ui-modules.mjs';
-import {SAFE_ZONE_PROFILES, checkLayout, elementsFromEditorialLayout} from '../kit/core/layout-check.mjs';
+import {SAFE_ZONE_PROFILES, checkLayout, elementsFromEditorialLayout} from '@launchclip/core/layout-check.mjs';
 
 const base = {id: 'mod', start: 0, duration: 4};
 const SPECS = {
@@ -116,7 +116,7 @@ test('explicit 16:9 rects with density: "fill" grow the type to fill the panel',
 });
 
 test('density: "fill" is grow-only: a short rect never gives smaller type than the default card, it errors with a fit hint', async () => {
-  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
   const code = {language: 'shell', typing: true, lines: [{at: .3, typeDuration: .9, tokens: [{text: '$ ', type: 'comment'}, {text: 'launchclip', type: 'keyword'}, {text: ' finish', type: 'plain'}, {text: ' launch/landscape', type: 'string'}]}]};
   const base = {id: 'code', kind: 'code-snippet', aspect: '16:9', start: 0, duration: 3, title: 'Terminal', code};
   const derived = resolveEditorialModule(base);

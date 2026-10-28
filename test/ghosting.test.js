@@ -2,10 +2,10 @@
 // time, casts change with a cut or a single-copy move, text fades are short.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameState } from "../kit/core/catalog-b-view.mjs";
-import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
-import { TEXT_FADE, resolveModule } from "../kit/core/modules.mjs";
-import { twoCopies, validateStory } from "../kit/core/story.mjs";
+import { frameState } from "@launchclip/core/catalog-b-view.mjs";
+import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
+import { TEXT_FADE, resolveModule } from "@launchclip/core/modules.mjs";
+import { twoCopies, validateStory } from "@launchclip/core/story.mjs";
 import { ghostingGate } from "../src/direction_guardrails.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };

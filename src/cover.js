@@ -16,8 +16,8 @@ import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { COVER_STILL, coverFrame, coverStory, resolveStory } from "../kit/core/story.mjs";
-import { SHORT_VIDEO_SECONDS } from "../kit/core/script-formats.mjs";
+import { COVER_STILL, coverFrame, coverStory, resolveStory } from "@launchclip/core/story.mjs";
+import { SHORT_VIDEO_SECONDS } from "@launchclip/core/script-formats.mjs";
 
 const execFileAsync = promisify(execFile);
 

@@ -17,7 +17,7 @@ import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promi
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { MODULES } from "../kit/core/catalog-a.mjs";
+import { MODULES } from "@launchclip/core/catalog-a.mjs";
 import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
 import { hyperframesInvocation } from "../src/toolchain.js";
 import { injectParityFonts } from "./parity-fonts.mjs";

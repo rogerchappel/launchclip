@@ -31,7 +31,7 @@ import {promisify} from 'node:util';
 import {bundleForRun} from './remotion-bundle.mjs';
 import {readProjectStory} from '../src/story_loader.js';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
 
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);

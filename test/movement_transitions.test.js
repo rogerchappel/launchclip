@@ -2,9 +2,9 @@
 // glow-wipe and card-to-card, as layer tweens both renderers evaluate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {LAYER_IDENTITY, TRANSITION_TYPES, cardMap, gsapVars, layerStateAt, layerStyle, sceneWindows, transitionTweens} from '../kit/core/transitions.mjs';
-import {STORY_TRANSITIONS, resolveStory, validateStory} from '../kit/core/story.mjs';
-import {getEase} from '../kit/core/motion.mjs';
+import {LAYER_IDENTITY, TRANSITION_TYPES, cardMap, gsapVars, layerStateAt, layerStyle, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
+import {STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
+import {getEase} from '@launchclip/core/motion.mjs';
 
 const size = {width: 1920, height: 1080};
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -76,7 +76,7 @@ test('card-to-card: the incoming card starts on the outgoing card and settles on
 });
 
 test('a rack-focus carries the cards: the incoming one is whole on its first frame, the outgoing one stays whole into the rack', async () => {
-  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
   const s = resolveStory(story([card('a', 0, 4), card('b', 4, 8, {in: {type: 'rack-focus', dur: 0.4}}), card('c', 8, 12, {in: {type: 'fade', dur: 0.35}})]));
   const [a, b, c] = s.scenes.map(scene => resolveModule(scene, s));
   assert.equal(a.carriedOut, true);

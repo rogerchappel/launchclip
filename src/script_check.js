@@ -41,7 +41,7 @@
 // least as large; "4 in 10" is a ratio that a brief percentage within five
 // points supports.
 
-import { AWARENESS_LEVELS, MAX_WORDS_PER_SECOND, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS } from "../kit/core/script-formats.mjs";
+import { AWARENESS_LEVELS, MAX_WORDS_PER_SECOND, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS } from "@launchclip/core/script-formats.mjs";
 
 export const SCRIPT_CHECK_VERSION = "launchclip.script-check.v1";
 // The format, goal and awareness ids are the planning pass's own (kit/core/script-formats.mjs).

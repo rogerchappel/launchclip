@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
 import { checkLayoutProject } from "../src/layout_check.js";
 import { runCli } from "../src/cli.js";
 import { buildEditorialModule } from "../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs";
@@ -196,16 +196,16 @@ test("layout-check explains a missing storyboard.json", async () => {
   await assert.rejects(checkLayoutProject(project, {}, { storyCore: {} }), /needs .*storyboard\.json/);
 });
 
-test("layout-check explains a missing kit/core/story.mjs", { skip: existsSync(path.resolve(import.meta.dirname, "../kit/core/story.mjs")) }, async () => {
+test("layout-check explains a missing @launchclip/core/story.mjs", { skip: existsSync(path.resolve(import.meta.dirname, "../kit/core/story.mjs")) }, async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-core-"));
   await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ format: { width: 1080, height: 1920 }, scenes: [] }));
-  await assert.rejects(checkLayoutProject(project), /kit\/core\/story\.mjs/);
+  await assert.rejects(checkLayoutProject(project), /@launchclip\/core/);
 });
 
 test("layout-check checks the ambient drift's largest extent, as the compilers draw it", async () => {
-  const { driftExtent, sceneDrift } = await import("../kit/core/ambient.mjs");
-  const { resolveModule } = await import("../kit/core/modules.mjs");
-  const { resolveStory } = await import("../kit/core/story.mjs");
+  const { driftExtent, sceneDrift } = await import("@launchclip/core/ambient.mjs");
+  const { resolveModule } = await import("@launchclip/core/modules.mjs");
+  const { resolveStory } = await import("@launchclip/core/story.mjs");
   const metric = { mode: "illustration", unit: "minutes", format: "number", values: [{ value: 48, at: 0.3 }] };
   // Two overlays 12 px apart: at rest they never touch.
   const story = (ambient) => ({
@@ -236,7 +236,7 @@ test("layout-check checks the ambient drift's largest extent, as the compilers d
 });
 
 test("text-size floors hold for editorial modules: minTextPx (body copy) and minSecondaryTextPx per profile", async () => {
-  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const { resolveModule } = await import("@launchclip/core/modules.mjs");
   const lines = [{ segments: [{ text: "\"module\": \"hook-title\"," }] }, { segments: [{ text: "\"start\": 0," }] }, { segments: [{ text: "\"end\": \"word:launch\"" }] }];
   const story = (width) => ({
     schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 },
@@ -273,8 +273,8 @@ test("text-size floors hold for editorial modules: minTextPx (body copy) and min
 });
 
 test("validate and layout-check agree on float bounds: one tolerance, bounds printed to 2 decimals", async () => {
-  const { resolveModule } = await import("../kit/core/modules.mjs");
-  const { resolveStory } = await import("../kit/core/story.mjs");
+  const { resolveModule } = await import("@launchclip/core/modules.mjs");
+  const { resolveStory } = await import("@launchclip/core/story.mjs");
   // 1.68 − 0.45 is 1.2299999999999998 in floating point, so the last valid state time
   // (duration − 0.45) came out as 0.7799999999999998 on one path and 0.78 on the other.
   const story = (at) => ({

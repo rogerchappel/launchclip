@@ -3,8 +3,8 @@
 // clause quotes, and output every module accepts in 16:9 and 9:16.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capabilityParams, isPlanned } from "../kit/core/visual-capabilities.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { capabilityParams, isPlanned } from "@launchclip/core/visual-capabilities.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
 const REAL = { platform: "x", name: "Ada Lovelace", handle: "@ada", verified: true, text: "The engine might compose elaborate pieces of music of any degree of complexity.", date: "Oct 25, 2026",
@@ -95,7 +95,7 @@ test("social-sort: only posts that say which camp they are in, three at most so 
 });
 
 test("social builders: the family's sample beats build every social module", async () => {
-  const { socialBuilders } = await import("../kit/core/capability-builders-social.mjs");
+  const { socialBuilders } = await import("@launchclip/core/capability-builders-social.mjs");
   const [sample] = socialBuilders({}).samples;
   for (const id of ["social-post", "social-stack", "social-wall", "social-sort"]) {
     const params = capabilityParams(id, sample);

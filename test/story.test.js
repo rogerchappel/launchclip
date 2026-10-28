@@ -6,7 +6,7 @@ import test from "node:test";
 import { runCli } from "../src/cli.js";
 import { parseDeclaredSequenceBoundaries } from "../src/cinematic_evidence.js";
 import * as storyApi from "../src/story.js";
-import { STORY_SCHEMA, deriveBoundaries, parseAnchor, resolveAnchor, resolveStory, storyFormat, storyHits, validateStory } from "../kit/core/story.mjs";
+import { STORY_SCHEMA, deriveBoundaries, parseAnchor, resolveAnchor, resolveStory, storyFormat, storyHits, validateStory } from "@launchclip/core/story.mjs";
 import { buildEditorialModule } from "../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -411,8 +411,8 @@ test("story validate fails a scene whose module params would render a placeholde
 });
 
 test("story.ambient and scenes[i].ambient validate the ambient-motion control", async () => {
-  const { STORY_AMBIENT_LEVELS } = await import("../kit/core/story.mjs");
-  const { AMBIENT_LEVELS, ambientErrors } = await import("../kit/core/ambient.mjs");
+  const { STORY_AMBIENT_LEVELS } = await import("@launchclip/core/story.mjs");
+  const { AMBIENT_LEVELS, ambientErrors } = await import("@launchclip/core/ambient.mjs");
   assert.deepEqual(STORY_AMBIENT_LEVELS, AMBIENT_LEVELS, "story.mjs keeps its own copy of the levels");
   const valid = baseStory({ ambient: { level: "subtle", background: false } });
   valid.scenes[1].ambient = "lively";
@@ -454,8 +454,8 @@ test("ending: loop_to null and loop false mean no loop, final picks hold/fade/ex
 });
 
 test("ending.final: without a loop the last scene holds settled by default, fade completes its exit by the final frame, exit keeps it", async () => {
-  const { resolveModule, storyFinal, FINAL_HOLD_TAIL } = await import("../kit/core/modules.mjs");
-  const { sampleNode } = await import("../kit/core/catalog-a.mjs");
+  const { resolveModule, storyFinal, FINAL_HOLD_TAIL } = await import("@launchclip/core/modules.mjs");
+  const { sampleNode } = await import("@launchclip/core/catalog-a.mjs");
   const brand = { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630", ink: "#0a0b10" } };
   const story = (ending, last = {}) => resolveStory({
     schema: STORY_SCHEMA, lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 8 }, brand,

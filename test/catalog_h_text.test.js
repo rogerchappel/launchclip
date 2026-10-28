@@ -2,10 +2,10 @@
 // text effects as variants of motion-title.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogHTimeline} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
-import {TEXT_EFFECTS} from '../kit/core/catalog-h-text.mjs';
+import {TEXT_EFFECTS} from '@launchclip/core/catalog-h-text.mjs';
 import {SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

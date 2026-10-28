@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
+import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import {
   gatherSegmentInputs,
   hashSegments,

@@ -9,8 +9,8 @@ import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { TITLE_CARD_MODULES, chooseSkeleton, kitCapabilities, mergeSkeletons, skeletonById, skeletonFeasibility, skeletonProblems, skeletonStale, structureCheck } from "../kit/core/skeleton-library.mjs";
-import { SCRIPT_SKELETONS } from "../kit/core/script-formats.mjs";
+import { TITLE_CARD_MODULES, chooseSkeleton, kitCapabilities, mergeSkeletons, skeletonById, skeletonFeasibility, skeletonProblems, skeletonStale, structureCheck } from "@launchclip/core/skeleton-library.mjs";
+import { SCRIPT_SKELETONS } from "@launchclip/core/script-formats.mjs";
 import { readProjectScript } from "./publish_manifest.js";
 
 /** Where skeletons are read from, in override order: the user's, then the project's. */

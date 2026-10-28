@@ -2,15 +2,15 @@
 // poses and expressions, the drawing, acting ops, story casts and cues.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ACCESSORIES, BUILDS, EXPRESSIONS, EXPRESSION_TABLE, HAIR_STYLES, POSES, POSE_TABLE, TOPS, normalizeRigParams, poseJoints, rigFingerprint, rigGeometry} from '../kit/core/characters/rig.mjs';
-import {STARTER_CAST, STARTER_IDS, characterLook, starterCharacter} from '../kit/core/characters/cast.mjs';
-import {SKIN_TONES, castRoles, characterColors} from '../kit/core/characters/palette.mjs';
-import {drawFlat} from '../kit/core/characters/style-flat.mjs';
-import {characterView} from '../kit/core/characters/view.mjs';
-import {ACTING, actingOps, jointTargets, speechChanges} from '../kit/core/characters/acting.mjs';
-import {castConsistency, castMember, cueWordIndex, resolveCastCues, resolveStoryCast, sceneCastCues, storyCastErrors, validateCastCues} from '../kit/core/characters/cues.mjs';
-import {SETS, layoutSet} from '../kit/core/characters/sets.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {ACCESSORIES, BUILDS, EXPRESSIONS, EXPRESSION_TABLE, HAIR_STYLES, POSES, POSE_TABLE, TOPS, normalizeRigParams, poseJoints, rigFingerprint, rigGeometry} from '@launchclip/core/characters/rig.mjs';
+import {STARTER_CAST, STARTER_IDS, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {SKIN_TONES, castRoles, characterColors} from '@launchclip/core/characters/palette.mjs';
+import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
+import {characterView} from '@launchclip/core/characters/view.mjs';
+import {ACTING, actingOps, jointTargets, speechChanges} from '@launchclip/core/characters/acting.mjs';
+import {castConsistency, castMember, cueWordIndex, resolveCastCues, resolveStoryCast, sceneCastCues, storyCastErrors, validateCastCues} from '@launchclip/core/characters/cues.mjs';
+import {SETS, layoutSet} from '@launchclip/core/characters/sets.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}};
 const maya = () => starterCharacter('maya');

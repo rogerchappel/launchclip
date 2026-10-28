@@ -8,7 +8,7 @@
 import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {moduleVariants} from '../kit/core/modules.mjs';
+import {moduleVariants} from '@launchclip/core/modules.mjs';
 import {BRAND, SAMPLES} from './variant-sheet.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));

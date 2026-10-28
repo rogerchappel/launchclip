@@ -3,13 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {MODULES, VARIANTS, catalogHStyle, catalogHTimeline, catalogHView, cssProps} from '../kit/core/catalog-h.mjs';
-import {numberFormat, seriesColors, contrastRatio} from '../kit/core/catalog-h-base.mjs';
-import {makeCheck} from '../kit/core/catalog-b-base.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHStyle, catalogHTimeline, catalogHView, cssProps} from '@launchclip/core/catalog-h.mjs';
+import {numberFormat, seriesColors, contrastRatio} from '@launchclip/core/catalog-h-base.mjs';
+import {makeCheck} from '@launchclip/core/catalog-b-base.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 import {SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -151,8 +151,8 @@ test('blur and clip props become CSS for GSAP and for Remotion alike', () => {
 });
 
 test('every catalogue H parity fixture is a valid story that resolves', async () => {
-  const {validateStory} = await import('../kit/core/story.mjs');
-  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {validateStory} = await import('@launchclip/core/story.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
   const {elementFixtures} = await import('../scripts/element-parity.mjs');
   for (const {name, fixture} of elementFixtures()) {
     const result = validateStory(fixture.story, {modules: knownModules()});

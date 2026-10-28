@@ -10,8 +10,8 @@
 // (the crowded take, the subject inventory, three fresh angles; ANGLE.json)
 // and scores its five title options, in the same call; the titles are then
 // ordered best first by a deterministic score.
-import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "../../kit/core/script-formats.mjs";
-import { skeletonScriptPlan } from "../../kit/core/skeleton-library.mjs";
+import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "@launchclip/core/script-formats.mjs";
+import { skeletonScriptPlan } from "@launchclip/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { TEASERS } from "../publish_manifest.js";
 

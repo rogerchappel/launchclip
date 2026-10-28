@@ -1,8 +1,8 @@
 // The channel builders (kit/core/capability-builders-channel.mjs): logo-sting from the story brand.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capabilityParams, isPlanned, resolveCapability } from "../kit/core/visual-capabilities.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { capabilityParams, isPlanned, resolveCapability } from "@launchclip/core/visual-capabilities.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#04070d", primary: "#3fd8ff", accent: "#ff9b54", ink: "#04070d", paper: "#f3f8ff" } };
 const beat = (brand) => ({ id: "open", text: "Welcome back to Signal Lab.", headline: "Welcome back", ...(brand === undefined ? {} : { brand }), facts: { numbers: [], items: [], dates: [], places: [] } });

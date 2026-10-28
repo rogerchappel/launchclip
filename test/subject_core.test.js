@@ -11,7 +11,7 @@ import {
   summarizeSamples,
   validateSubjectInfo,
   validateSubjectProbe
-} from "../kit/core/subject.mjs";
+} from "@launchclip/core/subject.mjs";
 
 const W = 180;
 const H = 320;
@@ -131,7 +131,7 @@ test("validateSubjectInfo checks the range, matte and frame order", () => {
 });
 
 test('maskOutline traces the silhouette and breaks where it meets the frame edge', async () => {
-  const {maskOutline, validateSubjectContours, CONTOURS_SCHEMA} = await import('../kit/core/subject.mjs');
+  const {maskOutline, validateSubjectContours, CONTOURS_SCHEMA} = await import('@launchclip/core/subject.mjs');
   const outline = maskOutline(presenter(), W, H, {rays: 72});
   assert.equal(outline.length, 72);
   const up = outline[54]; // straight up (270°)

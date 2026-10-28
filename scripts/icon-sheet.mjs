@@ -8,7 +8,7 @@
 
 import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-import {ICON_NAMES, ICON_SOURCES, iconNode} from '../kit/core/icons.mjs';
+import {ICON_NAMES, ICON_SOURCES, iconNode} from '@launchclip/core/icons.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 
 const args = process.argv.slice(2);

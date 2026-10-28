@@ -9,12 +9,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
-import { cameraPlan, captionDipWindows, sceneObjectLookup, sweepingMove } from "../kit/core/camera-world.mjs";
-import { captionDipHidden, captionDipOpacity, captionDipTweens, captionMoveHide, CAPTION_DIP_RAMP } from "../kit/core/captions.mjs";
-import { checkCameraSweeps } from "../kit/core/layout-check.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
+import { cameraPlan, captionDipWindows, sceneObjectLookup, sweepingMove } from "@launchclip/core/camera-world.mjs";
+import { captionDipHidden, captionDipOpacity, captionDipTweens, captionMoveHide, CAPTION_DIP_RAMP } from "@launchclip/core/captions.mjs";
+import { checkCameraSweeps } from "@launchclip/core/layout-check.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { checkLayoutProject } from "../src/layout_check.js";
 

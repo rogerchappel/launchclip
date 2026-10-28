@@ -140,7 +140,7 @@ test("the headless critic is told the measured findings and records them with ci
   await writeFile(path.join(project, "qa/critic-sheets/index.json"), JSON.stringify({ sheets: [{ sheet: "sheet-01.jpg", samples: ["s0", "s1", "s2"] }] }));
   await writeFile(path.join(project, "qa/critic-sheets/sheet-01.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   const thin = await sparse();
-  const quality = qualityFindings((await import("../kit/core/direction.mjs")).directionMeasures(thin.direction, thin.story, { words: await words() }), profile("short-talking-head"));
+  const quality = qualityFindings((await import("@launchclip/core/direction.mjs")).directionMeasures(thin.direction, thin.story, { words: await words() }), profile("short-talking-head"));
   const seen = [];
   const client = { provider: "openai", async runStructured(request) { seen.push(request); return { model: "stand-in", value: { verdict: "ship", summary: "fine", findings: [] }, usage: { input_tokens: 1, output_tokens: 1 } }; } };
   const result = await runHeadlessCritic({ project, client, quality });

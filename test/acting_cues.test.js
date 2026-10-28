@@ -2,12 +2,12 @@
 // gaze, stand-up and walk-to on cast-scene and character-cameo.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameState } from "../kit/core/catalog-b-view.mjs";
-import { charactersTimeline, charactersView } from "../kit/core/catalog-characters.mjs";
-import { ACTIONS, gazeOffset, targetError, walkDuration } from "../kit/core/characters/actions.mjs";
-import { POSES } from "../kit/core/characters/rig.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { worldFocus } from "../kit/core/worlds/index.mjs";
+import { frameState } from "@launchclip/core/catalog-b-view.mjs";
+import { charactersTimeline, charactersView } from "@launchclip/core/catalog-characters.mjs";
+import { ACTIONS, gazeOffset, targetError, walkDuration } from "@launchclip/core/characters/actions.mjs";
+import { POSES } from "@launchclip/core/characters/rig.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { worldFocus } from "@launchclip/core/worlds/index.mjs";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" } };
 const story = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", brand, format: { width: 1080, height: 1920, fps: 30, duration: 8 }, cast: { characters: [{ id: "maya" }, { id: "theo" }] }, scenes });
@@ -158,7 +158,7 @@ test("look-target-hidden stops at the look's own scene: a card over the next pla
 });
 
 test("sitters sit on the bench and the sofa, not inside them: the seat is behind their legs", async () => {
-  const { layoutSet } = await import("../kit/core/characters/sets.mjs");
+  const { layoutSet } = await import("@launchclip/core/characters/sets.mjs");
   const brand = { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" };
   const canvas = { width: 1080, height: 1920 };
   const bench = layoutSet("park-bench", { canvas, colors: brand, count: 2, heights: [1000, 1000], backdrop: "world", floor: 1500 });

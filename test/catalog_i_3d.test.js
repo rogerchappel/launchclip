@@ -4,13 +4,13 @@
 // that fades has 3D children), the projection fit, and each module's params.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {OBJECT_MODULES} from '../kit/core/catalog-i-3d.mjs';
-import {camera, cameraStates, fitScene, project} from '../kit/core/catalog-i-3d-base.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {OBJECT_MODULES} from '@launchclip/core/catalog-i-3d.mjs';
+import {camera, cameraStates, fitScene, project} from '@launchclip/core/catalog-i-3d-base.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

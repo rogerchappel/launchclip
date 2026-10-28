@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {STATE_EVENT, scoreBrief, stateEvents, stateMarks} from '../eval/scorecard.mjs';
-import {resolveStory} from '../kit/core/story.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {mediaSkip} from './helpers/media.js';
 
 const SAMPLE = new URL('../examples/story/shot-states-16x9/storyboard.json', import.meta.url);

@@ -6,7 +6,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { runMake } from "../src/make/index.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");

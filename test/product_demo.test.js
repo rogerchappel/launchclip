@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import {PRODUCT_DEMO_TIMING, cameraAt, cameraKeys, cameraTransform, mapBox, productDemoParams, productDemoTimeline, productDemoView, pushTransform, throughCamera, zoomScale} from '../kit/core/catalog-d.mjs';
-import {knownModules, moduleTiming, resolveModule} from '../kit/core/modules.mjs';
-import {resolveStory, validateStory} from '../kit/core/story.mjs';
+import {PRODUCT_DEMO_TIMING, cameraAt, cameraKeys, cameraTransform, mapBox, productDemoParams, productDemoTimeline, productDemoView, pushTransform, throughCamera, zoomScale} from '@launchclip/core/catalog-d.mjs';
+import {knownModules, moduleTiming, resolveModule} from '@launchclip/core/modules.mjs';
+import {resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {emitProductDemo} from '../kit/hyperframes/catalog-d.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 

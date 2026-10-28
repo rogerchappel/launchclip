@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { CAPTION_BAND, CAPTION_CSS, captionBandFor, captionCss } from "../kit/core/captions.mjs";
-import { SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
+import { CAPTION_BAND, CAPTION_CSS, captionBandFor, captionCss } from "@launchclip/core/captions.mjs";
+import { SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");

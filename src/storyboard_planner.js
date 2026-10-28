@@ -17,16 +17,16 @@
 // model, response_id} (src/model_provider.js clients, the Anthropic adapter
 // below, or a fake in tests), so the planner runs keyless in tests.
 
-import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
-import { validateModuleParams } from "../kit/core/module-schemas.mjs";
-import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
-import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "../kit/core/direction.mjs";
-import { isLongForm, structureLongForm } from "../kit/core/long-form.mjs";
-import { compareMeasures } from "../kit/core/profiles.mjs";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
-import { captionZones } from "../kit/core/footage-layout.mjs";
-import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
-import { applyStyle } from "../kit/core/style.mjs";
+import { STORY_LANES, resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
+import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
+import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
+import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
+import { compareMeasures } from "@launchclip/core/profiles.mjs";
+import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "@launchclip/core/layout-check.mjs";
+import { captionZones } from "@launchclip/core/footage-layout.mjs";
+import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
+import { applyStyle } from "@launchclip/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 

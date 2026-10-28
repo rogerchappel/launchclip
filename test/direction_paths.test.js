@@ -12,11 +12,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { INTENT_RULES, intentHints } from "../kit/core/direction.mjs";
-import { directionMapReference, profilesReference } from "../kit/core/planning-prompt.mjs";
+import { INTENT_RULES, intentHints } from "@launchclip/core/direction.mjs";
+import { directionMapReference, profilesReference } from "@launchclip/core/planning-prompt.mjs";
 import { shippedProfiles } from "../src/profile_store.js";
 import { planStoryCommand, runStoryCommand } from "../src/story_cli.js";
-import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 
 const EXAMPLES = fileURLToPath(new URL("../examples/story/", import.meta.url));
 const SKILLS = ["launchclip-create-video", "launchclip-create-video-remotion"].map((name) => fileURLToPath(new URL(`../skills/${name}/references/`, import.meta.url)));

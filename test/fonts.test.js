@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   FONT_REGISTRY, FONT_ROLE_DEFAULTS, SYMBOL_FALLBACK, allFontFaces, brandFontStacks, fontFaceRule, fontFamilyName,
   fontStack, fontWidthScale, frozenFontFaces, projectFontFamilies, registeredFamily, registryFontFaces
-} from "../kit/core/fonts.mjs";
+} from "@launchclip/core/fonts.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const require = createRequire(import.meta.url);

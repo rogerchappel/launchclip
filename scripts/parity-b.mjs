@@ -17,7 +17,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { resolveEditorialModule } from '../kit/core/editorial-core.mjs';
+import { resolveEditorialModule } from '@launchclip/core/editorial-core.mjs';
 import { buildEditorialModule } from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 import { injectParityFonts } from './parity-fonts.mjs';
 import { bundleForRun } from './remotion-bundle.mjs';

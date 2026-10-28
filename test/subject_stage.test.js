@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "../kit/core/subject.mjs";
+import { validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "@launchclip/core/subject.mjs";
 import { matteSize, parseRange, rangeDirName, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../src/subject/stage.js";
 import { inputSize, resizeAlpha } from "../src/subject/segment.js";
 import { modelStatus, subjectModel } from "../src/subject/models.js";

@@ -3,14 +3,14 @@
 // every new option drawn in every style.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {AGES, BOTTOMS, GLASSES, HAIR_STYLES, HEADWEAR, MOBILITY, OVERS, TOPS, ACCESSORIES, normalizeRigParams, rigFingerprint, rigGeometry} from '../kit/core/characters/rig.mjs';
-import {CHARACTER_SETS, CHARACTER_SET_NAMES, castFromStyle, generateCast} from '../kit/core/characters/generate.mjs';
-import {resolveStoryCast, storyCastErrors} from '../kit/core/characters/cues.mjs';
-import {characterLook, starterCharacter} from '../kit/core/characters/cast.mjs';
-import {sceneJoints} from '../kit/core/characters/acting.mjs';
-import {DRAWING_STYLES, drawCharacter, styleGeometry} from '../kit/core/characters/styles.mjs';
-import {drawingBounds} from '../kit/core/characters/bounds.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
+import {AGES, BOTTOMS, GLASSES, HAIR_STYLES, HEADWEAR, MOBILITY, OVERS, TOPS, ACCESSORIES, normalizeRigParams, rigFingerprint, rigGeometry} from '@launchclip/core/characters/rig.mjs';
+import {CHARACTER_SETS, CHARACTER_SET_NAMES, castFromStyle, generateCast} from '@launchclip/core/characters/generate.mjs';
+import {resolveStoryCast, storyCastErrors} from '@launchclip/core/characters/cues.mjs';
+import {characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {sceneJoints} from '@launchclip/core/characters/acting.mjs';
+import {DRAWING_STYLES, drawCharacter, styleGeometry} from '@launchclip/core/characters/styles.mjs';
+import {drawingBounds} from '@launchclip/core/characters/bounds.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
 
 const palette = {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'};
 
@@ -114,7 +114,7 @@ test('castFromStyle reads a seeded style pack cast; a generated cast plays a sce
 });
 
 test('balanced casts: a woman and a man, and a light-skinned person, in every cast of two or more', async () => {
-  const {SKIN_ORDER} = await import('../kit/core/characters/palette.mjs');
+  const {SKIN_ORDER} = await import('@launchclip/core/characters/palette.mjs');
   const light = SKIN_ORDER.slice(0, Math.ceil(SKIN_ORDER.length / 3));
   for (const set of CHARACTER_SET_NAMES) for (let k = 0; k < 40; k++) for (const count of [2, 3, 6]) {
     const cast = generateCast({seed: `b${k}`, set, count});
@@ -132,8 +132,8 @@ test('the starter cast includes white men and women, children and a teen', () =>
 });
 
 test('the newer sets: 1–3 characters in both orientations, every style, inside the canvas and the safe zone', async () => {
-  const {SETS, SEATED_SETS, SET_INFO} = await import('../kit/core/characters/sets.mjs');
-  const {castPlacement} = await import('../kit/core/characters/placement.mjs');
+  const {SETS, SEATED_SETS, SET_INFO} = await import('@launchclip/core/characters/sets.mjs');
+  const {castPlacement} = await import('@launchclip/core/characters/placement.mjs');
   const fresh = ['kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk'];
   for (const name of fresh) {
     assert.ok(SETS.includes(name) && SET_INFO[name].describe, name);

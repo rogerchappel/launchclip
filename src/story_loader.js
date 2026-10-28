@@ -4,26 +4,26 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { migrateStory } from "../kit/core/story-migrations.mjs";
+import { migrateStory } from "@launchclip/core/story-migrations.mjs";
 import { typesetProjectStory } from "./math/index.js";
 import { applyProjectStyle } from "./story_style.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 
-// kit/core/story.mjs is the canonical storyboard.json implementation (see
-// docs/KIT_CONTRACTS.md). It is loaded lazily so the HyperFrames path keeps
+// @launchclip/core/story.mjs (kit/core/story.mjs) is the canonical
+// storyboard.json implementation (see docs/KIT_CONTRACTS.md). It is loaded lazily so the HyperFrames path keeps
 // working without it, and so tests can inject a stub through `storyModule`.
 const execFileAsync = promisify(execFile);
-export const DEFAULT_STORY_MODULE = fileURLToPath(new URL("../kit/core/story.mjs", import.meta.url));
+export const DEFAULT_STORY_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs"));
 const REQUIRED_EXPORTS = ["resolveStory", "deriveBoundaries", "storyFormat"];
 
-// source: undefined (kit/core/story.mjs), a file path or URL, or an already
+// source: undefined (@launchclip/core/story.mjs), a file path or URL, or an already
 // imported module object.
 export async function loadStoryModule(source) {
   if (source && typeof source === "object" && !(source instanceof URL)) return assertStoryModule(source, "injected story module");
   const file = source instanceof URL ? fileURLToPath(source) : path.resolve(String(source ?? DEFAULT_STORY_MODULE));
   if (!existsSync(file)) {
     throw new Error(`storyboard.json support requires ${path.relative(process.cwd(), file) || file}, which was not found. `
-      + "It is the kit/core/story.mjs module from docs/KIT_CONTRACTS.md (resolveStory, deriveBoundaries, storyFormat).");
+      + "It is the @launchclip/core/story.mjs module from docs/KIT_CONTRACTS.md (resolveStory, deriveBoundaries, storyFormat).");
   }
   return assertStoryModule(await import(pathToFileURL(file).href), file);
 }

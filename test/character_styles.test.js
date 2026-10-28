@@ -3,14 +3,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {EXPRESSIONS, POSES, poseJoints, rigGeometry} from '../kit/core/characters/rig.mjs';
-import {STARTER_CAST, characterLook, starterCharacter} from '../kit/core/characters/cast.mjs';
-import {drawFlat} from '../kit/core/characters/style-flat.mjs';
-import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '../kit/core/characters/styles.mjs';
-import {DEFAULT_LIGHT, lightErrors, normalizeLight} from '../kit/core/characters/light.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {charactersView} from '../kit/core/catalog-characters.mjs';
-import {resolveStory} from '../kit/core/story.mjs';
+import {EXPRESSIONS, POSES, poseJoints, rigGeometry} from '@launchclip/core/characters/rig.mjs';
+import {STARTER_CAST, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
+import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {DEFAULT_LIGHT, lightErrors, normalizeLight} from '@launchclip/core/characters/light.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {charactersView} from '@launchclip/core/catalog-characters.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 
@@ -112,9 +112,9 @@ test('stick-classic: black and white only (ink lines, paper head), coloured stic
 // Cast-scene renders per drawing style (catalog-characters.mjs): the style
 // reaches the drawn tree, and the styles stay apart.
 test('a seeded drawing style reaches the rendered cast-scene, and the eight styles all look different', async () => {
-  const {generateStyle} = await import('../kit/core/style-seed.mjs');
-  const {applyStyle} = await import('../kit/core/style.mjs');
-  const {DRAWING_STYLES} = await import('../kit/core/characters/styles.mjs');
+  const {generateStyle} = await import('@launchclip/core/style-seed.mjs');
+  const {applyStyle} = await import('@launchclip/core/style.mjs');
+  const {DRAWING_STYLES} = await import('@launchclip/core/characters/styles.mjs');
   const trees = new Map();
   for (const style of DRAWING_STYLES) {
     const pack = {name: `seed-${style}`, ...generateStyle({seed: '0badf00d', constraints: {drawing_style: style}})};
@@ -131,7 +131,7 @@ test('a seeded drawing style reaches the rendered cast-scene, and the eight styl
 });
 
 test('cinematic is set well apart from lifelike: harder key, teal core shadow, brighter rim', async () => {
-  const {CINEMATIC} = await import('../kit/core/characters/real-pen.mjs');
+  const {CINEMATIC} = await import('@launchclip/core/characters/real-pen.mjs');
   assert.ok(CINEMATIC.key > 1.2 && CINEMATIC.rim > 1.5 && CINEMATIC.shade >= 0.45);
   const scene = {id: 'desk', module: 'cast-scene', start: 0, end: 6, params: {set: 'desk-laptop', backdrop: 'room', cast: [{id: 'maya', pose: 'type'}, {id: 'theo', pose: 'point'}]}};
   const m = style => { const s = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand: {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}}, cast: {style, characters: [{id: 'maya'}, {id: 'theo'}]}, scenes: [scene]}; return resolveModule(scene, s); };
@@ -142,10 +142,10 @@ test('cinematic is set well apart from lifelike: harder key, teal core shadow, b
 });
 
 test('a floor shadow is not part of a character\'s reach, and the mark never reaches the JSON', async () => {
-  const {drawingBounds, SHADOW} = await import('../kit/core/characters/bounds.mjs');
-  const {castPlacement} = await import('../kit/core/characters/placement.mjs');
-  const {sceneJoints} = await import('../kit/core/characters/acting.mjs');
-  const {DEFAULT_LIGHT: light} = await import('../kit/core/characters/light.mjs');
+  const {drawingBounds, SHADOW} = await import('@launchclip/core/characters/bounds.mjs');
+  const {castPlacement} = await import('@launchclip/core/characters/placement.mjs');
+  const {sceneJoints} = await import('@launchclip/core/characters/acting.mjs');
+  const {DEFAULT_LIGHT: light} = await import('@launchclip/core/characters/light.mjs');
   const params = starterCharacter('maya').params;
   for (const style of DRAWING_STYLES) {
     const colors = characterLook(params, {style}).colors;

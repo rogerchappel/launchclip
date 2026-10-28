@@ -4,11 +4,11 @@ import { lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/pr
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { storyboardMeasures } from "../kit/core/cadence.mjs";
-import { chooseCutWindow, cutTrim, cutWords, cutdownStory, keyWords, mapTime } from "../kit/core/cutdown.mjs";
-import { validateDirection } from "../kit/core/direction.mjs";
-import { structureLongForm } from "../kit/core/long-form.mjs";
-import { resolveStory, storyBase } from "../kit/core/story.mjs";
+import { storyboardMeasures } from "@launchclip/core/cadence.mjs";
+import { chooseCutWindow, cutTrim, cutWords, cutdownStory, keyWords, mapTime } from "@launchclip/core/cutdown.mjs";
+import { validateDirection } from "@launchclip/core/direction.mjs";
+import { structureLongForm } from "@launchclip/core/long-form.mjs";
+import { resolveStory, storyBase } from "@launchclip/core/story.mjs";
 import { runCli } from "../src/cli.js";
 import { runCutdown } from "../src/cutdown.js";
 import { profileForStory, resolveProfile } from "../src/profile_store.js";

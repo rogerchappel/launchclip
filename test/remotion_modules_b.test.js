@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { resolveEditorialModule } from "../kit/core/editorial-core.mjs";
+import { resolveEditorialModule } from "@launchclip/core/editorial-core.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

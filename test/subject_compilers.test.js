@@ -2,7 +2,7 @@
 // subject camera and room sets; stories without a subject unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveStory} from '../kit/core/story.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

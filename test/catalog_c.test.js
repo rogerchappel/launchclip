@@ -5,10 +5,10 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runInNewContext} from 'node:vm';
 import gsap from 'gsap';
-import {MODULES, BASE_CAMERA, cameraOps, cameraOverlaps, catalogCTimeline, catalogCView} from '../kit/core/catalog-c.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, BASE_CAMERA, cameraOps, cameraOverlaps, catalogCTimeline, catalogCView} from '@launchclip/core/catalog-c.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS, cameraGsap} from '../kit/hyperframes/catalog-c.mjs';
-import {knownModules, resolveModule} from '../kit/core/modules.mjs';
+import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const IDS = ['punch-in', 'zoom-through', 'footage-callout', 'lower-third', 'emphasis-caption', 'masthead', 'dolly-zoom'];
@@ -406,7 +406,7 @@ test('zoom-through: no cut in the edit means a fake cut mid-scene; strict valida
 // column, so the head hides most of it. resolve refuses it; a word that
 // reaches past the head resolves, and layout-check's 60% rule judges each letter.
 test('masthead: refuses a word the measured head mostly hides', async () => {
-  const {checkBehindText, subjectCoverShare} = await import('../kit/core/subject-layer.mjs');
+  const {checkBehindText, subjectCoverShare} = await import('@launchclip/core/subject-layer.mjs');
   const W = 1920, H = 1080, h = {x: 0.5037, y: 0.3421, w: 0.2185, h: 0.4868};
   const box = {x: (h.x - h.w / 2) * W, y: (h.y - h.h / 2) * H, width: h.w * W, height: h.h * H};
   const wide = {format: {width: W, height: H, fps: 30, duration: 10}, aspect: '16:9', subject: {available: true, framing: 'close-up', head: box, placement: 'measured'}};

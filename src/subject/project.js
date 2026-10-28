@@ -14,8 +14,8 @@
 
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { subjectMode } from "../../kit/core/story.mjs";
-import { validateSubjectTrack } from "../../kit/core/subject.mjs";
+import { subjectMode } from "@launchclip/core/story.mjs";
+import { validateSubjectTrack } from "@launchclip/core/subject.mjs";
 import { rangeDirName } from "./stage.js";
 
 export const MATTES_SCHEMA = "launchclip.subject-mattes.v1";

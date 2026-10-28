@@ -11,7 +11,7 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {runInNewContext} from 'node:vm';
 import {build} from 'esbuild';
-import {resolveEditorialModule} from '../kit/core/editorial-core.mjs';
+import {resolveEditorialModule} from '@launchclip/core/editorial-core.mjs';
 import {buildEditorialModule} from '../kit/hyperframes/editorial-ui-modules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));

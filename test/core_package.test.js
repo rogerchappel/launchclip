@@ -159,3 +159,21 @@ test('@launchclip/core is versioned in step with launchclip and pinned exactly',
   assert.equal(core.type, 'module');
   assert.deepEqual(Object.keys(core.dependencies ?? {}), []);
 });
+
+// One source of truth: Node code reaches the engine through the package, never
+// by a relative path into kit/core. kit/remotion, kit/hyperframes and the
+// Remotion test entries (.tsx) sit beside kit/core and keep ../core/ imports.
+test('Node code outside kit/ imports @launchclip/core, not kit/core paths', () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(path.join(ROOT, dir), {withFileTypes: true})) {
+      const file = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(file); continue; }
+      if (!/\.(js|mjs|cjs)$/.test(entry.name)) continue;
+      const source = readFileSync(path.join(ROOT, file), 'utf8');
+      for (const match of source.matchAll(/(?:from|import\()\s*['"]((?:\.\.\/)+kit\/core\/[^'"]+)['"]/g)) offenders.push(`${file}: ${match[1]}`);
+    }
+  };
+  for (const dir of ['bin', 'src', 'scripts', 'eval', 'test']) walk(dir);
+  assert.deepEqual(offenders, []);
+});

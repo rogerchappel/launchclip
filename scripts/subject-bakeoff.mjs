@@ -19,7 +19,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { maskStats, summarizeSamples } from "../kit/core/subject.mjs";
+import { maskStats, summarizeSamples } from "@launchclip/core/subject.mjs";
 import { readFrames } from "../src/subject/frames.js";
 import { ensureModel, subjectModel } from "../src/subject/models.js";
 import { createSegmenter, fuseSegmenters } from "../src/subject/segment.js";

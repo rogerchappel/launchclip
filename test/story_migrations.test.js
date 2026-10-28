@@ -5,8 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {STORY_MIGRATIONS, STORY_REVISION, migrateStory, migrationProblems, stampStory, storyVersion} from '../kit/core/story-migrations.mjs';
-import {STORY_SCHEMA, validateStory} from '../kit/core/story.mjs';
+import {STORY_MIGRATIONS, STORY_REVISION, migrateStory, migrationProblems, stampStory, storyVersion} from '@launchclip/core/story-migrations.mjs';
+import {STORY_SCHEMA, validateStory} from '@launchclip/core/story.mjs';
 import {globalSettings} from '../src/render_segments.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');

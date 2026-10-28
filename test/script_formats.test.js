@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planningPrompt } from "../kit/core/planning-prompt.mjs";
+import { planningPrompt } from "@launchclip/core/planning-prompt.mjs";
 import {
   AWARENESS_LEVELS,
   MAX_WORDS_PER_SECOND,
@@ -14,7 +14,7 @@ import {
   scriptPlanLines,
   scriptRuleLines,
   wordBudget
-} from "../kit/core/script-formats.mjs";
+} from "@launchclip/core/script-formats.mjs";
 
 test("the format, goal and awareness vocabularies are fixed", () => {
   assert.deepEqual([...SCRIPT_FORMAT_IDS], ["short-form", "long-form", "explainer", "data-explainer", "story", "promo"]);

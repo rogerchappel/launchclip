@@ -21,4 +21,4 @@ export {
   edlTrim,
   BASE_FITS,
   aspectName
-} from "../kit/core/story.mjs";
+} from "@launchclip/core/story.mjs";

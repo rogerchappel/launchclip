@@ -6,13 +6,13 @@ import test from "node:test";
 import gsap from "gsap";
 import {
   blurAt, cameraPlan, cameraStateAt, captionDipWindows, containerState, opsStateAt, restState, sceneObjectLookup, screenPoint, worldPoint
-} from "../kit/core/camera-world.mjs";
-import { getEase } from "../kit/core/motion.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
-import { worldBackdrops } from "../kit/core/world-backdrops.mjs";
-import { ZOOM, shotZooms, zoomFitError, zoomFrame, zoomOps, zoomStateAt, zoomTiming } from "../kit/core/zooms.mjs";
+} from "@launchclip/core/camera-world.mjs";
+import { getEase } from "@launchclip/core/motion.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
+import { worldBackdrops } from "@launchclip/core/world-backdrops.mjs";
+import { ZOOM, shotZooms, zoomFitError, zoomFrame, zoomOps, zoomStateAt, zoomTiming } from "@launchclip/core/zooms.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const W = 1080, H = 1920;

@@ -9,9 +9,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {getEase} from '../kit/core/motion.mjs';
-import {HOLD_GAP, emptyPlates, layerStateAt, sceneLeadIn, sceneWindows} from '../kit/core/transitions.mjs';
-import {resolveStory, validateStory} from '../kit/core/story.mjs';
+import {getEase} from '@launchclip/core/motion.mjs';
+import {HOLD_GAP, emptyPlates, layerStateAt, sceneLeadIn, sceneWindows} from '@launchclip/core/transitions.mjs';
+import {resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {checkLayoutProject} from '../src/layout_check.js';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'inter', meta: 'jetbrains-mono'}};

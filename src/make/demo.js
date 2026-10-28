@@ -13,7 +13,7 @@
 // recording.
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { productDemoParams } from "../../kit/core/catalog-d.mjs";
+import { productDemoParams } from "@launchclip/core/catalog-d.mjs";
 import { RECEIPT_FILE, approveFlows, approvedFlows, askYesNo, runAutopilot } from "../demo/autopilot.js";
 
 export const DEMO_DIR = "assets/demo";

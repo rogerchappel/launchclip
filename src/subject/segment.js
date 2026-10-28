@@ -2,7 +2,7 @@
 // comes back at the same size as 0–255 values. Inference runs at the model's
 // own resolution and the mask is scaled back with bilinear filtering.
 
-import { maskStats } from "../../kit/core/subject.mjs";
+import { maskStats } from "@launchclip/core/subject.mjs";
 import { ensurePipeline, subjectModel, subjectPipeline } from "./models.js";
 
 /**

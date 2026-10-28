@@ -19,7 +19,7 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
-import {MODULES} from '../kit/core/catalog-b.mjs';
+import {MODULES} from '@launchclip/core/catalog-b.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-b.mjs';
 import {injectParityFonts} from './parity-fonts.mjs';
 import {bundleForRun} from './remotion-bundle.mjs';

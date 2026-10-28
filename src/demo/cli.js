@@ -2,7 +2,7 @@
 // `launchclip demo scene <dir>` and `launchclip demo shots <docs>`.
 import path from "node:path";
 import { createPlannerClient } from "../storyboard_planner.js";
-import { productDemoParams } from "../../kit/core/catalog-d.mjs";
+import { productDemoParams } from "@launchclip/core/catalog-d.mjs";
 import { approveFlows, approvedFlows, askYesNo, runAutopilot } from "./autopilot.js";
 import { runShots } from "./shots.js";
 

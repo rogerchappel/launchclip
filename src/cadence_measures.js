@@ -19,8 +19,8 @@ import { createReadStream, existsSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { distribution, storyboardMeasures } from "../kit/core/cadence.mjs";
-import { CADENCE_PROFILE_SCHEMA, PROFILE_MEASURES, REFERENCE_RIGHTS, percentiles, validateProfile } from "../kit/core/profiles.mjs";
+import { distribution, storyboardMeasures } from "@launchclip/core/cadence.mjs";
+import { CADENCE_PROFILE_SCHEMA, PROFILE_MEASURES, REFERENCE_RIGHTS, percentiles, validateProfile } from "@launchclip/core/profiles.mjs";
 import { analyzeRenderMotion, hookEventSeconds } from "./render_motion_analysis.js";
 
 const execFileAsync = promisify(execFile);

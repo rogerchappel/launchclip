@@ -4,7 +4,7 @@
 // by (src/render_segments.js). Contract: docs/KIT_CONTRACTS.md, "Story patches".
 import { gatherSegmentInputs, hashSegments, planSegments, sceneModels } from "./render_segments.js";
 
-export { applyJsonPatch, applyStoryPatch, formatPointer, messagePointer, parsePointer } from "../kit/core/story-patch.mjs";
+export { applyJsonPatch, applyStoryPatch, formatPointer, messagePointer, parsePointer } from "@launchclip/core/story-patch.mjs";
 
 // Segment inputs without a project: captions and asset contents come from
 // files, which both sides of an edit share, so only what the stories say can

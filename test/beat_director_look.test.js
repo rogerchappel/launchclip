@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { beatMapToStory, directLongForm, dryRunWords, windowWords } from "../kit/core/beat-director.mjs";
-import { cutShorts } from "../kit/core/cutdown.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { scenePlateSpec } from "../kit/core/plates.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { beatMapToStory, directLongForm, dryRunWords, windowWords } from "@launchclip/core/beat-director.mjs";
+import { cutShorts } from "@launchclip/core/cutdown.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { scenePlateSpec } from "@launchclip/core/plates.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 
 const FIXTURE = path.resolve("eval/fixtures/long-form-16min");
 const script = readFileSync(path.join(FIXTURE, "SCRIPT.md"), "utf8");

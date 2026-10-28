@@ -11,7 +11,7 @@
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CONTOURS_SCHEMA, SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "../../kit/core/subject.mjs";
+import { CONTOURS_SCHEMA, SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectProbe, validateSubjectTrack } from "@launchclip/core/subject.mjs";
 import { probeMedia } from "../media_trim.js";
 import { openMatteWriter, readFrames, withAlpha, writeImage } from "./frames.js";
 import { createPlateAccumulator } from "./plate.js";

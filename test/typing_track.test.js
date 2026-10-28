@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 import { assignVariants, collectTyping, keyKind, mixTyping, pitchShift, thinKeys, typingSchedule } from "../src/sfx/typing.js";
 
 // A code-snippet scene with two typed lines, resolved through the real module.

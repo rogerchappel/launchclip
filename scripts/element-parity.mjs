@@ -14,7 +14,7 @@ import {mkdtemp, readdir, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {MODULES, VARIANTS} from '../kit/core/catalog-h.mjs';
+import {MODULES, VARIANTS} from '@launchclip/core/catalog-h.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from './element-samples.mjs';
 import {BRAND, SCENE} from './element-sheet.mjs';
 

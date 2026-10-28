@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { chooseAlignment, keyMoments, momentReport, nearest, scoreMoments, snapStory, summarizeMoments, syncStrategy } from "../src/music/beat_sync.js";
 import { gridFromBpm, transformGrid } from "../src/music/beats.js";
 

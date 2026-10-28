@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { allFontFaces } from "../kit/core/fonts.mjs";
+import { allFontFaces } from "@launchclip/core/fonts.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const source = readFileSync(path.join(ROOT, "kit/remotion/fonts.ts"), "utf8");

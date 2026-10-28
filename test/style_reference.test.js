@@ -7,8 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { colorDistance, STYLE_SCHEMA, validateStylePack } from "../kit/core/style.mjs";
-import { validateProfile } from "../kit/core/profiles.mjs";
+import { colorDistance, STYLE_SCHEMA, validateStylePack } from "@launchclip/core/style.mjs";
+import { validateProfile } from "@launchclip/core/profiles.mjs";
 import { boundariesFromGrayFrames, captionCase, captionsFromDetection, columnCase, compareToStyle, detectCaptions, detectLayouts, downsampleFrame, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, overlayEventsFromGrayFrames, paletteClusters, panelShare, profileFromReferences } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { mediaSkip } from "./helpers/media.js";

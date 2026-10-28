@@ -4,21 +4,21 @@ import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { TEXT_FADE } from "../kit/core/modules.mjs";
+import { TEXT_FADE } from "@launchclip/core/modules.mjs";
 import gsap from "gsap";
 import {
   calmEase, DEFAULT_GRAMMAR, easeOvershoot, easeRole, GRAMMAR_NAMES, GRAMMARS, grammarDuration, grammarEase, grammarErrors, grammarStagger,
   isEditorialGrammar, resolveGrammar
-} from "../kit/core/grammar.mjs";
-import { getEase } from "../kit/core/motion.mjs";
-import { resolveEditorialModule } from "../kit/core/editorial-core.mjs";
+} from "@launchclip/core/grammar.mjs";
+import { getEase } from "@launchclip/core/motion.mjs";
+import { resolveEditorialModule } from "@launchclip/core/editorial-core.mjs";
 import { emitEditorialModule } from "../kit/hyperframes/editorial-ui-modules.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { sceneWindows, transitionTweens } from "../kit/core/transitions.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { sceneWindows, transitionTweens } from "@launchclip/core/transitions.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { readProjectStory } from "../src/story_loader.js";
-import { suggestMotion, planningPrompt } from "../kit/core/planning-prompt.mjs";
-import { sceneAmbient } from "../kit/core/ambient.mjs";
+import { suggestMotion, planningPrompt } from "@launchclip/core/planning-prompt.mjs";
+import { sceneAmbient } from "@launchclip/core/ambient.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY = path.join(ROOT, "examples", "story");

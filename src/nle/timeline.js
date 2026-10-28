@@ -29,10 +29,10 @@
 //
 // buildTimeline() is pure: the export command (export.js) probes media and
 // renders overlays, then passes their descriptions in `media`.
-import { resolveModule } from "../../kit/core/modules.mjs";
-import { storyBase, storyChapters, storyHits } from "../../kit/core/story.mjs";
-import { needsSubject, sceneLayerOf, subjectSegments, subjectWindows } from "../../kit/core/subject-layer.mjs";
-import { sceneWindows } from "../../kit/core/transitions.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { storyBase, storyChapters, storyHits } from "@launchclip/core/story.mjs";
+import { needsSubject, sceneLayerOf, subjectSegments, subjectWindows } from "@launchclip/core/subject-layer.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { framesToSeconds, framesToTimecode, parseRate, secondsToFrames } from "./time.js";
 
 export const TIMELINE_SCHEMA = "launchclip.nle-timeline.v1";

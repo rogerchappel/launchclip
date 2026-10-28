@@ -3,8 +3,8 @@
 // fail on a card's panel-fill pattern or a world's overscan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cardSurface} from '../kit/core/catalog-g-base.mjs';
-import {layerNode} from '../kit/core/worlds/view.mjs';
+import {cardSurface} from '@launchclip/core/catalog-g-base.mjs';
+import {layerNode} from '@launchclip/core/worlds/view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 
 test('a card panel fill and a world layer mark their intended overflow', () => {

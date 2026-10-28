@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { profileGeometry } from "../kit/core/layout-check.mjs";
+import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { decodePng } from "./visual_snapshot.js";
 
 // Still-based confirmation for the geometric layout check: measure what the

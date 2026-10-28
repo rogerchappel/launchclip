@@ -19,9 +19,9 @@ import { writeMotionReport } from "./render_motion_analysis.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { hasExactFile, readProjectStory } from "./story_loader.js";
 import { readStorySubject } from "./subject/project.js";
-import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
-import { storyBase } from "../kit/core/story.mjs";
-import { needsSubject } from "../kit/core/subject-layer.mjs";
+import { catalogModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { storyBase } from "@launchclip/core/story.mjs";
+import { needsSubject } from "@launchclip/core/subject-layer.mjs";
 
 // adapters (all optional, for tests and embedding):
 //   verifyProject(project, qaDir, options) replaces the renderer check entirely;

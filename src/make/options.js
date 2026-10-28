@@ -3,7 +3,7 @@
 // block (docs/COLLECTIONS_RFC.md §3.3) is the subset marked `setting`: the
 // choices a recipe saves. The rest (the prompt's own assets, --out, --repo
 // and the demo flags, --replan) belong to one video.
-import { scriptPlanOptions } from "../../kit/core/script-formats.mjs";
+import { scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { MUSIC_FLAG_VALUES } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";

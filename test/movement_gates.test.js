@@ -2,7 +2,7 @@
 // over 3 s, and no shot runs over 10 s without a state change.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveStory} from '../kit/core/story.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {MOVEMENT, holdGate, stateGate} from '../src/movement_guardrails.js';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

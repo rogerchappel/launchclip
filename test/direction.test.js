@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { DIRECTION_INTENTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, classifyIntent, directionMeasures, draftDirectionMap, intentHints, segmentLines, validateDirection } from "../kit/core/direction.mjs";
+import { DIRECTION_INTENTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, classifyIntent, directionMeasures, draftDirectionMap, intentHints, segmentLines, validateDirection } from "@launchclip/core/direction.mjs";
 import { runStoryCommand } from "../src/story_cli.js";
 
 const FOOTAGE = fileURLToPath(new URL("../examples/story/footage/", import.meta.url));
@@ -117,7 +117,7 @@ test("draftDirectionMap drafts a valid map from a storyboard", async () => {
 });
 
 test("a narrative map names the key action of every line with cast cues, and of each section", async () => {
-  const { validateDirection } = await import("../kit/core/direction.mjs");
+  const { validateDirection } = await import("@launchclip/core/direction.mjs");
   const words = Array.from({ length: 4 }, (_, i) => ({ text: `w${i}`, start: i, end: i + 0.5 }));
   const line = (extra) => ({ words: [0, 3], intent: "claim", treatment: "insert", scenes: ["c"], ...extra });
   const map = (lines) => ({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", beat: "resolution", lines }] });

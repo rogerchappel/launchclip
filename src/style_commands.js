@@ -7,7 +7,7 @@ import { analyzeReference, compareToStyle, draftStyleFromReferences } from "./st
 import { storyCadence, styleAdherence, styleProfile } from "./style_adherence.js";
 import { readProjectDirection } from "./quality_gates.js";
 import { readProjectStory } from "./story_loader.js";
-import { applyStyle } from "../kit/core/style.mjs";
+import { applyStyle } from "@launchclip/core/style.mjs";
 import { resolveStyleV2, writeStyleV2 } from "./style_store.js";
 
 const list = (value) => (value === undefined || value === true ? [] : Array.isArray(value) ? value : [value]).map(String);

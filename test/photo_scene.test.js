@@ -5,10 +5,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {MODULES, kenBurnsAt, photoSceneTimeline, photoSceneView} from '../kit/core/catalog-d.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {sceneDrift} from '../kit/core/ambient.mjs';
-import {profileGeometry} from '../kit/core/layout-check.mjs';
+import {MODULES, kenBurnsAt, photoSceneTimeline, photoSceneView} from '@launchclip/core/catalog-d.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {sceneDrift} from '@launchclip/core/ambient.mjs';
+import {profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 

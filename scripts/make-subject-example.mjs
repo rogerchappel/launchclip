@@ -31,7 +31,7 @@ import {createHash} from 'node:crypto';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CONTOURS_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectTrack} from '../kit/core/subject.mjs';
+import {CONTOURS_SCHEMA, SUBJECT_SCHEMA, TRACK_FPS, TRACK_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectTrack} from '@launchclip/core/subject.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);

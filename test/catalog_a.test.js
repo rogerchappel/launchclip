@@ -7,10 +7,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import gsap from "gsap";
-import { CATALOG_A_IDS, MODULES, ANIMATED_PROPS, contrastRatio, cssFromProps, initialNodeProps, mixHex, sampleNode, textAt } from "../kit/core/catalog-a.mjs";
+import { CATALOG_A_IDS, MODULES, ANIMATED_PROPS, contrastRatio, cssFromProps, initialNodeProps, mixHex, sampleNode, textAt } from "@launchclip/core/catalog-a.mjs";
 import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
-import { getEase } from "../kit/core/motion.mjs";
-import { SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { getEase } from "@launchclip/core/motion.mjs";
+import { SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -441,7 +441,7 @@ test("count-up counts in discrete frames and hits when the count lands", () => {
 });
 
 test("count-up formats decimals, separators, signs and affixes", async () => {
-  const { formatNumber } = await import("../kit/core/catalog-a.mjs");
+  const { formatNumber } = await import("@launchclip/core/catalog-a.mjs");
   assert.equal(formatNumber(1234567.891, { decimals: 2 }), "1,234,567.89");
   assert.equal(formatNumber(1234567, { separator: false }), "1234567");
   assert.equal(formatNumber(-42.5, { decimals: 1 }), "−42.5");
@@ -478,7 +478,7 @@ const EQUATION = { name: "Newton's law of cooling", equation: "dT/dt = −k (T �
 registerSample("equation-lockup", EQUATION);
 
 test("equation-lockup typesets terms, fractions and scripts without MathJax", async () => {
-  const { tokenizeMath } = await import("../kit/core/catalog-a.mjs");
+  const { tokenizeMath } = await import("@launchclip/core/catalog-a.mjs");
   assert.deepEqual(tokenizeMath("dT/dt"), [{ type: "frac", num: [{ type: "var", text: "dT" }], den: [{ type: "var", text: "dt" }] }]);
   assert.deepEqual(tokenizeMath("T_room"), [{ type: "var", text: "T", sub: [{ type: "fn", text: "room" }] }]);
   assert.deepEqual(tokenizeMath("x^2"), [{ type: "var", text: "x", sup: [{ type: "num", text: "2" }] }]);
@@ -653,9 +653,9 @@ test("HyperFrames: GSAP owns animated transforms (none in the stylesheet) and an
 });
 
 test("hook-title and cta have four layout variants that seeds pick from", async () => {
-  const { TITLE_VARIANTS } = await import("../kit/core/catalog-a.mjs");
-  const { moduleVariants } = await import("../kit/core/modules.mjs");
-  const { SEED_MODULE_VARIANTS } = await import("../kit/core/style-seed.mjs");
+  const { TITLE_VARIANTS } = await import("@launchclip/core/catalog-a.mjs");
+  const { moduleVariants } = await import("@launchclip/core/modules.mjs");
+  const { SEED_MODULE_VARIANTS } = await import("@launchclip/core/style-seed.mjs");
   assert.deepEqual(TITLE_VARIANTS, ["centered", "flush", "boxed", "low"]);
   for (const id of ["hook-title", "cta"]) {
     assert.deepEqual(moduleVariants()[id], TITLE_VARIANTS);

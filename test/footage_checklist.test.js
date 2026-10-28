@@ -3,8 +3,8 @@
 // whose text stays legal; without one it is placed exactly as before.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveStory} from '../kit/core/story.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const rows = [{label: 'Drop in your clip', status: 'active', at: 0.3, doneAt: 0.9}, {label: 'Ship the video', status: 'active', at: 1.0, doneAt: 1.6}];

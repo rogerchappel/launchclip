@@ -7,7 +7,7 @@ import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {resolveEditorialModule} from '../kit/core/editorial-core.mjs';
+import {resolveEditorialModule} from '@launchclip/core/editorial-core.mjs';
 import {editorialSpecFromScene, mixHex, brandTheme} from '../scripts/parity-scene.mjs';
 import {sampleTimes} from '../scripts/parity.mjs';
 import {mediaSkip} from './helpers/media.js';

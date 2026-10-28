@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-import {isSubjectEffect, SUBJECT_DENSITY, subjectDensityFindings, subjectDensityWarnings} from '../kit/core/modules.mjs';
+import {isSubjectEffect, SUBJECT_DENSITY, subjectDensityFindings, subjectDensityWarnings} from '@launchclip/core/modules.mjs';
 import {checkLayoutProject} from '../src/layout_check.js';
 import {checkStoryboard} from '../src/storyboard_planner.js';
 

@@ -17,7 +17,7 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { writeFileAtomic } from "../atomic_write.js";
-import { densityValue } from "../../kit/core/sound/options.mjs";
+import { densityValue } from "@launchclip/core/sound/options.mjs";
 
 export const LIBRARY_SCHEMA = "launchclip.sfx-library.v1";
 export const LIBRARY_FILE = "library.json";

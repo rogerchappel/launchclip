@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { resolveStory } from "../kit/core/story.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames, mediaLayerTweens } from "../kit/hyperframes/story-compiler.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");

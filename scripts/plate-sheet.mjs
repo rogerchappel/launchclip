@@ -14,8 +14,8 @@ import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {PLATE_KINDS} from '../kit/core/plates.mjs';
-import {resolveStory} from '../kit/core/story.mjs';
+import {PLATE_KINDS} from '@launchclip/core/plates.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {getRenderer} from '../src/renderers/index.js';
 

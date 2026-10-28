@@ -8,11 +8,11 @@ import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
-import { ambientField, blobStateAt, driftStateAt, sceneDrift } from "../kit/core/ambient.mjs";
-import { profileGeometry } from "../kit/core/layout-check.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
+import { ambientField, blobStateAt, driftStateAt, sceneDrift } from "@launchclip/core/ambient.mjs";
+import { profileGeometry } from "@launchclip/core/layout-check.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MINIMAL = path.join(ROOT, "examples/story/minimal");

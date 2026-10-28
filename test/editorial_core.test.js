@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule, statusContrast} from '../kit/core/editorial-core.mjs';
+import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule, statusContrast} from '@launchclip/core/editorial-core.mjs';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 
 const corpus = JSON.parse(readFileSync(new URL('./fixtures/editorial-golden.json', import.meta.url), 'utf8'));
@@ -195,7 +195,7 @@ test('status-rack status palette: lights can go red → green, with contrast-che
 });
 
 test('status-rack status palette takes pass and fail from brand roles through the module registry', async () => {
-  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
   const story = colors => ({format: {width: 1920, height: 1080, fps: 30, duration: 5}, brand: {colors}, scenes: []});
   const scene = params => ({id: 'gates', module: 'status-rack', start: 0, end: 4, params: {title: 'Gates', rect: {x: 400, y: 200, width: 1100, height: 400}, rack: {mode: 'illustration', rows: [{label: 'Tests', states: [{at: .4, lights: [true, true, true], tone: 'fail'}, {at: 1.2, lights: [true, true, true], tone: 'pass'}]}]}, ...params}});
   const brand = {bg: '#0a0b10', paper: '#f3efe6', primary: '#ffa630', success: '#22c55e', danger: '#ef4444'};
