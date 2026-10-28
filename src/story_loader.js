@@ -23,7 +23,7 @@ export async function loadStoryModule(source) {
   const file = source instanceof URL ? fileURLToPath(source) : path.resolve(String(source ?? DEFAULT_STORY_MODULE));
   if (!existsSync(file)) {
     throw new Error(`storyboard.json support requires ${path.relative(process.cwd(), file) || file}, which was not found. `
-      + "It is the @launchclip/core/story.mjs module from docs/KIT_CONTRACTS.md (resolveStory, deriveBoundaries, storyFormat).");
+      + "It is the @launchclip/core story module (kit/core/story.mjs) from docs/KIT_CONTRACTS.md (resolveStory, deriveBoundaries, storyFormat).");
   }
   return assertStoryModule(await import(pathToFileURL(file).href), file);
 }
