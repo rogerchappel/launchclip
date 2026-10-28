@@ -59,7 +59,7 @@ export const STYLE_ILLUSTRATIONS = Object.freeze(['flat', 'flat-shadow', 'line']
 export const STYLE_MEDIUMS = MEDIUM_KINDS;
 // The worlds kit's times (kit/core/worlds/); a pack's world is checked like a story's.
 export const STYLE_WORLD_TIMES = WORLD_TIMES;
-export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 'at', 'constraints', 'theme', 'scheme', 'pairing', 'redraws']);
+export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 'at', 'constraints', 'inputs', 'theme', 'scheme', 'pairing', 'redraws', 'adjusted', 'substituted', 'stepped', 'avoided', 'pinned']);
 const SEED_HEX = /^[0-9a-f]{8}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export const STYLE_DIALS = Object.freeze(['energy', 'density', 'playfulness', 'polish']);

@@ -2,7 +2,16 @@
 // pack from an 8-hex seed, so two projects made from bare prompts look
 // different and one project looks the same every time.
 //
-//   generateStyle({seed, tone, constraints, at}) → pack
+//   generateStyle({seed, brand, tone, constraints, avoid, at}) → pack
+//
+// A brand (style-brand.mjs: colours with or without roles, a logo, fonts,
+// tone words, an industry, reference stills) conditions the draw: its colours
+// keep their roles and the seed fills the rest around its hue, its fonts map
+// to the bundled OFL families, its tone words and industry choose the tone
+// and the worlds, and its name and logo make the lockup in the brand frame.
+// Generator v2 adds the motion feel and the backdrop plates (style-feel.mjs);
+// `avoid` keeps the result at least MIN_AVOID_DISTANCE (style-distance.mjs)
+// from every style it lists, stepping to derived seeds until it is.
 //
 // Art direction sets the constraints (tone, theme, world, drawing style,
 // character set, background, panel); the seed picks among the options that
@@ -30,15 +39,24 @@ import { moduleVariants } from './modules.mjs';
 import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
 import { BACKGROUND_MOTIFS } from './backgrounds.mjs';
 import { PANEL_TREATMENTS } from './panels.mjs';
-import { WORLD_KINDS } from './worlds/index.mjs';
+import { WORLD_KINDS, suggestWorld } from './worlds/index.mjs';
 import { mediumErrors } from './medium.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
 import { fitContrast, hexToOklab, hexToOklch, hueGap, oklchToHex } from './oklch.mjs';
+import { brandFonts, brandIsEmpty, brandRoles, normalizeBrand } from './style-brand.mjs';
+import { drawBackdrops, drawMotionFeel } from './style-feel.mjs';
+import { MIN_AVOID_DISTANCE, styleDistance, styleTraits } from './style-distance.mjs';
 import { STYLE_FRAME_POSITIONS, STYLE_ICON_STYLES, STYLE_ILLUSTRATIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
 
 export { hexToOklab, hexToOklch, oklchToHex } from './oklch.mjs';
 
-export const GENERATOR_VERSION = 'launchclip.style-seed.v1';
+export { NEAR_DUPLICATE, MIN_AVOID_DISTANCE, styleDistance, styleDistanceReport, styleTraits } from './style-distance.mjs';
+
+// v2 adds brand inputs, the motion feel and the backdrop plates. A v1 pack
+// regenerates exactly with generator: GENERATOR_V1.
+export const GENERATOR_V1 = 'launchclip.style-seed.v1';
+export const GENERATOR_VERSION = 'launchclip.style-seed.v2';
+export const GENERATOR_VERSIONS = Object.freeze([GENERATOR_V1, GENERATOR_VERSION]);
 export const SEED_PATTERN = /^[0-9a-f]{8}$/;
 
 // ---------------------------------------------------------------------------
@@ -124,7 +142,9 @@ const NIGHT_TONES = new Set(['premium', 'energetic']);
 export const SEED_MODULE_VARIANTS = Object.freeze(Object.fromEntries(Object.entries(moduleVariants()).map(([id, names]) => [id, Object.freeze(names)])));
 // medium is never drawn by the seed: a generated style is painted only when
 // art direction asks for it (kit/core/medium.mjs mediumFromText reads the words).
-export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel', 'medium']);
+// overshoot: true lets entrances and emphasis keep the base grammar's back
+// and elastic eases (off by default: every generated feel is slow-fast-slow).
+export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel', 'medium', 'overshoot']);
 
 /**
  * Curated type pairings over the bundled fonts (kit/core/fonts.mjs): display
@@ -328,6 +348,54 @@ function drawPalette(s, { theme, scheme, tone }) {
   return { colors, dark };
 }
 
+/**
+ * A palette around a brand's own colours (style-brand.mjs brandRoles): the
+ * roles it fixes stay as given unless they fail a contrast pair, when the
+ * smallest lightness move that passes is made and reported in `adjusted`.
+ * The theme follows a given bg; the open roles are drawn as drawPalette
+ * draws them, around the brand primary's hue and chroma.
+ * → {colors, dark, theme, adjusted: [{role, from, to}]} or null to redraw
+ */
+function drawBrandPalette(s, given, { theme, scheme, tone }) {
+  const t = TONE_TABLE[tone] ?? NO_TONE;
+  const primaryIn = given.primary ? hexToOklch(given.primary) : null;
+  const base = primaryIn?.h ?? s.range(0, 360);
+  let look = theme;
+  let tint = null;
+  if (given.bg) {
+    const ground = hexToOklch(given.bg);
+    const deep = ground.l < 0.6;
+    look = ground.c > 0.035 ? 'tinted' : deep ? 'dark' : 'light';
+    tint = look === 'tinted' ? (deep ? 'deep' : 'pale') : null;
+  } else if (look === 'tinted') tint = s.chance(0.6) ? 'deep' : 'pale';
+  const dark = look === 'dark' || tint === 'deep';
+  const accentHue = given.accent ? hexToOklch(given.accent).h : (schemeHues(s, scheme, base) + 360) % 360;
+  const bgHue = s.chance(0.7) ? base : accentHue;
+  const bgHex = given.bg ?? oklchToHex(look === 'dark' ? { l: s.range(0.13, 0.22), c: s.range(0.006, 0.03), h: bgHue }
+    : look === 'light' ? { l: s.range(0.955, 0.985), c: s.range(0.004, 0.018), h: bgHue }
+    : tint === 'deep' ? { l: s.range(0.2, 0.3), c: s.range(0.04, 0.08), h: bgHue }
+    : { l: s.range(0.88, 0.93), c: s.range(0.025, 0.05), h: bgHue });
+  const chroma = primaryIn ? Math.max(0.04, primaryIn.c) : s.range(...t.chroma);
+  const settle = (hex, against, min) => (hex && contrastRatio(hex, against) >= min ? hex : hex ? fitContrast(hexToOklch(hex), against, min) : null);
+  const colors = { bg: bgHex };
+  colors.paper = settle(given.paper ?? oklchToHex(dark ? { l: s.range(0.93, 0.985), c: s.range(0.005, 0.025), h: bgHue } : { l: s.range(0.17, 0.27), c: s.range(0.01, 0.04), h: bgHue }), bgHex, 4.5);
+  colors.primary = settle(given.primary ?? oklchToHex({ l: dark ? s.range(0.72, 0.86) : s.range(0.48, 0.58), c: chroma, h: base }), bgHex, 3);
+  colors.accent = settle(given.accent ?? oklchToHex({ l: dark ? s.range(0.68, 0.84) : s.range(0.45, 0.58), c: chroma * s.range(0.8, 1.1), h: accentHue }), bgHex, 3);
+  if (!colors.paper || !colors.primary || !colors.accent) return null;
+  // ink: the given one, else whichever of bg, near-white and near-black reads best on primary and accent.
+  const score = (ink) => Math.min(contrastRatio(ink, colors.primary) / 4.5, contrastRatio(ink, colors.accent) / 3, ink === bgHex ? Infinity : contrastRatio(ink, colors.paper) / 4.5);
+  const candidates = [bgHex, oklchToHex({ l: 0.99, c: 0.004, h: base }), oklchToHex({ l: 0.17, c: 0.02, h: base })];
+  colors.ink = given.ink ?? candidates.reduce((best, ink) => (score(ink) > score(best) ? ink : best), candidates[0]);
+  if (contrastRatio(colors.ink, colors.primary) < 4.5) colors.primary = fitContrast(hexToOklch(colors.primary), colors.ink, 4.5);
+  if (colors.accent && contrastRatio(colors.ink, colors.accent) < 3) colors.accent = fitContrast(hexToOklch(colors.accent), colors.ink, 3);
+  if (Object.values(colors).some((hex) => !hex)) return null;
+  if (!paletteContrast(colors).every((entry) => entry.ok)) return null;
+  if (colors.primary === colors.accent) return null;
+  if (!given.accent && scheme !== 'monochrome' && hueGap(hexToOklch(colors.primary).h, hexToOklch(colors.accent).h) < MIN_HUE_GAP) return null;
+  const adjusted = Object.entries(given).filter(([role, hex]) => colors[role] !== hex).map(([role, hex]) => ({ role, from: hex, to: colors[role] }));
+  return { colors, dark, theme: look, adjusted };
+}
+
 // ---------------------------------------------------------------------------
 // Fingerprint (§3.6)
 
@@ -363,11 +431,12 @@ export function paletteDistance(a, b) {
 }
 
 /**
- * How different two looks are, 0–1: the palette counts for half (its mean
- * OKLab distance over 0.25, capped), then fonts, panel, grammar and caption
- * preset for an eighth each.
+ * How different two fingerprints are, 0–1: the palette counts for half (its
+ * mean OKLab distance over 0.25, capped), then fonts, panel, grammar and
+ * caption preset for an eighth each. The starter check (§3.6) uses this;
+ * styleDistance (style-distance.mjs) compares whole packs.
  */
-export function styleDistance(a, b) {
+export function fingerprintDistance(a, b) {
   const palette = Math.min(1, paletteDistance(a, b) / 0.25);
   const parts = ['fonts', 'panel', 'grammar', 'caption'].reduce((sum, key) => sum + (a[key] === b[key] ? 0 : 0.125), 0);
   return round(palette * 0.5 + parts, 4);
@@ -389,7 +458,7 @@ export const AVOID_LOOKS = Object.freeze([
 const lookPack = (look) => ({ brand: { colors: look.colors, fonts: look.fonts }, layouts: { panel: { treatment: look.panel } }, motion: { grammar: look.grammar }, captions: { preset: look.caption } });
 const AVOID_FINGERPRINTS = AVOID_LOOKS.map((look) => ({ name: look.name, fingerprint: styleFingerprint(lookPack(look)) }));
 
-/** A generated look must sit at least this far (styleDistance) from every starter, with a palette at least MIN_PALETTE_DISTANCE away. */
+/** A generated look must sit at least this far (fingerprintDistance) from every starter, with a palette at least MIN_PALETTE_DISTANCE away. */
 export const MIN_STARTER_DISTANCE = 0.3;
 export const MIN_PALETTE_DISTANCE = 0.06;
 
@@ -398,7 +467,7 @@ export function nearestStarter(pack) {
   const fingerprint = styleFingerprint(pack);
   let best = null;
   for (const entry of AVOID_FINGERPRINTS) {
-    const distance = styleDistance(fingerprint, entry.fingerprint);
+    const distance = fingerprintDistance(fingerprint, entry.fingerprint);
     if (!best || distance < best.distance) best = { name: entry.name, distance, palette: round(paletteDistance(fingerprint, entry.fingerprint), 4) };
   }
   return { ...best, close: best.distance < MIN_STARTER_DISTANCE || best.palette < MIN_PALETTE_DISTANCE };
@@ -435,6 +504,11 @@ export function normalizeConstraints(constraints = {}) {
     if (value === undefined || value === null || value === '') continue;
     out[key] = typeof value === 'string' ? value.trim().toLowerCase() : value;
   }
+  if (out.overshoot !== undefined) {
+    if (![true, false, 'true', 'false'].includes(out.overshoot)) throw new Error('overshoot must be true or false');
+    if (out.overshoot === true || out.overshoot === 'true') out.overshoot = true;
+    else delete out.overshoot;
+  }
   if (out.tone !== undefined && !TONES.includes(out.tone)) throw new Error(`tone must be one of ${TONES.join(', ')}`);
   if (out.theme !== undefined && !THEMES.includes(out.theme)) throw new Error(`theme must be one of ${THEMES.join(', ')}`);
   if (out.character_set !== undefined && !CHARACTER_SET_NAMES.includes(out.character_set)) throw new Error(`character_set must be one of ${CHARACTER_SET_NAMES.join(', ')}`);
@@ -450,43 +524,143 @@ export function normalizeConstraints(constraints = {}) {
 }
 
 const MAX_REDRAWS = 24;
+// How many derived seeds `avoid` tries before it settles for the farthest.
+export const MAX_AVOID_STEPS = 64;
+
+/** The seed `avoid` steps to: the seed hashed with the step number. */
+export function deriveSeed(seed, step) {
+  return hash32(`${normalizeSeed(seed)}/avoid/${step}`).toString(16).padStart(8, '0');
+}
 
 /**
- * A complete launchclip.style.v3 pack for a seed. `tone` (or
- * constraints.tone) narrows the families; the other constraints pin their
- * dimension. `at` (an ISO date) is recorded in the provenance block when
- * given, so the same seed, tone and constraints always give the same pack
- * apart from it.
+ * A complete launchclip.style.v3 pack for a seed. `brand` (style-brand.mjs)
+ * conditions the draw; `tone` (or constraints.tone, else the brand's tone
+ * words and industry) narrows the families; the other constraints pin their
+ * dimension; `avoid` lists styles (packs) the result must stay at least
+ * MIN_AVOID_DISTANCE from. `at` (an ISO date) is recorded in the provenance
+ * block when given, so the same inputs always give the same pack apart from
+ * it. `generator` regenerates a pack made by an older version (GENERATOR_VERSIONS).
+ * With no seed a fresh one is drawn from Math.random.
  */
-export function generateStyle({ seed, tone = null, constraints = {}, at } = {}) {
+export function generateStyle({ seed, brand, tone = null, constraints = {}, avoid = [], at, generator = GENERATOR_VERSION } = {}) {
+  if (!GENERATOR_VERSIONS.includes(generator)) throw new Error(`generator must be one of ${GENERATOR_VERSIONS.join(', ')}`);
   const hex = normalizeSeed(seed ?? randomSeed());
-  const fixed = normalizeConstraints({ ...constraints, ...(tone ? { tone } : {}) });
+  const inputs = normalizeBrand(brand);
+  const branded = !brandIsEmpty(inputs);
+  if (branded && generator === GENERATOR_V1) throw new Error(`brand inputs need ${GENERATOR_VERSION}`);
+  const brandTone = branded ? toneFromText([...inputs.tone_words, inputs.industry ?? ''].join(' ')) : null;
+  const given = { ...constraints, ...(tone ? { tone } : {}) };
+  if (given.tone === undefined && brandTone) given.tone = brandTone;
+  if (given.world === undefined && inputs.industry) {
+    const fit = suggestWorld(inputs.industry);
+    if (fit?.matched?.length && fit.worlds?.length) given.world = [...fit.worlds];
+  }
+  const fixed = normalizeConstraints(given);
   const toneName = fixed.tone ?? null;
   const t = TONE_TABLE[toneName] ?? NO_TONE;
+  const ctx = { version: generator, roles: branded ? brandRoles(inputs) : {}, fonts: branded ? brandFonts(inputs) : { fonts: {}, substituted: [] }, brand: inputs };
+  const avoidTraits = (Array.isArray(avoid) ? avoid : [avoid]).filter(Boolean).map(styleTraits);
 
-  let pack = null;
-  let redraws = 0;
-  for (; redraws <= MAX_REDRAWS; redraws += 1) {
-    const candidate = buildPack(hex, toneName, t, fixed, redraws);
-    if (!candidate) continue;
-    if (nearestStarter(candidate).close) continue;
-    pack = candidate;
-    break;
+  // Step 0 is the seed itself. Later steps are derived seeds, taken when the
+  // seed has no palette that passes (v2; v1 throws, as it always did) or the
+  // look is too close to a style in `avoid`; the farthest is kept.
+  let best = null;
+  for (let step = 0; step <= MAX_AVOID_STEPS; step += 1) {
+    const stepHex = step ? deriveSeed(hex, step) : hex;
+    const pack = seededPack(stepHex, toneName, t, fixed, ctx);
+    if (!pack) continue;
+    const distance = avoidTraits.length ? Math.min(...avoidTraits.map((other) => styleDistance(pack, other))) : Infinity;
+    if (!best || distance > best.distance) best = { pack, step, distance };
+    if (distance >= MIN_AVOID_DISTANCE) break;
   }
-  if (!pack) throw new Error(`seed ${hex} found no palette that passes contrast and starter distance; try another seed`);
+  if (!best) throw new Error(`seed ${hex} found no palette that passes contrast and starter distance; try another seed`);
+  const { pack, step, distance } = best;
   pack.generated = {
-    seed: hex, generator: GENERATOR_VERSION, tone: toneName, ...(at ? { at } : {}),
+    seed: pack.generated.seed, generator, tone: toneName, ...(at ? { at } : {}),
     ...(Object.keys(fixed).length ? { constraints: fixed } : {}),
-    ...pack.generated, ...(redraws ? { redraws } : {})
+    ...(branded ? { inputs: { brand: inputs } } : {}),
+    ...pack.generated,
+    ...(step ? { stepped: { from: hex, steps: step } } : {}),
+    ...(avoidTraits.length ? { avoided: { styles: avoidTraits.length, distance: round(distance, 4) } } : {})
   };
-  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'medium', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
+  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'plate', 'medium', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
   const sorted = Object.fromEntries(order.filter((key) => pack[key] !== undefined).map((key) => [key, pack[key]]));
   const validation = validateStylePack(sorted);
   if (!validation.ok) throw new Error(`generated style ${sorted.name} is invalid:\n- ${validation.errors.join('\n- ')}`);
   return sorted;
 }
 
-function buildPack(hex, toneName, t, fixed, attempt) {
+/**
+ * The type pairing for a brand's fonts, or null when it gives none: the
+ * table's pairing when the brand's display and body are one, else the
+ * brand's families on a pairing drawn from those that share them (case and
+ * weight from a pairing with the same display).
+ */
+function brandPairing(choose, pairings, fonts) {
+  if (!fonts.display && !fonts.body && !fonts.meta) return null;
+  const fits = FONT_PAIRINGS.filter((entry) => (!fonts.display || entry.display === fonts.display) && (!fonts.body || entry.body === fonts.body));
+  const drawn = choose('type', fits.length ? fits : pairings);
+  const display = fonts.display ?? drawn.display, body = fonts.body ?? drawn.body;
+  const known = FONT_PAIRINGS.find((entry) => entry.display === display && entry.body === body);
+  const shape = known ?? FONT_PAIRINGS.find((entry) => entry.display === display) ?? { case: 'title', weight: 700 };
+  return { id: known?.id ?? 'brand', display, body, meta: fonts.meta ?? known?.meta ?? drawn.meta, case: shape.case, weight: shape.weight };
+}
+
+/** One seed's pack: redrawn (palette only) until it passes contrast and, without brand colours, starter distance. */
+function seededPack(hex, toneName, t, fixed, ctx) {
+  // A brand's own colours are its identity: a look close to a starter is the
+  // brand's choice, so only an unbranded palette is redrawn away from them.
+  const ownPalette = Object.keys(ctx.roles).length > 0;
+  for (let redraws = 0; redraws <= MAX_REDRAWS; redraws += 1) {
+    const candidate = buildPack(hex, toneName, t, fixed, redraws, ctx);
+    if (!candidate) continue;
+    if (!ownPalette && nearestStarter(candidate).close) continue;
+    candidate.generated = { seed: hex, ...candidate.generated, ...(redraws ? { redraws } : {}) };
+    return candidate;
+  }
+  if (ctx.version === GENERATOR_V1) throw new Error(`seed ${hex} found no palette that passes contrast and starter distance; try another seed`);
+  return null;
+}
+
+/** The inputs a generated pack was made from, ready for generateStyle: the same seed, generator, tone, constraints, brand and date. */
+export function styleInputs(pack) {
+  const g = pack?.generated;
+  if (!g?.seed || !g.generator) throw new Error('this pack has no generator provenance (generated.seed, generated.generator)');
+  return { seed: g.seed, generator: g.generator, ...(g.tone ? { tone: g.tone } : {}), constraints: g.constraints ?? {}, ...(g.inputs?.brand ? { brand: g.inputs.brand } : {}), ...(g.at ? { at: g.at } : {}) };
+}
+
+/** A generated pack made again from its provenance: equal to the pack (its step, avoid record and pin carried over). */
+export function regenerateStyle(pack) {
+  const again = generateStyle(styleInputs(pack));
+  for (const key of ['stepped', 'avoided', 'pinned']) if (pack.generated[key] !== undefined) again.generated[key] = pack.generated[key];
+  return again;
+}
+
+/**
+ * A new look for the same brand and direction: a fresh seed (or `seed`),
+ * kept at least MIN_AVOID_DISTANCE from the pack it replaces and from
+ * `avoid`, made with the current generator. Refuses a pinned pack unless
+ * `force`.
+ */
+export function rerollStyle(pack, { seed, tone, avoid = [], at, force = false } = {}) {
+  if (pack?.generated?.pinned && !force) throw new Error(`${pack.name} is pinned; unpin it (or pass force) to reroll`);
+  const inputs = styleInputs(pack);
+  const constraints = { ...inputs.constraints };
+  if (tone) delete constraints.tone;
+  return generateStyle({ ...inputs, seed: seed ?? randomSeed(), generator: GENERATOR_VERSION, ...(tone ? { tone } : {}), constraints, avoid: [pack, ...avoid], ...(at ? { at } : {}) });
+}
+
+/** A copy of a generated pack pinned (pinned true) or unpinned: a pinned look is never rerolled by accident. */
+export function pinStyle(pack, pinned = true) {
+  const copy = JSON.parse(JSON.stringify(pack));
+  if (!copy.generated) throw new Error('only a generated pack can be pinned');
+  if (pinned) copy.generated.pinned = true;
+  else delete copy.generated.pinned;
+  return copy;
+}
+
+function buildPack(hex, toneName, t, fixed, attempt, ctx) {
+  const v2 = ctx.version !== GENERATOR_V1;
   const draw = (name) => stream(hex, attempt ? `${name}#${attempt}` : name);
   // Categorical choices are fixed per seed (a redraw only redraws the palette,
   // which is half the starter distance), so consecutive seeds keep stepping
@@ -496,18 +670,22 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const scheme = choose('scheme', PALETTE_SCHEMES);
   let palette = null;
   const paletteStream = draw('palette');
-  for (let i = 0; i < 12 && !palette; i += 1) palette = drawPalette(paletteStream, { theme, scheme, tone: toneName });
+  const ownColors = Object.keys(ctx.roles).length > 0;
+  for (let i = 0; i < 12 && !palette; i += 1) palette = ownColors ? drawBrandPalette(paletteStream, ctx.roles, { theme, scheme, tone: toneName }) : drawPalette(paletteStream, { theme, scheme, tone: toneName });
   if (!palette) return null;
 
   const pairings = toneName ? FONT_PAIRINGS.filter((entry) => entry.tones.includes(toneName)) : FONT_PAIRINGS;
-  const pairing = choose('type', pairings);
+  const pairing = brandPairing(choose, pairings, ctx.fonts.fonts) ?? choose('type', pairings);
 
   const motion = draw('motion');
   const grammar = choose('grammar', t.grammars);
   const transitions = [...GRAMMAR_TRANSITIONS[grammar]];
   const preference = [];
   while (preference.length < 2 + Math.floor(motion.random() * 2) && transitions.length) preference.push(transitions.splice(Math.floor(motion.random() * transitions.length), 1)[0]);
-  const camera = WORLD_GRAMMARS.has(grammar) && motion.chance(0.5) ? { mode: 'world', layout: 'auto' } : { mode: 'cuts' };
+  let camera = WORLD_GRAMMARS.has(grammar) && motion.chance(0.5) ? { mode: 'world', layout: 'auto' } : { mode: 'cuts' };
+  // v2: the motion feel (style-feel.mjs) from its own stream, so every v1 draw stays put.
+  const feel = v2 ? drawMotionFeel(draw('feel'), { grammar, tone: toneName, overshoot: fixed.overshoot === true, transitions: preference }) : null;
+  if (feel) camera = feel.camera;
 
   const panelStream = draw('panel');
   const panelFixed = asObject(fixed.panel, 'treatment') ?? {};
@@ -560,6 +738,13 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     progress: frame.chance(0.5) ? { position: frame.pick(['top', 'bottom']), thickness: 3 + Math.floor(frame.random() * 4), ticks: frame.chance(0.5) } : false,
     show: 'always'
   };
+  // A brand name or logo makes the lockup: the frame turns on with the name as its kicker.
+  if (ctx.brand.name || ctx.brand.logo?.src) {
+    brand_frame.enabled = true;
+    if (ctx.brand.name) brand_frame.kicker.label = ctx.brand.name;
+    if (ctx.brand.logo?.src) { brand_frame.logo = ctx.brand.logo.src; brand_frame.kicker.logo = true; }
+  }
+  const plate = v2 ? drawBackdrops(draw('backdrops'), { dark: palette.dark }) : null;
 
   const dialStream = draw('dials');
   const dials = Object.fromEntries(Object.entries(t.dials).map(([key, centre]) => [key, round(Math.max(0.05, Math.min(0.95, centre + dialStream.range(-0.12, 0.12))), 2)]));
@@ -570,11 +755,12 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const spec = GENRE_SPECS[genre];
 
   const fonts = { display: pairing.display, body: pairing.body, meta: pairing.meta };
+  const look = palette.theme ?? theme;
   const pack = {
     schema: STYLE_SCHEMA,
     name: `seed-${hex}`,
     brand: { colors: palette.colors, fonts },
-    motion: { grammar, transition_preference: preference },
+    motion: feel ? { grammar: feel.grammar, transition_preference: feel.transitions, feel: feel.feel } : { grammar, transition_preference: preference },
     camera,
     ambient: { level, background: kind === 'blobs' },
     captions: { preset: caption, position: 'auto', lanes: { 'footage-led': { ...STYLE_V3_DEFAULTS.caption_lanes['footage-led'] } } },
@@ -587,6 +773,7 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     layout: { title_case: pairing.case === 'title' },
     layouts: { by_intent: {}, by_section: {}, panel },
     background,
+    ...(plate ? { plate } : {}),
     vocabulary,
     variants,
     cast,
@@ -594,7 +781,11 @@ function buildPack(hex, toneName, t, fixed, attempt) {
     ...(fixed.medium ? { medium: JSON.parse(JSON.stringify(fixed.medium)) } : {}),
     brand_frame,
     dials,
-    generated: { theme, scheme, pairing: pairing.id }
+    generated: {
+      theme: look, scheme, pairing: pairing.id,
+      ...(palette.adjusted?.length ? { adjusted: palette.adjusted } : {}),
+      ...(ctx.fonts.substituted.length ? { substituted: ctx.fonts.substituted } : {})
+    }
   };
   pack.description = `Generated from seed ${hex}: ${styleSummary(pack, { seed: false })}.`;
   return pack;
