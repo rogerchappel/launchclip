@@ -34,6 +34,11 @@
   answer per line on its stdout, from your media library or generated. Shots
   land in the project's `assets/shots/`, and what they cost shows up in
   `make --json` under `costs`.
+- `launchclip make --base-edited` takes a talking-head or screen recording
+  you have already edited (bad takes, pauses) as the final base: make skips
+  its own recording edit and dresses your cut as is. Add
+  `--base-transcript <word-timed.json>` to use your transcript instead of a
+  fresh Whisper pass.
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
@@ -106,7 +111,6 @@
   of under the bar. Regression fixtures lock each step's sign and direction,
   for an all-positive build-up and for one that crosses zero, in both
   renderers.
-
 - Evidence clips and other screen recordings move with the world camera in
   HyperFrames. Their video used to stay full-size on screen while the camera
   pushed, zoomed or pulled back for an overview; it now moves with its shot,

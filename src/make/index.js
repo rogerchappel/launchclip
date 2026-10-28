@@ -295,6 +295,9 @@ async function prepareFootage(ctx) {
   const source = path.join(project, "assets", entry.path);
   const enhancement = await audioEnhancementFeature();
   report.base_edit = { source: `assets/${entry.path}`, enhancement };
+  // --base-edited: the app already cut this recording (bad takes, pauses)
+  // and its edit stays canonical, so make mounts it as is.
+  if (ctx.options.baseEdited || ctx.options.baseTranscript) return suppliedFootage(ctx, entry);
   const transcriptFile = entry.transcript?.raw_file ? path.join(project, entry.transcript.raw_file) : null;
   const { prepareRecording, recordingOptions } = await import("../recording_workflow.js");
   const recordingOpts = { ...recordingOptions({}), out: path.join(project, MAKE_PATHS.recording), aspect: routing.aspect, ...(transcriptFile ? { transcript: transcriptFile } : {}) };
@@ -335,7 +338,31 @@ async function prepareFootage(ctx) {
     report.base_edit = { ...report.base_edit, status: result?.status ?? "failed", output: null };
     ctx.base = { src: `assets/${entry.path}`, fit: "cover" };
   }
-  if (!words.length) throw new Error(`no transcript words for ${entry.path}; footage-led needs the recording's words (is local Whisper installed? run: launchclip doctor)`);
+  return footageWords(ctx, entry, words, duration);
+}
+
+// A base the app edited itself: no edit-recording pass; its words come from
+// --base-transcript (word-timed JSON: Whisper's, or {words: [{text|word,
+// start, end}]}) when given, else from the inventory's transcription.
+async function suppliedFootage(ctx, entry) {
+  const { report } = ctx;
+  let words = entry.transcript?.words ?? [];
+  if (ctx.options.baseTranscript) {
+    const file = path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.baseTranscript));
+    const transcript = await readJson(file);
+    if (!transcript) throw new Error(`--base-transcript ${file} is not readable JSON`);
+    const { normalizeRecordingTranscript } = await import("../recording_edit.js");
+    words = normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
+  }
+  const duration = Number(entry.media?.duration) || Number(words.at(-1)?.end ?? 0);
+  report.base_edit = { source: `assets/${entry.path}`, status: "supplied", output: `assets/${entry.path}`, edited_seconds: duration, transcript: ctx.options.baseTranscript ? "supplied" : "inventory" };
+  ctx.base = { src: `assets/${entry.path}`, fit: "cover" };
+  return footageWords(ctx, entry, words, duration);
+}
+
+async function footageWords(ctx, entry, words, duration) {
+  const { project, report, routing, state } = ctx;
+  if (!words.length) throw new Error(`no transcript words for ${entry.path}; footage-led needs the recording's words (pass --base-transcript, or install local Whisper: launchclip doctor)`);
   await writeJson(path.join(project, MAKE_PATHS.words), { schema_version: "launchclip.narration.v1", provider: "recording", text: words.map((word) => word.text).join(" "), duration_seconds: duration, words });
   ctx.words = words;
   ctx.narrationText = words.map((word) => word.text).join(" ");

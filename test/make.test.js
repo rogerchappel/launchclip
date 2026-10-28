@@ -337,6 +337,44 @@ test("make routes footage to footage-led and uses the base edit's output and wor
   }
 });
 
+test("--base-edited mounts the app's own edit as is, with its transcript, and never runs edit-recording", async () => {
+  const assets = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-supplied-"));
+  const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-supplied-out-"));
+  try {
+    await writeFile(path.join(assets, "talking-head.mp4"), "already edited");
+    const theirs = ["Ledgerly", "matches", "every", "payout", "today."].map((text, i) => ({ text, start: 0.2 + i * 0.6, end: 0.6 + i * 0.6 }));
+    const transcriptFile = path.join(out, "..", `${path.basename(out)}-words.json`);
+    await writeFile(transcriptFile, JSON.stringify({ words: theirs }));
+    // The inventory's own transcription differs: the supplied one must win.
+    const inventory = async (dir) => ({ dir, entries: [{ path: "talking-head.mp4", kind: "video", role: "talking-head", confidence: 0.9, signals: ["camera-look"], description: "Talking-head recording", media: { kind: "video", width: 720, height: 1280, duration: 3.2, orientation: "portrait", mountable: true }, speech: { present: true }, transcript: { text: "x", words: [{ text: "whisper", start: 0, end: 0.5 }] }, fingerprint: "1" }], counts: {}, summary: [] });
+    const prepareRecording = async () => { throw new Error("edit-recording must not run on a supplied edit"); };
+    const client = {
+      provider: "openai",
+      async runStructured(request) {
+        if (request.schemaName === "launchclip_direction") return { model: "gpt-5.6-luna", value: { direction_json: "" }, usage: { input_tokens: 1, output_tokens: 1 } };
+        assert.match(request.input, /base: "assets\/talking-head\.mp4"/);
+        const board = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 3.2 }, brand: DEFAULT_BRAND, audio: { words: "NARRATION.json" }, base: "assets/talking-head.mp4",
+          scenes: [{ id: "c1", module: "emphasis-caption", track: 1, start: "word:every", end: "word:today", params: { text: "Every payout" } }],
+          overlays: [{ type: "captions", style: "word-highlight" }] };
+        return { model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(board) }, usage: { input_tokens: 10, output_tokens: 10 } };
+      }
+    };
+    const report = await runMake("Dress my founder clip", { assets, out, voice: "test", baseEdited: true, baseTranscript: transcriptFile }, { env: {}, client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false }, inventory, prepareRecording, finish: fakeFinish([]), notice() {} });
+    await rm(transcriptFile, { force: true });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.equal(report.routing.lane, "footage-led");
+    assert.deepEqual(report.base_edit, { source: "assets/talking-head.mp4", status: "supplied", output: "assets/talking-head.mp4", edited_seconds: 3.2, transcript: "supplied" });
+    const story = JSON.parse(await readFile(path.join(out, "storyboard.json"), "utf8"));
+    assert.equal(story.base, "assets/talking-head.mp4");
+    const narration = JSON.parse(await readFile(path.join(out, "NARRATION.json"), "utf8"));
+    assert.deepEqual(narration.words.map((word) => word.text), ["Ledgerly", "matches", "every", "payout", "today."]);
+    assert.equal(existsSync(path.join(out, "assets/base-edit.mp4")), false);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
 test("a base edit that needs semantic review uses the candidate edit and leaves a pending base_edit_qa gate", async () => {
   const assets = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-review-"));
   const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-review-out-"));
