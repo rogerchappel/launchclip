@@ -256,9 +256,16 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   };
 
   const models = [];
+  const tailFrames = [];
+  const sourceDurations = await videoDurations(story, sourceDir);
   for (const entry of layers) {
     const track = allocate(entry.start, entry.renderEnd);
-    const { model, out } = build(entry, { track });
+    const { model, out: built } = build(entry, { track });
+    // A video that ends before its scene does holds its last frame, as
+    // Remotion's <OffthreadVideo> does (HyperFrames draws nothing past the end).
+    const tail = soleVideo(built.html) ? videoTail(built, sourceDurations, format.fps) : null;
+    if (tail) tailFrames.push(tail.frame);
+    const out = tail ? { ...built, motion: tail.motion } : built;
     models.push(model);
     const depth = subjectNeeded ? sceneLayerOf(entry.scene, model) : { layer: 'front' };
     if (depth.reason) warnings.push(`${entry.scene.id}: ${depth.reason}`);
@@ -272,7 +279,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // product-demo…) keeps it, and its overlay, inside the plate, so the
     // camera's moves and zooms carry it as they carry the rest of the plate.
     const inCamera = inWorld && soleVideo(out.html);
-    const media = inCamera ? { html: `${out.html}${out.overlay ?? ''}`, elements: [] } : hoistMedia(out.html ?? '');
+    const media = inCamera ? { html: `${tail?.html ?? ''}${out.html}${out.overlay ?? ''}`, elements: [] } : hoistMedia(`${tail?.html ?? ''}${out.html ?? ''}`);
     // A module whose own layer is a timed clip on its track and which also
     // hoists a video (backdrop-swap, app-stage…) gives the video its own track,
     // or the two clips overlap on one track.
@@ -326,6 +333,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
     }
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
+    if (tail) motion.push(tail.toggle);
     motion.push(...mediaMotion);
     // Split modules: their behind part is a second layer under the subject,
     // shown and moved with the scene.
@@ -356,7 +364,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
       // A video kept in its plate (soleVideo) is held as a still of the frame
       // Remotion's <Freeze> shows (written with the project; heldStill), under its overlay.
-      const still = soleVideo(out.html) ? heldStill(out.html, at, format.fps, `held/${id}.png`) : null;
+      const still = soleVideo(out.html) ? heldStill(out.html, at, format.fps, `held/${id}.png`, sourceDurations) : null;
       if (still) heldFrames.push(still.frame);
       const media = still ? { html: `${still.html}${out.overlay ?? ''}`, elements: [] } : hoistMedia(out.html ?? '');
       world.push(`<div id="${outer}" class="lc-scene lc-plate lc-held lc-world-plate" data-launchclip-scene="${id}" data-launchclip-held="${attr(entry.id)}" data-launchclip-start="${num(hold.start)}" style="z-index:${z}${plateStyle(entry.id, plan.placements[entry.id])}"><div id="${inner}" class="lc-layer">${unclip(media.html)}</div></div>`);
@@ -591,6 +599,11 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
       if (error) warnings.push(`${frame.file}: the held frame of ${frame.src} at ${num(frame.time)}s was not extracted (${error}); the overview shows the clip's frame without it`);
       else if (!files.includes('held/')) files.push('held/');
     }
+    for (const frame of tailFrames) {
+      const error = await extractFrame(path.join(sourceDir ?? projectDir, frame.src), frame.time, path.join(projectDir, frame.file));
+      if (error) warnings.push(`${frame.file}: the last frame of ${frame.src} was not extracted (${error}); the clip's frame is empty after ${num(frame.time)}s of source`);
+      else if (!files.includes('held/')) files.push('held/');
+    }
     await writeFile(path.join(projectDir, 'index.html'), html);
     files.push('index.html');
   }
@@ -797,15 +810,60 @@ function soleVideo(html) {
 // style (so the held timeline's sets still move it), frame: {src, time, file}}.
 // time is the source time of the frame Remotion's <Freeze> holds: the
 // scene-relative frame at `at` from data-media-start.
-function heldStill(videoHtml, at, fps, file) {
+function heldStill(videoHtml, at, fps, file, durations = new Map()) {
   const tag = /<video\b[^>]*>/i.exec(videoHtml)[0];
   const read = (name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
   const src = read('src');
   if (!src) return null;
   const start = Number(read('data-start')) || 0, mediaStart = Number(read('data-media-start')) || 0;
-  const time = round(mediaStart + Math.max(0, Math.round(at * fps) - Math.round(start * fps)) / fps, 6);
+  const time = round(Math.min(mediaStart + Math.max(0, Math.round(at * fps) - Math.round(start * fps)) / fps, lastFrameTime(durations.get(src), fps)), 6);
   const keep = ['id', 'class', 'style'].map((name) => (read(name) === undefined ? '' : ` ${name}="${read(name)}"`)).join('');
   return { html: `<img${keep} src="${attr(file)}" alt="" data-launchclip-held-frame="${attr(src)}">`, frame: { src, time, file } };
+}
+
+// The source time of a video's last frame (Infinity when its length is unknown).
+function lastFrameTime(duration, fps) {
+  return Number.isFinite(duration) ? Math.max(0, duration - 1 / fps) : Infinity;
+}
+
+// Lengths in seconds of the scenes' params.media videos in sourceDir, by src
+// (ffprobe; a video it cannot read is left out). → Map src → seconds
+async function videoDurations(story, sourceDir) {
+  const durations = new Map();
+  if (!sourceDir) return durations;
+  const sources = new Set((story.scenes ?? []).map((scene) => scene?.params?.media?.src).filter((src) => typeof src === 'string' && /\.(mp4|webm|mov)$/i.test(src)));
+  await Promise.all([...sources].map((src) => new Promise((resolve) => {
+    execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(sourceDir, src)], (error, stdout) => {
+      const seconds = Number(String(stdout).trim());
+      if (!error && seconds > 0) durations.set(src, seconds);
+      resolve();
+    });
+  })));
+  return durations;
+}
+
+// A module's sole <video> that runs out before its clip ends → {html: an
+// <img> of its last frame, with the video's style, hidden until the source
+// ends; motion: the module's motion with every set on the video applied to
+// the image too; toggle: the GSAP call that shows it; frame: {src, time,
+// file}} | null.
+function videoTail(out, durations, fps) {
+  const tag = /<video\b[^>]*>/i.exec(out.html)[0];
+  const read = (name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+  const id = read('id'), src = read('src');
+  const start = Number(read('data-start')) || 0, duration = Number(read('data-duration')), mediaStart = Number(read('data-media-start')) || 0;
+  const length = durations.get(src);
+  if (!id || !Number.isFinite(length) || !(duration > 0)) return null;
+  const ends = start + Math.max(0, length - mediaStart);
+  if (ends >= start + duration - 1 / fps) return null;
+  const tailId = `${id}-tail`;
+  const style = (read('style') ?? '').replace(/;?\s*$/, '');
+  return {
+    html: `<img id="${attr(tailId)}" class="lc-media-tail" src="held/${attr(tailId)}.png" alt="" data-launchclip-tail-of="${attr(id)}" style="${style};visibility:hidden">`,
+    motion: (out.motion ?? '').split(js(`#${id}`)).join(js(`#${id}, #${tailId}`)),
+    toggle: `tl.fromTo(${js(`#${tailId}`)}, { visibility: 'hidden' }, { visibility: 'visible', duration: 0, immediateRender: false }, ${num(Math.max(start, ends - 1 / fps))});`,
+    frame: { src, time: round(lastFrameTime(length, fps), 6), file: `held/${tailId}.png` }
+  };
 }
 
 // One frame of a video as a PNG, with ffmpeg's default conversion (as
