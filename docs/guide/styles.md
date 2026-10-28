@@ -19,6 +19,23 @@ The style is saved in the project (`.launchclip/styles/seed-7f3a91c2/style.json`
 
 Naming a style or giving a brand always wins over a seed.
 
+### A look for a brand
+
+Give a brand and the seed fills in only what the brand leaves open. Colours keep their roles and the rest are drawn around the brand's hue. Fonts map to the closest bundled open-licence family. Tone words and the industry set the tone and the worlds, and a name or logo makes the lockup.
+
+```bash
+launchclip style generate --name Northwind --colors "#0b3d91,accent=#f2a900" --fonts "Montserrat,Inter" --brand-tone "warm, friendly" --industry "coffee roasting" --logo assets/logo.svg --out ./looks/northwind
+```
+
+`--brand brand.json` takes the same fields as a file. `--reference shop.jpg` (repeatable) adds the colours of a still, and a raster logo's colours are extracted the same way. The result lists any brand colour it had to darken or lighten for contrast (`adjusted`) and any font it swapped (`substituted`).
+
+Every style also carries a **motion feel**: world camera or cuts, an ease family with no overshoot (moves go slow, fast, slow), a tempo, motion blur on fast moves, a whip style, and how often the camera zooms into a detail. Dark looks usually get a set of soft backdrop plates that change every few shots.
+
+- **Keep brands apart:** `--avoid other/style.json,another/style.json` keeps the new look clearly different from each of them.
+- **Compare looks:** `launchclip style distance a/style.json b/style.json` scores how different two styles look, from 0 to 1, across palette, type, motion, backdrops and module variants. Under 0.2, they read as the same brand.
+- **See it move:** `launchclip style preview ./looks/northwind --out northwind.mp4` renders a 10-second reel with a title, a chart, a card, a camera move and a backdrop change. `--aspect 9:16`, `--duration 8` to `12` and `--renderer remotion` are optional.
+- **Lock it:** `launchclip style pin ./my-video` stops `style reroll` from changing the look until `--off`. A reroll keeps the brand and moves clearly away from the old look.
+
 ## Three ways to get a style
 
 ### 1. Start from a built-in style

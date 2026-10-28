@@ -1074,6 +1074,31 @@ the farthest. `test/style_brand.test.js` checks that 1,000 seeds have no
 pair under `NEAR_DUPLICATE` and that styles made with no seed and no inputs
 never come within it of a starter.
 
+Preview reel (`kit/core/style-preview.mjs`): `stylePreviewStory(style,
+{aspect: 16:9 | 9:16 | 1:1, duration: 8–12, title?, kicker?})` is a story
+that names the style and carries no look of its own: hook-title (the brand
+name as eyebrow), bar-chart (entered with the style's first preferred
+transition, with a focus zoom on the tallest bar when the feel zooms and the
+beat has room after the entry lands), concept-card on a new backdrop (the
+plate cycle's next plate, or a primary wash on a light look) and cta. The
+Node side (`src/style_preview.js`) stages it as a project
+(`.launchclip/styles/<name>/style.json` beside `storyboard.json`), compiles
+and renders it: `renderStylePreview(style, {out, renderer, quality, aspect,
+duration, title, kicker, work})`.
+
+CLI (`src/style_seed_store.js`): `style generate` takes the brand as
+`--brand brand.json` and/or `--name`, `--colors` (`#hex` or `role=#hex`,
+comma-separated), `--fonts display,body[,meta]`, `--brand-tone`,
+`--industry`, `--logo` and repeatable `--reference` (SVG colours read from
+the markup, raster colours extracted with `paletteClusters`), plus
+`--avoid <style>[,...]` and `--overshoot`; `style reroll` uses
+`rerollStyle` (brand and constraints kept; a pinned style needs `--force`);
+`style pin [--off]`; `style preview <style> [--out --renderer --aspect
+--duration --title --kicker --quality]`; `style distance <a> <b> [...]`
+(every pair with its parts; status `near-duplicate` when any pair is under
+`NEAR_DUPLICATE`). A style argument is a style.json, a project directory or
+a style name.
+
 ### Brand frame (`kit/core/brand-frame.mjs`)
 
 `story.frame` (filled from the style's `brand_frame`, or written by hand;

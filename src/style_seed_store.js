@@ -7,11 +7,12 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CONSTRAINT_KEYS, generateStyle, normalizeSeed, seedSummaryLine, styleSummary, toneFromText } from "@launchclip/core/style-seed.mjs";
+import { CONSTRAINT_KEYS, NEAR_DUPLICATE, generateStyle, normalizeSeed, pinStyle, rerollStyle, seedSummaryLine, styleDistanceReport, styleSummary, toneFromText } from "@launchclip/core/style-seed.mjs";
 import { mediumFromText } from "@launchclip/core/medium.mjs";
 import { packCaptionsFor, validateStylePack } from "@launchclip/core/style.mjs";
 import { suggestWorld } from "@launchclip/core/worlds/index.mjs";
-import { homeStyleRoot, loadStyleV2 } from "./style_store.js";
+import { homeStyleRoot, loadStyleV2, resolveStyleV2 } from "./style_store.js";
+import { paletteClusters, pixelsFromFrames, sampleFrames } from "./style_reference.js";
 
 const STORY_FILE = "storyboard.json";
 const PREVIOUS_FILE = "previous.json";
@@ -28,8 +29,13 @@ const isSeedName = (name) => typeof name === "string" && /^seed-[0-9a-f]{8}$/.te
  * Generate a seeded pack and save it in the project (overwriting a pack of
  * the same seed, which is the same pack). → {name, file, pack, summary, line}
  */
-export async function generateProjectStyle(projectDir, { seed, tone = null, constraints = {}, clock = () => new Date().toISOString() } = {}) {
-  const pack = generateStyle({ seed: seed ?? freshSeed(), tone, constraints, at: clock() });
+export async function generateProjectStyle(projectDir, { seed, tone = null, constraints = {}, brand, avoid = [], clock = () => new Date().toISOString() } = {}) {
+  const pack = generateStyle({ seed: seed ?? freshSeed(), tone, constraints, brand, avoid, at: clock() });
+  return saveProjectStyle(projectDir, pack);
+}
+
+/** Save a generated pack as a project style. → {name, file, pack, summary, line} */
+export async function saveProjectStyle(projectDir, pack) {
   const file = path.join(stylesRoot(projectDir), pack.name, "style.json");
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(pack, null, 2)}\n`);
@@ -59,6 +65,7 @@ export function constraintFlags(flags = {}) {
   const out = {};
   for (const key of CONSTRAINT_KEYS) {
     const value = flags[key] ?? flags[key.replace(/_/g, "-")];
+    if (key === "overshoot" && value !== undefined) { out.overshoot = value === true || value === "true"; continue; }
     if (value === undefined || value === true) continue;
     if (key === "world") {
       const worlds = [].concat(value).flatMap((entry) => String(entry).split(",")).map((entry) => entry.trim()).filter(Boolean);
@@ -118,6 +125,62 @@ export function adoptStyleLook(story, pack) {
   return story;
 }
 
+/** The colours of an image, most covered first (k-means over one sampled frame). */
+export async function imageColors(file, { k = 6 } = {}) {
+  const { frames } = await sampleFrames(file, { image: true });
+  return paletteClusters(pixelsFromFrames(frames), { k }).map((entry) => entry.hex);
+}
+
+const listFlag = (value) => (value === undefined || value === true ? [] : [].concat(value).flatMap((entry) => String(entry).split(",")).map((entry) => entry.trim()).filter(Boolean));
+
+/**
+ * The brand a host gives on the command line: --brand <brand.json> (the
+ * generateStyle brand object), then --name, --colors "#0b3d91,accent=#f2a900",
+ * --fonts "Display,Body[,Meta]", --brand-tone "warm, friendly", --industry,
+ * --logo <file> and --reference <file> (repeatable) on top. An SVG's colours
+ * are read from its markup; a raster logo's or still's are extracted
+ * (imageColors, or adapters.colors). Paths stay as given, relative to cwd.
+ * → a brand object, or undefined when none is given.
+ */
+export async function brandFlags(flags = {}, { cwd = process.cwd(), colors = imageColors } = {}) {
+  const base = flags.brand && flags.brand !== true ? JSON.parse(await readFile(path.resolve(cwd, String(flags.brand)), "utf8")) : {};
+  const brand = { ...base };
+  if (flags.name && flags.name !== true) brand.name = String(flags.name);
+  const colorList = listFlag(flags.colors);
+  if (colorList.length) {
+    const roles = colorList.filter((entry) => entry.includes("="));
+    brand.colors = roles.length
+      ? [...colorList.map((entry) => (entry.includes("=") ? { role: entry.split("=")[0].trim(), hex: entry.split("=")[1].trim() } : entry))]
+      : colorList;
+  }
+  const fonts = listFlag(flags.fonts);
+  if (fonts.length) brand.fonts = fonts;
+  if (flags["brand-tone"] && flags["brand-tone"] !== true) brand.tone = String(flags["brand-tone"]);
+  if (flags.industry && flags.industry !== true) brand.industry = String(flags.industry);
+  const image = async (file) => {
+    const resolved = path.resolve(cwd, file);
+    if (/\.svg$/i.test(file)) return { src: file, svg: await readFile(resolved, "utf8") };
+    return { src: file, colors: await colors(resolved) };
+  };
+  if (flags.logo && flags.logo !== true) brand.logo = await image(String(flags.logo));
+  const references = listFlag(flags.reference);
+  if (references.length) brand.references = await Promise.all(references.map(image));
+  return Object.keys(brand).length ? brand : undefined;
+}
+
+/** A style to compare or preview: a style.json path, a project directory (its storyboard's style), or a style name. → pack */
+export async function loadStyleArg(value, { cwd = process.cwd() } = {}) {
+  if (!value || value === true) throw new Error("name a style: a style.json, a project directory or a style name");
+  const target = path.resolve(cwd, String(value));
+  if (existsSync(path.join(target, STORY_FILE))) {
+    const story = await readJson(path.join(target, STORY_FILE));
+    const name = typeof story?.style === "string" ? story.style : story?.style?.name;
+    if (!name) throw new Error(`${target} names no style`);
+    return (await resolveStyleV2(name, { projectDir: target })).pack;
+  }
+  return (await resolveStyleV2(String(value), { projectDir: cwd })).pack;
+}
+
 /**
  * launchclip style generate --seed <hex> [--tone] [constraint flags] [--out | --project]:
  * --out is a style.json path or a directory (the pack is written to
@@ -125,16 +188,18 @@ export function adoptStyleLook(story, pack) {
  * (.launchclip/styles/seed-<hex>/style.json) for a storyboard to name;
  * with neither the pack is returned.
  */
-export async function styleGenerateCommand(flags = {}, { cwd = process.cwd(), clock = () => new Date().toISOString() } = {}) {
+export async function styleGenerateCommand(flags = {}, { cwd = process.cwd(), clock = () => new Date().toISOString(), colors } = {}) {
   const constraints = constraintFlags(flags);
   const seed = flags.seed && flags.seed !== true ? normalizeSeed(flags.seed) : freshSeed();
+  const brand = await brandFlags(flags, { cwd, ...(colors ? { colors } : {}) });
+  const avoid = await Promise.all(listFlag(flags.avoid).map((entry) => loadStyleArg(entry, { cwd })));
   if (flags.project && flags.project !== true) {
     if (flags.out) throw new Error("pass --out or --project, not both");
-    const made = await generateProjectStyle(path.resolve(cwd, String(flags.project)), { seed, constraints, clock });
+    const made = await generateProjectStyle(path.resolve(cwd, String(flags.project)), { seed, constraints, brand, avoid, clock });
     return { stage: "style", action: "generate", status: "ready", name: made.name, seed: made.pack.generated.seed, summary: made.summary, line: made.line, path: made.file, next: `set "style": "${made.name}" in storyboard.json and leave brand out` };
   }
-  const pack = generateStyle({ seed, constraints, at: clock() });
-  const result = { stage: "style", action: "generate", status: "ready", name: pack.name, seed: pack.generated.seed, summary: styleSummary(pack) };
+  const pack = generateStyle({ seed, constraints, brand, avoid, at: clock() });
+  const result = { stage: "style", action: "generate", status: "ready", name: pack.name, seed: pack.generated.seed, summary: styleSummary(pack), ...(pack.generated.adjusted ? { adjusted: pack.generated.adjusted } : {}), ...(pack.generated.substituted ? { substituted: pack.generated.substituted } : {}) };
   if (!flags.out || flags.out === true) return { ...result, pack };
   const target = path.resolve(cwd, String(flags.out));
   const file = target.endsWith(".json") ? target : path.join(target, "style.json");
@@ -171,12 +236,13 @@ export async function styleRerollCommand(projectArg, flags = {}, { cwd = process
     const named = typeof story.style === "string" ? story.style : story.style?.name;
     throw new Error(named ? `this project uses the style "${named}", which was not generated from a seed; reroll changes only generated styles` : "this project names no style; run launchclip style generate, or make the video again without --style");
   }
-  const old = current.pack.generated;
-  const constraints = { ...(old.constraints ?? {}), ...constraintFlags(flags) };
-  if (old.tone && !constraints.tone) constraints.tone = old.tone;
+  if (current.pack.generated.pinned && !flags.force) throw new Error(`${current.name} is pinned; launchclip style pin ${projectArg ?? "."} --off unpins it (or pass --force)`);
   let seed = flags.seed && flags.seed !== true ? normalizeSeed(flags.seed) : freshSeed();
   while (`seed-${seed}` === current.name) seed = freshSeed();
-  const next = await generateProjectStyle(project, { seed, constraints, clock });
+  // rerollStyle keeps the brand and direction (generated.inputs and
+  // constraints), draws with the current generator and steps away from the old look.
+  const base = { ...current.pack, generated: { ...current.pack.generated, constraints: { ...(current.pack.generated.constraints ?? {}), ...constraintFlags(flags) } } };
+  const next = await saveProjectStyle(project, rerollStyle(base, { seed, force: true, at: clock(), ...(flags.tone && flags.tone !== true ? { tone: String(flags.tone) } : {}) }));
   await writeJson(storyFile, { ...story, style: next.name });
   await writeJson(previousFile, { style: current.name, replaced_by: next.name, at: clock() });
   return { stage: "style", action: "reroll", status: "ready", project, name: next.name, previous: current.name, summary: next.summary, line: next.line, next: `launchclip finish ${path.relative(cwd, project) || "."} renders the new look; launchclip style reroll --undo goes back` };
@@ -206,6 +272,57 @@ export async function styleKeepCommand(projectArg, flags = {}, { cwd = process.c
   await writeFile(staging, `${JSON.stringify(pack, null, 2)}\n`);
   await rename(staging, file);
   return { stage: "style", action: "keep", status: "ready", name, from: current.name, path: file, next: `use it anywhere with --style ${name}` };
+}
+
+/**
+ * launchclip style pin [<project> | <style.json>] [--off]: pin a generated
+ * style so reroll refuses it (until --off, or reroll --force).
+ */
+export async function stylePinCommand(target, flags = {}, { cwd = process.cwd() } = {}) {
+  const location = path.resolve(cwd, target ?? ".");
+  let file = location;
+  if (existsSync(path.join(location, STORY_FILE))) {
+    const current = await projectSeedStyle(location);
+    if (!current) throw new Error(`${location} has no generated style to pin`);
+    file = current.file;
+  } else if (!location.endsWith(".json")) file = path.join(location, "style.json");
+  const pack = await readJson(file);
+  if (!pack?.generated) throw new Error(`${file} is not a generated style`);
+  const pinned = flags.off !== true;
+  await writeJson(file, pinStyle(pack, pinned));
+  return { stage: "style", action: "pin", status: "ready", name: pack.name, pinned, path: file };
+}
+
+/**
+ * launchclip style preview <style> --out preview.mp4 [--renderer hyperframes|remotion]
+ * [--aspect 16:9|9:16|1:1] [--duration 8-12] [--title] [--kicker] [--quality]:
+ * render the style's preview reel (title, chart, card, a camera move and a
+ * backdrop change).
+ */
+export async function stylePreviewCommand(target, flags = {}, { cwd = process.cwd(), render } = {}) {
+  const pack = await loadStyleArg(target, { cwd });
+  const out = flags.out && flags.out !== true ? path.resolve(cwd, String(flags.out)) : path.resolve(cwd, `${pack.name}-preview.mp4`);
+  const { renderStylePreview } = await import("./style_preview.js");
+  const options = { out, renderer: flags.renderer ?? "hyperframes", quality: flags.quality ?? "draft", ...(flags.aspect ? { aspect: String(flags.aspect) } : {}), ...(flags.duration ? { duration: Number(flags.duration) } : {}), ...(flags.title ? { title: String(flags.title) } : {}), ...(flags.kicker ? { kicker: String(flags.kicker) } : {}) };
+  const result = await (render ?? renderStylePreview)(pack, options);
+  return { stage: "style", action: "preview", status: result.status, name: pack.name, renderer: result.renderer, video: result.video, duration: result.duration, warnings: result.warnings ?? [] };
+}
+
+/**
+ * launchclip style distance <a> <b> [<c> ...]: how different styles look,
+ * every pair, with the parts; a pair under NEAR_DUPLICATE reads as one brand.
+ */
+export async function styleDistanceCommand(targets = [], { cwd = process.cwd() } = {}) {
+  if (targets.length < 2) throw new Error("style distance needs at least two styles (style.json, project directory or style name)");
+  const packs = await Promise.all(targets.map((entry) => loadStyleArg(entry, { cwd })));
+  const pairs = [];
+  for (let i = 0; i < packs.length; i += 1) {
+    for (let j = i + 1; j < packs.length; j += 1) {
+      const report = styleDistanceReport(packs[i], packs[j]);
+      pairs.push({ a: packs[i].name, b: packs[j].name, distance: report.distance, parts: report.parts, near_duplicate: report.distance < NEAR_DUPLICATE });
+    }
+  }
+  return { stage: "style", action: "distance", status: pairs.some((pair) => pair.near_duplicate) ? "near-duplicate" : "distinct", threshold: NEAR_DUPLICATE, pairs };
 }
 
 async function readJson(file) {

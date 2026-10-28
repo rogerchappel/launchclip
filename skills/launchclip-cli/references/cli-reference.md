@@ -1220,16 +1220,34 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
   ```
 
-- `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints.
+- `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints, conditioned on a brand's colours, logo, fonts, tone and industry when given; --avoid keeps it clear of other styles.
 
   ```text
-  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>[,<id>...]] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--medium oil|watercolour|pastel|ink|gouache] [--out <dir|style.json> | --project <dir>] [--force]
+  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>[,<id>...]] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--medium oil|watercolour|pastel|ink|gouache] [--overshoot] [--brand <brand.json>] [--name <brand>] [--colors <#hex,role=#hex,...>] [--fonts <display,body[,meta]>] [--brand-tone <words>] [--industry <text>] [--logo <file>] [--reference <file>]... [--avoid <style>[,<style>...]] [--out <dir|style.json> | --project <dir>] [--force]
   ```
 
-- `style reroll`: Give a project with a generated style a new seed (its constraints kept); --undo goes back once.
+- `style reroll`: Give a project with a generated style a new seed, keeping its brand and constraints and stepping away from the old look; --undo goes back once. A pinned style needs --force.
 
   ```text
-  launchclip style reroll [<project>] [--tone <tone>] [--seed <hex>] [--undo]
+  launchclip style reroll [<project>] [--tone <tone>] [--seed <hex>] [--undo] [--force]
+  ```
+
+- `style pin`: Pin a generated style so reroll leaves it alone (--off unpins).
+
+  ```text
+  launchclip style pin [<project> | <style.json>] [--off]
+  ```
+
+- `style preview`: Render a style's 8-12 s preview reel: a title, a chart, a card, a camera move and a backdrop change.
+
+  ```text
+  launchclip style preview <style.json | project | name> [--out preview.mp4] [--renderer hyperframes|remotion] [--aspect 16:9|9:16|1:1] [--duration 8-12] [--title <text>] [--kicker <text>] [--quality draft|standard|high]
+  ```
+
+- `style distance`: How different styles look (0-1) across palette, type, motion, backdrops and module variants; under 0.2 reads as one brand.
+
+  ```text
+  launchclip style distance <style> <style> [<style> ...]
   ```
 
 - `style keep`: Copy a project's generated style to ~/.launchclip/styles/<name> as a personal style.
