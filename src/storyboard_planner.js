@@ -29,6 +29,7 @@ import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningP
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
+import { resolveShots, shotPrompt } from "./asset_provider.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -73,7 +74,7 @@ const PLAN_BAND_ERRORS = Object.freeze(["coverage", "longest_undressed_seconds"]
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null } = options;
   // direction: true plans DIRECTION.json first (one call, RFC §6.4), a map
   // object plans against that map, false or omitted plans no map.
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
@@ -101,7 +102,12 @@ export async function planStoryboard(options = {}) {
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
   }
-  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction });
+  if (assets && typeof assets.findShot !== "function") throw new Error("assets must be an asset provider with findShot(request)");
+  // assets: the app's asset provider (src/asset_provider.js). The model may
+  // then ask for shots, which are found or generated before the checks.
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction }), ...(assets ? [shotPrompt()] : [])].join("\n\n");
+  const shotCache = new Map();
+  let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
   // history: a "Recent videos" section (src/visual_history.js historyPrompt)
   // naming what earlier videos in the series chose, so this plan differs.
@@ -140,7 +146,15 @@ export async function planStoryboard(options = {}) {
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
       if (repairedMap?.ok) direction = repairedMap.map;
+      let shotErrors = [];
+      if (assets) {
+        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
+        pinned.storyboard = found.storyboard;
+        shots = found.shots;
+        shotErrors = found.errors.map((entry) => `assets: ${entry}`);
+      }
       checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given" });
+      if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
       // extraCheck(storyboard) → [error strings]: caller rules (for example,
@@ -229,6 +243,8 @@ export async function planStoryboard(options = {}) {
     direction,
     direction_source: directionSource,
     direction_attempts: directionPlan.attempts,
+    // Shots the app's asset provider supplied for the final storyboard.
+    ...(assets ? { shots } : {}),
     profile: profile?.id ?? null,
     cadence: last?.cadence ?? null,
     long_form: longForm,
