@@ -19,7 +19,7 @@ import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@lau
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs"));
-const EDITORIAL_MODULE = path.join(ROOT, "skills/launchclip-create-video/scripts/editorial-ui-modules.mjs");
+const EDITORIAL_MODULE = path.join(ROOT, "kit/hyperframes/editorial-ui-modules.mjs");
 // Kept in step with KINDS in editorial-ui-modules.mjs, which does not export it.
 const EDITORIAL_KINDS = new Set(["media-window", "checklist", "step-rail", "callout", "audience-grid", "trend-chart", "metric", "progress", "date-card", "status-rack", "code-snippet", "excerpt-window", "focus-flow", "growth-chart"]);
 const PARAM_ROLES = new Set(["text", "hero", "media", "caption", "decor"]);

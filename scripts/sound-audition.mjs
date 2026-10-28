@@ -21,9 +21,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SFX_FAMILY_NAMES, SOUND_PALETTES } from '@launchclip/core/sound/options.mjs';
-import { synthAmbience, synthGenreBed } from '../skills/launchclip-create-video/scripts/synth-audio-kit.mjs';
-import { buildMix, normalizeCues } from '../skills/launchclip-create-video/scripts/build-mix.mjs';
-import { masterLoudness } from '../skills/launchclip-create-video/scripts/master-loudness.mjs';
+import { synthAmbience, synthGenreBed } from '../src/scripts/synth-audio-kit.mjs';
+import { buildMix, normalizeCues } from '../src/scripts/build-mix.mjs';
+import { masterLoudness } from '../src/scripts/master-loudness.mjs';
 import { analyseFile, decodePcm, effectProblems, loudness } from './sound-analysis.mjs';
 import { analyzeBeatsFile } from '../src/music/beats.js';
 import { analyzeProductionAudio } from '../src/render_audio_analysis.js';
@@ -31,7 +31,7 @@ import { normalizeLoudness } from '../src/voice/supplied.js';
 
 const run = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const KIT = path.join(ROOT, 'skills', 'launchclip-create-video', 'scripts', 'synth-audio-kit.mjs');
+const KIT = path.join(ROOT, 'src', 'scripts', 'synth-audio-kit.mjs');
 const GAP = 0.4;
 
 async function ffmpeg(args) {

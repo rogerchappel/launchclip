@@ -4,10 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_profiles.js";
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
-import { SFX, bedExpressions } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
-import { parseEbur128Summary, parseLoudnormJson } from "../skills/launchclip-create-video/scripts/master-loudness.mjs";
-import { mixGraph, normalizeCues } from "../skills/launchclip-create-video/scripts/build-mix.mjs";
-import { evidenceSchedule } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
+import { SFX, bedExpressions } from "../src/scripts/synth-audio-kit.mjs";
+import { parseEbur128Summary, parseLoudnormJson } from "../src/scripts/master-loudness.mjs";
+import { mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
+import { evidenceSchedule } from "../src/scripts/build-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const words = (text, step = 0.3) => text.split(" ").map((word, index) => ({ text: word, start: index * step, end: index * step + step * 0.8 }));

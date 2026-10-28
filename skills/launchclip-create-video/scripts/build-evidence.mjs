@@ -22,6 +22,9 @@ const REMOTION_VERSION = '4.0.536';
 const COMPOSITION_ID = 'LaunchclipStory';
 const BROWSER_SOURCE = 'browser-still';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// The package root: two folders up from src/scripts/ (three from a skill's
+// scripts/ copy, which scripts/sync-skills.mjs rewrites).
+const ROOT = path.resolve(HERE, '../../..');
 const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hasExactFile = (dir, name) => existsSync(dir) && readdirSync(dir).includes(name);
 
@@ -62,13 +65,21 @@ export function evidenceSchedule(html) {
 }
 
 // The story module is a copy of kit/core/story.mjs next to this script when the
-// skill ships standalone, else the repo's canonical kit/core/story.mjs.
+// skill ships standalone, else @launchclip/core's story.mjs.
 export async function loadStoryModule(source) {
   if (source && typeof source === 'object') return source;
-  const candidates = source ? [path.resolve(source)] : [path.join(HERE, 'story.mjs'), path.resolve(HERE, '../../../kit/core/story.mjs')];
+  const candidates = source ? [path.resolve(source)] : [path.join(HERE, 'story.mjs'), coreFile('./story.mjs')].filter(Boolean);
   const file = candidates.find((candidate) => existsSync(candidate));
   if (!file) throw new Error(`storyboard.json support needs story.mjs (looked in ${candidates.join(', ')})`);
   return import(pathToFileURL(file).href);
+}
+
+function coreFile(specifier) {
+  try {
+    return fileURLToPath(import.meta.resolve(specifier));
+  } catch {
+    return null;
+  }
 }
 
 function readOptionalJson(file) {
@@ -150,7 +161,7 @@ export function remotionStillArgs({ serveUrl, propsFile, project, frame, output,
 }
 
 function remotionEntry(project, entry) {
-  const candidates = entry ? [path.resolve(entry)] : [process.env.REMOTION_ENTRY, path.join(project, 'remotion/entry.tsx'), path.resolve(HERE, '../../../kit/remotion/entry.tsx')].filter(Boolean);
+  const candidates = entry ? [path.resolve(entry)] : [process.env.REMOTION_ENTRY, path.join(project, 'remotion/entry.tsx'), path.join(ROOT, 'kit/remotion/entry.tsx')].filter(Boolean);
   const found = candidates.find((candidate) => existsSync(candidate));
   if (!found) throw new Error(`Remotion entry not found (looked in ${candidates.join(', ')}); pass --entry`);
   return found;

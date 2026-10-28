@@ -11,8 +11,8 @@ import { palette, paletteChain } from "@launchclip/core/sound/palettes.mjs";
 import { ambienceSpec } from "@launchclip/core/sound/ambience.mjs";
 import { genreBed, musicChoice } from "@launchclip/core/sound/music.mjs";
 import { rng } from "@launchclip/core/sound/dsp.mjs";
-import { SFX_VARIANTS, kitVariants, roleEnvelope } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
-import { mixGraph } from "../skills/launchclip-create-video/scripts/build-mix.mjs";
+import { SFX_VARIANTS, kitVariants, roleEnvelope } from "../src/scripts/synth-audio-kit.mjs";
+import { mixGraph } from "../src/scripts/build-mix.mjs";
 import { applyDensity, densityTyping } from "../src/sfx/library.js";
 import { CUE_LEVELS, PATHS, bindCues, defaultCueFor, kitArgs, runFinish, soundSettings } from "../src/finish.js";
 import { mediaSkip } from "./helpers/media.js";
@@ -258,11 +258,11 @@ test("finish reads the sound block: palette kit, genre bed, ambience from the wo
 
 test("rendered: a palette slice, a genre bed and an ambience loop pass the listen checks", { skip: mediaSkip(), timeout: 600_000 }, async () => {
   const { analyseFile, decodePcm, effectProblems } = await import("../scripts/sound-analysis.mjs");
-  const { synthAmbience, synthGenreBed } = await import("../skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+  const { synthAmbience, synthGenreBed } = await import("../src/scripts/synth-audio-kit.mjs");
   const { analyzeBeatsFile } = await import("../src/music/beats.js");
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-sound-media-"));
   try {
-    const kit = path.join(ROOT, "skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+    const kit = path.join(ROOT, "src/scripts/synth-audio-kit.mjs");
     await execFileAsync(process.execPath, [kit, path.join(dir, "kit"), "--palette", "retro-8bit", "--seed", "t1", "--only", "whoosh,ding,glitch,keystroke,success"], { maxBuffer: 1 << 26 });
     const manifest = JSON.parse(await readFile(path.join(dir, "kit/AUDIO-KIT.json"), "utf8"));
     assert.equal(manifest.palette, "retro-8bit");

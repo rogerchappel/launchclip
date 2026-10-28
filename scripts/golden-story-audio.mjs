@@ -3,7 +3,7 @@
 // NARRATION.json and storyboard.json, using only local tools:
 //   - voice: each narration word spoken by macOS `say`, trimmed and fitted to
 //     the word's [start, end] window, so the audio matches the word timings;
-//   - music and SFX: skills/launchclip-create-video/scripts/synth-audio-kit.mjs
+//   - music and SFX: src/scripts/synth-audio-kit.mjs
 //     (procedural bed + cue kit);
 //   - mix: build-mix.mjs (bed ducked under the voice, one SFX per hit `cue`),
 //     then a loudness-normalised mono AAC encode to keep the file small.
@@ -19,12 +19,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { resolveStory } from '@launchclip/core/story.mjs';
-import { buildMix, normalizeCues } from '../skills/launchclip-create-video/scripts/build-mix.mjs';
-import { SFX } from '../skills/launchclip-create-video/scripts/synth-audio-kit.mjs';
+import { buildMix, normalizeCues } from '../src/scripts/build-mix.mjs';
+import { SFX } from '../src/scripts/synth-audio-kit.mjs';
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const SYNTH = path.join(ROOT, 'skills', 'launchclip-create-video', 'scripts', 'synth-audio-kit.mjs');
+const SYNTH = path.join(ROOT, 'src', 'scripts', 'synth-audio-kit.mjs');
 const RATE = 48000;
 
 async function ffmpeg(args) {

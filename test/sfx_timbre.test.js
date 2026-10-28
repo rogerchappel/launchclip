@@ -83,7 +83,7 @@ test("rendered: the kit's tonal families pass the timbre guard in every palette"
   const { decodeAudio } = await import("../src/sfx/process.js");
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-timbre-"));
   try {
-    const kit = path.join(ROOT, "skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+    const kit = path.join(ROOT, "src/scripts/synth-audio-kit.mjs");
     for (const palette of [null, "industrial", "cinematic", "glassy", "retro-8bit"]) {
       const out = path.join(dir, palette ?? "neutral");
       await execFileAsync(process.execPath, [kit, out, ...(palette ? ["--palette", palette, "--seed", "t1", "--only", TONAL.join(",")] : ["--with", "tally"])], { maxBuffer: 1 << 26 });
