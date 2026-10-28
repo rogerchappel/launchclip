@@ -121,12 +121,20 @@ test("repair success: the exact validation and tier errors go back, then the fix
   assert.equal(report.usage.total_tokens, 20400);
 });
 
-test("param errors surface after the shape is valid", async () => {
+test("param errors surface with the param's path, from the module's schema", async () => {
   const story = goodStoryboard();
   story.scenes[0].params.headline = "Why does a hot cup of coffee on your desk cool so quickly at first and then so slowly afterwards?";
   const checked = checkStoryboard(story, { words: WORDS, tier: "structured" });
   assert.equal(checked.ok, false);
-  assert.ok(checked.errors.some((entry) => /^params: scenes\[0\] \(s1\): module "hook-title" params: hook-title: .*headline/.test(entry)), checked.errors.join("\n"));
+  assert.ok(checked.errors.includes("validation: scenes[0].params.headline must be at most 90 characters (it has 97)"), checked.errors.join("\n"));
+});
+
+test("param errors the schema cannot see surface from the module after the shape is valid", async () => {
+  const story = goodStoryboard();
+  story.scenes[0].params.emphasis = "kettle";
+  const checked = checkStoryboard(story, { words: WORDS, tier: "structured" });
+  assert.equal(checked.ok, false);
+  assert.ok(checked.errors.some((entry) => /^params: scenes\[0\] \(s1\): module "hook-title" params: hook-title: .*emphasis/.test(entry)), checked.errors.join("\n"));
 });
 
 test("layout errors from guided-tier coordinates are reported as layout errors", () => {

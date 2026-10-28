@@ -190,6 +190,9 @@ function ms(value) {
 /**
  * Validate a story.json v1 document (resolved or not).
  * modules: optional Set or array of known module ids; unknown ids are errors when given.
+ * moduleParams: optional (moduleId, params) → [{path, message}] (path a JSON
+ * Pointer from params), e.g. validateModuleParams from
+ * kit/core/module-schemas.mjs; each problem is an error on that scene's params.
  */
 /**
  * Adjacent track-0 world plates of the same place (kind, time and props,
@@ -237,7 +240,12 @@ export function twoCopies(story) {
   return out;
 }
 
-export function validateStory(story, { modules } = {}) {
+// "/rows/0/label" → ".rows[0].label" (RFC 6901 pointer to the dotted paths errors use).
+function pointerPath(pointer) {
+  return String(pointer ?? "").split("/").slice(1).map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~")).map((token) => (/^\d+$/.test(token) ? `[${token}]` : `.${token}`)).join("");
+}
+
+export function validateStory(story, { modules, moduleParams } = {}) {
   const errors = [];
   const warnings = [];
   const err = (message) => errors.push(message);
@@ -441,6 +449,10 @@ export function validateStory(story, { modules } = {}) {
     if (scene.params !== undefined && !isObject(scene.params)) err(`${path}.params must be an object`);
     // A world scene's kind names its environment (kit/core/catalog-world.mjs), not an editorial kind.
     if (isObject(scene.params)) for (const key of ["id", "kind", "aspect", "start", "duration"]) if (key in scene.params && !(key === "kind" && scene.module === "world")) err(`${path}.params.${key} is not allowed; it comes from the scene and the format`);
+    // Module param schemas (kit/core/module-schemas.mjs), when the caller passes them.
+    if (typeof moduleParams === "function" && typeof scene.module === "string" && scene.module !== "custom" && (scene.params === undefined || isObject(scene.params)) && (!known || known.has(scene.module))) {
+      for (const problem of moduleParams(scene.module, scene.params ?? {})) err(`${path}.params${pointerPath(problem.path)} ${problem.message}`);
+    }
 
     const start = scene.start === undefined ? (err(`${path}.start is required`), null) : anchorField(scene.start, `${path}.start`);
     const end = scene.end === undefined ? (err(`${path}.end is required`), null) : anchorField(scene.end, `${path}.end`);

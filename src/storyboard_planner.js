@@ -18,6 +18,7 @@
 // below, or a fake in tests), so the planner runs keyless in tests.
 
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
+import { validateModuleParams } from "../kit/core/module-schemas.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "../kit/core/direction.mjs";
 import { isLongForm, structureLongForm } from "../kit/core/long-form.mjs";
@@ -257,7 +258,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const layout = emptyLayout();
   // The checks see the story as every renderer will: with the style merged.
   const input = style && raw && typeof raw === "object" && !Array.isArray(raw) && raw.style ? applyStyle(raw, style).story : raw;
-  const validation = validateStory(input, { modules: knownModules() });
+  const validation = validateStory(input, { modules: knownModules(), moduleParams: validateModuleParams });
   errors.push(...validation.errors.map((entry) => `validation: ${entry}`));
   warnings.push(...validation.warnings);
   errors.push(...tierErrors(input, tier).map((entry) => `tier: ${entry}`));
@@ -271,7 +272,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     errors.push(`anchors: ${message(error)}`);
     return { ok: false, errors, warnings, storyboard, layout };
   }
-  const second = validateStory(resolved, { modules: knownModules() });
+  const second = validateStory(resolved, { modules: knownModules(), moduleParams: validateModuleParams });
   errors.push(...second.errors.filter((entry) => !validation.errors.includes(entry)).map((entry) => `validation: ${entry} (after resolving anchors)`));
   if (second.ok) warnings.push(...subjectDensityWarnings(resolved, { profile }));
   // The direction map against this storyboard, and the measures it gives
