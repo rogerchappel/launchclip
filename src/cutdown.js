@@ -1,4 +1,4 @@
-// launchclip cutdown <project> --to shorts [--section <id>] [--out dir] [--max 58] [--model provider:model] [--force]
+// launchclip cutdown <project> --to shorts [--section <id> | --lines 23-28 | --range 120-150] [--out dir] [--max 58] [--model provider:model] [--force]
 //
 // A Short from one section of a long video (docs/VIDEO_QUALITY_RFC.md §10.2):
 // a new 9:16 project that re-plans the section against the Shorts profile
@@ -12,13 +12,21 @@
 // against the Shorts profile (paid calls), and the cut keeps the base edit,
 // the hook check and the loop ending.
 //
+// A voiceover-motion story (no recording) is cut too: its narration is
+// spliced from the picked lines into the Short's own assets/audio, and its
+// shots, beats and captions re-timed onto the Short's clock
+// (cutdownMotionStory). --lines and --range pick the narration by hand,
+// several stretches at once ("64,71-74,78").
+//
 // Writes <out>/storyboard.json, DIRECTION.json, NARRATION.json, CUTDOWN.json
 // (the receipt) and assets/ (hard links to the long form's assets, without its
 // audio and captions, which finish makes again for the Short).
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, link, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CUTDOWN_SCHEMA, CUTDOWN_TARGETS, chooseCutWindow, cutdownStory } from "@launchclip/core/cutdown.mjs";
+import { promisify } from "node:util";
+import { CUTDOWN_SCHEMA, CUTDOWN_TARGETS, CUTDOWN_VOICE, chooseCutWindow, cutdownMotionStory, cutdownStory, pickCutWindow } from "@launchclip/core/cutdown.mjs";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { storyStyleRequest } from "@launchclip/core/style.mjs";
@@ -30,6 +38,9 @@ import { readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { resolveStyleV2 } from "./style_store.js";
 
+const execFileAsync = promisify(execFile);
+// Lanes cutdown cuts: a presenter's recording, or narration over motion graphics.
+const LANES = new Set(["footage-led", "voiceover-motion"]);
 // Long-form assets the Short makes again for itself.
 const OWN_ASSETS = new Set(["audio", "captions"]);
 
@@ -41,7 +52,10 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
   const storyFile = path.join(project, "storyboard.json");
   if (!existsSync(storyFile)) throw new Error(`launchclip cutdown needs ${storyFile}`);
   const story = JSON.parse(await readFile(storyFile, "utf8"));
-  if (story.lane !== "footage-led") throw new Error(`cutdown cuts footage-led videos (a presenter's recording); this story is ${story.lane}`);
+  if (!LANES.has(story.lane)) throw new Error(`cutdown cuts footage-led and voiceover-motion videos; this story is ${story.lane}`);
+  const motion = story.lane === "voiceover-motion";
+  if (motion && typeof story.audio?.voice !== "string") throw new Error("cutdown splices the Short's narration from audio.voice; this story has none (run launchclip voice first)");
+  if (motion && flags.model) throw new Error("--model re-plans footage-led cut-downs only; a voiceover-motion Short reuses the long form's shots");
   const mapFile = directionFileFor(storyFile);
   if (!existsSync(mapFile)) throw new Error(`cutdown picks the section from ${path.basename(mapFile)}; write the direction map first`);
   const map = JSON.parse(await readFile(mapFile, "utf8"));
@@ -53,10 +67,21 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
 
   const max = flags.max !== undefined ? Number(flags.max) : target.max;
   if (!(max >= target.min && max <= 60)) throw new Error(`--max must be ${target.min}–60 seconds`);
-  const window = chooseCutWindow(map, words, { section: flags.section ? String(flags.section) : null, max, min: target.min });
-  const { profile } = resolveProfile(target.profile);
-  const cut = cutdownStory(resolved, { story, words, window, profile, target });
-  const out = path.resolve(flags.out ? String(flags.out) : path.join(project, "cutdowns", `${window.section}-${to}`));
+  const picked = flags.lines !== undefined || flags.range !== undefined;
+  if (picked && flags.section) throw new Error("pass --section, --lines or --range, not several");
+  if (flags.lines !== undefined && flags.range !== undefined) throw new Error("pass --lines or --range, not both");
+  const window = picked
+    ? pickCutWindow(map, words, flags.lines !== undefined ? { lines: String(flags.lines) } : { range: String(flags.range) })
+    : chooseCutWindow(map, words, { section: flags.section ? String(flags.section) : null, max, min: target.min });
+  if (!motion && window.segments.length > 1) throw new Error("a footage-led Short is one stretch of the recording; pick consecutive lines");
+  const { profile } = resolveProfile(motion ? target.motionProfile : target.profile);
+  const cut = motion ? cutdownMotionStory(resolved, { story, words, window, profile, target }) : cutdownStory(resolved, { story, words, window, profile, target });
+  const length = cut.story.format.duration;
+  if (picked && length > 60) throw new Error(`the picked narration runs ${length} s; a Short is 60 s at most`);
+  if (picked && length < target.min) cut.warnings.push(`the picked narration runs ${length} s, under the ${target.min} s a Short usually needs`);
+  const name = picked ? `${window.section}-${flags.lines !== undefined ? `l${String(flags.lines)}` : `t${String(flags.range)}`}` : window.section;
+  const out = path.resolve(flags.out ? String(flags.out) : path.join(project, "cutdowns", `${slugName(name)}-${to}`));
+  if (motion) cut.story.style = rebaseStyle(cut.story.style, project, out);
   if (existsSync(path.join(out, "storyboard.json")) && !flags.force) throw new Error(`${out} already holds a storyboard; pass --force to replace it`);
 
   // --model: the planner re-plans the section's words against the Shorts profile.
@@ -97,6 +122,7 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
 
   await mkdir(out, { recursive: true });
   await linkAssets(project, out);
+  if (motion) await (adapters.spliceAudio ?? spliceAudio)(path.resolve(project, story.audio.voice), cut.segments, path.join(out, CUTDOWN_VOICE));
   await writeFile(path.join(out, "storyboard.json"), `${JSON.stringify(planned, null, 2)}\n`);
   await writeFile(path.join(out, "DIRECTION.json"), directionJson(map2));
   await writeFile(path.join(out, "NARRATION.json"), `${JSON.stringify({ words: cut.words }, null, 2)}\n`);
@@ -106,9 +132,9 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
     to,
     section: window.section,
     title: window.title,
-    window: { start: window.start, end: window.end, words: window.words },
+    window: { start: window.start, end: window.end, words: window.words, ...(cut.segments ? { segments: cut.segments } : {}) },
     duration: planned.format.duration,
-    trim: planned.base.trim,
+    ...(motion ? { voice: CUTDOWN_VOICE } : { trim: planned.base.trim }),
     planner: plan ? { model: String(flags.model), cost_usd: plan.cost?.estimated_usd ?? null } : "deterministic",
     hook: cut.hook,
     loop_to: planned.ending?.loop_to ?? null,
@@ -119,6 +145,31 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
   };
   await writeFile(path.join(out, "CUTDOWN.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   return { stage: "cutdown", status: gate.status === "passed" ? "ready" : "needs-repair", out, ...receipt, next_steps: [`launchclip finish ${path.relative(process.cwd(), out) || out}`] };
+}
+
+// A style named by path is relative to the long form's folder; the Short's sits elsewhere.
+function rebaseStyle(style, project, out) {
+  const rebase = (name) => {
+    if (typeof name !== "string" || !/[\\/]|\.json$/i.test(name) || path.isAbsolute(name)) return name;
+    const file = path.resolve(project, name);
+    return existsSync(file) ? path.relative(out, file).split(path.sep).join("/") : name;
+  };
+  if (typeof style === "string") return rebase(style);
+  if (style && typeof style === "object" && typeof style.name === "string") return { ...style, name: rebase(style.name) };
+  return style;
+}
+
+// The Short's narration: the long form's voice cut at each segment and joined, in order.
+export async function spliceAudio(voice, segments, output) {
+  if (!existsSync(voice)) throw new Error(`cutdown needs the long form's narration at ${voice}`);
+  await mkdir(path.dirname(output), { recursive: true });
+  const filter = segments.map((segment, k) => `[0:a]atrim=${segment.start}:${segment.end},asetpts=PTS-STARTPTS[a${k}];`).join("")
+    + `${segments.map((_, k) => `[a${k}]`).join("")}concat=n=${segments.length}:v=0:a=1[out]`;
+  await execFileAsync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-i", voice, "-filter_complex", filter, "-map", "[out]", output]);
+}
+
+function slugName(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
 
 async function stylePack(story, project) {
