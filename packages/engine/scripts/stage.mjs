@@ -14,6 +14,7 @@
 // (test/engine_package.test.js); --check only reports.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -38,7 +39,16 @@ function walk(relative) {
   return readdirSync(full).flatMap((name) => walk(`${relative}/${name}`)).filter((file) => !SKIP.test(file) && !path.basename(file).startsWith('.'));
 }
 
-const extras = EXTRA_TREES.flatMap(walk);
+// Only tracked files ship (never renders, caches or local experiments).
+function trackedFiles() {
+  try {
+    return new Set(execFileSync('git', ['ls-files', '-z', ...EXTRA_TREES], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 }).split('\0').filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+const tracked = trackedFiles();
+const extras = EXTRA_TREES.flatMap(walk).filter((file) => !tracked || tracked.has(file));
 const entries = ['src/engine/index.js', ...extras.filter((file) => /^src\/.*\.(js|mjs)$/.test(file) || /^kit\/hyperframes\/.*\.mjs$/.test(file))];
 const result = await build({
   entryPoints: entries.map((file) => path.join(ROOT, file)),
