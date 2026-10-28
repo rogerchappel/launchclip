@@ -1966,6 +1966,15 @@ style under the overlay. A compile that cannot extract it warns and the
 overview shows the clip's frame and tag without the picture. Golden:
 `examples/story/evidence-world-16x9` (camera parity, `test/parity_camera.test.js`).
 
+A source video shorter than its clip (a 6.4 s capture in a 6.8 s scene)
+holds its last frame to the end, as Remotion's `<OffthreadVideo>` does;
+HyperFrames alone draws nothing once the source ends. For a module whose
+html is its `<video>` alone, on a plate or on the root, the compiler reads
+each `params.media` video's length with ffprobe, writes the last frame to
+`held/<video id>-tail.png`, and puts it under the video as an `<img>` with the
+video's style, hidden until the source ends; the module's sets on the video
+apply to it too.
+
 Other modules that hoist a video from inside their own markup (backdrop-swap,
 app-stage…) still hoist it, with the warning that it does not follow the world
 camera.
