@@ -23,6 +23,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { buildTemporalEvidenceSchedule } from "./cinematic_evidence.js";
+import { DIRECTION_FILE } from "@launchclip/core/direction.mjs";
 import { cinematicMotionExpectations } from "./cinematic_check.js";
 import { checkLayoutProject } from "./layout_check.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -41,9 +42,10 @@ export const RENDERERS = RENDERER_NAMES;
 
 // Golden storyboards (RFC §8: they double as renderer regression tests). A
 // `dir` is a project with storyboard.json; a `story` is a loose story file
-// staged as storyboard.json next to its `narration`.
+// staged as storyboard.json next to its `narration` and its `direction` map
+// (staged as DIRECTION.json, where validate looks beside storyboard.json).
 export const GOLDEN_STORIES = Object.freeze([
-  { id: "cooling", story: "examples/story/cooling.story.json", narration: "examples/story/cooling.NARRATION.json" },
+  { id: "cooling", story: "examples/story/cooling.story.json", narration: "examples/story/cooling.NARRATION.json", direction: "examples/story/cooling.DIRECTION.json" },
   { id: "minimal", dir: "examples/story/minimal" },
   { id: "promo-16x9", dir: "examples/story/promo-16x9" },
   { id: "explainer-9x16", dir: "examples/story/explainer-9x16" },
@@ -469,6 +471,7 @@ export async function stageStory(definition, project, { root = ROOT } = {}) {
     const story = JSON.parse(await readFile(source, "utf8"));
     const wordsName = typeof story.audio?.words === "string" ? story.audio.words : "NARRATION.json";
     if (definition.narration) await cp(path.resolve(root, definition.narration), path.join(project, wordsName));
+    if (definition.direction) await cp(path.resolve(root, definition.direction), path.join(project, DIRECTION_FILE));
     storyFile = path.join(project, "storyboard.json");
     await writeFile(storyFile, `${JSON.stringify(story, null, 2)}\n`);
   }
