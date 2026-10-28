@@ -999,6 +999,77 @@ saved pack is what renders, so a new version changes only rerolls.
   old) and writes `.launchclip/styles/previous.json` for one `--undo`;
   `style keep` copies the pack to `~/.launchclip/styles/<name>`.
 
+#### Brand-conditioned styles and generator v2
+
+`generateStyle({seed?, brand?, tone?, constraints?, avoid?, at?, generator?})`
+is deterministic for one input. Generator `launchclip.style-seed.v2` adds
+three things to every pack, each drawn from its own stream so every v1 draw
+stays where it was (`generator: GENERATOR_V1` still regenerates a v1 pack
+exactly):
+
+- Brand inputs (`kit/core/style-brand.mjs`), all optional: `name`, `colors`
+  (a list, `{role: hex}` with host role names such as `background`, `text`,
+  `secondary`, or `[{hex, role?}]`), `logo` (a path, SVG markup or
+  `{src?, svg?, colors?}`), `fonts` (`{display?, body?, meta?}`), `tone` words,
+  `industry` and `references` (stills as `{src?, colors?}`). `normalizeBrand`
+  makes the canonical record stored in `generated.inputs.brand`. `brandRoles`
+  keeps given roles and fills open ones from the host's colours, then the
+  logo's and the stills' (first chromatic → primary, next ≥ 30° of hue away →
+  accent, a near-neutral host colour → bg). The palette keeps the brand's
+  colours and draws the rest around the primary's hue; a given colour that
+  fails a contrast pair takes the smallest lightness move that passes and is
+  listed in `generated.adjusted`. A given bg sets the theme. Fonts map to the
+  bundled OFL families (`BRAND_FONT_NEAREST`, then `nearestBundledFont`), with
+  each swap in `generated.substituted`. Tone words and industry choose the
+  tone (`toneFromText`) and the industry the worlds (`suggestWorld`). A name
+  or logo turns the brand frame on, with the name as the kicker label and the
+  logo in the kicker (the lockup). A style with brand colours is never
+  redrawn away from the starters: its colours are its identity.
+- Motion feel (`kit/core/style-feel.mjs` `drawMotionFeel`): `motion.grammar`
+  becomes `{base, ease, duration, overshoot: 0, stagger, camera: {whip,
+  anticipation: false, moveBlur, drift}}`. One ease family with no overshoot
+  (`FEEL_EASES`: sine, power1–4, circ, expo) drives entrances (`.out`), moves
+  and the camera (`.inOut`, slow-fast-slow); a tempo scales every duration of
+  the base grammar; motion blur is always above 0 so fast moves blur at peak
+  speed. `camera` is `{mode: "cuts"}` or `{mode: "world", layout, spacing,
+  parallax}`. `motion.feel` summarises it for planners: `{ease, tempo, whip
+  (blur-whip | slide | push | cut), blur, focus_zooms: {every, scale}}` (a
+  focus zoom every n shots, 0 for none, and its dive scale), and the whip's
+  transition leads `transition_preference`. `FEEL_TONES` narrows each choice
+  by tone. The constraint `overshoot: true` keeps the base grammar's own
+  entrances and emphasis (back, elastic) instead.
+- Backdrops (`drawBackdrops`): most dark looks (`PLATE_CHANCE`) get `plate`:
+  2–4 dark plate kinds with seeded focus, intensity, speed, depth and tint,
+  cycling every 1–4 shots (`plate.cycle: {every, plates}`); with a world
+  camera they are the world's backdrops. Light looks keep their background
+  field and world.
+
+Provenance and lifecycle: `generated` holds `seed`, `generator`, `tone`,
+`constraints`, `inputs.brand`, `at`, and when they apply `adjusted`,
+`substituted`, `stepped` (`{from, steps}`: the seed had no passing palette, or
+was too close to a style to avoid, so a derived seed `deriveSeed(seed, n)`
+was used; `seed` is then the derived one), `avoided` (`{styles, distance}`)
+and `pinned`. `styleInputs(pack)` reads the inputs back; `regenerateStyle(pack)`
+makes the identical pack; `rerollStyle(pack, {seed?, tone?, avoid?, force?})`
+keeps the brand and direction, draws a new seed with the current generator
+and avoids the old look (a pinned pack needs `force`); `pinStyle(pack,
+pinned?)` sets or clears the pin.
+
+Distance (`kit/core/style-distance.mjs`): `styleDistance(a, b)` (0–1) and
+`styleDistanceReport(a, b)` (`{distance, parts}`) compare any two packs over
+palette (0.3: mean OKLab distance of bg, paper, primary and accent over 0.25),
+type (0.15: display, body, case), motion (0.2: grammar, ease family, tempo,
+camera mode, whip, blur, zoom cadence), backdrops (0.15: background kind,
+plate set, panel treatment, radius, panel fill) and variants (0.2: the share
+of catalogue modules drawn with a different variant). `styleTraits(pack)`
+precomputes a pack's side for many comparisons; packs without a feel read
+their grammar preset. Below `NEAR_DUPLICATE` (0.2) two styles read as one
+brand; `avoid: [packs]` keeps a result at least `MIN_AVOID_DISTANCE` (0.35)
+from each, stepping through up to `MAX_AVOID_STEPS` derived seeds and keeping
+the farthest. `test/style_brand.test.js` checks that 1,000 seeds have no
+pair under `NEAR_DUPLICATE` and that styles made with no seed and no inputs
+never come within it of a starter.
+
 ### Brand frame (`kit/core/brand-frame.mjs`)
 
 `story.frame` (filled from the style's `brand_frame`, or written by hand;

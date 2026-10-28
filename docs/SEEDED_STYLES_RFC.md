@@ -175,6 +175,62 @@ own fallback. A candidate too close is redrawn from the next seed state.
 warning and never an error, so even hand-picked starters get a nudge to brand
 them.
 
+### 3.7 Brand inputs (added 2026-10-28)
+
+A host product that embeds LaunchClip can give every brand its own look. It
+passes what it knows about the brand, and the seed fills everything else:
+
+```js
+generateStyle({
+  seed: "7f3a91c2",                 // optional: drawn when absent
+  brand: {                           // every field optional
+    name: "Northwind",
+    colors: ["#0b3d91", "#f2a900"],  // or {primary, background, text, ...}
+    logo: { src: "assets/logo.svg", colors: ["#0b3d91"] },
+    fonts: { display: "Montserrat", body: "Inter" },
+    tone: ["friendly", "craft"],
+    industry: "coffee roasting",
+    references: [{ src: "assets/shop.jpg", colors: ["#3b2a20"] }]
+  },
+  tone: "warm",                      // optional: else from the brand's words
+  avoid: [otherBrandStyle, ...],     // optional: stay clearly apart from these
+})
+```
+
+- Colours keep their roles; unassigned ones fill primary, accent and bg in
+  order; open roles are drawn around the brand's hue. A brand colour that
+  fails contrast is moved the least that passes, and the move is reported.
+- Fonts stay open-licence: a family outside the bundled OFL set maps to the
+  closest bundled one, and the swap is reported.
+- Tone words and industry pick the tone and the fitting worlds; a name or
+  logo makes the lockup in the brand frame.
+- The host extracts colours from raster logos and stills (the CLI does it
+  with `--logo` and `--reference`); the generator itself reads no files.
+
+### 3.8 Motion feel and backdrops (added 2026-10-28)
+
+Each style carries a motion feel inside the tone's ranges: camera mode (world
+or cuts), layout, spacing and parallax; an ease family with no overshoot by
+default (slow-fast-slow on moves and the camera); a tempo on every duration;
+motion blur at peak speed; a whip style (blur-whip, slide, push, cut); how
+often focus zooms happen and how deep; ambient level and energy dials. It is
+written as a grammar override and a camera block, which both renderers
+already read, so the feel needs no renderer changes. Dark looks usually get a
+cycling set of seeded backdrop plates (the world camera's backdrops in world
+mode). A world explainer with a `power3.inOut` camera, 0.8 s moves and
+`moveBlur` 0.75 over a cycling plate is one point in this space.
+
+### 3.9 Distance and avoid (added 2026-10-28)
+
+`styleDistance(a, b)` compares two whole styles across palette, type,
+motion, backdrops and module variants (0–1). Under 0.2 they read as one
+brand. `avoid` keeps a new style at least 0.35 from each listed style by
+stepping to derived seeds, so a host can generate a brand's look while
+keeping clear of every other brand it already serves. 1,000 seeds have no
+pair under 0.2, and styles generated with no inputs never come within 0.2 of
+a starter. Provenance (seed, generator version, inputs) regenerates any style
+exactly; reroll draws a new seed and avoids the old look; pin blocks reroll.
+
 ## 4. User-facing behaviour
 
 | Situation | What happens |

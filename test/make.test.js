@@ -271,7 +271,7 @@ test("a bare-prompt make uses a seeded style, keeps it on reruns, and --seed pic
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.equal(story.style, report.style.name);
     assert.deepEqual(story.brand, pack.brand);
-    assert.equal(story.motion.grammar, pack.motion.grammar, "the pack's grammar wins over the planner's");
+    assert.deepEqual(story.motion.grammar, pack.motion.grammar, "the pack's grammar wins over the planner's");
     assert.deepEqual(story.overlays.find((overlay) => overlay.type === "captions").preset, pack.captions.preset);
 
     // A rerun keeps the project's look.
