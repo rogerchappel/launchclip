@@ -8,8 +8,9 @@ crosses a boundary below must match these signatures exactly.
 
 ```
 kit/
-  core/                 plain ESM .mjs, no npm imports, no node: imports
-                        unless noted; safe for browsers and Remotion bundles
+  core/                 plain ESM .mjs, no npm imports, no node: imports;
+                        safe for browsers and Remotion bundles; published
+                        as @launchclip/core (index.mjs is its entry)
     story.mjs           storyboard.json (story v1) validate, resolve anchors, derive boundaries
     style.mjs           style pack v2: validate, applyStyle, palette roles, v1 upgrade
     captions.mjs        word chunking, caption presets (plan, frame-pure evaluator, GSAP runtime)
@@ -33,6 +34,55 @@ kit/
 `skills/*/scripts/` hold **copies** of `kit/core/*.mjs`, because each skill must
 work on its own. `scripts/sync-skills.mjs` regenerates those copies, and a test
 fails when they drift. The canonical copy is always `kit/core/`.
+
+## The `@launchclip/core` package (`kit/core/package.json`)
+
+`kit/core/` is also an npm workspace published as `@launchclip/core`, for
+tools that embed the engine. The folder is the package: nothing is copied or
+compiled, so the CLI, the renderer kits and the package always run the same
+files.
+
+- **Entry points.** `@launchclip/core` (`kit/core/index.mjs`) is the curated
+  public API: story validate/resolve, the module registry and its JSON
+  Schemas, migrations, story patches, and the main caption, transition,
+  camera, layout-check, cadence and profile functions. Every file is also
+  importable as `@launchclip/core/<file>.mjs` with its full export list.
+  The package README lists the root exports.
+- **Purity.** No dependencies, no Node built-ins, no top-level side effects
+  (`sideEffects: false`). `test/core_package.test.js` bundles every file for
+  the browser, so a `node:` import (or `fs`, `path`, …) fails the suite; it
+  also packs the package, installs the tarball, imports it in Node, typechecks
+  a TypeScript consumer against the generated declarations and runs it in a
+  sandbox with no `process`, `require` or `Buffer`.
+- **Types.** `types/*.d.mts` are generated at pack time (`prepack` runs
+  `kit/core/scripts/build-types.js`; `postpack` removes them) and are not
+  committed. Add JSDoc to a source file to sharpen its types.
+- **Who imports it how.** Node code outside `kit/` (`src/`, `bin/`, `scripts/`,
+  `eval/`, `test/`) imports `@launchclip/core` or `@launchclip/core/<file>.mjs`.
+  `kit/remotion/` and `kit/hyperframes/` keep their relative `../core/`
+  imports: they sit beside `kit/core/` in every checkout and install, and the
+  skills copy them next to their own copies of the core files.
+
+### Versioning
+
+- **Lockstep.** `@launchclip/core` has the same version as `launchclip` and is
+  released from the same commit. The root `package.json` depends on it at
+  that exact version, and a test fails when the two drift. A release bumps
+  `package.json`, `kit/core/package.json`, `package-lock.json` and
+  `.codex-plugin/plugin.json` together (docs/DISTRIBUTION.md).
+- **Semver, read for 0.x.** While the version is `0.x`, a minor release may
+  break the package API and a patch release does not; from `1.0.0`, only a
+  major does. A breaking change to a root export is called out under
+  "Breaking" in CHANGELOG.md. Deep imports (`@launchclip/core/<file>.mjs`)
+  follow the same rule, but a name may move between files in a minor release.
+  Consumers should pin an exact version.
+- **Stories are versioned separately.** The package version says which
+  engine you have; a story's `schema` and `engine.revision` say which
+  contract it was written for (Story versions and migrations, below). A
+  release that makes a non-additive story change bumps `STORY_REVISION` and
+  ships a migration, so older stories keep loading.
+- **Releases with no core change** still publish `@launchclip/core` at the new
+  version, so `launchclip@x.y.z` always has a matching `@launchclip/core@x.y.z`.
 
 ## storyboard.json (story v1) (`kit/core/story.mjs`)
 
