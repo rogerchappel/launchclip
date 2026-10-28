@@ -45,6 +45,10 @@ const result = applyStoryPatch(story, [
   { op: 'replace', path: '/scenes/0/params/headline', value: 'Ship in minutes.' }
 ], { words });
 if (!result.ok) showErrors(result.errors); // each error carries a JSON Pointer
+
+// Which render segments the edit invalidates, by the same hashes the CLI's
+// `finish` caches segments under.
+const { invalidated, frames } = await diffSegments(resolved, result.resolved);
 ```
 
 ## Public API
@@ -57,7 +61,8 @@ The package root (`@launchclip/core`) exports:
 | Modules | `catalogModules`, `knownModules`, `moduleVariants`, `moduleTiming`, `resolveModule` |
 | Module schemas | `JSON_SCHEMA_DIALECT`, `EDITOR_CONTROLS`, `EDITOR_GROUPS`, `moduleSchemaId`, `moduleSchema`, `listModuleSchemas`, `validateAgainstSchema`, `validateModuleParams` |
 | Migrations | `STORY_MIGRATIONS`, `storyVersion`, `migrationProblems`, `migrateStory`, `stampStory` |
-| Patches | `applyJsonPatch`, `applyStoryPatch`, `parsePointer`, `formatPointer`, `messagePointer` |
+| Patches | `applyJsonPatch`, `applyStoryPatch`, `diffSegments`, `parsePointer`, `formatPointer`, `messagePointer` |
+| Render segments | `SEGMENT_SCHEMA`, `planSegments`, `hashSegments` |
 | Captions | `chunkWords`, `captionChunksFrom`, `narrationWords`, `visibleChunks`, `captionPlan`, `CAPTION_PRESETS`, `CAPTION_PRESET_NAMES` |
 | Transitions | `TRANSITION_TYPES`, `sceneWindows`, `layerStateAt`, `layerStyle` |
 | Camera | `resolveCamera`, `cameraPlan`, `cameraStateAt` |

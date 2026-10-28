@@ -10,7 +10,9 @@
   the camera, the layout check, cadence and profiles. It is pure ESM with no
   dependencies and no Node built-ins, runs in browsers and Node, ships
   TypeScript declarations, and is versioned in lockstep with the CLI. Editors
-  can now embed the engine at an exact version instead of copying it. See
+  can now embed the engine at an exact version instead of copying it.
+  `diffSegments`, which says which render segments a chat edit invalidates,
+  runs there too, with the same hashes `finish` caches segments under. See
   [kit/core/README.md](kit/core/README.md).
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
