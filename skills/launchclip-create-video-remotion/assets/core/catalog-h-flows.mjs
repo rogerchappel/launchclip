@@ -153,7 +153,9 @@ function waterfallResolve(params, ctx) {
   } catch { layout = 'horizontal'; }
   let bars, baseline;
   if (layout === 'vertical') {
-    const top = r2(tb.top + valueSize * 1.25 + u(8)), bottom = r2(rect.height - tb.bottom - labelSize * 2.4 - u(18));
+    // A bar that ends below where it starts carries its value under it: room for that above the labels.
+    const below = cols.some(c => c.to < c.from) ? valueSize * 1.25 + u(8) : 0;
+    const top = r2(tb.top + valueSize * 1.25 + u(8)), bottom = r2(rect.height - tb.bottom - labelSize * 2.4 - u(18) - below);
     if (bottom - top < u(240)) check.fail('params', 'leaves too little height for the columns; drop the title or enlarge rect');
     const Y = v => r2(top + (bottom - top) * (1 - (v - lo) / (hi - lo)));
     const barW = r2(Math.min(slot * 0.66, u(150)));
@@ -162,7 +164,7 @@ function waterfallResolve(params, ctx) {
       const y1 = Y(Math.max(c.from, c.to)), y2 = Y(Math.min(c.from, c.to));
       const grows = c.to >= c.from ? 'up' : 'down';
       return {label: c.label, text: c.text, kind: c.kind, color: colors[c.kind], x: r2(slot * i + (slot - barW) / 2), y: y1, width: barW, height: r2(Math.max(u(4), y2 - y1)), origin: grows === 'up' ? '50% 100%' : '50% 0%', time: starts[i],
-        labelBox: {x: r2(slot * i + u(4)), y: r2(bottom + u(14)), width: r2(slot - u(8)), align: 'center'}, value: {x: r2(slot * i), y: r2(grows === 'up' || c.kind === 'total' ? y1 - valueSize * 1.2 - u(4) : y2 + u(6)), width: r2(slot), align: 'center'},
+        labelBox: {x: r2(slot * i + u(4)), y: r2(bottom + below + u(14)), width: r2(slot - u(8)), align: 'center'}, value: {x: r2(slot * i), y: r2(grows === 'up' ? y1 - valueSize * 1.2 - u(4) : y2 + u(6)), width: r2(slot), align: 'center'},
         connector: i < n - 1 ? {x: r2(slot * i + (slot + barW) / 2), y: Y(c.to), width: r2(slot - barW), height: r2(2 * u(1))} : null};
     });
   } else {

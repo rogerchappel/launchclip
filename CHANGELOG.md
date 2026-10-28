@@ -82,8 +82,14 @@
   cover and captions, whether the video fits each platform (YouTube Shorts,
   TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request),
   and per-platform UTM links with `--link` and `--utm`.
-
 ### Fixed
+
+- `waterfall` keeps its values clear of the column labels: a loss that
+  reaches the bottom of the chart used to print its value over the label
+  below it, and a total below zero printed its value on the zero line instead
+  of under the bar. Regression fixtures lock each step's sign and direction,
+  for an all-positive build-up and for one that crosses zero, in both
+  renderers.
 
 - Evidence clips and other screen recordings move with the world camera in
   HyperFrames. Their video used to stay full-size on screen while the camera
