@@ -34,6 +34,11 @@
   answer per line on its stdout, from your media library or generated. Shots
   land in the project's `assets/shots/`, and what they cost shows up in
   `make --json` under `costs`.
+- `launchclip make --base-edited` takes a talking-head or screen recording
+  you have already edited (bad takes, pauses) as the final base: make skips
+  its own recording edit and dresses your cut as is. Add
+  `--base-transcript <word-timed.json>` to use your transcript instead of a
+  fresh Whisper pass.
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
