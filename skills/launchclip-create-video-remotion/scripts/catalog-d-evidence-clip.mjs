@@ -9,7 +9,8 @@
 // JSON-only model, evidenceClipView(model) → {media, overlay} (the <video>,
 // then the frame, cursor and source tag above it), evidenceClipTimeline(model)
 // → renderer-neutral ops. The video is root media: HyperFrames hoists it to
-// the composition root and the overlay one z-index above.
+// the composition root and the overlay one z-index above, except on a world
+// plate, where both stay in the plate and ride the camera.
 //
 // The capture already carries its own beats (scroll, selection, focus ring,
 // pins); this module frames it. Its camera is a slow push-in over the whole

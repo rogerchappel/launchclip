@@ -13,9 +13,9 @@
 // ctx) → a JSON-only model; productDemoView(model) is the static element tree
 // both renderers draw, productDemoTimeline(model) the renderer-neutral op
 // list. The view has two roots: `media` (the <video>, which HyperFrames hoists
-// to the composition root, because it only seeks root media) and `overlay`
-// (highlights and callouts, drawn above the video; the story compiler hoists
-// it too, one z-index above).
+// to the composition root off the world camera) and `overlay` (highlights and
+// callouts, drawn above the video; the story compiler hoists it too, one
+// z-index above). On a world plate both stay in the plate.
 //
 // Camera. Zooms are pure functions of time: cameraKeys() turns the actions
 // into keyframes {t, s, f} (scale and the canvas point to centre), cameraAt()
