@@ -117,6 +117,13 @@ test('waterfall signs every step by its own delta: an all-positive build-up and 
     const grows = mixed.bars.map(b => b.origin);
     const [up, down] = mixed.layout === 'vertical' ? ['50% 100%', '50% 0%'] : ['0% 50%', '100% 50%'];
     assert.deepEqual(grows.slice(1, 4), [down, up, down], aspect);
+    // The sign is drawn large: condensed display faces draw + and − short and thin.
+    const value = catalogHView({...resolve('waterfall', fixture('h-waterfall-buildup-portrait'), aspect)});
+    const find = (n, id) => n?.id === id ? n : (n?.children ?? []).reduce((hit, child) => hit ?? find(child, id), null);
+    const step = find(value, 'scene-value-1');
+    assert.deepEqual([step.children[0].children, step.children[1]], [['+'], '0.5 ¢'], aspect);
+    assert.match(step.children[0].style.transform, /scale\(1\.5\)/);
+    assert.deepEqual(find(value, 'scene-value-0').children, ['1.0 ¢'], 'unsigned values stay plain text');
     if (mixed.layout === 'vertical') {
       // Values clear the category labels, and a total below zero carries its value under the bar.
       for (const bar of mixed.bars) assert.ok(bar.value.y + mixed.valueSize * 1.2 <= bar.labelBox.y + 1e-6, `${aspect} ${bar.label}: value overlaps its label`);

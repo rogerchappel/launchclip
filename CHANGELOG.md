@@ -84,6 +84,9 @@
   and per-platform UTM links with `--link` and `--utm`.
 ### Fixed
 
+- `waterfall` draws a step's + or − half as large again. Condensed display
+  faces like Anton draw them short and thin, and in a draft render of AI
+  Rider's first episode a +0.5¢ step read as −0.5¢.
 - `waterfall` keeps its values clear of the column labels: a loss that
   reaches the bottom of the chart used to print its value over the label
   below it, and a total below zero printed its value on the zero line instead

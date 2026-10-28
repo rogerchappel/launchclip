@@ -203,10 +203,19 @@ function waterfallView(model) {
       transformOrigin: C.vertical ? '50% 0%' : '0% 50%', transform: transformString(C.vertical ? {scaleY: 0} : {scaleX: 0})})));
     kids.push(el('div', `${id}-bar-${i}`, {...abs(bar.x, bar.y, bar.width, bar.height), borderRadius: r2(c.variant === 'floating' ? 14 * u : 6 * u), background: bar.color,
       ...(c.variant === 'floating' && bar.kind !== 'total' ? {boxShadow: `0 ${r2(14 * u)}px ${r2(30 * u)}px #00000080`} : {}), transformOrigin: bar.origin, transform: transformString(bar.horizontal ? {scaleX: 0} : {scaleY: 0})}));
-    kids.push(label(`${id}-value-${i}`, bar.value.x, bar.value.y, bar.value.width, bar.text, {size: c.valueSize, family: fonts.display, color: bar.kind === 'total' ? c.ink : bar.color, align: bar.value.align, extra: {opacity: 0}}));
+    kids.push(signedLabel(label(`${id}-value-${i}`, bar.value.x, bar.value.y, bar.value.width, bar.text, {size: c.valueSize, family: fonts.display, color: bar.kind === 'total' ? c.ink : bar.color, align: bar.value.align, extra: {opacity: 0}}), c.valueSize));
     kids.push(label(`${id}-label-${i}`, bar.labelBox.x, bar.labelBox.y, bar.labelBox.width, bar.label, {size: c.labelSize, family: fonts.body, color: c.muted, align: bar.labelBox.align, weight: 600, wrap: !bar.horizontal, extra: {opacity: 0}}));
   });
   return kids;
+}
+
+// A step's sign drawn half as large again: condensed display faces (Anton)
+// draw + and − short and thin, and at a draft render's size a + read as −.
+function signedLabel(node, size) {
+  const [value] = node.children;
+  if (typeof value !== 'string' || !/^[+−]/.test(value)) return node;
+  const sign = el('span', null, {display: 'inline-block', transform: 'scale(1.5)', marginRight: r2(size * 0.12)}, [value[0]]);
+  return {...node, children: [sign, value.slice(1)]};
 }
 
 function waterfallTimeline(model, ops) {
