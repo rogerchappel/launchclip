@@ -61,6 +61,15 @@
   TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request),
   and per-platform UTM links with `--link` and `--utm`.
 
+### Fixed
+
+- Evidence clips and other screen recordings move with the world camera in
+  HyperFrames. Their video used to stay full-size on screen while the camera
+  pushed, zoomed or pulled back for an overview; it now moves with its shot,
+  and an overview shows it frozen on its last frame, as Remotion does.
+- A screen recording shorter than its scene holds its last frame in
+  HyperFrames, as in Remotion, instead of leaving an empty frame.
+
 ## 0.2.0 - 2026-10-23
 
 ### Highlights

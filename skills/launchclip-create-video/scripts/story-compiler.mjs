@@ -17,6 +17,7 @@
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
 import { copyFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -255,9 +256,16 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   };
 
   const models = [];
+  const tailFrames = [];
+  const sourceDurations = await videoDurations(story, sourceDir);
   for (const entry of layers) {
     const track = allocate(entry.start, entry.renderEnd);
-    const { model, out } = build(entry, { track });
+    const { model, out: built } = build(entry, { track });
+    // A video that ends before its scene does holds its last frame, as
+    // Remotion's <OffthreadVideo> does (HyperFrames draws nothing past the end).
+    const tail = soleVideo(built.html) ? videoTail(built, sourceDurations, format.fps) : null;
+    if (tail) tailFrames.push(tail.frame);
+    const out = tail ? { ...built, motion: tail.motion } : built;
     models.push(model);
     const depth = subjectNeeded ? sceneLayerOf(entry.scene, model) : { layer: 'front' };
     if (depth.reason) warnings.push(`${entry.scene.id}: ${depth.reason}`);
@@ -266,7 +274,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]);
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
-    const media = hoistMedia(out.html ?? '');
+    const inWorld = Boolean(plan && (entry.plate || entry.rides));
+    // On a world plate a module whose html is its <video> alone (evidence-clip,
+    // product-demo…) keeps it, and its overlay, inside the plate, so the
+    // camera's moves and zooms carry it as they carry the rest of the plate.
+    const inCamera = inWorld && soleVideo(out.html);
+    const media = inCamera ? { html: `${tail?.html ?? ''}${out.html}${out.overlay ?? ''}`, elements: [] } : hoistMedia(`${tail?.html ?? ''}${out.html ?? ''}`);
     // A module whose own layer is a timed clip on its track and which also
     // hoists a video (backdrop-swap, app-stage…) gives the video its own track,
     // or the two clips overlap on one track.
@@ -275,7 +288,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     for (const element of media.elements) hoisted.push(withZIndex(element, sceneZ + 5));
     // An emitter's `overlay` annotates its root media (product-demo), so it is
     // hoisted too, one z-index above the video.
-    if (out.overlay) {
+    if (out.overlay && !inCamera) {
       media.elements.push(out.overlay);
       hoisted.push(withZIndex(out.overlay, sceneZ + 6));
     }
@@ -286,7 +299,6 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
     }
     const boundary = boundaryFor.get(entry.scene.id);
-    const inWorld = Boolean(plan && (entry.plate || entry.rides));
     const worldMode = plan?.mode === 'world';
     const worldClass = inWorld && worldMode ? ' lc-world-plate' : '';
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
@@ -321,6 +333,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
     }
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
+    if (tail) motion.push(tail.toggle);
     motion.push(...mediaMotion);
     // Split modules: their behind part is a second layer under the subject,
     // shown and moved with the scene.
@@ -341,6 +354,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // frames is drawn again at its placement for the overview, frozen on its
   // settled last frame (holdTime): its module runs on its own paused
   // timeline, held at that time, as the loop ending holds its clone.
+  const heldFrames = [];
   if (plan?.mode === 'world') for (const [index, entry] of layers.entries()) {
     if (!entry.plate || !entry.holds?.length) continue;
     const at = holdTime(entry, models[index], format.fps);
@@ -348,7 +362,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       const { out } = build(entry, { idSuffix: `-held${k ? `-${k}` : ''}`, clone: true, held: true });
       const id = attr(`${entry.id}-held${k ? `-${k}` : ''}`);
       const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
-      const media = hoistMedia(out.html ?? '');
+      // A video kept in its plate (soleVideo) is held as a still of the frame
+      // Remotion's <Freeze> shows (written with the project; heldStill), under its overlay.
+      const still = soleVideo(out.html) ? heldStill(out.html, at, format.fps, `held/${id}.png`, sourceDurations) : null;
+      if (still) heldFrames.push(still.frame);
+      const media = still ? { html: `${still.html}${out.overlay ?? ''}`, elements: [] } : hoistMedia(out.html ?? '');
       world.push(`<div id="${outer}" class="lc-scene lc-plate lc-held lc-world-plate" data-launchclip-scene="${id}" data-launchclip-held="${attr(entry.id)}" data-launchclip-start="${num(hold.start)}" style="z-index:${z}${plateStyle(entry.id, plan.placements[entry.id])}"><div id="${inner}" class="lc-layer">${unclip(media.html)}</div></div>`);
       if (media.elements.length) warnings.push(`${entry.id}: root media is not held in the overview (HyperFrames keeps <video>/<audio> on the root)`);
       css.push(out.css ?? '');
@@ -576,6 +594,16 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
       files.push('assets/');
     }
     if (fontCss.copies.length) { await copyProjectFonts(fontCss.copies, projectDir); files.push('fonts/'); }
+    for (const frame of heldFrames) {
+      const error = await extractFrame(path.join(sourceDir ?? projectDir, frame.src), frame.time, path.join(projectDir, frame.file));
+      if (error) warnings.push(`${frame.file}: the held frame of ${frame.src} at ${num(frame.time)}s was not extracted (${error}); the overview shows the clip's frame without it`);
+      else if (!files.includes('held/')) files.push('held/');
+    }
+    for (const frame of tailFrames) {
+      const error = await extractFrame(path.join(sourceDir ?? projectDir, frame.src), frame.time, path.join(projectDir, frame.file));
+      if (error) warnings.push(`${frame.file}: the last frame of ${frame.src} was not extracted (${error}); the clip's frame is empty after ${num(frame.time)}s of source`);
+      else if (!files.includes('held/')) files.push('held/');
+    }
     await writeFile(path.join(projectDir, 'index.html'), html);
     files.push('index.html');
   }
@@ -761,12 +789,93 @@ function boundaryAttrs(boundary) {
   return out;
 }
 
-// HyperFrames only seeks media that is a direct child of the root, so
-// <video>/<audio> leave the scene layer.
+// <video>/<audio> leave the scene layer for the root, where no layer
+// transition or wrapper can hide or freeze them.
 function hoistMedia(html) {
   const elements = [];
   const rest = html.replace(/<(video|audio)\b[^>]*>(?:[\s\S]*?<\/\1>)?/gi, (match) => { elements.push(match); return ''; });
   return { html: rest, elements };
+}
+
+// html that is one <video> and nothing else. Such a video can stay inside a
+// world plate: HyperFrames seeks every timed <video> in the document unless a
+// timed ancestor holds it (the plate and camera wrappers are not timed), and
+// its render draws each frame as an <img> sibling with the video's own box,
+// so the plate's and camera's transforms apply to the frame too.
+function soleVideo(html) {
+  return /^\s*<video\b[^>]*>(?:\s*<\/video>)?\s*$/i.test(html ?? '');
+}
+
+// A held clone's <video> → {html: an <img> with the video's id, class and
+// style (so the held timeline's sets still move it), frame: {src, time, file}}.
+// time is the source time of the frame Remotion's <Freeze> holds: the
+// scene-relative frame at `at` from data-media-start.
+function heldStill(videoHtml, at, fps, file, durations = new Map()) {
+  const tag = /<video\b[^>]*>/i.exec(videoHtml)[0];
+  const read = (name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+  const src = read('src');
+  if (!src) return null;
+  const start = Number(read('data-start')) || 0, mediaStart = Number(read('data-media-start')) || 0;
+  const time = round(Math.min(mediaStart + Math.max(0, Math.round(at * fps) - Math.round(start * fps)) / fps, lastFrameTime(durations.get(src), fps)), 6);
+  const keep = ['id', 'class', 'style'].map((name) => (read(name) === undefined ? '' : ` ${name}="${read(name)}"`)).join('');
+  return { html: `<img${keep} src="${attr(file)}" alt="" data-launchclip-held-frame="${attr(src)}">`, frame: { src, time, file } };
+}
+
+// The source time of a video's last frame (Infinity when its length is unknown).
+function lastFrameTime(duration, fps) {
+  return Number.isFinite(duration) ? Math.max(0, duration - 1 / fps) : Infinity;
+}
+
+// Lengths in seconds of the scenes' params.media videos in sourceDir, by src
+// (ffprobe; a video it cannot read is left out). → Map src → seconds
+async function videoDurations(story, sourceDir) {
+  const durations = new Map();
+  if (!sourceDir) return durations;
+  const sources = new Set((story.scenes ?? []).map((scene) => scene?.params?.media?.src).filter((src) => typeof src === 'string' && /\.(mp4|webm|mov)$/i.test(src)));
+  await Promise.all([...sources].map((src) => new Promise((resolve) => {
+    execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(sourceDir, src)], (error, stdout) => {
+      const seconds = Number(String(stdout).trim());
+      if (!error && seconds > 0) durations.set(src, seconds);
+      resolve();
+    });
+  })));
+  return durations;
+}
+
+// A module's sole <video> that runs out before its clip ends → {html: an
+// <img> of its last frame, with the video's style, hidden until the source
+// ends; motion: the module's motion with every set on the video applied to
+// the image too; toggle: the GSAP call that shows it; frame: {src, time,
+// file}} | null.
+function videoTail(out, durations, fps) {
+  const tag = /<video\b[^>]*>/i.exec(out.html)[0];
+  const read = (name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+  const id = read('id'), src = read('src');
+  const start = Number(read('data-start')) || 0, duration = Number(read('data-duration')), mediaStart = Number(read('data-media-start')) || 0;
+  const length = durations.get(src);
+  if (!id || !Number.isFinite(length) || !(duration > 0)) return null;
+  const ends = start + Math.max(0, length - mediaStart);
+  if (ends >= start + duration - 1 / fps) return null;
+  const tailId = `${id}-tail`;
+  const style = (read('style') ?? '').replace(/;?\s*$/, '');
+  return {
+    html: `<img id="${attr(tailId)}" class="lc-media-tail" src="held/${attr(tailId)}.png" alt="" data-launchclip-tail-of="${attr(id)}" style="${style};visibility:hidden">`,
+    motion: (out.motion ?? '').split(js(`#${id}`)).join(js(`#${id}, #${tailId}`)),
+    toggle: `tl.fromTo(${js(`#${tailId}`)}, { visibility: 'hidden' }, { visibility: 'visible', duration: 0, immediateRender: false }, ${num(Math.max(start, ends - 1 / fps))});`,
+    frame: { src, time: round(lastFrameTime(length, fps), 6), file: `held/${tailId}.png` }
+  };
+}
+
+// One frame of a video as a PNG, with ffmpeg's default conversion (as
+// HyperFrames' own frame extraction). → null, or the error message.
+function extractFrame(source, time, target) {
+  return new Promise((resolve) => {
+    mkdir(path.dirname(target), { recursive: true }).then(() => {
+      execFile('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(time), '-i', source, '-frames:v', '1', target], (error, stdout, stderr) => {
+        resolve(error ? (String(stderr).trim().split('\n').at(-1) || error.message) : (existsSync(target) ? null : 'no frame at that time'));
+      });
+    }, (error) => resolve(error.message));
+  });
 }
 
 // Root media sits outside its scene layer, so it would ignore the layer's

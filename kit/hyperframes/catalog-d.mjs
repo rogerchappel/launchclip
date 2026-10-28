@@ -2,10 +2,11 @@
 //
 // The model comes from kit/core/catalog-d.mjs. Markup is the shared view
 // serialised by catalogue B's renderNode, motion the shared op list as
-// tl.set / tl.fromTo calls. HyperFrames only seeks root media, so the
-// <video> (html) is hoisted to the composition root by the story compiler,
-// and the overlay (highlights and callouts, returned as `overlay`) is hoisted
-// one z-index above it, so it is drawn over the video it annotates.
+// tl.set / tl.fromTo calls. The <video> (html) is hoisted to the composition
+// root by the story compiler, and the overlay (highlights and callouts,
+// returned as `overlay`) one z-index above it, so it is drawn over the video
+// it annotates. On a world plate both stay in the plate, in that order, and
+// ride the camera (story-compiler.mjs soleVideo).
 
 import {evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from '../core/catalog-d.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './catalog-b.mjs';

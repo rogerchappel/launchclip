@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { resolveStory } from "@launchclip/core/story.mjs";
@@ -37,4 +39,48 @@ test("the promo's media window follows its morph and whip in HyperFrames", async
   assert.deepEqual(warnings.filter((warning) => /root media/.test(warning)), []);
   assert.match(html, /tl\.fromTo\("#s5-media", \{"filter":"opacity\(0\) blur\(0px\)"\}/);
   assert.match(html, /tl\.fromTo\("#s5-media", \{"xPercent":0\}, \{"xPercent":-160,/);
+});
+
+// Regression (Terra v7, the overview into chapter-the-anthropic-squeeze):
+// HyperFrames hoisted an evidence clip's <video> to the root, outside the
+// world camera, so it stayed full-size through pushes, zooms and overviews,
+// and the overview's held shot had no clip. A video that is a module's whole
+// html now stays in its plate, and the held shot shows its frozen frame.
+test("an evidence clip's video rides the world camera and is held in the overview", async () => {
+  const dir = path.join(ROOT, "examples", "story", "evidence-world-16x9");
+  const story = JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8"));
+  const { html, warnings } = await compileStoryToHyperFrames(resolveStory(story), { sourceDir: dir, write: false });
+  assert.deepEqual(warnings.filter((warning) => /root media/.test(warning)), []);
+  const plate = html.slice(html.indexOf('<div id="lc-scene-s2"'), html.indexOf('<div id="lc-scene-s3"'));
+  assert.match(plate, /<video id="s2-media" class="clip" data-start="3"[^>]*src="assets\/evidence-static\.mp4"/);
+  assert.match(plate, /<\/video><div id="s2-overlay" class="clip"/, "the overlay follows its video inside the plate");
+  assert.doesNotMatch(plate, /<video[^>]*z-index/, "no root z-index on a video kept in its plate");
+  const held = html.slice(html.indexOf('<div id="lc-scene-s2-held"'));
+  assert.match(held, /<img id="s2-held-media" class="lc-unclipped [^"]*" style="[^"]*" src="held\/s2-held\.png"/);
+  assert.match(held, /id="s2-held-overlay" class="lc-unclipped/);
+  assert.doesNotMatch(held.slice(0, held.indexOf("</div></div>")), /<video/);
+});
+
+test("the held and last evidence frames are written with the project", async () => {
+  const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-held-"));
+  try {
+    const source = path.join(work, "story");
+    await cp(path.join(ROOT, "examples", "story", "evidence-world-16x9"), source, { recursive: true });
+    await mkdir(path.join(source, "assets"), { recursive: true });
+    await copyFile(path.join(ROOT, "test", "fixtures", "parity", "assets", "evidence-static.mp4"), path.join(source, "assets", "evidence-static.mp4"));
+    const story = JSON.parse(await readFile(path.join(source, "storyboard.json"), "utf8"));
+    const { files, warnings } = await compileStoryToHyperFrames(resolveStory(story), { sourceDir: source, projectDir: path.join(work, "hf") });
+    assert.deepEqual(warnings.filter((warning) => /held frame/.test(warning)), []);
+    assert.ok(files.includes("held/"));
+    assert.ok(existsSync(path.join(work, "hf", "held", "s2-held.png")));
+    // The 8 s clip ends at 11 s, inside its 3–12.3 s window: its last frame
+    // shows from then, under the video, moved by the module's own sets.
+    const html = await readFile(path.join(work, "hf", "index.html"), "utf8");
+    assert.ok(existsSync(path.join(work, "hf", "held", "s2-media-tail.png")));
+    assert.match(html, /<img id="s2-media-tail" class="lc-media-tail" src="held\/s2-media-tail\.png"[^>]*visibility:hidden"><video id="s2-media"/);
+    assert.match(html, /tl\.fromTo\("#s2-media-tail", \{ visibility: 'hidden' \}, \{ visibility: 'visible', duration: 0, immediateRender: false \}, 10\.9667\);/);
+    assert.match(html, /tl\.set\("#s2-media, #s2-media-tail", /);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 });

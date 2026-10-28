@@ -37,7 +37,16 @@ export const CAMERA_PARITY = Object.freeze([
   {id: 'zoom-cuts-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
   // The overview move: out over four held, frozen shots plus the incoming
   // one, the hold, the push in and settled.
-  {id: 'overview-world-9x16', threshold: 0.97, times: [10.0, 16.6, 17.4, 18.2, 19.5]}
+  {id: 'overview-world-9x16', threshold: 0.97, times: [10.0, 16.6, 17.4, 18.2, 19.5]},
+  // An evidence clip on a world plate: mid-push in, settled, inside a 1.5×
+  // zoom in the shot, after its 8 s source has run out (it holds the last
+  // frame, as Remotion's <OffthreadVideo>), mid-pull out, and the overview
+  // with the clip held. Its <video> now rides the camera in HyperFrames (it was
+  // left full-size on the root: 0.31 in the zoom). 0.9 as the d-evidence-clip
+  // fixture: Chrome scales the testsrc <video> differently in each renderer
+  // (0.948 settled, 0.910 at 1.5×); the frame, tag and cursor match.
+  {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
+    files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);
 
 // Largest luma step between neighbouring columns x0…x1, averaged over 16 rows from y.
@@ -50,9 +59,9 @@ export function columnStep(file, {y, x0, x1, rows = 16}) {
   return max;
 }
 
-for (const {id, threshold, times, seams = []} of CAMERA_PARITY) {
+for (const {id, threshold, times, seams = [], files = null} of CAMERA_PARITY) {
   test(`parity: camera story ${id}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render camera parity', timeout: 900_000}, async () => {
-    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, threshold, out: path.join(ROOT, 'qa', 'parity', `camera-${id}`)});
+    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, threshold, files, out: path.join(ROOT, 'qa', 'parity', `camera-${id}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `camera story ${id} t=${sample.time}: ssim ${sample.ssim} < ${threshold} (see ${report.outDir}/${sample.sideBySide})`);
     for (const seam of seams) {
       const sample = report.samples.find((entry) => entry.time === seam.time);
