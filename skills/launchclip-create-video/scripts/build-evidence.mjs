@@ -145,8 +145,9 @@ function hyperframesStills(project, schedule, out, frames) {
 
 // serveUrl is either an entry file (bundled per call, with the project as the
 // public dir) or a directory made by `remotion bundle`.
-export function remotionStillArgs({ serveUrl, propsFile, project, frame, output, bundled = false }) {
-  return ['still', serveUrl, COMPOSITION_ID, output, '--props', propsFile, ...(bundled ? [] : ['--public-dir', project]), `--frame=${frame}`, '--overwrite', '--log', 'warn'];
+export function remotionStillArgs({ serveUrl, propsFile, project, frame, output, bundled = false, browser = process.env.LAUNCHCLIP_REMOTION_BROWSER?.trim() || null }) {
+  // LAUNCHCLIP_REMOTION_BROWSER: the Chrome the render used (src/renderers/remotion_segments.js).
+  return ['still', serveUrl, COMPOSITION_ID, output, '--props', propsFile, ...(bundled ? [] : ['--public-dir', project]), `--frame=${frame}`, '--overwrite', '--log', 'warn', ...(browser ? ['--browser-executable', browser] : [])];
 }
 
 function remotionEntry(project, entry) {
