@@ -65,11 +65,15 @@ jobs:
           path: |
             ~/.cache/hyperframes
             node_modules/.remotion
+            ~/.cache/ms-playwright
           key: media-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - name: Ensure headless Chrome for both renderers
+      # Playwright's Chromium: the state-events eval (scripts/state-events.mjs)
+      # and the demo recorder launch it.
+      - name: Ensure headless Chrome for both renderers and Playwright
         run: |
           npx hyperframes browser ensure
           npx remotion browser ensure
+          npx playwright install --only-shell chromium
       - name: Full suite with media tests
         run: npm run test:all -- --test-shard=${{ matrix.shard }}/2
 
