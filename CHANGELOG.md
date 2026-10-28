@@ -82,6 +82,10 @@
   cover and captions, whether the video fits each platform (YouTube Shorts,
   TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request),
   and per-platform UTM links with `--link` and `--utm`.
+- `brand.colors.focus` gives the focus ring its own colour, in a story or a
+  style pack, so a style can keep its accent for something else. It is used
+  when it reads at 3:1 on the background; otherwise the ring keeps the
+  accent, as before.
 ### Fixed
 
 - `waterfall` draws a step's + or − half as large again. Condensed display

@@ -192,10 +192,10 @@ export function resolveShotStates(scene, model, {spec, resolveWith}) {
   return {color: focusColor(model.theme), items: spec.items, states, events};
 }
 
-/** The focus colour: the brand accent when it reads on the background (3:1), else primary. */
+/** The focus colour: brand.colors.focus, else the brand accent, when it reads on the background (3:1), else primary. */
 export function focusColor(theme = {}) {
   const bg = theme.bg ?? theme.surface ?? '#000000';
-  for (const color of [theme.accent, theme.primary, theme.foreground]) if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color) && contrastRatio(color, bg) >= 3) return color;
+  for (const color of [theme.focus, theme.accent, theme.primary, theme.foreground]) if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color) && contrastRatio(color, bg) >= 3) return color;
   return '#46d4ff';
 }
 
