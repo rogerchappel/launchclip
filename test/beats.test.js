@@ -11,7 +11,7 @@ import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
-const SYNTH = path.join(ROOT, "skills/launchclip-create-video/scripts/synth-audio-kit.mjs");
+const SYNTH = path.join(ROOT, "src/scripts/synth-audio-kit.mjs");
 const RATE = 22050;
 
 // A click track: a low thump on every bar line (accent), a bright tick on the

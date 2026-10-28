@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
+import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../src/scripts/build-evidence.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt, remotionRoot } from "../src/renderers/remotion.js";

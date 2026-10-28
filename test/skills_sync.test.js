@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { SHARED_SCRIPTS, renderTemplate, syncSkills } from "../scripts/sync-skills.mjs";
+import { ENGINE_SCRIPTS, SHARED_SCRIPTS, renderTemplate, syncSkills } from "../scripts/sync-skills.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const run = promisify(execFile);
@@ -49,6 +49,7 @@ test("sync copies kit core into both skills and the Remotion kit into assets", a
   try {
     await cp(path.join(root, "skills-src"), path.join(temp, "skills-src"), { recursive: true });
     await cp(path.join(root, "skills/launchclip-create-video"), path.join(temp, "skills/launchclip-create-video"), { recursive: true });
+    await cp(path.join(root, "src/scripts"), path.join(temp, "src/scripts"), { recursive: true });
     await mkdir(path.join(temp, "kit/core"), { recursive: true });
     await mkdir(path.join(temp, "kit/remotion/modules"), { recursive: true });
     await writeFile(path.join(temp, "kit/core/motion.mjs"), "export const ease = {};\n");
@@ -130,5 +131,36 @@ test("Remotion skill mirrors the cinematic contract with the Remotion runtime", 
   for (const generated of ["SKILL.md", "references", "agents"]) {
     const text = await readFile(path.join(dir, generated === "SKILL.md" ? generated : `${generated}/${generated === "agents" ? "openai.yaml" : "recorded-video.md"}`), "utf8");
     assert.doesNotMatch(text, /<!-- (include|renderer|\/renderer)/);
+  }
+});
+
+// The engine runs its own audio and evidence scripts (src/scripts/), never a
+// skill's copy, so it works with no skills/ folder at all.
+test("engine code under src/ references no skill scripts", async () => {
+  const offenders = [];
+  const walk = async (dir) => {
+    for (const entry of await readdir(path.join(root, dir), { withFileTypes: true })) {
+      const file = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { await walk(file); continue; }
+      if (!/\.(js|mjs)$/.test(entry.name)) continue;
+      const source = await readFile(path.join(root, file), "utf8");
+      if (/skills[/'", ]+launchclip-create-video[^/'"]*['"/, ]+scripts/.test(source)) offenders.push(file);
+    }
+  };
+  await walk("src");
+  assert.deepEqual(offenders, []);
+});
+
+test("both skills carry the engine scripts, imports rewritten to their own copies", async () => {
+  for (const skill of ["launchclip-create-video", "launchclip-create-video-remotion"]) {
+    for (const script of Object.keys(ENGINE_SCRIPTS)) {
+      const copy = await readFile(path.join(root, "skills", skill, "scripts", script), "utf8");
+      assert.doesNotMatch(copy, /@launchclip\/core\//, `${skill}/${script}`);
+    }
+    const synth = await readFile(path.join(root, "skills", skill, "scripts/synth-audio-kit.mjs"), "utf8");
+    assert.match(synth, /from '\.\/sound\/dsp\.mjs'/);
+    const evidence = await readFile(path.join(root, "skills", skill, "scripts/build-evidence.mjs"), "utf8");
+    assert.match(evidence, /from '\.\.\/\.\.\/\.\.\/src\/cinematic_evidence\.js'/);
+    assert.match(evidence, /path\.resolve\(HERE, '\.\.\/\.\.\/\.\.'\)/);
   }
 });

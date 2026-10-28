@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
@@ -72,13 +73,17 @@ import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory,
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
-const SCRIPTS = path.join(ROOT, "skills", "launchclip-create-video", "scripts");
+// The audio and evidence scripts are engine code (src/scripts/; the skills
+// carry copies, scripts/sync-skills.mjs ENGINE_SCRIPTS). The procedural sound
+// they synthesise from is @launchclip/core's sound/ folder.
+const SCRIPTS = path.join(ROOT, "src", "scripts");
 const SCRIPT = {
   synth: path.join(SCRIPTS, "synth-audio-kit.mjs"),
   mix: path.join(SCRIPTS, "build-mix.mjs"),
   master: path.join(SCRIPTS, "master-loudness.mjs"),
   evidence: path.join(SCRIPTS, "build-evidence.mjs")
 };
+const SOUND_DIR = path.dirname(fileURLToPath(import.meta.resolve("@launchclip/core/sound/dsp.mjs")));
 
 export const FINISH_STAGES = ["voice", "validate", "captions", "sound", "render", "master", "evidence", "gates"];
 export const FINISH_STATE_VERSION = "launchclip.finish-state.v1";
@@ -573,13 +578,13 @@ export function defaultAdapters() {
     },
     renderTyping: (schedule, banks, options) => renderTypingTrack(schedule, banks, options),
     async buildMix(options) {
-      const { buildMix, normalizeCues } = await import(SCRIPT.mix);
+      const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
       const cues = normalizeCues(options.cues, options.sfxDir);
       buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, ambienceVolume: options.ambienceVolume });
       return { cues };
     },
     async master(input, output, target) {
-      const { masterLoudness } = await import(SCRIPT.master);
+      const { masterLoudness } = await import("./scripts/master-loudness.mjs");
       return masterLoudness(input, output, target);
     },
     async cutChapter(input, output, { start, end }) {
@@ -593,7 +598,7 @@ export function defaultAdapters() {
       return String(stdout).trim().length > 0;
     },
     async buildEvidence(project, options) {
-      const { buildEvidence } = await import(SCRIPT.evidence);
+      const { buildEvidence } = await import("./scripts/build-evidence.mjs");
       return buildEvidence(project, options);
     },
     motion: (video, out, options) => writeMotionReport(video, out, options),
@@ -1030,7 +1035,7 @@ const STAGES = [
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         duration: ctx.resolved.resolved.duration,
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
-        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(path.join(SCRIPTS, "sound")), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         kit: kit ?? undefined,
         sfx: { density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
@@ -1042,7 +1047,7 @@ const STAGES = [
       ctx.warnings.push(...plan.cueWarnings);
       const kitDir = path.join(ctx.project, PATHS.kit);
       const synthBed = plan.music.kind === "synth" ? plan.bed : null;
-      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(path.join(SCRIPTS, "sound")), ...(plan.kit ? { kit: plan.kit } : {}) });
+      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(SOUND_DIR), ...(plan.kit ? { kit: plan.kit } : {}) });
       const previousKit = ctx.state.stages?.sound?.details?.kit_key;
       const ambienceFile = plan.sound.ambience ? path.join(kitDir, "ambience", `${plan.sound.ambience}.wav`) : null;
       let kitReused = previousKit === kitKey && existsSync(path.join(kitDir, "AUDIO-KIT.json")) && (!synthBed || existsSync(path.join(kitDir, "music", "bed.wav"))) && (!ambienceFile || existsSync(ambienceFile));

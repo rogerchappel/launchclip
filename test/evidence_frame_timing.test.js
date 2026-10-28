@@ -10,7 +10,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { encodedFrameArgs, evidenceFrame, remotionStillArgs, snapshotTime } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
+import { encodedFrameArgs, evidenceFrame, remotionStillArgs, snapshotTime } from "../src/scripts/build-evidence.mjs";
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 

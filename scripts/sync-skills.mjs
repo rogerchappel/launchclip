@@ -34,7 +34,9 @@
 // and both skills.
 //
 // The renderer-neutral scripts are maintained in
-// skills/launchclip-create-video/scripts/ and copied into the Remotion skill.
+// skills/launchclip-create-video/scripts/ and copied into the Remotion skill,
+// except the ones the engine runs itself (ENGINE_SCRIPTS, canonical in
+// src/scripts/), which are copied into both skills.
 // kit/core/*.mjs (and kit/core/<folder>/*.mjs) is canonical for its files and
 // is copied into both skills.
 // kit/hyperframes/*.mjs (the HyperFrames emitters, including
@@ -91,6 +93,24 @@ export const SHARED_SCRIPTS = [
   'synth-audio-kit.mjs',
   'word-captions.mjs'
 ];
+
+// Shared scripts whose canonical copy is engine code (src/), not a skill.
+export const ENGINE_SCRIPTS = Object.freeze({
+  'build-evidence.mjs': 'src/scripts/build-evidence.mjs',
+  'build-mix.mjs': 'src/scripts/build-mix.mjs',
+  'master-loudness.mjs': 'src/scripts/master-loudness.mjs',
+  'synth-audio-kit.mjs': 'src/scripts/synth-audio-kit.mjs'
+});
+
+// A skill's copy of an engine script sits in skills/<skill>/scripts/ beside
+// its kit/core copies: @launchclip/core/<file> becomes ./<file>, ../<file>
+// (src/) becomes ../../../src/<file>, and the package root is one more up.
+export function engineScriptCopy(root, script) {
+  return readFileSync(path.join(root, ENGINE_SCRIPTS[script]), 'utf8')
+    .replace(/(['"])@launchclip\/core\//g, '$1./')
+    .replace(/(from\s+['"])\.\.\//g, '$1../../../src/')
+    .replace("path.resolve(HERE, '../..')", "path.resolve(HERE, '../../..')");
+}
 
 export const SKILLS = [
   {
@@ -221,7 +241,9 @@ export function planOutputs({ root = ROOT } = {}) {
     for (const [name, content] of generated) files.set(`${dir}/references/${name}`, content);
     if (skill.sharedScripts) {
       managedDirs.push(`${dir}/scripts`);
-      for (const script of SHARED_SCRIPTS) files.set(`${dir}/scripts/${script}`, readFileSync(path.join(hyperframesScripts, script)));
+      for (const script of SHARED_SCRIPTS) files.set(`${dir}/scripts/${script}`, ENGINE_SCRIPTS[script] ? engineScriptCopy(root, script) : readFileSync(path.join(hyperframesScripts, script)));
+    } else {
+      for (const script of Object.keys(ENGINE_SCRIPTS)) files.set(`${dir}/scripts/${script}`, engineScriptCopy(root, script));
     }
     for (const file of kitCore) {
       if (SHARED_SCRIPTS.includes(file)) throw new Error(`kit/core/${file} collides with a shared skill script`);

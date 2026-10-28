@@ -4,7 +4,7 @@ import { SOUND_PALETTES } from "@launchclip/core/sound/options.mjs";
 import { familySpec, keyboard } from "@launchclip/core/sound/families.mjs";
 import { palette } from "@launchclip/core/sound/palettes.mjs";
 import { rng } from "@launchclip/core/sound/dsp.mjs";
-import { kitVariants } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
+import { kitVariants } from "../src/scripts/synth-audio-kit.mjs";
 
 const SEVEN = ["whoosh", "impact", "riser", "tick", "pop", "shimmer", "subdrop"];
 const seeds = Array.from({ length: 24 }, (_, i) => `s${i}`);

@@ -25,7 +25,7 @@ import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashO
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
-export const SYNTH_SCRIPT = path.join(ROOT, "skills", "launchclip-create-video", "scripts", "synth-audio-kit.mjs");
+export const SYNTH_SCRIPT = path.join(ROOT, "src", "scripts", "synth-audio-kit.mjs");
 export const PROMPTS_FILE = path.join(import.meta.dirname, "prompts.json");
 export const ELEVENLABS_API = "https://api.elevenlabs.io";
 export const SOUND_GENERATION_PATH = "/v1/sound-generation";
