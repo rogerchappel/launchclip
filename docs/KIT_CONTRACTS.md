@@ -21,9 +21,11 @@ kit/
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
-  remotion/             TSX for Remotion 4.0.536 / React 19.3
+  remotion/             TSX for Remotion 4.0.536 / React 19.3; published as
+                        @launchclip/remotion (index.ts is its entry)
     entry.tsx           registerRoot(Root)
-    Root.tsx            <Composition id="LaunchclipStory" …/> plus module review comps
+    Root.tsx            compositions.tsx plus every registry font (font-files.ts)
+    compositions.tsx    <Composition id="LaunchclipStory" …/> plus module review comps
     modules/<Kind>.tsx  one component per editorial kind
     captions/WordCaptions.tsx
     StoryComposition.tsx
@@ -58,10 +60,13 @@ files.
   `kit/core/scripts/build-types.js`; `postpack` removes them) and are not
   committed. Add JSDoc to a source file to sharpen its types.
 - **Who imports it how.** Node code outside `kit/` (`src/`, `bin/`, `scripts/`,
-  `eval/`, `test/`) imports `@launchclip/core` or `@launchclip/core/<file>.mjs`.
-  `kit/remotion/` and `kit/hyperframes/` keep their relative `../core/`
-  imports: they sit beside `kit/core/` in every checkout and install, and the
-  skills copy them next to their own copies of the core files.
+  `eval/`, `test/`) and `kit/remotion/` (the `@launchclip/remotion` package)
+  import `@launchclip/core` or `@launchclip/core/<file>.mjs`.
+  `kit/hyperframes/` keeps its relative `../core/` imports: it sits beside
+  `kit/core/` in every checkout and install. The skills copy the kits next to
+  their own copies of the core files, so `scripts/sync-skills.mjs` rewrites
+  the Remotion kit's `@launchclip/core/` imports to relative `../core/` ones
+  in those copies.
 
 ### Versioning
 
@@ -83,6 +88,42 @@ files.
   ships a migration, so older stories keep loading.
 - **Releases with no core change** still publish `@launchclip/core` at the new
   version, so `launchclip@x.y.z` always has a matching `@launchclip/core@x.y.z`.
+
+## The `@launchclip/remotion` package (`kit/remotion/package.json`)
+
+`kit/remotion/` is an npm workspace published as `@launchclip/remotion`, for
+apps that render stories in their own Remotion bundle or `@remotion/player`.
+The CLI renders the same TSX through `kit/remotion/entry.tsx`; the package
+ships it compiled (`dist/`, built at pack time by `kit/remotion/scripts/build.mjs`
+and removed after, never committed). `kit/remotion/README.md` is the
+consumer guide.
+
+- **Entry points.** `@launchclip/remotion` (`kit/remotion/index.ts`):
+  `LaunchclipCompositions` (registers `LaunchclipStory`, `ModuleReview` and
+  `SceneOverlay`), `StoryComposition` with `calculateStoryMetadata`,
+  `storyPlayerProps` for `@remotion/player`, `MODULE_COMPONENTS` and the
+  twelve registries it merges, `WordCaptions`, `BrandFrame`, the asset
+  resolver, the font registry and the WebGL gate.
+  `@launchclip/remotion/fonts` (`kit/remotion/font-files.ts`) imports every
+  registry woff2 and registers its URL; the package root imports no font file.
+- **No CLI state.** The kit reads its props and nothing else: no
+  `.launchclip/`, no `~/.launchclip`, no project layout. Every media src
+  (images, video, audio, captions, SVG layers) goes through `assetUrl()`:
+  the app's resolver (`setAssetResolver`), else absolute URLs pass through,
+  else `staticFile(src)`.
+- **Fonts.** `FONT_FACES` lists every registry face with its `@fontsource`
+  package and file; `registerFontFiles()` takes the app's URLs for them. The
+  kit's own `Root.tsx` imports `font-files.ts`, so CLI renders are unchanged.
+- **WebGL.** `WEBGL_MODULES` (with `moduleNeedsWebGL`, `storyWebGLModules`)
+  lists modules that need `@remotion/three`. It is empty: kit modules follow
+  the portable-module rule (DOM, SVG, CSS 3D). `test/remotion_package.test.js`
+  fails when a kit file imports three.js, so a WebGL module is listed first.
+- **Dependencies.** `react` (^19.3) and `remotion` (^4.0.536) are peers;
+  `@launchclip/core` (exact) and the `@fontsource` packages (the root's
+  pinned versions) are dependencies. The kit imports nothing else.
+- **Versioning.** Lockstep with `launchclip` and `@launchclip/core`, under
+  the same rules as `@launchclip/core` (above). A test fails when the
+  versions or the font pins drift.
 
 ## storyboard.json (story v1) (`kit/core/story.mjs`)
 

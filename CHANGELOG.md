@@ -14,6 +14,13 @@
   `diffSegments`, which says which render segments a chat edit invalidates,
   runs there too, with the same hashes `finish` caches segments under. See
   [kit/core/README.md](kit/core/README.md).
+- The Remotion kit is its own npm package too, `@launchclip/remotion`:
+  `StoryComposition`, every module component and registry, captions, the
+  brand frame and the bundled fonts, for apps that render stories in their
+  own Remotion bundle or `@remotion/player`. It renders from its props alone,
+  takes the app's media through an asset resolver, lets the app supply font
+  URLs, and is versioned in lockstep with the CLI. See
+  [kit/remotion/README.md](kit/remotion/README.md).
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,

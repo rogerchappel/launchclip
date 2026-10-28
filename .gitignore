@@ -88,3 +88,4 @@ qa/parity-social/
 # Format scorecard (npm run eval:formats)
 qa/format-eval*/
 /kit/core/types/
+/kit/remotion/dist/
