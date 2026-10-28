@@ -107,6 +107,10 @@
   explainer exceeds, so evidence failed although the render worked. Every
   HyperFrames call LaunchClip makes now sets
   `PRODUCER_PAGE_NAVIGATION_TIMEOUT_MS` to 3 minutes unless you set it.
+- HyperFrames no longer warns at every shot start that the captions overlay
+  fades out without a hard kill. Each time the captions dip out for a
+  camera move, the compiler now ends the fade with a `tl.set` to opacity 0,
+  so a seek past the fade finds them hidden. Frames are unchanged.
 - `waterfall` draws a step's + or − half as large again. Condensed display
   faces like Anton draw them short and thin, and in a draft render of AI
   Rider's first episode a +0.5¢ step read as −0.5¢.
