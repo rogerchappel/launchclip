@@ -58,7 +58,8 @@ test("validation finds uncovered words, missing scenes and lines without a why",
   far.sections[0].lines[0].scenes = ["captions-note"];
   assert.match(validateDirection(far, { words: list, story }).errors.join("\n"), /does not overlap the line's words/);
   const silent = structuredClone(base);
-  const face = silent.sections.flatMap((section) => section.lines).find((line) => line.treatment === "face" || line.treatment === "camera");
+  const face = silent.sections[0].lines[0];
+  face.treatment = "camera";
   delete face.why;
   assert.match(validateDirection(silent, { words: list, story }).errors.join("\n"), /needs a short why/);
   const bare = structuredClone(base);
@@ -100,7 +101,7 @@ test("coverage, face time and the longest undressed run come from map plus story
   assert.ok(measures.face_time < 1, "the insert hides the presenter");
   assert.ok(measures.longest_undressed_seconds > 0);
   assert.equal(measures.lines.length, 7);
-  assert.deepEqual(measures.missed.map((line) => line.intent), ["hook"], "the example's hook plays on a punch-in only");
+  assert.deepEqual(measures.missed, [], "every visual line in the example is dressed");
   const sparse = structuredClone(await map());
   for (const section of sparse.sections) for (const line of section.lines) { line.treatment = "face"; line.why = "on the face"; delete line.scenes; }
   const bare = { ...story, scenes: story.scenes.filter((scene) => scene.module === "punch-in") };

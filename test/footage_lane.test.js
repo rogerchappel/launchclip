@@ -141,12 +141,9 @@ test('Remotion kit: BaseLayer per segment with trimBefore, camera from the share
 test('the footage example validates, resolves its edl and layout-checks clean', async () => {
   const result = await runStoryCommand('validate', join(EXAMPLE, 'storyboard.json'));
   assert.equal(result.status, 'passed', result.errors.join('\n'));
-  // The example's one quality finding: its hook is a lone punch-in, so the
-  // first graphic lands at 2.9 s (VIDEO_QUALITY_RFC §10.1 wants a visual by ~1 s).
-  assert.deepEqual(result.warnings, [
-    'cadence: first_visual_seconds 2.9 s is above the profile band (at most 1.5 s, target 0.5 s) (profile short-talking-head)',
-    'direction: words [0, 5] (hook) call for a visual but play on the camera alone: a missed opportunity unless the why says otherwise'
-  ]);
+  // The hook is dressed from 0.3 s (VIDEO_QUALITY_RFC §10.1 wants a visual by
+  // ~1 s), so the example passes the profile with no warnings.
+  assert.deepEqual(result.warnings, []);
   assert.equal(result.direction.status, 'valid');
   assert.equal(result.direction.profile, 'short-talking-head');
   const {resolved} = await readProjectStory(EXAMPLE);
@@ -154,7 +151,8 @@ test('the footage example validates, resolves its edl and layout-checks clean', 
   const modules = resolved.scenes.map(scene => scene.module);
   assert.equal(modules.filter(id => id === 'punch-in').length, 3);
   assert.equal(modules.filter(id => id === 'footage-callout').length, 2);
-  assert.ok(modules.includes('lower-third') && modules.includes('emphasis-caption'));
+  assert.ok(modules.includes('lower-third'));
+  assert.equal(modules.filter(id => id === 'emphasis-caption').length, 2);
   assert.equal(resolved.scenes.filter(scene => scene.insert).length, 1);
   assert.ok(resolved.overlays.some(overlay => overlay.type === 'captions'));
   // Scene starts on the frame grid keep Remotion Sequences and GSAP in step.

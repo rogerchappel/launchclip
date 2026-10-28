@@ -5,7 +5,7 @@
     {
       "id": "s1",
       "lines": [
-        { "words": [0, 5], "intent": "hook", "treatment": "camera", "scenes": ["punch-demo"], "why": "a punch-in lands the line on the presenter" },
+        { "words": [0, 5], "intent": "hook", "treatment": "dress", "scenes": ["hook", "punch-demo"], "why": "the claim pops over the opening words, then a punch-in lands it on the presenter" },
         { "words": [6, 14], "intent": "product", "treatment": "dress", "scenes": ["builder"] },
         { "words": [15, 21], "intent": "product", "treatment": "dress", "scenes": ["name"] },
         { "words": [22, 29], "intent": "process", "treatment": "dress", "scenes": ["name"] },

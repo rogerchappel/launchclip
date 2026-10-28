@@ -55,7 +55,7 @@ test("a sparse draft fails coverage with missed-opportunity and sparseness findi
   assert.equal(dressed.status, "passed", dressed.errors.join("\n"));
   assert.equal(dressed.profile, "short-talking-head");
   assert.ok(dressed.measures.coverage > 0.35);
-  assert.deepEqual(dressed.findings.map((finding) => finding.category), ["missed-opportunity"], "only the punch-in hook");
+  assert.deepEqual(dressed.findings, [], "the dressed example has no measured findings");
 });
 
 test("the direction gate: a valid map passes, a broken one fails, a missing one fails only with narration", async (t) => {
