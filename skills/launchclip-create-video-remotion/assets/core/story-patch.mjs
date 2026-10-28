@@ -2,7 +2,8 @@
 // arrives as an RFC 6902 JSON Patch against story.json instead of a whole new
 // storyboard; applyStoryPatch applies it atomically, then validates, resolves
 // and layout-checks the result, and reports every problem with the JSON
-// Pointer it concerns. Plain ESM; imports only sibling kit/core files.
+// Pointer it concerns; diffSegments says which render segments the edit
+// invalidates. Plain ESM; imports only sibling kit/core files.
 // Contract: docs/KIT_CONTRACTS.md, "Story patches".
 //
 // Canonical copy: kit/core/story-patch.mjs.
@@ -11,6 +12,7 @@ import { captionZones } from './footage-layout.mjs';
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from './layout-check.mjs';
 import { validateModuleParams } from './module-schemas.mjs';
 import { knownModules, resolveModule } from './modules.mjs';
+import { hashSegments, planSegments, sceneModels } from './render-segments.mjs';
 import { migrateStory } from './story-migrations.mjs';
 import { resolveStory, validateStory } from './story.mjs';
 
@@ -252,4 +254,60 @@ export function applyStoryPatch(story, patch, { words = [], beats = null, layout
     errors.push(problem('layout', error.message, { path: '' }));
   }
   return done(fields);
+}
+
+// ---------------------------------------------------------------------------
+// Render segments an edit invalidates
+
+// Segment inputs from the stories alone: captions and asset contents come from
+// files, which both sides of an edit share, so only what the stories say can
+// differ. The kit and fonts are the same engine on both sides.
+function storyOnlyInputs(story, renderer) {
+  return { renderer, kit: null, fonts: null, captions: null, assets: {}, base: null, models: sceneModels(story) };
+}
+
+/**
+ * Which render segments an edit invalidates. oldStory and newStory are
+ * resolved stories (applyStoryPatch's `resolved`). Both are planned and
+ * hashed exactly as `finish` does (render-segments.mjs); a segment of the new
+ * story whose hash the old story already had is a cache hit, every other one
+ * must re-render. options.renderer: "remotion" (default) or "hyperframes".
+ * options.inputs: (story) => segment inputs (or a promise of them) for hashing
+ * what the stories leave out, such as caption and asset files
+ * (src/story_patch.js passes the project's; default: the stories alone).
+ * → {segments: [{index, id, label, kind, start, end, startFrame, endFrame,
+ *    frames, scenes, status: "unchanged" | "changed" | "new", parts}],
+ *    invalidated: [ids], removed: [old ids no longer used], global: boolean,
+ *    frames: {total, invalidated}}.
+ * status "changed": a segment with the same layers existed and `parts` names
+ * what changed ("global", "layers", "captions", "overlays", "assets",
+ * "camera", "frames"); "new": the edit moved a cut, so no segment had these
+ * layers. global: the edit touched a setting every segment depends on.
+ */
+export async function diffSegments(oldStory, newStory, { renderer = 'remotion', inputs = null } = {}) {
+  const hashed = async (story) => {
+    const plan = planSegments(story);
+    return hashSegments(story, plan, inputs ? await inputs(story) : storyOnlyInputs(story, renderer));
+  };
+  const [before, after] = [await hashed(oldStory), await hashed(newStory)];
+  const oldHashes = new Set(before.map((segment) => segment.hash));
+  const newHashes = new Set(after.map((segment) => segment.hash));
+  const byLabel = new Map(before.map((segment) => [segment.label, segment]));
+  const segments = after.map((segment) => {
+    const { hash, parts, layers: _layers, ...shown } = segment;
+    if (oldHashes.has(hash)) return { ...shown, status: 'unchanged', parts: [] };
+    const previous = byLabel.get(segment.label);
+    if (!previous) return { ...shown, status: 'new', parts: Object.keys(parts) };
+    const changed = Object.keys({ ...parts, ...previous.parts }).filter((key) => parts[key] !== previous.parts[key]);
+    if (previous.startFrame !== segment.startFrame || previous.endFrame !== segment.endFrame) changed.push('frames');
+    return { ...shown, status: 'changed', parts: changed };
+  });
+  const invalidated = segments.filter((segment) => segment.status !== 'unchanged');
+  return {
+    segments,
+    invalidated: invalidated.map((segment) => segment.id),
+    removed: before.filter((segment) => !newHashes.has(segment.hash)).map((segment) => segment.id),
+    global: Boolean(before[0] && after[0] && before[0].parts.global !== after[0].parts.global),
+    frames: { total: after.reduce((sum, segment) => sum + segment.frames, 0), invalidated: invalidated.reduce((sum, segment) => sum + segment.frames, 0) }
+  };
 }

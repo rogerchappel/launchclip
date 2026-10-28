@@ -31,7 +31,8 @@ export {
   validateModuleParams
 } from './module-schemas.mjs';
 export { STORY_MIGRATIONS, storyVersion, migrationProblems, migrateStory, stampStory } from './story-migrations.mjs';
-export { applyJsonPatch, applyStoryPatch, parsePointer, formatPointer, messagePointer } from './story-patch.mjs';
+export { applyJsonPatch, applyStoryPatch, diffSegments, parsePointer, formatPointer, messagePointer } from './story-patch.mjs';
+export { SEGMENT_SCHEMA, planSegments, hashSegments } from './render-segments.mjs';
 export { chunkWords, captionChunksFrom, narrationWords, visibleChunks, captionPlan, CAPTION_PRESETS, CAPTION_PRESET_NAMES } from './captions.mjs';
 export { TRANSITION_TYPES, sceneWindows, layerStateAt, layerStyle } from './transitions.mjs';
 export { resolveCamera, cameraPlan, cameraStateAt } from './camera-world.mjs';

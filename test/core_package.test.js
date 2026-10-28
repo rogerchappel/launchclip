@@ -123,13 +123,15 @@ export { schemas, schema, validateStory, captionPlan, notExported };
     const sandbox = createContext({console, structuredClone, URL, TextEncoder, TextDecoder, queueMicrotask, setTimeout, clearTimeout});
     runInContext(bundle.outputFiles[0].text, sandbox);
     sandbox.input = {story: story(), words: WORDS};
-    const result = runInContext(`(() => {
+    const result = await runInContext(`(async () => {
       const core = LaunchClipCore;
       const { story, words } = input;
       const validation = core.validateStory(story, { modules: core.knownModules(), moduleParams: core.validateModuleParams });
       const patched = core.applyStoryPatch(story, [{ op: 'replace', path: '/scenes/0/params/headline', value: 'Ship release notes in minutes, never in days.' }], { words });
       const resolved = core.resolveStory(story, { words });
+      const diff = await core.diffSegments(resolved, patched.resolved);
       return JSON.stringify({
+        diff: { invalidated: diff.invalidated.length, segments: diff.segments.length, global: diff.global },
         node: [typeof process, typeof require, typeof Buffer],
         errors: validation.errors,
         schemas: core.listModuleSchemas().length,
@@ -145,6 +147,9 @@ export { schemas, schema, validateStory, captionPlan, notExported };
     assert.equal(parsed.patched, true);
     assert.equal(parsed.scenes, story().scenes.length);
     assert.equal(parsed.windows, story().scenes.length);
+    // The headline edit re-renders the hook's segments and nothing global.
+    assert.ok(parsed.diff.invalidated >= 1 && parsed.diff.invalidated < parsed.diff.segments, JSON.stringify(parsed.diff));
+    assert.equal(parsed.diff.global, false);
   });
 });
 
