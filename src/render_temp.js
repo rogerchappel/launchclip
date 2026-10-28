@@ -13,6 +13,7 @@
 import { mkdir, mkdtemp, readdir, rm, rmdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { stateScope } from "./state_dirs.js";
 
 // Captured at load, before any useProjectTemp().
 const SYSTEM_TMPDIR = os.tmpdir();
@@ -32,6 +33,9 @@ export function systemTempDir() {
  * (and .launchclip-tmp when nothing else is using it).
  */
 export async function useProjectTemp(project, env = process.env) {
+  // Inside an engine call (src/state_dirs.js) the app owns the process and its
+  // temp folder: TMPDIR is never repointed under it.
+  if (stateScope()) return { dir: null, async release() {} };
   const root = path.join(path.dirname(path.resolve(project)), TEMP_FOLDER);
   // A parent that cannot be written (a drive's root folder): keep the system temp folder.
   try { await mkdir(root, { recursive: true }); } catch { return { dir: null, async release() {} }; }

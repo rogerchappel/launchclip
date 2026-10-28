@@ -3,12 +3,13 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pinnedHome } from "./state_dirs.js";
 
 export const ENTITY_RESOLUTION_VERSION = "launchclip.entity-resolution.v1";
 export const BRAND_LIBRARY_VERSION = "launchclip.brand-library.v1";
 
 export function defaultBrandLibraryDir(env = process.env) {
-  return path.resolve(env.LAUNCHCLIP_BRAND_ASSETS_DIR ?? path.join(os.homedir(), ".launchclip", "brand-assets"));
+  return pinnedHome("brand-assets") ?? path.resolve(env.LAUNCHCLIP_BRAND_ASSETS_DIR ?? path.join(os.homedir(), ".launchclip", "brand-assets"));
 }
 
 export async function resolveProductionEntities(workspacePath, options = {}) {

@@ -18,6 +18,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { pinnedCache } from "./state_dirs.js";
 
 const execute = promisify(execFile);
 export const ELEVENLABS_ISOLATION_ENDPOINT = "/v1/audio-isolation";
@@ -26,7 +27,7 @@ const MAX_SECONDS = 3600;
 const MAX_BYTES = 500 * 1024 * 1024;
 
 export function isolationCacheDir(env = process.env) {
-  return env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "elevenlabs", "audio-isolation") : path.join(os.homedir(), ".cache", "launchclip", "elevenlabs", "audio-isolation");
+  return pinnedCache("elevenlabs/audio-isolation") ?? (env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "elevenlabs", "audio-isolation") : path.join(os.homedir(), ".cache", "launchclip", "elevenlabs", "audio-isolation"));
 }
 
 /**

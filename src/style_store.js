@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { STYLE_SCHEMA, STYLE_V2_SCHEMA, upgradeV1Pack, upgradeV2Pack, validateStylePack } from "@launchclip/core/style.mjs";
+import { pinnedHome } from "./state_dirs.js";
 
 export const STYLE_PACK_SCHEMA_VERSION = "launchclip.style-pack.v1";
 export const STYLE_PACK_V2_SCHEMA = STYLE_SCHEMA;
@@ -181,6 +182,7 @@ export async function listStylePacks(options = {}) {
 
 /** ~/.launchclip/styles, or $LAUNCHCLIP_HOME/styles. */
 export function homeStyleRoot(options = {}) {
+  if (!options.home && pinnedHome("styles")) return pinnedHome("styles");
   const home = options.home ?? process.env.LAUNCHCLIP_HOME ?? path.join(os.homedir(), ".launchclip");
   return path.join(path.resolve(home), "styles");
 }

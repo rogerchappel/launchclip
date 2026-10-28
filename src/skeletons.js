@@ -12,10 +12,11 @@ import path from "node:path";
 import { TITLE_CARD_MODULES, chooseSkeleton, kitCapabilities, mergeSkeletons, skeletonById, skeletonFeasibility, skeletonProblems, skeletonStale, structureCheck } from "@launchclip/core/skeleton-library.mjs";
 import { SCRIPT_SKELETONS } from "@launchclip/core/script-formats.mjs";
 import { readProjectScript } from "./publish_manifest.js";
+import { pinnedHome } from "./state_dirs.js";
 
 /** Where skeletons are read from, in override order: the user's, then the project's. */
 export function skeletonDirs({ project = null, home = os.homedir(), env = process.env } = {}) {
-  const user = env.LAUNCHCLIP_HOME ? path.join(env.LAUNCHCLIP_HOME, "skeletons") : path.join(home, ".launchclip", "skeletons");
+  const user = pinnedHome("skeletons") ?? (env.LAUNCHCLIP_HOME ? path.join(env.LAUNCHCLIP_HOME, "skeletons") : path.join(home, ".launchclip", "skeletons"));
   return [user, ...(project ? [path.join(project, ".launchclip", "skeletons")] : [])];
 }
 

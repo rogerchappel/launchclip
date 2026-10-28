@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { writeFileAtomic } from "../atomic_write.js";
 import { buildMusicRequest } from "./prompt.js";
+import { pinnedCache } from "../state_dirs.js";
 
 export const ELEVENLABS_API = "https://api.elevenlabs.io";
 export const MUSIC_ENDPOINT = "/v1/music";
@@ -27,7 +28,7 @@ export const USD_PER_GENERATED_MINUTE = 0.15;
 
 /** $LAUNCHCLIP_CACHE/elevenlabs/music, else ~/.cache/launchclip/elevenlabs/music. */
 export function musicCacheDir(env = process.env) {
-  return env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "elevenlabs", "music") : path.join(os.homedir(), ".cache", "launchclip", "elevenlabs", "music");
+  return pinnedCache("elevenlabs/music") ?? (env.LAUNCHCLIP_CACHE ? path.join(env.LAUNCHCLIP_CACHE, "elevenlabs", "music") : path.join(os.homedir(), ".cache", "launchclip", "elevenlabs", "music"));
 }
 
 /** Cache key of one request: sha256 of the prompt or plan, length, model, seed and format. */
