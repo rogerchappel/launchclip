@@ -125,6 +125,50 @@ consumer guide.
   the same rules as `@launchclip/core` (above). A test fails when the
   versions or the font pins drift.
 
+## The `@launchclip/engine` package (`packages/engine/`)
+
+`packages/engine/` is an npm workspace published as `@launchclip/engine`: the
+Node engine (`src/`) for apps that embed it. The CLI runs the same files;
+`packages/engine/README.md` is the consumer guide and documents every adapter
+interface.
+
+- **Entry point.** `@launchclip/engine` is `src/engine/index.js`:
+  `createEngine({workDir, cacheDir, stateDir?, adapters?, env?})` →
+  `planStoryboard`, `finish`, `renderSegments`, `exportNle`, `critique`,
+  `prepareRecording`, `subject.{probe, track, matte}`, `project()`, plus the
+  pure gates, `planRecordingEdit`, `checkStoryboard` and `withStateDirs`.
+- **Adapters** (`src/engine/adapters.js`, `ADAPTER_KEYS`): `llm` (structured
+  calls, `vision`), `tts`, `music`, `transcribe`, `matting`, `assets` (the
+  asset-provider hook, `src/asset_provider.js`), `renderer`, `notice`. Each
+  maps onto an injection point the CLI already has (the planner's `client`,
+  finish's `voiceProvider`/`musicProvider`, `prepareRecording`'s
+  `transcribe`, the subject stage's `createSegmenter`); a key left out uses
+  the CLI's implementation, reading keys only from the engine's `env`.
+- **State.** Project paths must stay inside `workDir`. Each call runs inside
+  `withStateDirs` (`src/state_dirs.js`): every folder the CLI keeps in
+  `~/.launchclip` or `~/.cache/launchclip` resolves under `stateDir` /
+  `cacheDir` for that async call, and `TMPDIR` is left alone. Code that adds
+  such a folder resolves it through `pinnedHome` / `pinnedCache` first
+  (`test/engine.test.js` lists them).
+- **No skill scripts.** The audio and evidence scripts the engine runs are
+  `src/scripts/` (the skills carry copies, `scripts/sync-skills.mjs`
+  `ENGINE_SCRIPTS`); `test/skills_sync.test.js` fails when `src/` names a
+  skill script.
+- **Staging.** `packages/engine/scripts/stage.mjs` (prepack) copies every
+  `src/` file reachable from the entry, plus `src/voice`, `src/scripts`,
+  `kit/remotion` (TSX), `kit/hyperframes` (its `../core/` imports rewritten to
+  `@launchclip/core/`), `kit/styles`, `kit/profiles` and `public/`, laid out as
+  in the repository; postpack removes them. It fails when the code imports a
+  package `packages/engine/package.json` does not declare, or reaches
+  `kit/core` by path. Node code must therefore import `@launchclip/core`, and
+  a computed `import()` needs its folder in `EXTRA_TREES`.
+- **Dependencies.** `@launchclip/core` (exact), `@anthropic-ai/sdk`,
+  `hyperframes` and the `@fontsource` packages at the root's pins; Remotion
+  and React are peers (an app's own Remotion is shared); `kokoro-js`,
+  `onnxruntime-node` and `playwright` are optional.
+- **Versioning.** Lockstep with `launchclip`, `@launchclip/core` and
+  `@launchclip/remotion`, under the `@launchclip/core` rules (above).
+
 ## storyboard.json (story v1) (`kit/core/story.mjs`)
 
 The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
