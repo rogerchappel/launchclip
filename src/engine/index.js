@@ -29,9 +29,10 @@ export { FINISH_STAGES, formatFinishSummary } from "../finish.js";
  *     skeletons, the SFX library, matting models, the slot queue); default
  *     <cacheDir>/state,
  *   adapters: any of src/engine/adapters.js ADAPTER_KEYS,
- *   env: environment the default providers read (API keys); default {}, so
- *     no key in the app's process.env reaches a default provider unless the
- *     app passes it
+ *   env: environment the default providers read (API keys, and
+ *     LAUNCHCLIP_REMOTION_BROWSER: the Chrome the default Remotion renderer
+ *     uses); default {}, so nothing in the app's process.env reaches a
+ *     default provider unless the app passes it
  * }
  */
 export function createEngine(options = {}) {

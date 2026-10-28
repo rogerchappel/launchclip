@@ -37,9 +37,12 @@
 //               line; see src/asset_provider.js. Default: none (the planner
 //               designs every scene as motion graphics).
 //   renderer    (name) → renderer adapter (src/renderers). Default: the
-//               bundled HyperFrames and Remotion adapters.
+//               bundled HyperFrames and Remotion adapters; Remotion renders
+//               with the Chrome at env.LAUNCHCLIP_REMOTION_BROWSER when set,
+//               else Remotion's own download.
 //   notice      (line) → void: progress lines. Default: stderr.
 import { getRenderer } from "../renderers/index.js";
+import { remotionBrowserExecutable } from "../renderers/remotion_segments.js";
 import { createPlannerClient } from "../storyboard_planner.js";
 import { getVoiceProvider } from "../voice/index.js";
 import { getMusicProvider } from "../music/index.js";
@@ -65,7 +68,8 @@ export function defaultEngineAdapters({ env = {} } = {}) {
     },
     matting: null,
     assets: null,
-    renderer: (name) => getRenderer(name),
+    // The engine's env, not process.env: null keeps the app's own variable out.
+    renderer: (name) => String(name ?? "").toLowerCase() === "remotion" ? getRenderer(name, { browserExecutable: remotionBrowserExecutable(env) }) : getRenderer(name),
     notice: (line) => process.stderr.write(`${line}\n`)
   };
 }
