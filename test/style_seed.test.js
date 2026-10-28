@@ -53,7 +53,7 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
     }
     if (pack.layouts.panel.fill) inRange(pack.layouts.panel.fill.kind, pack.layouts.panel.fill.params, pack.name, { fill: true });
     if (pack.layouts.panel.fill) assert.notEqual(pack.layouts.panel.fill.kind, "blobs");
-    assert.equal(pack.ambient.background, pack.background.kind === "blobs");
+    assert.equal(pack.ambient.background, pack.background.kind === "blobs" || Boolean(pack.plate));
     const { palette, music, ambience } = pack.sound;
     assert.ok(palette && music.genre && music.key && Number.isInteger(music.progression) && ambience, pack.name);
     assert.ok(music.bpm >= music.bpm_range[0] && music.bpm <= music.bpm_range[1]);

@@ -762,7 +762,8 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     brand: { colors: palette.colors, fonts },
     motion: feel ? { grammar: feel.grammar, transition_preference: feel.transitions, feel: feel.feel } : { grammar, transition_preference: preference },
     camera,
-    ambient: { level, background: kind === 'blobs' },
+    // A plate only draws where the story draws a background (plates.mjs scenePlateSpec).
+    ambient: { level, background: kind === 'blobs' || Boolean(plate) },
     captions: { preset: caption, position: 'auto', lanes: { 'footage-led': { ...STYLE_V3_DEFAULTS.caption_lanes['footage-led'] } } },
     sound: {
       palette: soundPalette,

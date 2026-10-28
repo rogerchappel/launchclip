@@ -14,7 +14,7 @@ import {
 import { brandFonts, brandRoles, normalizeBrand, svgColors } from "@launchclip/core/style-brand.mjs";
 import { FEEL_EASES } from "@launchclip/core/style-feel.mjs";
 import { easeOvershoot, grammarErrors, resolveGrammar } from "@launchclip/core/grammar.mjs";
-import { DARK_PLATE_KINDS, plateErrors } from "@launchclip/core/plates.mjs";
+import { DARK_PLATE_KINDS, plateErrors, scenePlateSpec } from "@launchclip/core/plates.mjs";
 import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
 import { applyStyle, contrastRatio, validateStylePack } from "@launchclip/core/style.mjs";
 import { validateStory } from "@launchclip/core/story.mjs";
@@ -130,7 +130,10 @@ test("a v2 pack applies to a story that validates, plate and camera included", (
     const story = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 4 }, scenes: [{ id: "a", module: "hook-title", start: 0, end: 4, params: { text: "Hello" } }] };
     const { story: out } = applyStyle(story, pack);
     assert.deepEqual(out.motion.grammar, pack.motion.grammar);
-    if (pack.plate) assert.deepEqual(out.plate, pack.plate);
+    if (pack.plate) {
+      assert.deepEqual(out.plate, pack.plate);
+      assert.equal(scenePlateSpec(out, out.scenes[0])?.kind, pack.plate.kind, `${pack.name}: the plate draws`);
+    }
     const result = validateStory(out);
     assert.deepEqual(result.errors ?? [], [], pack.name);
   }
