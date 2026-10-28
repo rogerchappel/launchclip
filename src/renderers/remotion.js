@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadStoryModule, readProjectStory } from "../story_loader.js";
 import { adapterError, captureCommand, runCommand } from "./command.js";
-import { MEZZANINE, encodeRemotionDelivery, remotionRoot, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
+import { MEZZANINE, encodeRemotionDelivery, remotionBrowserExecutable, remotionRoot, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
 
 export { remotionRoot };
 
@@ -177,7 +177,8 @@ async function injectedStory(story, storyModule) {
 }
 
 function sharedArgs(propsFile, project) {
-  return ["--props", propsFile, "--public-dir", project, "--overwrite", "--log", "warn"];
+  const browser = remotionBrowserExecutable();
+  return ["--props", propsFile, "--public-dir", project, "--overwrite", "--log", "warn", ...(browser ? ["--browser-executable", browser] : [])];
 }
 
 function withFps(props, fps) {
