@@ -241,6 +241,8 @@ test("launchclip story plan writes storyboard.json and the plan report", async (
     const written = JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8"));
     assert.equal(written.audio.words, "NARRATION.json");
     assert.equal(written.audio.voice, "assets/audio/narration.wav");
+    // Stamped with the engine that wrote it (kit/core/story-migrations.mjs).
+    assert.deepEqual(written.engine, { version: JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version, revision: 0 });
     const report = JSON.parse(await readFile(path.join(dir, ".launchclip/storyboard-plan.json"), "utf8"));
     assert.equal(report.schema_version, "launchclip.storyboard-plan.v1");
     assert.equal(report.attempts.length, 2);

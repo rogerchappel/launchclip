@@ -1,10 +1,12 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
 import { knownModules, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { validateCastCues } from "../kit/core/characters/cues.mjs";
 import { CAST_MODULES } from "../kit/core/story.mjs";
 import { validateModuleParams } from "../kit/core/module-schemas.mjs";
+import { migrateStory, stampStory } from "../kit/core/story-migrations.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, remotionRoot, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -20,6 +22,7 @@ import { DIRECTION_FILE, DIRECTION_LANES, directionJson, directionMeasures, vali
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { profileForStory } from "./profile_store.js";
 
+const PACKAGE_VERSION = createRequire(import.meta.url)("../package.json").version;
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
 // Validation against the kit's module registry and each module's params
@@ -121,11 +124,14 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
   if (action === "long-form") return (await import("./long_form.js")).runLongFormCommand(storyPath, flags);
   if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
-  const styled = await applyProjectStyle(await readJson(file, "story.json"), { projectDir: path.dirname(file) });
+  // An older story is migrated in memory (kit/core/story-migrations.mjs); the file is untouched.
+  const migrated = migrateStory(await readJson(file, "story.json"));
+  const styled = await applyProjectStyle(migrated.story, { projectDir: path.dirname(file) });
   const story = styled.story;
   const words = await loadWords(flags.narration, story, path.dirname(file));
   const beats = flags.beats ? await readJson(path.resolve(flags.beats), "BEATS.json") : null;
   const validation = validateStory(story);
+  if (migrated.applied.length) validation.warnings.push(`story is ${migrated.from.schema} revision ${migrated.from.revision}; it was read as revision ${migrated.to.revision} through ${migrated.applied.join(", ")} (save it again to keep the upgrade)`);
 
   if (action === "validate") {
     const errors = [...validation.errors];
@@ -343,7 +349,8 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     warnings: [...warnings, ...report.warnings]
   };
   if (report.status === "passed") {
-    await writeJson(out, generated ? adoptStyleLook(report.storyboard, style.pack) : report.storyboard);
+    // The stamp says which engine wrote the story (kit/core/story-migrations.mjs).
+    await writeJson(out, stampStory(generated ? adoptStyleLook(report.storyboard, style.pack) : report.storyboard, { version: PACKAGE_VERSION }));
     if (report.direction) await writeFile(path.join(outDir, DIRECTION_FILE), directionJson(report.direction));
     return summary;
   }

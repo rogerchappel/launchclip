@@ -5,6 +5,11 @@
 // docs/KIT_CONTRACTS.md ("story.json v1") for the binding contract.
 
 export const STORY_SCHEMA = "launchclip.story.v1";
+// Non-additive changes made inside STORY_SCHEMA so far: a story's
+// engine.revision (0 when absent). Migrations between revisions live in
+// kit/core/story-migrations.mjs; the policy is in docs/KIT_CONTRACTS.md,
+// "Story versions and migrations".
+export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
 export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview"];
@@ -92,7 +97,7 @@ const EPS = 1e-6;
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
-const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate"]);
+const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -257,6 +262,18 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   if (story.schema !== STORY_SCHEMA) {
     const major = typeof story.schema === "string" && /^launchclip\.story\.v\d+/.test(story.schema);
     err(major ? `schema ${story.schema} is not supported; this tool reads ${STORY_SCHEMA}` : `schema must be "${STORY_SCHEMA}"`);
+  }
+  // engine: the stamp of the engine that wrote the story (kit/core/story-migrations.mjs stampStory).
+  if (story.engine !== undefined) {
+    const engine = story.engine;
+    if (!isObject(engine)) err("engine must be {version?, revision?}: the stamp of the launchclip that wrote the story");
+    else {
+      for (const key of Object.keys(engine)) if (!["version", "revision"].includes(key)) err(`engine.${key} is not supported (allowed: version, revision)`);
+      if (engine.version !== undefined && !nonEmpty(engine.version)) err("engine.version must be the launchclip version that wrote the story, like \"0.2.0\"");
+      if (engine.revision !== undefined && !(Number.isInteger(engine.revision) && engine.revision >= 0)) err("engine.revision must be a whole number from 0");
+      else if ((engine.revision ?? 0) > STORY_REVISION) err(`engine.revision ${engine.revision} is newer than this engine reads (${STORY_SCHEMA} revision ${STORY_REVISION}); upgrade launchclip to open this story`);
+      else if ((engine.revision ?? 0) < STORY_REVISION) err(`engine.revision ${engine.revision ?? 0} is older than this engine's (${STORY_REVISION}); bring the story up to date with migrateStory (kit/core/story-migrations.mjs) first`);
+    }
   }
   if (story.phase !== undefined && story.phase !== 2) err("phase must be 2 when set (the phase-2 cinematic contract)");
   if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
