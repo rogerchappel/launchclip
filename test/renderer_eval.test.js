@@ -222,6 +222,7 @@ test("stageStory copies a loose story beside its narration and drops audio it do
     assert.equal(story.lane, "motion");
     assert.ok(staged.warnings.some((warning) => /audio\.voice assets\/audio\/narration\.wav/.test(warning)));
     assert.ok(JSON.parse(await readFile(path.join(staged.project, "cooling.NARRATION.json"), "utf8")).words.length > 10);
+    assert.ok(JSON.parse(await readFile(path.join(staged.project, "DIRECTION.json"), "utf8")).sections.length > 0, "the direction map is staged where validate looks");
 
     const minimal = await stageStory(GOLDEN_STORIES.find((entry) => entry.id === "minimal"), path.join(out, "minimal"));
     assert.deepEqual(minimal.warnings, []);
