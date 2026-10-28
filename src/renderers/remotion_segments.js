@@ -177,6 +177,17 @@ async function listFonts(project) {
 }
 
 /**
+ * The Chrome to render with: LAUNCHCLIP_REMOTION_BROWSER (a chrome-headless-shell
+ * or Chrome binary) when set, else Remotion's own download. An escape hatch
+ * for a Chrome build that crashes on a story (Remotion's 157.0.8080.0 hits a
+ * V8 fatal check, MigrateToMap/TrustedCast, on some module combinations).
+ */
+export function remotionBrowserExecutable(env = process.env) {
+  const value = env.LAUNCHCLIP_REMOTION_BROWSER?.trim();
+  return value ? value : null;
+}
+
+/**
  * Render segments of the LaunchclipStory composition.
  * segments: [{startFrame, endFrame (exclusive), output}]
  * Calls onSegment(segment, seconds) after each one. Returns
@@ -189,7 +200,7 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
   const bundleSeconds = (performance.now() - bundleStarted) / 1000;
   const results = [];
   if (!segments.length) return { bundle: { cached, seconds: bundleSeconds }, segments: results };
-  const browser = await openBrowser("chrome", { logLevel });
+  const browser = await openBrowser("chrome", { logLevel, browserExecutable: remotionBrowserExecutable() });
   try {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel });
     for (const segment of segments) {
@@ -229,9 +240,10 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
 export async function renderRemotionAudio({ entry, project, props, output, kitHash, bundleRoot, logLevel = "error" }) {
   const { renderMedia, selectComposition } = await import("@remotion/renderer");
   const { serveUrl } = await cachedBundle({ entry, project, kitHash, bundleRoot });
-  const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, logLevel });
+  const browserExecutable = remotionBrowserExecutable();
+  const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, logLevel, browserExecutable });
   await mkdir(path.dirname(output), { recursive: true });
-  await renderMedia({ serveUrl, composition, inputProps: props, codec: "aac", outputLocation: path.resolve(output), overwrite: true, logLevel });
+  await renderMedia({ serveUrl, composition, inputProps: props, codec: "aac", outputLocation: path.resolve(output), overwrite: true, logLevel, browserExecutable });
   return { output };
 }
 

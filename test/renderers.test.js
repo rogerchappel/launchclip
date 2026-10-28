@@ -10,7 +10,7 @@ import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRend
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt, remotionRoot } from "../src/renderers/remotion.js";
-import { pruneRemotionRoots } from "../src/renderers/remotion_segments.js";
+import { pruneRemotionRoots, remotionBrowserExecutable } from "../src/renderers/remotion_segments.js";
 import * as storyModule from "./fixtures/story-stub.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -312,5 +312,23 @@ test("old Remotion roots are pruned, keeping the recent few and any in use", asy
     assert.deepEqual(old.filter((dir) => left.has(path.basename(dir))), old.slice(0, 4));
   } finally {
     await rm(roots, { recursive: true, force: true });
+  }
+});
+
+test("LAUNCHCLIP_REMOTION_BROWSER picks the Chrome that Remotion renders with", () => {
+  assert.equal(remotionBrowserExecutable({}), null);
+  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "  " }), null);
+  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome/chrome-headless-shell" }), "/opt/chrome/chrome-headless-shell");
+  const remotion = getRenderer("remotion");
+  const prepared = { entry: "/p/remotion/entry.tsx", propsFile: "/p/props.json", project: "/p" };
+  const previous = process.env.LAUNCHCLIP_REMOTION_BROWSER;
+  try {
+    delete process.env.LAUNCHCLIP_REMOTION_BROWSER;
+    assert.equal(remotion.renderArgs(prepared, "/p/out.mp4").includes("--browser-executable"), false);
+    process.env.LAUNCHCLIP_REMOTION_BROWSER = "/opt/chrome/chrome-headless-shell";
+    const args = remotion.renderArgs(prepared, "/p/out.mp4");
+    assert.equal(args[args.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
+  } finally {
+    if (previous === undefined) delete process.env.LAUNCHCLIP_REMOTION_BROWSER; else process.env.LAUNCHCLIP_REMOTION_BROWSER = previous;
   }
 });
