@@ -1945,6 +1945,31 @@ export function zoomOps(keys, size)        // cuts-mode ops on "zoom" and "pan"
 // kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
 ```
 
+## Video on world plates (HyperFrames)
+
+Off the world camera the story compiler hoists a module's `<video>` (and its
+`overlay`) to the composition root, where its layer tweens are replayed on it
+(`mediaLayerTweens`). On a world plate (world mode, or a camera transition in
+a cuts story), a module whose html is its `<video>` alone (`evidence-clip`,
+`product-demo`, a `photo-scene` video) keeps the video and its overlay inside
+the plate instead, so pushes, pulls, pans, zooms inside the shot and
+overviews move it with the rest of the plate, as Remotion does. HyperFrames
+seeks every timed `<video>` in the document unless a timed ancestor holds it
+(no plate or camera wrapper is timed), and its render draws each frame as an
+`<img>` sibling in the video's own box, so the plate's transforms apply.
+
+An overview's held shot shows the clip frozen, as Remotion's `<Freeze>`: the
+compiler writes the frame at the hold time (`holdTime`, from
+`data-media-start`) to `held/<scene>-held.png` with ffmpeg when it writes the
+project, and the held plate draws it as an `<img>` with the video's id and
+style under the overlay. A compile that cannot extract it warns and the
+overview shows the clip's frame and tag without the picture. Golden:
+`examples/story/evidence-world-16x9` (camera parity, `test/parity_camera.test.js`).
+
+Other modules that hoist a video from inside their own markup (backdrop-swap,
+app-stage…) still hoist it, with the warning that it does not follow the world
+camera.
+
 ## The overview move (`in: {type: "overview"}`)
 
 The camera pulls back until the story so far shows as a map of shots, holds a
@@ -3297,7 +3322,8 @@ caption band.
     overlay in the scene layer, so it travels with a world camera.
   - A video is root media. The emitter returns `{html: <video>, overlay}`,
     and the story compiler hoists both, the overlay one z-index above, as for
-    `product-demo`. Root media stays put under a world camera.
+    `product-demo`; on a world plate both stay in the plate instead (see
+    "Video on world plates").
   - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
     `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
     same tree and ops.
@@ -3350,7 +3376,8 @@ the module frames it and can add post moves on top. It keeps captions.
   `click-<i>` (cue `click`).
 - **Compilers:** root media, as `product-demo`: the HyperFrames emitter returns
   `{html: <video>, overlay}` and the story compiler hoists both, the overlay
-  one z-index above. Remotion (`kit/remotion/catalog/EvidenceClip.tsx`) draws
+  one z-index above; on a world plate both stay in the plate, and an
+  overview holds a still of the clip (see "Video on world plates"). Remotion (`kit/remotion/catalog/EvidenceClip.tsx`) draws
   an `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
   same tree and ops.
 
