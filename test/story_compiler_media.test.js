@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames, mediaLayerTweens } from "../kit/hyperframes/story-compiler.mjs";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROMO = path.join(ROOT, "examples", "story", "promo-16x9");
+const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
 // Regression (npm run eval:renderers, promo-16x9): HyperFrames hoists <video>
 // out of the scene layer, so the media-window clip ignored the morph's
@@ -61,7 +64,8 @@ test("an evidence clip's video rides the world camera and is held in the overvie
   assert.doesNotMatch(held.slice(0, held.indexOf("</div></div>")), /<video/);
 });
 
-test("the held and last evidence frames are written with the project", async () => {
+// FFmpeg extracts the held and tail frames, so this one runs with the media tests.
+test("the held and last evidence frames are written with the project", { skip: mediaSkip(hasFfmpeg ? false : "ffmpeg is not installed") }, async () => {
   const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-held-"));
   try {
     const source = path.join(work, "story");
