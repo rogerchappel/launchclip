@@ -225,6 +225,59 @@ Conventions:
 The compilers do not: a scene whose params fail still renders as the
 labelled placeholder.
 
+## Story patches (`kit/core/story-patch.mjs`, `src/story_patch.js`)
+
+The contract for changing a story by chatting: an edit is an RFC 6902 JSON
+Patch against `story.json`, never a rewritten storyboard.
+
+```js
+// kit/core/story-patch.mjs (pure ESM)
+export function applyJsonPatch(doc, patch)
+// → {ok: true, doc} | {ok: false, error: {op, path, message}}; atomic, never changes doc.
+export function applyStoryPatch(story, patch, {words, beats, layout = true, modules, moduleParams} = {})
+// → {ok, story, resolved, applied, errors, warnings, layout: {errors, warnings, findings}}
+export function parsePointer(pointer), formatPointer(tokens), messagePointer(message, doc?)
+// src/story_patch.js (Node; re-exports the above)
+export async function diffSegments(oldResolved, newResolved, {project, renderer = "remotion"} = {})
+// → {segments: [{…segment, status, parts}], invalidated: [ids], removed: [ids], global, frames: {total, invalidated}}
+```
+
+`applyJsonPatch` implements all six operations (`add`, `remove`, `replace`,
+`move`, `copy`, `test`) with RFC 6901 pointers (`~0`, `~1`, `-` to append).
+A patch applies whole or not at all; the error names the failing
+operation's index. Clients should lead with `test` operations on what they
+read (`{op: "test", path: "/scenes/2/module", value: "checklist"}`), so an
+edit made against a stale story fails instead of landing on the wrong scene.
+
+`applyStoryPatch` runs these stages in order and stops at the first that
+fails:
+
+| stage | what | error `path` |
+|---|---|---|
+| `migrate` | `migrateStory` (a story newer than the engine is refused) | `""` |
+| `patch` | the operations; the error also has `op` (its index) | the operation's path |
+| `validate` | `validateStory` with the module registry and `validateModuleParams` | the field the message names (`/scenes/2/params/rows/0/label`) |
+| `resolve` | time anchors (`words`, `beats`) | the anchored field |
+| `params` | every scene resolves through its module (`resolveModule`) | `/scenes/<i>/params` |
+| `layout` | the declared-geometry layout check (`checkLayout`, as `story plan` runs it); `layout: false` skips it | `/scenes/<i>` of the scene a finding names |
+
+Every problem is `{stage, path, message}`, `path` a JSON Pointer into the
+patched story. Warnings carry the same shape. `story` is the patched story
+whenever the patch applied, even when a later stage failed, so an editor can
+show the edit beside its errors; `resolved` is set once resolve passed.
+
+`diffSegments` plans and hashes both resolved stories exactly as `finish`
+does (`planSegments`, `hashSegments` in `src/render_segments.js`), so
+"invalidated" means "not in the segment cache": a new segment whose hash the
+old story had is `unchanged`; one with the same layers but another hash is
+`changed`, with `parts` naming what changed (`global`, `layers`, `captions`,
+`overlays`, `assets`, `camera`, `frames`); one whose layers no old segment
+had is `new` (the edit moved a cut). `global` is true when the edit touched a
+setting every segment hashes (brand, format, style, camera …). Without
+`project`, captions and asset contents are left out (both sides read the same
+files); with it they are hashed from the project as `finish` hashes them.
+Edits to `title`, `notes`, `meta` or the `engine` stamp invalidate nothing.
+
 ## Motion primitives (`kit/core/motion.mjs`)
 
 Every function is a pure function of its inputs.
