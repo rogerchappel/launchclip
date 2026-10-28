@@ -41,6 +41,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["visual-history-dir", {}],
   ["visual-history-limit", { setting: true }],
   ["visual-similarity-limit", { setting: true }],
+  // The app's shot source (src/asset_provider_cmd.js): a property of the host, not a recipe.
+  ["asset-provider-cmd", {}],
   ["repo", {}],
   ["approve-demo", { boolean: true }],
   ["redemo", { boolean: true }],
@@ -65,6 +67,7 @@ export function makeOptionsFromFlags(flags = {}) {
     model: flags.model,
     voice: flags.voice,
     voiceId: flags["voice-id"],
+    assetProviderCmd: flags["asset-provider-cmd"],
     music: flags.music,
     renderer: flags.renderer,
     quality: flags.quality,

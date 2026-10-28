@@ -23,7 +23,8 @@
 //   url: a URL the app serves (the story names assets/shots/<id>.<ext>; the
 //     app maps it back, e.g. @launchclip/remotion setAssetResolver),
 //   sourceStart?: seconds into a video, source?: {provider, id, license,
-//   generated, prompt, ...} (recorded in the plan report)} | null
+//   generated, prompt, ...} (recorded in the plan report), cost_usd?} | null
+// (or the flat shape normalizeShot() accepts).
 import { createHash } from "node:crypto";
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -118,6 +119,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       errors.push(`${where}: the app could not find a shot that shows "${shows}" (${error?.message ?? error}); design this scene without one`);
       continue;
     }
+    shot = normalizeShot(shot);
     if (!shot) { errors.push(`${where}: the app has no shot that shows "${shows}"; design this scene without one`); continue; }
     let placed;
     try {
@@ -128,9 +130,27 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     }
     const kind = placed.kind;
     story.scenes[index] = { ...scene, params: { ...scene.params, media: { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}) } } };
-    shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}) });
+    shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}) });
   }
   return { storyboard: story, shots, errors };
+}
+
+// The flat shape some apps answer with is accepted too: {path (= file), kind,
+// source: "library" | "ai" | "none" (none = no shot), asset_id?, provider?,
+// model?, cost_usd?, duration_s?, crop_hint?}; its fields go into source.
+const FLAT_FIELDS = Object.freeze(["asset_id", "provider", "model", "cost_usd", "duration_s", "crop_hint"]);
+
+export function normalizeShot(shot) {
+  if (!shot || typeof shot !== "object" || shot.source === "none") return null;
+  const flat = typeof shot.source === "string";
+  const source = flat ? { origin: shot.source, ...Object.fromEntries(FLAT_FIELDS.filter((key) => shot[key] != null).map((key) => [key, shot[key]])) } : shot.source;
+  const cost = Number(shot.cost_usd ?? source?.cost_usd);
+  return {
+    ...shot,
+    file: shot.file ?? shot.path,
+    ...(source ? { source } : {}),
+    cost_usd: Number.isFinite(cost) && cost > 0 ? cost : 0
+  };
 }
 
 async function placeShot(shot, request, project) {

@@ -217,6 +217,26 @@ when rendering (in `@launchclip/remotion`, `setAssetResolver`). When
 `findShot` returns `null`, the planner gets a repair note and designs that
 scene as motion graphics. `plan.shots` lists what was used.
 
+The flat shape some hosts already use is accepted as well: `{path, kind,
+source: "library" | "ai" | "none", asset_id?, provider?, model?, cost_usd?,
+duration_s?, crop_hint?}`. Here `path` is `file`, `source: "none"` is no shot,
+and the other fields are recorded in the shot's `source`. A `cost_usd` above 0
+also lands in `launchclip make --json` `costs.items` as `{stage: "shot", scene_id,
+provider, model, estimated_usd}`.
+
+**From the CLI.** `launchclip make … --asset-provider-cmd "<command>"` runs
+your command once, through the shell, for the length of the plan:
+
+- **Requests.** Each request above goes to its stdin as one JSON line.
+- **Answers.** It reads one JSON line back for each: a shot, `null`, or
+  `{"source": "none"}`.
+- **Matching.** Echo the request's `id` in the answer to match answers to
+  requests. An answer without one is taken as the answer to the oldest open
+  request.
+- **Failures.** A line that is not JSON, a command that exits, or no answer
+  within 120 s counts as no shot.
+- **stderr.** It shows up in make's progress lines.
+
 ### `renderer` and `notice`
 
 `renderer: (name) → renderer adapter` replaces the bundled HyperFrames and

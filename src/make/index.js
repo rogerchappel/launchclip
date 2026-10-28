@@ -16,6 +16,8 @@ import { copyFile, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/pr
 import path from "node:path";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { SHOTS_DIR } from "../asset_provider.js";
+import { createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { profileForStory } from "../profile_store.js";
@@ -551,7 +553,7 @@ async function stageStoryboard(ctx) {
   // shipped one for the routed lane, aspect, duration and platform.
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even
@@ -570,6 +572,10 @@ async function stageStoryboard(ctx) {
   // forbids (it bans scene.track), so footage-led plans at the guided tier.
   const tier = lane === "footage-led" ? "guided" : "structured";
   ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
+  // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
+  // planner may ask it for shots, filed under assets/shots/.
+  const assets = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  if (assets) ctx.say(`assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
   const plan = await planStoryboard({
     brief,
     words: ctx.words,
@@ -587,8 +593,13 @@ async function stageStoryboard(ctx) {
     profile,
     maxRepairs,
     ...(history?.prompt ? { history: history.prompt } : {}),
-    extraCheck: (story) => [...assetErrors(story, allowed), ...storyboardStructureErrors(story, ctx.skeleton)]
-  });
+    ...(assets ? { assets, project: ctx.project } : {}),
+    extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
+  }).finally(() => assets?.close?.());
+  for (const shot of plan.shots ?? []) {
+    if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd });
+  }
+  if (assets) report.shots = plan.shots ?? [];
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
@@ -799,10 +810,12 @@ async function composeBrief(ctx, manifest) {
 }
 
 /** Errors for every assets/ path in the story that is not in `allowed`. */
-export function assetErrors(story, allowed) {
+export function assetErrors(story, allowed, { shots = false } = {}) {
   const errors = [];
   const visit = (value, where) => {
     if (typeof value === "string") {
+      // Shots the asset provider filed (src/asset_provider.js) are allowed too.
+      if (shots && value.replace(/^\.\//, "").startsWith(`${SHOTS_DIR}/`)) return;
       if (/^(\.\/)?assets\//.test(value) && !allowed.has(value.replace(/^\.\//, ""))) errors.push(`${where} references ${value}, which is not in the asset manifest; use one of: ${[...allowed].join(", ") || "(none: remove the media)"}`);
       return;
     }

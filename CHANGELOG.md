@@ -29,6 +29,11 @@
   state stays in the folders the app passes, and an asset-provider hook lets
   the planner ask the app for "a shot that shows X" from its media library or
   a generated asset. See [packages/engine/README.md](packages/engine/README.md).
+- `launchclip make --asset-provider-cmd "<command>"` lets the planner ask
+  your own command for shots: one JSON request per line on its stdin, one
+  answer per line on its stdout, from your media library or generated. Shots
+  land in the project's `assets/shots/`, and what they cost shows up in
+  `make --json` under `costs`.
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
