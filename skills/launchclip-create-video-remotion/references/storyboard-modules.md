@@ -696,9 +696,11 @@ params:
 - name: string ≤ 32
 - title: string ≤ 48 (optional; the role)
 - align: left|center
-- tone: dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it)
+- tone: dark|primary|pill (the name in bold capitals in a glowing brand pill, the role under it; default: the variant's)
+- variant: bar|band|pill|outline (optional; default: the style's variants["lower-third"], else bar); usually leave it to the style
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: name, title
+variants: bar (default), band, pill, outline
 
 ### emphasis-caption (keeps captions)
 Footage-led: one to three big words that pop over the footage; hides the captions while on screen.

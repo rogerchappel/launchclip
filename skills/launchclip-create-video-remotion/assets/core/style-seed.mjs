@@ -35,7 +35,7 @@ import { seededRandom } from './ambient.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
 import { DRAWING_STYLES } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, generateCast } from './characters/generate.mjs';
-import { moduleVariants } from './modules.mjs';
+import { V1_MODULE_VARIANTS, V2_MODULE_VARIANTS } from './style-seed-variants.mjs';
 import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
 import { BACKGROUND_MOTIFS } from './backgrounds.mjs';
 import { PANEL_TREATMENTS } from './panels.mjs';
@@ -137,9 +137,10 @@ export const SEED_WORLDS = Object.freeze(['abstract-stage', 'skyline', 'rooftop'
 // [time, weight]: day and dusk above night, except for night-friendly tones.
 export const SEED_WORLD_TIMES = Object.freeze([['day', 2], ['dusk', 2], ['night', 1]].map(Object.freeze));
 const NIGHT_TONES = new Set(['premium', 'energetic']);
-// Modules with designed variants → their names, default first
-// (kit/core/modules.mjs moduleVariants: catalogue G, editorial and the rest).
-export const SEED_MODULE_VARIANTS = Object.freeze(Object.fromEntries(Object.entries(moduleVariants()).map(([id, names]) => [id, Object.freeze(names)])));
+// Modules with designed variants → their names, default first, as the
+// current generator draws them: a frozen copy per version
+// (kit/core/style-seed-variants.mjs), so catalogue growth never moves a saved seed.
+export const SEED_MODULE_VARIANTS = V2_MODULE_VARIANTS;
 // medium is never drawn by the seed: a generated style is painted only when
 // art direction asks for it (kit/core/medium.mjs mediumFromText reads the words).
 // overshoot: true lets entrances and emphasis keep the base grammar's back
@@ -712,7 +713,7 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
 
   const vocab = draw('vocabulary');
   const vocabulary = { icon_tint: vocab.pick(['primary', 'accent']), icon_stroke: 1.25 + 0.25 * Math.floor(vocab.random() * 6), icon_style: choose('icon-style', SEED_ICON_STYLES), illustration: choose('illustration', SEED_ILLUSTRATIONS), prefer: {} };
-  const variants = Object.fromEntries(Object.entries(SEED_MODULE_VARIANTS).map(([id, list]) => [id, choose(`variant:${id}`, list)]));
+  const variants = Object.fromEntries(Object.entries(v2 ? V2_MODULE_VARIANTS : V1_MODULE_VARIANTS).map(([id, list]) => [id, choose(`variant:${id}`, list)]));
 
   const cast = {
     drawing_style: fixed.drawing_style ?? choose('drawing-style', SEED_DRAWING_STYLES),

@@ -940,9 +940,13 @@ saved pack is what renders, so a new version changes only rerolls.
   picks the transition preference and caption preset; the world camera only
   for playful, snappy, smooth and cinematic; light themes keep the
   stroke-free caption presets.
-- The option lists come from the kits: `SEED_MODULE_VARIANTS` is
-  `moduleVariants()` (every module with designed variants, catalogue H
-  included), `SEED_DRAWING_STYLES` the characters kit's styles,
+- The option lists come from the kits: `SEED_MODULE_VARIANTS` is the
+  current generator's frozen copy of `moduleVariants()`
+  (`kit/core/style-seed-variants.mjs`: `V1_MODULE_VARIANTS`,
+  `V2_MODULE_VARIANTS`), so a module or variant added to the catalogue never
+  moves a saved seed and reaches seeded styles with the next generator
+  version (`test/style_variants.test.js` checks every frozen name still
+  exists), `SEED_DRAWING_STYLES` the characters kit's styles,
   `SEED_PANEL_TREATMENTS` the panels kit's, `SEED_BACKGROUND_KINDS` every
   background kind but logo-pattern (a seeded style has no logo),
   `SEED_ICON_STYLES` and `SEED_ILLUSTRATIONS` the style's, and the sound lists
@@ -2333,7 +2337,7 @@ full-canvas root. `layout.rect` is the occupied box.
 | `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s; or `steps [{at, scale}]` 1–4 (scale 1–1.35, the first ≥ 1.06, ≥ 0.3 s apart) instead of `at`/`scale`; `blur` true (14 px at 1080) or 2–30 px | `punch` (whoosh), `step-<i>` (whoosh, or whoosh-soft stepping out), `release` | Camera only; layout role `decor`; ≥ 0.8 s. Blur is velocity-shaped (`motionBlurPx` of the frame edge's speed), 0 once settled; samples carry `blur` |
 | `zoom-through` | `at` (the cut; default the base cut nearest the scene's middle, else the middle), `scale` 1.6–3.5 (2.6), `rush` 0.15–0.6 s (0.3), `burst` 0.2–0.8 s (0.4), `focus` (default the presenter's face), `blur` (default on, 24 px at 1080) | `rush` (whoosh), `cut` (impact) | Camera only: power3.in to `scale` at the cut, power3.out back after it, velocity-shaped blur either side; `camera.onCut` says whether it sits on a real base cut; ≥ 0.8 s |
 | `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
-| `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary/pill (the name in bold capitals in a glowing brand pill, the role on its own line under it), `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
+| `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary/pill (the name in bold capitals in a glowing brand pill, the role on its own line under it; default: the variant's), `variant` bar/band/pill/outline (default: the style's `variants["lower-third"]`, else bar; outline rings the dark panel in primary and draws an underline across instead of the bar), `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
 | `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
 | `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `baseline` 0–0.35, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline `baseline` × the height of `ctx.subject.head` (or a default medium head) down the head; by default as deep as 0.35 while the head covers at most 30% of the cap height, never shrinking the letters below 150 px to get there. Letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px, and fails when a measured head hides most of the word (more than half its letters under 60% visible, e.g. a short word inside the head's column on a close-up), so a re-resolve against the real framing refuses it early. `content.covered` is the share of cap height the head covers, `content.baseline` the depth used; `MODULES.masthead.glyphs(model)` gives the key glyph boxes; ≥ 1.5 s |
 | `dolly-zoom` | `direction` push/pull, `scale` 1.12–1.6 (1.3), `move` 1–2.5 s, `release` 0.3–1 s (push), `at` | `move` (riser), `release` | Layer `behind`, needs the subject. Scales the matte's room plate (`ctx.subject.plate`) about the head centre; `subjectCamera` holds the presenter at identity. Fails on a close-up; without a plate it draws nothing; ≥ 1.8 s |
