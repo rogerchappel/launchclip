@@ -16,7 +16,7 @@ const REMOTION_PACKAGE = require("@remotion/cli/package.json");
 
 export const COMPOSITION_ID = "LaunchclipStory";
 export const DEFAULT_REMOTION_ENTRY = path.join(PACKAGE_ROOT, "kit", "remotion", "entry.tsx");
-export const DEFAULT_LAYOUT_CHECK_MODULE = path.join(PACKAGE_ROOT, "kit", "core", "layout-check.mjs");
+export const DEFAULT_LAYOUT_CHECK_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/layout-check.mjs"));
 const RESOLVED_STORY = path.join(".launchclip", "story.resolved.json");
 const LAYOUT_CHECK_EXPORTS = ["checkStoryLayout", "checkLayout", "layoutCheck", "default"];
 const BLOCKING_SEVERITIES = new Set(["error", "blocking", "fatal", "major"]);
