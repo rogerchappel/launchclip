@@ -187,8 +187,9 @@ export function planOutputs({ root = ROOT } = {}) {
   const files = new Map();
   const managedDirs = [];
   // kit/core/*.mjs plus its subfolders of modules (kit/core/characters/),
-  // copied with their folder so relative imports keep working.
-  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => file.endsWith('.mjs') && file.split(path.sep).length <= 2).map((file) => file.split(path.sep).join('/'));
+  // copied with their folder so relative imports keep working. index.mjs is
+  // the @launchclip/core package entry, which the skills never import.
+  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => file.endsWith('.mjs') && file !== 'index.mjs' && file.split(path.sep).length <= 2).map((file) => file.split(path.sep).join('/'));
   const kitRemotion = listFiles(path.join(root, 'kit/remotion'));
   const kitHyperframes = listFiles(path.join(root, 'kit/hyperframes')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const hyperframesScripts = path.join(root, 'skills/launchclip-create-video/scripts');

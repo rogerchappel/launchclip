@@ -14,6 +14,10 @@ try {
   const packed = await run("npm", ["pack", "--json", "--pack-destination", temp], packageRoot);
   const [artifact] = JSON.parse(packed.stdout);
   if (!artifact?.filename) throw new Error("npm pack did not report a tarball.");
+  // launchclip depends on @launchclip/core at its own version (the kit/core
+  // workspace), which may not be on the registry yet: install both tarballs.
+  const [coreArtifact] = JSON.parse((await run("npm", ["pack", "--json", "--pack-destination", temp], path.join(packageRoot, "kit/core"))).stdout);
+  if (coreArtifact?.version !== artifact.version) throw new Error(`@launchclip/core ${coreArtifact?.version} does not match launchclip ${artifact.version}.`);
 
   const expectedFiles = [
     ".codex-plugin/plugin.json",
@@ -63,7 +67,7 @@ try {
   await writeFile(path.join(consumer, "package.json"), `${JSON.stringify({ name: "launchclip-consumer", private: true }, null, 2)}\n`);
 
   const tarball = path.join(temp, artifact.filename);
-  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], consumer);
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball, path.join(temp, coreArtifact.filename)], consumer);
 
   // Verify the example can be installed and prepared from the published artifact.
   const example = path.join(consumer, "node_modules", "launchclip", "examples", "hyperframes-local");
@@ -90,7 +94,7 @@ try {
   await run(bin, ["init", source, "--out", workspace], consumer);
   await access(path.join(workspace, "launchclip.json"));
 
-  console.log(`package smoke ok: ${artifact.name}@${artifact.version} (${artifact.entryCount} files)`);
+  console.log(`package smoke ok: ${artifact.name}@${artifact.version} (${artifact.entryCount} files), ${coreArtifact.name}@${coreArtifact.version} (${coreArtifact.entryCount} files)`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

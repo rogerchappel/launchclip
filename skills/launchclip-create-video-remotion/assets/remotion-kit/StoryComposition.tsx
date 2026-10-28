@@ -52,6 +52,7 @@ import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSv
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "../core/plates.mjs";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
+// @ts-ignore plain ESM from kit/core
 import { shotZooms, zoomOps } from "../core/zooms.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";

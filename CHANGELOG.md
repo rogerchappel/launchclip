@@ -4,6 +4,15 @@
 
 ### Added
 
+- The storyboard engine is its own npm package, `@launchclip/core`: the
+  `launchclip.story.v1` contract, the module registry with a JSON Schema per
+  module, story migrations, story patches (RFC 6902), captions, transitions,
+  the camera, the layout check, cadence and profiles. It is pure ESM with no
+  dependencies and no Node built-ins, runs in browsers and Node, ships
+  TypeScript declarations, and is versioned in lockstep with the CLI. Editors
+  can now embed the engine at an exact version instead of copying it. See
+  [kit/core/README.md](kit/core/README.md).
+
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,
   with wobbly edges, brush strokes or washes, paper grain and lines that boil

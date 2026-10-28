@@ -84,7 +84,10 @@ const CONFIGURABLE = {
   elastic: (type, amplitude, period) => configElastic(type, amplitude, period)
 };
 
-/** Every named ease, keyed by GSAP name: "power3.out", "power3" (= .out), "none", … */
+/**
+ * Every named ease, keyed by GSAP name: "power3.out", "power3" (= .out), "none", …
+ * @type {Record<string, (progress: number) => number>}
+ */
 export const ease = {none: FAMILIES.linear.in};
 for (const [name, variants] of Object.entries(FAMILIES)) {
   ease[name] = variants.out;
