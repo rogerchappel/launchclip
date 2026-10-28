@@ -4,7 +4,7 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { PLACEHOLDER_STYLE } from "../core/modules.mjs";
+import { PLACEHOLDER_STYLE } from "@launchclip/core/modules.mjs";
 
 export const Placeholder: React.FC<{ model: any }> = ({ model }) => {
   const S = PLACEHOLDER_STYLE;

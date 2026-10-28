@@ -2,7 +2,7 @@
 // while the chosen option travels to the centre, then a progress bar fills.
 import React from "react";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { tween } from "../../core/motion.mjs";
+import { tween } from "@launchclip/core/motion.mjs";
 import { A, BOX, Model, R, S, Section, SymbolIcon, Title, chain, inFlight, palette, scaleX, transform, useModuleTime, visible } from "./shell-b";
 
 export const FocusFlow: React.FC<{ model: Model }> = ({ model }) => {

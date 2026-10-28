@@ -131,7 +131,7 @@ test('HyperFrames: footage-led never mounts audio.voice; unresolved edl and base
 test('Remotion kit: BaseLayer per segment with trimBefore, camera from the shared ops, bed audio', () => {
   const source = readFileSync(join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
   assert.match(source, /export const BaseLayer/);
-  assert.match(source, /<OffthreadVideo src=\{staticFile\(base\.src\)\} trimBefore=\{Math\.round\(segment\.sourceStart \* fps\)\}/);
+  assert.match(source, /<OffthreadVideo src=\{assetUrl\(base\.src\)\} trimBefore=\{Math\.round\(segment\.sourceStart \* fps\)\}/);
   assert.match(source, /cameraStyle\(cameraOps, t\)/);
   assert.match(source, /const audio = base \? story\.audio\?\.mix \?\? null/);
   assert.match(source, /const offset = Number\(scene\.start\);/);

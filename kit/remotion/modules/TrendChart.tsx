@@ -4,7 +4,7 @@
 import React from 'react';
 import {C, R, S, ModuleShell, fromTo, transform, useModuleTime, type ModuleProps, type Model} from './shared';
 // @ts-ignore plain ESM core shared with HyperFrames
-import {tween} from '../../core/motion.mjs';
+import {tween} from '@launchclip/core/motion.mjs';
 
 export function chartCss(model: Model): string {
   const {id, accent, content: c} = model;

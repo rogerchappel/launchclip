@@ -11,9 +11,9 @@ import React from 'react';
 import {AbsoluteFill} from 'remotion';
 import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core shared with HyperFrames
-import {tween} from '../../core/motion.mjs';
+import {tween} from '@launchclip/core/motion.mjs';
 // @ts-ignore plain ESM core shared with HyperFrames
-import {EDITORIAL_STYLE, EDITORIAL_SYMBOLS, editorialVariantCss} from '../../core/editorial-core.mjs';
+import {EDITORIAL_STYLE, EDITORIAL_SYMBOLS, editorialVariantCss} from '@launchclip/core/editorial-core.mjs';
 
 export type Model = any;
 export type ModuleProps = {model: Model};

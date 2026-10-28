@@ -47,7 +47,8 @@
     "node": ">=22"
   },
   "workspaces": [
-    "kit/core"
+    "kit/core",
+    "kit/remotion"
   ],
   "files": [
     ".codex-plugin",

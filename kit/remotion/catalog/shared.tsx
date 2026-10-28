@@ -6,7 +6,7 @@
 import React from "react";
 import { useSceneTime } from "../clock";
 // @ts-ignore plain ESM core without type declarations
-import { cssFromProps, nodeId, sampleNode, textAt } from "../../core/catalog-a.mjs";
+import { cssFromProps, nodeId, sampleNode, textAt } from "@launchclip/core/catalog-a.mjs";
 
 export type Model = any;
 export type Styler = (node: string) => React.CSSProperties;

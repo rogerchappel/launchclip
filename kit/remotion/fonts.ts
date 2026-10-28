@@ -1,11 +1,14 @@
 // Fonts for the Remotion kit, from the registry in kit/core/fonts.mjs (shared
 // with the HyperFrames compiler), so both renderers draw the same files.
 //
-// - Registry families: each face's woff2 is imported from its pinned
-//   @fontsource package, so the Remotion bundler copies it into the bundle and
-//   hands back its URL. Nothing touches the public dir and nothing is fetched
-//   from the network; the same import works for Studio, `remotion render`,
-//   `remotion still` and the ModuleReview parity renders.
+// - Registry families: each face's woff2 comes from its pinned @fontsource
+//   package. font-files.ts imports every file, so the Remotion bundler copies
+//   it into the bundle and hands back its URL, and registers them here. The
+//   kit's Root imports it, so Studio, `remotion render`, `remotion still` and
+//   the ModuleReview parity renders carry every face. An app that embeds
+//   @launchclip/remotion imports "@launchclip/remotion/fonts" (a bundler with
+//   a woff2 loader) or calls registerFontFiles() with its own URLs, from
+//   FONT_FACES (each face's package and file).
 // - Frozen families: files under <public-dir>/assets/fonts/ named
 //   <family-slug>-<weight>[-italic].woff2 win for their family, exactly as in
 //   the HyperFrames compiler, and load through staticFile().
@@ -13,71 +16,24 @@
 // Every face loads through the FontFace API inside delayRender/continueRender,
 // and the handle is released only once document.fonts is ready, so no frame is
 // captured with a fallback face. test/remotion_fonts.test.js keeps FONT_FILES
-// in step with the registry: add a family there, then add its imports here.
+// in step with the registry: add a family there, then add its imports to
+// font-files.ts.
 import { continueRender, delayRender, getStaticFiles, staticFile } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { brandFontStacks, frozenFontFaces, projectFontFamilies, registryFontFaces } from "../core/fonts.mjs";
-import antonLatin400Normal from "@fontsource/anton/files/anton-latin-400-normal.woff2";
-import archivoBlackLatin400Normal from "@fontsource/archivo-black/files/archivo-black-latin-400-normal.woff2";
-import bebasNeueLatin400Normal from "@fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff2";
-import bigShouldersDisplayLatinWghtNormal from "@fontsource-variable/big-shoulders-display/files/big-shoulders-display-latin-wght-normal.woff2";
-import bricolageGrotesqueLatinWghtNormal from "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2";
-import dmSansLatinWghtNormal from "@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2";
-import dmSerifDisplayLatin400Normal from "@fontsource/dm-serif-display/files/dm-serif-display-latin-400-normal.woff2";
-import firaCodeLatinWghtNormal from "@fontsource-variable/fira-code/files/fira-code-latin-wght-normal.woff2";
-import frauncesLatinWghtNormal from "@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2";
-import instrumentSerifLatin400Normal from "@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2";
-import instrumentSerifLatin400Italic from "@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2";
-import interLatinWghtNormal from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2";
-import jetbrainsMonoLatinWghtNormal from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2";
-import lexendLatinWghtNormal from "@fontsource-variable/lexend/files/lexend-latin-wght-normal.woff2";
-import manropeLatinWghtNormal from "@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2";
-import oswaldLatinWghtNormal from "@fontsource-variable/oswald/files/oswald-latin-wght-normal.woff2";
-import outfitLatinWghtNormal from "@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2";
-import playfairDisplayLatinWghtNormal from "@fontsource-variable/playfair-display/files/playfair-display-latin-wght-normal.woff2";
-import plusJakartaSansLatinWghtNormal from "@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2";
-import soraLatinWghtNormal from "@fontsource-variable/sora/files/sora-latin-wght-normal.woff2";
-import spaceGroteskLatinWghtNormal from "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2";
-import stixTwoMathLatin400Normal from "@fontsource/stix-two-math/files/stix-two-math-latin-400-normal.woff2";
-import stixTwoTextLatinWghtNormal from "@fontsource-variable/stix-two-text/files/stix-two-text-latin-wght-normal.woff2";
-import stixTwoTextLatinWghtItalic from "@fontsource-variable/stix-two-text/files/stix-two-text-latin-wght-italic.woff2";
-import syneLatinWghtNormal from "@fontsource-variable/syne/files/syne-latin-wght-normal.woff2";
-import unboundedLatinWghtNormal from "@fontsource-variable/unbounded/files/unbounded-latin-wght-normal.woff2";
-import youngSerifLatin400Normal from "@fontsource/young-serif/files/young-serif-latin-400-normal.woff2";
-
-/** Registry file name → URL of that file in the Remotion bundle. */
-export const FONT_FILES: Record<string, string> = {
-  "anton-latin-400-normal.woff2": antonLatin400Normal,
-  "archivo-black-latin-400-normal.woff2": archivoBlackLatin400Normal,
-  "bebas-neue-latin-400-normal.woff2": bebasNeueLatin400Normal,
-  "big-shoulders-display-latin-wght-normal.woff2": bigShouldersDisplayLatinWghtNormal,
-  "bricolage-grotesque-latin-wght-normal.woff2": bricolageGrotesqueLatinWghtNormal,
-  "dm-sans-latin-wght-normal.woff2": dmSansLatinWghtNormal,
-  "dm-serif-display-latin-400-normal.woff2": dmSerifDisplayLatin400Normal,
-  "fira-code-latin-wght-normal.woff2": firaCodeLatinWghtNormal,
-  "fraunces-latin-wght-normal.woff2": frauncesLatinWghtNormal,
-  "instrument-serif-latin-400-normal.woff2": instrumentSerifLatin400Normal,
-  "instrument-serif-latin-400-italic.woff2": instrumentSerifLatin400Italic,
-  "inter-latin-wght-normal.woff2": interLatinWghtNormal,
-  "jetbrains-mono-latin-wght-normal.woff2": jetbrainsMonoLatinWghtNormal,
-  "lexend-latin-wght-normal.woff2": lexendLatinWghtNormal,
-  "manrope-latin-wght-normal.woff2": manropeLatinWghtNormal,
-  "oswald-latin-wght-normal.woff2": oswaldLatinWghtNormal,
-  "outfit-latin-wght-normal.woff2": outfitLatinWghtNormal,
-  "playfair-display-latin-wght-normal.woff2": playfairDisplayLatinWghtNormal,
-  "plus-jakarta-sans-latin-wght-normal.woff2": plusJakartaSansLatinWghtNormal,
-  "sora-latin-wght-normal.woff2": soraLatinWghtNormal,
-  "space-grotesk-latin-wght-normal.woff2": spaceGroteskLatinWghtNormal,
-  "stix-two-math-latin-400-normal.woff2": stixTwoMathLatin400Normal,
-  "stix-two-text-latin-wght-normal.woff2": stixTwoTextLatinWghtNormal,
-  "stix-two-text-latin-wght-italic.woff2": stixTwoTextLatinWghtItalic,
-  "syne-latin-wght-normal.woff2": syneLatinWghtNormal,
-  "unbounded-latin-wght-normal.woff2": unboundedLatinWghtNormal,
-  "young-serif-latin-400-normal.woff2": youngSerifLatin400Normal
-};
-
+import { allFontFaces, brandFontStacks, frozenFontFaces, projectFontFamilies, registryFontFaces } from "@launchclip/core/fonts.mjs";
 export type FontStacks = { display: string; body: string; meta: string; math: string; serif: string; families: string[] };
 type Face = { family: string; file: string; weight: string; style: string; format: string };
+
+/** Every registry face: {family, package, file, module, weight, style, format}; `module` is the import path of its woff2. */
+export const FONT_FACES: ReadonlyArray<Face & { package: string; module: string }> = allFontFaces();
+
+// Registry file name → URL, filled by registerFontFiles (font-files.ts).
+const fontUrls = new Map<string, string>();
+
+/** Registers URLs for registry faces, keyed by file name (FONT_FACES[i].file). */
+export function registerFontFiles(files: Record<string, string>): void {
+  for (const [file, url] of Object.entries(files)) if (url) fontUrls.set(file, url);
+}
 
 // Font loading is resource state, not animation state: one load per face per
 // page, shared by every composition instance.
@@ -133,9 +89,9 @@ export function ensureFonts(brand: any): FontStacks {
       continue;
     }
     for (const face of faces) {
-      const url = FONT_FILES[face.file];
+      const url = fontUrls.get(face.file);
       if (url) loadFace(`registry:${face.file}`, face, url);
-      else warnOnce(`font file ${face.file} is not imported in kit/remotion/fonts.ts`);
+      else warnOnce(`font file ${face.file} is not registered: import "@launchclip/remotion/fonts" (kit/remotion/font-files.ts) or call registerFontFiles()`);
     }
   }
   return stacks;

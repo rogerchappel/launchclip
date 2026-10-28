@@ -8,7 +8,8 @@
 // renders nothing here: its model.camera moves the base layer, which
 // StoryComposition owns (see cameraStyle).
 import React, {useMemo} from 'react';
-import {AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
+import {assetUrl} from '../media';
 // @ts-ignore plain ESM core module
 import {BASE_CAMERA, cameraOps, catalogCTimeline, catalogCView} from '../../core/catalog-c.mjs';
 // @ts-ignore plain ESM core module
@@ -22,7 +23,7 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   const props = node.id ? state.get(node.id) : undefined;
   const style = props ? {...(node.style ?? {}), ...propsToStyle(props)} : node.style;
   const attrs: Record<string, unknown> = {...(node.attrs ?? {})};
-  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = staticFile(attrs.src as string);
+  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
   const children = node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style, ...attrs},
     ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index))));

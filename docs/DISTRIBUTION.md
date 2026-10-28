@@ -21,6 +21,7 @@ npm ci
 npm audit --omit=dev
 npm run release:check
 npm publish --dry-run --workspace @launchclip/core
+npm publish --dry-run --workspace @launchclip/remotion
 npm publish --dry-run
 ```
 
@@ -32,19 +33,22 @@ version that differs from `package.json`.
 For every release:
 
 1. Update `package.json`, `kit/core/package.json` (and the root's
+   `@launchclip/core` dependency), `kit/remotion/package.json` (and its
    `@launchclip/core` dependency), `package-lock.json`, and
    `.codex-plugin/plugin.json` to the same semantic version. The storyboard
-   engine, `@launchclip/core`, is versioned in lockstep with the CLI
-   (docs/KIT_CONTRACTS.md, "The `@launchclip/core` package").
+   engine, `@launchclip/core`, and the Remotion kit, `@launchclip/remotion`,
+   are versioned in lockstep with the CLI (docs/KIT_CONTRACTS.md, "The
+   `@launchclip/core` package" and "The `@launchclip/remotion` package").
 2. Update `CHANGELOG.md`; keep its documentation commit separate from the
    three-file release-metadata commit.
 3. Run the release gates above on the exact commit.
 4. Tag that commit as `v<version>` and create a GitHub release.
-5. Publish npm first, `@launchclip/core` before `launchclip` (which depends
-   on it at the same version). The first release requires an authorized
+5. Publish npm first, `@launchclip/core` before `@launchclip/remotion` and
+   `launchclip` (which depend on it at the same version). The first release requires an authorized
    maintainer and an npm organisation named `launchclip`, which owns the
    `@launchclip` scope:
    `npm publish --workspace @launchclip/core --access public`, then
+   `npm publish --workspace @launchclip/remotion --access public`, then
    `npm publish --access public`.
 6. After the package exists, configure npm trusted publishing for a dedicated
    GitHub Actions release workflow. Prefer OIDC and an approval-protected GitHub

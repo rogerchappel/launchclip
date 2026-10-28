@@ -7,9 +7,9 @@
 import React from "react";
 import { useSceneTime } from "../clock";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { EDITORIAL_STYLE, EDITORIAL_SYMBOLS } from "../../core/editorial-core.mjs";
+import { EDITORIAL_STYLE, EDITORIAL_SYMBOLS } from "@launchclip/core/editorial-core.mjs";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { tween } from "../../core/motion.mjs";
+import { tween } from "@launchclip/core/motion.mjs";
 import { Density } from "./shared";
 
 export type Model = any;

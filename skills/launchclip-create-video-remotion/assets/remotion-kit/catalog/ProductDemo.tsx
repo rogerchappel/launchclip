@@ -7,7 +7,8 @@
 // media.sourceStart (the scene's Sequence starts it at the scene start), and
 // the overlay is drawn after it, so it sits above the video as in HyperFrames.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, OffthreadVideo, useCurrentFrame, useVideoConfig} from 'remotion';
+import {assetUrl} from '../media';
 // @ts-ignore plain ESM core module
 import {productDemoTimeline, productDemoView} from '../../core/catalog-d.mjs';
 // @ts-ignore plain ESM core module
@@ -38,7 +39,7 @@ export const ProductDemo: React.FC<{model: any}> = ({model}) => {
   const media = model.content.media;
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>
-      <OffthreadVideo id={view.media.id} src={staticFile(media.src)} muted trimBefore={Math.round(media.sourceStart * fps)} style={styleOf(view.media, state)} />
+      <OffthreadVideo id={view.media.id} src={assetUrl(media.src)} muted trimBefore={Math.round(media.sourceStart * fps)} style={styleOf(view.media, state)} />
       {renderNode(view.overlay, state, model.id)}
     </AbsoluteFill>
   );

@@ -3,7 +3,7 @@
 // in a layout effect, so the canvas is drawn before the frame is captured.
 import React, {useLayoutEffect, useRef} from 'react';
 // @ts-ignore plain ESM core module
-import {paintParticles} from '../../core/particles.mjs';
+import {paintParticles} from '@launchclip/core/particles.mjs';
 
 export const PaintCanvas: React.FC<{id: string; plan: unknown; t: number; style?: React.CSSProperties; attrs: Record<string, unknown>}> = ({id, plan, t, style, attrs}) => {
   const ref = useRef<HTMLCanvasElement>(null);

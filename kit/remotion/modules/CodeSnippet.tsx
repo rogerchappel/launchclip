@@ -2,7 +2,7 @@
 // their time; with typing, every character appears at its charTime.
 import React from "react";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { tween } from "../../core/motion.mjs";
+import { tween } from "@launchclip/core/motion.mjs";
 import { BOX, C, F, Model, Section, Title, inFlight, palette, transform, useModuleTime, visible } from "./shell-b";
 
 export const CodeSnippet: React.FC<{ model: Model }> = ({ model }) => {

@@ -3,7 +3,7 @@
 // fill in from the left or fade their background in.
 import React from "react";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { tween } from "../../core/motion.mjs";
+import { tween } from "@launchclip/core/motion.mjs";
 import { BOX, F, Model, R, S, Section, WindowBar, inFlight, palette, scaleX, transform, useModuleTime, visible } from "./shell-b";
 
 export const ExcerptWindow: React.FC<{ model: Model }> = ({ model }) => {

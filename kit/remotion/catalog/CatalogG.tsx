@@ -5,9 +5,9 @@ import React, {useMemo} from 'react';
 import {AbsoluteFill} from 'remotion';
 import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core module
-import {catalogGTimeline, catalogGView} from '../../core/catalog-g.mjs';
+import {catalogGTimeline, catalogGView} from '@launchclip/core/catalog-g.mjs';
 // @ts-ignore plain ESM core module
-import {frameState} from '../../core/catalog-b-view.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {renderNode, type FrameProps, type ViewNode} from './CatalogB';
 
 const CatalogGModule: React.FC<{model: any}> = ({model}) => {

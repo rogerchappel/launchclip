@@ -1,4 +1,4 @@
-// kit/remotion/fonts.ts imports exactly the registry's files (kit/core/fonts.mjs),
+// kit/remotion/font-files.ts imports exactly the registry's files (kit/core/fonts.mjs),
 // so the Remotion bundle carries the same faces the HyperFrames compiler copies.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -9,10 +9,11 @@ import { allFontFaces } from "@launchclip/core/fonts.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const source = readFileSync(path.join(ROOT, "kit/remotion/fonts.ts"), "utf8");
+const files = readFileSync(path.join(ROOT, "kit/remotion/font-files.ts"), "utf8");
 
-test("fonts.ts imports every registry face and nothing else", () => {
-  const imports = new Map([...source.matchAll(/^import (\w+) from "([^"]+\.woff2)";$/gm)].map((match) => [match[1], match[2]]));
-  const entries = new Map([...source.matchAll(/^ {2}"([^"]+\.woff2)": (\w+),?$/gm)].map((match) => [match[1], match[2]]));
+test("font-files.ts imports every registry face and nothing else", () => {
+  const imports = new Map([...files.matchAll(/^import (\w+) from "([^"]+\.woff2)";$/gm)].map((match) => [match[1], match[2]]));
+  const entries = new Map([...files.matchAll(/^ {2}"([^"]+\.woff2)": (\w+),?$/gm)].map((match) => [match[1], match[2]]));
   const faces = allFontFaces();
   assert.deepEqual([...imports.values()].sort(), faces.map((face) => face.module).sort());
   assert.deepEqual([...entries.keys()].sort(), faces.map((face) => face.file).sort());

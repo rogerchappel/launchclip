@@ -2,7 +2,7 @@
 // border.
 import React from "react";
 // @ts-ignore plain ESM core, bundled by Remotion
-import { tween } from "../../core/motion.mjs";
+import { tween } from "@launchclip/core/motion.mjs";
 import { BOX, Model, R, S, Section, Title, inFlight, palette, transform, useModuleTime, visible } from "./shell-b";
 
 export const AudienceGrid: React.FC<{ model: Model }> = ({ model }) => {
