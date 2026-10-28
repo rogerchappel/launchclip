@@ -2,13 +2,13 @@
 // anchored to their plate's camera, same-place cuts, and the physics gate.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameState } from "../kit/core/catalog-b-view.mjs";
-import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
-import { worldTimeline } from "../kit/core/catalog-world.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { MOTION_CLASSES, PROP_MOTION, propMotion } from "../kit/core/physics.mjs";
-import { samePlaceCuts, validateStory } from "../kit/core/story.mjs";
-import { PROP_IDS, renderWorld } from "../kit/core/worlds/index.mjs";
+import { frameState } from "@launchclip/core/catalog-b-view.mjs";
+import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
+import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { MOTION_CLASSES, PROP_MOTION, propMotion } from "@launchclip/core/physics.mjs";
+import { samePlaceCuts, validateStory } from "@launchclip/core/story.mjs";
+import { PROP_IDS, renderWorld } from "@launchclip/core/worlds/index.mjs";
 import { physicsGate } from "../src/direction_guardrails.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" } };
@@ -81,7 +81,7 @@ test("in world mode the loop ending clones the cast riding its target plate, so 
   const s = story([world("street", 0, 4, { kind: "city-street", camera: "drift" }), bench("c1", 0, 4), world("park", 4, 8, {}, { in: { type: "pan", dur: 0.8, direction: "left" } }), bench("c2", 4, 8, { cast: [{ id: "theo" }] })], { brand: { ...brand, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } }, camera: { mode: "world" }, ending: { loop_to: "street", in: { type: "whip-pan", dur: 0.4 } } });
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-loop-riders-"));
   try {
-    const { resolveStory } = await import("../kit/core/story.mjs");
+    const { resolveStory } = await import("@launchclip/core/story.mjs");
     await compileStoryToHyperFrames(resolveStory(s, { words: [] }), { projectDir: dir });
     const html = await readFile(path.join(dir, "index.html"), "utf8");
     assert.match(html, /id="lc-scene-street-loop"/);

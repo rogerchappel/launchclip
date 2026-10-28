@@ -3,9 +3,9 @@
 // "at least N s after the previous" rule allows a 1e-6 s tolerance.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES as CATALOG_A} from '../kit/core/catalog-a.mjs';
-import {MODULES as CATALOG_B} from '../kit/core/catalog-b.mjs';
-import {resolveEditorialModule} from '../kit/core/editorial-core.mjs';
+import {MODULES as CATALOG_A} from '@launchclip/core/catalog-a.mjs';
+import {MODULES as CATALOG_B} from '@launchclip/core/catalog-b.mjs';
+import {resolveEditorialModule} from '@launchclip/core/editorial-core.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const format = {width: 1920, height: 1080, fps: 30, duration: 60};

@@ -1,7 +1,7 @@
 // A small resolved story and media set for the NLE writer tests: a 6 s
 // footage-led cut (two trim segments, a punch-in camera, two overlays, an
 // insert), music, overlapping SFX, a reference mix, captions and a render.
-import { resolveStory } from "../../../kit/core/story.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
 
 export function smallFootageStory() {
   return resolveStory({

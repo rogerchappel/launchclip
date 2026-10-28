@@ -15,11 +15,11 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
 import {chromium} from 'playwright';
 import sharp from 'sharp';
-import {WORLD_KINDS, WORLD_TIMES, renderWorld} from '../kit/core/worlds/index.mjs';
-import {worldLayerNodes} from '../kit/core/worlds/view.mjs';
-import {scrimFor} from '../kit/core/worlds/readable.mjs';
+import {WORLD_KINDS, WORLD_TIMES, renderWorld} from '@launchclip/core/worlds/index.mjs';
+import {worldLayerNodes} from '@launchclip/core/worlds/view.mjs';
+import {scrimFor} from '@launchclip/core/worlds/readable.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
-import {luminance} from '../kit/core/catalog-b-base.mjs';
+import {luminance} from '@launchclip/core/catalog-b-base.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {

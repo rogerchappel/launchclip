@@ -5,13 +5,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {CODE_ADVANCE, codeFont, cropLine, parseLines} from '../kit/core/catalog-i-code-base.mjs';
-import {makeCheck} from '../kit/core/catalog-b-base.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {CODE_ADVANCE, codeFont, cropLine, parseLines} from '@launchclip/core/catalog-i-code-base.mjs';
+import {makeCheck} from '@launchclip/core/catalog-b-base.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -216,7 +216,7 @@ test('code text uses a registered monospace face with a 0.6 em advance', () => {
 });
 
 test('the planner maps receipt lines to the code-evidence modules and states the real-data rule', async () => {
-  const {suggestModules, storyboardModulesReference} = await import('../kit/core/planning-prompt.mjs');
+  const {suggestModules, storyboardModulesReference} = await import('@launchclip/core/planning-prompt.mjs');
   const pick = sentence => suggestModules(sentence)[0].modules;
   assert.ok(pick('They merged pull request #39217 on Oct 16.').includes('repo-pr-card'));
   assert.ok(pick('A commit co-authored by Copilot swapped the model.').includes('commit-card'));

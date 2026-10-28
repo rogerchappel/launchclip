@@ -4,14 +4,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {MAX_UNITS} from '../kit/core/catalog-h-data.mjs';
-import {contrastRatio} from '../kit/core/catalog-h-base.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {MAX_UNITS} from '@launchclip/core/catalog-h-data.mjs';
+import {contrastRatio} from '@launchclip/core/catalog-h-base.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules, resolveModule} from '../kit/core/modules.mjs';
-import {PHRASE_MODULE_TABLE, phraseRowModule, planningPrompt, storyboardModulesReference, suggestModules} from '../kit/core/planning-prompt.mjs';
+import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
+import {PHRASE_MODULE_TABLE, phraseRowModule, planningPrompt, storyboardModulesReference, suggestModules} from '@launchclip/core/planning-prompt.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

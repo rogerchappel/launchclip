@@ -19,7 +19,7 @@ import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {BACKGROUND_KINDS} from '../kit/core/backgrounds.mjs';
+import {BACKGROUND_KINDS} from '@launchclip/core/backgrounds.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {getRenderer} from '../src/renderers/index.js';
 import {readProjectStory} from '../src/story_loader.js';

@@ -7,10 +7,10 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CONSTRAINT_KEYS, generateStyle, normalizeSeed, seedSummaryLine, styleSummary, toneFromText } from "../kit/core/style-seed.mjs";
-import { mediumFromText } from "../kit/core/medium.mjs";
-import { packCaptionsFor, validateStylePack } from "../kit/core/style.mjs";
-import { suggestWorld } from "../kit/core/worlds/index.mjs";
+import { CONSTRAINT_KEYS, generateStyle, normalizeSeed, seedSummaryLine, styleSummary, toneFromText } from "@launchclip/core/style-seed.mjs";
+import { mediumFromText } from "@launchclip/core/medium.mjs";
+import { packCaptionsFor, validateStylePack } from "@launchclip/core/style.mjs";
+import { suggestWorld } from "@launchclip/core/worlds/index.mjs";
 import { homeStyleRoot, loadStyleV2 } from "./style_store.js";
 
 const STORY_FILE = "storyboard.json";

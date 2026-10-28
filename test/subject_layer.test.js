@@ -3,12 +3,12 @@
 // head on the canvas and the face rule.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveStory} from '../kit/core/story.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {
   checkBehindText, checkSubjectFace, headLocator, subjectCoverShare, subjectLocator, needsSubject, roomChanges, roomStateAt, sceneLayerOf, sourceBoxToCanvas, sourceTimeAt,
   subjectCameraAt, subjectCameraOps, subjectModelErrors, subjectSegments, subjectWindows
-} from '../kit/core/subject-layer.mjs';
-import {storyBase} from '../kit/core/story.mjs';
+} from '@launchclip/core/subject-layer.mjs';
+import {storyBase} from '@launchclip/core/story.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 
@@ -132,7 +132,7 @@ test('checkSubjectFace flags front elements over the face for more than 0.3 s', 
 });
 
 test('subjectContext reports the presenter at a time, from the covering matte', async () => {
-  const {subjectContext} = await import('../kit/core/subject-layer.mjs');
+  const {subjectContext} = await import('@launchclip/core/subject-layer.mjs');
   const summary = {source: {width: 1080, height: 1920}, framing: 'medium', head: {x: 0.5, y: 0.25, w: 0.2, h: 0.1}, body: {x: 0.5, y: 0.65, w: 0.6, h: 0.7}, headroom: 0.2};
   const resolved = story({src: 'assets/recording.mp4', subject: {mattes: [{src: 'assets/subject/a.webm', in: 0, out: 4, plate: 'assets/subject/a.plate.jpg', summary}]}});
   const at = subjectContext(resolved, 1);
@@ -149,7 +149,7 @@ test('subjectContext reports the presenter at a time, from the covering matte', 
 });
 
 test('subjectOutlineAt maps the nearest traced frame onto the canvas', async () => {
-  const {subjectOutlineAt} = await import('../kit/core/subject-layer.mjs');
+  const {subjectOutlineAt} = await import('@launchclip/core/subject-layer.mjs');
   const summary = {source: {width: 1080, height: 1920}, framing: 'medium', head: {x: 0.5, y: 0.25, w: 0.2, h: 0.1}};
   const outline = {frames: [{t: 0, points: [[0.5, 0.1], null]}, {t: 0.1, points: [[0.6, 0.2], [0, 1]]}]};
   const resolved = story({src: 'assets/recording.mp4', subject: {mattes: [{src: 'assets/subject/a.webm', in: 0, out: 4, summary, outline}]}});
@@ -159,7 +159,7 @@ test('subjectOutlineAt maps the nearest traced frame onto the canvas', async () 
 });
 
 test('subjectStyle: a sticker outline and shadow on the cut-out for the scene window', async () => {
-  const {subjectFilterAt, subjectFilterChanges, subjectCameraOps, subjectCameraAt, needsSubject: needs} = await import('../kit/core/subject-layer.mjs');
+  const {subjectFilterAt, subjectFilterChanges, subjectCameraOps, subjectCameraAt, needsSubject: needs} = await import('@launchclip/core/subject-layer.mjs');
   const sticker = {start: 1, end: 3, subjectStyle: {outline: 10, color: '#ffffff', shadow: true}};
   assert.equal(subjectFilterAt([sticker], 0.5), 'none');
   const filter = subjectFilterAt([sticker], 2);
@@ -205,7 +205,7 @@ test('checkBehindText: the worst glyph under 60% visible, once per element', () 
 });
 
 test('base.crop: validated, normalised to fractions, drawn in one box that the face track maps through', async () => {
-  const {validateStory, baseMediaBox, baseMediaStyle} = await import('../kit/core/story.mjs');
+  const {validateStory, baseMediaBox, baseMediaStyle} = await import('@launchclip/core/story.mjs');
   const story = (base) => ({schema: 'launchclip.story.v1', lane: 'footage-led', format: {width: 1920, height: 1080, fps: 30, duration: 4}, brand: {colors: {bg: '#000000', primary: '#ffffff'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}}, base: {src: 'assets/raw.mp4', ...base}, scenes: [{id: 'lt', module: 'lower-third', track: 1, start: 0, end: 2, params: {name: 'Ada'}}]});
   const errors = (base) => validateStory(story(base)).errors.join('\n');
   assert.equal(errors({crop: {right: 80}, size: {width: 1360, height: 720}}), '');

@@ -4,12 +4,12 @@
 // mouths and every other feature stay inside the head's outline.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EXPRESSIONS, normalizeRigParams, poseJoints} from '../kit/core/characters/rig.mjs';
-import {STARTER_CAST, characterLook, starterCharacter} from '../kit/core/characters/cast.mjs';
-import {DRAWING_STYLES, drawCharacter, styleGeometry} from '../kit/core/characters/styles.mjs';
-import {partShapes, pathOutline, placePoint} from '../kit/core/characters/bounds.mjs';
-import {GAZE} from '../kit/core/characters/actions.mjs';
-import {HEAD} from '../kit/core/characters/toon.mjs';
+import {EXPRESSIONS, normalizeRigParams, poseJoints} from '@launchclip/core/characters/rig.mjs';
+import {STARTER_CAST, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {DRAWING_STYLES, drawCharacter, styleGeometry} from '@launchclip/core/characters/styles.mjs';
+import {partShapes, pathOutline, placePoint} from '@launchclip/core/characters/bounds.mjs';
+import {GAZE} from '@launchclip/core/characters/actions.mjs';
+import {HEAD} from '@launchclip/core/characters/toon.mjs';
 
 // Full reach (actions.mjs gazeOffset with the target far to the side), and
 // the three-quarter turn (catalog-characters.mjs), which narrows the face.

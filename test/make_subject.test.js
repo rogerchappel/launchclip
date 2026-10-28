@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { runMake } from "../src/make/index.js";
 import { readProjectStory } from "../src/story_loader.js";
 

@@ -43,11 +43,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { directionMapReference, profilesReference, storyboardModulesReference, subjectEffectsReference } from '../kit/core/planning-prompt.mjs';
+import { directionMapReference, profilesReference, storyboardModulesReference, subjectEffectsReference } from '@launchclip/core/planning-prompt.mjs';
 import { shippedProfiles } from '../src/profile_store.js';
-import { longFormReference } from '../kit/core/long-form.mjs';
-import { scriptFormatsReference } from '../kit/core/script-formats.mjs';
-import { skeletonLibraryReference } from '../kit/core/skeleton-library.mjs';
+import { longFormReference } from '@launchclip/core/long-form.mjs';
+import { scriptFormatsReference } from '@launchclip/core/script-formats.mjs';
+import { skeletonLibraryReference } from '@launchclip/core/skeleton-library.mjs';
 import { usageMarkdown } from '../src/cli_usage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

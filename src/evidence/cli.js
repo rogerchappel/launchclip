@@ -4,7 +4,7 @@
 // params for a storyboard scene). Contract: docs/EVIDENCE_CAPTURE.md.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { evidenceClipParams } from "../../kit/core/catalog-d.mjs";
+import { evidenceClipParams } from "@launchclip/core/catalog-d.mjs";
 import { normalizeTarget, validateCaptureRequest } from "./request.js";
 
 async function readJson(file, what) {

@@ -10,10 +10,10 @@ import {
   AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, SEED_WORLDS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
   fingerprintKey, generateStyle, hexToOklch, nearestStarter, normalizeSeed, oklchToHex, paletteContrast,
   randomSeed, seedSummaryLine, styleDistance, styleFingerprint, toneFromText
-} from "../kit/core/style-seed.mjs";
-import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "../kit/core/style.mjs";
-import { FONT_REGISTRY, registeredFamily } from "../kit/core/fonts.mjs";
-import { seededRandom } from "../kit/core/ambient.mjs";
+} from "@launchclip/core/style-seed.mjs";
+import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "@launchclip/core/style.mjs";
+import { FONT_REGISTRY, registeredFamily } from "@launchclip/core/fonts.mjs";
+import { seededRandom } from "@launchclip/core/ambient.mjs";
 
 const STYLES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "kit", "styles");
 const seeds = Array.from({ length: 50 }, (_, i) => (Math.imul(i + 7, 2654435761) >>> 0).toString(16).padStart(8, "0"));
@@ -237,8 +237,8 @@ test("applyStyle hands the seeded fields to the story; the story's own values wi
 });
 
 test("seed runs cover every option of every dimension: 50 from 0, or any 100 in a row", async () => {
-  const { WORLD_KINDS } = await import("../kit/core/worlds/index.mjs");
-  const { SEED_AMBIENCE, SEED_CHARACTER_SETS, SEED_DRAWING_STYLES, SEED_ICON_STYLES, SEED_ILLUSTRATIONS, SEED_MODULE_VARIANTS, SEED_MUSIC_GENRES, SEED_PANEL_TREATMENTS, SEED_SOUND_PALETTES, SEED_BACKGROUND_KINDS, THEMES, PALETTE_SCHEMES } = await import("../kit/core/style-seed.mjs");
+  const { WORLD_KINDS } = await import("@launchclip/core/worlds/index.mjs");
+  const { SEED_AMBIENCE, SEED_CHARACTER_SETS, SEED_DRAWING_STYLES, SEED_ICON_STYLES, SEED_ILLUSTRATIONS, SEED_MODULE_VARIANTS, SEED_MUSIC_GENRES, SEED_PANEL_TREATMENTS, SEED_SOUND_PALETTES, SEED_BACKGROUND_KINDS, THEMES, PALETTE_SCHEMES } = await import("@launchclip/core/style-seed.mjs");
   // Each dimension of n options shuffles its options afresh in every block
   // of n seeds, so a run holding a whole block (50 seeds from 0, any 100 in a
   // row, for n up to 50) sees every option.
@@ -274,12 +274,12 @@ test("seed runs cover every option of every dimension: 50 from 0, or any 100 in 
     assert.deepEqual(WORLD_KINDS.filter((kind) => !everywhere.has(kind)), [], `every world from ${run[0]}`);
   }
   // The catalogue's modules with designed variants, catalogue H included, are all drawn.
-  const { moduleVariants } = await import("../kit/core/modules.mjs");
+  const { moduleVariants } = await import("@launchclip/core/modules.mjs");
   assert.deepEqual(Object.keys(SEED_MODULE_VARIANTS).sort(), Object.keys(moduleVariants()).sort());
 });
 
 test("no two dimensions move in lockstep: random seeds reach their combinations", async () => {
-  const { SEED_MODULE_VARIANTS, randomSeed } = await import("../kit/core/style-seed.mjs");
+  const { SEED_MODULE_VARIANTS, randomSeed } = await import("@launchclip/core/style-seed.mjs");
   const random = seededRandom(0x5eed);
   const N = 600;
   const packs = Array.from({ length: N }, () => generateStyle({ seed: randomSeed(random) }));

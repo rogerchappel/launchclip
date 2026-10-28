@@ -16,11 +16,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
-import { ambientField, blobStateAt, fieldTiles, luma } from "../kit/core/ambient.mjs";
-import { backgroundExtent, backgroundFieldTiles, cameraPlan, opsStateAt, sceneObjectLookup } from "../kit/core/camera-world.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory } from "../kit/core/story.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
+import { ambientField, blobStateAt, fieldTiles, luma } from "@launchclip/core/ambient.mjs";
+import { backgroundExtent, backgroundFieldTiles, cameraPlan, opsStateAt, sceneObjectLookup } from "@launchclip/core/camera-world.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory } from "@launchclip/core/story.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");

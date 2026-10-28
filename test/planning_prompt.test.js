@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { EDITORIAL_KINDS } from "../kit/core/editorial-core.mjs";
-import { catalogModules, knownModules, resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { EDITORIAL_KINDS } from "@launchclip/core/editorial-core.mjs";
+import { catalogModules, knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import {
   EDITORIAL_SPECS,
   PHRASE_MODULE_TABLE,
@@ -18,7 +18,7 @@ import {
   subjectEffectsReference,
   suggestModuleMoods,
   suggestModules
-} from "../kit/core/planning-prompt.mjs";
+} from "@launchclip/core/planning-prompt.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const portrait = { width: 1080, height: 1920, fps: 30, duration: 30, platform: "youtube-shorts" };

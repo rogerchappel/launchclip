@@ -4,10 +4,10 @@
 // the room, its window mapped back through the base's
 // trims to source seconds, padded and merged. `launchclip make` mattes exactly these.
 
-import { resolveModule } from "../../kit/core/modules.mjs";
-import { storyBase } from "../../kit/core/story.mjs";
-import { needsSubject, subjectWindows } from "../../kit/core/subject-layer.mjs";
-import { SECTION_ROOMS, storySections } from "../../kit/core/footage-layout.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { storyBase } from "@launchclip/core/story.mjs";
+import { needsSubject, subjectWindows } from "@launchclip/core/subject-layer.mjs";
+import { SECTION_ROOMS, storySections } from "@launchclip/core/footage-layout.mjs";
 
 export const MATTE_PAD_SECONDS = 0.5;
 

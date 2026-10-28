@@ -18,10 +18,10 @@
 import { existsSync } from "node:fs";
 import { copyFile, link, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CUTDOWN_SCHEMA, CUTDOWN_TARGETS, chooseCutWindow, cutdownStory } from "../kit/core/cutdown.mjs";
-import { directionJson } from "../kit/core/direction.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { storyStyleRequest } from "../kit/core/style.mjs";
+import { CUTDOWN_SCHEMA, CUTDOWN_TARGETS, chooseCutWindow, cutdownStory } from "@launchclip/core/cutdown.mjs";
+import { directionJson } from "@launchclip/core/direction.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { storyStyleRequest } from "@launchclip/core/style.mjs";
 import { resolveProfile } from "./profile_store.js";
 import { coverageGate } from "./quality_gates.js";
 import { checkStoryboard, createPlannerClient, planStoryboard } from "./storyboard_planner.js";

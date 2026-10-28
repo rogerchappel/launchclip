@@ -2,7 +2,7 @@
 // the measurement on rendered pixels, predicted plates, and the style rule.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { captionLegiblePlate, captionPlan, captionPresetName } from "../kit/core/captions.mjs";
+import { captionLegiblePlate, captionPlan, captionPresetName } from "@launchclip/core/captions.mjs";
 import { CAPTION_LEGIBILITY, captionBandRect, captionLines, lineLegibility, measureCaptionLegibility, predictCaptionPlates } from "../src/caption_legibility.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };

@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { MODULES as CATALOG_F } from "../kit/core/catalog-f.mjs";
-import { knownModules } from "../kit/core/modules.mjs";
-import { stylePromptLines, validateStylePack } from "../kit/core/style.mjs";
-import { DRAWING_STYLES } from "../kit/core/characters/cues.mjs";
+import { MODULES as CATALOG_F } from "@launchclip/core/catalog-f.mjs";
+import { knownModules } from "@launchclip/core/modules.mjs";
+import { stylePromptLines, validateStylePack } from "@launchclip/core/style.mjs";
+import { DRAWING_STYLES } from "@launchclip/core/characters/cues.mjs";
 
 const pack = (name) => JSON.parse(readFileSync(new URL(`../kit/styles/${name}.json`, import.meta.url), "utf8"));
 const STARTERS = ["bold-creator", "editorial-dark", "glass-explainer", "minimal-tech", "neon-explainer", "warm-documentary"];

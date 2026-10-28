@@ -8,9 +8,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens, joinAttachedWords } from "../kit/core/captions.mjs";
-import { CAPTION_POSITION_TOP, captionBandAt } from "../kit/core/layout-check.mjs";
-import { resolveStory, STORY_CAPTION_PRESETS, validateStory } from "../kit/core/story.mjs";
+import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens, joinAttachedWords } from "@launchclip/core/captions.mjs";
+import { CAPTION_POSITION_TOP, captionBandAt } from "@launchclip/core/layout-check.mjs";
+import { resolveStory, STORY_CAPTION_PRESETS, validateStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const require = createRequire(import.meta.url);
@@ -179,7 +179,7 @@ test("split transcript tokens join back into one caption word; word timings stay
 });
 
 test('a caption line spoken into a hidden range ends where the range starts', async () => {
-  const { visibleChunks } = await import('../kit/core/captions.mjs');
+  const { visibleChunks } = await import('@launchclip/core/captions.mjs');
   const chunk = { id: 'c1', start: 9, end: 10.6, words: [{ text: 'and', start: 9, end: 9.3 }, { text: 'get', start: 9.6, end: 10.1 }, { text: 'your', start: 10.2, end: 10.6 }] };
   const later = { id: 'c2', start: 10.3, end: 11, words: [{ text: 'first', start: 10.3, end: 11 }] };
   const [line, ...rest] = visibleChunks([chunk, later], [[10, 12]]);
@@ -190,7 +190,7 @@ test('a caption line spoken into a hidden range ends where the range starts', as
 });
 
 test("caption lines over a dark world switch to a colour that reads; over a light world they keep the preset's", async () => {
-  const { captionPlan, captionToneColors, captionContrast, CAPTION_WORLD_TONES } = await import("../kit/core/captions.mjs");
+  const { captionPlan, captionToneColors, captionContrast, CAPTION_WORLD_TONES } = await import("@launchclip/core/captions.mjs");
   const brand = { colors: { bg: "#cee8ee", primary: "#89592c", accent: "#2a7180", ink: "#fbfeff", paper: "#1e282b" } };
   const toned = captionToneColors({ idle: "#1e282b", accent: "#2a7180", spoken: "#1e282b", active: "#89592c" }, "night", brand.colors);
   assert.equal(toned.idle, "#fbfeff");

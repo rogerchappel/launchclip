@@ -17,7 +17,7 @@ import {mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {moduleVariants} from '../kit/core/modules.mjs';
+import {moduleVariants} from '@launchclip/core/modules.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));

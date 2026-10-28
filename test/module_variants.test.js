@@ -2,10 +2,10 @@
 // designed looks, chosen by story.variants (a style's) or params.variant.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogGTimeline, catalogGView} from '../kit/core/catalog-g.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
-import {moduleVariants, resolveModule} from '../kit/core/modules.mjs';
-import {validateStory} from '../kit/core/story.mjs';
+import {MODULES, VARIANTS, catalogGTimeline, catalogGView} from '@launchclip/core/catalog-g.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
+import {moduleVariants, resolveModule} from '@launchclip/core/modules.mjs';
+import {validateStory} from '@launchclip/core/story.mjs';
 import {BRAND, SAMPLES} from '../scripts/variant-sheet.mjs';
 
 const FORMATS = {'9:16': {width: 1080, height: 1920, fps: 30, duration: 10}, '16:9': {width: 1920, height: 1080, fps: 30, duration: 10}};
@@ -122,7 +122,7 @@ test('quote-card: a one-line highlight sweeps in on a marker; every variant keep
 
 // Editorial modules (kit/core/editorial-core.mjs): variants restyle the shell
 // and its entrance over the geometry the core measured.
-import {EDITORIAL_VARIANTS, editorialVariantCss} from '../kit/core/editorial-core.mjs';
+import {EDITORIAL_VARIANTS, editorialVariantCss} from '@launchclip/core/editorial-core.mjs';
 import {EMITTERS as EDITORIAL_EMITTERS} from '../kit/hyperframes/editorial-ui-modules.mjs';
 
 const EDITORIAL = Object.keys(EDITORIAL_VARIANTS);

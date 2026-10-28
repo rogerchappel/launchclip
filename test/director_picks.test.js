@@ -2,8 +2,8 @@
 // real long-form script (written inline; the script itself is not in the repo).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GENERIC_MODULES, directLongForm, entityAliases, extractFacts, ledgerOutputPrices, ledgerTimeline, matchEvidence, pairSeries, visualKind } from "../kit/core/beat-director.mjs";
-import { capabilityParams } from "../kit/core/visual-capabilities.mjs";
+import { GENERIC_MODULES, directLongForm, entityAliases, extractFacts, ledgerOutputPrices, ledgerTimeline, matchEvidence, pairSeries, visualKind } from "@launchclip/core/beat-director.mjs";
+import { capabilityParams } from "@launchclip/core/visual-capabilities.mjs";
 
 const kind = (text) => visualKind({ text, facts: extractFacts(text) });
 

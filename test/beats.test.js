@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { resolveAnchor } from "../kit/core/story.mjs";
+import { resolveAnchor } from "@launchclip/core/story.mjs";
 import { analyzeBeatsFile, analyzeSamples, beatsDocument, gridFromBpm, transformGrid } from "../src/music/beats.js";
 import { mediaSkip } from "./helpers/media.js";
 

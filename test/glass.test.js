@@ -4,14 +4,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {PANEL_TREATMENTS, contrast, glassSurface, panelFill, panelSurfaceStyle} from '../kit/core/panels.mjs';
-import {SEED_PANEL_TREATMENTS} from '../kit/core/style-seed.mjs';
-import {MODULES, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
+import {PANEL_TREATMENTS, contrast, glassSurface, panelFill, panelSurfaceStyle} from '@launchclip/core/panels.mjs';
+import {SEED_PANEL_TREATMENTS} from '@launchclip/core/style-seed.mjs';
+import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
-import {cardSurface} from '../kit/core/catalog-g-base.mjs';
-import {knownModules, resolveModule} from '../kit/core/modules.mjs';
-import {applyStyle, validateStylePack} from '../kit/core/style.mjs';
-import {STORY_PANEL_TREATMENTS, validateStory} from '../kit/core/story.mjs';
+import {cardSurface} from '@launchclip/core/catalog-g-base.mjs';
+import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
+import {applyStyle, validateStylePack} from '@launchclip/core/style.mjs';
+import {STORY_PANEL_TREATMENTS, validateStory} from '@launchclip/core/story.mjs';
 import {SAMPLES} from '../scripts/element-samples.mjs';
 
 const pack = JSON.parse(readFileSync(new URL('../kit/styles/glass-explainer.json', import.meta.url), 'utf8'));

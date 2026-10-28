@@ -1,24 +1,24 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
-import { catalogModules, rectFitHint, resolveModule, subjectDensityFindings } from "../kit/core/modules.mjs";
+import { catalogModules, rectFitHint, resolveModule, subjectDensityFindings } from "@launchclip/core/modules.mjs";
 import { profileForStory } from "./profile_store.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
-import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "../kit/core/camera-world.mjs";
-import { captionDipHidden, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
-import { backgroundContrastFindings } from "../kit/core/backgrounds.mjs";
-import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
-import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
-import { storyBase } from "../kit/core/story.mjs";
-import { brandFrameLayout, intersectRects } from "../kit/core/brand-frame.mjs";
-import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "../kit/core/subject-layer.mjs";
-import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "../kit/core/footage-layout.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
+import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
+import { captionDipHidden, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
+import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
+import { driftExtent, sceneDrift } from "@launchclip/core/ambient.mjs";
+import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
+import { storyBase } from "@launchclip/core/story.mjs";
+import { brandFrameLayout, intersectRects } from "@launchclip/core/brand-frame.mjs";
+import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "@launchclip/core/subject-layer.mjs";
+import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
+const STORY_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs"));
 const EDITORIAL_MODULE = path.join(ROOT, "skills/launchclip-create-video/scripts/editorial-ui-modules.mjs");
 // Kept in step with KINDS in editorial-ui-modules.mjs, which does not export it.
 const EDITORIAL_KINDS = new Set(["media-window", "checklist", "step-rail", "callout", "audience-grid", "trend-chart", "metric", "progress", "date-card", "status-rack", "code-snippet", "excerpt-window", "focus-flow", "growth-chart"]);
@@ -407,7 +407,7 @@ export function formatLayoutReport(report) {
 }
 
 async function loadStoryCore() {
-  if (!(await exists(STORY_MODULE))) throw new Error(`layout-check needs ${STORY_MODULE} to resolve storyboard.json, and it is missing; install a LaunchClip build that ships kit/core/story.mjs`);
+  if (!(await exists(STORY_MODULE))) throw new Error(`layout-check needs ${STORY_MODULE} to resolve storyboard.json, and it is missing; install a LaunchClip build that ships @launchclip/core`);
   const module = await import(pathToFileURL(STORY_MODULE).href);
   if (typeof module.resolveStory !== "function") throw new Error(`${STORY_MODULE} does not export resolveStory`);
   return module;

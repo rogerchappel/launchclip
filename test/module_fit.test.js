@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {moduleFit, rectFitHint, resolveModule} from '../kit/core/modules.mjs';
+import {moduleFit, rectFitHint, resolveModule} from '@launchclip/core/modules.mjs';
 import {runCli} from '../src/cli.js';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'inter', meta: 'jetbrains-mono'}};

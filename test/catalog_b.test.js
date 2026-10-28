@@ -6,9 +6,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
-import {MODULES, catalogBTimeline, catalogBView, contrastRatio, formatNumber, mixColor, parseExpression, sampleIndex} from '../kit/core/catalog-b.mjs';
-import {createBase} from '../kit/core/catalog-b-base.mjs';
-import {loopValue, propsToStyle, transformString} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogBTimeline, catalogBView, contrastRatio, formatNumber, mixColor, parseExpression, sampleIndex} from '@launchclip/core/catalog-b.mjs';
+import {createBase} from '@launchclip/core/catalog-b-base.mjs';
+import {loopValue, propsToStyle, transformString} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS, gsapOwnedTransforms, opsToGsap, renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 import {mediaSkip} from './helpers/media.js';
@@ -362,7 +362,7 @@ test('flow-compare: fixture model meets the contract; particles are a pure funct
   assert.ok(top.pipe.height > bottom.pipe.height, 'big rate gets the fatter pipe');
   assert.deepEqual(model.events.map(e => e.name), ['enter', 'top-flow', 'bottom-flow']);
   assert.equal(top.tag.text, 'FAST');
-  const {flowOffset} = await import('../kit/core/catalog-b-flow-compare.mjs');
+  const {flowOffset} = await import('@launchclip/core/catalog-b-flow-compare.mjs');
   const op = catalogBTimeline(model).find(entry => entry.type === 'loop' && entry.target === 'flow-top-belt');
   for (const t of [0, top.time, top.time + 0.01, 1.7, 3.33, 4.9, 2.2, 1.1]) {
     const a = flowOffset(top, t), b = loopValue(op, t).x;

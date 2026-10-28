@@ -29,9 +29,9 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beatMapReportText, beatMapToDirection, directLongForm, dryRunWords } from '../kit/core/beat-director.mjs';
-import { cutShorts } from '../kit/core/cutdown.mjs';
-import { directionJson, validateDirection } from '../kit/core/direction.mjs';
+import { beatMapReportText, beatMapToDirection, directLongForm, dryRunWords } from '@launchclip/core/beat-director.mjs';
+import { cutShorts } from '@launchclip/core/cutdown.mjs';
+import { directionJson, validateDirection } from '@launchclip/core/direction.mjs';
 import { loadResearchEvidence } from '../src/research/evidence_data.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));

@@ -6,8 +6,8 @@ import gsap from "gsap";
 import {
   AMBIENT_LEVELS, AMBIENT_PRESETS, ambientErrors, ambientField, ambientSeed, axisSegments, axisValue, blobBackground, blobStateAt, blobTweens,
   blobAlpha, driftBounds, driftEligible, driftExtent, driftGsap, driftPlan, driftStateAt, driftStyle, fieldLevel, levelForEnergy, luma, sceneAmbient, sceneDrift
-} from "../kit/core/ambient.mjs";
-import { profileGeometry } from "../kit/core/layout-check.mjs";
+} from "@launchclip/core/ambient.mjs";
+import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const canvas = { width: 1080, height: 1920 };
@@ -195,7 +195,7 @@ test("sceneDrift applies eligibility: placeholders, decor cameras and root video
 });
 
 test("a world camera drives the field container at a parallax depth", async () => {
-  const { FIELD_PARALLAX, parallaxState, parallaxStyle } = await import("../kit/core/ambient.mjs");
+  const { FIELD_PARALLAX, parallaxState, parallaxStyle } = await import("@launchclip/core/ambient.mjs");
   assert.equal(FIELD_PARALLAX, 0.3);
   assert.deepEqual(parallaxState({ x: 100, y: -40, scale: 1.2 }), { x: 30, y: -12, scale: 1 + 0.2 * 0.3 });
   assert.deepEqual(parallaxState({ x: 100, y: -40, scale: 1.2 }, 1), { x: 100, y: -40, scale: 1.2 });

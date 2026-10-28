@@ -1,6 +1,6 @@
 // `launchclip cast`, the cast consistency gate and dialogue voices
 // (src/cast.js, src/voice/dialogue.js).
-import {STARTER_CAST} from '../kit/core/characters/cast.mjs';
+import {STARTER_CAST} from '@launchclip/core/characters/cast.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
@@ -13,8 +13,8 @@ import { promisify } from "node:util";
 import { castGate, castList, castShow, castSheetHtml, castUsage, runCastCommand } from "../src/cast.js";
 import { DIALOGUE_GAP, dialogueGaps, dialogueLayout, dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice/dialogue.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 import { USAGE } from "../src/cli_usage.js";
 import { checkStoryDirection } from "../src/story_cli.js";
 
@@ -188,7 +188,7 @@ test("story validate checks a narrative map's cast cues with the character kit",
 });
 
 test("the cast gate fails a limb off the canvas or out of the safe zone, and a couple swapping sides", async () => {
-  const { castPlacement } = await import("../kit/core/characters/placement.mjs");
+  const { castPlacement } = await import("@launchclip/core/characters/placement.mjs");
   const brand = example().brand;
   const short = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand, cast: { characters: [{ id: "maya" }, { id: "theo" }] }, scenes });
   const phone = (id, start, cast) => ({ id, module: "cast-scene", start, end: start + 4, params: { set: "phone", cast } });
@@ -214,7 +214,7 @@ test("the cast gate fails a limb off the canvas or out of the safe zone, and a c
 });
 
 test("every starter character at rest passes the cast gate in every set and count, in both orientations", async () => {
-  const { STARTER_IDS } = await import("../kit/core/characters/cast.mjs");
+  const { STARTER_IDS } = await import("@launchclip/core/characters/cast.mjs");
   const brand = example().brand;
   const failures = [];
   for (const [width, height] of [[1080, 1920], [1920, 1080]]) for (const set of ["desk-laptop", "phone", "meeting"]) for (const count of [1, 2, 3]) {

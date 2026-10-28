@@ -14,8 +14,8 @@
 //
 // Word-anchored times are never moved off their word, and beat anchors are on
 // the grid already. Every decision is recorded for qa/beat-sync.json.
-import { resolveModule } from "../../kit/core/modules.mjs";
-import { parseAnchor, resolveStory, validateStory } from "../../kit/core/story.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { parseAnchor, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { transformGrid } from "./beats.js";
 
 export const BEAT_SYNC_SCHEMA = "launchclip.beat-sync.v1";

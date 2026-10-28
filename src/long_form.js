@@ -11,13 +11,13 @@
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { directionJson } from "../kit/core/direction.mjs";
-import { structureLongForm, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
-import { resolveStory, storyChapters, validateStory } from "../kit/core/story.mjs";
+import { directionJson } from "@launchclip/core/direction.mjs";
+import { structureLongForm, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
+import { resolveStory, storyChapters, validateStory } from "@launchclip/core/story.mjs";
 import { directionFileFor } from "./story_cli.js";
 import { profileForStory } from "./profile_store.js";
 import { resolveStyleV2 } from "./style_store.js";
-import { storyStyleRequest } from "../kit/core/style.mjs";
+import { storyStyleRequest } from "@launchclip/core/style.mjs";
 
 /** The storyboard file a project path or storyboard path names. */
 export async function storyFileOf(target) {

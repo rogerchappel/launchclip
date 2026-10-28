@@ -5,8 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { capabilityParams, isPlanned } from "../kit/core/visual-capabilities.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { capabilityParams, isPlanned } from "@launchclip/core/visual-capabilities.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 import { commitCardParams, diffViewParams, prCardParams, sourceParams } from "../src/evidence/github.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/github/${name}`, import.meta.url), "utf8")).data;

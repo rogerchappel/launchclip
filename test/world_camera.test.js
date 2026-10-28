@@ -7,10 +7,10 @@ import {
   CAMERA_STACK, ridesPlate, rideWorldPlates,
   blurAt, cameraActive, cameraOps, cameraPlan, cameraStateAt, containerState, layoutDirection, objectRectFromModel, opsStateAt,
   overlayOps, PARALLAX, placementCentre, resolveCamera, restState, sceneObjectLookup, screenPoint, worldLayout, worldPoint
-} from "../kit/core/camera-world.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { sceneWindows, transitionTweens } from "../kit/core/transitions.mjs";
+} from "@launchclip/core/camera-world.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { sceneWindows, transitionTweens } from "@launchclip/core/transitions.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -304,7 +304,7 @@ test("world mode stacks overlays above the camera: a cast on track 1 is never un
 });
 
 test("world mode: a cast standing in a world plate rides it inside the camera, with cut entry and exit", async () => {
-  const { sceneWindows } = await import("../kit/core/transitions.mjs");
+  const { sceneWindows } = await import("@launchclip/core/transitions.mjs");
   const dir = path.join(ROOT, "examples/story/world-ride-9x16");
   const story = resolveStory(JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8")));
   assert.equal(ridesPlate(story, story.scenes.find((s) => s.id === "pair")), "street");

@@ -5,7 +5,7 @@
 // renderer adapters, cinematic checks and the renderer eval all call this, so
 // they see the same merged story.
 import path from "node:path";
-import { applyStyle, storyStyleRequest } from "../kit/core/style.mjs";
+import { applyStyle, storyStyleRequest } from "@launchclip/core/style.mjs";
 import { resolveStyleV2 } from "./style_store.js";
 
 /**

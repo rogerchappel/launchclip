@@ -11,18 +11,18 @@
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
 
-import { frameState } from "../kit/core/catalog-b-view.mjs";
-import { charactersTimeline } from "../kit/core/catalog-characters.mjs";
-import { worldTimeline } from "../kit/core/catalog-world.mjs";
-import { rideWorldPlates } from "../kit/core/camera-world.mjs";
-import { driftEligible } from "../kit/core/ambient.mjs";
-import { profileGeometry } from "../kit/core/layout-check.mjs";
-import { TEXT_FADE, resolveModule } from "../kit/core/modules.mjs";
-import { TRANSFORM_KEYS } from "../kit/core/physics.mjs";
-import { samePlaceCuts, twoCopies } from "../kit/core/story.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
-import { ACTION_INFO, LOOK_ACTIONS } from "../kit/core/characters/actions.mjs";
-import { narrationWords } from "../kit/core/direction.mjs";
+import { frameState } from "@launchclip/core/catalog-b-view.mjs";
+import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
+import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
+import { rideWorldPlates } from "@launchclip/core/camera-world.mjs";
+import { driftEligible } from "@launchclip/core/ambient.mjs";
+import { profileGeometry } from "@launchclip/core/layout-check.mjs";
+import { TEXT_FADE, resolveModule } from "@launchclip/core/modules.mjs";
+import { TRANSFORM_KEYS } from "@launchclip/core/physics.mjs";
+import { samePlaceCuts, twoCopies } from "@launchclip/core/story.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
+import { ACTION_INFO, LOOK_ACTIONS } from "@launchclip/core/characters/actions.mjs";
+import { narrationWords } from "@launchclip/core/direction.mjs";
 
 // Sampling step (s) and tolerances for "moves with its layer".
 export const PHYSICS = Object.freeze({ step: 0.1, px: 0.5, scale: 0.001, fadeLow: 0.02, fadeHigh: 0.98 });

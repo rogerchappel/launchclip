@@ -4,13 +4,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {perTokenPrice} from '../kit/core/catalog-i-tokenizer.mjs';
-import {PAINT_KINDS, PARTICLE_RUNTIME} from '../kit/core/particles.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {perTokenPrice} from '@launchclip/core/catalog-i-tokenizer.mjs';
+import {PAINT_KINDS, PARTICLE_RUNTIME} from '@launchclip/core/particles.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 import {tokenize} from '../src/tokenizer.js';
 

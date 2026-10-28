@@ -7,8 +7,8 @@
 
 import {resolve} from 'node:path';
 import {chromium} from 'playwright';
-import {PROP_IDS, drawProp} from '../kit/core/worlds/index.mjs';
-import {el} from '../kit/core/catalog-b-view.mjs';
+import {PROP_IDS, drawProp} from '@launchclip/core/worlds/index.mjs';
+import {el} from '@launchclip/core/catalog-b-view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 
 const args = process.argv.slice(2);

@@ -20,7 +20,7 @@ import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SFX_FAMILY_NAMES, SOUND_PALETTES } from '../kit/core/sound/options.mjs';
+import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SFX_FAMILY_NAMES, SOUND_PALETTES } from '@launchclip/core/sound/options.mjs';
 import { synthAmbience, synthGenreBed } from '../skills/launchclip-create-video/scripts/synth-audio-kit.mjs';
 import { buildMix, normalizeCues } from '../skills/launchclip-create-video/scripts/build-mix.mjs';
 import { masterLoudness } from '../skills/launchclip-create-video/scripts/master-loudness.mjs';

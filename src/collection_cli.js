@@ -10,7 +10,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { generateStyle, normalizeSeed } from "../kit/core/style-seed.mjs";
+import { generateStyle, normalizeSeed } from "@launchclip/core/style-seed.mjs";
 import {
   COLLECTION_FILE, COLLECTION_KINDS, COLLECTION_SCHEMA, RECIPE_SCHEMA, RESOLVED_FILE, checkIdOrThrow, listCollectionVideos, listRecipeIds,
   loadCollection, loadRecipe, makeOptionsFor, recipeFile, resolveCollectionStyle, resolveVideoSettings, validateCollection, validateRecipe,

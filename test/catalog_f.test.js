@@ -3,10 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {MODULES, catalogFTimeline, catalogFView} from '../kit/core/catalog-f.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogFTimeline, catalogFView} from '@launchclip/core/catalog-f.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-f.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const subject = {available: true, framing: 'medium', head: {x: 420, y: 560, width: 240, height: 300}, placement: 'measured'};

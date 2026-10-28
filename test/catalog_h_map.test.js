@@ -2,11 +2,11 @@
 // world (kit/core/world-110m.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogHTimeline} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
-import {COUNTRIES, WORLD_SIZE} from '../kit/core/world-110m.mjs';
-import {countryId, projectLonLat} from '../kit/core/catalog-h-map.mjs';
+import {COUNTRIES, WORLD_SIZE} from '@launchclip/core/world-110m.mjs';
+import {countryId, projectLonLat} from '@launchclip/core/catalog-h-map.mjs';
 import {equalEarth, unwrapRing} from '../scripts/vendor-world.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 

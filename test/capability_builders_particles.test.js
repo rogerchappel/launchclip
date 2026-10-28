@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capabilityAdditions, capabilityParams, hasParamsBuilder } from "../kit/core/visual-capabilities.mjs";
-import { extractFacts } from "../kit/core/beat-director.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { capabilityAdditions, capabilityParams, hasParamsBuilder } from "@launchclip/core/visual-capabilities.mjs";
+import { extractFacts } from "@launchclip/core/beat-director.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 
 const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } };
 const beat = (text, extra = {}) => ({ id: "b", text, headline: extra.headline ?? text, facts: extractFacts(text), ...extra });

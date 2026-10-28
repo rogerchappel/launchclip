@@ -2,8 +2,8 @@
 // weight; LaunchClip's own drawings plus the vendored Lucide set.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ICONS, ICON_BOX, ICON_NAMES, ICON_SOLIDS, ICON_SOURCES, ICON_STROKE, ICON_STYLES, closedPath, iconNode, iconPath, isIcon} from '../kit/core/icons.mjs';
-import {LUCIDE, LUCIDE_VERSION} from '../kit/core/icons-lucide.mjs';
+import {ICONS, ICON_BOX, ICON_NAMES, ICON_SOLIDS, ICON_SOURCES, ICON_STROKE, ICON_STYLES, closedPath, iconNode, iconPath, isIcon} from '@launchclip/core/icons.mjs';
+import {LUCIDE, LUCIDE_VERSION} from '@launchclip/core/icons-lucide.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 
 test('over 1000 icons with stable kebab-case names', () => {

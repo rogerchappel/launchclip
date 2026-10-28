@@ -5,9 +5,9 @@ import {runInNewContext} from 'node:vm';
 import gsap from 'gsap';
 import {spring} from 'remotion';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
-import * as motion from '../kit/core/motion.mjs';
+import * as motion from '@launchclip/core/motion.mjs';
 import {ease, getEase, tween, track, stagger, countUp, springValue, splitWords, splitChars, motionBlurPx,
-  interpolateColor, clamp01, seconds, frames} from '../kit/core/motion.mjs';
+  interpolateColor, clamp01, seconds, frames} from '@launchclip/core/motion.mjs';
 
 const samples = Array.from({length: 101}, (_, i) => i / 100);
 const close = (actual, expected, tolerance, label) =>
@@ -176,7 +176,7 @@ test('helpers', () => {
 });
 
 test("gsapText keeps numeric strings with trailing zeros as text through a real GSAP set", async () => {
-  const { gsapText } = await import("../kit/core/motion.mjs");
+  const { gsapText } = await import("@launchclip/core/motion.mjs");
   const gsap = (await import("gsap")).default;
   assert.equal(gsapText("64.5"), "64.5");
   assert.equal(gsapText("70.0"), "⁠70.0");

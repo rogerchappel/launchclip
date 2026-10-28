@@ -13,16 +13,16 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { STARTER_CAST } from "../kit/core/characters/cast.mjs";
-import { castPlacement } from "../kit/core/characters/placement.mjs";
-import { SEATED_SETS } from "../kit/core/characters/sets.mjs";
-import { KOKORO_VOICES, castConsistency, castMember, resolveStoryCast, validateCastCues } from "../kit/core/characters/cues.mjs";
-import { EXPRESSIONS, POSES } from "../kit/core/characters/rig.mjs";
-import { sceneJoints } from "../kit/core/characters/acting.mjs";
-import { drawCharacter, styleGeometry, styleHeight } from "../kit/core/characters/styles.mjs";
-import { characterView } from "../kit/core/characters/view.mjs";
-import { CAST_MODULES } from "../kit/core/story.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
+import { STARTER_CAST } from "@launchclip/core/characters/cast.mjs";
+import { castPlacement } from "@launchclip/core/characters/placement.mjs";
+import { SEATED_SETS } from "@launchclip/core/characters/sets.mjs";
+import { KOKORO_VOICES, castConsistency, castMember, resolveStoryCast, validateCastCues } from "@launchclip/core/characters/cues.mjs";
+import { EXPRESSIONS, POSES } from "@launchclip/core/characters/rig.mjs";
+import { sceneJoints } from "@launchclip/core/characters/acting.mjs";
+import { drawCharacter, styleGeometry, styleHeight } from "@launchclip/core/characters/styles.mjs";
+import { characterView } from "@launchclip/core/characters/view.mjs";
+import { CAST_MODULES } from "@launchclip/core/story.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
 import { renderNode } from "../kit/hyperframes/catalog-b.mjs";
 import { applyProjectStyle } from "./story_style.js";
 

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { BEAT_MAP_SCHEMA, GENERIC_MODULES, beatMapEvents, beatMapReportText, beatMapToDirection, beatMapToStory, clauseBeats, directLongForm, dryRunWords, extractFacts, matchEvidence, parseScript, visualKind, windowWords } from "../kit/core/beat-director.mjs";
-import { CADENCE_BENCHMARK, cadenceTarget } from "../kit/core/cadence.mjs";
-import { validateDirection } from "../kit/core/direction.mjs";
-import { longFormChunks } from "../kit/core/long-form.mjs";
-import { knownModules, resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { BEAT_MAP_SCHEMA, GENERIC_MODULES, beatMapEvents, beatMapReportText, beatMapToDirection, beatMapToStory, clauseBeats, directLongForm, dryRunWords, extractFacts, matchEvidence, parseScript, visualKind, windowWords } from "@launchclip/core/beat-director.mjs";
+import { CADENCE_BENCHMARK, cadenceTarget } from "@launchclip/core/cadence.mjs";
+import { validateDirection } from "@launchclip/core/direction.mjs";
+import { longFormChunks } from "@launchclip/core/long-form.mjs";
+import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { DEFAULT_CHANNEL } from "../eval/beat-map-dry-run.mjs";
 
 const FIXTURE = path.resolve("eval/fixtures/long-form-16min");

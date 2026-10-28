@@ -9,10 +9,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
-import { cameraPlan, opsStateAt } from "../kit/core/camera-world.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
-import { BACKDROP_FEATHER, worldBackdrops } from "../kit/core/world-backdrops.mjs";
+import { cameraPlan, opsStateAt } from "@launchclip/core/camera-world.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
+import { BACKDROP_FEATHER, worldBackdrops } from "@launchclip/core/world-backdrops.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
 const COLORS = Object.freeze({ bg: "#05070c", paper: "#f4f7fb", ink: "#05070c", primary: "#38e1ff", accent: "#ff8a3d" });

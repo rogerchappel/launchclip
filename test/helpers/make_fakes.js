@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { DEFAULT_BRAND } from "../../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 
 export const PROMPT = "A 6-second launch video for a fictional SaaS called Ledgerly that reconciles Stripe payouts automatically";
 // Within the 6-second clock (16 words at 2.75 a second), so the script checks pass.

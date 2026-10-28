@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { applyStyle, assignPaletteRoles, checkPackContrast, contrastRatio, nearestBundledFont, STYLE_SCHEMA, stylePromptLines, upgradeV1Pack, validateStylePack } from "../kit/core/style.mjs";
-import { knownModules, resolveModule } from "../kit/core/modules.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
-import { planningPrompt } from "../kit/core/planning-prompt.mjs";
+import { applyStyle, assignPaletteRoles, checkPackContrast, contrastRatio, nearestBundledFont, STYLE_SCHEMA, stylePromptLines, upgradeV1Pack, validateStylePack } from "@launchclip/core/style.mjs";
+import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { planningPrompt } from "@launchclip/core/planning-prompt.mjs";
 import { createStylePack, listBuiltinStyles, loadStylePack, resolveStyleV2, upgradeStylePack, writeStyleV2 } from "../src/style_store.js";
 import { applyProjectStyle } from "../src/story_style.js";
 import { readProjectStory } from "../src/story_loader.js";

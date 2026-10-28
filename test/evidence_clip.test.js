@@ -5,10 +5,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {MODULES, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from '../kit/core/catalog-d.mjs';
-import {focusAt, focusKeys, shortDate} from '../kit/core/catalog-d-evidence-clip.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {profileGeometry} from '../kit/core/layout-check.mjs';
+import {MODULES, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from '@launchclip/core/catalog-d.mjs';
+import {focusAt, focusKeys, shortDate} from '@launchclip/core/catalog-d-evidence-clip.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { generateStyle } from "../kit/core/style-seed.mjs";
+import { generateStyle } from "@launchclip/core/style-seed.mjs";
 import {
   COLLECTION_SCHEMA, RECIPE_SCHEMA, VIDEO_SCHEMA, layerFlags, listCollectionVideos, loadCollection, loadRecipe, makeOptionsFor,
   resolveVideoSettings, staleReasons, validateCollection, validateRecipe, validateVideo, versionOf, videoProjectDir, writeVideoRecord

@@ -4,9 +4,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync, existsSync} from 'node:fs';
 import path from 'node:path';
-import {EDITOR_CONTROLS, EDITOR_GROUPS, JSON_SCHEMA_DIALECT, listModuleSchemas, moduleSchema, moduleSchemaId, paramSchemaFromText, validateAgainstSchema, validateModuleParams} from '../kit/core/module-schemas.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
-import {validateStory} from '../kit/core/story.mjs';
+import {EDITOR_CONTROLS, EDITOR_GROUPS, JSON_SCHEMA_DIALECT, listModuleSchemas, moduleSchema, moduleSchemaId, paramSchemaFromText, validateAgainstSchema, validateModuleParams} from '@launchclip/core/module-schemas.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
+import {validateStory} from '@launchclip/core/story.mjs';
 import {SAMPLES} from '../scripts/variant-sheet.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');

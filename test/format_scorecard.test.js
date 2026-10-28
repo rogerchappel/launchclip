@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CADENCE_FORMATS } from "../kit/core/cadence.mjs";
+import { CADENCE_FORMATS } from "@launchclip/core/cadence.mjs";
 import { parseArguments, reportMarkdown } from "../eval/formats.mjs";
 import { avSync, captionHygiene, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneTimes, renderedCadence, scoreBrief } from "../eval/scorecard.mjs";
 

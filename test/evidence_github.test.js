@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {commitCardParams, diffViewParams, githubEvidence, githubGet, parseGithubRef, patchExcerpt, prCardParams, sourceParams} from '../src/evidence/github.js';
-import {MODULES} from '../kit/core/catalog-h.mjs';
+import {MODULES} from '@launchclip/core/catalog-h.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/github/', import.meta.url));
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};

@@ -6,7 +6,7 @@
 // width and the minimum width at its height. A width table lists the minimum
 // height at common widths either way.
 import { readFile } from "node:fs/promises";
-import { isEditorialKind, knownModules, moduleFit, moduleTiming, resolveModule, timingWindow } from "../kit/core/modules.mjs";
+import { isEditorialKind, knownModules, moduleFit, moduleTiming, resolveModule, timingWindow } from "@launchclip/core/modules.mjs";
 
 const FORMATS = { "16:9": { width: 1920, height: 1080 }, "9:16": { width: 1080, height: 1920 } };
 // A neutral brand for catalogue modules (they need brand colours and fonts);

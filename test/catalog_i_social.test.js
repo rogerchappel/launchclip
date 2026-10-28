@@ -3,12 +3,12 @@
 // line, and both renderers' output.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {PLATFORMS, countText, sourceLine} from '../kit/core/catalog-i-social.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {PLATFORMS, countText, sourceLine} from '@launchclip/core/catalog-i-social.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {hyperframesEmitters} from '../kit/hyperframes/story-compiler.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 import {DEMO_POSTS, SAMPLES} from '../scripts/element-samples.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -179,7 +179,7 @@ test('social-wall: a drifting depth field, then the pulled posts come forward sh
 });
 
 test('validateStory warns when a social post has no source.url, but not for demo posts', async () => {
-  const {validateStory} = await import('../kit/core/story.mjs');
+  const {validateStory} = await import('@launchclip/core/story.mjs');
   const story = scenes => ({schema: 'launchclip.story.v1', title: 'Social', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 6, platform: 'youtube'}, brand, base: null, scenes});
   const real = {platform: 'x', name: 'Ada', handle: 'ada', text: 'Hello'};
   const warnings = validateStory(story([

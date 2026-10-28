@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runStoryCommand } from "../src/story_cli.js";
 import { checkLayoutProject } from "../src/layout_check.js";
-import { deriveBoundaries, resolveStory } from "../kit/core/story.mjs";
+import { deriveBoundaries, resolveStory } from "@launchclip/core/story.mjs";
 
 // Golden storyboards double as renderer regression tests (RFC §8,
 // npm run eval:renderers). Each must validate with zero warnings and pass the

@@ -2,8 +2,8 @@
 // icons in stroke, duotone and tiles variants.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MODULES, VARIANTS, catalogHTimeline} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHTimeline} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {SAMPLES} from '../scripts/element-samples.mjs';
 

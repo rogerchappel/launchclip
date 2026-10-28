@@ -10,7 +10,7 @@
 //       kit/profiles/ and refreshes kit/profiles/PROVENANCE.md.
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PROFILE_MEASURES, validateProfile } from "../kit/core/profiles.mjs";
+import { PROFILE_MEASURES, validateProfile } from "@launchclip/core/profiles.mjs";
 import { measureProfile } from "./cadence_measures.js";
 import { PROFILE_DIR, provenanceMarkdown, resolveProfile, shippedProfiles } from "./profile_store.js";
 

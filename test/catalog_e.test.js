@@ -3,11 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {MODULES, catalogETimeline, catalogEView} from '../kit/core/catalog-e.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, catalogETimeline, catalogEView} from '@launchclip/core/catalog-e.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-e.mjs';
-import {knownModules} from '../kit/core/modules.mjs';
-import {resolveStory} from '../kit/core/story.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
+import {resolveStory} from '@launchclip/core/story.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
@@ -104,7 +104,7 @@ test('backdrop-swap moves the presenter, not the room, and fades its backdrop', 
 });
 
 test('backdrop-swap: the title has lifted away before the presenter glides back to full size', async () => {
-  const {BACKDROP_TITLE_CLEAR} = await import('../kit/core/catalog-e.mjs');
+  const {BACKDROP_TITLE_CLEAR} = await import('@launchclip/core/catalog-e.mjs');
   for (const params of [PARAMS['backdrop-swap'], {...PARAMS['backdrop-swap'], release: 1}, {title: 'Ship Mode', at: 2.15}]) {
     const model = resolve('backdrop-swap', params);
     const ops = catalogETimeline(model);

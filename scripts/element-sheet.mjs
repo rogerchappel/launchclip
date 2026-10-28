@@ -17,12 +17,12 @@ import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {MODULES, VARIANTS, catalogHStyle, catalogHTimeline, catalogHView} from '../kit/core/catalog-h.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, VARIANTS, catalogHStyle, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {copyProjectFonts, projectFontFaces} from '../kit/hyperframes/story-compiler.mjs';
 import {SAMPLES} from './element-samples.mjs';
-import {PARTICLE_RUNTIME} from '../kit/core/particles.mjs';
+import {PARTICLE_RUNTIME} from '@launchclip/core/particles.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const BRAND = Object.freeze({colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}});

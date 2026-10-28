@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { runCli } from "../src/cli.js";
 import { runHeadlessCritic } from "../src/make/critic.js";
 import { assetErrors, audioEnhancementFeature, formatMakeSummary, runMake, slugify } from "../src/make/index.js";

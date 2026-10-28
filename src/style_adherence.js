@@ -27,13 +27,13 @@
 //   the motion grammar's shot range (warning) (compareToStyle).
 // - brand frame: when the style has one, the story draws it (error), unless
 //   the story turns it off with "frame": false (warning).
-import { brandFramePlan, storyFrame } from "../kit/core/brand-frame.mjs";
-import { CAPTION_PRESETS, captionOptions, captionPresetName, captionsOverlayOf } from "../kit/core/captions.mjs";
-import { colorDistance, hexToHsl, packCaptionsFor } from "../kit/core/style.mjs";
-import { compareMeasures } from "../kit/core/profiles.mjs";
-import { isGraphicScene, storyboardMeasures } from "../kit/core/cadence.mjs";
-import { directionMeasures } from "../kit/core/direction.mjs";
-import { storySections } from "../kit/core/story.mjs";
+import { brandFramePlan, storyFrame } from "@launchclip/core/brand-frame.mjs";
+import { CAPTION_PRESETS, captionOptions, captionPresetName, captionsOverlayOf } from "@launchclip/core/captions.mjs";
+import { colorDistance, hexToHsl, packCaptionsFor } from "@launchclip/core/style.mjs";
+import { compareMeasures } from "@launchclip/core/profiles.mjs";
+import { isGraphicScene, storyboardMeasures } from "@launchclip/core/cadence.mjs";
+import { directionMeasures } from "@launchclip/core/direction.mjs";
+import { storySections } from "@launchclip/core/story.mjs";
 import { resolveProfile } from "./profile_store.js";
 import { compareToStyle, paletteDistance } from "./style_reference.js";
 

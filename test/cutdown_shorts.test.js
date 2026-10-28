@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { SHORTS_FORMAT, chooseShortWindows, cutShorts } from "../kit/core/cutdown.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { TITLE_CARD_MODULES } from "../kit/core/skeleton-library.mjs";
-import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { SHORTS_FORMAT, chooseShortWindows, cutShorts } from "@launchclip/core/cutdown.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { TITLE_CARD_MODULES } from "@launchclip/core/skeleton-library.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 
 const FIXTURE = path.resolve("eval/fixtures/long-form-16min");
 const map = JSON.parse(readFileSync(path.join(FIXTURE, "BEATMAP.json"), "utf8"));

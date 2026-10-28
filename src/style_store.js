@@ -3,7 +3,7 @@ import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writ
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { STYLE_SCHEMA, STYLE_V2_SCHEMA, upgradeV1Pack, upgradeV2Pack, validateStylePack } from "../kit/core/style.mjs";
+import { STYLE_SCHEMA, STYLE_V2_SCHEMA, upgradeV1Pack, upgradeV2Pack, validateStylePack } from "@launchclip/core/style.mjs";
 
 export const STYLE_PACK_SCHEMA_VERSION = "launchclip.style-pack.v1";
 export const STYLE_PACK_V2_SCHEMA = STYLE_SCHEMA;

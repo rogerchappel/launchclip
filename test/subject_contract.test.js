@@ -2,7 +2,7 @@
 // scene layer, and resolveStory filling "auto" from the project's mattes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateStory, resolveStory, storyBase, subjectMode} from '../kit/core/story.mjs';
+import {validateStory, resolveStory, storyBase, subjectMode} from '@launchclip/core/story.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const MATTE = {src: 'assets/subject/0.000-6.000.webm', in: 0, out: 6, info: 'assets/subject/0.000-6.000.json'};

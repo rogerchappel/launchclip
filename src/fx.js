@@ -14,8 +14,8 @@
 import { copyFile, link, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { knownModules, resolveModule } from "../kit/core/modules.mjs";
-import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
+import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { readProjectStory } from "./story_loader.js";
 import { plannedSubjectRanges } from "./subject/plan.js";
 import { fileProjectMatte } from "./subject/project.js";

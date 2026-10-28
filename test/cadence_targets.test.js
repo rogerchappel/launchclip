@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CADENCE_BENCHMARK, CADENCE_FORMATS, cadenceGate, cadenceReport, cadenceTarget, eventStats, mergeEvents } from "../kit/core/cadence.mjs";
+import { CADENCE_BENCHMARK, CADENCE_FORMATS, cadenceGate, cadenceReport, cadenceTarget, eventStats, mergeEvents } from "@launchclip/core/cadence.mjs";
 
 // A synthetic run shaped like the benchmark: an event every 5.2 s, a cut every fourth.
 function benchmarkLike() {

@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { aspectOf, selectProfile, validateProfile } from "../kit/core/profiles.mjs";
+import { aspectOf, selectProfile, validateProfile } from "@launchclip/core/profiles.mjs";
 
 export const PROFILE_DIR = fileURLToPath(new URL("../kit/profiles/", import.meta.url));
 

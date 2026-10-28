@@ -3,8 +3,8 @@
 // the boundaries they state.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { knownModules, moduleTiming, resolveModule, timingWindow } from "../kit/core/modules.mjs";
-import { storyboardModulesReference, timingTableLines } from "../kit/core/planning-prompt.mjs";
+import { knownModules, moduleTiming, resolveModule, timingWindow } from "@launchclip/core/modules.mjs";
+import { storyboardModulesReference, timingTableLines } from "@launchclip/core/planning-prompt.mjs";
 import { formatModuleFit, moduleFitReport } from "../src/module_fit.js";
 
 const BRAND = { colors: { bg: "#0b0d12", primary: "#ffb020", accent: "#46d4ff", ink: "#0b0d12", paper: "#f2eee6" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } };

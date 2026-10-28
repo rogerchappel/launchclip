@@ -1,7 +1,7 @@
 // Density and variety (docs/DIRECTION_GUARDRAILS.md §5).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compositionPromptLines } from "../kit/core/composition.mjs";
+import { compositionPromptLines } from "@launchclip/core/composition.mjs";
 import { densityGate, varietyGate } from "../src/direction_guardrails.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };

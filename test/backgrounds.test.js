@@ -6,13 +6,13 @@ import gsap from "gsap";
 import {
   BACKGROUND_KINDS, BACKGROUND_OPTIONS, BACKGROUND_PARAMS, BACKGROUND_COLORS, DEFAULT_PATTERN_ICONS, LOGO_SRC, backgroundContrastFindings, backgroundErrors, backgroundPlan, backgroundTones,
   fieldStyle, layerCss, layerStateAt, layerStyle, layerSvg, layerTweens, layoutFillClip, panelFillErrors, panelFillPlan, patternIcons, safeAlpha, sceneBackground, storyBackground
-} from "../kit/core/backgrounds.mjs";
-import { PANEL_TREATMENTS, contrast, panelErrors, panelFill, panelSurfaceStyle, panelTheme, storyPanel } from "../kit/core/panels.mjs";
-import { STORY_BACKGROUND_COLORS, STORY_BACKGROUND_KINDS, STORY_BACKGROUND_OPTIONS, STORY_BACKGROUND_PARAMS, STORY_PANEL_TREATMENTS, resolveStory, validateStory } from "../kit/core/story.mjs";
+} from "@launchclip/core/backgrounds.mjs";
+import { PANEL_TREATMENTS, contrast, panelErrors, panelFill, panelSurfaceStyle, panelTheme, storyPanel } from "@launchclip/core/panels.mjs";
+import { STORY_BACKGROUND_COLORS, STORY_BACKGROUND_KINDS, STORY_BACKGROUND_OPTIONS, STORY_BACKGROUND_PARAMS, STORY_PANEL_TREATMENTS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
-import { cardSurface } from "../kit/core/catalog-g-base.mjs";
-import { resolveModule } from "../kit/core/modules.mjs";
-import { captionOptions } from "../kit/core/captions.mjs";
+import { cardSurface } from "@launchclip/core/catalog-g-base.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { captionOptions } from "@launchclip/core/captions.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MINIMAL = path.join(ROOT, "examples", "story", "minimal");
@@ -321,11 +321,11 @@ test("the HyperFrames compiler draws a layout panel fill clipped on the layout's
 });
 
 test("seeded patterns are visible: the strongest pattern tone stands off bg, and text keeps its floor", async () => {
-  const { generateStyle, SEED_BACKGROUND_PARAMS } = await import("../kit/core/style-seed.mjs");
-  const { applyStyle } = await import("../kit/core/style.mjs");
-  const { resolveStory } = await import("../kit/core/story.mjs");
-  const { backgroundPlan } = await import("../kit/core/backgrounds.mjs");
-  const { contrast } = await import("../kit/core/panels.mjs");
+  const { generateStyle, SEED_BACKGROUND_PARAMS } = await import("@launchclip/core/style-seed.mjs");
+  const { applyStyle } = await import("@launchclip/core/style.mjs");
+  const { resolveStory } = await import("@launchclip/core/story.mjs");
+  const { backgroundPlan } = await import("@launchclip/core/backgrounds.mjs");
+  const { contrast } = await import("@launchclip/core/panels.mjs");
   // Line and dot patterns need a stronger tone than area patterns to read; a texture is a quiet surface.
   const floor = { "dot-grid": 1.6, topographic: 1.6, halftone: 1.6, stripes: 1.3, texture: 1.15, geometric: 1.3 };
   for (const kind of Object.keys(floor)) {

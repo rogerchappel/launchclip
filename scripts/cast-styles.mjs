@@ -15,14 +15,14 @@
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '../kit/core/characters/styles.mjs';
-import {sceneJoints} from '../kit/core/characters/acting.mjs';
-import {characterView} from '../kit/core/characters/view.mjs';
-import {castMember, resolveStoryCast} from '../kit/core/characters/cues.mjs';
-import {generateCast} from '../kit/core/characters/generate.mjs';
-import {resolveModule} from '../kit/core/modules.mjs';
-import {charactersTimeline, charactersView} from '../kit/core/catalog-characters.mjs';
-import {frameState, propsToStyle} from '../kit/core/catalog-b-view.mjs';
+import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {sceneJoints} from '@launchclip/core/characters/acting.mjs';
+import {characterView} from '@launchclip/core/characters/view.mjs';
+import {castMember, resolveStoryCast} from '@launchclip/core/characters/cues.mjs';
+import {generateCast} from '@launchclip/core/characters/generate.mjs';
+import {resolveModule} from '@launchclip/core/modules.mjs';
+import {charactersTimeline, charactersView} from '@launchclip/core/catalog-characters.mjs';
+import {frameState, propsToStyle} from '@launchclip/core/catalog-b-view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));

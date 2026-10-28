@@ -15,7 +15,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { COVER_PATH } from "./cover.js";
-import { aspectName, coverFrame } from "../kit/core/story.mjs";
+import { aspectName, coverFrame } from "@launchclip/core/story.mjs";
 
 export const PUBLISH_VERSION = "launchclip.publish.v1";
 export const PUBLISH_FILE = "publish.json";

@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { narrationWords } from "../kit/core/captions.mjs";
+import { narrationWords } from "@launchclip/core/captions.mjs";
 import { concatArgs, concatList, defaultSegmentTools, ffmpegHasSettsPrescale, muxArgs, planSegments, remuxForJoinArgs, renderWithSegments } from "../src/render_segments.js";
 import { resolveStory } from "../src/story.js";
 import { mediaSkip } from "./helpers/media.js";

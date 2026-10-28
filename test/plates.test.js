@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "../kit/core/plates.mjs";
-import { layerStateAt, layerTweens } from "../kit/core/backgrounds.mjs";
-import { contrast, mix } from "../kit/core/panels.mjs";
-import { STORY_PLATE_KINDS, resolveStory, validateStory } from "../kit/core/story.mjs";
-import { applyStyle, validateStylePack } from "../kit/core/style.mjs";
+import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
+import { layerStateAt, layerTweens } from "@launchclip/core/backgrounds.mjs";
+import { contrast, mix } from "@launchclip/core/panels.mjs";
+import { STORY_PLATE_KINDS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { applyStyle, validateStylePack } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";

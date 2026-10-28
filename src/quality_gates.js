@@ -16,10 +16,10 @@
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { DIRECTION_LANES, directionMeasures, validateDirection } from "../kit/core/direction.mjs";
-import { storyboardMeasures, unionIntervals } from "../kit/core/cadence.mjs";
-import { compareMeasures } from "../kit/core/profiles.mjs";
-import { storyBase } from "../kit/core/story.mjs";
+import { DIRECTION_LANES, directionMeasures, validateDirection } from "@launchclip/core/direction.mjs";
+import { storyboardMeasures, unionIntervals } from "@launchclip/core/cadence.mjs";
+import { compareMeasures } from "@launchclip/core/profiles.mjs";
+import { storyBase } from "@launchclip/core/story.mjs";
 import { faceIntervalsFromProbe } from "./cadence_measures.js";
 import { profileForStory } from "./profile_store.js";
 import { directionFileFor } from "./story_cli.js";

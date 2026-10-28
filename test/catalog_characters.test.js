@@ -6,12 +6,12 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {runInNewContext} from 'node:vm';
 import gsap from 'gsap';
-import {MODULES, charactersTimeline, charactersView} from '../kit/core/catalog-characters.mjs';
-import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {MODULES, charactersTimeline, charactersView} from '@launchclip/core/catalog-characters.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-characters.mjs';
-import {knownModules, resolveModule} from '../kit/core/modules.mjs';
-import {resolveStory, validateStory} from '../kit/core/story.mjs';
-import {castConsistency, storyCastErrors} from '../kit/core/characters/cues.mjs';
+import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
+import {resolveStory, validateStory} from '@launchclip/core/story.mjs';
+import {castConsistency, storyCastErrors} from '@launchclip/core/characters/cues.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const story = (scenes, extra = {}) => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand, cast: {characters: [{id: 'maya'}, {id: 'theo'}]}, scenes, ...extra});
@@ -113,8 +113,8 @@ test('character-cameo: a card beside one character; sit is refused', () => {
 });
 
 test('character-cameo: keeps inside the brand frame safe area, and takes a rect (guided and bespoke tiers)', async () => {
-  const {brandFrameSafe} = await import('../kit/core/brand-frame.mjs');
-  const {planningPrompt} = await import('../kit/core/planning-prompt.mjs');
+  const {brandFrameSafe} = await import('@launchclip/core/brand-frame.mjs');
+  const {planningPrompt} = await import('@launchclip/core/planning-prompt.mjs');
   const scene = {id: 'cameo', module: 'character-cameo', start: 0, end: 4, params: {character: 'maya', pose: 'shrug', card: {kicker: 'Take 1', title: 'Heard as blame'}}};
   const portrait = {format: {width: 1080, height: 1920, fps: 30, duration: 4}};
   const plain = story([scene], portrait);
@@ -213,8 +213,8 @@ test('HyperFrames: GSAP owns the rig transforms (no CSS transform for it to over
 });
 
 test('cast-scene and character-cameo take the light of the world they play over', async () => {
-  const {normalizeLight, DEFAULT_LIGHT} = await import('../kit/core/characters/light.mjs');
-  const {worldLight} = await import('../kit/core/worlds/index.mjs');
+  const {normalizeLight, DEFAULT_LIGHT} = await import('@launchclip/core/characters/light.mjs');
+  const {worldLight} = await import('@launchclip/core/worlds/index.mjs');
   const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'night'}};
   const over = {...desk(), track: 1};
   const s = story([world, over]);
@@ -232,7 +232,7 @@ test('cast-scene and character-cameo take the light of the world they play over'
 });
 
 test('characters in a world take half its time-of-day grade; outside one they keep their colours', async () => {
-  const {worldGrade} = await import('../kit/core/worlds/index.mjs');
+  const {worldGrade} = await import('@launchclip/core/worlds/index.mjs');
   const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'night'}};
   const over = {...desk(), track: 1};
   const plain = resolve(desk()).content.actors[0].colors;
@@ -246,8 +246,8 @@ test('characters in a world take half its time-of-day grade; outside one they ke
 });
 
 test('params.world names the world a cast stands in, without a world scene beneath', async () => {
-  const {normalizeLight} = await import('../kit/core/characters/light.mjs');
-  const {worldLight} = await import('../kit/core/worlds/index.mjs');
+  const {normalizeLight} = await import('@launchclip/core/characters/light.mjs');
+  const {worldLight} = await import('@launchclip/core/worlds/index.mjs');
   const actor = resolve(desk({world: {kind: 'alley', time: 'dusk'}})).content.actors[0];
   assert.deepEqual(actor.light, normalizeLight(worldLight('alley', 'dusk')));
   assert.notDeepEqual(actor.colors, resolve(desk()).content.actors[0].colors);
@@ -268,8 +268,8 @@ test('cast references: "@1" and "@2" name the story cast by place', async () => 
 });
 
 test('a seeded style tells the planner its cast ids, their places and its world', async () => {
-  const {generateStyle} = await import('../kit/core/style-seed.mjs');
-  const {stylePromptLines} = await import('../kit/core/style.mjs');
+  const {generateStyle} = await import('@launchclip/core/style-seed.mjs');
+  const {stylePromptLines} = await import('@launchclip/core/style.mjs');
   const pack = generateStyle({seed: '00000001'});
   const lines = stylePromptLines({name: 'seed-00000001', ...pack}).join('\n');
   for (const [i, member] of pack.cast.members.entries()) assert.match(lines, new RegExp(`"${member.id}"[^,]*= "@${i + 1}"`));
@@ -277,8 +277,8 @@ test('a seeded style tells the planner its cast ids, their places and its world'
 });
 
 test('a set stands in a world with its furniture alone (backdrop world); its room only on backdrop room', async () => {
-  const {layoutSet, WORLD_SETS} = await import('../kit/core/characters/sets.mjs');
-  const {worldAnchors} = await import('../kit/core/worlds/index.mjs');
+  const {layoutSet, WORLD_SETS} = await import('@launchclip/core/characters/sets.mjs');
+  const {worldAnchors} = await import('@launchclip/core/worlds/index.mjs');
   const opts = {canvas: {width: 1920, height: 1080}, colors: brand.colors, count: 2, heights: [1000, 1000]};
   const room = layoutSet('desk-laptop', opts);
   const bare = layoutSet('desk-laptop', {...opts, backdrop: 'world', floor: 900, grade: hex => hex === '#c99a6b' ? '#123456' : hex});
@@ -314,7 +314,7 @@ test('a set stands in a world with its furniture alone (backdrop world); its roo
 });
 
 test('a world leaves out its front layer when a cast stands in it', async () => {
-  const {worldView} = await import('../kit/core/catalog-world.mjs');
+  const {worldView} = await import('@launchclip/core/catalog-world.mjs');
   const world = {id: 'street', module: 'world', start: 0, end: 6, params: {kind: 'city-street', time: 'day'}};
   const over = {...desk(), track: 1};
   const front = model => worldView(model).front.children.find(node => node.id === 'street-front').children[0].children.length;

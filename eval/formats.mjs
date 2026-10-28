@@ -24,9 +24,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { beatMapToStory, windowWords } from '../kit/core/beat-director.mjs';
-import { cadenceGate, cadenceTarget, eventStats } from '../kit/core/cadence.mjs';
-import { cutShorts } from '../kit/core/cutdown.mjs';
+import { beatMapToStory, windowWords } from '@launchclip/core/beat-director.mjs';
+import { cadenceGate, cadenceTarget, eventStats } from '@launchclip/core/cadence.mjs';
+import { cutShorts } from '@launchclip/core/cutdown.mjs';
 import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, scenesAbove, scoreBrief, stateEvents } from './scorecard.mjs';
 
 const execFileAsync = promisify(execFile);

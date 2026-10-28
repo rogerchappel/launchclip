@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {readFileSync, readdirSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {validateStory, resolveStory, storyBase, edlTrim, deriveBoundaries} from '../kit/core/story.mjs';
+import {validateStory, resolveStory, storyBase, edlTrim, deriveBoundaries} from '@launchclip/core/story.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {readProjectStory} from '../src/story_loader.js';
 import {checkLayoutProject} from '../src/layout_check.js';

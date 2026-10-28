@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SOUND_PALETTES } from "../kit/core/sound/options.mjs";
-import { familySpec, keyboard } from "../kit/core/sound/families.mjs";
-import { palette } from "../kit/core/sound/palettes.mjs";
-import { rng } from "../kit/core/sound/dsp.mjs";
+import { SOUND_PALETTES } from "@launchclip/core/sound/options.mjs";
+import { familySpec, keyboard } from "@launchclip/core/sound/families.mjs";
+import { palette } from "@launchclip/core/sound/palettes.mjs";
+import { rng } from "@launchclip/core/sound/dsp.mjs";
 import { kitVariants } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
 
 const SEVEN = ["whoosh", "impact", "riser", "tick", "pop", "shimmer", "subdrop"];
