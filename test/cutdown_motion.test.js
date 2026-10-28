@@ -99,6 +99,35 @@ test("cutdown: a voiceover-motion Short re-times shots, beats and states across 
   assert.equal(coverageGate({ resolved: local, words: cut.words, map: cut.map, profile: SHORT_MOTION }).status, "passed");
 });
 
+test("cutdown: a Short re-times its shots' zooms and fits box zooms to the 9:16 safe area", () => {
+  const { story, map, words } = motionLongForm();
+  const s3 = story.scenes.find((scene) => scene.id === "s3"), s5 = story.scenes.find((scene) => scene.id === "s5");
+  // A box in the long form's 1920x1080 plate px: copied as it is, it would sit off the Short's 1080 px wide plate.
+  s3.zooms = [{ at: 11.5, until: 14.2, box: { x: 1300, y: 200, width: 500, height: 600 }, scale: 1.5 }];
+  s5.zooms = [{ at: 21.5, target: 0 }];
+  const resolved = resolveStory(story, { words });
+  const long = validateStory(story);
+  assert.ok(long.ok, long.errors.join("\n"));
+
+  const cut = cutdownMotionStory(resolved, { story, words, window: pickCutWindow(map, words, { lines: "3-5" }), profile: SHORT_MOTION });
+  const shift = cut.segments[0].start;
+  const short3 = cut.story.scenes.find((scene) => scene.id === "s3"), short5 = cut.story.scenes.find((scene) => scene.id === "s5");
+  assert.equal(short3.zooms[0].at, round(11.5 - shift));
+  assert.equal(short3.zooms[0].until, round(14.2 - shift));
+  assert.deepEqual(short3.zooms[0].box, { x: 731.3, y: 355.6, width: 281.3, height: 1066.7 });
+  assert.equal(short3.zooms[0].scale, 1.5);
+  assert.deepEqual(short5.zooms, [{ at: round(21.5 - shift), target: 0 }]);
+  const check = validateStory(cut.story);
+  assert.ok(check.ok, check.errors.join("\n"));
+
+  // A range that starts after s5's zoom carries the shot without it; one that cuts s3 short drops the zoom it can no longer hold.
+  const later = cutdownMotionStory(resolved, { story, words, window: pickCutWindow(map, words, { range: "22-30" }), profile: SHORT_MOTION });
+  assert.equal(later.story.scenes.find((scene) => scene.id === "s5")?.zooms, undefined);
+  const early = cutdownMotionStory(resolved, { story, words, window: pickCutWindow(map, words, { range: "10.3-13" }), profile: SHORT_MOTION });
+  assert.equal(early.story.scenes.find((scene) => scene.id === "s3")?.zooms, undefined);
+  assert.ok(validateStory(early.story).ok);
+});
+
 test("cutdown: a voiceover-motion Short opens on an image, not the section's title card", () => {
   const { story, resolved, map, words } = motionLongForm();
   // Line 1 of section c2 opens on a hook-title.

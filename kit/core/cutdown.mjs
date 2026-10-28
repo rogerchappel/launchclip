@@ -36,7 +36,8 @@ import { capabilitiesFor, capabilityParams, resolveCapability } from './visual-c
 import { draftDirectionMap, narrationWords } from './direction.mjs';
 import { PROMISE_ID } from './long-form.mjs';
 import { resolveModule } from './modules.mjs';
-import { parseAnchor, resolveAnchor, storyBase, storySections } from './story.mjs';
+import { parseAnchor, resolveAnchor, storyBase, storySections, validateStory } from './story.mjs';
+import { ZOOM, zoomFitError, zoomFrame } from './zooms.mjs';
 
 export const CUTDOWN_SCHEMA = 'launchclip.cutdown.v1';
 export const CUTDOWN_TARGETS = Object.freeze({
@@ -224,6 +225,7 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
         .map(({ hit, raw: written }) => ({ ...written, at: mapTime(written.at, Number(hit.at), start, local) }));
       if (!copy.hits.length) delete copy.hits;
     }
+    cutZooms(copy, scene, source, { from, to, at: (written, seconds) => mapTime(written, seconds, start, local), plate: resolved.format, canvas: target, warnings });
     scenes.push(copy);
     carried.push(scene.id);
   }
@@ -315,6 +317,7 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
   cut.scenes.sort((x, y) => Number(sceneTime(x.start, local)) - Number(sceneTime(y.start, local)));
 
   const draft = shortMap(cut, local, window, lines.map((line) => ({ ...line, words: line.words.map((index) => index - window.words[0]) })), profile?.id ?? target.profile);
+  fitZooms(cut, local, warnings);
   return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, warnings };
 }
 
@@ -390,10 +393,11 @@ export function cutdownMotionStory(resolved, { story = resolved, words, window, 
           .map(({ entry, written }) => ({ ...written, at: at(written.at, Number(entry.at)) }));
         if (!copy[key].length) delete copy[key];
       }
+      cutZooms(copy, scene, source, { from, to, at, plate: resolved.format, canvas: target, warnings });
       const last = pieces.at(-1);
       if (last?.source === scene.id && Math.abs(sceneTime(last.scene.end, local) - sceneTime(copy.start, local)) < 1e-3) {
         last.scene.end = copy.end;
-        for (const key of ['hits', 'states']) if (copy[key]) last.scene[key] = [...(last.scene[key] ?? []), ...copy[key]];
+        for (const key of ['hits', 'states', 'zooms']) if (copy[key]) last.scene[key] = [...(last.scene[key] ?? []), ...copy[key]];
         continue;
       }
       const repeat = pieces.filter((piece) => piece.source === scene.id).length;
@@ -455,6 +459,7 @@ export function cutdownMotionStory(resolved, { story = resolved, words, window, 
     }
   }
   chainShots(cut, local, duration);
+  fitZooms(cut, local, warnings);
   if (!shots(cut).length) throw new Error('none of the window\'s shots fits a 9:16 canvas; pick other lines');
   cut.scenes.sort((x, y) => sceneTime(x.start, local) - sceneTime(y.start, local) || (x.track ?? 0) - (y.track ?? 0));
   const first = shots(cut)[0];
@@ -465,6 +470,79 @@ export function cutdownMotionStory(resolved, { story = resolved, words, window, 
   const hookText = local.slice(hookLine.words[0], hookLine.words[1] + 1).map((word) => word.text).join(' ');
   const draft = shortMap(cut, local, window, lines, profile?.id ?? target.motionProfile);
   return { story: cut, map: draft, words: local, segments: segments.map(({ start, end, offset }) => ({ start, end, offset })), hook: { id: first.id, text: hookText, line: hookLine.words }, carried, added, warnings };
+}
+
+// A carried shot's zooms (kit/core/zooms.mjs) on the Short's clock: the ones
+// that start inside the piece [from, to] of the long form's shot, at and
+// until re-timed by `at` (an until past the piece is dropped, so the zoom
+// eases out by itself). A box is in the long form's plate px: it is scaled
+// to the Short's plate, and its scale lowered until the zoomed box sits in
+// the safe area (the zoom leaves when even ZOOM.min misses). copy.zooms is
+// set, or deleted when none is left.
+function cutZooms(copy, scene, source, { from, to, at, plate, canvas, warnings }) {
+  delete copy.zooms;
+  if (!Array.isArray(scene.zooms)) return;
+  const kept = [];
+  scene.zooms.forEach((zoom, z) => {
+    const written = source.zooms?.[z] ?? zoom;
+    const a = Number(zoom.at);
+    if (!finite(a) || a < from - 1e-6 || a >= to - 1e-6) return;
+    const copied = JSON.parse(JSON.stringify(written));
+    copied.at = at(written.at, a);
+    const until = Number(zoom.until);
+    if (finite(until) && until <= to + 1e-6) copied.until = at(written.until, until);
+    else delete copied.until;
+    if (isObject(copied.box)) {
+      const fitted = fitZoomBox(copied, plate, canvas);
+      if (!fitted) { warnings.push(`${copy.id}: a zoom at ${copied.at} left out: its box cannot sit in the ${canvas.width}×${canvas.height} safe area`); return; }
+    }
+    kept.push(copied);
+  });
+  if (kept.length) copy.zooms = kept;
+}
+
+// A box zoom moved from the long form's plate to the Short's: the box scaled
+// per axis, the scale lowered (in 0.05 steps, to ZOOM.min) until the zoomed
+// box lands inside the safe area. → true, or false when no scale fits.
+function fitZoomBox(zoom, plate, canvas) {
+  const W = Number(plate?.width), H = Number(plate?.height);
+  if (W > 0 && H > 0 && (W !== canvas.width || H !== canvas.height)) {
+    const sx = canvas.width / W, sy = canvas.height / H;
+    const { x, y, width, height } = zoom.box;
+    zoom.box = { x: round(x * sx, 1), y: round(y * sy, 1), width: round(width * sx, 1), height: round(height * sy, 1) };
+  }
+  const size = { width: canvas.width, height: canvas.height };
+  const first = zoomFrame(zoom.box, zoom.scale, size);
+  if (!zoomFitError(first, size)) return true;
+  for (let scale = Math.floor(first.scale * 20) / 20; scale >= ZOOM.min - 1e-6; scale = round(scale - 0.05, 2)) {
+    const s = round(Math.max(ZOOM.min, scale), 2);
+    if (!zoomFitError(zoomFrame(zoom.box, s, size), size)) { zoom.scale = s; return true; }
+  }
+  return false;
+}
+
+// The zooms the Short's shots can no longer hold (an at during the entry
+// move or past the shot's new end, a hold cut short) leave, one at a time,
+// until the story's own zoom checks pass.
+function fitZooms(story, words, warnings) {
+  for (let pass = 0; pass < 64; pass += 1) {
+    const numbered = { ...story, scenes: story.scenes.map((scene) => ({
+      ...scene,
+      start: sceneTime(scene.start, words),
+      end: sceneTime(scene.end, words),
+      ...(Array.isArray(scene.zooms) ? { zooms: scene.zooms.map((zoom) => ({ ...zoom, at: sceneTime(zoom.at, words), ...(zoom.until !== undefined ? { until: sceneTime(zoom.until, words) } : {}) })) } : {})
+    })) };
+    const error = validateStory(numbered).errors.find((message) => /^scenes\[\d+\]\.zooms/.test(message));
+    if (!error) return;
+    const [, i, z] = /^scenes\[(\d+)\]\.zooms(?:\[(\d+)\])?/.exec(error);
+    const scene = story.scenes[Number(i)];
+    if (z === undefined) delete scene.zooms;
+    else {
+      scene.zooms.splice(Number(z), 1);
+      if (!scene.zooms.length) delete scene.zooms;
+    }
+    warnings.push(`${scene.id}: a zoom left out: ${error.replace(/^scenes\[\d+\]\./, '')}`);
+  }
 }
 
 /** Where a Short's narration is written, in its own project. */
