@@ -1,0 +1,57 @@
+{
+  "name": "@launchclip/core",
+  "version": "0.2.0",
+  "description": "LaunchClip's storyboard engine: the launchclip.story.v1 contract, its module registry and JSON Schemas, migrations, story patches, captions, transitions, camera and layout checks. Pure ESM, browser-safe, no Node built-ins.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./types/index.d.mts",
+      "default": "./index.mjs"
+    },
+    "./package.json": "./package.json",
+    "./*.mjs": {
+      "types": "./types/*.d.mts",
+      "default": "./*.mjs"
+    }
+  },
+  "types": "./types/index.d.mts",
+  "files": [
+    "*.mjs",
+    "*/*.mjs",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build-types.js",
+    "prepack": "npm run build",
+    "postpack": "node -e \"require('node:fs').rmSync('types', {recursive: true, force: true})\""
+  },
+  "keywords": [
+    "video",
+    "storyboard",
+    "motion-graphics",
+    "captions",
+    "json-schema",
+    "json-patch",
+    "launchclip"
+  ],
+  "author": "Roger Chappel",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rogerchappel/launchclip.git",
+    "directory": "kit/core"
+  },
+  "bugs": {
+    "url": "https://github.com/rogerchappel/launchclip/issues"
+  },
+  "homepage": "https://github.com/rogerchappel/launchclip/tree/main/kit/core#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
