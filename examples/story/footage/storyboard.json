@@ -20,10 +20,10 @@
       "id": "hook",
       "module": "emphasis-caption",
       "track": 1,
-      "start": 0.3,
+      "start": 0.2,
       "end": 2.4,
-      "params": { "text": "Buried demos" },
-      "hits": [{ "at": "word:bury", "event": "pop" }]
+      "params": { "text": "Buried demos", "at": 0 },
+      "hits": [{ "at": "word:most", "event": "pop" }]
     },
     {
       "id": "punch-demo",
