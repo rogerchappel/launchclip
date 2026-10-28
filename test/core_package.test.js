@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {readdirSync, readFileSync} from 'node:fs';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {cp, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -49,8 +49,13 @@ test('kit/core imports no Node built-ins and nothing outside itself', async () =
 test('the packed package installs, imports and typechecks', {timeout: 240_000}, async (t) => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'launchclip-core-package-'));
   t.after(() => rm(temp, {recursive: true, force: true}));
-  // prepack generates types/ and postpack removes it, as on a real publish.
-  const {stdout} = await run(npm, ['pack', '--json', '--pack-destination', temp], {cwd: CORE});
+  // Packs a copy: prepack would write types/ into kit/core, whose content is
+  // the kit fingerprint other tests' render caches key on. The build is the
+  // one prepack runs.
+  const copy = path.join(temp, 'core');
+  await cp(CORE, copy, {recursive: true, filter: (source) => !/[\\/](types|node_modules)$/.test(source)});
+  await run(process.execPath, [path.join(CORE, 'scripts/build-types.js'), copy]);
+  const {stdout} = await run(npm, ['pack', '--ignore-scripts', '--json', '--pack-destination', temp], {cwd: copy});
   const [packed] = JSON.parse(stdout);
   const listed = packed.files.map((file) => file.path);
   for (const file of ['package.json', 'README.md', 'LICENSE', 'index.mjs', 'types/index.d.mts', 'story.mjs', 'types/story.d.mts', 'characters/styles.mjs']) {

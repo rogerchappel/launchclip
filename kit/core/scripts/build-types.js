@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Generates types/*.d.mts for @launchclip/core from the plain ESM sources
-// (npm run build, run by prepack). tsc's declarations for JavaScript keep a
+// (npm run build, run by prepack). An argument builds another copy of the
+// package instead (test/core_package.test.js packs a copy, so the suite never
+// writes into kit/core). tsc's declarations for JavaScript keep a
 // destructured parameter's pattern but type it only from the keys that have
 // defaults ({canvas, sampleStep = 1/30} → {canvas, sampleStep}?: {sampleStep?:
 // number}), which is not valid TypeScript. Each pattern becomes a plain
@@ -12,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-const PACKAGE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PACKAGE = path.resolve(process.argv[2] ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));
 
 function openPatterns(context) {
   const { factory } = context;
