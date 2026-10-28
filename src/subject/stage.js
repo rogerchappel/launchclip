@@ -72,7 +72,9 @@ export function rangeDirName(range) {
 
 /**
  * Probe a recording. → {probe, path, cached}
- * options: {model, cacheDir, force, download, smooth, log, segmenter (tests)}
+ * options: {model, cacheDir, force, download, smooth, log, segmenter (tests),
+ *   createSegmenter(modelId, options) → segmenter (an app's own matting; else
+ *   createSubjectSegmenter, which downloads the ONNX models)}
  */
 export async function runSubjectProbe(src, options = {}) {
   const modelId = options.model ?? DEFAULT_PROBE_MODEL;
@@ -86,7 +88,7 @@ export async function runSubjectProbe(src, options = {}) {
   }
   const rate = Math.min(1, PROBE_MAX_SAMPLES / source.duration);
   const size = evenSize(PROBE_WIDTH, source);
-  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options, options.createSegmenter);
   const samples = [];
   try {
     let index = 0;
@@ -121,7 +123,7 @@ export async function runSubjectTrack(src, options = {}) {
   }
   const rate = Math.min(TRACK_FPS, source.fps);
   const size = evenSize(PROBE_WIDTH, source);
-  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options, options.createSegmenter);
   const frames = [];
   try {
     let index = 0;
@@ -164,7 +166,7 @@ export async function runSubjectMatte(src, range, options = {}) {
   const { fps } = source;
   const { width, height } = matteSize(source);
   const stats = evenSize(Math.min(STATS_WIDTH, width), source);
-  const segmenter = options.segmenter ?? await openSegmenter(modelId, options);
+  const segmenter = options.segmenter ?? await openSegmenter(modelId, options, options.createSegmenter);
   const partial = path.join(dir, "matte.partial.webm");
   const writer = openMatteWriter(partial, { width, height, fps, ffmpeg: options.ffmpeg });
   const frames = [];
