@@ -5,7 +5,7 @@
 // the cast overlay.
 import React from 'react';
 // @ts-ignore plain ESM core module
-import {charactersTimeline, charactersView} from '../../core/catalog-characters.mjs';
+import {charactersTimeline, charactersView} from '@launchclip/core/catalog-characters.mjs';
 import {PartsModule} from './CatalogE';
 
 const typed = (id: string): React.FC<{model: any}> => {

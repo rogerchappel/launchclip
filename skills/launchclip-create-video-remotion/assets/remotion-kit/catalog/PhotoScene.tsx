@@ -7,7 +7,8 @@
 // media.sourceStart, an image an <Img>; the overlay (scrim and text) is drawn
 // after it.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, Img, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Img, OffthreadVideo, useCurrentFrame, useVideoConfig} from 'remotion';
+import {assetUrl} from '../media';
 // @ts-ignore plain ESM core module
 import {photoSceneTimeline, photoSceneView} from '../../core/catalog-d.mjs';
 // @ts-ignore plain ESM core module
@@ -39,8 +40,8 @@ export const PhotoScene: React.FC<{model: any}> = ({model}) => {
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>
       {media.kind === 'video'
-        ? <OffthreadVideo id={view.media.id} src={staticFile(media.src)} muted trimBefore={Math.round(media.sourceStart * fps)} style={styleOf(view.media, state)} />
-        : <Img id={view.media.id} src={staticFile(media.src)} alt={String(view.media.attrs?.alt ?? '')} style={styleOf(view.media, state)} />}
+        ? <OffthreadVideo id={view.media.id} src={assetUrl(media.src)} muted trimBefore={Math.round(media.sourceStart * fps)} style={styleOf(view.media, state)} />
+        : <Img id={view.media.id} src={assetUrl(media.src)} alt={String(view.media.attrs?.alt ?? '')} style={styleOf(view.media, state)} />}
       {renderNode(view.overlay, state, model.id)}
     </AbsoluteFill>
   );

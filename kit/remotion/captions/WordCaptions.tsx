@@ -7,7 +7,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { captionBandFor, captionDipOpacity, captionElementStateAt, captionInlineStyle, captionPlan, CAPTION_DEFAULT_COLORS, indexCaptionTweens } from "../../core/captions.mjs";
+import { captionBandFor, captionDipOpacity, captionElementStateAt, captionInlineStyle, captionPlan, CAPTION_DEFAULT_COLORS, indexCaptionTweens } from "@launchclip/core/captions.mjs";
 
 export type CaptionWord = { text: string; start: number; end: number };
 export type CaptionChunk = { id: string; start: number; end: number; words: CaptionWord[] };

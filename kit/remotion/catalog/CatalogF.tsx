@@ -3,7 +3,7 @@
 // as HyperFrames.
 import React from 'react';
 // @ts-ignore plain ESM core module
-import {catalogFTimeline, catalogFView} from '../../core/catalog-f.mjs';
+import {catalogFTimeline, catalogFView} from '@launchclip/core/catalog-f.mjs';
 import {PartsModule} from './CatalogE';
 
 const typed = (id: string): React.FC<{model: any}> => {

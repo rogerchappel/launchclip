@@ -8,7 +8,8 @@
 // overlay. A split module is rendered once per part: model.part "behind"
 // draws the behind tree, "front" the front tree.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, OffthreadVideo, useCurrentFrame, useVideoConfig} from 'remotion';
+import {assetUrl} from '../media';
 // @ts-ignore plain ESM core module
 import {catalogETimeline, catalogEView} from '../../core/catalog-e.mjs';
 // @ts-ignore plain ESM core module
@@ -26,7 +27,7 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   if (typeof node === 'string') return node;
   const props = node.id ? state.get(node.id) : undefined;
   const attrs: Record<string, unknown> = {...(node.attrs ?? {})};
-  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = staticFile(attrs.src as string);
+  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style: styleOf(node, state), ...attrs},
     ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index))));
@@ -55,7 +56,7 @@ export const PartsModule: React.FC<{model: any; viewOf: (model: any) => any; tim
     <AbsoluteFill style={{pointerEvents: 'none'}}>
       {main ? renderNode(main, state, model.id) : null}
       {m && m.tag === 'video' && source ? (
-        <OffthreadVideo id={m.id} src={staticFile(source.src)} muted trimBefore={Math.round(source.sourceStart * fps)} style={styleOf(m, state)} />
+        <OffthreadVideo id={m.id} src={assetUrl(source.src)} muted trimBefore={Math.round(source.sourceStart * fps)} style={styleOf(m, state)} />
       ) : m ? renderNode(m, state, `${model.id}-media`) : null}
       {view.overlay ? renderNode(view.overlay, state, `${model.id}-overlay`) : null}
     </AbsoluteFill>

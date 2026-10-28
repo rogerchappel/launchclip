@@ -18,9 +18,9 @@ import React from "react";
 import { AbsoluteFill, Freeze, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs";
+import { layerStateAt, layerStyle, sceneWindows } from "@launchclip/core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
-import { getEase } from "../core/motion.mjs";
+import { getEase } from "@launchclip/core/motion.mjs";
 import { resolveSceneElement } from "./StoryComposition";
 import type { StoryProps } from "./StoryComposition";
 import { SceneStartFrame } from "./clock";

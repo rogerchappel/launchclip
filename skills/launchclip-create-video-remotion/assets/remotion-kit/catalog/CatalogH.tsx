@@ -2,7 +2,8 @@
 // same view tree and op list as HyperFrames (kit/core/catalog-h.mjs).
 // Frame-pure: the scene clock and the model only.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, staticFile} from 'remotion';
+import {AbsoluteFill} from 'remotion';
+import {assetUrl} from '../media';
 import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core module
 import {MODULES, catalogHStyle, catalogHTimeline, catalogHView} from '../../core/catalog-h.mjs';
@@ -20,7 +21,7 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   const attrs: Record<string, unknown> = {...(node.attrs ?? {})};
   // A canvas with a paint plan (kit/core/particles.mjs) is drawn by the painter.
   if (node.tag === 'canvas' && node.id && paint?.plans[node.id]) return <PaintCanvas key={key} id={node.id} plan={paint.plans[node.id]} t={paint.t} style={style as React.CSSProperties} attrs={attrs} />;
-  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = staticFile(attrs.src as string);
+  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style, ...attrs},
     ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index, paint))));

@@ -3,7 +3,7 @@
 // the shared catalogue E parts renderer.
 import React from 'react';
 // @ts-ignore plain ESM core module
-import {worldTimeline, worldView} from '../../core/catalog-world.mjs';
+import {worldTimeline, worldView} from '@launchclip/core/catalog-world.mjs';
 import {PartsModule} from './CatalogE';
 
 export const World: React.FC<{model: any}> = ({model}) => {

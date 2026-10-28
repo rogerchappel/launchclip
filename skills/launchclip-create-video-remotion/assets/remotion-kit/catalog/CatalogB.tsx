@@ -6,7 +6,8 @@
 // evaluated with kit/core/motion.mjs eases by frameState(). Nothing is cached
 // between frames, so any frame can render in any order.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, staticFile} from 'remotion';
+import {AbsoluteFill} from 'remotion';
+import {assetUrl} from '../media';
 import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core module
 import {catalogBView, catalogBTimeline} from '../../core/catalog-b.mjs';
@@ -21,7 +22,7 @@ export function renderNode(node: ViewNode | string, state: Map<string, FrameProp
   const props = node.id ? state.get(node.id) : undefined;
   const style = props ? {...(node.style ?? {}), ...propsToStyle(props)} : node.style;
   const attrs: Record<string, unknown> = {...(node.attrs ?? {})};
-  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = staticFile(attrs.src as string);
+  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style, ...attrs},
     ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index))));

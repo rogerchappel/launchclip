@@ -30,7 +30,8 @@
 //   the absolute frame as the HyperFrames compiler steps it on its timeline;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
-import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { assetUrl } from "./media";
 import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
 import { placeholderModel, resolveModule } from "../core/modules.mjs";
@@ -138,7 +139,7 @@ export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSS
 export const BackgroundField: React.FC<{ plan: any; t: number }> = ({ plan, t }) => (
   <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", ...fieldStyle(plan) }} aria-hidden>
     {plan.layers.map((layer: any) => (
-      <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, staticFile) } : undefined} />
+      <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />
     ))}
   </AbsoluteFill>
 );
@@ -234,7 +235,7 @@ export const WorldBackdrops: React.FC<{ backdrops: any; background: string; t: n
             <div style={{ ...box, transform: containerTransform({ x: state.x, y: state.y }) }}>
               <div style={{ position: "absolute", left: c.x, top: c.y, width: c.width, height: c.height, overflow: "hidden", background, ...mask }}>
                 {segment.layers.map((layer: any) => (
-                  <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, staticFile) } : undefined} />
+                  <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />
                 ))}
               </div>
             </div>
@@ -313,7 +314,7 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
         const from = Math.round(segment.start * fps), to = Math.round(segment.end * fps);
         return (
           <Sequence key={segment.index} name={`base ${segment.index}`} from={from - shift} durationInFrames={Math.max(1, to - from)} layout="none">
-            <OffthreadVideo src={staticFile(base.src)} trimBefore={Math.round(segment.sourceStart * fps)} volume={muted ? 0 : base.volume} muted={muted || base.volume === 0} style={style} />
+            <OffthreadVideo src={assetUrl(base.src)} trimBefore={Math.round(segment.sourceStart * fps)} volume={muted ? 0 : base.volume} muted={muted || base.volume === 0} style={style} />
           </Sequence>
         );
       })}
@@ -336,7 +337,7 @@ export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offse
         const from = Math.round(clip.start * fps), to = Math.round(clip.end * fps);
         return (
           <Sequence key={clip.index} name={`subject ${clip.index}`} from={from - shift} durationInFrames={Math.max(1, to - from)} layout="none">
-            <OffthreadVideo src={staticFile(clip.src)} trimBefore={Math.round(clip.mediaStart * fps)} transparent muted style={style} />
+            <OffthreadVideo src={assetUrl(clip.src)} trimBefore={Math.round(clip.mediaStart * fps)} transparent muted style={style} />
           </Sequence>
         );
       })}
@@ -500,7 +501,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
             <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
           ) : null}
         </AbsoluteFill>
-        {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
+        {audio ? <Audio src={assetUrl(audio)} volume={mixVolume} /> : null}
       </AbsoluteFill>
     );
   }
@@ -531,7 +532,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       {overlay && Array.isArray(__captions) && __captions.length ? (
         <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
       ) : null}
-      {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
+      {audio ? <Audio src={assetUrl(audio)} volume={mixVolume} /> : null}
     </AbsoluteFill>
   );
 };
@@ -541,9 +542,9 @@ export async function loadStoryCaptions(story: any): Promise<any[] | null> {
   const overlay = captionOverlay(story);
   if (!overlay) return null;
   try {
-    if (overlay.src) return captionChunksFrom(await (await fetch(staticFile(overlay.src))).json());
+    if (overlay.src) return captionChunksFrom(await (await fetch(assetUrl(overlay.src))).json());
     if (!story.audio?.words) return null;
-    const words = narrationWords(await (await fetch(staticFile(story.audio.words))).json());
+    const words = narrationWords(await (await fetch(assetUrl(story.audio.words))).json());
     return words.length ? chunkWords(words) : null;
   } catch (error: any) {
     console.warn(`[launchclip] captions skipped: ${error?.message ?? error}`);

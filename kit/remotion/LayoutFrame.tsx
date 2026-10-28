@@ -5,7 +5,7 @@
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { layoutFrameStyle, layoutStateAt } from "../core/footage-layout.mjs";
+import { layoutFrameStyle, layoutStateAt } from "@launchclip/core/footage-layout.mjs";
 
 export const LayoutFrame: React.FC<{ plan: any }> = ({ plan }) => {
   const frame = useCurrentFrame();

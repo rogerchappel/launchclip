@@ -3,7 +3,8 @@
 // the chrome's top-left pivot (the media starts 48px below it), so they move
 // as one window.
 import React from "react";
-import { Img, OffthreadVideo, staticFile, useVideoConfig } from "remotion";
+import { Img, OffthreadVideo, useVideoConfig } from "remotion";
+import { assetUrl } from "../media";
 import { C, Model, Section, WindowBar, moduleMotion, palette, useModuleTime, visible } from "./shell-b";
 
 export const MediaWindow: React.FC<{ model: Model }> = ({ model }) => {
@@ -16,7 +17,7 @@ export const MediaWindow: React.FC<{ model: Model }> = ({ model }) => {
     background: p.custom ? model.theme.surface : C.media, borderRadius: `0 0 ${c.mediaRadius}px ${c.mediaRadius}px`,
     ...moduleMotion(model, t, c.mediaTransformOrigin)
   };
-  const src = staticFile(c.media.src);
+  const src = assetUrl(c.media.src);
   return (
     <>
       {c.media.kind === "video"

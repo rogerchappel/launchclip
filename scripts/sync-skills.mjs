@@ -181,6 +181,17 @@ export function hyperframesCopy(root, file, kitCore = []) {
   return source.replace(/(['"])\.\.\/core\//g, '$1./');
 }
 
+// kit/remotion imports the engine as @launchclip/core/<file>.mjs (it is the
+// @launchclip/remotion package). A skill ships core beside the kit instead
+// (assets/core → kit/core), so its copy imports ../core/<file>.mjs, with one
+// more ../ per folder below kit/remotion.
+export function remotionKitCopy(root, file) {
+  const source = readFileSync(path.join(root, 'kit/remotion', file));
+  if (!/\.tsx?$/.test(file)) return source;
+  const up = '../'.repeat(file.split(path.sep).length);
+  return source.toString('utf8').replace(/(['"])@launchclip\/core\//g, `$1${up}core/`);
+}
+
 // → { files: Map<repo-relative path, Buffer|string>, managedDirs: repo-relative dirs owned wholesale }
 export function planOutputs({ root = ROOT } = {}) {
   const srcRoot = path.join(root, 'skills-src');
@@ -190,7 +201,9 @@ export function planOutputs({ root = ROOT } = {}) {
   // copied with their folder so relative imports keep working. index.mjs is
   // the @launchclip/core package entry, which the skills never import.
   const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => file.endsWith('.mjs') && file !== 'index.mjs' && file.split(path.sep).length <= 2).map((file) => file.split(path.sep).join('/'));
-  const kitRemotion = listFiles(path.join(root, 'kit/remotion'));
+  // The kit's TSX, without the @launchclip/remotion packaging (package.json,
+  // README, LICENSE, build script, dist/).
+  const kitRemotion = listFiles(path.join(root, 'kit/remotion')).filter((file) => /\.tsx?$/.test(file) && !/^(?:scripts|dist)[\\/]/.test(file));
   const kitHyperframes = listFiles(path.join(root, 'kit/hyperframes')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const hyperframesScripts = path.join(root, 'skills/launchclip-create-video/scripts');
   const generated = Object.entries(GENERATED_REFERENCES).map(([name, build]) => [name, build()]);
@@ -225,7 +238,7 @@ export function planOutputs({ root = ROOT } = {}) {
     if (skill.remotionKit) {
       managedDirs.push(`${dir}/assets`);
       for (const file of kitRemotion) {
-        files.set(`${dir}/assets/remotion-kit/${file.split(path.sep).join('/')}`, readFileSync(path.join(root, 'kit/remotion', file)));
+        files.set(`${dir}/assets/remotion-kit/${file.split(path.sep).join('/')}`, remotionKitCopy(root, file));
       }
       // The TSX imports ../core/*.mjs, so ship core beside it: a project copies
       // assets/remotion-kit → kit/remotion and assets/core → kit/core.
