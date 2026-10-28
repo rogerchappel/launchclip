@@ -602,7 +602,8 @@ viewer (and a scene detector, see "State events" below) reads it as one.
   edge and counts between numbers in the same frame (`$1` → `$3`), opacity,
   clip and dash follow the settled ops. Colours and SVG paths do not morph.
 - Focus: the ring is a rounded rim in the focus colour (`focusColor(theme)`:
-  the brand accent at 3:1 on bg, else primary) with a soft outer glow. A new
+  `brand.colors.focus` when the story or style pack sets it, else the brand
+  accent, at 3:1 on bg; else primary) with a soft outer glow. A new
   target gets its own ring that starts exactly on the old ring's rect and
   settles exactly on its own (FLIP), so it ends crisp; the targets' siblings
   (other items, or for an element id its id'd siblings) dim to 30 % and come

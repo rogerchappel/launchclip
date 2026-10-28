@@ -1568,10 +1568,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip history check <dir> [--hook-limit 0.6] [--structure-limit 0.85] [--similarity-limit 0.6] [--json]
   ```
 
-- `cutdown`: Cut a Short from one section of a long video: a new 9:16 project (default <project>/cutdowns/<section>-shorts) that re-plans the section against the Shorts profile instead of cropping. It reuses the base edit, mattes and face track, maps word anchors into the section, opens on a hook card and loops back to it. Deterministic and free; --model re-plans with the planner (paid). Then run launchclip finish on it.
+- `cutdown`: Cut a Short from one section of a long video: a new 9:16 project (default <project>/cutdowns/<section>-shorts) that re-plans the section against the Shorts profile instead of cropping. It reuses the base edit, mattes and face track, maps word anchors into the section, opens on a hook card and loops back to it. Deterministic and free; --model re-plans with the planner (paid). A voiceover-motion video is cut too: its narration spliced from the picked lines, its shots, beats and captions re-timed and laid out again at 9:16, opening on an image. --lines (direction-map lines, 1-based: 23-28 or 64,71-74,78) or --range (seconds: 120-150,212-230) picks the narration by hand. Then run launchclip finish on it.
 
   ```text
-  launchclip cutdown <project> --to shorts [--section <id>] [--max 58] [--out <dir>] [--model provider:model] [--force]
+  launchclip cutdown <project> --to shorts [--section <id> | --lines 23-28 | --range 120-150] [--max 58] [--out <dir>] [--model provider:model] [--force]
   ```
 
 - `export`: Export an editable timeline for Final Cut Pro, Premiere Pro or Resolve.

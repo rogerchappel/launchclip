@@ -185,3 +185,15 @@ test('dim: false on a later state stops dimming from then on, not before', () =>
   assert.equal(frameState(ops, 4).get('cost-bar-0').opacity, FOCUS_DIM);
   assert.equal(frameState(ops, 7).get('cost-bar-0').opacity, 1);
 });
+
+test('brand.colors.focus colours the ring, so the accent stays free; one that cannot read on bg falls back to the accent', () => {
+  const ring = colors => {
+    const s = resolveStory({...story(barScene([{at: 3, set: {focus: 1}}])), brand: {...brand, colors: {...brand.colors, ...colors}}});
+    const m = resolveModule(s.scenes[0], s);
+    const node = (function find(n) { if (n?.id === 'cost-ss-ring-0') return n; for (const c of n?.children ?? []) { const hit = find(c); if (hit) return hit; } return null; })(catalogHView(m));
+    return node.style.border;
+  };
+  assert.match(ring({}), /#46d4ff$/);
+  assert.match(ring({focus: '#F1ECE2'}), /#f1ece2$/);
+  assert.match(ring({focus: '#0a0b10'}), /#46d4ff$/, 'under 3:1 on bg');
+});

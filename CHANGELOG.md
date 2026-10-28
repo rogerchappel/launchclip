@@ -87,6 +87,19 @@
   cover and captions, whether the video fits each platform (YouTube Shorts,
   TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request),
   and per-platform UTM links with `--link` and `--utm`.
+- `brand.colors.focus` gives the focus ring its own colour, in a story or a
+  style pack, so a style can keep its accent for something else. It is used
+  when it reads at 3:1 on the background; otherwise the ring keeps the
+  accent, as before.
+- `launchclip cutdown` cuts voiceover-motion videos too. It splices the
+  Short's narration from the long form's voice, moves the shots, beats,
+  states and captions onto the Short's clock, lets each module lay itself out
+  again at 9:16 (dropping a source line or title that no longer fits before
+  dropping a shot), and opens on an image rather than a title card, so the
+  structure gate's first-frame check passes. `--lines 23-28` or
+  `--lines 64,71-74,78` (direction-map lines) and `--range 120-150` (seconds)
+  pick the narration by hand, several stretches at once.
+
 ### Fixed
 
 - `waterfall` draws a step's + or − half as large again. Condensed display
@@ -98,7 +111,6 @@
   of under the bar. Regression fixtures lock each step's sign and direction,
   for an all-positive build-up and for one that crosses zero, in both
   renderers.
-
 - Evidence clips and other screen recordings move with the world camera in
   HyperFrames. Their video used to stay full-size on screen while the camera
   pushed, zoomed or pulled back for an overview; it now moves with its shot,

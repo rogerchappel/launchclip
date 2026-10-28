@@ -340,7 +340,9 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const fontsIn = brand.fonts ?? {};
   const fonts = {display: fontStack(fontsIn.display, 'display', check, 'brand.fonts.display'), body: fontStack(fontsIn.body, 'body', check, 'brand.fonts.body'), meta: fontStack(fontsIn.meta, 'meta', check, 'brand.fonts.meta')};
   const theme = {surface: colors.bg, foreground: colors.paper, muted: mixColor(colors.paper, colors.bg, 0.62), border: mixColor(colors.paper, colors.bg, 0.18), accentText: colors.ink,
-    primary: colors.primary, accent: colors.accent, ink: colors.ink, paper: colors.paper, bg: colors.bg, panel: mixColor(colors.paper, colors.bg, 0.06)};
+    primary: colors.primary, accent: colors.accent, ink: colors.ink, paper: colors.paper, bg: colors.bg, panel: mixColor(colors.paper, colors.bg, 0.06),
+    // brand.colors.focus (optional): the focus ring's own colour, when the accent is wanted elsewhere.
+    ...(HEX6.test(colorsIn.focus ?? '') ? {focus: colorsIn.focus.toLowerCase()} : {})};
   const contrast = {};
   const requireContrast = (name, fg, bg, label) => {
     const ratio = contrastRatio(fg, bg);
