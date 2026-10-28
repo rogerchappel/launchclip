@@ -9,13 +9,15 @@ import { fileURLToPath } from "node:url";
 import {
   AVOID_LOOKS, FONT_PAIRINGS, SEED_BACKGROUND_PARAMS, SEED_WORLDS, GENERATOR_VERSION, MIN_PALETTE_DISTANCE, MIN_STARTER_DISTANCE, TONE_TABLE,
   fingerprintKey, generateStyle, hexToOklch, nearestStarter, normalizeSeed, oklchToHex, paletteContrast,
-  randomSeed, seedSummaryLine, styleDistance, styleFingerprint, toneFromText
+  fingerprintDistance, randomSeed, seedSummaryLine, styleFingerprint, toneFromText
 } from "@launchclip/core/style-seed.mjs";
 import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "@launchclip/core/style.mjs";
 import { FONT_REGISTRY, registeredFamily } from "@launchclip/core/fonts.mjs";
 import { seededRandom } from "@launchclip/core/ambient.mjs";
 
 const STYLES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "kit", "styles");
+// v2 packs carry {base, ...overrides}; v1 packs a grammar name.
+const grammarName = (pack) => (typeof pack.motion.grammar === "string" ? pack.motion.grammar : pack.motion.grammar.base);
 const seeds = Array.from({ length: 50 }, (_, i) => (Math.imul(i + 7, 2654435761) >>> 0).toString(16).padStart(8, "0"));
 
 test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
@@ -32,7 +34,7 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
   const fingerprints = packs.map(styleFingerprint);
   assert.equal(new Set(fingerprints.map(fingerprintKey)).size, 50);
   for (let i = 0; i < fingerprints.length; i += 1) {
-    for (let j = i + 1; j < fingerprints.length; j += 1) assert.ok(styleDistance(fingerprints[i], fingerprints[j]) > 0.02, `${packs[i].name} ~ ${packs[j].name}`);
+    for (let j = i + 1; j < fingerprints.length; j += 1) assert.ok(fingerprintDistance(fingerprints[i], fingerprints[j]) > 0.02, `${packs[i].name} ~ ${packs[j].name}`);
   }
   // Subtle patterns and textures most of the time, not flat fills.
   assert.ok(packs.filter((pack) => pack.background.kind === "flat").length <= 8);
@@ -62,7 +64,7 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
   assert.ok(new Set(packs.map((pack) => pack.world.kind)).size >= 4);
   // The families spread: every theme, several grammars and pairings.
   assert.equal(new Set(packs.map((pack) => pack.generated.theme)).size, 3);
-  assert.ok(new Set(packs.map((pack) => pack.motion.grammar)).size >= 5);
+  assert.ok(new Set(packs.map((pack) => grammarName(pack))).size >= 5);
   assert.ok(new Set(packs.map((pack) => pack.generated.pairing)).size >= 10);
 });
 
@@ -81,7 +83,7 @@ test("tone narrows the families; the seed picks inside them", () => {
   for (const tone of Object.keys(TONE_TABLE)) {
     for (const seed of seeds.slice(0, 8)) {
       const pack = generateStyle({ seed, tone });
-      assert.ok(TONE_TABLE[tone].grammars.includes(pack.motion.grammar), `${tone}: ${pack.motion.grammar}`);
+      assert.ok(TONE_TABLE[tone].grammars.includes(grammarName(pack)), `${tone}: ${grammarName(pack)}`);
       assert.ok(TONE_TABLE[tone].themes.includes(pack.generated.theme), `${tone}: ${pack.generated.theme}`);
       assert.ok(FONT_PAIRINGS.find((entry) => entry.id === pack.generated.pairing).tones.includes(tone));
       assert.equal(pack.generated.tone, tone);
@@ -157,7 +159,7 @@ test("the starter table matches kit/styles, and starters read as close to themse
     assert.deepEqual(look.colors, pack.brand.colors, pack.name);
     assert.deepEqual(look.fonts, { display: pack.brand.fonts.display, body: pack.brand.fonts.body }, pack.name);
     assert.equal(look.panel, pack.layouts.panel.treatment, pack.name);
-    assert.equal(look.grammar, pack.motion.grammar, pack.name);
+    assert.equal(look.grammar, grammarName(pack), pack.name);
     assert.equal(look.caption, pack.captions.preset, pack.name);
     const nearest = nearestStarter(pack);
     assert.equal(nearest.name, pack.name);
@@ -250,7 +252,7 @@ test("seed runs cover every option of every dimension: 50 from 0, or any 100 in 
       theme: [(p) => p.generated.theme, THEMES],
       scheme: [(p) => p.generated.scheme, PALETTE_SCHEMES],
       pairing: [(p) => p.generated.pairing, FONT_PAIRINGS.map((entry) => entry.id)],
-      grammar: [(p) => p.motion.grammar, ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"]],
+      grammar: [grammarName, ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"]],
       panel: [(p) => p.layouts.panel.treatment, SEED_PANEL_TREATMENTS],
       background: [(p) => p.background.kind, names(SEED_BACKGROUND_KINDS)],
       "ambient level": [(p) => p.ambient.level, ["off", "subtle", "standard", "lively"]],
@@ -284,7 +286,7 @@ test("no two dimensions move in lockstep: random seeds reach their combinations"
   const N = 600;
   const packs = Array.from({ length: N }, () => generateStyle({ seed: randomSeed(random) }));
   const dimensions = {
-    theme: (p) => p.generated.theme, scheme: (p) => p.generated.scheme, pairing: (p) => p.generated.pairing, grammar: (p) => p.motion.grammar,
+    theme: (p) => p.generated.theme, scheme: (p) => p.generated.scheme, pairing: (p) => p.generated.pairing, grammar: grammarName,
     panel: (p) => p.layouts.panel.treatment, background: (p) => p.background.kind, "icon style": (p) => p.vocabulary.icon_style,
     illustration: (p) => p.vocabulary.illustration, "drawing style": (p) => p.cast.drawing_style, "character set": (p) => p.cast.set,
     world: (p) => p.world.kind, "world time": (p) => p.world.time, "sound palette": (p) => p.sound.palette, genre: (p) => p.sound.music.genre,

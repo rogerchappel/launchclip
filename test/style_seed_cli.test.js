@@ -138,7 +138,7 @@ test("story plan with no style or brand plans for a seeded style and names it", 
     const pack = JSON.parse(await readFile(path.join(dir, ".launchclip", "styles", "seed-7f3a91c2", "style.json"), "utf8"));
     assert.equal(pack.generated.tone, "calm");
     assert.equal(story.style, "seed-7f3a91c2");
-    assert.equal(story.motion.grammar, pack.motion.grammar);
+    assert.deepEqual(story.motion.grammar, pack.motion.grammar);
     assert.equal(story.overlays[0].preset, pack.captions.preset);
     assert.equal(story.overlays[0].style, undefined);
 
