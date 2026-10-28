@@ -108,6 +108,10 @@ export async function storyCaptionChunks(project, story, { models = sceneModels(
 // The kit sources that render for each renderer (content, not mtimes, so a
 // fresh checkout reuses its segments).
 const KIT_DIRS = Object.freeze({ remotion: ["kit/core", "kit/remotion"], hyperframes: ["kit/core", "kit/hyperframes"] });
+// kit/core is the @launchclip/core package: kit/core in a checkout, the
+// installed dependency in @launchclip/engine.
+const CORE_DIR = path.dirname(fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs")));
+const kitDir = (root, dir) => (dir === "kit/core" && root === ROOT ? CORE_DIR : path.join(root, dir));
 const kitCache = new Map();
 
 /**
@@ -121,7 +125,7 @@ export async function kitFingerprint(renderer, { root = ROOT, project, cache = t
   if (!kitCache.has(key)) {
     kitCache.set(key, (async () => {
       const parts = {};
-      for (const dir of dirs) parts[dir] = await treeContentHash(path.join(root, dir));
+      for (const dir of dirs) parts[dir] = await treeContentHash(kitDir(root, dir));
       parts.package = renderer === "remotion" ? packageVersion("@remotion/renderer") : renderer === "hyperframes" ? packageVersion("hyperframes") : null;
       return hashValue(parts);
     })());

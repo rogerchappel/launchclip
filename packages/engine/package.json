@@ -1,0 +1,93 @@
+{
+  "name": "@launchclip/engine",
+  "version": "0.2.0",
+  "description": "LaunchClip's Node engine for apps that embed it: the storyboard planner, finish (voice, music, SFX, mix, master), gates and critic, the segment renderer, NLE export and the footage-led lane, with every model and provider call through injected adapters.",
+  "type": "module",
+  "exports": {
+    ".": "./src/engine/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "kit",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "stage": "node scripts/stage.mjs",
+    "prepack": "npm run stage",
+    "postpack": "node -e \"for (const dir of ['src', 'kit', 'public']) require('node:fs').rmSync(dir, {recursive: true, force: true})\""
+  },
+  "keywords": [
+    "video",
+    "storyboard",
+    "motion-graphics",
+    "remotion",
+    "tts",
+    "launchclip"
+  ],
+  "author": "Roger Chappel",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rogerchappel/launchclip.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/rogerchappel/launchclip/issues"
+  },
+  "homepage": "https://github.com/rogerchappel/launchclip/tree/main/packages/engine#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@launchclip/core": "0.2.0",
+    "@anthropic-ai/sdk": "^0.104.1",
+    "hyperframes": "0.7.58",
+    "@fontsource-variable/big-shoulders-display": "5.3.0",
+    "@fontsource-variable/bricolage-grotesque": "5.3.0",
+    "@fontsource-variable/dm-sans": "5.3.0",
+    "@fontsource-variable/fira-code": "5.3.0",
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@fontsource-variable/lexend": "5.3.0",
+    "@fontsource-variable/manrope": "5.3.0",
+    "@fontsource-variable/oswald": "5.3.0",
+    "@fontsource-variable/outfit": "5.3.0",
+    "@fontsource-variable/playfair-display": "5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "5.3.0",
+    "@fontsource-variable/sora": "5.3.0",
+    "@fontsource-variable/space-grotesk": "5.3.0",
+    "@fontsource-variable/stix-two-text": "5.3.0",
+    "@fontsource-variable/syne": "5.3.0",
+    "@fontsource-variable/unbounded": "5.3.0",
+    "@fontsource/anton": "5.3.0",
+    "@fontsource/archivo-black": "5.3.0",
+    "@fontsource/bebas-neue": "5.3.0",
+    "@fontsource/dm-serif-display": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@fontsource/stix-two-math": "5.3.0",
+    "@fontsource/young-serif": "5.3.0"
+  },
+  "peerDependencies": {
+    "@remotion/bundler": "^4.0.536",
+    "@remotion/cli": "^4.0.536",
+    "@remotion/renderer": "^4.0.536",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.536"
+  },
+  "optionalDependencies": {
+    "kokoro-js": "1.2.1",
+    "onnxruntime-node": "1.27.0",
+    "playwright": "1.64.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

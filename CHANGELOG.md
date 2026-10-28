@@ -21,6 +21,14 @@
   takes the app's media through an asset resolver, lets the app supply font
   URLs, and is versioned in lockstep with the CLI. See
   [kit/remotion/README.md](kit/remotion/README.md).
+- The Node engine is its own npm package, `@launchclip/engine`: the planner,
+  finish (voice, music, SFX, mix, master), the gates and critic, the segment
+  renderer, NLE export and the footage-led lane, for apps that embed
+  LaunchClip. Every model and provider call goes through adapters the app
+  can replace (an LLM with vision, TTS, music, transcription, matting, media),
+  state stays in the folders the app passes, and an asset-provider hook lets
+  the planner ask the app for "a shot that shows X" from its media library or
+  a generated asset. See [packages/engine/README.md](packages/engine/README.md).
 
 - Style packs and storyboards take a `medium`: `oil`, `watercolour`,
   `pastel`, `ink` or `gouache` paints every frame so it looks hand-animated,

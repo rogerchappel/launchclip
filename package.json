@@ -48,7 +48,8 @@
   },
   "workspaces": [
     "kit/core",
-    "kit/remotion"
+    "kit/remotion",
+    "packages/engine"
   ],
   "files": [
     ".codex-plugin",

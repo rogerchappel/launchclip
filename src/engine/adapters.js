@@ -1,6 +1,6 @@
 // The adapters an app gives createEngine (src/engine/index.js). Every model
 // and provider call the engine makes goes through one of these; an adapter
-// left out uses the CLI's own implementation. docs/ENGINE.md documents each
+// left out uses the CLI's own implementation. packages/engine/README.md documents each
 // interface with examples.
 //
 //   llm         structured LLM calls, with images when vision is needed:

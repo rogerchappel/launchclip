@@ -159,7 +159,7 @@ test('@launchclip/core is versioned in step with launchclip and pinned exactly',
   assert.equal(core.name, '@launchclip/core');
   assert.equal(core.version, root.version);
   assert.equal(root.dependencies['@launchclip/core'], root.version);
-  assert.deepEqual(root.workspaces, ['kit/core', 'kit/remotion']);
+  assert.deepEqual(root.workspaces, ['kit/core', 'kit/remotion', 'packages/engine']);
   assert.equal(core.sideEffects, false);
   assert.equal(core.type, 'module');
   assert.deepEqual(Object.keys(core.dependencies ?? {}), []);

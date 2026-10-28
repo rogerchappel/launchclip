@@ -89,3 +89,6 @@ qa/parity-social/
 qa/format-eval*/
 /kit/core/types/
 /kit/remotion/dist/
+/packages/engine/src/
+/packages/engine/kit/
+/packages/engine/public/

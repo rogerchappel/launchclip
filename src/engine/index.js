@@ -5,7 +5,7 @@
 // call going through those adapters (the CLI's implementations by default)
 // and every piece of state kept under the app's folders (src/state_dirs.js).
 // The adapter interfaces are documented in src/engine/adapters.js and in
-// docs/ENGINE.md.
+// packages/engine/README.md (the @launchclip/engine package).
 import path from "node:path";
 import { withStateDirs } from "../state_dirs.js";
 import { engineAdapters } from "./adapters.js";
