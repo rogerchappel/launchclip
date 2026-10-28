@@ -74,7 +74,7 @@ test("runExport writes every format, copies media, validates and reuses overlay 
   assert.equal(report.validation.fcpxml.dtd.status === "skipped" || report.validation.fcpxml.dtd.status === "passed", true);
   assert.ok(existsSync(path.join(dir, "media", "recording.mp4")));
   assert.deepEqual(report.overlays.cameras, ["punch-demo", "punch-recording", "punch-callouts"]);
-  assert.deepEqual(log, ["prepare", "render twelve", "render builder", "render name", "render captions-note", "render try-it"]);
+  assert.deepEqual(log, ["prepare", "render twelve", "render hook", "render builder", "render name", "render captions-note", "render try-it"]);
   // V1: the edit plan's two kept segments, the second from source 10 s.
   const timeline = JSON.parse(await readFile(path.join(dir, "timeline.json"), "utf8"));
   assert.deepEqual(timeline.tracks[0].clips.map((clip) => [clip.start, clip.duration, clip.in]), [[0, 240, 0], [240, 360, 300]]);
