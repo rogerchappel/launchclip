@@ -11,7 +11,7 @@ import {formatBound, withinBounds} from './bounds.mjs';
 import {getEase} from './motion.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
-import {fontStack as registryStack} from './fonts.mjs';
+import {fontFamilyName, fontStack as registryStack, fontWidthScale} from './fonts.mjs';
 
 export const SAMPLE_LEAD = 0.0005;
 
@@ -40,6 +40,23 @@ const ROLE_NAMES = ['primary', 'accent', 'paper'];
 // Calibrated on the bundled role defaults (fonts.mjs FONT_REGISTRY advances): Anton,
 // Inter at 650, JetBrains Mono and Instrument Serif, with headroom for mixed case.
 const ADVANCE = {display: 0.56, body: 0.6, meta: 0.62, serif: 0.5};
+// The advances above are calibrated on the role defaults (Anton, Inter,
+// JetBrains Mono). createBase records how much wider the scene's brand faces
+// set (fontWidthScale); modules that shrink their type to fit (titles,
+// headline cards) divide their width by brandTextScale(role), so a wide face
+// such as Space Grotesk gets smaller type instead of overflowing its box and
+// breaking words. Modules are built one at a time, so it is the current scene's.
+let roleScale = {};
+/** Record the brand's width scale per type role for the scene about to be built. */
+export function setBrandTextScale(fonts = {}) {
+  const scale = role => fontWidthScale(typeof fonts[role] === 'string' ? fontFamilyName(fonts[role]) : null, role);
+  roleScale = {display: scale('display'), body: scale('body'), meta: scale('meta')};
+  return roleScale;
+}
+/** How much wider the current scene's brand face for a role sets than its calibration (≥ 1). */
+export function brandTextScale(role) {
+  return roleScale[role] ?? 1;
+}
 
 // ---------------------------------------------------------------------------
 // Safe expression parser (no eval, no Function)
@@ -268,11 +285,16 @@ function lineCount(text, size, family, width) {
   }
   return lines;
 }
-// Largest size in [min, preferred] (step 2) where text fits maxLines lines.
+// Largest size in [min, preferred] (step 2) where text fits maxLines lines:
+// first at the brand face's real width (brandTextScale), so a wide face gets
+// smaller type, then, when nothing fits that way, at the calibrated width.
 export function fitText(check, path, text, {family, width, preferred, min, maxLines = 1}) {
-  for (let size = Math.floor(preferred); size >= Math.ceil(min); size -= 2) {
-    const lines = lineCount(text, size, family, width);
-    if (lines <= maxLines) return {size, lines};
+  const scale = brandTextScale(family);
+  for (const fitWidth of scale > 1 ? [width / scale, width] : [width]) {
+    for (let size = Math.floor(preferred); size >= Math.ceil(min); size -= 2) {
+      const lines = lineCount(text, size, family, fitWidth);
+      if (lines <= maxLines) return {size, lines};
+    }
   }
   return check.fail(path, `is too long: ${JSON.stringify(text)} does not fit ${maxLines} line${maxLines === 1 ? '' : 's'} at ${Math.ceil(min)} px in ${Math.round(width)} px; shorten it`);
 }
@@ -338,6 +360,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
     colors[key] = colorsIn[key].toLowerCase();
   }
   const fontsIn = brand.fonts ?? {};
+  setBrandTextScale(fontsIn);
   const fonts = {display: fontStack(fontsIn.display, 'display', check, 'brand.fonts.display'), body: fontStack(fontsIn.body, 'body', check, 'brand.fonts.body'), meta: fontStack(fontsIn.meta, 'meta', check, 'brand.fonts.meta')};
   const theme = {surface: colors.bg, foreground: colors.paper, muted: mixColor(colors.paper, colors.bg, 0.62), border: mixColor(colors.paper, colors.bg, 0.18), accentText: colors.ink,
     primary: colors.primary, accent: colors.accent, ink: colors.ink, paper: colors.paper, bg: colors.bg, panel: mixColor(colors.paper, colors.bg, 0.06),
