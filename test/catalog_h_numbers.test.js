@@ -92,7 +92,11 @@ test('countdown ticks down to zero and the end word replaces it', () => {
   assert.ok(end.time > steps.at(-1).time);
   const clock = resolve('countdown', {from: 15, step: 0.1, variant: 'clock'});
   assert.equal(clock.content.steps[0].text, '00:15');
-  assert.throws(() => resolve('countdown', {from: 20, step: 1}), /runs past the scene/);
+  // A step too slow for the scene ticks faster to fit instead of failing the plan.
+  const fitted = resolve('countdown', {from: 20, step: 1});
+  assert.ok(fitted.content.step < 1 && fitted.content.steps.at(-1).time <= 1 + 5 + 1e-6);
+  assert.equal(resolve('countdown', {from: 3, step: 0.5}).content.step, 0.5);
+  assert.throws(() => resolve('countdown', {from: 200}), /runs past the scene even at 0\.1 s/);
 });
 
 test('percent-fill rises to its share and counts to the exact figure', () => {
