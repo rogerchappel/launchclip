@@ -47,17 +47,18 @@ export const FEEL_ZOOM_EVERY = Object.freeze([0, 2, 3, 4, 6]);
 
 // Per tone: the ease families it fits, its tempo range (a multiplier on
 // every duration of the base grammar: below 1 is faster), its motion blur
-// range, the whips it fits, how often it zooms and the share of world camera.
+// range, the whips it fits, how often it zooms and the share of world camera
+// (most travel: motion videos are expected to move through one world).
 export const FEEL_TONES = Object.freeze({
-  calm: { eases: ['sine', 'power1', 'power2'], tempo: [1.05, 1.35], blur: [0.15, 0.4], whips: ['slide', 'cut'], zooms: [0, 4, 6], world: 0.5 },
-  serious: { eases: ['power1', 'power2', 'power3'], tempo: [0.95, 1.25], blur: [0.15, 0.45], whips: ['slide', 'push', 'cut'], zooms: [3, 4, 6], world: 0.35 },
-  warm: { eases: ['sine', 'power2', 'power3'], tempo: [0.95, 1.25], blur: [0.2, 0.5], whips: ['slide', 'push'], zooms: [3, 4, 6], world: 0.5 },
-  energetic: { eases: ['power3', 'power4', 'expo', 'circ'], tempo: [0.7, 0.95], blur: [0.45, 0.85], whips: ['blur-whip', 'push', 'slide'], zooms: [2, 3], world: 0.6 },
-  playful: { eases: ['power2', 'power3', 'circ', 'expo'], tempo: [0.8, 1.05], blur: [0.35, 0.75], whips: ['blur-whip', 'slide', 'push'], zooms: [2, 3, 4], world: 0.65 },
-  premium: { eases: ['power2', 'power3', 'sine'], tempo: [1, 1.3], blur: [0.25, 0.6], whips: ['slide', 'push'], zooms: [3, 4, 6], world: 0.55 },
-  technical: { eases: ['power3', 'power4', 'expo', 'circ'], tempo: [0.8, 1.05], blur: [0.3, 0.7], whips: ['blur-whip', 'push', 'slide', 'cut'], zooms: [2, 3, 4], world: 0.45 }
+  calm: { eases: ['sine', 'power1', 'power2'], tempo: [1.05, 1.35], blur: [0.15, 0.4], whips: ['slide', 'cut'], zooms: [0, 4, 6], world: 0.8 },
+  serious: { eases: ['power1', 'power2', 'power3'], tempo: [0.95, 1.25], blur: [0.15, 0.45], whips: ['slide', 'push', 'cut'], zooms: [3, 4, 6], world: 0.75 },
+  warm: { eases: ['sine', 'power2', 'power3'], tempo: [0.95, 1.25], blur: [0.2, 0.5], whips: ['slide', 'push'], zooms: [3, 4, 6], world: 0.85 },
+  energetic: { eases: ['power3', 'power4', 'expo', 'circ'], tempo: [0.7, 0.95], blur: [0.45, 0.85], whips: ['blur-whip', 'push', 'slide'], zooms: [2, 3], world: 0.95 },
+  playful: { eases: ['power2', 'power3', 'circ', 'expo'], tempo: [0.8, 1.05], blur: [0.35, 0.75], whips: ['blur-whip', 'slide', 'push'], zooms: [2, 3, 4], world: 0.95 },
+  premium: { eases: ['power2', 'power3', 'sine'], tempo: [1, 1.3], blur: [0.25, 0.6], whips: ['slide', 'push'], zooms: [3, 4, 6], world: 0.85 },
+  technical: { eases: ['power3', 'power4', 'expo', 'circ'], tempo: [0.8, 1.05], blur: [0.3, 0.7], whips: ['blur-whip', 'push', 'slide', 'cut'], zooms: [2, 3, 4], world: 0.9 }
 });
-const NO_TONE = Object.freeze({ eases: FEEL_EASES, tempo: [0.75, 1.3], blur: [0.15, 0.85], whips: FEEL_WHIPS, zooms: FEEL_ZOOM_EVERY, world: 0.5 });
+const NO_TONE = Object.freeze({ eases: FEEL_EASES, tempo: [0.75, 1.3], blur: [0.15, 0.85], whips: FEEL_WHIPS, zooms: FEEL_ZOOM_EVERY, world: 0.85 });
 // The fastest families whip; a gentle family whips with power3.
 const WHIP_EASE = Object.freeze({ sine: 'power3', power1: 'power3', power2: 'power3', power3: 'power4', circ: 'circ', power4: 'expo', expo: 'expo' });
 
