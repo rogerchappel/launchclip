@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { catalogModules, knownModules } from "@launchclip/core/modules.mjs";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
+import { STYLE_SCHEMA } from "@launchclip/core/style.mjs";
 import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
 import { planStoryCommand } from "../src/story_cli.js";
 import { runCli } from "../src/cli.js";
@@ -127,6 +128,21 @@ test("param errors surface with the param's path, from the module's schema", asy
   const checked = checkStoryboard(story, { words: WORDS, tier: "structured" });
   assert.equal(checked.ok, false);
   assert.ok(checked.errors.includes("validation: scenes[0].params.headline must be at most 90 characters (it has 97)"), checked.errors.join("\n"));
+});
+
+test("the structured tier checks the params the model wrote, not the ones the style pack fills in", () => {
+  // A style that dresses a module (here the checklist as glass) must not fail
+  // a plan for a tuning param the model never wrote and so cannot remove.
+  const style = { schema: STYLE_SCHEMA, name: "glass-panels", modules: { params: { checklist: { presentation: "glass" } } } };
+  const story = { ...goodStoryboard(), style: style.name };
+  const checked = checkStoryboard(story, { words: WORDS, tier: "structured", style });
+  assert.ok(!checked.errors.some((entry) => entry.startsWith("tier:")), checked.errors.join("\n"));
+  assert.equal(checked.storyboard.scenes[2].params.presentation, "glass");
+  // make re-checks the planner's (already styled) storyboard after adding audio.
+  assert.ok(checkStoryboard(checked.storyboard, { words: WORDS, tier: "structured", style }).ok, "the styled storyboard re-checks clean");
+  story.scenes[2].params.presentation = "solid";
+  const written = checkStoryboard(story, { words: WORDS, tier: "structured", style });
+  assert.ok(written.errors.includes("tier: scenes[2] (s3).params.presentation is not allowed in the structured tier; remove it (tooling places and styles modules)"), written.errors.join("\n"));
 });
 
 test("param errors the schema cannot see surface from the module after the shape is valid", async () => {

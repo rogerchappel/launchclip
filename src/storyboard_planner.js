@@ -277,7 +277,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const validation = validateStory(input, { modules: knownModules(), moduleParams: validateModuleParams });
   errors.push(...validation.errors.map((entry) => `validation: ${entry}`));
   warnings.push(...validation.warnings);
-  errors.push(...tierErrors(input, tier).map((entry) => `tier: ${entry}`));
+  errors.push(...tierErrors(input, tier, { style }).map((entry) => `tier: ${entry}`));
   if (errors.length) return { ok: false, errors, warnings, storyboard: input, layout };
 
   const storyboard = JSON.parse(JSON.stringify(input));
@@ -352,8 +352,12 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence };
 }
 
-/** Tier rules (RFC §7) as error strings. */
-export function tierErrors(story, tier) {
+/**
+ * Tier rules (RFC §7) as error strings. A tuning param that holds the style
+ * pack's own value for the module is tooling's (applyStyle fills it in), so
+ * the model is never asked to remove what it did not write.
+ */
+export function tierErrors(story, tier, { style = null } = {}) {
   const errors = [];
   if (tier === "bespoke") return errors;
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
@@ -362,10 +366,15 @@ export function tierErrors(story, tier) {
     if (scene?.module === "custom") errors.push(`${where} uses "custom", which only the bespoke tier may use; pick the nearest catalogue module`);
     if (tier !== "structured") return;
     const params = scene?.params && typeof scene.params === "object" ? scene.params : {};
-    for (const key of TUNING_PARAMS) if (key in params) errors.push(`${where}.params.${key} is not allowed in the structured tier; remove it (tooling places and styles modules)`);
+    const styled = style?.modules?.params?.[scene?.module] ?? {};
+    for (const key of TUNING_PARAMS) if (key in params && !sameValue(params[key], styled[key])) errors.push(`${where}.params.${key} is not allowed in the structured tier; remove it (tooling places and styles modules)`);
     if (scene?.track !== undefined && scene.track !== 0) errors.push(`${where}.track is not allowed in the structured tier; remove it`);
   });
   return errors;
+}
+
+function sameValue(a, b) {
+  return b !== undefined && JSON.stringify(a) === JSON.stringify(b);
 }
 
 // ---------------------------------------------------------------------------
