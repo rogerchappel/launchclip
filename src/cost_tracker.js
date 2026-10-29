@@ -14,6 +14,14 @@ const OPENAI_RATES = [
   { pattern: /^gpt-5\.5(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30 }
 ];
 
+// A model missing from the tables above is still billed against the spending
+// limit: at the highest standard rate its vendor publishes, flagged as an
+// estimate, so a new or renamed model can never run the limit up unseen.
+const FALLBACK_RATES = {
+  openai: { input: 5, cached: .5, cacheWrite: 6.25, output: 30 },
+  anthropic: { input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
+};
+
 const ANTHROPIC_RATES = [
   { pattern: /^claude-opus-4-8(?:-|$)/, input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
 ];
@@ -142,6 +150,7 @@ async function describeRequest(input, init = {}) {
 async function lineItemFor(request, response) {
   const url = new URL(request.url);
   if (isOpenAi(url)) return openAiLineItem(request, await responseJson(response));
+  if (isOpenRouter(url)) return openRouterLineItem(request, await responseJson(response));
   if (isAnthropic(url)) return anthropicLineItem(request, await responseJson(response));
   if (isElevenLabs(url)) return elevenLabsLineItem(url, request, response);
   return null;
@@ -153,8 +162,9 @@ function openAiLineItem(request, payload) {
   if (!usage && !completed) return null;
   const model = String(payload?.model ?? request.json?.model ?? "unknown");
   const normalized = normalizeOpenAiUsage(usage);
-  const rates = OPENAI_RATES.find((entry) => entry.pattern.test(model));
-  if (!rates) return unpricedItem({ provider: "openai", product: "llm", model, requestId: payload?.id, usage: normalized, warning: `No public PAYG rate is configured for OpenAI model ${model}` });
+  const known = OPENAI_RATES.find((entry) => entry.pattern.test(model));
+  const rates = known ?? FALLBACK_RATES.openai;
+  const fallback = known ? null : `No public PAYG rate is configured for OpenAI model ${model}; estimated at the highest standard OpenAI rate`;
 
   const uncached = Math.max(0, normalized.input_tokens - normalized.cached_input_tokens - normalized.cache_write_input_tokens);
   const cachedCost = rates.cached == null && normalized.cached_input_tokens > 0 ? null : normalized.cached_input_tokens * Number(rates.cached ?? 0);
@@ -170,17 +180,37 @@ function openAiLineItem(request, payload) {
   }
   return pricedItem({
     provider: "openai", product: "llm", model, requestId: payload?.id, usage: normalized, cost,
-    rates: { unit: "USD per 1M tokens", input: rates.input, cached_input: rates.cached, cache_write: rates.cacheWrite, output: rates.output },
-    source: SOURCES.openai, note
+    rates: { unit: "USD per 1M tokens", input: rates.input, cached_input: rates.cached, cache_write: rates.cacheWrite, output: rates.output, ...(fallback ? { fallback: true } : {}) },
+    source: SOURCES.openai, note, warning: fallback
   });
+}
+
+// OpenRouter answers in the OpenAI shape with a vendor-prefixed model
+// ("openai/gpt-5.6-terra", "anthropic/claude-opus-4-8"). Its own usage.cost
+// (USD) wins; otherwise the vendor's rates (or the vendor fallback) apply.
+function openRouterLineItem(request, payload) {
+  if (!payload?.usage && !Array.isArray(payload?.choices)) return null;
+  const model = String(payload?.model ?? request.json?.model ?? "unknown");
+  const name = model.replace(/^[^/]+\//, "");
+  const usage = normalizeOpenAiUsage(payload?.usage);
+  const reported = Number(payload?.usage?.cost);
+  if (payload?.usage?.cost != null && Number.isFinite(reported) && reported >= 0) {
+    return pricedItem({ provider: "openrouter", product: "llm", model, requestId: payload?.id, usage, cost: reported, rates: { unit: "USD reported by OpenRouter" }, source: "https://openrouter.ai/docs/use-cases/usage-accounting" });
+  }
+  const anthropic = /^anthropic\//.test(model) || /^claude-/.test(name);
+  const vendor = anthropic
+    ? anthropicLineItem({ json: { model: name } }, { type: "message", model: name, usage: { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, cache_read_input_tokens: usage.cached_input_tokens } })
+    : openAiLineItem({ json: { model: name } }, { status: "completed", model: name, usage: payload?.usage ?? {} });
+  return { ...vendor, provider: "openrouter", model, request_id: payload?.id ?? null };
 }
 
 function anthropicLineItem(request, payload) {
   if (!payload?.usage && payload?.type !== "message") return null;
   const model = String(payload?.model ?? request.json?.model ?? "unknown");
   const normalized = normalizeAnthropicUsage(payload?.usage);
-  const rates = ANTHROPIC_RATES.find((entry) => entry.pattern.test(model));
-  if (!rates) return unpricedItem({ provider: "anthropic", product: "llm", model, requestId: payload?.id, usage: normalized, warning: `No public PAYG rate is configured for Anthropic model ${model}` });
+  const known = ANTHROPIC_RATES.find((entry) => entry.pattern.test(model));
+  const rates = known ?? FALLBACK_RATES.anthropic;
+  const fallback = known ? null : `No public PAYG rate is configured for Anthropic model ${model}; estimated at the highest standard Anthropic rate`;
   const cost = (
     normalized.input_tokens * rates.input
     + normalized.cache_write_5m_tokens * rates.cacheWrite5m
@@ -191,8 +221,8 @@ function anthropicLineItem(request, payload) {
   ) / 1_000_000;
   return pricedItem({
     provider: "anthropic", product: "llm", model, requestId: payload?.id, usage: normalized, cost,
-    rates: { unit: "USD per 1M tokens", input: rates.input, cache_write_5m: rates.cacheWrite5m, cache_write_1h: rates.cacheWrite1h, cached_input: rates.cached, output: rates.output },
-    source: SOURCES.anthropic
+    rates: { unit: "USD per 1M tokens", input: rates.input, cache_write_5m: rates.cacheWrite5m, cache_write_1h: rates.cacheWrite1h, cached_input: rates.cached, output: rates.output, ...(fallback ? { fallback: true } : {}) },
+    source: SOURCES.anthropic, warning: fallback
   });
 }
 
@@ -252,11 +282,12 @@ function normalizeAnthropicUsage(usage = {}) {
   };
 }
 
-function pricedItem({ provider, product, model, requestId, usage, cost, rates, source, note = null }) {
+function pricedItem({ provider, product, model, requestId, usage, cost, rates, source, note = null, warning = null }) {
   return {
     provider, product, model, request_id: requestId ?? null, usage: usage ?? {},
     estimated_usd: roundMoney(cost), pricing: { ...rates, as_of: PRICING_AS_OF, source },
-    ...(note ? { note } : {})
+    ...(note ? { note } : {}),
+    ...(warning ? { warning } : {})
   };
 }
 
@@ -277,6 +308,11 @@ function summarize(items) {
     } else {
       total += item.estimated_usd;
       provider.estimated_usd += item.estimated_usd;
+      // Priced at a fallback rate: counted, and the tally says it is an estimate.
+      if (item.warning) {
+        provider.fallback_calls = (provider.fallback_calls ?? 0) + 1;
+        warnings.push(item.warning);
+      }
     }
   }
   for (const provider of Object.values(providers)) provider.estimated_usd = roundMoney(provider.estimated_usd);
@@ -309,6 +345,7 @@ function isFormData(value) {
 }
 
 function isOpenAi(url) { return /(^|\.)openai\.com$/i.test(url.hostname); }
+function isOpenRouter(url) { return /(^|\.)openrouter\.ai$/i.test(url.hostname); }
 function isAnthropic(url) { return /(^|\.)anthropic\.com$/i.test(url.hostname); }
 function isElevenLabs(url) { return /(^|\.)elevenlabs\.io$/i.test(url.hostname); }
 
@@ -316,6 +353,7 @@ function providerForUrl(value) {
   try {
     const url = new URL(value);
     if (isOpenAi(url)) return "openai";
+    if (isOpenRouter(url)) return "openrouter";
     if (isAnthropic(url)) return "anthropic";
     if (isElevenLabs(url)) return "elevenlabs";
   } catch {}

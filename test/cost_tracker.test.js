@@ -90,9 +90,9 @@ test("totals ElevenLabs transcription, speech, and music usage", async () => {
   assert.deepEqual(costs.line_items.map((item) => item.product), ["text-to-speech", "transcription", "music-generation"]);
 });
 
-test("keeps unknown AI calls visible and marks the tally incomplete", async () => {
+test("prices an unknown model at its vendor's highest standard rate and marks the tally an estimate", async () => {
   const tracker = createCostTracker({ fetch: async () => jsonResponse({
-    id: "resp_unknown", status: "completed", model: "gpt-future", usage: { input_tokens: 10, output_tokens: 2 }
+    id: "resp_unknown", status: "completed", model: "gpt-future", usage: { input_tokens: 1_000_000, output_tokens: 100_000 }
   }) });
   await tracker.fetch("https://api.openai.com/v1/responses", {
     method: "POST", body: JSON.stringify({ model: "gpt-future" })
@@ -100,9 +100,37 @@ test("keeps unknown AI calls visible and marks the tally incomplete", async () =
 
   const costs = tracker.summary();
   assert.equal(costs.complete, false);
-  assert.equal(costs.total_usd, 0);
-  assert.equal(costs.by_provider.openai.unpriced_calls, 1);
-  assert.match(costs.warnings[0], /gpt-future/);
+  assert.equal(costs.total_usd, 8); // $5 in + $3 out at the gpt-5.6 rate
+  assert.equal(costs.by_provider.openai.fallback_calls, 1);
+  assert.equal(costs.line_items[0].pricing.fallback, true);
+  assert.match(costs.warnings[0], /gpt-future.*highest standard OpenAI rate/);
+});
+
+test("tracks OpenRouter calls: its reported cost, else the vendor's rates", async () => {
+  const replies = [
+    { id: "gen-1", model: "openai/gpt-5.6-terra", choices: [{}], usage: { prompt_tokens: 1_000_000, completion_tokens: 100_000 } },
+    { id: "gen-2", model: "anthropic/claude-opus-4-8", choices: [{}], usage: { prompt_tokens: 1_000_000, completion_tokens: 0, cost: 4.2 } },
+    { id: "gen-3", model: "acme/mystery-1", choices: [{}], usage: { prompt_tokens: 1_000_000, completion_tokens: 0 } }
+  ];
+  const tracker = createCostTracker({ fetch: async () => jsonResponse(replies.shift()) });
+  for (let i = 0; i < 3; i += 1) await tracker.fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: "x" }) });
+
+  const items = tracker.summary().line_items;
+  assert.deepEqual(items.map((item) => [item.provider, item.model, item.estimated_usd]), [
+    ["openrouter", "openai/gpt-5.6-terra", 4], // $2.50 in + $1.50 out
+    ["openrouter", "anthropic/claude-opus-4-8", 4.2],
+    ["openrouter", "acme/mystery-1", 5] // unknown vendor model: the OpenAI fallback rate
+  ]);
+});
+
+test("the spending limit stops new OpenRouter calls and counts fallback-priced ones", async () => {
+  const tracker = createCostTracker({
+    limitUsd: 1,
+    fetch: async () => jsonResponse({ id: `gen-${Math.random()}`, model: "openai/gpt-new", choices: [{}], usage: { prompt_tokens: 300_000, completion_tokens: 0 } })
+  });
+  const post = () => tracker.fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", body: "{}" });
+  await post(); // $1.50 at the fallback rate
+  await assert.rejects(post, (error) => error.code === "LAUNCHCLIP_COST_LIMIT");
 });
 
 test("ignores non-AI fetches", async () => {
