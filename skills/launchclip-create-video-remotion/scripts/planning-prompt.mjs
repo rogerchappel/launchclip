@@ -267,9 +267,9 @@ const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\
 /**
  * Motion grammar and camera mode for an art direction (free text: the brief
  * or style notes) and lane. Footage-led stories always keep cuts and
- * punch-ins; the motion and voiceover lanes get the world camera when the
- * direction asks for travel, or when its grammar is playful, snappy, smooth or cinematic
- * (editorial and documentary keep cuts unless asked).
+ * punch-ins; the motion and voiceover lanes travel on the world camera
+ * whatever the grammar (editorial and documentary travel more calmly), unless
+ * the direction asks for cuts.
  * → {grammar, camera: {mode, layout?}, reason}
  */
 export function suggestMotion({ artDirection = '', lane } = {}) {
@@ -280,6 +280,7 @@ export function suggestMotion({ artDirection = '', lane } = {}) {
   if (lane === 'footage-led') return { grammar, camera: { mode: 'cuts' }, reason: 'footage-led keeps cuts and punch-ins' };
   if (match(CUT_WORDS)) return { grammar, camera: { mode: 'cuts' }, reason: 'the direction asks for cuts' };
   if (match(WORLD_WORDS)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: 'the direction asks for camera travel' };
+  if (lane === 'motion' || lane === 'voiceover-motion') return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `motion videos travel between scenes (${grammar} pace)` };
   if (['playful', 'snappy', 'smooth', 'cinematic'].includes(grammar)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `${grammar} motion travels between scenes` };
   return { grammar, camera: { mode: 'cuts' }, reason: `${grammar} motion cuts between scenes` };
 }
@@ -297,9 +298,10 @@ function motionLines({ lane, artDirection } = {}) {
     'In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.',
     'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy, smooth or cinematic.'
   ];
-  if (artDirection) {
+  if (artDirection || lane === 'motion' || lane === 'voiceover-motion') {
     const suggestion = suggestMotion({ artDirection, lane });
     lines.push(`For this request: motion.grammar "${suggestion.grammar}" and camera.mode "${suggestion.camera.mode}" (${suggestion.reason}).`);
+    if (suggestion.camera.mode === 'world') lines.push('In world mode make it feel like one place the camera explores: an entry move on most track-0 scenes (push into the detail a line names, pull to reveal, pan along a sequence, whip-pan on a turn), 2–3 zooms a minute on the numbers, bars and rows the narration names, an overview on the recap line, and a backdrop that changes every 6–10 s (plate.cycle). Never a flat, empty frame.');
   }
   return lines;
 }

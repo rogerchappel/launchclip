@@ -11,7 +11,7 @@
 // row of inline-block word spans (and character spans inside them), and the
 // browser lays the row out, the same DOM in both renderers.
 
-import {timingRules} from './catalog-b-base.mjs';
+import {brandTextScale, timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, clip, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {abs, el, riseOps, set, tw} from './catalog-h-view.mjs';
 
@@ -73,11 +73,17 @@ function titleResolve(params, ctx) {
   const kickerSize = kicker ? r2(Math.max(b.min.meta, u(32))) : 0;
   const subFit = sub ? fitText(check, 'params.sub', sub, {family: 'body', width: inner, preferred: u(46), min: b.min.key, maxLines: 2}) : null;
   const extraH = (kicker ? kickerSize * 1.4 + u(26) : 0) + (subFit ? subFit.size * 1.25 * subFit.lines + u(30) : 0) + pad * 2;
-  // The largest size whose wrapped lines (at most 4) fit the width and height.
-  let size = u(b.portrait ? 170 : 150), lines;
-  for (; size >= b.min.key; size -= 2) {
-    lines = wrap(words, size, inner);
-    if (lines.length <= 4 && lines.every(line => textWidth(line.join(' '), size, 'display') <= inner) && lines.length * size * 1.02 + extraH <= H) break;
+  // The largest size whose wrapped lines (at most 4) fit the width and height:
+  // first at the brand face's real width (a wide face gets smaller type, so no
+  // word breaks), then at the calibrated width.
+  let size, lines;
+  const scale = brandTextScale('display');
+  for (const fitW of scale > 1 ? [inner / scale, inner] : [inner]) {
+    for (size = u(b.portrait ? 170 : 150); size >= b.min.key; size -= 2) {
+      lines = wrap(words, size, fitW);
+      if (lines.length <= 4 && lines.every(line => textWidth(line.join(' '), size, 'display') <= fitW) && lines.length * size * 1.02 + extraH <= H) break;
+    }
+    if (size >= b.min.key) break;
   }
   if (size < b.min.key) check.fail('params.text', 'does not fit the rect at the 44 px floor; shorten it');
   size = r2(size);

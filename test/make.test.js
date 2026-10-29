@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { runCli } from "../src/cli.js";
 import { runHeadlessCritic } from "../src/make/critic.js";
-import { assetErrors, audioEnhancementFeature, formatMakeSummary, runMake, slugify } from "../src/make/index.js";
+import { assetErrors, audioEnhancementFeature, formatMakeSummary, runMake, slugify, worldLook } from "../src/make/index.js";
 import { selectMakeModel } from "../src/make/models.js";
 import { testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
@@ -501,4 +501,27 @@ test("end to end: make renders a real Remotion draft with a fake model, the test
     await rm(assets, { recursive: true, force: true });
     await rm(out, { recursive: true, force: true });
   }
+});
+
+test("worldLook: motion videos travel on the world camera over changing backdrops", () => {
+  const scenes = (n) => Array.from({ length: n }, (_, i) => ({ id: `s${i + 1}`, module: "stat-card", start: i * 3, end: i * 3 + 3 }));
+  const story = { lane: "motion", format: { duration: 30 }, scenes: scenes(10) };
+  assert.deepEqual(worldLook(story, "Crazy AI news in October 2026"), ["camera.mode world", "plate cycle every 3 shots"]);
+  assert.deepEqual(story.camera, { mode: "world", layout: "auto" });
+  assert.deepEqual(story.plate, { kind: "hex-shell", cycle: { every: 3 } });
+
+  // The plan's own choices stand: cuts, its own plates, a drawn world.
+  const cuts = { lane: "motion", camera: { mode: "cuts" }, scenes: scenes(4) };
+  assert.deepEqual(worldLook(cuts, ""), []);
+  const plated = { lane: "motion", scenes: scenes(4).map((scene, i) => (i === 1 ? { ...scene, backdrop: "wash" } : scene)) };
+  assert.deepEqual(worldLook(plated, ""), ["camera.mode world"]);
+  assert.equal(plated.plate, undefined);
+  const drawn = { lane: "motion", scenes: [{ id: "w", module: "world", start: 0, end: 9 }, ...scenes(2)] };
+  worldLook(drawn, "");
+  assert.equal(drawn.plate, undefined);
+  // A brief that asks for cuts, and the footage lane, keep them.
+  const asked = { lane: "motion", scenes: scenes(4) };
+  assert.deepEqual(worldLook(asked, "hard cuts only"), []);
+  assert.equal(asked.camera, undefined);
+  assert.deepEqual(worldLook({ lane: "footage-led", scenes: scenes(4) }, ""), []);
 });

@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
+import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR } from "../asset_provider.js";
 import { createCommandAssetProvider } from "../asset_provider_cmd.js";
@@ -704,8 +704,39 @@ export function finalizeStory(storyboard, ctx) {
     delete story.grammar;
   }
   if (ctx.generatedStyle) adoptStyleLook(story, ctx.generatedStyle);
+  const world = worldLook(story, ctx.text);
+  if (world.length) ctx.report.notices.push(`world look: ${world.join("; ")}`);
   story.meta = { ...(story.meta ?? {}), made_by: "launchclip make", prompt: ctx.text };
   return story;
+}
+
+const TRAVEL_LANES = new Set(["motion", "voiceover-motion"]);
+const PLATE_SECONDS = 8;
+
+/**
+ * Motion videos travel (suggestMotion): when the plan left the camera unset,
+ * it becomes the world camera, and a world with no backdrop of its own gets
+ * plates that change about every 8 s. A plan that chose cuts, a brief that
+ * asks for them, or a drawn world scene keeps its own. → what was added.
+ */
+export function worldLook(story, prompt = "") {
+  const added = [];
+  if (!TRAVEL_LANES.has(story.lane)) return added;
+  if (!story.camera?.mode && suggestMotion({ artDirection: prompt, lane: story.lane }).camera.mode === "world") {
+    story.camera = { ...(story.camera ?? {}), mode: "world", layout: story.camera?.layout ?? "auto" };
+    added.push("camera.mode world");
+  }
+  if (story.camera?.mode !== "world") return added;
+  const base = (story.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0);
+  const drawn = Boolean(story.world) || base.some((scene) => scene?.module === "world");
+  const ownPlates = story.plate || (story.chapters ?? []).some((chapter) => chapter?.plate) || base.some((scene) => scene?.backdrop || scene?.plate);
+  if (!drawn && !ownPlates && base.length > 1) {
+    const duration = Number(story.format?.duration) || base.reduce((end, scene) => Math.max(end, Number(scene.end) || 0), 0);
+    const every = Math.max(1, Math.min(50, Math.round(PLATE_SECONDS / Math.max(1, duration / base.length))));
+    story.plate = { kind: "hex-shell", cycle: { every } };
+    added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"}`);
+  }
+  return added;
 }
 
 // Matte exactly the source ranges the planned subject scenes cover (padded),

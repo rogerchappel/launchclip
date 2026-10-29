@@ -266,7 +266,9 @@ test("the planner picks the grammar and camera from the art direction and lane",
   assert.equal(suggestMotion({ artDirection: "punchy, high-energy launch", lane: "motion" }).grammar, "snappy");
   assert.deepEqual(suggestMotion({ artDirection: "punchy, high-energy launch", lane: "footage-led" }).camera, { mode: "cuts" }, "footage-led keeps cuts");
   assert.equal(suggestMotion({ artDirection: "a sober documentary on the archive", lane: "motion" }).grammar, "documentary");
-  assert.deepEqual(suggestMotion({ artDirection: "a sober documentary on the archive", lane: "motion" }).camera, { mode: "cuts" });
+  // Motion videos travel whatever the grammar; documentary keeps its calmer pace.
+  assert.deepEqual(suggestMotion({ artDirection: "a sober documentary on the archive", lane: "motion" }).camera, { mode: "world", layout: "auto" });
+  assert.deepEqual(suggestMotion({ artDirection: "AI news, hard cuts only", lane: "motion" }).camera, { mode: "cuts" });
   assert.deepEqual(suggestMotion({ artDirection: "an editorial explainer that travels across a map", lane: "motion" }).camera, { mode: "world", layout: "auto" });
   assert.equal(suggestMotion({ artDirection: "explain caching", lane: "motion" }).grammar, "editorial");
   const prompt = planningPrompt({ lane: "voiceover-motion", artDirection: "calm premium brand film" });
@@ -274,5 +276,9 @@ test("the planner picks the grammar and camera from the art direction and lane",
   assert.match(prompt, /For this request: motion\.grammar "smooth" and camera\.mode "world"/);
   assert.match(prompt, /footage-led keeps camera\.mode "cuts"/);
   for (const name of GRAMMAR_NAMES) assert.match(prompt, new RegExp(`- ${name}: `));
-  assert.doesNotMatch(planningPrompt({ lane: "motion" }), /For this request/);
+  // A motion plan with no art direction still gets the world camera and its look.
+  const bare = planningPrompt({ lane: "motion" });
+  assert.match(bare, /For this request: motion\.grammar "editorial" and camera\.mode "world"/);
+  assert.match(bare, /2–3 zooms a minute/);
+  assert.doesNotMatch(planningPrompt({ lane: "footage-led" }), /For this request/);
 });
