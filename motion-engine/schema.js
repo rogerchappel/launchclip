@@ -1,5 +1,5 @@
 // motion.timeline.v1 — the contract between any director (human, heuristic, LLM)
-// and the MotionLayer renderer. Designed to be extracted into product-videogen
+// and the MotionLayer renderer. Designed to be extracted into a host app
 // unchanged: keep this file dependency-free and framework-free.
 
 export const MOTION_TIMELINE_VERSION = "motion.timeline.v1";

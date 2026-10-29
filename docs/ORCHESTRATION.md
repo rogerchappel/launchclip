@@ -8,7 +8,7 @@
 2. `demo` captures an explicitly approved terminal command and writes a receipt.
 3. `plan` emits a video-skillkit-compatible manifest and brief.
 4. `captions` writes editable, platform-specific, evidence-backed drafts.
-5. `render` creates either a product-videogen dry-run render/review payload, a Remotion MP4, or a local ffmpeg fallback MP4.
+5. `render` creates either a review-app dry-run render/review payload, a Remotion MP4, or a local ffmpeg fallback MP4.
 6. `submit-review` creates a pending Review Feed intake payload in dry-run form.
 7. `validate` checks required artifacts, stage status, caption claim status, and platform length limits.
 8. `review` creates `REVIEW.md` for human approval.
@@ -46,10 +46,10 @@ For constrained environments, `launchclip render <workspace> --provider local-ff
 - `local-ffmpeg`: built-in text-forward vertical MP4 fallback.
 - `cutpilot`: future optional EDL and advanced ffmpeg handoff.
 - `postmaker`: caption grounding and claim-status inspiration.
-- `product-videogen`: Review Feed approval lane and downstream social queue sync.
-- Clutch Cut: reachable only through product-videogen after approval, never directly in V1.
+- `review-app`: Review Feed approval lane and downstream social queue sync.
+- The publishing app: reachable only through review-app after approval, never directly in V1.
 
-## Product-Videogen API Gap
+## Review app API Gap
 
 V1 can emit this dry-run request without requiring the endpoint:
 

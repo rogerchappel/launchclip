@@ -12,11 +12,11 @@ Decision: ready for next OSS factory development round
 Total: 88/100
 Band: build now
 Last scored: 2026-06-10
-Scored by: OpenClaw agent from Roger direction
+Scored by: the maintainers
 
 | Criterion | Points | Notes |
 |---|---:|---|
-| Problem pain | 18/20 | Roger needs to pivot from shipping many OSS tools to consistently promoting them. |
+| Problem pain | 18/20 | Maintainers who ship many OSS tools need to consistently promote them. |
 | Demand signal | 16/20 | OSS maintainers and indie builders repeatedly need demo clips, captions, and social scheduling without a heavyweight marketing stack. |
 | V1 buildability | 18/20 | Can start as a local-first orchestrator over repo facts, generated artifacts, captions, and dry-run queue receipts. |
 | Differentiation | 13/15 | Focused on agent-built OSS promotion rather than generic social scheduling or generic video editing. |
@@ -25,11 +25,11 @@ Scored by: OpenClaw agent from Roger direction
 
 ## Pitch
 
-`launchclip` turns an OSS repo into a grounded social promo packet: demo artifacts, a short-form video edit plan, captions, and a product-videogen Review Feed submission that can later flow into Clutch Cut/social publishing after approval.
+`launchclip` turns an OSS repo into a grounded social promo packet: demo artifacts, a short-form video edit plan, captions, and a review-app Review Feed submission that can later flow into the publishing app/social publishing after approval.
 
 ## Why It Matters
 
-Roger's OSS factory can generate a lot of useful tools, but the next bottleneck is distribution. Each project needs proof that it works, a compelling demo angle, a short video, platform-specific captions, and a way to queue the content without manually stitching every step together.
+An OSS factory can generate a lot of useful tools, but the next bottleneck is distribution. Each project needs proof that it works, a compelling demo angle, a short video, platform-specific captions, and a way to queue the content without manually stitching every step together.
 
 The key is not to make another all-in-one video editor. The useful layer is an orchestration CLI and agent skill that coordinates existing local-first tools and emits reviewable artifacts before anything is posted.
 
@@ -48,12 +48,12 @@ Can this be explained clearly in one sentence? Yes: "Run one command on an OSS r
 - Remotion / Hyperframes-style renderers - good downstream adapters, but should not be hard-coded into the planning layer.
 - Buffer, Hypefury, Typefully, Later, and native platform schedulers - useful scheduling references, but not local-first OSS-agent pipelines.
 - `repo-to-content` - adjacent evidence-grounded launch content generator from repo facts.
-- Clutch Cut - target queue and publishing system for Roger's content workflow.
-- Product-videogen API - target review, generation, and approval lane. Existing Review Feed behavior is built around pending videos, carousels, and photos.
+- The publishing app - the downstream queue and publishing system.
+- The review app API - target review, generation, and approval lane. Existing Review Feed behavior is built around pending videos, carousels, and photos.
 
 ### Star / Demand Signal
 
-- Personal workflow pain: Roger is moving from OSS production volume to promotion volume.
+- Workflow pain: moving from OSS production volume to promotion volume.
 - Existing repo garden already includes pieces of the workflow: `video-skillkit`, `cutpilot`, `tool-demo-script`, `postmaker`, `pagepix`, and `ossrank`.
 - Social distribution is the obvious next leverage point for local-first CLI projects: users need to see the problem, command, output, and install path quickly.
 
@@ -68,7 +68,7 @@ V1 can be built without external posting permissions:
 - read a local repo
 - generate deterministic demo artifacts
 - call or emulate existing local tools where installed
-- write `launchclip.json`, `brief.md`, `captions.md`, `queue.clutchcut.json`, and `REVIEW.md`
+- write `launchclip.json`, `brief.md`, `captions.md`, `queue.json`, and `REVIEW.md`
 - support `--dry-run` by default
 - require explicit approval/config before queue submission
 
@@ -92,10 +92,10 @@ V1 can be built without external posting permissions:
   - include installation CTA and GitHub URL
   - keep editable drafts before queueing
 - Review submission stage:
-  - create a product-videogen Review Feed item with `approval_status=pending`
+  - create a review-app Review Feed item with `approval_status=pending`
   - preserve the OSS repo, demo artifacts, captions, evidence, and launch metadata in `metadata_json` / `recipe_json`
   - support direct API submission only after explicit config/approval
-  - keep Clutch Cut queueing behind product-videogen approval instead of bypassing the Review Feed
+  - keep publishing-app queueing behind review-app approval instead of bypassing the Review Feed
   - save request/response receipts with secrets redacted
 - Agent skill:
   - clear workflow for agents to run inspect, create artifacts, review, render or dry-run, write captions, and queue
@@ -108,7 +108,7 @@ V1 can be built without external posting permissions:
 - Full video editor UI.
 - Replacing `video-skillkit`, `cutpilot`, or `postmaker`.
 - Generating unsupported product claims.
-- Using secrets or Clutch Cut credentials without explicit local config.
+- Using secrets or publishing-app credentials without explicit local config.
 - Auto-publishing without human approval.
 
 ## CLI/API Sketch
@@ -129,11 +129,11 @@ launchclip captions .launchclip/my-oss-tool \
   --platforms x,linkedin,tiktok,bluesky
 
 launchclip render .launchclip/my-oss-tool \
-  --provider product-videogen \
+  --provider review-app \
   --dry-run
 
 launchclip submit-review .launchclip/my-oss-tool \
-  --provider product-videogen \
+  --provider review-app \
   --dry-run
 
 launchclip review .launchclip/my-oss-tool
@@ -152,15 +152,15 @@ Example output:
     video.json
     brief.md
     render-plan.json
-    product-videogen.dry-run.json
+    review-app.dry-run.json
   captions/
     x.md
     linkedin.md
     tiktok.md
     bluesky.md
   review/
-    product-videogen-review.dry-run.json
-    product-videogen-review.receipt.json
+    review-app-review.dry-run.json
+    review-app-review.receipt.json
     receipt.json
   REVIEW.md
 ```
@@ -174,10 +174,10 @@ The CLI should behave like a small pipeline runner with explicit stage receipts:
 3. `brief` - call `video-skillkit` semantics to create a grounded video manifest.
 4. `edit` - emit viral-format edit instructions and optionally call `cutpilot` or a renderer adapter.
 5. `caption` - create platform drafts using only evidence-backed claims.
-6. `render` - create a product-videogen request or local renderer plan; submit only when approved.
-7. `submit-review` - create a product-videogen pending Review Feed item; dry-run by default.
-8. `approval-handoff` - rely on product-videogen approval to enqueue/schedule social output.
-9. `review` - produce one human-readable packet with claims, assets, captions, API requests, and product-videogen Review Feed status.
+6. `render` - create a review-app request or local renderer plan; submit only when approved.
+7. `submit-review` - create a review-app pending Review Feed item; dry-run by default.
+8. `approval-handoff` - rely on review-app approval to enqueue/schedule social output.
+9. `review` - produce one human-readable packet with claims, assets, captions, API requests, and review-app Review Feed status.
 
 Each stage should be rerunnable and should read/write JSON so agents can inspect and patch artifacts between stages.
 
@@ -192,8 +192,8 @@ The skill should instruct agents to:
 5. Run `launchclip plan` to create a short-form structure.
 6. Review claims against local evidence.
 7. Run `launchclip captions`.
-8. Run `launchclip submit-review --dry-run --provider product-videogen`.
-9. Present `REVIEW.md` to Roger before product-videogen Review Feed submission, render, upload, queue submission, or posting.
+8. Run `launchclip submit-review --dry-run --provider review-app`.
+9. Present `REVIEW.md` to the user before review-app Review Feed submission, render, upload, queue submission, or posting.
 
 ## Renderer Strategy
 
@@ -206,11 +206,11 @@ The skill should instruct agents to:
 
 This keeps `video-skillkit` clean as the manifest/brief layer and lets rendering evolve independently.
 
-## Product-Videogen Review Feed Strategy
+## Review app Review Feed Strategy
 
-Product-videogen should be the approval lane. `launchclip` should submit review-ready promo packets into product-videogen as pending review items rather than posting directly to Clutch Cut.
+The review app should be the approval lane. `launchclip` should submit review-ready promo packets into review-app as pending review items rather than posting directly to the publishing app.
 
-Current product-videogen behavior already supports the core lifecycle:
+Current review-app behavior already supports the core lifecycle:
 
 - Review Feed loads generated videos, carousels, and photos with `approval_status=pending`.
 - `PATCH /api/videos/{id}` approves or rejects a pending video.
@@ -252,28 +252,28 @@ POST /api/v1/review-items
 Implementation options:
 
 - Preferred: add a first-class public endpoint that creates a pending generated video/carousel/photo review record.
-- Minimum viable: allow product-videogen generation endpoints to accept `source=launchclip`, `external_trace_id`, `caption`, and `metadata_json`, then return the generated item IDs for Review Feed tracking.
-- Avoid: posting directly into Clutch Cut/social queue before product-videogen approval.
+- Minimum viable: allow review-app generation endpoints to accept `source=launchclip`, `external_trace_id`, `caption`, and `metadata_json`, then return the generated item IDs for Review Feed tracking.
+- Avoid: posting directly into the publishing app's social queue before review-app approval.
 
-`launchclip submit-review --provider product-videogen --submit` should return:
+`launchclip submit-review --provider review-app --submit` should return:
 
 ```json
 {
-  "provider": "product-videogen",
+  "provider": "review-app",
   "review_item_id": "uuid",
-  "review_url": "https://product-videogen.example/feed?tab=review",
+  "review_url": "https://review-app.example/feed?tab=review",
   "approval_status": "pending",
   "submitted_at": "2026-06-10T00:00:00Z"
 }
 ```
 
-## Clutch Cut Queue Strategy
+## Publishing Queue Strategy
 
-Clutch Cut should remain downstream of product-videogen approval for this workflow. V1 may still write a local queue preview payload, but live queue insertion should happen through product-videogen's existing approval-to-social-queue path.
+The publishing app should remain downstream of review-app approval for this workflow. V1 may still write a local queue preview payload, but live queue insertion should happen through the review app's existing approval-to-social-queue path.
 
 ```json
 {
-  "schemaVersion": "launchclip.clutchcut.v1",
+  "schemaVersion": "launchclip.queue.v1",
   "project": "my-oss-tool",
   "assets": [],
   "captions": [],
@@ -283,22 +283,22 @@ Clutch Cut should remain downstream of product-videogen approval for this workfl
 }
 ```
 
-Any direct Clutch Cut submission should require:
+Any direct publishing-app submission should require:
 
-- a local config file naming the Clutch Cut endpoint or import folder
+- a local config file naming the publishing-app endpoint or import folder
 - explicit `--submit`
 - a queue receipt saved to disk
 - no hidden credentials in logs
 
-## Product Videogen Strategy
+## Review App Strategy
 
-The posting system should treat product-videogen as the media generation/render provider and the approval authority. Clutch Cut/social queue is the scheduling/publishing provider after approval.
+The posting system should treat review-app as the media generation/render provider and the approval authority. The publishing app's social queue is the scheduling/publishing provider after approval.
 
-Product-videogen requests should be built from the approved `video.json`, renderer settings, captions, and demo artifacts:
+The review app requests should be built from the approved `video.json`, renderer settings, captions, and demo artifacts:
 
 ```json
 {
-  "schemaVersion": "launchclip.product-videogen.v1",
+  "schemaVersion": "launchclip.review-app.v1",
   "project": "my-oss-tool",
   "sourceManifest": "video/video.json",
   "format": "short-30",
@@ -311,12 +311,12 @@ Product-videogen requests should be built from the approved `video.json`, render
 
 The adapter should support:
 
-- `launchclip render --provider product-videogen --dry-run` to preview the request
-- `launchclip render --provider product-videogen --submit` to create media after approval
-- `launchclip submit-review --provider product-videogen --dry-run` to preview the Review Feed request
-- `launchclip submit-review --provider product-videogen --submit` to create a pending Review Feed item
+- `launchclip render --provider review-app --dry-run` to preview the request
+- `launchclip render --provider review-app --submit` to create media after approval
+- `launchclip submit-review --provider review-app --dry-run` to preview the Review Feed request
+- `launchclip submit-review --provider review-app --submit` to create a pending Review Feed item
 - storing returned asset IDs, URLs, thumbnails, durations, and provider job IDs
-- storing the product-videogen review item ID and Review Feed URL
+- storing the review-app review item ID and Review Feed URL
 - retry-safe receipts so agents can resume without duplicate posts
 
 The API integration should be narrow and swappable:
@@ -324,8 +324,8 @@ The API integration should be narrow and swappable:
 - `POST /render-jobs` or equivalent for product video generation
 - `GET /render-jobs/:id` or equivalent for status
 - `POST /api/v1/review-items` or equivalent for pending Review Feed insertion
-- existing product-videogen approval endpoints for approval/rejection
-- existing product-videogen social queue endpoints after approval
+- existing review-app approval endpoints for approval/rejection
+- existing review-app social queue endpoints after approval
 - optional local import folder mode for early development before stable APIs exist
 
 ## Verification
@@ -334,9 +334,9 @@ The API integration should be narrow and swappable:
 - Demo command allowlist prevents accidental network or publish commands.
 - Captions include evidence or claim status for every product claim.
 - Queue command defaults to dry-run and refuses to submit without explicit config plus `--submit`.
-- Product-videogen command defaults to dry-run and refuses to submit without explicit config plus `--submit`.
-- Product-videogen Review Feed submission creates or previews an `approval_status=pending` item.
-- Clutch Cut/social queue handoff happens after product-videogen approval.
+- The review app command defaults to dry-run and refuses to submit without explicit config plus `--submit`.
+- The review app Review Feed submission creates or previews an `approval_status=pending` item.
+- The publishing app's social queue handoff happens after review-app approval.
 - Snapshot tests cover generated markdown and JSON.
 - CLI tests cover rerunning individual stages.
 - Adapter tests use fixture HTTP clients; no real API calls in CI.
@@ -346,4 +346,4 @@ The API integration should be narrow and swappable:
 
 Build `launchclip`, a local-first TypeScript CLI and agent skill for turning OSS repositories into reviewable social promo packets.
 
-The V1 should orchestrate demo artifact creation, short-form video planning, platform caption drafting, product-videogen render request generation, and product-videogen Review Feed submission. Keep external posting disabled by default. Write deterministic JSON and Markdown artifacts for every stage. Reuse the existing ecosystem boundaries: `video-skillkit` remains the grounded brief/manifest layer, `cutpilot` remains the local EDL/ffmpeg render path, `repo-to-content`/`postmaker` can inform evidence-backed copy, product-videogen handles media generation and approval, and Clutch Cut/social queue handles queueing/publishing after approval. Renderer adapters such as Remotion or Hyperframes stay optional future integrations. Include fixture-backed tests, a smoke command, release checks, and an agent skill that forces review before rendering, upload, Review Feed submission, queue submission, or posting.
+The V1 should orchestrate demo artifact creation, short-form video planning, platform caption drafting, review-app render request generation, and review-app Review Feed submission. Keep external posting disabled by default. Write deterministic JSON and Markdown artifacts for every stage. Reuse the existing ecosystem boundaries: `video-skillkit` remains the grounded brief/manifest layer, `cutpilot` remains the local EDL/ffmpeg render path, `repo-to-content`/`postmaker` can inform evidence-backed copy, review-app handles media generation and approval, and the publishing app's social queue handles queueing/publishing after approval. Renderer adapters such as Remotion or Hyperframes stay optional future integrations. Include fixture-backed tests, a smoke command, release checks, and an agent skill that forces review before rendering, upload, Review Feed submission, queue submission, or posting.

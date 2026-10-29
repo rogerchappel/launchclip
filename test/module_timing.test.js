@@ -62,9 +62,9 @@ test("catalogue timing tables match the validators: minimum scenes, process-step
     new RegExp(`must fall between ${steps.leadIn} s and ${duration - steps.leadOut} s`));
   const lower = moduleTiming("lower-third");
   const footage = { lane: "footage-led", base: { src: "assets/base.mp4" } };
-  assert.ok(resolves("lower-third", { name: "Roger", at: 3 - lower.leadOut }, 3, footage));
-  assert.ok(!resolves("lower-third", { name: "Roger", at: 3 - lower.leadOut + 0.05 }, 3, footage));
-  assert.ok(!resolves("lower-third", { name: "Roger" }, lower.minDuration - 0.05, footage));
+  assert.ok(resolves("lower-third", { name: "Alex", at: 3 - lower.leadOut }, 3, footage));
+  assert.ok(!resolves("lower-third", { name: "Alex", at: 3 - lower.leadOut + 0.05 }, 3, footage));
+  assert.ok(!resolves("lower-third", { name: "Alex" }, lower.minDuration - 0.05, footage));
 });
 
 test("the timing table reaches the skill reference and launchclip module fit", () => {

@@ -202,12 +202,12 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
     assets,
-    product_videogen_boundary: "Use product-videogen only through dry-run review payloads unless config, approval, and --submit are present.",
+    review_app_boundary: "Use review-app only through dry-run review payloads unless config, approval, and --submit are present.",
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
       remotion: "Render frame-accurate motion, camera pushes, kinetic captions, and local sound-design cues from the plan.",
       hyperframes: "Open video/hyperframes/index.html with HyperFrames. Start with video/hyperframes/DESIGN.md and QUALITY.md, then check template-qa.html, chart-diagram-qa.html, asset-readiness.html, and sfx-manifest.json before linting, validating, inspecting, previewing, and rendering.",
-      "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
+      "ugc-split": "The review app or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
       heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
       talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
     },
@@ -273,18 +273,18 @@ export async function writeCaptions(workspacePath, flags = {}) {
 }
 
 export async function renderDryRun(workspacePath, flags = {}) {
-  return renderVideo(workspacePath, { ...flags, provider: flags.provider ?? "product-videogen", "dry-run": true });
+  return renderVideo(workspacePath, { ...flags, provider: flags.provider ?? "review-app", "dry-run": true });
 }
 
 export async function renderVideo(workspacePath, flags = {}) {
   const out = path.resolve(workspacePath);
-  const provider = flags.provider ?? "product-videogen";
+  const provider = flags.provider ?? "review-app";
   if (provider === "local-ffmpeg") return renderLocalFfmpeg(out, flags);
   if (provider === "remotion") return renderRemotion(out, flags);
   if (provider === "hyperframes") return renderHyperframes(out, flags);
-  if (provider !== "product-videogen") throw new Error(`Unsupported render provider: ${provider}`);
-  const payload = await productVideogenPayload(out, "render");
-  const filePath = path.join(out, "video", "product-videogen.dry-run.json");
+  if (provider !== "review-app") throw new Error(`Unsupported render provider: ${provider}`);
+  const payload = await reviewAppPayload(out, "render");
+  const filePath = path.join(out, "video", "review-app.dry-run.json");
   await writeJson(filePath, payload);
   await updateManifest(out, (manifest) => {
     manifest.stages.render = { status: "dry-run", provider };
@@ -928,14 +928,14 @@ function atempoFilter(speed) {
 
 export async function submitReview(workspacePath, flags = {}) {
   const out = path.resolve(workspacePath);
-  const provider = flags.provider ?? "product-videogen";
-  if (provider !== "product-videogen") throw new Error(`Unsupported review provider: ${provider}`);
+  const provider = flags.provider ?? "review-app";
+  if (provider !== "review-app") throw new Error(`Unsupported review provider: ${provider}`);
   if (flags.submit) {
-    throw new Error("Live product-videogen submission is intentionally disabled in V1 without explicit local integration code and approval.");
+    throw new Error("Live review-app submission is intentionally disabled in V1 without explicit local integration code and approval.");
   }
-  const payload = await productVideogenPayload(out, "review-item");
-  const dryRunPath = path.join(out, "review", "product-videogen-review.dry-run.json");
-  const receiptPath = path.join(out, "review", "product-videogen-review.receipt.json");
+  const payload = await reviewAppPayload(out, "review-item");
+  const dryRunPath = path.join(out, "review", "review-app-review.dry-run.json");
+  const receiptPath = path.join(out, "review", "review-app-review.receipt.json");
   const genericReceiptPath = path.join(out, "review", "receipt.json");
   const receipt = {
     provider,
@@ -943,8 +943,8 @@ export async function submitReview(workspacePath, flags = {}) {
     submitted: false,
     approval_status: "pending",
     endpoint: "POST /api/v1/review-items",
-    payload_path: "review/product-videogen-review.dry-run.json",
-    product_videogen_api_gap: "Needs first-class external review-item ingestion endpoint or equivalent metadata_json/recipe_json acceptance."
+    payload_path: "review/review-app-review.dry-run.json",
+    review_app_api_gap: "Needs first-class external review-item ingestion endpoint or equivalent metadata_json/recipe_json acceptance."
   };
   await writeJson(dryRunPath, payload);
   await writeJson(receiptPath, receipt);
@@ -971,7 +971,7 @@ Rendered video: ${manifest.stages.render?.media ?? "not rendered"}
 - Demo: ${manifest.stages.demo?.status ?? "missing"}
 - Video plan: ${manifest.stages.plan?.status ?? "missing"}
 - Captions: ${manifest.stages.captions?.status ?? "missing"}
-- Product-videogen review: ${manifest.stages.submit_review?.status ?? "missing"}
+- The review app review: ${manifest.stages.submit_review?.status ?? "missing"}
 - Approval status: ${receipt?.approval_status ?? "not submitted"}
 - Social readiness: ${readiness.status}
 
@@ -994,20 +994,20 @@ Rendered video: ${manifest.stages.render?.media ?? "not rendered"}
 - video/render-plan.json
 - ${manifest.stages.render?.media ?? "video/launchclip.mp4"}
 - ${manifest.stages.render?.thumbnail ?? "video/thumbnail.png"}
-- video/product-videogen.dry-run.json
+- video/review-app.dry-run.json
 - captions/*.md
-- review/product-videogen-review.dry-run.json
-- review/product-videogen-review.receipt.json
+- review/review-app-review.dry-run.json
+- review/review-app-review.receipt.json
 
 ## Safety
-This packet is dry-run by default. Launchclip does not post to social platforms, publish media, or write to Clutch Cut directly. Product-videogen remains the approval lane.
+This packet is dry-run by default. Launchclip does not post to social platforms, publish media, or write to a publishing app directly. The review app remains the approval lane.
 
 ## Social Readiness
 ${readiness.issues.length ? readiness.issues.map((issue) => `- ${issue}`).join("\n") : "- Ready for human review."}
 ${readiness.warnings?.length ? `\nWarnings:\n${readiness.warnings.map((warning) => `- ${warning}`).join("\n")}` : ""}
 
-## Product-Videogen Follow-Up
-${receipt?.product_videogen_api_gap ?? "Run submit-review --provider product-videogen --dry-run to create the dry-run payload."}
+## Review App Follow-Up
+${receipt?.review_app_api_gap ?? "Run submit-review --provider review-app --dry-run to create the dry-run payload."}
 `;
   const reviewPath = path.join(out, "REVIEW.md");
   await writeFile(reviewPath, review);
@@ -1096,8 +1096,8 @@ export async function runPacket(repoPath, flags = {}) {
     "voice-id": flags["voice-id"]
   });
   await writeCaptions(out, { platforms, angle: flags.angle, audience: flags.audience, "cta-url": flags["cta-url"] });
-  await renderDryRun(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
-  await submitReview(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
+  await renderDryRun(out, { provider: flags.provider ?? "review-app", "dry-run": true });
+  await submitReview(out, { provider: flags.provider ?? "review-app", "dry-run": true });
   await writeReview(out);
   const readiness = await validateWorkspace(out, { write: true });
   return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues, warnings: readiness.warnings };
@@ -1281,9 +1281,9 @@ export async function validateWorkspace(workspacePath, flags = {}) {
     "video/hyperframes/QUALITY.md",
     "video/brief.md",
     "video/render-plan.json",
-    "video/product-videogen.dry-run.json",
-    "review/product-videogen-review.dry-run.json",
-    "review/product-videogen-review.receipt.json"
+    "video/review-app.dry-run.json",
+    "review/review-app-review.dry-run.json",
+    "review/review-app-review.receipt.json"
   ];
   const issues = [];
   for (const file of requiredFiles) {
@@ -1348,7 +1348,7 @@ async function inspectRepo(repo) {
   };
 }
 
-async function productVideogenPayload(out, purpose) {
+async function reviewAppPayload(out, purpose) {
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const video = await optionalJson(path.join(out, "video", "video.json"));
   const voiceover = await optionalJson(path.join(out, "video", "voiceover.json"));
@@ -1634,7 +1634,7 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
     frame_md: "video/frame.md",
     generated_for: repoName,
     style,
-    renderer_targets: ["hyperframes", "remotion", "product-videogen", "local-ffmpeg"],
+    renderer_targets: ["hyperframes", "remotion", "review-app", "local-ffmpeg"],
     hyperframes: {
       project_dir: HYPERFRAMES_PROJECT_DIR,
       composition_id: "LaunchclipHyperframes",
@@ -5546,7 +5546,7 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
     schema_version: "launchclip.storyboard.v1",
     intent: `${repoName} should feel like a modern creator-led product short, with proof and motion designed before rendering starts.`,
     creative_positioning: stylePreset.angle,
-    renderer_priority: ["remotion", "hyperframes", "heygen", "product-videogen", "local-ffmpeg"],
+    renderer_priority: ["remotion", "hyperframes", "heygen", "review-app", "local-ffmpeg"],
     non_goals: [
       "Do not make retro terminal art the main visual language.",
       "Do not render static text cards for consecutive beats.",
@@ -5599,7 +5599,7 @@ function buildDataStoryBenchmarkStoryboard(manifest, script, stylePreset) {
     schema_version: "launchclip.storyboard.v1",
     intent: `${repoName} should stress Launchclip with an original 150-second vertical data story: dark atlas styling, chart cards, map grids, split counters, workflow diagrams, SFX lanes, and review artifacts.`,
     creative_positioning: stylePreset.angle,
-    renderer_priority: ["hyperframes", "remotion", "product-videogen", "local-ffmpeg"],
+    renderer_priority: ["hyperframes", "remotion", "review-app", "local-ffmpeg"],
     non_goals: [
       "Do not download or reuse the reference transcript, audio, footage, frames, graphics, creator likeness, chart values, or exact sequence.",
       "Do not present synthetic benchmark fixtures as public survey data.",
@@ -5879,7 +5879,7 @@ function buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHe
     schema_version: "launchclip.storyboard.v1",
     intent: `${repoName} should feel like a reference-grade vertical product Short: fluid product proof, branded assets, physical object motion, prompt typing, and dense SFX cues.`,
     creative_positioning: stylePreset.angle,
-    renderer_priority: ["remotion", "hyperframes", "product-videogen", "local-ffmpeg"],
+    renderer_priority: ["remotion", "hyperframes", "review-app", "local-ffmpeg"],
     asset_manifest: {
       schema_version: ASSET_MANIFEST_SCHEMA,
       expected_file: ASSET_MANIFEST_FILE,
@@ -6139,7 +6139,7 @@ function ugcSplitStructure(manifest) {
     { beat: "hook", seconds: 3, instruction: `Open with a presenter-led claim: ${manifest.source_repo.name} turns a repo demo into launch-ready short-form assets.` },
     { beat: "split-screen-proof", seconds: 5, instruction: "Use a vertical split-screen: generated/demo B-roll above and presenter/talking-head below, with large centered captions." },
     { beat: "steps", seconds: 8, instruction: "Show 3-5 numbered workflow steps with minimal words, light progress bars, and quick scene changes." },
-    { beat: "artifact-reveal", seconds: 8, instruction: "Reveal the actual artifacts: rendered MP4, thumbnail, captions, review packet, and product-videogen dry-run payload." },
+    { beat: "artifact-reveal", seconds: 8, instruction: "Reveal the actual artifacts: rendered MP4, thumbnail, captions, review packet, and review-app dry-run payload." },
     { beat: "cta", seconds: 6, instruction: "Return to the presenter or a clean product screen with the repo URL and approval boundary." }
   ];
 }
@@ -6151,7 +6151,7 @@ function socialPunchyStructure(manifest) {
     { beat: "demo-trigger", seconds: 4, instruction: "Show the real demo command, timer, and passing receipt." },
     { beat: "proof", seconds: 5, instruction: "Show script-to-visual alignment as proof that the edit follows the spoken line." },
     { beat: "transformation", seconds: 6, instruction: "Assemble the launch packet outputs into one visible stack." },
-    { beat: "artifact-reveal", seconds: 7, instruction: "Flash real workspace files: brief, render plan, captions, review packet, product-videogen dry run." },
+    { beat: "artifact-reveal", seconds: 7, instruction: "Flash real workspace files: brief, render plan, captions, review packet, review-app dry run." },
     { beat: "cta", seconds: 3, instruction: "End on review-first approval CTA with repo URL." }
   ];
 }
@@ -6294,7 +6294,7 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           public_dir: "video/render-public",
           required_asset_aliases: [...PREMIUM_REQUIRED_ASSET_ALIASES],
           fallback_composition_id: "LaunchclipSocial",
-          external_api_policy: "No ElevenLabs, HyperFrames, SFX provider, product-videogen live submit, or social posting calls in this renderer."
+          external_api_policy: "No ElevenLabs, HyperFrames, SFX provider, review-app live submit, or social posting calls in this renderer."
         },
         generation_notes: [
           "Do not auto-fetch logos; only use launchclip-assets.json.",
@@ -6348,8 +6348,8 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           adapter: "launchclip.hyperframes-data-story.v1",
           composition_id: "LaunchclipHyperframes",
           primary_renderer: "hyperframes",
-          fallback_adapters: ["remotion", "local-ffmpeg", "product-videogen"],
-          external_api_policy: "No reference download, no voice cloning, no live product-videogen submit, no social posting, and no unlabelled synthetic claims."
+          fallback_adapters: ["remotion", "local-ffmpeg", "review-app"],
+          external_api_policy: "No reference download, no voice cloning, no live review-app submit, no social posting, and no unlabelled synthetic claims."
         },
         benchmark_reference_observations: {
           source_video_duration_seconds: 150,
@@ -6417,14 +6417,14 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           adapter: "launchclip.remotion-render.v1",
           local_preview: "local-ffmpeg should render script beat cards, kinetic captions, proof panels, progress motion, artifact flashes, and CTA.",
           remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, dynamic camera motion, local SFX cues, animated proof panels, and artifact cards.",
-          fallback_adapters: ["local-ffmpeg", "hyperframes", "product-videogen"]
+          fallback_adapters: ["local-ffmpeg", "hyperframes", "review-app"]
         },
         generation_notes: [
           "Do not reuse downloaded reference footage or creator likeness.",
           "Generate original presenter, voiceover, B-roll, and captions from the repo facts.",
           talkingHead.enabled ? `Route presenter generation through the ${talkingHead.provider} talking-head adapter contract.` : "Use the talking-head adapter contract when presenter generation is enabled.",
           "Ground every product claim in README, package metadata, demo output, or generated artifacts.",
-          "Keep external publishing and product-videogen submission behind human approval."
+          "Keep external publishing and review-app submission behind human approval."
         ]
       }
     };
@@ -6563,7 +6563,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         voiceover: `Review the packet, swap in better assets, then approve only when the claims and visuals line up.`,
         caption: "Review. Swap. Approve.",
         visual: "Final product lockup with asset tokens settled around review-safe approval checks and repo URL.",
-        evidence_source: "review/product-videogen-review.dry-run.json",
+        evidence_source: "review/review-app-review.dry-run.json",
         adapter_target: "remotion",
         caption_emphasis: ["review", "swap", "approve"],
         motion: "asset settle, check ticks, calm camera push, final hold",
@@ -6688,9 +6688,9 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         beat: "artifact-reveal",
         time_range: "20-27s",
         target_seconds: 7,
-        voiceover: `For ${repoName}, you can inspect the brief, render plan, captions, and product-videogen dry run before posting.`,
+        voiceover: `For ${repoName}, you can inspect the brief, render plan, captions, and review-app dry run before posting.`,
         caption: "Receipts before posting",
-        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, REVIEW.md, and product-videogen.dry-run.json.",
+        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, REVIEW.md, and review-app.dry-run.json.",
         evidence_source: "generated workspace files",
         adapter_target: "b-roll",
         caption_emphasis: ["inspect", "before posting"],
@@ -6704,7 +6704,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         voiceover: `Open the review packet. Approve only when the claims and visuals line up.`,
         caption: "Review first",
         visual: "Clean end card: presenter, two approval checks, short repo URL, no progress bar.",
-        evidence_source: "review/product-videogen-review.dry-run.json",
+        evidence_source: "review/review-app-review.dry-run.json",
         adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
         caption_emphasis: ["review", "approve"],
         motion: "presenter punch-in, two checks tick, clean CTA hold",
@@ -6754,9 +6754,9 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         beat: "artifact-reveal",
         time_range: "16-24s",
         target_seconds: 8,
-        voiceover: `For ${repoName}, the packet includes the brief, render plan, captions, and product-videogen dry run.`,
+        voiceover: `For ${repoName}, the packet includes the brief, render plan, captions, and review-app dry run.`,
         caption: "Review packet ready",
-        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, and product-videogen.dry-run.json.",
+        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, and review-app.dry-run.json.",
         evidence_source: "generated workspace files",
         adapter_target: "b-roll",
         caption_emphasis: ["review packet"],
@@ -6770,7 +6770,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         voiceover: `Review it first, then approve the clip when the claims and visuals line up.`,
         caption: "Review before posting",
         visual: "Presenter returns beside a clean product screen with repo URL and approval boundary.",
-        evidence_source: "review/product-videogen-review.dry-run.json",
+        evidence_source: "review/review-app-review.dry-run.json",
         adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
         caption_emphasis: ["review", "posting"],
         motion: "presenter return with CTA lockup",
@@ -6844,11 +6844,11 @@ function captionFor(platform, manifest, flags = {}) {
       "Claim status: evidence-backed."
     ],
     linkedin: [
-      `I built a grounded launch packet for ${repo.name}: demo evidence, a short-form video plan, platform captions, and a pending product-videogen review payload.`,
+      `I built a grounded launch packet for ${repo.name}: demo evidence, a short-form video plan, platform captions, and a pending review-app review payload.`,
       "",
       `The angle: ${angle}. The audience: ${audience}.`,
       "",
-      "The useful bit is the approval boundary: launchclip prepares the packet, while product-videogen owns review and downstream social queueing.",
+      "The useful bit is the approval boundary: launchclip prepares the packet, while review-app owns review and downstream social queueing.",
       "",
       `Repo: ${url}`,
       "Claim status: evidence-backed from local artifacts."
@@ -6856,14 +6856,14 @@ function captionFor(platform, manifest, flags = {}) {
     tiktok: [
       `POV: your OSS tool finally gets a launch clip packet before anyone posts anything.`,
       `${repo.name}: ${angle}.`,
-      `For ${audience}: demo proof, edit plan, captions, product-videogen review handoff.`,
+      `For ${audience}: demo proof, edit plan, captions, review-app review handoff.`,
       `GitHub: ${url}`,
       "Claim status: evidence-backed."
     ],
     bluesky: [
-      `${repo.name} now has a dry-run launch packet: demo proof, video brief, captions, and product-videogen review payload.`,
+      `${repo.name} now has a dry-run launch packet: demo proof, video brief, captions, and review-app review payload.`,
       `Angle: ${shorten(angle, 78)}.`,
-      `Approval stays in product-videogen.`,
+      `Approval stays in review-app.`,
       "Claim status: evidence-backed.",
       url
     ]
@@ -6961,7 +6961,7 @@ async function buildRemotionProps(out, renderOptions) {
       "video/render-plan.json",
       "captions/*.md",
       "REVIEW.md",
-      "product-videogen.dry-run.json"
+      "review-app.dry-run.json"
     ],
     approvalBoundary: "Review before posting. External submission stays behind human approval."
   };

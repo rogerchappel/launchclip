@@ -8,7 +8,7 @@ HyperFrames lane see [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md).
 - [x] Scaffold dependency-free Node CLI.
 - [x] Implement `init`, `demo`, `plan`, `captions`, `render`, `submit-review`, and `review`.
 - [x] Emit required launchclip workspace artifacts.
-- [x] Keep product-videogen and Clutch Cut writes dry-run only.
+- [x] Keep review-app and publishing-app writes dry-run only.
 - [x] Add fixture-backed unit tests.
 - [x] Add real CLI smoke flow.
 - [x] Add agent skill, orchestration docs, and README quickstart.
@@ -23,11 +23,11 @@ HyperFrames lane see [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md).
 
 ## Follow-Up
 
-- [ ] Add product-videogen `POST /api/v1/review-items` endpoint or compatible ingestion path.
+- [ ] Add review-app `POST /api/v1/review-items` endpoint or compatible ingestion path.
 - [ ] Add optional `cutpilot` adapter when local footage exists.
 - [x] Implement the HyperFrames production contract, HTML assembly, Studio preview, verification, and local MP4 rendering (`src/hyperframes_assembler.js`, `src/production_render.js`).
-- [ ] Add real presenter/B-roll rendering for `ugc-split` using product-videogen, HeyGen, or another approved generation backend.
+- [ ] Add real presenter/B-roll rendering for `ugc-split` using review-app, HeyGen, or another approved generation backend.
 - [ ] Add live HeyGen API integration once credentials, avatar defaults, and approval flow are configured.
 - [ ] Add richer repo discovery for non-Node projects.
 - [ ] Add configurable claim templates and evidence linting.
-- [ ] Add real platform-specific media specs once product-videogen exposes final queue requirements.
+- [ ] Add real platform-specific media specs once review-app exposes final queue requirements.

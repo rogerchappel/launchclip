@@ -20,5 +20,5 @@ npm run check
 
 ## Notes
 
-- Product-videogen submission remains dry-run only.
-- Product-videogen follow-up: add `POST /api/v1/review-items` or an equivalent external pending Review Feed ingestion endpoint that accepts launch metadata in `metadata_json` and video/demo/caption provenance in `recipe_json`.
+- The review app submission remains dry-run only.
+- The review app follow-up: add `POST /api/v1/review-items` or an equivalent external pending Review Feed ingestion endpoint that accepts launch metadata in `metadata_json` and video/demo/caption provenance in `recipe_json`.

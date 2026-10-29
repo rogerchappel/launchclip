@@ -1,6 +1,6 @@
 # motion-engine
 
-Event-timeline motion graphics over real footage. This package is the lab for the renderer that will move into product-videogen's `packages/video-engine` — keep it dependency-light and framework-boundaries clean:
+Event-timeline motion graphics over real footage. This package is the lab for the renderer that will move into a host app's video engine — keep it dependency-light and framework-boundaries clean:
 
 - `schema.js` / `heuristics.js` — pure JS, no React, no Remotion. The `motion.timeline.v1` contract any director (human, heuristic, LLM) must emit.
 - `camera.js`, `MotionLayer.jsx`, `components/` — Remotion rendering of a timeline.
@@ -42,7 +42,7 @@ Drop your recording at `public/base/talking-head.mp4` to make the golden timelin
 
 Replace `public/sfx/*.wav` with a real sound pack (the placeholders are synthesized and merely adequate). Keep the same filenames or update `DEFAULT_SFX`.
 
-## Extraction checklist (when this graduates to product-videogen)
+## Extraction checklist (when this graduates to a host app)
 
 - `schema.js` + `heuristics.js` move as-is (no imports beyond each other)
 - Components move into `packages/video-engine/src`

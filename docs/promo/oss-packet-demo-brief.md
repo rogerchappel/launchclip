@@ -36,7 +36,7 @@ packet without posting anywhere or rendering a final video by default.
 - The model-directed lane keeps stages resumable: evidence, creative plan,
   assembly, verification, draft, critique, repair, preview, and approved render.
 - LaunchClip does not publish packages, post to social platforms, or submit live
-  product-videogen work without a future explicit integration and human
+  review-app work without a future explicit integration and human
   approval.
 
 ## Shot list

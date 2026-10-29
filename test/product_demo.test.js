@@ -100,7 +100,7 @@ test('cameraKeys never snaps: moves take at least minMove, close or far actions 
     hop: [{at: 2, s: 1.8, f: at(200, 150)}, {at: 3, s: 1.8, f: at(1700, 950)}],
     // A corner target that hits the clamp mid-zoom.
     corner: [{at: 1, s: 1.8, f: at(110, 1010)}, {at: 2.4, s: 1.8, f: at(1800, 60)}],
-    // A navigating click followed by a field on the next page (the ClutchCut API key flow).
+    // A navigating click followed by a field on the next page (an app's API key flow).
     navigate: [{at: 2.81, navigates: true, s: 1.8, f: at(160, 850)}, {at: 4.65, s: 1.8, f: at(880, 260)}]
   };
   for (const [name, targets] of Object.entries(logs)) {
@@ -146,7 +146,7 @@ test('productDemoParams turns an action log into scene-relative params', async (
   assert.ok(!JSON.stringify(record).includes('demo-pass-123'), 'the password never reaches the action log');
 });
 
-// The ClutchCut "Create an API key" flow: "API Keys" in the Settings sidebar
+// An app's "Create an API key" flow: "API Keys" in the Settings sidebar
 // opens another page, then the name field on it is typed into.
 const NAVIGATING_LOG = {
   schema: 'launchclip.demo-actions.v1', video: 'api-keys.mp4', viewport: {width: 1920, height: 1080}, duration: 8,

@@ -18,11 +18,11 @@ npm run check
 
 ## Current Limitations
 
-- Live product-videogen submission is disabled.
-- Product-videogen handoffs remain dry-run contracts. HyperFrames, local FFmpeg, and Remotion rendering are implemented; their runtime/toolchain requirements differ.
+- Live review-app submission is disabled.
+- The review app handoffs remain dry-run contracts. HyperFrames, local FFmpeg, and Remotion rendering are implemented; their runtime/toolchain requirements differ.
 - Repo discovery is intentionally conservative.
 - Secret redaction covers common token/key/password patterns, but reviewers should still inspect generated artifacts before sharing.
 
-## Product-Videogen Follow-Up
+## Review App Follow-Up
 
 Add or expose `POST /api/v1/review-items` for external pending Review Feed items that accept launch metadata in `metadata_json` and edit/demo provenance in `recipe_json`.

@@ -3,7 +3,7 @@
   "duration_seconds": 17.3,
   "base": {
     "type": "video",
-    "src": "base/talking-head-roger.mp4"
+    "src": "base/talking-head.mp4"
   },
   "scenes": [
     {
@@ -12,7 +12,7 @@
       "start": 0,
       "end": 3.189,
       "transition": "cut",
-      "src": "base/talking-head-roger.mp4",
+      "src": "base/talking-head.mp4",
       "offset": 0,
       "layout": "split",
       "items": [
@@ -148,7 +148,7 @@
     }
   ],
   "audio": {
-    "voiceover": "base/talking-head-roger.mp4",
+    "voiceover": "base/talking-head.mp4",
     "music": "music/golden-bed.mp3",
     "music_volume": 0.18
   },

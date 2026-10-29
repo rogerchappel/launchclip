@@ -216,7 +216,7 @@ No repo, no product, no screenshots — the grammar still works because the refe
   1. launchclip itself (`software_demo`, recorded take)
   2. A cold OSS repo never seen before (`software_demo`, TTS, no assets)
   3. "How DNS works" (`explainer`, TTS, zero assets)
-  4. product-videogen with screenshots (`software_demo`, screenshot-heavy)
+  4. review-app with screenshots (`software_demo`, screenshot-heavy)
   5. "5 mistakes new freelancers make" (`listicle`, `--voice none`)
   Pass = renders warning-free, lints clean, and survives a human watch-through.
 
@@ -228,7 +228,7 @@ No repo, no product, no screenshots — the grammar still works because the refe
 | **2. Density + structure components** | chapter_rail, stat_counter, quote_card, words_on_footage + density linter tightening; `--quality high` (scene fan-out + critic) | Fluidity gap closes; education videos look structured |
 | **3. Assets + breadth** | resolver (manifest, Brandfetch, vision classify), compare_split, chat_thread, icon_orbit, listicle/announcement/comparison presets, approval-gated image gen, claims-verifier agent, `--quality max` tournament | Scenarios 4–5; logos auto-appear; education claims pre-verified |
 | **4. QA loop + character** | frame-sampling QA critic (vision call against the disqualifier checklist) → re-direct; mascot pose system | Self-correcting quality; the OpenClaw charm tier |
-| **Port** | schema, catalog, presets, lint, director prompts → product-videogen; product-videogen supplies its own ingest (media library), voice (existing ElevenLabs), and review UI | The product |
+| **Port** | schema, catalog, presets, lint, director prompts → review-app; review-app supplies its own ingest (media library), voice (existing ElevenLabs), and review UI | The product |
 
 ## 13. Risks
 
@@ -238,4 +238,4 @@ No repo, no product, no screenshots — the grammar still works because the refe
 | Density rules produce chaos instead of fluidity | Density lint has both floor AND ceiling; phase 2 components give the Director *legitimate* ways to fill time. |
 | Asset legal (fetched logos) | Nominative use for mentioned tools is standard practice, but surface every fetched logo in the REVIEW packet for human sign-off. |
 | Education claims are wrong | `model_knowledge` flags + review gate (§9). |
-| Scope creep in launchclip | Phases 1–2 only need ~4 new files + catalog entries. The port to product-videogen is the deadline forcing function. |
+| Scope creep in launchclip | Phases 1–2 only need ~4 new files + catalog entries. The port to the host app is the deadline forcing function. |

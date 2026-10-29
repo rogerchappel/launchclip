@@ -25,8 +25,8 @@ try {
   await runCli(["validate", out], quietIo());
 
   const review = await readFile(path.join(out, "REVIEW.md"), "utf8");
-  if (!review.includes("Product-Videogen Follow-Up")) {
-    throw new Error("Smoke review packet missing product-videogen follow-up");
+  if (!review.includes("Review App Follow-Up")) {
+    throw new Error("Smoke review packet missing review-app follow-up");
   }
   if (!review.includes("Social readiness: ready")) {
     throw new Error("Smoke review packet is not social-ready");
