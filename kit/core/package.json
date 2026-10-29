@@ -21,12 +21,13 @@
     "*/*.mjs",
     "types",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node scripts/build-types.js",
-    "prepack": "npm run build",
-    "postpack": "node -e \"require('node:fs').rmSync('types', {recursive: true, force: true})\""
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md')\" && npm run build",
+    "postpack": "node -e \"require('node:fs').rmSync('types', {recursive: true, force: true}); require('node:fs').rmSync('THIRD_PARTY_NOTICES.md', {force: true})\""
   },
   "keywords": [
     "video",

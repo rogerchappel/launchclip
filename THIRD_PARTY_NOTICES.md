@@ -185,6 +185,34 @@ of that file. Its glyph outlines are drawn from the MathJax TeX fonts and are
 written into a typeset equation's `params.typeset`. MathJax is not relicensed
 under LaunchClip's MIT License.
 
+## AI model providers (optional, paid)
+
+Planning, scripts, the headless critic and some assets can call OpenAI,
+Anthropic or OpenRouter, only with the user's own `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`. LaunchClip ships no keys and no
+model output. Each request, and what the user does with its output, is
+governed by that provider's terms and usage policies for the account that
+made it, not by LaunchClip's licence:
+
+- <https://openai.com/policies>
+- <https://www.anthropic.com/legal>
+- <https://openrouter.ai/terms>
+
+Kokoro and the person cut-out models are downloaded from Hugging Face on first
+use; their licences are listed above.
+
+## Copyleft licences among transitive dependencies
+
+Two packages that other dependencies install use file-level or library
+copyleft licences. LaunchClip does not modify or bundle either:
+
+- `mediabunny` and its `@mediabunny/*` encoders (MPL-2.0), installed by
+  Remotion's media packages. Source: <https://github.com/Vanilagy/mediabunny>.
+- libvips (LGPL-3.0-or-later), the image library inside `sharp`'s prebuilt
+  `@img/sharp-libvips-*` binaries, which `@huggingface/transformers` installs
+  for the optional Kokoro voice. `sharp` itself is Apache-2.0. Source:
+  <https://github.com/libvips/libvips>.
+
 ## Other direct dependencies
 
 At the time of the 0.2.0 release, HyperFrames declares Apache-2.0;
