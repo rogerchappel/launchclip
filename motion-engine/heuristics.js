@@ -1,5 +1,5 @@
 // Deterministic starter director: turns aligned words into a usable first-pass
-// event timeline. The real Motion Director (LLM) lives in product-videogen;
+// event timeline. The real Motion Director (LLM) lives in the host app;
 // these heuristics exist so a fresh recording renders with life immediately.
 
 import { MOTION_TIMELINE_VERSION, DEFAULT_SFX } from "./schema.js";

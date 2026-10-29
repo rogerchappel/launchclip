@@ -557,7 +557,7 @@ launchclip review .launchclip/my-oss-tool
 ```
 
 Local render options include `remotion`, `hyperframes`, and `local-ffmpeg`.
-Keep product-videogen and Review Feed operations in `--dry-run` unless the user
+Keep review-app and Review Feed operations in `--dry-run` unless the user
 explicitly authorizes a supported live integration.
 
 ## Storyboard (storyboard.json)
@@ -1697,7 +1697,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `render`: Render the packet video.
 
   ```text
-  launchclip render <workspace> --provider product-videogen --dry-run
+  launchclip render <workspace> --provider review-app --dry-run
   launchclip render <workspace> --provider hyperframes [--quality high] [--strict-all] [--inspect-samples 15] [--skip-quality-gates] [--voiceover local-say|elevenlabs] [--music elevenlabs]
   launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
   launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
@@ -1712,7 +1712,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `submit-review`: Submit the packet for review.
 
   ```text
-  launchclip submit-review <workspace> --provider product-videogen --dry-run
+  launchclip submit-review <workspace> --provider review-app --dry-run
   ```
 
 - `validate`: Validate a packet workspace.

@@ -68,7 +68,7 @@ const WORKFLOW_PROOF = [
   ["thumbnail_card", "A video thumbnail preview card.", ["thumbnail", "media"]],
   ["caption_card", "A social caption or subtitle artifact card.", ["caption", "artifact"]],
   ["render_plan_card", "A render-plan JSON/brief summary card.", ["render", "artifact"]],
-  ["dry_run_payload", "A product-videogen dry-run payload proof card.", ["dry-run", "review"]]
+  ["dry_run_payload", "A review-app dry-run payload proof card.", ["dry-run", "review"]]
 ];
 
 const BRAND_MEDIA = [

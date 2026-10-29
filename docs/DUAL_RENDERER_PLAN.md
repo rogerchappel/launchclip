@@ -16,8 +16,8 @@ the same audio, captions and evidence tooling, and the same gates. The creative
 prompt is shared. Only the runtime contract and the render adapter differ.
 
 The goal is output from the two renderers that is close to identical, then
-improving both together. Clutchcut is **out of scope** for now. The Remotion
-path is written in clutchcut's idiom (Remotion 4.0.536, React 19.3, TSX,
+improving both together. Host apps are **out of scope** for now. The Remotion
+path is written in a typical host app's idiom (Remotion 4.0.536, React 19.3, TSX,
 frame-pure components, no WebGL in portable modules), so moving it across later
 is mostly a copy.
 

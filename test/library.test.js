@@ -54,13 +54,13 @@ test("resolves storage paths against the library folder and expands ~", async ()
   const home = await tempDir();
   const file = await writeLibraryFile(root, {
     schema: LIBRARY_SCHEMA,
-    name: "Roger's videos",
+    name: "My videos",
     storage: { projects: "/Volumes/Footage/launchclip", finals: "finals", archive: null, min_free_gb: 40 },
     cache: "~/.cache/launchclip",
     collections: ["acme"]
   });
   const library = await readLibrary(file, { HOME: home });
-  assert.equal(library.name, "Roger's videos");
+  assert.equal(library.name, "My videos");
   assert.equal(library.root, root);
   assert.deepEqual(library.storage, {
     projects: "/Volumes/Footage/launchclip",

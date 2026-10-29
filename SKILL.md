@@ -1,6 +1,6 @@
 # launchclip Skill
 
-Use this skill when Roger wants to promote a local OSS repo with a reviewable packet before anything is posted.
+Use this skill when the user wants to promote a local OSS repo with a reviewable packet before anything is posted.
 
 ## Related Bundled Skills
 
@@ -32,7 +32,7 @@ the bundled skills under `skills/` instead:
 ## Side-Effect Boundaries
 
 - Do not post to social media.
-- Do not submit live product-videogen or Clutch Cut requests unless local config, explicit approval, and a future supported submission path are present.
+- Do not submit live review-app or publishing-app requests unless local config, explicit approval, and a future supported submission path are present.
 - Do not publish packages, tag releases, merge PRs, or create GitHub Releases.
 - Treat generated captions as drafts.
 - Treat redacted receipts as review artifacts, not permission to run commands that print secrets.

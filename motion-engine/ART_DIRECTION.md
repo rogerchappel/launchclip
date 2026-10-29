@@ -105,7 +105,7 @@ OSS verdicts (both MIT, copy-in philosophy):
 
 ## 4e. Client feedback pass (first production review, 2026-06-13) — all BUILT
 
-Roger reviewed our output against the reference (frame study in
+The maintainer reviewed our output against the reference (frame study in
 `reference/feedback-pass/`, key frame: the 34s composer close-up). Verdicts,
 each now in the renderer:
 
@@ -272,5 +272,5 @@ not just look right in one exported frame.
 2. **Paper ground component**: color + grid + grain, shared by every scene.
 3. **Card primitive**: one component (radius/shadow/tilt presets) that screenshots, prompts, icons, steps, and face-inserts all reuse.
 4. **Icon-card library**: brand glyph on black rounded square — generated per brand from logo assets.
-5. **Screenshot harvesting**: real product screenshots are now a *primary input* (Roger: this is what product-videogen's media library already does well).
+5. **Screenshot harvesting**: real product screenshots are now a *primary input* (this is what a host app's media library already does well).
 6. Illustrated props: out of scope for the engine; per-video artisanal assets, possibly AI-generated and approved by a human.

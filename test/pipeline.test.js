@@ -23,19 +23,19 @@ test("creates a complete dry-run promotion packet", async () => {
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal", "demo-media": screenshot });
     await planVideo(out, { format: "short-30", renderer: "none" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     await writeReview(out);
 
     const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
-    const reviewPayload = JSON.parse(await readFile(path.join(out, "review/product-videogen-review.dry-run.json"), "utf8"));
+    const reviewPayload = JSON.parse(await readFile(path.join(out, "review/review-app-review.dry-run.json"), "utf8"));
     const review = await readFile(path.join(out, "REVIEW.md"), "utf8");
 
     assert.equal(manifest.source_repo.name, "sample-tool");
     assert.equal(manifest.stages.submit_review.approval_status, "pending");
     assert.equal(reviewPayload.approval_status, "pending");
     assert.equal(reviewPayload.metadata_json.claim_status, "evidence_backed");
-    assert.match(review, /Product-Videogen Follow-Up/);
+    assert.match(review, /Review App Follow-Up/);
     assert.match(review, /Social readiness: ready/);
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -70,19 +70,19 @@ test("runs and validates a social-ready packet in one command", async () => {
   }
 });
 
-test("plans ugc split-screen creative recipe for product-videogen handoff", async () => {
+test("plans ugc split-screen creative recipe for review-app handoff", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
   try {
     await initWorkspace(fixtureRepo, { out });
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
-    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "ugc-split", "talking-head": "heygen", "avatar-id": "avatar_launchclip_demo" });
+    await planVideo(out, { format: "short-30", renderer: "review-app", style: "ugc-split", "talking-head": "heygen", "avatar-id": "avatar_launchclip_demo" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
 
     const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
     const renderPlan = JSON.parse(await readFile(path.join(out, "video/render-plan.json"), "utf8"));
-    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/review-app.dry-run.json"), "utf8"));
 
     assert.equal(video.style, "ugc-split");
     assert.equal(video.duration_seconds, 30);
@@ -133,13 +133,13 @@ test("plans premium product short contract with deterministic asset warnings", a
     });
     await initWorkspace(fixtureRepo, { out });
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
-    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "premium-product-short", "assets-dir": assetsDir });
+    await planVideo(out, { format: "short-30", renderer: "review-app", style: "premium-product-short", "assets-dir": assetsDir });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
 
     const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
-    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/review-app.dry-run.json"), "utf8"));
     const readiness = await validateWorkspace(out);
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
@@ -368,13 +368,13 @@ test("plans original 150 second data-story benchmark contract", async () => {
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
     await planVideo(out, { format: "short-150", renderer: "hyperframes", style: "data-story-benchmark", "sfx-dir": sfxDir });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     const renderAnalysis = await analyzeRender(out);
 
     const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
     const renderPlan = JSON.parse(await readFile(path.join(out, "video/render-plan.json"), "utf8"));
-    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/review-app.dry-run.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
     const renderAnalysisReport = JSON.parse(await readFile(path.join(out, "review/render-analysis.json"), "utf8"));
     const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
@@ -458,8 +458,8 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
     await planVideo(out, { format: "short-30", renderer: "local-ffmpeg", style: "ugc-demo-punchy", "talking-head": "heygen" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     const result = await renderVideo(out, { provider: "local-ffmpeg", duration: "4", fps: "6" });
     const readiness = await validateWorkspace(out);
 
@@ -503,8 +503,8 @@ test("renders punchy social-ready UGC preview with Remotion", { skip: mediaSkip(
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
     await planVideo(out, { format: "short-30", renderer: "remotion", style: "ugc-demo-punchy", "talking-head": "heygen" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     const result = await renderVideo(out, { provider: "remotion", duration: "2", fps: "15" });
     const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
     const props = JSON.parse(await readFile(path.join(out, "video/remotion-props.json"), "utf8"));
@@ -546,8 +546,8 @@ test("renders premium product short sample with local manifest assets", { skip: 
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
     await planVideo(out, { format: "short-30", renderer: "remotion", style: "premium-product-short", "assets-dir": assetsDir });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     const result = await renderVideo(out, { provider: "remotion", duration: "6", fps: "15", "assets-dir": assetsDir });
 
     const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
@@ -583,10 +583,10 @@ test("validation catches missing script and visual alignment fields", async () =
   try {
     await initWorkspace(fixtureRepo, { out });
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
-    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "ugc-split", "talking-head": "heygen" });
+    await planVideo(out, { format: "short-30", renderer: "review-app", style: "ugc-split", "talking-head": "heygen" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
 
     const videoPath = path.join(out, "video/video.json");
     const video = JSON.parse(await readFile(videoPath, "utf8"));
@@ -650,8 +650,8 @@ test("rejects live submit in V1", async () => {
   try {
     await initWorkspace(fixtureRepo, { out });
     await assert.rejects(
-      submitReview(out, { provider: "product-videogen", submit: true }),
-      /Live product-videogen submission is intentionally disabled/
+      submitReview(out, { provider: "review-app", submit: true }),
+      /Live review-app submission is intentionally disabled/
     );
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -741,8 +741,8 @@ test("renders a local uploadable video when ffmpeg is available", { skip: mediaS
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal", "demo-media": screenshot });
     await planVideo(out, { format: "short-15", renderer: "local-ffmpeg" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
-    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
-    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    await renderDryRun(out, { provider: "review-app", "dry-run": true });
+    await submitReview(out, { provider: "review-app", "dry-run": true });
     const result = await renderVideo(out, { provider: "local-ffmpeg", duration: "6" });
     const readiness = await validateWorkspace(out);
 

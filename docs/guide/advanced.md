@@ -1,6 +1,6 @@
 # Advanced reference
 
-The full operating reference that used to live in the README: every CLI lane (including the legacy OSS promotion packet and the API-backed HyperFrames production pipeline), recorded-video options, renderer notes, product-videogen handoff, limitations and safety notes. Start with the [README](../../README.md) and the [guides](README.md) if you are new.
+The full operating reference that used to live in the README: every CLI lane (including the legacy OSS promotion packet and the API-backed HyperFrames production pipeline), recorded-video options, renderer notes, review-app handoff, limitations and safety notes. Start with the [README](../../README.md) and the [guides](README.md) if you are new.
 
 ## Install (from source)
 
@@ -558,13 +558,13 @@ You can also run each stage by hand:
 launchclip init ./my-oss-tool --out .launchclip/my-oss-tool
 launchclip demo ./my-oss-tool --out .launchclip/my-oss-tool --demo-cmd "npm run smoke" --capture terminal --demo-media demo/screenshot.png
 launchclip plan .launchclip/my-oss-tool --format short-15 --renderer none
-launchclip plan .launchclip/my-oss-tool --format short-30 --style ugc-split --renderer product-videogen --talking-head heygen
+launchclip plan .launchclip/my-oss-tool --format short-30 --style ugc-split --renderer review-app --talking-head heygen
 launchclip plan .launchclip/my-oss-tool --format short-30 --style ugc-demo-punchy --renderer remotion --talking-head heygen
 launchclip captions .launchclip/my-oss-tool --platforms x,linkedin,tiktok,bluesky
-launchclip render .launchclip/my-oss-tool --provider product-videogen --dry-run
+launchclip render .launchclip/my-oss-tool --provider review-app --dry-run
 launchclip render .launchclip/my-oss-tool --provider remotion
 launchclip render .launchclip/my-oss-tool --provider local-ffmpeg
-launchclip submit-review .launchclip/my-oss-tool --provider product-videogen --dry-run
+launchclip submit-review .launchclip/my-oss-tool --provider review-app --dry-run
 launchclip review .launchclip/my-oss-tool
 launchclip validate .launchclip/my-oss-tool
 ```
@@ -589,15 +589,15 @@ Expected packet:
     remotion-props.json
     launchclip.mp4
     thumbnail.png
-    product-videogen.dry-run.json
+    review-app.dry-run.json
   captions/
     x.md
     linkedin.md
     tiktok.md
     bluesky.md
   review/
-    product-videogen-review.dry-run.json
-    product-videogen-review.receipt.json
+    review-app-review.dry-run.json
+    review-app-review.receipt.json
     social-readiness.json
     receipt.json
   REVIEW.md
@@ -605,7 +605,7 @@ Expected packet:
 
 ## How It Works
 
-`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence with obvious API keys, tokens, passwords, and GitHub tokens redacted; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default `proof-card` style is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. Use `--style ugc-split` for a 30-second creator-led split-screen recipe with presenter, generated/demo B-roll, burned-in captions, numbered steps, artifact reveal, and approval-safe CTA. Use `--style ugc-demo-punchy` for the more social-ready version: seven short beats, first-frame hook, visible friction, real demo proof, script-to-visual alignment panels, fast artifact flashes, kinetic captions, motion/transition instructions, and a review-safe CTA. The plan also includes a deterministic `launchclip.script.v1` script, `script_visual_alignment` timeline, and `launchclip.storyboard.v1` creative storyboard so each beat carries layout, composition, media slots, motion grammar, typography, color grade, and quality gates before any renderer starts. `plan --renderer hyperframes` writes an editable HyperFrames project with `DESIGN.md`, `QUALITY.md`, QA pages, lifecycle object templates, transition-masked scenes, and SFX metadata. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider hyperframes` runs HyperFrames lint, validate, and inspect before rendering `video/launchclip-hyperframes.mp4`; for draft iteration, pass `--skip-quality-gates`. `render --provider remotion` creates an uploadable vertical MP4 at `video/launchclip.mp4`, a thumbnail, and `video/remotion-props.json`; for `ugc-demo-punchy`, the Remotion composition follows the storyboard with creator-frame slots, device-capture proof, editor timeline motion, artifact inspection, and review-safe CTA. `render --provider local-ffmpeg` remains a dependency-light fallback. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, script/visual alignment, storyboard completeness, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
+`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence with obvious API keys, tokens, passwords, and GitHub tokens redacted; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default `proof-card` style is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. Use `--style ugc-split` for a 30-second creator-led split-screen recipe with presenter, generated/demo B-roll, burned-in captions, numbered steps, artifact reveal, and approval-safe CTA. Use `--style ugc-demo-punchy` for the more social-ready version: seven short beats, first-frame hook, visible friction, real demo proof, script-to-visual alignment panels, fast artifact flashes, kinetic captions, motion/transition instructions, and a review-safe CTA. The plan also includes a deterministic `launchclip.script.v1` script, `script_visual_alignment` timeline, and `launchclip.storyboard.v1` creative storyboard so each beat carries layout, composition, media slots, motion grammar, typography, color grade, and quality gates before any renderer starts. `plan --renderer hyperframes` writes an editable HyperFrames project with `DESIGN.md`, `QUALITY.md`, QA pages, lifecycle object templates, transition-masked scenes, and SFX metadata. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider review-app --dry-run` creates a dry-run review-app payload. `render --provider hyperframes` runs HyperFrames lint, validate, and inspect before rendering `video/launchclip-hyperframes.mp4`; for draft iteration, pass `--skip-quality-gates`. `render --provider remotion` creates an uploadable vertical MP4 at `video/launchclip.mp4`, a thumbnail, and `video/remotion-props.json`; for `ugc-demo-punchy`, the Remotion composition follows the storyboard with creator-frame slots, device-capture proof, editor timeline motion, artifact inspection, and review-safe CTA. `render --provider local-ffmpeg` remains a dependency-light fallback. `submit-review` creates the dry-run review-app review payload. `validate` checks required artifacts, stage status, script/visual alignment, storyboard completeness, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
 
 ## UGC Split Style
 
@@ -615,12 +615,12 @@ For automated product shorts that feel closer to a creator-led UGC clip, plan wi
 launchclip plan .launchclip/my-oss-tool \
   --format short-30 \
   --style ugc-split \
-  --renderer product-videogen \
+  --renderer review-app \
   --talking-head heygen \
   --avatar-id avatar_123
 ```
 
-This does not copy reference footage or a creator likeness. It emits an original `creative_recipe` for product-videogen or a future renderer: vertical split-screen, generated or captured B-roll, talking-head presenter direction, large burned-in captions, numbered workflow steps, artifact montage, and a human-approval CTA.
+This does not copy reference footage or a creator likeness. It emits an original `creative_recipe` for review-app or a future renderer: vertical split-screen, generated or captured B-roll, talking-head presenter direction, large burned-in captions, numbered workflow steps, artifact montage, and a human-approval CTA.
 
 `ugc-split` defaults to a provider-neutral talking-head contract with HeyGen as the first adapter target. The plan and dry-run payload include `talking_head.provider`, optional `avatar_id` and `voice_id`, script segments, B-roll slots, and consent/safety requirements. They also include a consistent script timeline where every voiceover segment points to the exact visual treatment and evidence source that should appear on screen. Add another presenter vendor later by mapping that same `launchclip.talking-head.v1` contract instead of changing the creative style.
 
@@ -638,9 +638,9 @@ launchclip plan .launchclip/my-oss-tool \
 launchclip render .launchclip/my-oss-tool --provider remotion
 ```
 
-This still does not generate the real HeyGen talking-head footage. It produces a deterministic Remotion preview with motion graphics from the same script and storyboard contracts that future HyperFrames, HeyGen, or product-videogen adapters can consume. The storyboard intentionally rejects retro terminal art and consecutive static text cards; terminal output is treated as evidence inside a broader creator-led edit.
+This still does not generate the real HeyGen talking-head footage. It produces a deterministic Remotion preview with motion graphics from the same script and storyboard contracts that future HyperFrames, HeyGen, or review-app adapters can consume. The storyboard intentionally rejects retro terminal art and consecutive static text cards; terminal output is treated as evidence inside a broader creator-led edit.
 
-## Product-Videogen Handoff
+## Review app Handoff
 
 The preferred future API is:
 
@@ -648,21 +648,21 @@ The preferred future API is:
 POST /api/v1/review-items
 ```
 
-The dry-run payload uses `approval_status: "pending"`, `metadata_json` for source repo and launch metadata, and `recipe_json` for video manifest, demo artifacts, captions, and provenance. Product-videogen remains responsible for approval and any downstream social queue sync.
+The dry-run payload uses `approval_status: "pending"`, `metadata_json` for source repo and launch metadata, and `recipe_json` for video manifest, demo artifacts, captions, and provenance. The review app remains responsible for approval and any downstream social queue sync.
 
 ## Limitations
 
 - Remotion rendering is the primary local social-preview path. It creates motion graphics from repo facts, captions, captured terminal evidence, and social-ready script beats, but it is still not a substitute for real HeyGen presenter footage or generated B-roll.
 - Local ffmpeg rendering is intentionally dependency-light and remains available as a fallback text-forward vertical preview.
-- Live product-videogen submission is intentionally disabled.
+- Live review-app submission is intentionally disabled.
 - Claims are grounded in local repo files and captured demo output; no unsupported performance or adoption claims are generated.
 - Demo commands can have side effects inside the target repo, so agents should ask before running non-trivial commands.
 - Redaction catches obvious secret patterns in command receipts and terminal output, but it is not a substitute for running safe demo commands.
 
 ## Safety Notes
 
-- Dry-run is the default and only implemented product-videogen mode.
-- No social posting or Clutch Cut queue writes.
+- Dry-run is the default and only implemented review-app mode.
+- No social posting or publishing-app queue writes.
 - No secrets are required.
 - Receipts store command, status, paths, and API shape, not credentials.
 - Terminal evidence and stored demo commands redact common token, API key, secret, and password patterns.

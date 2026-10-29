@@ -74,7 +74,7 @@ go:
 ```json
 {
   "schema": "launchclip.library.v1",
-  "name": "Roger's videos",
+  "name": "My videos",
   "storage": {
     "projects": "/Volumes/Footage/launchclip",
     "finals": "/Volumes/Footage/launchclip/_finals",
