@@ -464,8 +464,10 @@ function countdownResolve(params, ctx) {
   const t0 = startEvent(b, p, 'start', 0.5, 'tick', 0.3);
   const ticks = from - to;
   const room = b.start + b.lastEvent - t0 - (end ? 0.45 : 0.1);
-  const step = p.step === undefined ? Math.min(1, room / ticks) : check.num(p.step, 'params.step', 0.1, 60);
-  if (step * ticks > room + 1e-6) check.fail('params.step', `× ${ticks} ticks runs past the scene (${r2(room)} s of room); lengthen the scene or shorten the step`);
+  // The step is a pace, not a promise: a count that would overrun its scene
+  // ticks faster to fit, so the planner never has to do the arithmetic.
+  const step = Math.min(p.step === undefined ? 1 : check.num(p.step, 'params.step', 0.1, 60), room / ticks);
+  if (step < 0.1 - 1e-6) check.fail('params.from', `${ticks} ticks runs past the scene even at 0.1 s each (${r2(room)} s of room); lengthen the scene or count fewer`);
   const clock = b.variant === 'clock';
   const fmt = v => (clock ? `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}` : String(v));
   const W = rect.width;
