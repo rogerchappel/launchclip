@@ -93,3 +93,6 @@ qa/format-eval*/
 /packages/engine/kit/
 /packages/engine/public/
 release/
+kit/core/THIRD_PARTY_NOTICES.md
+kit/remotion/THIRD_PARTY_NOTICES.md
+packages/engine/THIRD_PARTY_NOTICES.md

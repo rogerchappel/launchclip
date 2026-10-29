@@ -12,12 +12,13 @@
     "kit",
     "public",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "stage": "node scripts/stage.mjs",
-    "prepack": "npm run stage",
-    "postpack": "node -e \"for (const dir of ['src', 'kit', 'public']) require('node:fs').rmSync(dir, {recursive: true, force: true})\""
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md')\" && npm run stage",
+    "postpack": "node -e \"for (const dir of ['src', 'kit', 'public']) require('node:fs').rmSync(dir, {recursive: true, force: true}); require('node:fs').rmSync('THIRD_PARTY_NOTICES.md', {force: true})\""
   },
   "keywords": [
     "video",
