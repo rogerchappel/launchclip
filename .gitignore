@@ -92,3 +92,4 @@ qa/format-eval*/
 /packages/engine/src/
 /packages/engine/kit/
 /packages/engine/public/
+release/
