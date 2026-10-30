@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectGpu, diagnoseCapacity, formatCapacity, parseSlotOverrides, recommendSlots, renderShare, resolveSlots } from "../src/capacity.js";
+import { containerLimits, detectGpu, diagnoseCapacity, measureMachine, formatCapacity, parseSlotOverrides, recommendSlots, renderShare, resolveSlots } from "../src/capacity.js";
 import { runCli } from "../src/cli.js";
 
 const MAC = { platform: "darwin", arch: "arm64", cores: 10, cpu_model: "Apple M4", ram_gb: 24 };
@@ -54,4 +54,17 @@ test("doctor --capacity prints the slots, and --json the report", async () => {
   output.length = 0;
   await runCli(["doctor", "--capacity"], { stdout: { write: (value) => output.push(value) }, productionAdapters: { capacity: async () => report } });
   assert.match(output.join(""), /^machine: 10 cores, 24 GB RAM, GPU not detected/);
+});
+
+test("a container's cgroup quota and memory limit beat the host's cores and RAM", () => {
+  const files = (map) => (file) => { if (!(file in map)) throw new Error("ENOENT"); return map[file]; };
+  assert.deepEqual(containerLimits(files({ "/sys/fs/cgroup/cpu.max": "800000 100000\n", "/sys/fs/cgroup/memory.max": `${16 * 1024 ** 3}\n` })), { cores: 8, ram_gb: 16 });
+  assert.deepEqual(containerLimits(files({ "/sys/fs/cgroup/cpu.max": "max 100000", "/sys/fs/cgroup/memory.max": "max" })), {});
+  assert.deepEqual(containerLimits(files({ "/sys/fs/cgroup/cpu/cpu.cfs_quota_us": "200000", "/sys/fs/cgroup/cpu/cpu.cfs_period_us": "100000", "/sys/fs/cgroup/memory/memory.limit_in_bytes": "9223372036854771712" })), { cores: 2 });
+  assert.deepEqual(containerLimits(files({})), {});
+  const machine = measureMachine({ platform: "linux", limits: { cores: 0.5, ram_gb: 0.25 } });
+  assert.equal(machine.cores, 1, "a fraction of a core still renders");
+  assert.equal(machine.ram_gb, 0.3);
+  assert.deepEqual(machine.container, { cores: 0.5, ram_gb: 0.3 });
+  assert.equal(measureMachine({ platform: "linux", limits: {} }).container, undefined);
 });
