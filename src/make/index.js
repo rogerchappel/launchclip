@@ -937,7 +937,7 @@ async function stageFinish(ctx) {
   if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", estimated_usd: musicCost });
   if (finish.status === "failed") {
     const failed = finish.stages.find((stage) => stage.status === "failed");
-    throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${String(failed?.error ?? "").split("\n")[0]}`);
+    throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
   }
   return { status: "done" };
 }
@@ -1194,6 +1194,15 @@ async function readJson(file) {
 async function writeJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+// A failed command's first line is only the command; the reason is in the
+// lines after it (its stderr), so keep the first line and the last few.
+export function errorSummary(error, { tail = 6, max = 1200 } = {}) {
+  const lines = String(error ?? "").split("\n").map((line) => line.trimEnd()).filter(Boolean);
+  const kept = lines.length <= tail + 1 ? lines : [lines[0], "…", ...lines.slice(-tail)];
+  const text = kept.join("\n");
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function round1(value) { return Math.round(value * 10) / 10; }

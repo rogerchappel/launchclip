@@ -144,3 +144,13 @@ test("a copy rewrite keeps the planner's structure: same keys, same items, same 
   assert.ok(!sameShape(before, { title: "x", steps: before.steps, extra: 1 }), "an added key");
   assert.ok(!sameShape({ value: 3 }, { value: "3" }), "a number stays a number");
 });
+
+test("a failed finish keeps the command's stderr, not only the command line", async () => {
+  const { errorSummary } = await import("../src/make/index.js");
+  const error = ["Command failed: node synth-audio-kit.mjs kit --bed 36.8", ...Array.from({ length: 20 }, (_, i) => `    at frame ${i}`), "RangeError: Invalid array length"].join("\n");
+  const summary = errorSummary(error);
+  assert.match(summary, /^Command failed: node synth-audio-kit/);
+  assert.match(summary, /RangeError: Invalid array length$/);
+  assert.ok(summary.split("\n").length <= 8);
+  assert.equal(errorSummary("one line"), "one line");
+});

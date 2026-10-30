@@ -12,6 +12,8 @@
 // first chapter's measured pace sets every later word target, and a chapter
 // more than RESIZE_TOLERANCE off its seconds gets one resize pass.
 import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { cleanNarration, RESIZE_TOLERANCE, RULES_HEADING, WORDS_PER_MINUTE } from "./script.js";
@@ -228,6 +230,7 @@ export function scriptMarkdown(title, chapters) {
 /** Join chapter takes (WAV files) into one voice track with CHAPTER_GAP of silence between them. */
 export async function joinVoice(files, out, { gap = CHAPTER_GAP, runCommand = run } = {}) {
   const parts = files.map((_, i) => `[${i}:a]aresample=${SAMPLE_RATE},aformat=channel_layouts=mono${i < files.length - 1 ? `,apad=pad_dur=${gap}` : ""}[a${i}]`);
+  await mkdir(path.dirname(out), { recursive: true });
   const filter = `${parts.join(";")};${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1[out]`;
   await runCommand("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", ...files.flatMap((file) => ["-i", file]), "-filter_complex", filter, "-map", "[out]", "-ar", String(SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le", out], { maxBuffer: 8 * 1024 * 1024 });
   return out;
