@@ -31,6 +31,7 @@ import { isLongForm, routeLane } from "./routing.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
+import { rewriteLongFormCopy } from "./long_form_copy.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
@@ -615,7 +616,7 @@ async function prepareLongForm(ctx) {
   // The joined take is the voice: finish mounts it as supplied audio rather than synthesising the whole text again.
   ctx.audio = { words: MAKE_PATHS.words, voice: LONG_FORM_VOICE };
   ctx.narration = null;
-  ctx.longForm = { chapters: joined.chapters };
+  ctx.longForm = { chapters: joined.chapters, notes };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, long_form: { chapters: chapters.map((chapter) => ({ id: chapter.id, title: chapter.title, target_seconds: chapter.seconds, seconds: chapter.take.seconds, words: wordCount(chapter.narration), passes: chapter.passes.length, reused: previous.has(chapter.key) })), pace_wpm: script.long_form.pace_wpm }, take: script.take };
   return { status: "done" };
 }
@@ -647,6 +648,10 @@ async function stageLongFormStoryboard(ctx) {
   const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
   const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height } }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
   ctx.say(beatMapReportText(map).split("\n")[0]);
+  // The copy pass: the model rewrites each chunk's on-screen words; chunks rewritten before (same key) are kept.
+  const done = new Set((previous?.chunks ?? []).filter((chunk) => chunk.copy).map((chunk) => chunk.key));
+  const copy = await rewriteLongFormCopy({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, format: { width, height }, brand, done, say: ctx.say });
+  for (const chunk of copy.chunks) if (!chunk.reused && chunk.usage) addCost(report, `copy-${chunk.id}`, ctx.model, chunk);
   let story = beatMapToStory(map, { title: ctx.script.title, format: ctx.format, fps, ...(brand ? { brand } : {}) });
   story.audio = { ...story.audio, ...ctx.audio };
   if (style) story = applyStyle({ ...story, style: style.name }, style.pack).story;
@@ -656,7 +661,7 @@ async function stageLongFormStoryboard(ctx) {
   await writeFile(path.join(project, MAKE_PATHS.direction), directionJson(beatMapToDirection(map)));
   const cadence = map.report.cadence;
   if (!cadence.gate.ok) report.warnings.push(`the long-form plan misses its cadence target: ${cadence.gate.checks.filter((check) => !check.ok).map((check) => `${check.id} ${check.value} (want ${check.want})`).join("; ")}`);
-  report.direction = { file: MAKE_PATHS.direction, source: "beat director", beat_map: MAKE_PATHS.beatMap, cadence: { per_min: cadence.per_min, ok: cadence.gate.ok } };
+  report.direction = { file: MAKE_PATHS.direction, source: "beat director", beat_map: MAKE_PATHS.beatMap, cadence: { per_min: cadence.per_min, ok: cadence.gate.ok }, copy: { chunks: copy.chunks.length, rewritten: copy.chunks.reduce((sum, chunk) => sum + chunk.changed, 0), kept: copy.chunks.reduce((sum, chunk) => sum + chunk.kept, 0) } };
   report.repairs = null;
   state.plan = { hash: planHash, long_form: true };
   return { status: "done" };

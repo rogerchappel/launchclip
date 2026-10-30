@@ -9,6 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
+import { sameShape } from "../src/make/long_form_copy.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
 
 test("tooling fits the outline: chapters scale to the duration, clamp, and drop when empty", () => {
@@ -60,6 +61,18 @@ function longFormModel() {
           { title: "What's next", point: "What to watch", facts: [], seconds: 90 }
         ] } };
       }
+      if (request.schemaName === "launchclip_long_form_copy") {
+        // Rewrite each card's first string; one answer breaks the timing and must be refused.
+        const cards = [...request.input.matchAll(/^## (\S+) \(.*\n(?:.*\n){3}Params: (.*)$/gm)].map((match) => ({ id: match[1], params: JSON.parse(match[2]) }));
+        const states = cards.map((card, i) => {
+          const params = structuredClone(card.params);
+          const key = Object.keys(params).find((name) => typeof params[name] === "string");
+          if (key) params[key] = i === 0 ? params[key] : `${params[key]}`.slice(0, 12);
+          if (i === 0) params.__extra = true;
+          return { id: card.id, params_json: JSON.stringify(params) };
+        });
+        return { model: "gpt-5.6-luna", usage, value: { states } };
+      }
       const words = Number(/about (\d+) words/.exec(request.input)?.[1] ?? 100);
       const text = [];
       while (text.join(" ").split(" ").length < words) text.push(SENTENCES[text.length % SENTENCES.length]);
@@ -105,6 +118,10 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
     for (let i = 1; i < narration.words.length; i += 1) assert.ok(narration.words[i].start >= narration.words[i - 1].start, "words on one clock");
     for (const file of ["SCRIPT.json", "SCRIPT.md", "BEATMAP.json", "DIRECTION.json"]) assert.ok(existsSync(path.join(project, file)), file);
     assert.equal(report.direction.source, "beat director");
+    assert.ok(calls.includes("launchclip_long_form_copy"), "the copy pass ran");
+    assert.ok(report.direction.copy.kept >= 1, "a rewrite that adds a key keeps the rule-made params");
+    const map = JSON.parse(await readFile(path.join(project, "BEATMAP.json"), "utf8"));
+    assert.ok(map.chunks.every((chunk) => chunk.copy), "every chunk is marked rewritten");
     assert.ok(report.costs.items.some((item) => item.stage === "outline"));
 
     // A rerun reuses the outline, every chapter and the plan: no model calls.
@@ -117,4 +134,13 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+test("a copy rewrite keeps the planner's structure: same keys, same items, same timings", () => {
+  const before = { title: "Lineage", steps: [{ label: "More", at: 1.2 }, { label: "Remember", at: 2.4 }] };
+  assert.ok(sameShape(before, { title: "Halcyon's lineage", steps: [{ label: "Bigger", at: 1.2 }, { label: "Longer memory", at: 2.4 }] }));
+  assert.ok(!sameShape(before, { title: "x", steps: [{ label: "a", at: 1.5 }, { label: "b", at: 2.4 }] }), "a moved at");
+  assert.ok(!sameShape(before, { title: "x", steps: [{ label: "a", at: 1.2 }] }), "a dropped item");
+  assert.ok(!sameShape(before, { title: "x", steps: before.steps, extra: 1 }), "an added key");
+  assert.ok(!sameShape({ value: 3 }, { value: "3" }), "a number stays a number");
 });
