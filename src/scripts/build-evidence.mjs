@@ -130,9 +130,13 @@ export function snapshotTime(frame, fps) {
   return Math.round(((frame + 0.25) / fps) * 1e6) / 1e6;
 }
 
-/** ffmpeg args that decode frame N exactly (by frame number, never by seeking). */
+/**
+ * ffmpeg args that decode frame N exactly (by frame number, never by seeking).
+ * One encoder thread: a single PNG gains nothing from frame threads, and on a
+ * busy container their setup can fail ("ff_frame_thread_encoder_init failed").
+ */
 export function encodedFrameArgs(draft, frame, output) {
-  return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=eq(n\\,${frame})`, '-vsync', '0', '-frames:v', '1', '-y', output];
+  return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=eq(n\\,${frame})`, '-vsync', '0', '-frames:v', '1', '-threads', '1', '-y', output];
 }
 
 function draftFps(draft) {
