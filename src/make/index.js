@@ -27,9 +27,13 @@ import { getVoiceProvider } from "../voice/index.js";
 import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
 import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
-import { routeLane } from "./routing.js";
+import { isLongForm, routeLane } from "./routing.js";
+import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
+import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
+import { applyStyle } from "@launchclip/core/style.mjs";
+import { rewriteLongFormCopy } from "./long_form_copy.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
-import { needsResize, RULES_HEADING, writeScript } from "./script.js";
+import { needsResize, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
@@ -57,6 +61,9 @@ export const MAKE_PATHS = Object.freeze({
   words: "NARRATION.json",
   story: "storyboard.json",
   direction: "DIRECTION.json",
+  beatMap: "BEATMAP.json",
+  scriptMarkdown: "SCRIPT.md",
+  chapterTakes: ".launchclip/make/chapters",
   plan: ".launchclip/storyboard-plan.json",
   variety: ".launchclip/variety.json",
   state: ".launchclip/make-state.json",
@@ -283,6 +290,7 @@ async function stagePrepare(ctx) {
   const lane = ctx.routing.lane;
   if (lane === "footage-led") return prepareFootage(ctx);
   if (lane === "voiceover-motion") return prepareVoiceover(ctx);
+  if (isLongForm(ctx.routing)) return prepareLongForm(ctx);
   return prepareMotion(ctx);
 }
 
@@ -521,6 +529,144 @@ async function prepareMotion(ctx) {
   return { status: "done" };
 }
 
+// Long form (docs/LONG_FORM_MAKE_RFC.md, src/make/long_form.js): an outline,
+// then each chapter written and voiced in order. The first chapter's take sets
+// the pace every later chapter is written to; a chapter far off its seconds
+// gets one resize pass. Every chapter is cached by its inputs, so a rerun
+// rewrites and revoices only from the first chapter that changed.
+async function prepareLongForm(ctx) {
+  const { project, routing, report, state, options, voiceProvider } = ctx;
+  const target = routing.format.duration;
+  const briefNotes = await notesText(ctx);
+  const research = await researchBrief(ctx, briefNotes);
+  const notes = research ? [...briefNotes, research.notes] : briefNotes;
+  const rules = rulesText(ctx);
+  const assets = assetManifestLines(ctx).map((item) => item.line);
+  const writer = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets };
+  const voice = { provider: voiceProvider, ...(options.voiceId ? { voice: String(options.voiceId) } : {}) };
+  const saved = (await readJson(path.join(project, MAKE_PATHS.script)))?.long_form ?? null;
+  const outlineHash = hashValue({ prompt: ctx.text, notes, assets, target, model: ctx.model.spec, ...(rules ? { rules } : {}), v: 1 });
+  let outline = saved?.outline_hash === outlineHash ? saved.outline : null;
+  const passes = [];
+  if (!outline) {
+    ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (long-form outline, ${target}s)`);
+    const written = await writeOutline({ ...writer, duration: target });
+    addCost(report, "outline", ctx.model, written);
+    outline = { title: written.title, title_options: written.title_options, chapters: written.chapters };
+    passes.push({ kind: "outline", chapters: outline.chapters.length, cost_usd: written.cost_usd });
+  }
+  ctx.say(`long form: ${outline.chapters.length} chapters, ${outline.chapters.map((chapter) => `${chapter.title} (${chapter.seconds}s)`).join(", ")}`);
+  const previous = new Map((saved?.outline_hash === outlineHash ? saved.chapters ?? [] : []).map((chapter) => [chapter.key, chapter]));
+  const chapters = [];
+  const takes = [];
+  let wpm = null;
+  let tail = null;
+  await mkdir(path.join(project, MAKE_PATHS.chapterTakes), { recursive: true });
+  for (const [index, plan] of outline.chapters.entries()) {
+    const id = chapterId(plan.title, index);
+    const words = chapterWords(plan.seconds, wpm);
+    const key = hashValue({ outline: outlineHash, index, tail, words, voice });
+    let chapter = previous.get(key) ?? null;
+    if (!chapter) {
+      ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (chapter ${index + 1}/${outline.chapters.length}, about ${words} words)`);
+      const written = await writeChapter({ ...writer, outline, index, previous: tail, words });
+      addCost(report, `chapter-${index + 1}`, ctx.model, written);
+      chapter = { id, title: plan.title, key, seconds: plan.seconds, narration: written.narration, word_target: words, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
+    }
+    ctx.say(`voice: chapter ${index + 1}/${outline.chapters.length} (${voiceProvider})`);
+    let take = await synthesizeChapter(ctx, chapter.narration, index, voice);
+    if (!previous.has(key) && chapterNeedsResize(take.duration, plan.seconds)) {
+      const pace = take.words.length / Math.max(1, take.duration) * 60;
+      const resizedWords = chapterWords(plan.seconds, pace);
+      ctx.say(`script: chapter ${index + 1} runs ${take.duration}s against ${plan.seconds}s; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+      const resized = await writeChapter({ ...writer, outline, index, previous: tail, words: resizedWords, resize: { previous: chapter.narration, measured_words: take.words.length, measured_seconds: take.duration } });
+      addCost(report, `chapter-${index + 1}-resize`, ctx.model, resized);
+      chapter = { ...chapter, narration: resized.narration, word_target: resizedWords, passes: [...chapter.passes, { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
+      take = await synthesizeChapter(ctx, chapter.narration, index, voice);
+    }
+    // The first take's pace sizes every chapter after it.
+    if (index === 0) wpm = take.words.length / Math.max(1, take.duration) * 60;
+    chapter = { ...chapter, id, take: { seconds: take.duration, words: take.words.length, cached: Boolean(take.cached) } };
+    chapters.push(chapter);
+    takes.push({ id, title: plan.title, duration: take.duration, words: take.words, file: take.file });
+    tail = narrationTail(chapter.narration);
+  }
+  const joined = joinTakes(takes);
+  await (ctx.adapters.joinVoice ?? joinVoice)(takes.map((take) => take.file), path.join(project, LONG_FORM_VOICE));
+  const narration = chapters.map((chapter) => chapter.narration).join(" ");
+  await writeJson(path.join(project, MAKE_PATHS.words), { schema_version: "launchclip.narration.v1", ...voice, text: narration, duration_seconds: joined.duration, words: joined.words, chapters: joined.chapters });
+  const script = {
+    schema_version: SCRIPT_VERSION,
+    title: outline.title,
+    title_options: outline.title_options,
+    narration,
+    word_count: wordCount(narration),
+    long_form: { version: LONG_FORM_VERSION, outline_hash: outlineHash, outline, chapters, pace_wpm: Math.round(wpm ?? 0) },
+    passes,
+    take: { seconds: joined.duration, words: joined.words.length, wpm: Math.round(joined.words.length / Math.max(0.1, joined.duration) * 60) }
+  };
+  await writeJson(path.join(project, MAKE_PATHS.script), script);
+  await writeFile(path.join(project, MAKE_PATHS.scriptMarkdown), scriptMarkdown(outline.title, chapters));
+  auditNarration(ctx, research, narration);
+  ctx.script = script;
+  ctx.words = joined.words;
+  ctx.narrationText = narration;
+  ctx.format = { ...routing.format, duration: round1(joined.duration + 0.8) };
+  if (Math.abs(ctx.format.duration - target) / target > 0.1) report.warnings.push(`the narration runs ${joined.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  // The joined take is the voice: finish mounts it as supplied audio rather than synthesising the whole text again.
+  ctx.audio = { words: MAKE_PATHS.words, voice: LONG_FORM_VOICE };
+  ctx.narration = null;
+  ctx.longForm = { chapters: joined.chapters, notes };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, long_form: { chapters: chapters.map((chapter) => ({ id: chapter.id, title: chapter.title, target_seconds: chapter.seconds, seconds: chapter.take.seconds, words: wordCount(chapter.narration), passes: chapter.passes.length, reused: previous.has(chapter.key) })), pace_wpm: script.long_form.pace_wpm }, take: script.take };
+  return { status: "done" };
+}
+
+async function synthesizeChapter(ctx, text, index, voice) {
+  const request = narrationRequest({ text, ...voice });
+  const file = path.join(ctx.project, MAKE_PATHS.chapterTakes, `${String(index + 1).padStart(2, "0")}.wav`);
+  const take = await synthesizeNarration(request, {
+    outFile: file,
+    cacheDir: voiceCacheDir(ctx.project),
+    voiceProvider: ctx.adapters.voiceProvider ?? ((name, providerOptions) => getVoiceProvider(name, providerOptions)),
+    normalizeVoice: ctx.adapters.normalizeVoice ?? (async (input, output) => (await import("../voice/supplied.js")).normalizeLoudness(input, output))
+  });
+  return { ...take, file };
+}
+
+// The long-form plan: the beat director (kit/core/beat-director.mjs) gives
+// every clause a visual decision with no model call, chunk by chunk, and
+// checks the whole map against the long-form cadence; beatMapToStory turns it
+// into the storyboard on the world camera.
+async function stageLongFormStoryboard(ctx) {
+  const { project, report, state, options } = ctx;
+  const style = await loadStyle(ctx);
+  const brand = await loadBrand(ctx);
+  const storyFile = path.join(project, MAKE_PATHS.story);
+  const { width, height, fps } = ctx.format;
+  const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1 });
+  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
+  const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
+  const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height } }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
+  ctx.say(beatMapReportText(map).split("\n")[0]);
+  // The copy pass: the model rewrites each chunk's on-screen words; chunks rewritten before (same key) are kept.
+  const done = new Set((previous?.chunks ?? []).filter((chunk) => chunk.copy).map((chunk) => chunk.key));
+  const copy = await rewriteLongFormCopy({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, format: { width, height }, brand, done, say: ctx.say });
+  for (const chunk of copy.chunks) if (!chunk.reused && chunk.usage) addCost(report, `copy-${chunk.id}`, ctx.model, chunk);
+  let story = beatMapToStory(map, { title: ctx.script.title, format: ctx.format, fps, ...(brand ? { brand } : {}) });
+  story.audio = { ...story.audio, ...ctx.audio };
+  if (style) story = applyStyle({ ...story, style: style.name }, style.pack).story;
+  story = finalizeStory(story, ctx);
+  await writeJson(storyFile, story);
+  await writeJson(path.join(project, MAKE_PATHS.beatMap), map);
+  await writeFile(path.join(project, MAKE_PATHS.direction), directionJson(beatMapToDirection(map)));
+  const cadence = map.report.cadence;
+  if (!cadence.gate.ok) report.warnings.push(`the long-form plan misses its cadence target: ${cadence.gate.checks.filter((check) => !check.ok).map((check) => `${check.id} ${check.value} (want ${check.want})`).join("; ")}`);
+  report.direction = { file: MAKE_PATHS.direction, source: "beat director", beat_map: MAKE_PATHS.beatMap, cadence: { per_min: cadence.per_min, ok: cadence.gate.ok }, copy: { chunks: copy.chunks.length, rewritten: copy.chunks.reduce((sum, chunk) => sum + chunk.changed, 0), kept: copy.chunks.reduce((sum, chunk) => sum + chunk.kept, 0) } };
+  report.repairs = null;
+  state.plan = { hash: planHash, long_form: true };
+  return { status: "done" };
+}
+
 // The library skeleton for a motion-lane script: --skeleton <id> | auto
 // (default) | none, from the library (built-in plus ~/.launchclip/skeletons
 // and the project's) for the brief's medium; a script format's own skeleton
@@ -567,6 +713,7 @@ async function synthesize(ctx, text) {
 }
 
 async function stageStoryboard(ctx) {
+  if (ctx.longForm) return stageLongFormStoryboard(ctx);
   const { project, report, state, options, routing } = ctx;
   const style = await loadStyle(ctx);
   const brand = await loadBrand(ctx);
@@ -790,7 +937,7 @@ async function stageFinish(ctx) {
   if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", estimated_usd: musicCost });
   if (finish.status === "failed") {
     const failed = finish.stages.find((stage) => stage.status === "failed");
-    throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${String(failed?.error ?? "").split("\n")[0]}`);
+    throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
   }
   return { status: "done" };
 }
@@ -1047,6 +1194,15 @@ async function readJson(file) {
 async function writeJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+// A failed command's first line is only the command; the reason is in the
+// lines after it (its stderr), so keep the first line and the last few.
+export function errorSummary(error, { tail = 6, max = 1200 } = {}) {
+  const lines = String(error ?? "").split("\n").map((line) => line.trimEnd()).filter(Boolean);
+  const kept = lines.length <= tail + 1 ? lines : [lines[0], "…", ...lines.slice(-tail)];
+  const text = kept.join("\n");
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function round1(value) { return Math.round(value * 10) / 10; }

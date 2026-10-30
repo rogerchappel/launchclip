@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { durationFromPrompt, routeLane } from "../src/make/routing.js";
+import { durationFromPrompt, isLongForm, routeLane } from "../src/make/routing.js";
 
 const entry = (path, kind, role, extra = {}) => ({ path, kind, role, confidence: 0.9, signals: ["test"], description: `${role} ${path}`, ...extra });
 const head = (path, duration = 40, orientation = "portrait") => entry(path, "video", "talking-head", { media: { kind: "video", duration, orientation, width: 720, height: 1280, mountable: true }, speech: { present: true } });
@@ -67,4 +67,15 @@ test("flags and prompt durations", () => {
   assert.equal(route([]).format.duration, 30);
   assert.throws(() => route([], { aspect: "4:3" }), /--aspect must be one of/);
   assert.throws(() => route([], { duration: 1 }), /--duration must be between/);
+});
+
+test("a motion video over 3 minutes is long form, up to 20; a recording keeps its own length", () => {
+  assert.equal(isLongForm(route([], { duration: 180 })), false);
+  const long = route([], { duration: 600 });
+  assert.equal(long.format.duration, 600);
+  assert.equal(isLongForm(long), true);
+  assert.equal(route([], { prompt: "a 10 minute explainer on the week in AI" }).format.duration, 600);
+  assert.throws(() => route([], { duration: 1500 }), /between 3 and 1200/);
+  assert.throws(() => route([head("me.mp4")], { duration: 600 }), /for motion videos \(long form\)/);
+  assert.equal(isLongForm(route([head("me.mp4", 400)])), false);
 });

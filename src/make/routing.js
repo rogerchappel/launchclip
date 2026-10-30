@@ -14,12 +14,22 @@
 // brand.json, a style pack and notes are carried as context. Format follows
 // --aspect, else the base recording's orientation, else 16:9. Duration follows
 // --duration, else a "45-second" style phrase in the prompt, else the base or
-// voiceover length, else 30 s.
+// voiceover length, else 30 s. A motion video longer than 180 s is long form
+// (docs/LONG_FORM_MAKE_RFC.md): written and planned in chapters, up to 20 min.
 
 export const MAKE_ROUTING_VERSION = "launchclip.make-routing.v1";
 export const ASPECTS = Object.freeze({ "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] });
 export const DEFAULT_ASPECT = "16:9";
 export const DEFAULT_DURATION = 30;
+// Up to SHORT_MAX_SECONDS every lane plans the whole video at once; past it, a
+// motion video is long form, up to LONG_FORM_MAX_SECONDS.
+export const SHORT_MAX_SECONDS = 180;
+export const LONG_FORM_MAX_SECONDS = 1200;
+
+/** A routed motion video too long to plan at once: written, voiced and planned in chapters. */
+export function isLongForm(routing) {
+  return routing?.lane === "motion" && Number(routing?.format?.duration) > SHORT_MAX_SECONDS;
+}
 
 /**
  * Route an inventory. options: {aspect, duration (seconds), prompt}.
@@ -126,11 +136,13 @@ export function durationFromPrompt(prompt) {
 export function resolveDuration(options, { lane, base, voiceover }) {
   if (options.duration !== undefined && options.duration !== null) {
     const value = Number(options.duration);
-    if (!(value >= 3 && value <= 180)) throw new Error(`--duration must be between 3 and 180 seconds; got ${options.duration}`);
+    if (!(value >= 3 && value <= LONG_FORM_MAX_SECONDS)) throw new Error(`--duration must be between 3 and ${LONG_FORM_MAX_SECONDS} seconds; got ${options.duration}`);
+    // Only motion videos are written in chapters; a recording or a voiceover sets its own length.
+    if (value > SHORT_MAX_SECONDS && lane && lane !== "motion") throw new Error(`--duration over ${SHORT_MAX_SECONDS} seconds is for motion videos (long form); the ${lane} lane takes its length from the recording`);
     return { value, reason: `--duration ${value}` };
   }
   const fromPrompt = durationFromPrompt(options.prompt);
-  if (lane === "motion" && fromPrompt && fromPrompt >= 3 && fromPrompt <= 180) return { value: fromPrompt, reason: "named in the prompt" };
+  if (lane === "motion" && fromPrompt && fromPrompt >= 3 && fromPrompt <= LONG_FORM_MAX_SECONDS) return { value: fromPrompt, reason: "named in the prompt" };
   if (lane === "footage-led" && base?.media?.duration) return { value: round1(base.media.duration), reason: "the base recording's length (the base edit shortens it)" };
   if (lane === "voiceover-motion" && voiceover?.media?.duration) return { value: round1(voiceover.media.duration), reason: "the voiceover's length (the voice prep tightens it)" };
   if (fromPrompt && fromPrompt >= 3 && fromPrompt <= 180) return { value: fromPrompt, reason: "named in the prompt" };

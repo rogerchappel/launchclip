@@ -32,7 +32,8 @@ test("validateMakeOptions refuses what runMake cannot use, naming the flag", () 
   assert.throws(() => validateMakeOptions({ voice: "siri" }), /--voice/);
   assert.throws(() => validateMakeOptions({ music: "loud" }), /--music/);
   assert.throws(() => validateMakeOptions({ aspect: "4:3" }), /--aspect must be one of/);
-  assert.throws(() => validateMakeOptions({ duration: 900 }), /--duration must be between 3 and 180/);
+  assert.throws(() => validateMakeOptions({ duration: 1500 }), /--duration must be between 3 and 1200/);
+  assert.doesNotThrow(() => validateMakeOptions({ duration: 600 }));
   assert.throws(() => validateMakeOptions({ format: "sitcom" }), /format/);
   assert.throws(() => validateMakeOptions({ maxRepairs: -1 }), /--max-repairs/);
   assert.throws(() => validateMakeOptions({ seed: "7f3a91c2", style: "editorial-dark" }), /--seed or --style, not both/);
