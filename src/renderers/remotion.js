@@ -104,7 +104,7 @@ export function createRemotionRenderer(defaults = {}) {
     // segments: [{startFrame, endFrame (exclusive), output}]; opts.story as in prepare.
     async renderSegments(projectDir, segments, opts = {}) {
       const prepared = await adapter.prepare(projectDir, opts);
-      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency, browserExecutable: browser(opts) });
+      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency, onSegment: opts.onSegment, browserExecutable: browser(opts) });
     },
 
     segmentEncoder: () => ({ ...MEZZANINE }),

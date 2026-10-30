@@ -10,6 +10,7 @@
 // library file's slots (passed in as options.librarySlots once
 // launchclip.library.json lands), then the measured rule.
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import { promisify } from "node:util";
 
@@ -23,16 +24,46 @@ export const SLOT_KINDS = Object.freeze(["plan", "local-model", "render", "io"])
 // benchmarks/RENDER_CAPACITY.md has the measurements behind them.
 export const RULE = Object.freeze({ PLAN: 4, RENDER_CORES: 5, RENDER_GB: 7, BASE_GB: 4, LOCAL_MODEL_TWO_AT_GB: 32 });
 
-/** The machine as Node sees it. No GPU probe (detectGpu does that). */
-export function measureMachine({ platform = process.platform, arch = process.arch } = {}) {
+/**
+ * The machine as Node sees it, inside a container's limits: a Linux container
+ * reports the host's cores and RAM, so a cgroup CPU quota or memory limit
+ * lower than those wins. No GPU probe (detectGpu does that).
+ */
+export function measureMachine({ platform = process.platform, arch = process.arch, limits = platform === "linux" ? containerLimits() : {} } = {}) {
   const cpus = os.cpus();
+  const hostCores = typeof os.availableParallelism === "function" ? os.availableParallelism() : cpus.length;
+  const hostGb = os.totalmem() / GB;
   return {
     platform,
     arch,
-    cores: typeof os.availableParallelism === "function" ? os.availableParallelism() : cpus.length,
+    cores: limits.cores ? Math.max(1, Math.min(hostCores, Math.floor(limits.cores))) : hostCores,
     cpu_model: cpus[0]?.model?.trim() ?? null,
-    ram_gb: round1(os.totalmem() / GB)
+    ram_gb: round1(limits.ram_gb ? Math.min(hostGb, limits.ram_gb) : hostGb),
+    ...(limits.cores || limits.ram_gb ? { container: { cores: limits.cores ?? null, ram_gb: limits.ram_gb ? round1(limits.ram_gb) : null } } : {})
   };
+}
+
+/**
+ * The cgroup CPU quota (in cores) and memory limit (GB), v2 then v1; a field
+ * is missing when there is no limit or nothing can be read.
+ * read(file) → text; it throws when the file is not there.
+ */
+export function containerLimits(read = (file) => readFileSync(file, "utf8")) {
+  const text = (file) => { try { return read(file).trim(); } catch { return null; } };
+  const out = {};
+  const cpuMax = text("/sys/fs/cgroup/cpu.max");
+  if (cpuMax) {
+    const [quota, period] = cpuMax.split(/\s+/);
+    if (quota !== "max" && Number(quota) > 0 && Number(period) > 0) out.cores = Number(quota) / Number(period);
+  } else {
+    const quota = Number(text("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"));
+    const period = Number(text("/sys/fs/cgroup/cpu/cpu.cfs_period_us"));
+    if (quota > 0 && period > 0) out.cores = quota / period;
+  }
+  const memory = text("/sys/fs/cgroup/memory.max") ?? text("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+  // v1 reports "no limit" as a number near 2^63.
+  if (memory && memory !== "max" && Number(memory) > 0 && Number(memory) < 2 ** 60) out.ram_gb = Number(memory) / GB;
+  return out;
 }
 
 /** Slot counts from cores and RAM by the starting rule. */

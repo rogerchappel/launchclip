@@ -11,6 +11,7 @@ import { parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
 import { sameShape } from "../src/make/long_form_copy.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
+import { parseProgressLine } from "../src/progress.js";
 
 test("tooling fits the outline: chapters scale to the duration, clamp, and drop when empty", () => {
   const fitted = fitOutline({ title: "The week in AI", title_options: ["The week in AI", "Three launches"], chapters: [
@@ -97,10 +98,17 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
       return { status: "done", seconds: 1, stages: [], gates: {}, final: path.join(project, "renders/draft.mp4"), warnings: [] };
     };
     const joinVoice = async (files, out) => { joins.push(files); await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
-    const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice() {} };
+    const lines = [];
+    const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice: (line) => lines.push(line) };
     const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
     const project = path.join(cwd, "october");
     assert.equal(report.status, "ready", JSON.stringify(report.stages));
+    // Progress lines: each stage starts and ends, and each chapter is counted.
+    const events = lines.map(parseProgressLine).filter(Boolean);
+    assert.deepEqual(events.filter((event) => event.done !== undefined && !event.step).map((event) => event.stage), ["model", "inventory", "demo", "route", "prepare", "storyboard", "subject", "finish", "critic"]);
+    assert.deepEqual(events.filter((event) => event.step === "chapter").map((event) => `${event.done}/${event.total}`), ["0/4", "1/4", "2/4", "3/4"]);
+    assert.ok(events.some((event) => event.stage === "finish" && event.status === "done" && Number.isFinite(event.seconds)));
+    assert.ok(lines.some((line) => line.startsWith("machine: ")), "the finish notice names the machine");
     assert.deepEqual(calls, ["launchclip_long_form_outline", "launchclip_long_form_chapter", "launchclip_long_form_chapter", "launchclip_long_form_chapter", "launchclip_long_form_chapter"].concat(calls.slice(5)));
     assert.equal(calls.filter((name) => name === "launchclip_long_form_outline").length, 1);
     assert.equal(report.script.long_form.chapters.length, 4);
