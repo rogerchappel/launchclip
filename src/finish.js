@@ -764,6 +764,7 @@ async function finishPublish(ctx, report) {
 
 async function runStage(ctx, definition) {
   const started = ctx.adapters.now();
+  ctx.adapters.progress?.({ step: definition.name });
   const entry = { name: definition.name, status: "done", reason: null, seconds: 0, outputs: [] };
   try {
     const plan = await definition.plan(ctx);
@@ -1405,7 +1406,7 @@ export function previewPath(sceneId) {
 // renderSegments (a custom or injected Remotion adapter) renders the whole
 // story directly.
 async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
-  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, concurrency: ctx.concurrency, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
+  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, concurrency: ctx.concurrency, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now, progress: ctx.adapters.progress };
   if (ctx.rendererName === "hyperframes") {
     const compileAndRender = async (dir, file, extra = {}) => {
       const hfDir = path.join(ctx.project, dir);

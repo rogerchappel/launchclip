@@ -260,3 +260,27 @@ test("FFmpeg: the join stamps every frame on its slot, whatever the segments' co
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a segment render reports its progress in frames, from none to all", async () => {
+  await withProject(async (project) => {
+    const story = await minimalStory();
+    const events = [];
+    const adapter = {
+      name: "remotion",
+      segmentEncoder: () => ({ fake: true }),
+      async renderSegments(_project, segments, opts) {
+        for (const segment of segments) {
+          await writeFile(segment.output, frameLines(segment.startFrame, segment.endFrame));
+          opts.onSegment?.(segment, 1);
+        }
+        return { segments: segments.map(() => ({ seconds: 1 })) };
+      },
+      async encodeDelivery(input, output) { await writeFile(output, await readFile(input, "utf8")); }
+    };
+    await renderWithSegments({ project, story, renderer: "remotion", adapter, output: path.join(project, "renders/draft.mp4"), tools: frameTools(), progress: (event) => events.push(event) });
+    const total = planSegments(story).segments.reduce((sum, segment) => sum + segment.frames, 0);
+    assert.deepEqual(events[0], { step: "render", done: 0, total, unit: "frames" });
+    assert.deepEqual(events.at(-1), { step: "render", done: total, total, unit: "frames" });
+    assert.equal(events.length, planSegments(story).segments.length + 1);
+  });
+});

@@ -49,6 +49,8 @@ import { auditNarration, researchBrief, researchMode } from "../research/make.js
 import { packCaptionsFor } from "@launchclip/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
+import { progressLine } from "../progress.js";
+import { measureMachine, renderShare } from "../capacity.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -108,6 +110,7 @@ export function slugify(prompt) {
 export async function runMake(prompt, options = {}, adapters = {}) {
   const env = adapters.env ?? process.env;
   const notice = adapters.notice ?? ((line) => process.stderr.write(`${line}\n`));
+  const progress = (event) => notice(progressLine(event));
   const now = adapters.now ?? (() => performance.now());
   const clock = adapters.clock ?? (() => new Date().toISOString());
   const text = String(prompt ?? "").trim();
@@ -148,7 +151,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   };
   const say = (line) => { report.notices.push(line); notice(line); };
   const state = { ...previousState, assets_dir: assetsDir };
-  const ctx = { project, env, adapters, options, report, state, say, voiceProvider, renderer, quality, text, assetsDir };
+  const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir };
 
   const stages = [
     ["model", stageModel],
@@ -161,8 +164,9 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["finish", stageFinish],
     ["critic", stageCritic]
   ];
-  for (const [name, fn] of stages) {
+  for (const [index, [name, fn]] of stages.entries()) {
     const t0 = now();
+    progress({ stage: name, done: index, total: stages.length });
     try {
       const result = await fn(ctx);
       report.stages[name] = { status: result?.status ?? "done", ...(result?.reason ? { reason: result.reason } : {}) };
@@ -176,6 +180,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
       report.next_steps.unshift(nextStepFor(name, error, ctx));
     }
     report.timings[name] = round1((now() - t0) / 1000);
+    progress({ stage: name, status: report.stages[name].status, seconds: report.timings[name] });
     await writeJson(path.join(project, MAKE_PATHS.state), state);
     if (report.status === "failed") break;
   }
@@ -567,6 +572,7 @@ async function prepareLongForm(ctx) {
     const words = chapterWords(plan.seconds, wpm);
     const key = hashValue({ outline: outlineHash, index, tail, words, voice });
     let chapter = previous.get(key) ?? null;
+    ctx.progress?.({ stage: "prepare", step: "chapter", done: index, total: outline.chapters.length });
     if (!chapter) {
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (chapter ${index + 1}/${outline.chapters.length}, about ${words} words)`);
       const written = await writeChapter({ ...writer, outline, index, previous: tail, words });
@@ -918,7 +924,8 @@ async function stageFinish(ctx) {
   const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
   ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}`);
-  const finishAdapters = { env: ctx.env, notice: ctx.say, ...(adapters.finishAdapters ?? {}) };
+  ctx.say(machineLine(options.concurrency));
+  const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage: "finish", ...event }), ...(adapters.finishAdapters ?? {}) };
   if (adapters.voiceProvider) finishAdapters.voiceProvider = adapters.voiceProvider;
   if (adapters.normalizeVoice) finishAdapters.normalizeVoice = adapters.normalizeVoice;
   const run = adapters.finish ?? (await import("../finish.js")).runFinish;
@@ -940,6 +947,18 @@ async function stageFinish(ctx) {
     throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
   }
   return { status: "done" };
+}
+
+// What the render runs on: the log line that tells a slow render on a small
+// container from a slow story.
+function machineLine(concurrency) {
+  try {
+    const machine = measureMachine();
+    const limit = machine.container ? ` (container limit${machine.container.cores ? ` ${round1(machine.container.cores)} cores` : ""}${machine.container.ram_gb ? ` ${machine.container.ram_gb} GB` : ""})` : "";
+    return `machine: ${machine.cores} cores, ${machine.ram_gb} GB${limit}; render tabs ${concurrency ?? renderShare({ machine })}`;
+  } catch (error) {
+    return `machine: not measured (${String(error?.message ?? error).split("\n")[0]})`;
+  }
 }
 
 async function stageCritic(ctx) {
