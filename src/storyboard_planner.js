@@ -30,6 +30,7 @@ import { applyStyle } from "@launchclip/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { resolveShots, shotPrompt } from "./asset_provider.js";
+import { fitTimings } from "./timing_fit.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -153,7 +154,19 @@ export async function planStoryboard(options = {}) {
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
       }
-      checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given" });
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given" };
+      checked = checkStoryboard(pinned.storyboard, checkOptions);
+      // An event time just outside its module's window is tooling's to fix,
+      // not a repair call's; a fix can expose the next one, so a few rounds.
+      const moved = [];
+      for (let round = 0; round < 3 && !checked.ok; round += 1) {
+        const fitted = fitTimings(pinned.storyboard, checked.errors);
+        if (!fitted.moved.length) break;
+        pinned.storyboard = fitted.storyboard;
+        moved.push(...fitted.moved);
+        checked = checkStoryboard(pinned.storyboard, checkOptions);
+      }
+      if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;

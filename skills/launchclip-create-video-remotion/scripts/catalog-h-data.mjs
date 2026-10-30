@@ -109,9 +109,13 @@ function unitResolve(params, ctx) {
   const x0 = r2((W - gridW) / 2), y0 = r2(top + (H - gridH - hlH) / 2);
   const units = Array.from({length: n}, (_, i) => ({x: r2(x0 + (i % grid.cols) * cell), y: r2(y0 + Math.floor(i / grid.cols) * cell)}));
 
-  // Build: every unit pops in reading order, within about 1.1 s.
-  const step = n > 1 ? Math.min(0.06, 1.1 / (n - 1)) : 0;
+  // Build: every unit pops in reading order, within about 1.1 s; quicker in
+  // a short scene, so a highlight or split still has room after it.
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
+  const follow = Boolean(highlight || groups);
+  const room = b.lastEvent - (buildAt - b.start) - 0.4 - (follow ? 0.4 : 0);
+  if (follow && room < 0) check.fail(highlight ? 'params.highlight' : 'params.groups', `needs the scene to run at least ${r2(b.duration - room)} s (the build, then the ${highlight ? 'highlight' : 'split'}); got ${r2(b.duration)} s`);
+  const step = n > 1 ? Math.min(0.06, 1.1 / (n - 1), follow ? room / (n - 1) : Infinity) : 0;
   const buildEnd = rt(buildAt + step * (n - 1) + 0.4);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'pop'});
   units.forEach((unit, i) => { unit.time = rt(buildAt + i * step); });

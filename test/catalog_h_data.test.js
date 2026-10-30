@@ -207,3 +207,12 @@ test('a data story resolves through the registry with its frame safe area', () =
   assert.equal(model.module, 'number-line');
   assert.ok(model.rect.y + model.rect.height <= model.frame.safe.y + model.frame.safe.height + 1e-6);
 });
+
+test('unit-grid: a short scene builds faster so its highlight still fits, and one too short says how long it needs', () => {
+  const params = {count: 10, highlight: {count: 6, label: 'Six in ten'}};
+  const model = resolve('unit-grid', params, '9:16', {duration: 2});
+  const build = model.events.find(event => event.name === 'build');
+  const highlight = model.events.find(event => event.name === 'highlight');
+  assert.ok(highlight.time >= build.endTime - 1e-9, 'the highlight comes after the build');
+  assert.throws(() => resolve('unit-grid', {...params, at: 0.9}, '9:16', {duration: 2}), /params\.highlight needs the scene to run at least [\d.]+ s/);
+});
