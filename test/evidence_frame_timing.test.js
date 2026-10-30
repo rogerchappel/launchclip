@@ -26,6 +26,7 @@ test("one frame index per sample, shared by every still and the encoded frame", 
   const args = encodedFrameArgs("draft.mp4", 51, "out.png");
   assert.ok(args.includes("select=eq(n\\,51)"));
   assert.ok(!args.includes("-ss"), "never seek by time");
+  assert.equal(args[args.indexOf("-threads") + 1], "1", "one encoder thread for one PNG");
 });
 
 test("the encoded frame is exactly frame N, where -ss picked the next frame", { skip: hasFfmpeg ? false : "needs ffmpeg" }, async () => {

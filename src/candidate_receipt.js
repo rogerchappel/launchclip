@@ -64,7 +64,7 @@ export function lifecycleTimes(duration, at) {
 
 /** Extract the frame with index round(t × fps) by number (select=eq(n,N)), never by seeking. */
 export async function extractFrame(video, frame, output) {
-  await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", video, "-vf", `select=eq(n\\,${frame})`, "-vsync", "0", "-frames:v", "1", output]);
+  await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", video, "-vf", `select=eq(n\\,${frame})`, "-vsync", "0", "-frames:v", "1", "-threads", "1", output]);
   if (!existsSync(output)) throw new Error(`ffmpeg wrote no frame ${frame} from ${video}`);
 }
 

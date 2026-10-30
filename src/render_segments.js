@@ -295,7 +295,7 @@ export function defaultSegmentTools() {
     },
     async still(video, frame, output) {
       await mkdir(path.dirname(output), { recursive: true });
-      await ffmpeg(["-i", video, "-vf", `select=eq(n\\,${frame})`, "-frames:v", "1", output]);
+      await ffmpeg(["-i", video, "-vf", `select=eq(n\\,${frame})`, "-frames:v", "1", "-threads", "1", output]);
     },
     async sideBySide(left, right, output) {
       await ffmpeg(["-i", left, "-i", right, "-filter_complex", "[0][1]hstack=inputs=2,scale=iw/2:-2", "-frames:v", "1", output]);
