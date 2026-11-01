@@ -6,11 +6,11 @@
 // snapshot time inside frame N, and ffmpeg select=eq(n,N).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { encodedFrameArgs, evidenceFrame, remotionStillArgs, snapshotTime } from "../src/scripts/build-evidence.mjs";
+import { criticSheetArgs, encodedFrameArgs, evidenceFrame, remotionStillArgs, snapshotTime } from "../src/scripts/build-evidence.mjs";
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
@@ -49,6 +49,23 @@ test("the encoded frame is exactly frame N, where -ss picked the next frame", { 
     const seek = (t) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(t), "-i", video, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"], { maxBuffer: 1 << 20 })[64 * 32 + 32];
     assert.equal(seek(0.31), level(10));
     assert.equal(luma(encodedFrameArgs(video, evidenceFrame(0.31, 30), "x.png")), level(9));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a contact sheet decodes every still on one thread", { skip: hasFfmpeg ? false : "needs ffmpeg" }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "lc-evidence-sheet-"));
+  try {
+    const files = Array.from({ length: 12 }, (_, i) => path.join(dir, `still-${i}.png`));
+    for (const [i, file] of files.entries()) execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `color=c=0x${(i * 20).toString(16).padStart(2, "0")}8080:s=32x18`, "-frames:v", "1", "-y", file]);
+    const output = path.join(dir, "sheet.jpg");
+    const args = criticSheetArgs(files, { width: 32, height: 18 }, 4, output);
+    // Each input carries its own -threads 1, and so do the filter graph and the encoder.
+    assert.equal(args.filter((arg, i) => arg === "-threads" && args[i + 1] === "1").length, files.length + 1);
+    assert.equal(args[args.indexOf("-filter_complex_threads") + 1], "1");
+    execFileSync("ffmpeg", args);
+    assert.ok((await stat(output)).size > 0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
