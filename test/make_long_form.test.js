@@ -7,10 +7,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseScript } from "@launchclip/core/beat-director.mjs";
+import { beatMapToStory, directLongForm, dryRunWords, parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
 import { sameShape } from "../src/make/long_form_copy.js";
-import { applyChoice, filesAllowed } from "../src/make/long_form_direct.js";
+import { applyChoice, filesAllowed, revertCards, unresolvedScenes } from "../src/make/long_form_direct.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
 import { parseProgressLine } from "../src/progress.js";
 
@@ -238,4 +238,26 @@ test("a clause's choice: a new card must fit its module and name only the video'
   assert.equal(filesAllowed({ logos: [{ src: "assets/a.png" }] }, new Set(["assets/a.png"])), true);
   assert.equal(filesAllowed({ logos: [{ src: "assets/b.png" }] }, new Set(["assets/a.png"])), false);
   assert.equal(filesAllowed({ media: { src: "https://example.com/x.mp4" } }, new Set()), false);
+});
+
+test("a directed card that does not resolve in the finished storyboard gets its rule-made card back", () => {
+  const script = "# Prices\n\n## The price shock\n\nThe labs raised their prices this month. Every plan moved, and the cheapest tier went first. Teams that built on the old rates now pay more for the same work.\n";
+  const timed = dryRunWords(script, { wpm: 155 });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, title: timed.title });
+  const ids = new Set(beatMapToStory(map, { title: timed.title }).scenes.map((scene) => scene.id));
+  const state = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states)).find((entry) => entry.params && ids.has(entry.id));
+  const rule = structuredClone({ module: state.module, params: state.params });
+  const ruled = new Map([[state.id, structuredClone({ module: state.module, params: state.params, capability: state.capability, change: state.change })]]);
+  // The model's card, as it reaches the finished storyboard: production's
+  // rack-shelf fitted the plain brand, then overflowed once styled.
+  const card = { module: "rack-shelf", params: { rows: Array.from({ length: 6 }, (_, i) => ({ label: `${"W".repeat(23)}${i}`, cells: ["W".repeat(10), "W".repeat(10), "W".repeat(10)] })) } };
+  const styled = beatMapToStory(map, { title: timed.title });
+  Object.assign(state, card, { capability: "rack-shelf" });
+  Object.assign(styled.scenes.find((scene) => scene.id === state.id), card);
+  assert.deepEqual(unresolvedScenes(styled, timed.words), [state.id]);
+  assert.deepEqual(revertCards(map, ruled, [state.id]), [state.id]);
+  assert.deepEqual({ module: state.module, params: state.params }, rule);
+  assert.deepEqual(unresolvedScenes(beatMapToStory(map, { title: timed.title }), timed.words), []);
+  // A rule-made card is never touched.
+  assert.deepEqual(revertCards(map, ruled, [state.id]), []);
 });

@@ -7,7 +7,8 @@
 // names a file the video does not have, keeps the director's rule-made card,
 // so a bad answer never fails the video.
 import { DEFAULT_BRAND, moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
-import { resolveModule } from "@launchclip/core/modules.mjs";
+import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { resolveStory } from "../story.js";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 
 // State kinds tooling writes (stings, calls to action): never directed.
@@ -69,7 +70,8 @@ export function catalogueText(modules = moduleCatalogue()) {
  * Direct every chunk not already directed. options: {client, model, provider,
  * map (the beat map: changed in place), notes, assets: [{src, line}], format,
  * brand, done (chunk keys already directed), say}.
- * → {chunks: [{id, key, reused, directed, kept, held, failed?, cost_usd, usage, model}]}
+ * → {chunks: [{id, key, reused, directed, kept, held, failed?, cost_usd, usage, model}],
+ *    ruled: the rule-made card of every clause the model changed, by state id}
  * A chunk whose call fails keeps every rule-made card and reports failed.
  */
 export async function directLongFormVisuals(options = {}) {
@@ -94,20 +96,57 @@ export async function directLongFormVisuals(options = {}) {
   const results = await limited(jobs, CONCURRENCY);
   // Applied in story order, so a hold carries whatever card the clause before ends up with.
   const allowed = new Set((options.assets ?? []).map((asset) => asset.src));
+  const ruled = new Map();
   let last = null;
   for (const chunk of map.chunks) {
     const summary = results.find((entry) => entry.id === chunk.id);
     const chosen = answers.get(chunk.id);
     for (const state of statesOf.get(chunk.id) ?? []) {
       if (chosen) {
+        const before = ruleCard(state);
         const outcome = applyChoice(state, chosen.get(state.id), last, { known, allowed, format: options.format, brand: options.brand });
         summary[outcome] += 1;
+        if (outcome !== "kept") ruled.set(state.id, before);
       }
       last = state;
     }
     if (chosen) chunk.directed = true;
   }
-  return { chunks: results };
+  return { chunks: results, ruled };
+}
+
+const CARD_KEYS = ["module", "params", "capability", "change", "why", "fallback", "focus", "guide", "zooms"];
+
+function ruleCard(state) {
+  return Object.fromEntries(CARD_KEYS.filter((key) => key in state).map((key) => [key, structuredClone(state[key])]));
+}
+
+/**
+ * The ids of a finished storyboard's scenes whose module does not resolve.
+ * The direct pass checks each card against the plain brand; the finished
+ * storyboard carries the style's fonts and panels, so a card that fitted
+ * there can still overflow here.
+ */
+export function unresolvedScenes(story, words = []) {
+  const resolved = resolveStory(story, { words });
+  const known = new Set(knownModules());
+  return (resolved.scenes ?? []).filter((scene) => {
+    if (!known.has(scene.module)) return false;
+    try { resolveModule(scene, resolved); return false; } catch { return true; }
+  }).map((scene) => scene.id);
+}
+
+/** Put back the rule-made card of every listed clause the model changed, in place. → the ids put back. */
+export function revertCards(map, ruled, ids) {
+  const back = [];
+  for (const chapter of map.chapters ?? []) for (const shot of chapter.shots ?? []) for (const state of shot.states ?? []) {
+    if (!ids.includes(state.id) || !ruled.has(state.id)) continue;
+    for (const key of CARD_KEYS) delete state[key];
+    Object.assign(state, structuredClone(ruled.get(state.id)));
+    ruled.delete(state.id);
+    back.push(state.id);
+  }
+  return back;
 }
 
 /** The states each chunk owns that the model may direct, by chunk id. */
