@@ -32,7 +32,7 @@ import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chap
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { rewriteLongFormCopy } from "./long_form_copy.js";
-import { directLongFormVisuals, typographyShare } from "./long_form_direct.js";
+import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
@@ -670,10 +670,21 @@ async function stageLongFormStoryboard(ctx) {
   const done = new Set([...(previous?.chunks ?? []).filter((chunk) => chunk.copy).map((chunk) => chunk.key), ...map.chunks.filter((chunk) => chunk.directed).map((chunk) => chunk.key)]);
   const copy = await rewriteLongFormCopy({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, format: { width, height }, brand, done, say: ctx.say });
   for (const chunk of copy.chunks) if (!chunk.reused && chunk.usage) addCost(report, `copy-${chunk.id}`, ctx.model, chunk);
-  let story = beatMapToStory(map, { title: ctx.script.title, format: ctx.format, fps, ...(brand ? { brand } : {}) });
-  story.audio = { ...story.audio, ...ctx.audio };
-  if (style) story = applyStyle({ ...story, style: style.name }, style.pack).story;
-  story = finalizeStory(story, ctx);
+  const build = () => {
+    let out = beatMapToStory(map, { title: ctx.script.title, format: ctx.format, fps, ...(brand ? { brand } : {}) });
+    out.audio = { ...out.audio, ...ctx.audio };
+    if (style) out = applyStyle({ ...out, style: style.name }, style.pack).story;
+    return finalizeStory(out, ctx);
+  };
+  let story = build();
+  // A directed card that does not resolve in the styled storyboard gets its rule-made card back, rather than failing the video at finish.
+  if (direct) {
+    const back = revertCards(map, direct.ruled, unresolvedScenes(story, ctx.words));
+    if (back.length) {
+      report.warnings.push(`${back.length} directed card${back.length === 1 ? "" : "s"} did not fit the styled storyboard and kept the rule-made card (${back.join(", ")})`);
+      story = build();
+    }
+  }
   await writeJson(storyFile, story);
   await writeJson(path.join(project, MAKE_PATHS.beatMap), map);
   await writeFile(path.join(project, MAKE_PATHS.direction), directionJson(beatMapToDirection(map)));
