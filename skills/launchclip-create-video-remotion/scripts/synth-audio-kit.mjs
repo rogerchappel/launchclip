@@ -333,7 +333,18 @@ async function ffmpeg(args) {
     }
     return arg;
   }));
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...portable], { maxBuffer: 1 << 26 });
+  await run('ffmpeg', ffmpegArgs(portable), { maxBuffer: 1 << 26 });
+}
+
+/**
+ * The full ffmpeg argv for a kit render (args end with the output file), on
+ * one thread: audio synthesis gains nothing from more, and up to six cues
+ * render at once, each starting a thread per core by default; beside a
+ * browser render that ran a container out of threads ("finish failed at the
+ * sound stage").
+ */
+export function ffmpegArgs(args) {
+  return ['-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', '1', '-filter_complex_threads', '1', ...args.slice(0, -1), '-threads', '1', args.at(-1)];
 }
 
 async function peakNormalize(input, output, peakDb) {
