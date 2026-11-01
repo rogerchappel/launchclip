@@ -127,6 +127,10 @@ export function encodedFrameArgs(draft, frame, output) {
   return encodedFramesArgs(draft, [frame], output);
 }
 
+// ffmpeg's expression parser rejects a sum of more than 100 terms ("Cannot
+// allocate memory"); parenthesised groups of 50 keep each sum under it.
+const SELECT_GROUP = 50;
+
 /**
  * ffmpeg args that decode several frames in one pass over the draft, written
  * in frame order to an image2 pattern (frames: ascending, distinct). One
@@ -134,7 +138,10 @@ export function encodedFrameArgs(draft, frame, output) {
  * a long video.
  */
 export function encodedFramesArgs(draft, frames, output) {
-  const select = frames.map((frame) => `eq(n\\,${frame})`).join('+');
+  const terms = frames.map((frame) => `eq(n\\,${frame})`);
+  const groups = [];
+  for (let i = 0; i < terms.length; i += SELECT_GROUP) groups.push(terms.slice(i, i + SELECT_GROUP).join('+'));
+  const select = groups.length === 1 ? groups[0] : groups.map((group) => `(${group})`).join('+');
   return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=${select}`, '-vsync', '0', '-frames:v', String(frames.length), '-threads', '1', '-y', output];
 }
 
