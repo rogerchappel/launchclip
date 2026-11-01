@@ -60,6 +60,25 @@ test("the encoded frame is exactly frame N, where -ss picked the next frame", { 
   }
 });
 
+test("hundreds of frames come from one decode, past ffmpeg's 100-term expression limit", { skip: hasFfmpeg ? false : "needs ffmpeg" }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "lc-evidence-many-"));
+  try {
+    const video = path.join(dir, "draft.mp4");
+    execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=16x16:r=30:d=20", "-vf", "geq=lum='mod(N\\,200)+20':cb=128:cr=128", "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv444p", "-y", video]);
+    const all = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", video, "-f", "rawvideo", "-pix_fmt", "gray", "-"], { maxBuffer: 1 << 24 });
+    const level = (n) => all[n * 16 * 16 + 16 * 8 + 8];
+    const wanted = Array.from({ length: 230 }, (_, i) => i * 2 + 1);
+    assert.equal(encodedFramesArgs(video, wanted, "x.png").filter((arg) => arg.startsWith("select=")).length, 1);
+    execFileSync("ffmpeg", encodedFramesArgs(video, wanted, path.join(dir, "f-%04d.png")));
+    for (const i of [0, 99, 100, 229]) {
+      const pixel = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", path.join(dir, `f-${String(i + 1).padStart(4, "0")}.png`), "-f", "rawvideo", "-pix_fmt", "gray", "-"], { maxBuffer: 1 << 20 })[16 * 8 + 8];
+      assert.equal(pixel, level(wanted[i]), `frame ${wanted[i]}`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("a contact sheet decodes every still on one thread", { skip: hasFfmpeg ? false : "needs ffmpeg" }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "lc-evidence-sheet-"));
   try {
