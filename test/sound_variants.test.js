@@ -39,3 +39,12 @@ test("every key of a kit comes from one keyboard; another seed is another keyboa
   const clickGains = new Set(keys.map((entry) => entry.spec.layers[0].gain));
   assert.equal(clickGains.size, 1);
 });
+
+test("every kit ffmpeg runs on one thread", async () => {
+  const { ffmpegArgs } = await import("../src/scripts/synth-audio-kit.mjs");
+  const args = ffmpegArgs(["-f", "lavfi", "-i", "anullsrc", "-t", "1", "out.wav"]);
+  assert.equal(args.at(-1), "out.wav");
+  assert.deepEqual(args.slice(-3, -1), ["-threads", "1"]);
+  assert.equal(args[args.indexOf("-filter_threads") + 1], "1");
+  assert.equal(args[args.indexOf("-filter_complex_threads") + 1], "1");
+});
