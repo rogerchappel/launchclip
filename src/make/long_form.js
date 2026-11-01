@@ -5,10 +5,11 @@
 //   outline (one call: title, chapters with their point, facts and seconds)
 //     → chapter scripts (one call each, in order, each handed the last lines
 //       of the one before) → a take per chapter → one joined voice and
-//       NARRATION.json → the beat director (kit/core/beat-director.mjs) plans
-//       the visuals → beatMapToStory → finish.
+//       NARRATION.json → the beat director (kit/core/beat-director.mjs) sets
+//       the clock (clauses, shots, camera) → the model directs each clause's
+//       card (long_form_direct.js) → beatMapToStory → finish.
 //
-// The model writes words only. Chapter lengths are fitted by tooling, the
+// Chapter lengths are fitted by tooling, the
 // first chapter's measured pace sets every later word target, and a chapter
 // more than RESIZE_TOLERANCE off its seconds gets one resize pass.
 import { execFile } from "node:child_process";

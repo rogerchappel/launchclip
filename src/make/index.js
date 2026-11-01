@@ -32,6 +32,7 @@ import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chap
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { rewriteLongFormCopy } from "./long_form_copy.js";
+import { directLongFormVisuals, typographyShare } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
@@ -622,7 +623,7 @@ async function prepareLongForm(ctx) {
   // The joined take is the voice: finish mounts it as supplied audio rather than synthesising the whole text again.
   ctx.audio = { words: MAKE_PATHS.words, voice: LONG_FORM_VOICE };
   ctx.narration = null;
-  ctx.longForm = { chapters: joined.chapters, notes };
+  ctx.longForm = { chapters: joined.chapters, notes, assets: assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, long_form: { chapters: chapters.map((chapter) => ({ id: chapter.id, title: chapter.title, target_seconds: chapter.seconds, seconds: chapter.take.seconds, words: wordCount(chapter.narration), passes: chapter.passes.length, reused: previous.has(chapter.key) })), pace_wpm: script.long_form.pace_wpm }, take: script.take };
   return { status: "done" };
 }
@@ -639,23 +640,34 @@ async function synthesizeChapter(ctx, text, index, voice) {
   return { ...take, file };
 }
 
-// The long-form plan: the beat director (kit/core/beat-director.mjs) gives
-// every clause a visual decision with no model call, chunk by chunk, and
-// checks the whole map against the long-form cadence; beatMapToStory turns it
-// into the storyboard on the world camera.
+// The long-form plan: the beat director (kit/core/beat-director.mjs) cuts the
+// narration into clauses and shots, plans the camera and checks the whole map
+// against the long-form cadence, with a rule-made card per clause; the model
+// then directs every clause's card (--long-form-visuals rules keeps the rule
+// cards and only rewrites their words); beatMapToStory turns the map into the
+// storyboard on the world camera.
 async function stageLongFormStoryboard(ctx) {
   const { project, report, state, options } = ctx;
   const style = await loadStyle(ctx);
   const brand = await loadBrand(ctx);
   const storyFile = path.join(project, MAKE_PATHS.story);
   const { width, height, fps } = ctx.format;
-  const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1 });
+  const visuals = longFormVisuals(options);
+  const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}) });
   if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
   const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height } }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
   ctx.say(beatMapReportText(map).split("\n")[0]);
-  // The copy pass: the model rewrites each chunk's on-screen words; chunks rewritten before (same key) are kept.
-  const done = new Set((previous?.chunks ?? []).filter((chunk) => chunk.copy).map((chunk) => chunk.key));
+  // The direct pass (docs/MAKE_SKILL_PARITY.md): the model picks every clause's card, as the skill's director does; chunks directed before (same key) are kept.
+  let direct = null;
+  if (visuals === "model") {
+    const directed = new Set((previous?.chunks ?? []).filter((chunk) => chunk.directed).map((chunk) => chunk.key));
+    direct = await directLongFormVisuals({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, assets: ctx.longForm.assets ?? [], format: { width, height }, brand, done: directed, say: ctx.say });
+    for (const chunk of direct.chunks) if (!chunk.reused && chunk.usage) addCost(report, `direct-${chunk.id}`, ctx.model, chunk);
+    for (const chunk of direct.chunks) if (chunk.failed) report.warnings.push(`visual direction for chunk ${chunk.id} failed (${chunk.failed}); it keeps the rule-made cards`);
+  }
+  // The copy pass: the model rewrites the on-screen words of chunks it did not direct; chunks rewritten before (same key) are kept.
+  const done = new Set([...(previous?.chunks ?? []).filter((chunk) => chunk.copy).map((chunk) => chunk.key), ...map.chunks.filter((chunk) => chunk.directed).map((chunk) => chunk.key)]);
   const copy = await rewriteLongFormCopy({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, format: { width, height }, brand, done, say: ctx.say });
   for (const chunk of copy.chunks) if (!chunk.reused && chunk.usage) addCost(report, `copy-${chunk.id}`, ctx.model, chunk);
   let story = beatMapToStory(map, { title: ctx.script.title, format: ctx.format, fps, ...(brand ? { brand } : {}) });
@@ -667,11 +679,22 @@ async function stageLongFormStoryboard(ctx) {
   await writeFile(path.join(project, MAKE_PATHS.direction), directionJson(beatMapToDirection(map)));
   const cadence = map.report.cadence;
   if (!cadence.gate.ok) report.warnings.push(`the long-form plan misses its cadence target: ${cadence.gate.checks.filter((check) => !check.ok).map((check) => `${check.id} ${check.value} (want ${check.want})`).join("; ")}`);
-  report.direction = { file: MAKE_PATHS.direction, source: "beat director", beat_map: MAKE_PATHS.beatMap, cadence: { per_min: cadence.per_min, ok: cadence.gate.ok }, copy: { chunks: copy.chunks.length, rewritten: copy.chunks.reduce((sum, chunk) => sum + chunk.changed, 0), kept: copy.chunks.reduce((sum, chunk) => sum + chunk.kept, 0) } };
+  const share = typographyShare(map);
+  if (share > 0.3) report.warnings.push(`${Math.round(share * 100)}% of the long-form cards are words on a backdrop (aim for at most 30%)`);
+  report.direction = { file: MAKE_PATHS.direction, source: visuals === "model" ? "model on the beat director's clock" : "beat director", beat_map: MAKE_PATHS.beatMap, typography_share: share, ...(direct ? { direct: { chunks: direct.chunks.length, directed: tally(direct.chunks, "directed"), held: tally(direct.chunks, "held"), kept: tally(direct.chunks, "kept"), failed: direct.chunks.filter((chunk) => chunk.failed).length } } : {}), cadence: { per_min: cadence.per_min, ok: cadence.gate.ok }, copy: { chunks: copy.chunks.length, rewritten: copy.chunks.reduce((sum, chunk) => sum + chunk.changed, 0), kept: copy.chunks.reduce((sum, chunk) => sum + chunk.kept, 0) } };
   report.repairs = null;
   state.plan = { hash: planHash, long_form: true };
   return { status: "done" };
 }
+
+/** --long-form-visuals: "model" (default; the model directs every card) or "rules" (the beat director alone, the model rewrites words). */
+export function longFormVisuals(options = {}) {
+  const value = String(options.longFormVisuals ?? "model").toLowerCase();
+  if (!["model", "rules"].includes(value)) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
+  return value;
+}
+
+function tally(entries, key) { return entries.reduce((total, entry) => total + (entry[key] ?? 0), 0); }
 
 // The library skeleton for a motion-lane script: --skeleton <id> | auto
 // (default) | none, from the library (built-in plus ~/.launchclip/skeletons

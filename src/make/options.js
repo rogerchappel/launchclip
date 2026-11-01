@@ -37,6 +37,7 @@ export const MAKE_FLAGS = Object.freeze([
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
+  ["long-form-visuals", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
   ["visual-history-dir", {}],
   ["visual-history-limit", { setting: true }],
@@ -85,6 +86,7 @@ export function makeOptionsFromFlags(flags = {}) {
     replan: Boolean(flags.replan),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
     maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
+    longFormVisuals: flags["long-form-visuals"],
     repo: flags.repo,
     approveDemo: Boolean(flags["approve-demo"]),
     redemo: Boolean(flags.redemo),
@@ -117,6 +119,7 @@ export function validateMakeOptions(options = {}) {
   if (options.aspect != null) resolveAspect(options.aspect, null);
   if (options.duration != null) resolveDuration({ duration: options.duration }, {});
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
+  if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);

@@ -10,6 +10,7 @@ import test from "node:test";
 import { parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
 import { sameShape } from "../src/make/long_form_copy.js";
+import { applyChoice, filesAllowed } from "../src/make/long_form_direct.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
 import { parseProgressLine } from "../src/progress.js";
 
@@ -62,6 +63,19 @@ function longFormModel() {
           { title: "What's next", point: "What to watch", facts: [], seconds: 90 }
         ] } };
       }
+      if (request.schemaName === "launchclip_long_form_direct") {
+        // Clause by clause: a stat card where a figure is said, a hold, a made-up file and an unknown module (both refused), else the rule pick.
+        const clauses = [...request.input.matchAll(/^### (\S+) \(.*\nNarration: (.*)\nRule pick: (.*)$/gm)].map((match) => ({ id: match[1], text: match[2], pick: match[3] }));
+        const states = clauses.map((clause, i) => {
+          if (i === 1) return { id: clause.id, action: "hold", module: "", params_json: "" };
+          if (i === 2) return { id: clause.id, action: "new", module: "logo-row", params_json: JSON.stringify({ logos: [{ src: "assets/made-up.png", label: "A" }, { src: "assets/also-made-up.png", label: "B" }] }) };
+          if (i === 3) return { id: clause.id, action: "new", module: "no-such-module", params_json: "{}" };
+          if (/81 percent/.test(clause.text)) return { id: clause.id, action: "new", module: "stat-card", params_json: JSON.stringify({ value: "81%", label: "CodeBench score", source: "the notes" }) };
+          const rule = /^(\S+) (\{.*\})$/.exec(clause.pick);
+          return rule ? { id: clause.id, action: "new", module: rule[1], params_json: rule[2] } : { id: clause.id, action: "hold", module: "", params_json: "" };
+        });
+        return { model: "gpt-5.6-luna", usage, value: { states } };
+      }
       if (request.schemaName === "launchclip_long_form_copy") {
         // Rewrite each card's first string; one answer breaks the timing and must be refused.
         const cards = [...request.input.matchAll(/^## (\S+) \(.*\n(?:.*\n){3}Params: (.*)$/gm)].map((match) => ({ id: match[1], params: JSON.parse(match[2]) }));
@@ -100,7 +114,7 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
     const joinVoice = async (files, out) => { joins.push(files); await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
     const lines = [];
     const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice: (line) => lines.push(line) };
-    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, adapters);
     const project = path.join(cwd, "october");
     assert.equal(report.status, "ready", JSON.stringify(report.stages));
     // Progress lines: each stage starts and ends, and each chapter is counted.
@@ -134,7 +148,7 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
 
     // A rerun reuses the outline, every chapter and the plan: no model calls.
     const before = calls.length;
-    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, adapters);
     assert.equal(again.status, "ready");
     assert.equal(calls.length, before);
     assert.equal(again.stages.storyboard.status, "cached");
@@ -161,4 +175,67 @@ test("a failed finish keeps the command's stderr, not only the command line", as
   assert.match(summary, /RangeError: Invalid array length$/);
   assert.ok(summary.split("\n").length <= 8);
   assert.equal(errorSummary("one line"), "one line");
+});
+
+test("by default the model directs every long-form card on the beat director's clock", async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-long-form-direct-"));
+  try {
+    const { calls, model } = longFormModel();
+    const finish = async (project) => {
+      await mkdir(path.join(project, "renders"), { recursive: true });
+      await writeFile(path.join(project, "renders/draft.mp4"), "video");
+      return { status: "done", seconds: 1, stages: [], gates: {}, final: path.join(project, "renders/draft.mp4"), warnings: [] };
+    };
+    const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
+    const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice: () => {} };
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    assert.equal(report.status, "ready", JSON.stringify(report.stages));
+    const project = path.join(cwd, "october");
+    const map = JSON.parse(await readFile(path.join(project, "BEATMAP.json"), "utf8"));
+    assert.equal(report.direction.source, "model on the beat director's clock");
+    assert.equal(calls.filter((name) => name === "launchclip_long_form_direct").length, map.chunks.length, "one direct call per chunk");
+    assert.ok(!calls.includes("launchclip_long_form_copy"), "directed chunks need no copy pass");
+    assert.ok(map.chunks.every((chunk) => chunk.directed));
+    const { directed, held, kept, failed } = report.direction.direct;
+    assert.equal(failed, 0);
+    assert.ok(directed > 0 && held >= map.chunks.length, `directed ${directed}, held ${held}`);
+    assert.ok(kept >= map.chunks.length * 2, "a made-up file and an unknown module keep the rule-made card");
+    const states = map.chapters.flatMap((chapter) => chapter.shots.flatMap((shot) => shot.states));
+    assert.ok(states.some((state) => state.module === "stat-card" && state.params.value === "81%"), "the said figure became a stat card");
+    assert.ok(!states.some((state) => state.module === "no-such-module" || JSON.stringify(state.params ?? {}).includes("made-up")));
+    assert.equal(typeof report.direction.typography_share, "number");
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    assert.ok(story.scenes.some((scene) => scene.module === "stat-card"));
+    assert.ok(report.costs.items.some((item) => item.stage.startsWith("direct-")));
+
+    // A rerun reuses every directed chunk: no model calls.
+    const before = calls.length;
+    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    assert.equal(again.stages.storyboard.status, "cached");
+    assert.equal(calls.length, before);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a clause's choice: a new card must fit its module and name only the video's files", () => {
+  const state = { id: "s1", module: "motion-title", params: { text: "Atlas 2" }, change: "hold", start: 0, end: 4, zooms: [{ at: 1 }] };
+  const known = new Set(["stat-card", "logo-row"]);
+  const format = { width: 1920, height: 1080 };
+  assert.equal(applyChoice({ ...state }, undefined, null, { known, format }), "kept");
+  assert.equal(applyChoice({ ...state }, { action: "new", module: "stat-card", params_json: "not json" }, null, { known, format }), "kept");
+  assert.equal(applyChoice({ ...state }, { action: "new", module: "stat-card", params_json: JSON.stringify({ value: "81%" }) }, null, { known, format }), "kept", "a card its module rejects");
+  const next = { ...state };
+  assert.equal(applyChoice(next, { action: "new", module: "stat-card", params_json: JSON.stringify({ value: "81%", label: "CodeBench", source: "Northwind" }) }, null, { known, format }), "directed");
+  assert.equal(next.module, "stat-card");
+  assert.equal(next.change, "swap", "a rule-made hold becomes a new card");
+  assert.equal(next.zooms, undefined, "the rule card's zooms go with it");
+  const held = { ...state, change: "swap" };
+  assert.equal(applyChoice(held, { action: "hold" }, next, { known, format }), "held");
+  assert.equal(held.module, "stat-card");
+  assert.equal(held.change, "hold");
+  assert.equal(applyChoice({ ...state }, { action: "hold" }, null, { known, format }), "kept", "nothing before to hold");
+  assert.equal(filesAllowed({ logos: [{ src: "assets/a.png" }] }, new Set(["assets/a.png"])), true);
+  assert.equal(filesAllowed({ logos: [{ src: "assets/b.png" }] }, new Set(["assets/a.png"])), false);
+  assert.equal(filesAllowed({ media: { src: "https://example.com/x.mp4" } }, new Set()), false);
 });
