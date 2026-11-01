@@ -39,7 +39,6 @@ import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from
 import { renderShare } from "./capacity.js";
 import { withSlot } from "./queue.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
-import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "@launchclip/core/story.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
@@ -1211,14 +1210,13 @@ const STAGES = [
       return { inputHash: hashValue({ video: await fileHash(ctx.out), story: ctx.resolved, renderer: ctx.rendererName, script: await fileHash(SCRIPT.evidence) }), outputs: [PATHS.evidence] };
     },
     async run(ctx) {
-      const remotion = remotionInvocation([]);
       const hyperframes = hyperframesInvocation([]);
       const result = await ctx.adapters.buildEvidence(ctx.project, {
         video: ctx.out,
         renderer: ctx.rendererName,
         story: ctx.resolved,
         stillsProject: ctx.rendererName === "hyperframes" ? path.join(ctx.project, PATHS.hyperframes) : undefined,
-        commands: { remotion: [remotion.command, ...remotion.args], hyperframes: [hyperframes.command, ...hyperframes.args] },
+        commands: { hyperframes: [hyperframes.command, ...hyperframes.args] },
         sheets: true
       });
       return { manifest: PATHS.evidence, samples: result?.samples ?? null, artifacts: result?.artifacts ?? null, sheets: (result?.sheets ?? []).map((sheet) => `qa/critic-sheets/${sheet}`) };

@@ -233,6 +233,30 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
 }
 
 /**
+ * Still frames of the LaunchclipStory composition from one bundle (the
+ * render's, when its key matches) and one browser. stills: [{frame, output}].
+ * The evidence stage took each still with its own `remotion still` process,
+ * a fresh Chrome per frame: up to 64 of them on a long video.
+ */
+export async function renderRemotionStills({ entry, project, props, stills, kitHash, bundleRoot, onStill, logLevel = "error", browserExecutable = remotionBrowserExecutable() }) {
+  const { openBrowser, renderStill, selectComposition } = await import("@remotion/renderer");
+  const { serveUrl, cached } = await cachedBundle({ entry, project, kitHash, bundleRoot });
+  if (!stills.length) return { bundle: { cached }, stills: [] };
+  const browser = await openBrowser("chrome", { logLevel, browserExecutable });
+  try {
+    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel });
+    for (const still of stills) {
+      await mkdir(path.dirname(still.output), { recursive: true });
+      await renderStill({ serveUrl, composition, inputProps: props, frame: still.frame, output: path.resolve(still.output), imageFormat: "png", overwrite: true, puppeteerInstance: browser, logLevel });
+      onStill?.(still);
+    }
+  } finally {
+    await browser.close({ silent: true }).catch(() => {});
+  }
+  return { bundle: { cached }, stills: stills.map((still) => still.output) };
+}
+
+/**
  * The whole soundtrack as Remotion mixes it (an audio-only render). Used when
  * a footage base plays its own audio under the mix, which a plain mux of
  * audio.mix cannot reproduce.
