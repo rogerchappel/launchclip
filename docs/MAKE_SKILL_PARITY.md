@@ -36,13 +36,13 @@ falls through to typography.
 Each phase is one or two small PRs, measured against the skill on the same
 briefs (see "Measuring parity").
 
-1. **Model-directed long form.** Each ≤ 180 s chunk goes through the same
-   direction-map-then-storyboard planner short `make` uses, with the chunk's
-   narration words, notes, the module catalogue and the visual history so far.
-   The beat director stays as the validator and fallback: cadence gate, cut
-   spacing, plates, camera, and its rule-made states for any chunk the model
-   cannot make pass after its repairs. The copy pass goes away for model-planned
-   chunks.
+1. **Model-directed long form.** The beat director keeps the clock: clauses,
+   shots, plates, camera and the cadence gate. One model call per ≤ 180 s
+   chunk then picks every clause's card, as the skill's director does: any
+   catalogue module and its params, or a hold on the card before. The
+   director's rule-made card stays as the per-clause fallback, for a choice
+   the module rejects or that names a file the video does not have. Directed
+   chunks need no copy pass; `--long-form-visuals rules` keeps the old path.
 2. **Critic, then repair.** The critic's findings name scenes; a repair pass
    re-plans those scenes only (storyboard planner, same chunk context), the
    affected scenes re-render, and the critic runs again, at most three passes.
