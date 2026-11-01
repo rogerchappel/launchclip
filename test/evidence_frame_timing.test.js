@@ -10,7 +10,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { criticSheetArgs, encodedFrameArgs, evidenceFrame, remotionStillArgs, snapshotTime } from "../src/scripts/build-evidence.mjs";
+import { criticSheetArgs, encodedFrameArgs, encodedFramesArgs, evidenceFrame, snapshotTime } from "../src/scripts/build-evidence.mjs";
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
@@ -22,7 +22,6 @@ test("one frame index per sample, shared by every still and the encoded frame", 
   // HyperFrames snapshot floors seconds × fps: the snapshot time lands inside frame N.
   for (let frame = 0; frame < 2000; frame += 7) assert.equal(Math.floor(snapshotTime(frame, 30) * 30), frame);
   for (let frame = 0; frame < 2000; frame += 11) assert.equal(Math.floor(snapshotTime(frame, 24) * 24), frame);
-  assert.ok(remotionStillArgs({ serveUrl: "b", propsFile: "p", project: ".", frame: 51, output: "o" }).includes("--frame=51"));
   const args = encodedFrameArgs("draft.mp4", 51, "out.png");
   assert.ok(args.includes("select=eq(n\\,51)"));
   assert.ok(!args.includes("-ss"), "never seek by time");
@@ -49,6 +48,13 @@ test("the encoded frame is exactly frame N, where -ss picked the next frame", { 
     const seek = (t) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(t), "-i", video, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"], { maxBuffer: 1 << 20 })[64 * 32 + 32];
     assert.equal(seek(0.31), level(10));
     assert.equal(luma(encodedFrameArgs(video, evidenceFrame(0.31, 30), "x.png")), level(9));
+    // Several frames from one decode, written in frame order.
+    const wanted = [3, 9, 15, 19];
+    execFileSync("ffmpeg", encodedFramesArgs(video, wanted, path.join(dir, "f-%02d.png")));
+    for (const [i, n] of wanted.entries()) {
+      const pixel = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", path.join(dir, `f-${String(i + 1).padStart(2, "0")}.png`), "-f", "rawvideo", "-pix_fmt", "gray", "-"], { maxBuffer: 1 << 20 })[64 * 32 + 32];
+      assert.equal(pixel, level(n), `frame ${n}`);
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

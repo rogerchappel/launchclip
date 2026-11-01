@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../src/scripts/build-evidence.mjs";
+import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer } from "../src/scripts/build-evidence.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt, remotionRoot } from "../src/renderers/remotion.js";
@@ -206,13 +206,6 @@ test("remotion check proves the story bundles and folds in the layout check", as
   assert.equal(broken.findings[0].source, "story");
 });
 
-test("build-evidence builds remotion still arguments from the schedule frame", () => {
-  assert.deepEqual(remotionStillArgs({ serveUrl: "e.tsx", propsFile: "p.json", project: "/p", frame: 12, output: "/p/o.png" }),
-    ["still", "e.tsx", "LaunchclipStory", "/p/o.png", "--props", "p.json", "--public-dir", "/p", "--frame=12", "--overwrite", "--log", "warn"]);
-  assert.deepEqual(remotionStillArgs({ serveUrl: "/tmp/bundle", bundled: true, propsFile: "p.json", project: "/p", frame: 3, output: "/p/o.png" }),
-    ["still", "/tmp/bundle", "LaunchclipStory", "/p/o.png", "--props", "p.json", "--frame=3", "--overwrite", "--log", "warn"]);
-});
-
 test("remotion adapter renders a real still and MP4, and build-evidence validates against them", { skip: mediaSkip(), timeout: 240_000 }, async (t) => {
   try {
     const { ensureBrowser } = await import("@remotion/renderer");
@@ -328,8 +321,6 @@ test("LAUNCHCLIP_REMOTION_BROWSER picks the Chrome that Remotion renders with", 
     process.env.LAUNCHCLIP_REMOTION_BROWSER = "/opt/chrome/chrome-headless-shell";
     const args = remotion.renderArgs(prepared, "/p/out.mp4");
     assert.equal(args[args.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
-    const still = remotionStillArgs({ serveUrl: "/b", propsFile: "/p/props.json", project: "/p", frame: 3, output: "/p/s.png" });
-    assert.equal(still[still.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
   } finally {
     if (previous === undefined) delete process.env.LAUNCHCLIP_REMOTION_BROWSER; else process.env.LAUNCHCLIP_REMOTION_BROWSER = previous;
   }

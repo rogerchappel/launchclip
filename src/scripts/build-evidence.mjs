@@ -7,20 +7,17 @@
 // The renderer defaults to remotion when the project has storyboard.json and no
 // index.html, otherwise hyperframes.
 // HyperFrames stills: set HYPERFRAMES_BIN to a local hyperframes binary; otherwise npx is used.
-// Remotion stills: set REMOTION_BIN to a local remotion binary; otherwise npx is used.
+// Remotion stills come from the Remotion API: one bundle (the render's, when cached) and one browser.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildTemporalEvidenceSchedule, parseDeclaredSequenceBoundaries } from '../cinematic_evidence.js';
 import { hyperframesEnv } from '../renderers/hyperframes_env.js';
-import { remotionRoot } from '../renderers/remotion_segments.js';
+import { renderRemotionStills } from '../renderers/remotion_segments.js';
 
 const HYPERFRAMES_VERSION = '0.7.58';
-const REMOTION_VERSION = '4.0.536';
-const COMPOSITION_ID = 'LaunchclipStory';
 const BROWSER_SOURCE = 'browser-still';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The package root: two folders up from src/scripts/ (three from a skill's
@@ -29,8 +26,8 @@ const ROOT = path.resolve(HERE, '../..');
 const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hasExactFile = (dir, name) => existsSync(dir) && readdirSync(dir).includes(name);
 
-// commands: optional {hyperframes, remotion} argv prefixes (e.g. [node, cli.js])
-// that replace the HYPERFRAMES_BIN / REMOTION_BIN / npx lookup.
+// commands: optional {hyperframes} argv prefix (e.g. [node, cli.js]) that
+// replaces the HYPERFRAMES_BIN / npx lookup.
 let COMMANDS = {};
 
 function hyperframes(args) {
@@ -39,15 +36,6 @@ function hyperframes(args) {
   const bin = process.env.HYPERFRAMES_BIN;
   if (bin) return execFileSync(bin, args, options);
   return execFileSync('npx', ['--yes', `hyperframes@${HYPERFRAMES_VERSION}`, ...args], options);
-}
-
-// options: execFileSync options, e.g. {cwd} for a bundle.
-function remotion(args, options = {}) {
-  const run = (command, argv) => execFileSync(command, argv, { stdio: 'ignore', ...options });
-  if (COMMANDS.remotion) return run(COMMANDS.remotion[0], [...COMMANDS.remotion.slice(1), ...args]);
-  const bin = process.env.REMOTION_BIN;
-  if (bin) return run(bin, args);
-  return run('npx', ['--yes', `@remotion/cli@${REMOTION_VERSION}`, ...args]);
 }
 
 function attr(html, name) {
@@ -136,7 +124,18 @@ export function snapshotTime(frame, fps) {
  * busy container their setup can fail ("ff_frame_thread_encoder_init failed").
  */
 export function encodedFrameArgs(draft, frame, output) {
-  return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=eq(n\\,${frame})`, '-vsync', '0', '-frames:v', '1', '-threads', '1', '-y', output];
+  return encodedFramesArgs(draft, [frame], output);
+}
+
+/**
+ * ffmpeg args that decode several frames in one pass over the draft, written
+ * in frame order to an image2 pattern (frames: ascending, distinct). One
+ * select per frame decoded the whole draft up to it each time: 64 decodes of
+ * a long video.
+ */
+export function encodedFramesArgs(draft, frames, output) {
+  const select = frames.map((frame) => `eq(n\\,${frame})`).join('+');
+  return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=${select}`, '-vsync', '0', '-frames:v', String(frames.length), '-threads', '1', '-y', output];
 }
 
 function draftFps(draft) {
@@ -160,13 +159,6 @@ function hyperframesStills(project, schedule, out, frames) {
   }
 }
 
-// serveUrl is either an entry file (bundled per call, with the project as the
-// public dir) or a directory made by `remotion bundle`.
-export function remotionStillArgs({ serveUrl, propsFile, project, frame, output, bundled = false, browser = process.env.LAUNCHCLIP_REMOTION_BROWSER?.trim() || null }) {
-  // LAUNCHCLIP_REMOTION_BROWSER: the Chrome the render used (src/renderers/remotion_segments.js).
-  return ['still', serveUrl, COMPOSITION_ID, output, '--props', propsFile, ...(bundled ? [] : ['--public-dir', project]), `--frame=${frame}`, '--overwrite', '--log', 'warn', ...(browser ? ['--browser-executable', browser] : [])];
-}
-
 function remotionEntry(project, entry) {
   const candidates = entry ? [path.resolve(entry)] : [process.env.REMOTION_ENTRY, path.join(project, 'remotion/entry.tsx'), path.join(ROOT, 'kit/remotion/entry.tsx')].filter(Boolean);
   const found = candidates.find((candidate) => existsSync(candidate));
@@ -174,31 +166,24 @@ function remotionEntry(project, entry) {
   return found;
 }
 
-function remotionStills(project, schedule, out, story, entry, frames) {
-  const propsFile = path.join(project, '.launchclip/story.resolved.json');
-  mkdirSync(path.dirname(propsFile), { recursive: true });
-  writeFileSync(propsFile, `${JSON.stringify(story.resolved, null, 2)}\n`);
-  // Bundle once outside the project (the project is the public dir), then take every still from the bundle.
-  const bundle = mkdtempSync(path.join(os.tmpdir(), 'launchclip-remotion-bundle-'));
-  try {
-    // From the project's own Remotion root (src/renderers/remotion_segments.js remotionRoot), so the bundle never clears another project's webpack cache.
-    remotion(['bundle', remotionEntry(project, entry), '--public-dir', project, '--out-dir', bundle, '--log', 'warn'], { cwd: remotionRoot(project) });
-    const byTime = new Map();
-    for (const at of schedule.timestamps) {
-      const output = path.join(out, `.still-${String(byTime.size).padStart(3, '0')}.png`);
-      remotion(remotionStillArgs({ serveUrl: bundle, bundled: true, propsFile, project, frame: frames.of(at), output }));
-      byTime.set(at, output);
-    }
-    for (const sample of schedule.entries) copyFileSync(byTime.get(sample.at_seconds), path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`));
-    for (const file of byTime.values()) rmSync(file, { force: true });
-  } finally {
-    rmSync(bundle, { recursive: true, force: true });
-  }
+async function remotionStills(project, schedule, out, story, entry, frames) {
+  const { kitFingerprint } = await import('../render_segments.js');
+  const byTime = new Map(schedule.timestamps.map((at, i) => [at, path.join(out, `.still-${String(i).padStart(3, '0')}.png`)]));
+  await renderRemotionStills({
+    entry: remotionEntry(project, entry),
+    project,
+    props: story.resolved,
+    // The render's bundle key, so the evidence stills reuse its bundle.
+    kitHash: await kitFingerprint('remotion', { project }),
+    stills: [...byTime].map(([at, output]) => ({ frame: frames.of(at), output }))
+  });
+  for (const sample of schedule.entries) copyFileSync(byTime.get(sample.at_seconds), path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`));
+  for (const file of byTime.values()) rmSync(file, { force: true });
 }
 
 // Options for embedding (launchclip finish): story (a resolved story instead of
 // storyboard.json), stillsProject (the compiled HyperFrames project to snapshot,
-// default the project) and commands ({hyperframes, remotion} argv prefixes).
+// default the project) and commands ({hyperframes} argv prefix).
 export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', sheets = true, renderer, entry, storyModule, story: injected, stillsProject, commands = {} } = {}) {
   const project = path.resolve(projectPath);
   const draft = path.resolve(project, video);
@@ -215,21 +200,26 @@ export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', 
   const frames = { fps, of: (t) => evidenceFrame(t, fps, duration) };
   if (engine === 'remotion') {
     if (!story) throw new Error('the remotion renderer needs storyboard.json');
-    remotionStills(project, schedule, out, story, entry, frames);
+    await remotionStills(project, schedule, out, story, entry, frames);
   } else {
     hyperframesStills(path.resolve(stillsProject ?? project), schedule, out, frames);
   }
+  // Every encoded-draft frame from one decode of the draft.
+  const wanted = [...new Set(schedule.entries.map((sample) => frames.of(sample.at_seconds)))].sort((a, b) => a - b);
+  execFileSync('ffmpeg', encodedFramesArgs(draft, wanted, path.join(out, '.encoded-%04d.png')));
+  const decoded = new Map(wanted.map((frame, i) => [frame, path.join(out, `.encoded-${String(i + 1).padStart(4, '0')}.png`)]));
+  for (const [frame, file] of decoded) if (!existsSync(file)) throw new Error(`ffmpeg wrote no frame ${frame} from ${draft}`);
   const entries = [];
   for (const sample of schedule.entries) {
     const browser = path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`);
     const encoded = path.join(out, `${sample.evidence_id}-encoded-draft.png`);
     const frame = frames.of(sample.at_seconds);
-    execFileSync('ffmpeg', encodedFrameArgs(draft, frame, encoded));
-    if (!existsSync(encoded)) throw new Error(`ffmpeg wrote no frame ${frame} from ${draft}`);
+    copyFileSync(decoded.get(frame), encoded);
     for (const [source, file] of [[BROWSER_SOURCE, browser], ['encoded-draft', encoded]]) {
       entries.push({ sample_id: sample.evidence_id, evidence_id: `${sample.evidence_id}-${source}`, source, role: sample.role, at_seconds: sample.at_seconds, frame, sequence_id: sample.sequence_id, boundary_id: sample.boundary_id, file: path.relative(project, file), sha256: sha(file) });
     }
   }
+  for (const file of decoded.values()) rmSync(file, { force: true });
   writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify({ schema_version: 'launchclip.subscription-temporal-evidence.v1', renderer: engine, video_sha256: sha(draft), entries }, null, 2)}\n`);
   const sheetFiles = sheets ? writeCriticSheets(project, schedule, draft, engine, frameSize(story, draft)) : [];
   return { renderer: engine, samples: schedule.entries.length, artifacts: entries.length, sheets: sheetFiles };
