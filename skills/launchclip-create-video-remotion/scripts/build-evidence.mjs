@@ -265,6 +265,20 @@ export function contactSheetLayout({ width, height } = {}) {
   return { tile, columns: 4, overview: orientation === 'portrait' ? { columns: 5, rows: 4 } : { columns: 4, rows: 5 }, orientation };
 }
 
+/**
+ * ffmpeg args that tile still frames into one contact sheet. Every input
+ * decodes on one thread: a dozen PNG decoders each starting a thread per core
+ * ran a busy container out of threads ("Error while opening decoder: Resource
+ * temporarily unavailable"), and stills gain nothing from them.
+ */
+export function criticSheetArgs(files, tile, columns, output) {
+  const n = files.length;
+  const scaled = Array.from({ length: n }, (_, j) => `[${j}]scale=${tile.width}:${tile.height}[s${j}]`).join(';');
+  const layout = Array.from({ length: n }, (_, j) => `${(j % columns) * tile.width}_${Math.floor(j / columns) * tile.height}`).join('|');
+  const stack = `${Array.from({ length: n }, (_, j) => `[s${j}]`).join('')}xstack=inputs=${n}:layout=${layout}`;
+  return ['-hide_banner', '-loglevel', 'error', '-y', ...files.flatMap((file) => ['-threads', '1', '-i', file]), '-filter_complex_threads', '1', '-filter_complex', `${scaled};${stack}`, '-threads', '1', output];
+}
+
 // Each sheet pairs browser (left) and encoded (right) tiles, six samples per sheet in schedule order.
 function writeCriticSheets(project, schedule, draft, engine, size) {
   const { tile, columns, overview, orientation } = contactSheetLayout(size);
@@ -276,16 +290,13 @@ function writeCriticSheets(project, schedule, draft, engine, size) {
   const index = [];
   for (let i = 0; i < ids.length; i += 6) {
     const group = ids.slice(i, i + 6);
-    const inputs = group.flatMap((id) => ['-i', path.join(project, 'qa/temporal-evidence', `${id}-${BROWSER_SOURCE}.png`), '-i', path.join(project, 'qa/temporal-evidence', `${id}-encoded-draft.png`)]);
-    const n = group.length * 2;
-    const scaled = Array.from({ length: n }, (_, j) => `[${j}]scale=${tile.width}:${tile.height}[s${j}]`).join(';');
-    const layout = Array.from({ length: n }, (_, j) => `${(j % columns) * tile.width}_${Math.floor(j / columns) * tile.height}`).join('|');
+    const files = group.flatMap((id) => [path.join(project, 'qa/temporal-evidence', `${id}-${BROWSER_SOURCE}.png`), path.join(project, 'qa/temporal-evidence', `${id}-encoded-draft.png`)]);
     const name = `sheet-${String(i / 6 + 1).padStart(2, '0')}.jpg`;
-    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', `${scaled};${Array.from({ length: n }, (_, j) => `[s${j}]`).join('')}xstack=inputs=${n}:layout=${layout}`, path.join(dir, name)]);
+    execFileSync('ffmpeg', criticSheetArgs(files, tile, columns, path.join(dir, name)));
     written.push(name);
     index.push({ sheet: name, samples: group });
   }
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', draft, '-vf', `fps=2/3,scale=${tile.width}:${tile.height},tile=${overview.columns}x${overview.rows}`, '-frames:v', '1', path.join(dir, 'overview-every-1.5s.jpg')]);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', draft, '-vf', `fps=2/3,scale=${tile.width}:${tile.height},tile=${overview.columns}x${overview.rows}`, '-frames:v', '1', '-threads', '1', path.join(dir, 'overview-every-1.5s.jpg')]);
   writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ tiles: `each sample is a pair: left = ${engine} browser still, right = encoded draft; ${columns} tiles per row`, tile: { ...tile, orientation }, sheets: index }, null, 2)}\n`);
   return [...written, 'overview-every-1.5s.jpg', 'index.json'];
 }
