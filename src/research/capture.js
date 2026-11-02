@@ -61,6 +61,45 @@ export function buildCaptureRequests(ledger, options = {}) {
   return { requests, byClaim };
 }
 
+/**
+ * Official X posts (src/research/social.js) → capture requests the recorder
+ * opens on the x-embed route (src/evidence/routes.js): the embed card
+ * settles, the claim's words are highlighted when the post says them, and
+ * the card holds. `taken` lists capture ids already used.
+ * posts: [{url, handle, name, text, published_at, fetched_at, claims: [claimId]}]
+ */
+export function buildPostCaptureRequests(posts, ledger, options = {}) {
+  const used = new Set(options.taken ?? []);
+  const requests = [];
+  for (const post of posts) {
+    let id = captureId(post.url);
+    for (let n = 2; used.has(id); n += 1) id = `${captureId(post.url)}-${n}`;
+    used.add(id);
+    const flat = String(post.text ?? "").replace(/\s+/g, " ").trim();
+    const beats = [{ at: 0, action: "wait", target: null, dur: 1.0, label: "post settles" }];
+    let at = 1.0;
+    const claim = ledger?.claims?.find((entry) => post.claims.includes(entry.id));
+    const span = claim && flat ? highlightSpan(claim, flat) : null;
+    if (span && span !== flat && flat.includes(span)) {
+      beats.push({ at, action: "highlight", target: { text: span }, dur: 2.2, label: shortLabel(claim) });
+      at += 2.2;
+    }
+    beats.push({ at: round1(at), action: "pin", target: null, dur: 1.4, label: `${post.handle} on X` });
+    requests.push({
+      schema: CAPTURE_SCHEMA,
+      id,
+      url: post.url,
+      kind: "post",
+      viewport: { ...CAPTURE_VIEWPORT },
+      theme: options.theme ?? "dark",
+      beats,
+      out: `assets/evidence/${id}.mp4`,
+      provenance: { source_title: `${post.name} (${post.handle}) on X`, fetched_at: post.fetched_at, publisher: post.handle, published_at: post.published_at ?? null }
+    });
+  }
+  return requests;
+}
+
 export function isApiFact(text) {
   return /^(?:Hugging Face|GitHub) API:/.test(String(text).trim());
 }
