@@ -158,9 +158,10 @@ test("prices an unknown model at its vendor's highest standard rate and marks th
 
   const costs = tracker.summary();
   assert.equal(costs.complete, false);
-  assert.equal(costs.total_usd, 8); // $5 in + $3 out at the gpt-5.6 rate
+  assert.equal(costs.total_usd, 15); // $10 in + $5 out at the gpt-6-astra rate
   assert.equal(costs.by_provider.openai.fallback_calls, 1);
   assert.equal(costs.line_items[0].pricing.fallback, true);
+  assert.equal(costs.line_items[0].fallback, true);
   assert.match(costs.warnings[0], /gpt-future.*highest standard OpenAI rate/);
 });
 
@@ -177,7 +178,7 @@ test("tracks OpenRouter calls: its reported cost, else the vendor's rates", asyn
   assert.deepEqual(items.map((item) => [item.provider, item.model, item.estimated_usd]), [
     ["openrouter", "openai/gpt-5.6-terra", 4], // $2.50 in + $1.50 out
     ["openrouter", "anthropic/claude-opus-4-8", 4.2],
-    ["openrouter", "acme/mystery-1", 5] // unknown vendor model: the OpenAI fallback rate
+    ["openrouter", "acme/mystery-1", 10] // unknown vendor model: the OpenAI fallback rate
   ]);
 });
 
@@ -187,7 +188,7 @@ test("the spending limit stops new OpenRouter calls and counts fallback-priced o
     fetch: async () => jsonResponse({ id: `gen-${Math.random()}`, model: "openai/gpt-new", choices: [{}], usage: { prompt_tokens: 300_000, completion_tokens: 0 } })
   });
   const post = () => tracker.fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", body: "{}" });
-  await post(); // $1.50 at the fallback rate
+  await post(); // $3 at the fallback rate
   await assert.rejects(post, (error) => error.code === "LAUNCHCLIP_COST_LIMIT");
 });
 

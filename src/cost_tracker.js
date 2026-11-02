@@ -27,9 +27,11 @@ const OPENAI_RATES = [
 // A model missing from the tables above is still billed against the spending
 // limit: at the highest standard rate its vendor publishes, flagged as an
 // estimate, so a new or renamed model can never run the limit up unseen.
+// OpenAI: gpt-6-astra. Anthropic: Claude Fable 5.1, with Claude Fable 5's
+// cache-hit rate (the higher of the two).
 const FALLBACK_RATES = {
-  openai: { input: 5, cached: .5, cacheWrite: 6.25, output: 30 },
-  anthropic: { input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
+  openai: { input: 10, cached: 1, cacheWrite: 12.5, output: 50 },
+  anthropic: { input: 10, cacheWrite5m: 12.5, cacheWrite1h: 20, cached: 1, output: 50 }
 };
 
 // USD per 1M tokens. A longContext entry replaces every rate once the prompt
