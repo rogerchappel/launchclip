@@ -304,6 +304,9 @@ test("with research on, make records the source pages while it writes, and the d
       await writeFile(path.join(out, "captures", "atlas-2-post.json"), JSON.stringify({ schema: "launchclip.capture.v1", id: "atlas-2-post", url: source.url, kind: "article", claim: "c-atlas", viewport: { width: 1280, height: 800 }, beats: [{ action: "scroll", at: 0.5, dur: 1.5 }], out: "assets/evidence/atlas-2-post.mp4" }));
       const card = { module: "social-post", params: { platform: "x", name: "Atlas", handle: "atlas_ai", text: "Atlas 2 is available today.", date: "Oct 6, 2026" } };
       await writeFile(path.join(out, "social.json"), JSON.stringify({ schema: "launchclip.research-social.v1", posts: [{ id: "1", url: "https://x.com/atlas_ai/status/1", handle: "atlas_ai", name: "Atlas", text: "Atlas 2 is available today.", published_at: "2026-10-06T09:00:00Z", claims: ["c-atlas"], card }], rejected: [] }));
+      await mkdir(path.join(out, "logos"), { recursive: true });
+      await writeFile(path.join(out, "logos", "atlas.svg"), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#3366ff"/></svg>');
+      await writeFile(path.join(out, "logos.json"), JSON.stringify({ schema: "launchclip.research-logos.v1", logos: [{ name: "Atlas", domain: "atlas.example", file: "logos/atlas.svg", asset: "assets/logos/atlas.svg", format: "svg", kind: "site", source_url: "https://atlas.example/", params: { "logo-row": { src: "assets/logos/atlas.svg", label: "Atlas" }, "brand-lockup": { mark: "assets/logos/atlas.svg" } } }], missed: [] }));
       return { summary: { claims: 1 } };
     };
     const recorded = [];
@@ -323,6 +326,9 @@ test("with research on, make records the source pages while it writes, and the d
     assert.ok(inputs.length > 0 && inputs.every((input) => input.includes("assets/evidence/atlas-2-post.mp4 — screen recording of the source page \"Atlas 2 is here\"")), inputs[0]);
     assert.match(inputs[0], /"module": "evidence-clip", "params": \{"media":\{"src":"assets\/evidence\/atlas-2-post.mp4"/);
     assert.match(inputs[0], /"source":\{"publisher":"Atlas","date":"Oct 6, 2026"\}/);
+    // The company's logo is staged under assets/ and offered with its params per module.
+    assert.ok(existsSync(path.join(cwd, "october", "assets/logos/atlas.svg")));
+    assert.match(inputs[0], /assets\/logos\/atlas\.svg — logo of Atlas \(atlas\.example\), svg\. .*brand-lockup \{"mark":"assets\/logos\/atlas\.svg"\}/);
     // The company's own post is offered as a ready social-post card.
     assert.match(inputs[0], /Post by @atlas_ai \(Atlas, 2026-10-06\): "Atlas 2 is available today\."\. Use as \{"module": "social-post", "params": \{"platform":"x"/);
   } finally {

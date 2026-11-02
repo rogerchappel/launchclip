@@ -1047,7 +1047,7 @@ async function settleCaptures(ctx) {
   if (!ctx.capturing && researchMode(ctx.options.research) === "on") startCaptures(ctx);
   const result = ctx.capturing ? await ctx.capturing : null;
   ctx.captures = [];
-  if (!result) { ctx.posts = await readPosts(ctx.project); if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })); return; }
+  if (!result) { await readResearchExtras(ctx); if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })); return; }
   for (const request of result.recorded) {
     const files = captureFiles(request);
     try {
@@ -1057,8 +1057,25 @@ async function settleCaptures(ctx) {
   }
   ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, ...(Object.keys(result.usage ?? {}).length ? { usage: result.usage } : {}), failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
   for (const entry of result.failed) ctx.report.warnings.push(`capture ${entry.id}${entry.url ? ` (${entry.url})` : ""} was not recorded: ${entry.reason}`);
-  ctx.posts = await readPosts(ctx.project);
+  await readResearchExtras(ctx);
   if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
+}
+
+/** Research's official posts and logos; each logo file is copied to the assets/ path its entry names, where modules can load it. */
+async function readResearchExtras(ctx) {
+  ctx.posts = await readPosts(ctx.project);
+  ctx.researchLogos = [];
+  const dir = path.join(ctx.project, RESEARCH_PATHS.dir);
+  let manifest;
+  try { manifest = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.logos), "utf8")); } catch { return; }
+  for (const logo of manifest.logos ?? []) {
+    if (!logo?.file || !logo?.asset?.startsWith("assets/")) continue;
+    try {
+      await mkdir(path.dirname(path.join(ctx.project, logo.asset)), { recursive: true });
+      await copyFile(path.join(dir, logo.file), path.join(ctx.project, logo.asset));
+      ctx.researchLogos.push(logo);
+    } catch (error) { ctx.report.warnings.push(`logo ${logo.name} could not be staged: ${error.message}`); }
+  }
 }
 
 /** Research's official posts (research/social.json), each with its ready social-post card. */
@@ -1096,6 +1113,11 @@ export function assetManifestLines(ctx) {
   // The companies' own posts on X: a designed social-post card (the recording of the post, when there is one, is listed above).
   for (const post of ctx.posts ?? []) {
     out.push({ src: null, kind: "card", line: `Post by @${post.handle} (${post.name}${post.published_at ? `, ${String(post.published_at).slice(0, 10)}` : ""}): "${String(post.card.params.text).slice(0, 140)}". Use as {"module": "social-post", "params": ${JSON.stringify(post.card.params)}} on the clause that reports it.` });
+  }
+  // The named companies' logos (research/logos.json), ready params per module; a logo-row shows 2–6 of them together.
+  for (const logo of ctx.researchLogos ?? []) {
+    const uses = Object.entries(logo.params ?? {}).map(([module, params]) => `${module} ${JSON.stringify(params)}`).join("; ");
+    out.push({ src: logo.asset, kind: "image", line: `${logo.asset} — logo of ${logo.name}${logo.domain ? ` (${logo.domain})` : ""}, ${logo.format ?? "image"}${logo.monochrome ? ", monochrome (set brand-lockup markTint)" : ""}. Use when the narration names ${logo.name}: a logo-row with the other companies named alongside it (2–6 logos), or a brand-lockup for ${logo.name} alone. Params per module: ${uses}.` });
   }
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;
