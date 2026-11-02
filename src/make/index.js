@@ -32,6 +32,9 @@ import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chap
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { rewriteLongFormCopy } from "./long_form_copy.js";
+import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js";
+import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
+import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
@@ -479,6 +482,7 @@ async function prepareMotion(ctx) {
   const briefNotes = await notesText(ctx);
   // --research on: the brief is checked against sources, and the script pass writes from what they state (src/research/make.js).
   const research = await researchBrief(ctx, briefNotes);
+  if (research) startCaptures(ctx);
   const notes = research ? [...briefNotes, research.notes] : briefNotes;
   const rules = rulesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
@@ -545,6 +549,7 @@ async function prepareLongForm(ctx) {
   const target = routing.format.duration;
   const briefNotes = await notesText(ctx);
   const research = await researchBrief(ctx, briefNotes);
+  if (research) startCaptures(ctx);
   const notes = research ? [...briefNotes, research.notes] : briefNotes;
   const rules = rulesText(ctx);
   const assets = assetManifestLines(ctx).map((item) => item.line);
@@ -653,10 +658,13 @@ async function stageLongFormStoryboard(ctx) {
   const storyFile = path.join(project, MAKE_PATHS.story);
   const { width, height, fps } = ctx.format;
   const visuals = longFormVisuals(options);
-  const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}) });
+  // Research's ledger and the pages recorded from it: the beat director matches clauses to them (evidence first).
+  const ledger = ctx.captures?.length || researchMode(options.research) === "on" ? await readLedger(project) : null;
+  const captures = (ctx.captures ?? []).map(({ request, files }) => ({ ...request, out: files.clip }));
+  const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}), ...(ledger ? { ledger: hashValue(ledger.claims ?? []), captures: captures.map((entry) => entry.id) } : {}) });
   if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
-  const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height } }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
+  const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height }, ...(ledger ? { ledger, captures } : {}) }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
   ctx.say(beatMapReportText(map).split("\n")[0]);
   // The direct pass (docs/MAKE_SKILL_PARITY.md): the model picks every clause's card, as the skill's director does; chunks directed before (same key) are kept.
   let direct = null;
@@ -753,6 +761,7 @@ async function synthesize(ctx, text) {
 }
 
 async function stageStoryboard(ctx) {
+  await settleCaptures(ctx);
   if (ctx.longForm) return stageLongFormStoryboard(ctx);
   const { project, report, state, options, routing } = ctx;
   const style = await loadStyle(ctx);
@@ -1022,6 +1031,40 @@ async function stageCritic(ctx) {
 // Brief, manifest and checks
 
 /** Every file the storyboard may reference: [{src, kind, line}]. */
+// Research's capture requests are recorded while the script and voice are
+// made (src/make/captures.js); the storyboard waits for them. A capture that
+// cannot be recorded is a warning: the director shows the clause another way.
+function startCaptures(ctx) {
+  ctx.capturing ??= (async () => {
+    const requests = await readCaptureRequests(ctx.project);
+    if (!requests.length) return null;
+    return recordCaptures(requests, { project: ctx.project, capture: ctx.adapters.capture, command: ctx.options.captureCmd, concurrency: ctx.options.captureConcurrency, env: ctx.env, say: ctx.say });
+  })().catch((error) => ({ recorded: [], failed: [{ id: "*", url: null, reason: error.message }], reused: 0 }));
+  return ctx.capturing;
+}
+
+async function settleCaptures(ctx) {
+  if (!ctx.capturing && researchMode(ctx.options.research) === "on") startCaptures(ctx);
+  const result = ctx.capturing ? await ctx.capturing : null;
+  ctx.captures = [];
+  if (!result) return;
+  for (const request of result.recorded) {
+    const files = captureFiles(request);
+    try {
+      const record = JSON.parse(await readFile(path.join(ctx.project, files.sidecar), "utf8"));
+      ctx.captures.push({ request, files, record });
+    } catch { result.failed.push({ id: request.id, url: request.url, reason: "its sidecar is missing" }); }
+  }
+  ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, ...(Object.keys(result.usage ?? {}).length ? { usage: result.usage } : {}), failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
+  for (const entry of result.failed) ctx.report.warnings.push(`capture ${entry.id}${entry.url ? ` (${entry.url})` : ""} was not recorded: ${entry.reason}`);
+  if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
+}
+
+/** The research ledger beside the project, or null. */
+async function readLedger(project) {
+  try { return JSON.parse(await readFile(path.join(project, RESEARCH_PATHS.dir, RESEARCH_PATHS.ledger), "utf8")); } catch { return null; }
+}
+
 export function assetManifestLines(ctx) {
   const routing = ctx.routing;
   const out = [];
@@ -1035,6 +1078,12 @@ export function assetManifestLines(ctx) {
     out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
   }
   out.push(...demoManifestLines(ctx));
+  // Recorded source pages: the real page on screen, as an evidence-clip with the params its sidecar gives.
+  for (const { request, files, record } of ctx.captures ?? []) {
+    const params = evidenceClipParams(record, { src: files.clip });
+    const title = record.provenance?.source_title ?? request.provenance?.source_title ?? record.final_url ?? request.url;
+    out.push({ src: files.clip, kind: "video", line: `${files.clip} — screen recording of the source page "${String(title).slice(0, 80)}" (${request.url}), ${record.duration ?? "?"} s, ${request.kind ?? "page"}${request.claim ? `, backs claim ${request.claim}` : ""}. Use as {"module": "evidence-clip", "params": ${JSON.stringify(params)}} on the clause that states what the page shows.` });
+  }
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;
     out.push({ src, kind: "image", line: `${src} — image, logo, ${item.width ?? "?"}×${item.height ?? "?"}: ${item.description}. No catalogue module shows a single logo on its own (logo-row needs 2–6 logos); use it in a media-window only if a product shot is missing, otherwise leave it out.` });

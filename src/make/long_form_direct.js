@@ -45,6 +45,7 @@ const SCHEMA = Object.freeze({
 const ROLE = `You are the visual director of a long explainer video narrated over motion graphics. The narration is split into clauses, each with its own seconds on screen. For every clause, choose what the viewer sees: a new card (one module from the catalogue below and its params), or "hold" to keep the card before on screen while the narration finishes its point.
 
 Direct it the way a good explainer channel would:
+- Real material first. When "Files the video can show" lists a recording of a source page, a logo or a post that backs a clause, show it there (an evidence-clip with the params the file line gives, a logo-row, a post card) before any diagram. A rule pick that already plays a recording is real evidence: keep it unless another file shows the clause better.
 - Show, don't caption. A number becomes a chart, a gauge, a counter or a comparison; a date becomes a calendar, a countdown or a timeline; companies and products become logos, lockups or object cards; places become a map; a sequence becomes steps; a choice becomes a comparison; a source becomes an excerpt or a quote card.
 - Words-on-a-backdrop cards (motion-title, kinetic-words, concept-card, glass-word, icon-row, object-card, emphasis-caption) are at most 3 in every 10 new cards, and never two in a row. Use them for a chapter title or a single line worth reading.
 - Vary the modules: never the same module three new cards in a row.
