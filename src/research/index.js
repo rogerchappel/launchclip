@@ -3,7 +3,7 @@
 //
 //   claims (patterns + optional model/agent claims) → sources (HF, GitHub,
 //   arXiv, script links, optional web search) → verify (ledger) → captures
-//   → data (tables) → media (metaphor beats) → people → files + RESEARCH.md
+//   → data (tables) → media (metaphor beats) → people → logos → files + RESEARCH.md
 //
 // No model is needed: the metered make pipeline may add a model claim pass,
 // and the subscription agent may hand in its own claims.json, but the stage
@@ -20,15 +20,17 @@ import { buildCaptureRequests } from "./capture.js";
 import { extractData } from "./data.js";
 import { findMedia, metaphorQueries } from "./media.js";
 import { findPeople } from "./people.js";
+import { findLogos, logoManifest, writeLogos } from "./logos.js";
 import { attachEvidenceData } from "./evidence_data.js";
-import { ASSETS_SCHEMA, RESEARCH_PATHS, validateAssets, validateCapture, validateLedger } from "./schema.js";
+import { ASSETS_SCHEMA, RESEARCH_PATHS, validateAssets, validateCapture, validateLedger, validateLogos } from "./schema.js";
 
 export { RESEARCH_PATHS } from "./schema.js";
 
 /**
  * input: a topic string, or a path to a script or outline (.md/.txt).
  * options: {out, cwd, urls[], claims (claims.json path or array), media (queries[] | "none"),
- *   people ("none" to skip), maxCaptures, maxTables, theme, now}
+ *   people ("none" to skip), logos ("none" to skip), logoDomains ({name: domain}), logoCache (dir;
+ *   else LAUNCHCLIP_LOGO_CACHE), maxLogos, maxCaptures, maxTables, theme, now}
  * adapters: {fetch, env, client ({client}: a make model for the claim pass), log}
  * → the report (also what the CLI prints)
  */
@@ -85,13 +87,17 @@ export async function runResearch(input, options = {}, adapters = {}) {
   const media = queries.length ? await findMedia(http, queries, { env, now }) : { assets: [], rejected: [], providers: [] };
   const peopleOff = String(options.people ?? "") === "none";
   const { people, portraits } = peopleOff ? { people: [], portraits: [] } : await findPeople(http, entities, claims, { now });
+  // 8. Logos: each organisation named → its official domain → the logo on its own site, else Simple Icons.
+  const logosOff = String(options.logos ?? "") === "none";
+  const logoResult = logosOff ? { logos: [], missed: [], files: [], cache_hits: 0 } : await findLogos(entities, { cacheDir: options.logoCache, domains: options.logoDomains, max: options.maxLogos, now }, { fetch: adapters.fetch, http, env, log });
+  const logos = logoManifest(logoResult, now);
   const assets = {
     schema: ASSETS_SCHEMA,
     created_at: now,
     policy: {
       licences: "public domain, CC0, CC BY, CC BY-SA, Pexels and Pixabay licences, NASA media; NC, ND, fair use and unlabelled items are dropped",
       never: "YouTube, streaming services, film or TV releases, or a photo scraped from a page",
-      icons_logos_audio: "resolve through the media-use skill, not here"
+      icons_logos_audio: `logos: ${RESEARCH_PATHS.logos}; icons and audio resolve through the media-use skill, not here`
     },
     providers: media.providers,
     queries,
@@ -101,7 +107,7 @@ export async function runResearch(input, options = {}, adapters = {}) {
   };
 
   // Contracts before anything is written.
-  const problems = [...validateLedger(ledger), ...requests.flatMap(validateCapture), ...validateAssets(assets)];
+  const problems = [...validateLedger(ledger), ...requests.flatMap(validateCapture), ...validateAssets(assets), ...validateLogos(logos)];
   if (problems.length) throw new Error(`research contract failed: ${problems.join("; ")}`);
 
   // Module-ready data for the evidence builders (src/research/evidence_data.js); post captures get theirs once captured (research attach).
@@ -115,7 +121,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
   await rm(path.join(outDir, RESEARCH_PATHS.data), { recursive: true, force: true });
   for (const file of data) await writeJson(path.join(outDir, RESEARCH_PATHS.data, `${file.id}.json`), file);
   await writeJson(path.join(outDir, RESEARCH_PATHS.assets), assets);
-  await writeFile(path.join(outDir, RESEARCH_PATHS.digest), renderDigest({ ledger, requests, data, assets }));
+  const logoFiles = await writeLogos(outDir, logoResult, logos);
+  await writeFile(path.join(outDir, RESEARCH_PATHS.digest), renderDigest({ ledger, requests, data, assets, logos }));
 
   const flagged = ledger.claims.filter((claim) => claim.status !== "verified");
   return {
@@ -127,9 +134,13 @@ export async function runResearch(input, options = {}, adapters = {}) {
       digest: path.join(outDir, RESEARCH_PATHS.digest),
       captures: requests.map((request) => path.join(outDir, RESEARCH_PATHS.captures, `${request.id}.json`)),
       data: data.map((file) => path.join(outDir, RESEARCH_PATHS.data, `${file.id}.json`)),
-      assets: path.join(outDir, RESEARCH_PATHS.assets)
+      assets: path.join(outDir, RESEARCH_PATHS.assets),
+      logos: path.join(outDir, RESEARCH_PATHS.logos),
+      logo_files: logoFiles
     },
-    summary: { ...ledger.summary, captures: requests.length, tables: data.length, assets: media.assets.length, people: people.length, portraits: portraits.length },
+    summary: { ...ledger.summary, captures: requests.length, tables: data.length, assets: media.assets.length, people: people.length, portraits: portraits.length, logos: logos.logos.length },
+    // The logos.json entries: make lists these as assets (stage each file at its `asset` path; `params` per module).
+    logos: logos.logos,
     flagged: flagged.map((claim) => ({ id: claim.id, status: claim.status, text: claim.text, action: claim.flag?.action, message: claim.flag?.message })),
     requests: http.calls.length,
     evidence_data: attached.report,
@@ -201,7 +212,7 @@ export function auditScript(narration, ledger, excerpts = ledger.excerpts ?? [])
   return { ok: results.every((entry) => entry.status === "verified" || entry.status === "sourced"), claims: results };
 }
 
-export function renderDigest({ ledger, requests, data, assets }) {
+export function renderDigest({ ledger, requests, data, assets, logos = null }) {
   const lines = [`# Research`, "", `${ledger.summary.claims} claims: ${ledger.summary.verified} verified, ${ledger.summary.contradicted} contradicted, ${ledger.summary.unverified} unverified. ${ledger.summary.sources_checked} sources checked (${ledger.summary.primary_sources} primary)${ledger.summary.web_search ? `, web search: ${ledger.summary.web_search}` : ", no web search key set"}.`, ""];
   const flagged = ledger.claims.filter((claim) => claim.status !== "verified");
   if (flagged.length) {
@@ -226,6 +237,10 @@ export function renderDigest({ ledger, requests, data, assets }) {
   if (assets.people.length) {
     lines.push("", "## People", "");
     for (const person of assets.people) lines.push(`- ${person.name}: ${[person.role, person.affiliation].filter(Boolean).join(", ") || "role unknown"}${person.wikidata ? ` ([${person.wikidata.id}](${person.wikidata.url}))` : ""}; ${person.portrait ? `portrait \`${person.portrait}\`` : person.portrait_note}`);
+  }
+  if (logos?.logos.length) {
+    lines.push("", "## Logos", "");
+    for (const logo of logos.logos) lines.push(`- ${logo.name}${logo.domain ? ` (${logo.domain})` : ""}: \`${logo.file}\` from ${logo.kind === "site" ? `the site (${logo.via})` : "Simple Icons"} <${logo.source_url}>`);
   }
   return `${lines.join("\n")}\n`;
 }
