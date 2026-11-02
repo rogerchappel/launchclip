@@ -18,7 +18,8 @@ export function buildCaptureRequests(ledger, options = {}) {
   for (const claim of ledger.claims) {
     if (claim.status !== "verified") continue;
     // Only a passage the page itself shows can be highlighted; API facts (sources.js) are checked, never captured.
-    const visible = claim.sources.filter((entry) => entry.supports && entry.quote?.text && !isApiFact(entry.quote.text));
+    // An aggregator never goes on screen, even when the primary source's quote is an API fact.
+    const visible = claim.sources.filter((entry) => entry.supports && entry.quote?.text && !isApiFact(entry.quote.text) && entry.source_class !== "aggregator");
     const source = visible.find((entry) => entry.primary) ?? visible[0];
     if (!source) continue;
     // A source that backs many claims is shown more than once, a few claims per capture.
