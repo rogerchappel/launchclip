@@ -4,6 +4,7 @@
 //   research/captures/<id>.json   launchclip.capture.v1         one on-screen source each (src/evidence/ renders them)
 //   research/data/<id>.json       launchclip.research-data.v1   numbers lifted from a source's table, cited
 //   research/assets.json          launchclip.research-assets.v1 licence-clear footage, images and portraits
+//   research/logos.json           launchclip.research-logos.v1  each named organisation's logo (research/logos/<slug>.svg|png)
 //
 // The ledger shares its version string with production/evidence.json (the
 // evidence stage's item list) but not its shape: the ledger keys its version
@@ -13,6 +14,7 @@ export const LEDGER_SCHEMA = "launchclip.evidence.v1";
 export const CAPTURE_SCHEMA = "launchclip.capture.v1";
 export const DATA_SCHEMA = "launchclip.research-data.v1";
 export const ASSETS_SCHEMA = "launchclip.research-assets.v1";
+export const LOGOS_SCHEMA = "launchclip.research-logos.v1";
 
 export const RESEARCH_PATHS = Object.freeze({
   dir: "research",
@@ -21,6 +23,8 @@ export const RESEARCH_PATHS = Object.freeze({
   captures: "captures",
   data: "data",
   assets: "assets.json",
+  logos: "logos.json",
+  logoFiles: "logos",
   snapshots: "snapshots"
 });
 
@@ -94,6 +98,26 @@ export function validateAssets(manifest) {
     if (!asset?.author) errors.push(`${at}: author missing`);
     if (!/^https?:\/\//.test(asset?.source_url ?? "")) errors.push(`${at}: source_url must be http(s)`);
     if (isBlockedMediaUrl(asset?.source_url) || isBlockedMediaUrl(asset?.media_url)) errors.push(`${at}: blocked host`);
+  }
+  return errors;
+}
+
+export const LOGO_KINDS = Object.freeze(["site", "simple-icons"]);
+
+export function validateLogos(manifest) {
+  const errors = [];
+  if (manifest?.schema !== LOGOS_SCHEMA) errors.push(`logos: schema must be ${LOGOS_SCHEMA}`);
+  if (!Array.isArray(manifest?.logos)) return [...errors, "logos: logos must be an array"];
+  const files = new Set();
+  for (const logo of manifest.logos) {
+    const at = `logo ${logo?.name ?? "?"}`;
+    if (!logo?.name) errors.push(`${at}: name missing`);
+    if (!LOGO_KINDS.includes(logo?.kind)) errors.push(`${at}: kind must be one of ${LOGO_KINDS.join(", ")}`);
+    if (!/^logos\/[a-z0-9][a-z0-9-]*\.(?:svg|png|jpg|webp)$/.test(logo?.file ?? "") || files.has(logo.file)) errors.push(`${at}: file must be a unique logos/<slug>.svg|png|jpg|webp`);
+    files.add(logo?.file);
+    if (logo?.domain != null && !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(logo.domain)) errors.push(`${at}: domain must be a bare hostname`);
+    if (!/^https:\/\//.test(logo?.source_url ?? "")) errors.push(`${at}: source_url must be https`);
+    if (logo?.colors != null && !(Array.isArray(logo.colors) && logo.colors.every((color) => /^#[0-9a-f]{6}$/.test(color)))) errors.push(`${at}: colors must be #rrggbb strings`);
   }
   return errors;
 }
