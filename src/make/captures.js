@@ -50,7 +50,8 @@ export function captureFiles(request) {
 /**
  * Record every request whose clip is missing. options: {project, command,
  * concurrency, timeoutMs, env, say, capture (local recorder, for tests),
- * spawn (for tests)}. → {recorded: [request], failed: [{id, url, reason}], reused}
+ * spawn (for tests)}. → {recorded: [request], failed: [{id, url, reason}], reused,
+ * usage: the sums of what the app's recorder reported per capture ({seconds, …}), for billing}
  */
 export async function recordCaptures(requests, options = {}) {
   const { project, say = () => {} } = options;
@@ -61,11 +62,12 @@ export async function recordCaptures(requests, options = {}) {
     else todo.push(request);
   }
   const failed = [];
-  if (!todo.length) return { recorded, failed, reused };
+  const usage = {};
+  if (!todo.length) return { recorded, failed, reused, usage };
   const recorder = options.command ? commandRecorder(options) : await localRecorder(options);
   if (!recorder.ok) {
     for (const request of todo) failed.push({ id: request.id, url: request.url, reason: recorder.reason });
-    return { recorded, failed, reused };
+    return { recorded, failed, reused, usage };
   }
   const size = Math.max(1, Number(options.concurrency) || (options.command ? CAPTURE_CONCURRENCY.command : CAPTURE_CONCURRENCY.local));
   say(`captures: recording ${todo.length} source page${todo.length === 1 ? "" : "s"} (${options.command ? "app recorder" : "local Chromium"}, ${size} at a time)`);
@@ -75,7 +77,8 @@ export async function recordCaptures(requests, options = {}) {
       while (next < todo.length) {
         const request = todo[next++];
         try {
-          await recorder.record(request);
+          const answer = await recorder.record(request);
+          for (const [key, value] of Object.entries(answer?.usage ?? {})) if (Number.isFinite(value)) usage[key] = (usage[key] ?? 0) + value;
           recorded.push(request);
           say(`captures: ${request.id} recorded (${request.url})`);
         } catch (error) {
@@ -89,7 +92,7 @@ export async function recordCaptures(requests, options = {}) {
   }
   const order = new Map(requests.map((request, index) => [request.id, index]));
   recorded.sort((a, b) => order.get(a.id) - order.get(b.id));
-  return { recorded, failed, reused };
+  return { recorded, failed, reused, usage };
 }
 
 async function localRecorder({ project, capture, say = () => {} }) {

@@ -27,7 +27,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
       files[key] = path.join(entry.out_dir, name);
       fs.writeFileSync(files[key], key === "sidecar" ? JSON.stringify({ id: entry.id }) : "x");
     }
-    process.stdout.write(JSON.stringify({ id: entry.id, ok: true, files }) + "\\n");
+    process.stdout.write(JSON.stringify({ id: entry.id, ok: true, files, usage: { seconds: 2.5 } }) + "\\n");
   }
   pending.length = 0;
 });
@@ -46,6 +46,7 @@ test("the app's capture command records requests concurrently, answers matched b
     const result = await recordCaptures([request("a"), request("b"), request("blocked")], { project: dir, command: `node ${path.join(dir, "recorder.cjs")}`, concurrency: 3, say: (line) => lines.push(line) });
     assert.deepEqual(result.recorded.map((entry) => entry.id), ["a", "b"]);
     assert.deepEqual(result.failed, [{ id: "blocked", url: "https://example.com/blocked", reason: "a sign-in wall" }]);
+    assert.deepEqual(result.usage, { seconds: 5 });
     for (const id of ["a", "b"]) assert.equal(JSON.parse(await readFile(path.join(dir, captureFiles(request(id)).sidecar), "utf8")).id, id);
     assert.ok(lines.some((line) => /recording 3 source pages \(app recorder, 3 at a time\)/.test(line)), lines.join("\n"));
     // A second run keeps what is on disk and records nothing.
@@ -86,4 +87,16 @@ test("the local recorder writes into the project; requests are read from researc
     assert.deepEqual(result.recorded.map((entry) => entry.id), ["one"]);
     assert.equal(result.failed[0].reason, "HTTP 403");
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("every capture opens with the same desktop Chrome profile: real version, no headless mark, US English, UTC", async () => {
+  const { captureProfile } = await import("../src/evidence/capture.js");
+  const viewport = { width: 1280, height: 800 };
+  const linux = captureProfile("131.0.6778.33", { platform: "linux", viewport, theme: "dark" });
+  assert.equal(linux.userAgent, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+  assert.doesNotMatch(linux.userAgent, /Headless/);
+  assert.deepEqual({ locale: linux.locale, timezoneId: linux.timezoneId, deviceScaleFactor: linux.deviceScaleFactor, colorScheme: linux.colorScheme, screen: linux.screen }, { locale: "en-US", timezoneId: "UTC", deviceScaleFactor: 2, colorScheme: "dark", screen: viewport });
+  assert.equal(linux.extraHTTPHeaders["Accept-Language"], "en-US,en;q=0.9");
+  assert.equal(linux.acceptDownloads, false);
+  assert.match(captureProfile("131.0.6778.33", { platform: "darwin", viewport }).userAgent, /Macintosh; Intel Mac OS X 10_15_7/);
 });

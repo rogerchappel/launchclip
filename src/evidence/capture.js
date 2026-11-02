@@ -352,6 +352,28 @@ export async function measureTarget(page, target, where = "target") {
 // ---------------------------------------------------------------------------
 // Open
 
+// One browser profile for every capture, so pages lay out and render the
+// same from run to run and machine to machine: a desktop Chrome on the real
+// platform at the real version (the reduced user-agent form Chrome itself
+// sends, without the "Headless" mark that gets some sites to serve a
+// stripped page), US English, UTC, a screen the size of the viewport and
+// twice the pixel density. It is the browser it says it is: no stealth
+// patches, and a bot check, a CAPTCHA or a sign-in wall still stops the
+// capture (blockReason) rather than being worked around.
+const UA_PLATFORMS = { darwin: "Macintosh; Intel Mac OS X 10_15_7", win32: "Windows NT 10.0; Win64; x64", linux: "X11; Linux x86_64" };
+
+/** The capture profile for a browser version ("131.0.6778.33") → Playwright context options. */
+export function captureProfile(version, { platform = process.platform, viewport, scale = SHOT_SCALE, theme = "light" } = {}) {
+  const major = String(version ?? "").split(".")[0] || "0";
+  return {
+    userAgent: `Mozilla/5.0 (${UA_PLATFORMS[platform] ?? UA_PLATFORMS.linux}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
+    extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+    viewport, screen: viewport, deviceScaleFactor: scale,
+    locale: "en-US", timezoneId: "UTC", colorScheme: theme, reducedMotion: "reduce",
+    acceptDownloads: false, serviceWorkers: "block", javaScriptEnabled: true
+  };
+}
+
 async function launch(available) {
   return available.chromium.launch({ executablePath: available.executablePath, headless: true, args: ["--hide-scrollbars", "--disable-features=Translate,MediaRouter", "--no-first-run", "--no-default-browser-check", "--mute-audio"] });
 }
@@ -365,7 +387,7 @@ export async function openEvidencePage(browser, request, { viewport, scale = SHO
   assertPublicUrl(request.url);
   const route = resolveRoute(request);
   assertPublicUrl(route.url);
-  const context = await browser.newContext({ viewport, deviceScaleFactor: scale, locale: "en-US", timezoneId: "UTC", colorScheme: request.theme, reducedMotion: "reduce", acceptDownloads: false, serviceWorkers: "block", javaScriptEnabled: true });
+  const context = await browser.newContext(captureProfile(browser.version?.(), { viewport, scale, theme: request.theme }));
   // Typing and form submission are never part of a capture: refuse any POST of a form the page might try.
   await context.route("**/*", (route) => (route.request().method() === "POST" && route.request().resourceType() === "document" ? route.abort("blockedbyclient") : route.continue()));
   const page = await context.newPage();
@@ -476,6 +498,7 @@ export async function captureEvidence(input, { root = process.cwd(), log = () =>
       final_url: finalUrl,
       http_status: status,
       page_title: title,
+      browser: { version: browser.version?.() ?? null, user_agent: captureProfile(browser.version?.()).userAgent },
       provenance: { ...request.provenance },
       captured_at: new Date().toISOString(),
       consent,

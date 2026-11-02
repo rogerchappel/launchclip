@@ -1055,7 +1055,7 @@ async function settleCaptures(ctx) {
       ctx.captures.push({ request, files, record });
     } catch { result.failed.push({ id: request.id, url: request.url, reason: "its sidecar is missing" }); }
   }
-  ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
+  ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, ...(Object.keys(result.usage ?? {}).length ? { usage: result.usage } : {}), failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
   for (const entry of result.failed) ctx.report.warnings.push(`capture ${entry.id}${entry.url ? ` (${entry.url})` : ""} was not recorded: ${entry.reason}`);
   if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
 }
