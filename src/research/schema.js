@@ -116,7 +116,7 @@ export function validateLogos(manifest) {
     if (!/^logos\/[a-z0-9][a-z0-9-]*\.(?:svg|png|jpg|webp)$/.test(logo?.file ?? "") || files.has(logo.file)) errors.push(`${at}: file must be a unique logos/<slug>.svg|png|jpg|webp`);
     files.add(logo?.file);
     if (logo?.domain != null && !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(logo.domain)) errors.push(`${at}: domain must be a bare hostname`);
-    if (!/^https:\/\//.test(logo?.source_url ?? "")) errors.push(`${at}: source_url must be https`);
+    if (!/^https?:\/\//.test(logo?.source_url ?? "")) errors.push(`${at}: source_url must be http(s)`);
     if (logo?.colors != null && !(Array.isArray(logo.colors) && logo.colors.every((color) => /^#[0-9a-f]{6}$/.test(color)))) errors.push(`${at}: colors must be #rrggbb strings`);
   }
   return errors;
