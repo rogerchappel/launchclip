@@ -143,24 +143,39 @@ export async function runResearch(input, options = {}, adapters = {}) {
  * the first two lists.
  */
 export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
-  const lines = ["## Research (launchclip research; state only facts listed here)"];
+  const lines = ["## Research (launchclip research; state only facts listed here)", "", ...SOURCE_RULES.map((rule) => `- ${rule}`)];
   const verified = ledger.claims.filter((claim) => claim.status === "verified");
   if (verified.length) {
     lines.push("", "Verified claims:");
-    for (const claim of verified) lines.push(`- [${claim.id}] ${claim.text} (source: ${claim.sources[0]?.publisher ?? claim.sources[0]?.url})`);
+    for (const claim of verified) {
+      const source = claim.sources.find((entry) => entry.supports && entry.primary) ?? claim.sources[0];
+      lines.push(`- [${claim.id}] ${claim.text} (source: ${source?.publisher ?? source?.url})`);
+    }
   }
   const excerpts = ledger.excerpts ?? (snapshotsOrNull ? keyExcerpts(snapshotsOrNull, options) : []);
   if (excerpts.length) {
     lines.push("", "Facts from primary sources:");
     for (const excerpt of excerpts) lines.push(`- ${excerpt.text} (source: ${excerpt.publisher ?? excerpt.url})`);
   }
-  const flagged = ledger.claims.filter((claim) => claim.status !== "verified");
+  const dropped = ledger.claims.filter((claim) => claim.status !== "verified" && claim.no_primary_source);
+  if (dropped.length) {
+    lines.push("", "Drop these stories: no primary source states them, only aggregators or rewrites:");
+    for (const claim of dropped) lines.push(`- [${claim.id}] ${claim.text}`);
+  }
+  const flagged = ledger.claims.filter((claim) => claim.status !== "verified" && !claim.no_primary_source);
   if (flagged.length) {
-    lines.push("", "Do not state these as fact (cut, soften or attribute):");
+    lines.push("", "Do not state these as fact (cut, soften or attribute to the company):");
     for (const claim of flagged) lines.push(`- [${claim.status}] ${claim.text}: ${claim.flag?.message ?? ""}`);
   }
   return lines.join("\n");
 }
+
+// How the script uses its sources: the facts are the companies', never a roundup's.
+export const SOURCE_RULES = Object.freeze([
+  "Never name an aggregator, news roundup, digest or blog in the narration or on screen, and never cite \"a report\" or \"reports\": no source names in card titles or captions.",
+  "State each fact directly, attributed to the company that made it (\"Nimbus released…\", \"Nimbus says…\"), not to the page that repeated it.",
+  "Drop any story with no primary source (the company's own page, its official account, the paper, or an outlet's first-hand report); do not hedge it into the script."
+]);
 
 /** Sentences and table rows with numbers from primary sources: the facts a writer can lean on. */
 export function keyExcerpts(snapshots, options = {}) {
