@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCostTracker, DEFAULT_MAX_COST_USD, estimateOpenAiUsageCost, parseCostLimit } from "../src/cost_tracker.js";
+import { createCostTracker, DEFAULT_MAX_COST_USD, estimateModelUsageCost, estimateOpenAiUsageCost, parseCostLimit } from "../src/cost_tracker.js";
 
 test("prices normalized OpenAI usage for an in-process circuit breaker", () => {
   const estimate = estimateOpenAiUsageCost("gpt-5.6-sol", {
@@ -61,6 +61,64 @@ test("totals Anthropic cache usage at the configured Opus rates", async () => {
   const costs = tracker.summary();
   assert.equal(costs.total_usd, .001245);
   assert.equal(costs.line_items[0].usage.cache_write_1h_tokens, 10);
+});
+
+test("prices the GPT-6.1 family at its published rates, long context included", async () => {
+  const replies = [
+    { id: "resp_terra", status: "completed", model: "gpt-6.1-terra", usage: { input_tokens: 272_000, output_tokens: 100_000 } },
+    { id: "resp_terra_cached", status: "completed", model: "gpt-6.1-terra-2026-10-01", usage: { input_tokens: 200_000, output_tokens: 0, input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 100_000 } } },
+    { id: "resp_terra_long", status: "completed", model: "gpt-6.1-terra", usage: { input_tokens: 300_000, output_tokens: 100_000 } }
+  ];
+  const tracker = createCostTracker({ fetch: async () => jsonResponse(replies.shift()) });
+  for (let i = 0; i < 3; i += 1) await tracker.fetch("https://api.openai.com/v1/responses", { method: "POST", body: JSON.stringify({ model: "gpt-6.1-terra" }) });
+
+  const costs = tracker.summary();
+  assert.equal(costs.complete, true);
+  assert.deepEqual(costs.warnings, []);
+  const [plain, cached, long] = costs.line_items;
+  assert.equal(plain.estimated_usd, .772); // at the 272K line: $1 in + $5 out per 1M
+  assert.equal(cached.estimated_usd, .13); // 100K cached at $0.05 + 100K written at $1.25
+  assert.equal(long.estimated_usd, 1.35); // over 272K input: $2 in + $7.50 out
+  assert.match(long.note, /272K/);
+  for (const item of costs.line_items) {
+    assert.equal(item.fallback, false);
+    assert.equal(item.provider, "openai");
+    assert.equal(item.pricing.source, "https://developers.openai.com/api/docs/pricing");
+  }
+  assert.equal(plain.usage.input_tokens, 272_000);
+  // 100K in + 100K out, short context.
+  assert.equal(estimateOpenAiUsageCost("gpt-6.1-sol", { input_tokens: 100_000, output_tokens: 100_000 }).estimated_usd, 1.2);
+  assert.equal(estimateOpenAiUsageCost("gpt-6-luna", { input_tokens: 100_000, output_tokens: 100_000 }).estimated_usd, .06);
+  assert.equal(estimateOpenAiUsageCost("gpt-6-sol", { input_tokens: 100_000, output_tokens: 0, cached_tokens: 100_000 }).estimated_usd, .02);
+  assert.equal(estimateOpenAiUsageCost("gpt-6-astra", { input_tokens: 100_000, output_tokens: 100_000 }).estimated_usd, 6);
+  // No gpt-6.1-luna is published: it stays an estimate.
+  assert.equal(estimateOpenAiUsageCost("gpt-6.1-luna", { input_tokens: 1, output_tokens: 1 }).fallback, true);
+});
+
+test("prices the Claude 5.x models at their published rates, Haiku's long prompts included", async () => {
+  const usage = { input_tokens: 1_000_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 1_000_000 };
+  const models = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+  const replies = [
+    ...models.map((model, index) => ({ id: `msg_${index}`, type: "message", model, usage })),
+    { id: "msg_cache", type: "message", model: "claude-opus-5-5", usage: { input_tokens: 0, cache_creation_input_tokens: 2_000_000, cache_creation: { ephemeral_5m_input_tokens: 1_000_000, ephemeral_1h_input_tokens: 1_000_000 }, cache_read_input_tokens: 1_000_000, output_tokens: 0 } },
+    { id: "msg_haiku_short", type: "message", model: "claude-haiku-5-5", usage: { input_tokens: 100_000, output_tokens: 0 } }
+  ];
+  const tracker = createCostTracker({ fetch: async () => jsonResponse(replies.shift()) });
+  for (let i = 0; i < 6; i += 1) await tracker.fetch("https://api.anthropic.com/v1/messages", { method: "POST", body: "{}" });
+
+  const costs = tracker.summary();
+  assert.equal(costs.complete, true);
+  assert.deepEqual(costs.line_items.map((item) => [item.model, item.estimated_usd, item.fallback]), [
+    ["claude-fable-5-1", 60, false], // $10 in + $50 out
+    ["claude-opus-5-5", 24, false], // $4 + $20
+    ["claude-sonnet-5-5", 12, false], // $2 + $10
+    ["claude-haiku-5-5", 3, false], // a 1M prompt is over 100K: $0.50 + $2.50
+    ["claude-opus-5-5", 13.2, false], // $5 (5m write) + $8 (1h write) + $0.20 (read)
+    ["claude-haiku-5-5", .01, false] // exactly 100K: $0.10 per 1M
+  ]);
+  assert.match(costs.line_items[3].note, /100K/);
+  assert.equal(costs.line_items[0].pricing.source, "https://platform.claude.com/docs/en/about-claude/pricing");
+  assert.equal(estimateModelUsageCost("anthropic", "anthropic/claude-sonnet-5-5", { input_tokens: 0, output_tokens: 0, cached_tokens: 1_000_000 }).estimated_usd, .1);
 });
 
 test("totals ElevenLabs transcription, speech, and music usage", async () => {
