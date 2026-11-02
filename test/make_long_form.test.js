@@ -207,6 +207,13 @@ test("by default the model directs every long-form card on the beat director's c
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.ok(story.scenes.some((scene) => scene.module === "stat-card"));
     assert.ok(report.costs.items.some((item) => item.stage.startsWith("direct-")));
+    // Each model call carries what a biller needs: provider, model, tokens, price, and whether the price is an estimate.
+    const direct = report.costs.items.find((item) => item.stage.startsWith("direct-"));
+    assert.deepEqual(
+      { provider: direct.provider, model: direct.model, input_tokens: direct.input_tokens, cached_input_tokens: direct.cached_input_tokens, output_tokens: direct.output_tokens, fallback: direct.fallback },
+      { provider: "openai", model: "gpt-5.6-luna", input_tokens: 3000, cached_input_tokens: 0, output_tokens: 900, fallback: false }
+    );
+    assert.equal(typeof direct.estimated_usd, "number");
 
     // A rerun reuses every directed chunk: no model calls.
     const before = calls.length;

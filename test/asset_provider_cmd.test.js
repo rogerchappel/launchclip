@@ -103,7 +103,7 @@ test("make --asset-provider-cmd plans with the command's shot and records its co
   assert.equal(await readFile(path.join(report.project, shot.src), "utf8"), "jpeg");
   const story = JSON.parse(await readFile(path.join(report.project, "storyboard.json"), "utf8"));
   assert.equal(story.scenes[0].params.media.src, shot.src);
-  assert.deepEqual(report.costs.items.find((item) => item.stage === "shot"), { stage: "shot", scene_id: "s1", provider: "imagegen", model: "img-2", estimated_usd: 0.04 });
+  assert.deepEqual(report.costs.items.find((item) => item.stage === "shot"), { stage: "shot", scene_id: "s1", provider: "imagegen", model: "img-2", estimated_usd: 0.04, fallback: false });
   assert.ok(report.costs.items.some((item) => item.stage.startsWith("storyboard-")), "model calls are itemised too");
   assert.ok(existsSync(path.join(report.project, shot.src)));
 });
