@@ -4,6 +4,7 @@
 //   research/captures/<id>.json   launchclip.capture.v1         one on-screen source each (src/evidence/ renders them)
 //   research/data/<id>.json       launchclip.research-data.v1   numbers lifted from a source's table, cited
 //   research/assets.json          launchclip.research-assets.v1 licence-clear footage, images and portraits
+//   research/social.json          launchclip.research-social.v1 official X posts behind verified claims (social.js)
 //
 // The ledger shares its version string with production/evidence.json (the
 // evidence stage's item list) but not its shape: the ledger keys its version
@@ -13,6 +14,7 @@ export const LEDGER_SCHEMA = "launchclip.evidence.v1";
 export const CAPTURE_SCHEMA = "launchclip.capture.v1";
 export const DATA_SCHEMA = "launchclip.research-data.v1";
 export const ASSETS_SCHEMA = "launchclip.research-assets.v1";
+export const SOCIAL_SCHEMA = "launchclip.research-social.v1";
 
 export const RESEARCH_PATHS = Object.freeze({
   dir: "research",
@@ -21,6 +23,7 @@ export const RESEARCH_PATHS = Object.freeze({
   captures: "captures",
   data: "data",
   assets: "assets.json",
+  social: "social.json",
   snapshots: "snapshots"
 });
 
@@ -94,6 +97,22 @@ export function validateAssets(manifest) {
     if (!asset?.author) errors.push(`${at}: author missing`);
     if (!/^https?:\/\//.test(asset?.source_url ?? "")) errors.push(`${at}: source_url must be http(s)`);
     if (isBlockedMediaUrl(asset?.source_url) || isBlockedMediaUrl(asset?.media_url)) errors.push(`${at}: blocked host`);
+  }
+  return errors;
+}
+
+export function validateSocial(manifest) {
+  const errors = [];
+  if (manifest?.schema !== SOCIAL_SCHEMA) errors.push(`schema must be ${SOCIAL_SCHEMA}`);
+  if (!Array.isArray(manifest?.posts)) return [...errors, "posts must be an array"];
+  for (const post of manifest.posts) {
+    const at = `post ${post?.id ?? "?"}`;
+    if (!/^https:\/\/x\.com\/\w{1,30}\/status\/\d{5,25}$/.test(post?.url ?? "")) errors.push(`${at}: url must be https://x.com/<handle>/status/<id>`);
+    if (!/^@\w{1,30}$/.test(post?.handle ?? "")) errors.push(`${at}: handle must be @<handle>`);
+    if (!post?.official?.reason) errors.push(`${at}: official needs the reason the account counts as the entity's own`);
+    if (!Array.isArray(post?.claims) || !post.claims.length) errors.push(`${at}: claims must name the verified claims it backs`);
+    if (post?.card?.module !== "social-post" || !post.card.params?.text || !post.card.params?.name) errors.push(`${at}: card must be social-post params with name and text`);
+    if (post?.card?.params?.source?.url !== post?.url) errors.push(`${at}: card source.url must be the post url`);
   }
   return errors;
 }
