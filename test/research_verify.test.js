@@ -93,10 +93,10 @@ test("findSources goes to the Hugging Face API first and prefers the named org's
 });
 
 test("URL classes, HTML text and arXiv entries", () => {
-  assert.deepEqual(classifyUrl("https://github.com/o/r/pull/12"), { kind: "pr", primary: true });
-  assert.deepEqual(classifyUrl("https://github.com/o/r/commit/abcdef1"), { kind: "commit", primary: true });
-  assert.deepEqual(classifyUrl("https://huggingface.co/o/m"), { kind: "model-card", primary: true });
-  assert.deepEqual(classifyUrl("https://x.com/nimbus/status/1"), { kind: "post", primary: false });
+  assert.deepEqual(classifyUrl("https://github.com/o/r/pull/12"), { kind: "pr", primary: true, source_class: "primary" });
+  assert.deepEqual(classifyUrl("https://github.com/o/r/commit/abcdef1"), { kind: "commit", primary: true, source_class: "primary" });
+  assert.deepEqual(classifyUrl("https://huggingface.co/o/m"), { kind: "model-card", primary: true, source_class: "primary" });
+  assert.deepEqual(classifyUrl("https://x.com/nimbus/status/1"), { kind: "post", primary: false, source_class: "secondary" });
   assert.equal(classifyUrl("https://nimbus.ai/news/launch", ["Nimbus AI"]).primary, true);
   const page = htmlToText("<html><head><title>Launch</title><meta property=\"article:published_time\" content=\"2026-10-20T08:00:00Z\"></head><body><script>x()</script><p>We shipped&nbsp;it.</p></body></html>");
   assert.equal(page.title, "Launch");

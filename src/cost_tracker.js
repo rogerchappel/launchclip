@@ -1,28 +1,55 @@
-const PRICING_AS_OF = "2026-07-13";
+const PRICING_AS_OF = "2026-11-03";
 
 const SOURCES = {
   openai: "https://developers.openai.com/api/docs/models",
+  openaiPricing: "https://developers.openai.com/api/docs/pricing",
   anthropic: "https://www.anthropic.com/news/claude-opus-4-8",
-  elevenlabs: "https://elevenlabs.io/pricing/api"
+  anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
+  elevenlabs: "https://elevenlabs.io/pricing/api",
+  brave: "https://brave.com/search/api/",
+  tavily: "https://docs.tavily.com/documentation/api-credits",
+  serper: "https://serper.dev/"
 };
 
+// Web search, USD per request (Tavily: per credit). Brave's Search plan;
+// Tavily's pay-as-you-go credit (a basic search is 1 credit, advanced 2);
+// Serper's smallest top-up pack (Starter, $1.00 per 1K queries), the highest
+// per-query rate it sells. Free monthly allowances are not subtracted.
+const WEB_SEARCH_RATES = { brave: .005, tavily: .008, serper: .001 };
+
+// USD per 1M tokens, Standard tier. cacheWrite is OpenAI's 30-minute cache
+// write. A longContext entry replaces every rate once a request's input passes
+// its threshold (OpenAI: more than 272K input tokens).
 const OPENAI_RATES = [
-  { pattern: /^gpt-5\.6-terra(?:-|$)/, input: 2.5, cached: .25, cacheWrite: 3.125, output: 15 },
-  { pattern: /^gpt-5\.6-luna(?:-|$)/, input: 1, cached: .1, cacheWrite: 1.25, output: 6 },
-  { pattern: /^gpt-5\.6(?:-sol)?(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30 },
-  { pattern: /^gpt-5\.5-pro(?:-|$)/, input: 30, cached: null, cacheWrite: null, output: 180 },
-  { pattern: /^gpt-5\.5(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30 }
+  { pattern: /^gpt-6\.1-terra(?:-|$)/, input: 1, cached: .05, cacheWrite: 1.25, output: 5, longContext: { above: 272_000, input: 2, cached: .1, cacheWrite: 2.5, output: 7.5 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-6\.1-sol(?:-|$)/, input: 2, cached: .1, cacheWrite: 2.5, output: 10, longContext: { above: 272_000, input: 4, cached: .2, cacheWrite: 5, output: 15 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-6-astra(?!-law)(?:-|$)/, input: 10, cached: 1, cacheWrite: 12.5, output: 50, longContext: { above: 272_000, input: 20, cached: 2, cacheWrite: 25, output: 75 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-6-sol(?:-|$)/, input: 2, cached: .2, cacheWrite: 2.5, output: 10, longContext: { above: 272_000, input: 4, cached: .4, cacheWrite: 5, output: 15 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-6-luna(?:-|$)/, input: .1, cached: .01, cacheWrite: .125, output: .5, longContext: { above: 272_000, input: .2, cached: .02, cacheWrite: .25, output: .75 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.6-terra(?:-|$)/, input: 2, cached: .2, cacheWrite: 2.5, output: 12, longContext: { above: 272_000, input: 4, cached: .4, cacheWrite: 5, output: 18 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.6-luna(?:-|$)/, input: .2, cached: .02, cacheWrite: .25, output: 1.2, longContext: { above: 272_000, input: .4, cached: .04, cacheWrite: .5, output: 1.8 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.6(?:-sol)?(?:-|$)/, input: 4, cached: .4, cacheWrite: 5, output: 20, longContext: { above: 272_000, input: 8, cached: .8, cacheWrite: 10, output: 30 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.5-pro(?:-|$)/, input: 30, cached: null, cacheWrite: null, output: 180, longContext: { above: 272_000, input: 60, cached: null, cacheWrite: null, output: 270 } },
+  { pattern: /^gpt-5\.5(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30, longContext: { above: 272_000, input: 10, cached: 1, cacheWrite: 12.5, output: 45 } }
 ];
 
 // A model missing from the tables above is still billed against the spending
 // limit: at the highest standard rate its vendor publishes, flagged as an
 // estimate, so a new or renamed model can never run the limit up unseen.
+// OpenAI: gpt-6-astra. Anthropic: Claude Fable 5.1, with Claude Fable 5's
+// cache-hit rate (the higher of the two).
 const FALLBACK_RATES = {
-  openai: { input: 5, cached: .5, cacheWrite: 6.25, output: 30 },
-  anthropic: { input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
+  openai: { input: 10, cached: 1, cacheWrite: 12.5, output: 50 },
+  anthropic: { input: 10, cacheWrite5m: 12.5, cacheWrite1h: 20, cached: 1, output: 50 }
 };
 
+// USD per 1M tokens. A longContext entry replaces every rate once the prompt
+// (input, cache reads and cache writes together) passes its threshold.
 const ANTHROPIC_RATES = [
+  { pattern: /^claude-fable-5-1(?:-|$)/, input: 10, cacheWrite5m: 12.5, cacheWrite1h: 20, cached: .25, output: 50, source: SOURCES.anthropicPricing },
+  { pattern: /^claude-opus-5-5(?:-|$)/, input: 4, cacheWrite5m: 5, cacheWrite1h: 8, cached: .2, output: 20, source: SOURCES.anthropicPricing },
+  { pattern: /^claude-sonnet-5-5(?:-|$)/, input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cached: .1, output: 10, source: SOURCES.anthropicPricing },
+  { pattern: /^claude-haiku-5-5(?:-|$)/, input: .1, cacheWrite5m: .125, cacheWrite1h: .2, cached: .01, output: .5, longContext: { above: 100_000, input: .5, cacheWrite5m: .625, cacheWrite1h: 1, cached: .05, output: 2.5 }, source: SOURCES.anthropicPricing },
   { pattern: /^claude-opus-4-8(?:-|$)/, input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
 ];
 
@@ -40,7 +67,8 @@ export function createCostTracker(options = {}) {
   async function trackedFetch(input, init) {
     const request = await describeRequest(input, init);
     // Only a POST to a paid provider starts new work; polling a background response must still finish it.
-    if (limitUsd != null && requestMethod(input, init) === "POST" && providerForUrl(request.url) !== "unknown") {
+    // A web search is new paid work even as a GET (Brave).
+    if (limitUsd != null && (requestMethod(input, init) === "POST" || isWebSearch(request.url)) && providerForUrl(request.url) !== "unknown") {
       const spent = summarize(items).total_usd;
       if (spent >= limitUsd) throw (limitError = costLimitError(spent, limitUsd));
     }
@@ -84,6 +112,7 @@ export function estimateOpenAiUsageCost(model, usage = {}) {
   return {
     estimated_usd: item.estimated_usd,
     complete: item.estimated_usd != null,
+    fallback: item.fallback,
     warning: item.warning ?? null,
     pricing: item.pricing ?? null
   };
@@ -106,6 +135,7 @@ export function estimateModelUsageCost(provider, model, usage = {}) {
   return {
     estimated_usd: item.estimated_usd,
     complete: item.estimated_usd != null,
+    fallback: item.fallback,
     warning: item.warning ?? null
   };
 }
@@ -153,7 +183,22 @@ async function lineItemFor(request, response) {
   if (isOpenRouter(url)) return openRouterLineItem(request, await responseJson(response));
   if (isAnthropic(url)) return anthropicLineItem(request, await responseJson(response));
   if (isElevenLabs(url)) return elevenLabsLineItem(url, request, response);
+  if (isWebSearch(url)) return webSearchLineItem(url, request, response);
   return null;
+}
+
+async function webSearchLineItem(url, request, response) {
+  const provider = providerForUrl(url.href);
+  const requestId = response.headers?.get?.("x-request-id") ?? response.headers?.get?.("request-id") ?? null;
+  if (provider === "tavily") {
+    const payload = await responseJson(response);
+    const depth = String(request.json?.search_depth ?? "basic");
+    const reported = Number(payload?.usage?.credits);
+    const credits = Number.isFinite(reported) && reported > 0 ? reported : depth === "advanced" ? 2 : 1;
+    return pricedItem({ provider, product: "web-search", model: `search-${depth}`, requestId: payload?.request_id ?? requestId, usage: { requests: 1, credits }, cost: credits * WEB_SEARCH_RATES.tavily, rates: { unit: "USD per credit", web_search: WEB_SEARCH_RATES.tavily }, source: SOURCES.tavily });
+  }
+  const model = provider === "brave" ? "web-search" : "google-search";
+  return pricedItem({ provider, product: "web-search", model, requestId, usage: { requests: 1 }, cost: WEB_SEARCH_RATES[provider], rates: { unit: "USD per request", web_search: WEB_SEARCH_RATES[provider] }, source: SOURCES[provider] });
 }
 
 function openAiLineItem(request, payload) {
@@ -163,8 +208,9 @@ function openAiLineItem(request, payload) {
   const model = String(payload?.model ?? request.json?.model ?? "unknown");
   const normalized = normalizeOpenAiUsage(usage);
   const known = OPENAI_RATES.find((entry) => entry.pattern.test(model));
-  const rates = known ?? FALLBACK_RATES.openai;
   const fallback = known ? null : `No public PAYG rate is configured for OpenAI model ${model}; estimated at the highest standard OpenAI rate`;
+  const long = known?.longContext && normalized.input_tokens > known.longContext.above ? known.longContext : null;
+  const rates = long ?? known ?? FALLBACK_RATES.openai;
 
   const uncached = Math.max(0, normalized.input_tokens - normalized.cached_input_tokens - normalized.cache_write_input_tokens);
   const cachedCost = rates.cached == null && normalized.cached_input_tokens > 0 ? null : normalized.cached_input_tokens * Number(rates.cached ?? 0);
@@ -172,16 +218,12 @@ function openAiLineItem(request, payload) {
   if (cachedCost == null || writeCost == null) {
     return unpricedItem({ provider: "openai", product: "llm", model, requestId: payload?.id, usage: normalized, warning: `OpenAI model ${model} returned cache usage without a configured cache rate` });
   }
-  let cost = (uncached * rates.input + cachedCost + writeCost + normalized.output_tokens * rates.output) / 1_000_000;
-  let note = null;
-  if (/^gpt-5\.5(?:-|$)/.test(model) && normalized.input_tokens > 272_000) {
-    cost = (uncached * rates.input * 2 + cachedCost * 2 + writeCost * 2 + normalized.output_tokens * rates.output * 1.5) / 1_000_000;
-    note = "GPT-5.5 long-context multiplier applied because input exceeded 272K tokens.";
-  }
+  const cost = (uncached * rates.input + cachedCost + writeCost + normalized.output_tokens * rates.output) / 1_000_000;
+  const note = long ? `Long-context rates applied because input exceeded ${Math.round(long.above / 1_000)}K tokens.` : null;
   return pricedItem({
     provider: "openai", product: "llm", model, requestId: payload?.id, usage: normalized, cost,
     rates: { unit: "USD per 1M tokens", input: rates.input, cached_input: rates.cached, cache_write: rates.cacheWrite, output: rates.output, ...(fallback ? { fallback: true } : {}) },
-    source: SOURCES.openai, note, warning: fallback
+    source: known?.source ?? SOURCES.openai, note, warning: fallback, fallback: Boolean(fallback)
   });
 }
 
@@ -209,8 +251,10 @@ function anthropicLineItem(request, payload) {
   const model = String(payload?.model ?? request.json?.model ?? "unknown");
   const normalized = normalizeAnthropicUsage(payload?.usage);
   const known = ANTHROPIC_RATES.find((entry) => entry.pattern.test(model));
-  const rates = known ?? FALLBACK_RATES.anthropic;
   const fallback = known ? null : `No public PAYG rate is configured for Anthropic model ${model}; estimated at the highest standard Anthropic rate`;
+  const prompt = normalized.input_tokens + normalized.cached_input_tokens + normalized.cache_write_5m_tokens + normalized.cache_write_1h_tokens + normalized.cache_write_unspecified_tokens;
+  const long = known?.longContext && prompt > known.longContext.above ? known.longContext : null;
+  const rates = long ?? known ?? FALLBACK_RATES.anthropic;
   const cost = (
     normalized.input_tokens * rates.input
     + normalized.cache_write_5m_tokens * rates.cacheWrite5m
@@ -219,10 +263,11 @@ function anthropicLineItem(request, payload) {
     + normalized.cached_input_tokens * rates.cached
     + normalized.output_tokens * rates.output
   ) / 1_000_000;
+  const note = long ? `Long-context rates applied because the prompt exceeded ${Math.round(long.above / 1_000)}K tokens.` : null;
   return pricedItem({
     provider: "anthropic", product: "llm", model, requestId: payload?.id, usage: normalized, cost,
     rates: { unit: "USD per 1M tokens", input: rates.input, cache_write_5m: rates.cacheWrite5m, cache_write_1h: rates.cacheWrite1h, cached_input: rates.cached, output: rates.output, ...(fallback ? { fallback: true } : {}) },
-    source: SOURCES.anthropic, warning: fallback
+    source: known?.source ?? SOURCES.anthropic, note, warning: fallback, fallback: Boolean(fallback)
   });
 }
 
@@ -282,17 +327,19 @@ function normalizeAnthropicUsage(usage = {}) {
   };
 }
 
-function pricedItem({ provider, product, model, requestId, usage, cost, rates, source, note = null, warning = null }) {
+// Every line item says whether it was priced at a vendor fallback rate, so a
+// biller can charge the priced ones exactly and flag the estimates.
+function pricedItem({ provider, product, model, requestId, usage, cost, rates, source, note = null, warning = null, fallback = false }) {
   return {
     provider, product, model, request_id: requestId ?? null, usage: usage ?? {},
-    estimated_usd: roundMoney(cost), pricing: { ...rates, as_of: PRICING_AS_OF, source },
+    estimated_usd: roundMoney(cost), fallback: Boolean(fallback), pricing: { ...rates, as_of: PRICING_AS_OF, source },
     ...(note ? { note } : {}),
     ...(warning ? { warning } : {})
   };
 }
 
 function unpricedItem({ provider, product, model, requestId, usage = {}, warning }) {
-  return { provider: provider ?? "unknown", product, model: model ?? null, request_id: requestId ?? null, usage, estimated_usd: null, pricing: null, warning };
+  return { provider: provider ?? "unknown", product, model: model ?? null, request_id: requestId ?? null, usage, estimated_usd: null, fallback: false, pricing: null, warning };
 }
 
 function summarize(items) {
@@ -309,10 +356,8 @@ function summarize(items) {
       total += item.estimated_usd;
       provider.estimated_usd += item.estimated_usd;
       // Priced at a fallback rate: counted, and the tally says it is an estimate.
-      if (item.warning) {
-        provider.fallback_calls = (provider.fallback_calls ?? 0) + 1;
-        warnings.push(item.warning);
-      }
+      if (item.fallback) provider.fallback_calls = (provider.fallback_calls ?? 0) + 1;
+      if (item.warning) warnings.push(item.warning);
     }
   }
   for (const provider of Object.values(providers)) provider.estimated_usd = roundMoney(provider.estimated_usd);
@@ -348,6 +393,15 @@ function isOpenAi(url) { return /(^|\.)openai\.com$/i.test(url.hostname); }
 function isOpenRouter(url) { return /(^|\.)openrouter\.ai$/i.test(url.hostname); }
 function isAnthropic(url) { return /(^|\.)anthropic\.com$/i.test(url.hostname); }
 function isElevenLabs(url) { return /(^|\.)elevenlabs\.io$/i.test(url.hostname); }
+function isBrave(url) { return /^api\.search\.brave\.com$/i.test(url.hostname); }
+function isTavily(url) { return /^api\.tavily\.com$/i.test(url.hostname); }
+function isSerper(url) { return /^google\.serper\.dev$/i.test(url.hostname); }
+function isWebSearch(value) {
+  try {
+    const url = value instanceof URL ? value : new URL(value);
+    return isBrave(url) || isTavily(url) || isSerper(url);
+  } catch { return false; }
+}
 
 function providerForUrl(value) {
   try {
@@ -356,6 +410,9 @@ function providerForUrl(value) {
     if (isOpenRouter(url)) return "openrouter";
     if (isAnthropic(url)) return "anthropic";
     if (isElevenLabs(url)) return "elevenlabs";
+    if (isBrave(url)) return "brave";
+    if (isTavily(url)) return "tavily";
+    if (isSerper(url)) return "serper";
   } catch {}
   return "unknown";
 }

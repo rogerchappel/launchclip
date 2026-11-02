@@ -18,7 +18,8 @@ export function buildCaptureRequests(ledger, options = {}) {
   for (const claim of ledger.claims) {
     if (claim.status !== "verified") continue;
     // Only a passage the page itself shows can be highlighted; API facts (sources.js) are checked, never captured.
-    const visible = claim.sources.filter((entry) => entry.supports && entry.quote?.text && !isApiFact(entry.quote.text));
+    // An aggregator never goes on screen, even when the primary source's quote is an API fact.
+    const visible = claim.sources.filter((entry) => entry.supports && entry.quote?.text && !isApiFact(entry.quote.text) && entry.source_class !== "aggregator");
     const source = visible.find((entry) => entry.primary) ?? visible[0];
     if (!source) continue;
     // A source that backs many claims is shown more than once, a few claims per capture.
@@ -59,6 +60,50 @@ export function buildCaptureRequests(ledger, options = {}) {
     });
   }
   return { requests, byClaim };
+}
+
+/**
+ * Official X posts (src/research/social.js) → capture requests the recorder
+ * opens on the x-embed route (src/evidence/routes.js): the embed card
+ * settles, the claim's words are highlighted when the post says them, and
+ * the card holds. `taken` lists capture ids already used.
+ * posts: [{url, handle, name, text, published_at, fetched_at, claims: [claimId]}]
+ */
+export function buildPostCaptureRequests(posts, ledger, options = {}) {
+  const used = new Set(options.taken ?? []);
+  const requests = [];
+  for (const post of posts) {
+    let id = captureId(post.url);
+    for (let n = 2; used.has(id); n += 1) id = `${captureId(post.url)}-${n}`;
+    used.add(id);
+    // The span stays inside one line of the post, so the card and the embed both show it verbatim.
+    const tokens = (ledger?.claims?.find((entry) => post.claims.includes(entry.id))?.values ?? []).map((value) => String(value.raw).split(/\s/)[0]);
+    const lines = String(post.text ?? "").split(/\n+/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const flat = lines.find((line) => tokens.some((token) => line.includes(token))) ?? lines[0] ?? "";
+    const beats = [{ at: 0, action: "wait", target: null, dur: 1.0, label: "post settles" }];
+    let at = 1.0;
+    const claim = ledger?.claims?.find((entry) => post.claims.includes(entry.id));
+    // A post leads with the product's name, so the claim's figure anchors the span first.
+    const byValue = claim?.values?.length ? highlightSpan({ values: claim.values, entities: [] }, flat) : null;
+    const span = byValue && claim.values.some((value) => byValue.includes(String(value.raw).split(/\s/)[0])) ? byValue : claim && flat ? highlightSpan(claim, flat) : null;
+    if (span && flat.includes(span)) {
+      beats.push({ at, action: "highlight", target: { text: span }, dur: 2.2, label: shortLabel(claim) });
+      at += 2.2;
+    }
+    beats.push({ at: round1(at), action: "pin", target: null, dur: 1.4, label: `${post.handle} on X` });
+    requests.push({
+      schema: CAPTURE_SCHEMA,
+      id,
+      url: post.url,
+      kind: "post",
+      viewport: { ...CAPTURE_VIEWPORT },
+      theme: options.theme ?? "dark",
+      beats,
+      out: `assets/evidence/${id}.mp4`,
+      provenance: { source_title: `${post.name} (${post.handle}) on X`, fetched_at: post.fetched_at, publisher: post.handle, published_at: post.published_at ?? null }
+    });
+  }
+  return requests;
 }
 
 export function isApiFact(text) {

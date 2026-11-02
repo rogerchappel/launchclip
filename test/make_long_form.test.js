@@ -10,7 +10,7 @@ import test from "node:test";
 import { beatMapToStory, directLongForm, dryRunWords, parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
 import { sameShape } from "../src/make/long_form_copy.js";
-import { applyChoice, filesAllowed, revertCards, unresolvedScenes } from "../src/make/long_form_direct.js";
+import { applyChoice, directLongFormVisuals, filesAllowed, revertCards, unresolvedScenes } from "../src/make/long_form_direct.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
 import { parseProgressLine } from "../src/progress.js";
 
@@ -207,6 +207,13 @@ test("by default the model directs every long-form card on the beat director's c
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.ok(story.scenes.some((scene) => scene.module === "stat-card"));
     assert.ok(report.costs.items.some((item) => item.stage.startsWith("direct-")));
+    // Each model call carries what a biller needs: provider, model, tokens, price, and whether the price is an estimate.
+    const direct = report.costs.items.find((item) => item.stage.startsWith("direct-"));
+    assert.deepEqual(
+      { provider: direct.provider, model: direct.model, input_tokens: direct.input_tokens, cached_input_tokens: direct.cached_input_tokens, output_tokens: direct.output_tokens, fallback: direct.fallback },
+      { provider: "openai", model: "gpt-5.6-luna", input_tokens: 3000, cached_input_tokens: 0, output_tokens: 900, fallback: false }
+    );
+    assert.equal(typeof direct.estimated_usd, "number");
 
     // A rerun reuses every directed chunk: no model calls.
     const before = calls.length;
@@ -215,6 +222,22 @@ test("by default the model directs every long-form card on the beat director's c
     assert.equal(calls.length, before);
   } finally {
     await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a direct call that answers with no clauses still reports what it cost", async () => {
+  const script = "# Prices\n\n## The price shock\n\nThe labs raised their prices this month. Every plan moved, and the cheapest tier went first. Teams that built on the old rates now pay more for the same work.\n";
+  const timed = dryRunWords(script, { wpm: 155 });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, title: timed.title });
+  const client = { provider: "openai", runStructured: async () => ({ model: "gpt-6.1-terra", status: "completed", value: { states: [] }, usage: { input_tokens: 1_000, output_tokens: 100 } }) };
+  const { chunks } = await directLongFormVisuals({ client, model: "gpt-6.1-terra", provider: "openai", map });
+  const asked = chunks.filter((chunk) => chunk.failed);
+  assert.ok(asked.length > 0, "the chunk with clauses was asked");
+  for (const chunk of asked) {
+    assert.match(chunk.failed, /no clauses/);
+    assert.deepEqual(chunk.usage, { input_tokens: 1_000, output_tokens: 100 });
+    assert.equal(chunk.cost_usd, .0015); // $1 in + $5 out per 1M
+    assert.equal(chunk.model, "gpt-6.1-terra");
   }
 });
 
@@ -260,4 +283,49 @@ test("a directed card that does not resolve in the finished storyboard gets its 
   assert.deepEqual(unresolvedScenes(beatMapToStory(map, { title: timed.title }), timed.words), []);
   // A rule-made card is never touched.
   assert.deepEqual(revertCards(map, ruled, [state.id]), []);
+});
+
+test("with research on, make records the source pages while it writes, and the director is offered them", async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-long-form-captures-"));
+  try {
+    const { model } = longFormModel();
+    const inputs = [];
+    const client = { ...model, client: { provider: model.provider, async runStructured(request) { if (request.schemaName === "launchclip_long_form_direct") inputs.push(request.input); return model.client.runStructured(request); } } };
+    const finish = async (project) => {
+      await mkdir(path.join(project, "renders"), { recursive: true });
+      await writeFile(path.join(project, "renders/draft.mp4"), "video");
+      return { status: "done", seconds: 1, stages: [], gates: {}, final: path.join(project, "renders/draft.mp4"), warnings: [] };
+    };
+    const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
+    const research = async (briefFile, { out }) => {
+      await mkdir(path.join(out, "captures"), { recursive: true });
+      const source = { url: "https://atlas.example/blog/atlas-2", publisher: "Atlas", primary: true, supports: true, quote: { text: "Atlas 2 is available today" } };
+      await writeFile(path.join(out, "evidence.json"), JSON.stringify({ schema: "launchclip.evidence.v1", summary: { claims: 1 }, claims: [{ id: "c-atlas", kind: "date", text: "Atlas 2 shipped October 6", status: "verified", sources: [source], capture: "atlas-2-post" }] }));
+      await writeFile(path.join(out, "captures", "atlas-2-post.json"), JSON.stringify({ schema: "launchclip.capture.v1", id: "atlas-2-post", url: source.url, kind: "article", claim: "c-atlas", viewport: { width: 1280, height: 800 }, beats: [{ action: "scroll", at: 0.5, dur: 1.5 }], out: "assets/evidence/atlas-2-post.mp4" }));
+      const card = { module: "social-post", params: { platform: "x", name: "Atlas", handle: "atlas_ai", text: "Atlas 2 is available today.", date: "Oct 6, 2026" } };
+      await writeFile(path.join(out, "social.json"), JSON.stringify({ schema: "launchclip.research-social.v1", posts: [{ id: "1", url: "https://x.com/atlas_ai/status/1", handle: "atlas_ai", name: "Atlas", text: "Atlas 2 is available today.", published_at: "2026-10-06T09:00:00Z", claims: ["c-atlas"], card }], rejected: [] }));
+      return { summary: { claims: 1 } };
+    };
+    const recorded = [];
+    const capture = async (request, { root }) => {
+      recorded.push(request.id);
+      await mkdir(path.join(root, "assets/evidence"), { recursive: true });
+      await writeFile(path.join(root, request.out), "mp4");
+      await writeFile(path.join(root, `assets/evidence/${request.id}.evidence.json`), JSON.stringify({ schema: "launchclip.evidence.v1", id: request.id, video: `${request.id}.mp4`, duration: 6, viewport: request.viewport, final_url: request.url, provenance: { source_title: "Atlas 2 is here", publisher: "Atlas", published_at: "2026-10-06T09:00:00Z" } }));
+    };
+    const adapters = { env: {}, client, inventory: emptyInventory, finish, joinVoice, research, capture, notice: () => {} };
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", research: "on" }, adapters);
+    // The fake narration says things the one-claim ledger does not back, so the research gate holds it for review.
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.deepEqual(recorded, ["atlas-2-post"]);
+    assert.deepEqual({ requested: report.captures.requested, recorded: report.captures.recorded, failed: report.captures.failed }, { requested: 1, recorded: 1, failed: [] });
+    // Every chunk's director call lists the recording as an evidence-clip with its sidecar's params.
+    assert.ok(inputs.length > 0 && inputs.every((input) => input.includes("assets/evidence/atlas-2-post.mp4 — screen recording of the source page \"Atlas 2 is here\"")), inputs[0]);
+    assert.match(inputs[0], /"module": "evidence-clip", "params": \{"media":\{"src":"assets\/evidence\/atlas-2-post.mp4"/);
+    assert.match(inputs[0], /"source":\{"publisher":"Atlas","date":"Oct 6, 2026"\}/);
+    // The company's own post is offered as a ready social-post card.
+    assert.match(inputs[0], /Post by @atlas_ai \(Atlas, 2026-10-06\): "Atlas 2 is available today\."\. Use as \{"module": "social-post", "params": \{"platform":"x"/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
