@@ -91,7 +91,8 @@ export async function directLongFormVisuals(options = {}) {
       return { id: chunk.id, key: chunk.key, reused: false, ...result.cost };
     } catch (error) {
       options.say?.(`direct: chunk ${chunk.id} keeps the rule-made cards (${error.message})`);
-      return { id: chunk.id, key: chunk.key, reused: false, failed: error.message, directed: 0, kept: states.length, held: 0 };
+      // A call that answered but could not be used was still paid for: its usage stays on the chunk.
+      return { id: chunk.id, key: chunk.key, reused: false, failed: error.message, directed: 0, kept: states.length, held: 0, ...(error.cost ?? {}) };
     }
   });
   const results = await limited(jobs, CONCURRENCY);
@@ -183,9 +184,10 @@ async function askChunk({ client, model = null, provider = null, instructions, c
   const result = await client.runStructured({ instructions, input: `${lines.join("\n")}\n`, schema: SCHEMA, schemaName: "launchclip_long_form_direct", model: undefined, maxOutputTokens: 16000 });
   const usage = result?.usage ?? {};
   const cost = estimateModelUsageCost(provider ?? client.provider ?? "openai", result?.model ?? model, usage).estimated_usd;
+  const spent = { cost_usd: cost, usage, model: result?.model ?? model };
   const answers = new Map((Array.isArray(result?.value?.states) ? result.value.states : []).map((entry) => [String(entry?.id ?? ""), entry]));
-  if (!answers.size) throw new Error("the model returned no clauses");
-  return { answers, cost: { directed: 0, kept: 0, held: 0, cost_usd: cost, usage, model: result?.model ?? model } };
+  if (!answers.size) throw Object.assign(new Error("the model returned no clauses"), { cost: spent });
+  return { answers, cost: { directed: 0, kept: 0, held: 0, ...spent } };
 }
 
 /**

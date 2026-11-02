@@ -820,7 +820,7 @@ async function stageStoryboard(ctx) {
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
   for (const shot of plan.shots ?? []) {
-    if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd });
+    if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd, fallback: false });
   }
   if (assets) report.shots = plan.shots ?? [];
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
@@ -984,7 +984,7 @@ async function stageFinish(ctx) {
   report.warnings.push(...(finish.warnings ?? []));
   const sound = finish.stages.find((stage) => stage.name === "sound");
   const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);
-  if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", estimated_usd: musicCost });
+  if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", model: sound?.details?.music?.model ?? sound?.details?.music?.generation?.model ?? null, generated_seconds: Number(sound?.details?.music?.generated_seconds ?? sound?.details?.music?.generation?.generated_seconds ?? 0), estimated_usd: musicCost, fallback: false });
   if (finish.status === "failed") {
     const failed = finish.stages.find((stage) => stage.status === "failed");
     throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
@@ -1275,10 +1275,21 @@ export function formatMakeSummary(report) {
 // ---------------------------------------------------------------------------
 // Helpers
 
+// One model call: its tokens, its price, and whether that price is a vendor
+// fallback estimate (a model the rate table does not list).
 function addCost(report, stage, model, result) {
-  let usd = result?.cost_usd;
-  if (usd === undefined && result?.usage) usd = estimateModelUsageCost(model.provider, result.model ?? model.model, result.usage).estimated_usd;
-  report.costs.items.push({ stage, provider: model.provider, model: result?.model ?? model.model, input_tokens: Number(result?.usage?.input_tokens ?? 0), output_tokens: Number(result?.usage?.output_tokens ?? 0), estimated_usd: usd ?? null });
+  const usage = result?.usage ?? {};
+  const estimate = result?.usage ? estimateModelUsageCost(model.provider, result.model ?? model.model, usage) : null;
+  const usd = result?.cost_usd !== undefined ? result.cost_usd : estimate?.estimated_usd;
+  report.costs.items.push({
+    stage, provider: model.provider, model: result?.model ?? model.model,
+    input_tokens: Number(usage.input_tokens ?? 0),
+    cached_input_tokens: Number(usage.cached_tokens ?? usage.cached_input_tokens ?? 0),
+    output_tokens: Number(usage.output_tokens ?? 0),
+    reasoning_tokens: Number(usage.reasoning_tokens ?? 0),
+    estimated_usd: usd ?? null,
+    fallback: Boolean(estimate?.fallback)
+  });
 }
 
 async function linkOrCopy(from, to, { replace = false } = {}) {

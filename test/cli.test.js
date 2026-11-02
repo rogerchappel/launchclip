@@ -97,7 +97,7 @@ test("includes a zero-cost tally in successful command JSON", async () => {
       schema_version: "launchclip.costs.v1",
       currency: "USD",
       pricing_basis: "public-pay-as-you-go-estimate",
-      pricing_as_of: "2026-07-13",
+      pricing_as_of: "2026-11-03",
       total_usd: 0,
       complete: true,
       calls: 0,

@@ -10,7 +10,7 @@ import test from "node:test";
 import { beatMapToStory, directLongForm, dryRunWords, parseScript } from "@launchclip/core/beat-director.mjs";
 import { runMake } from "../src/make/index.js";
 import { sameShape } from "../src/make/long_form_copy.js";
-import { applyChoice, filesAllowed, revertCards, unresolvedScenes } from "../src/make/long_form_direct.js";
+import { applyChoice, directLongFormVisuals, filesAllowed, revertCards, unresolvedScenes } from "../src/make/long_form_direct.js";
 import { CHAPTER_SECONDS, LONG_FORM_VOICE, chapterCount, chapterId, chapterWords, fitOutline, joinTakes, narrationTail, scriptMarkdown } from "../src/make/long_form.js";
 import { parseProgressLine } from "../src/progress.js";
 
@@ -207,6 +207,13 @@ test("by default the model directs every long-form card on the beat director's c
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.ok(story.scenes.some((scene) => scene.module === "stat-card"));
     assert.ok(report.costs.items.some((item) => item.stage.startsWith("direct-")));
+    // Each model call carries what a biller needs: provider, model, tokens, price, and whether the price is an estimate.
+    const direct = report.costs.items.find((item) => item.stage.startsWith("direct-"));
+    assert.deepEqual(
+      { provider: direct.provider, model: direct.model, input_tokens: direct.input_tokens, cached_input_tokens: direct.cached_input_tokens, output_tokens: direct.output_tokens, fallback: direct.fallback },
+      { provider: "openai", model: "gpt-5.6-luna", input_tokens: 3000, cached_input_tokens: 0, output_tokens: 900, fallback: false }
+    );
+    assert.equal(typeof direct.estimated_usd, "number");
 
     // A rerun reuses every directed chunk: no model calls.
     const before = calls.length;
@@ -215,6 +222,22 @@ test("by default the model directs every long-form card on the beat director's c
     assert.equal(calls.length, before);
   } finally {
     await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a direct call that answers with no clauses still reports what it cost", async () => {
+  const script = "# Prices\n\n## The price shock\n\nThe labs raised their prices this month. Every plan moved, and the cheapest tier went first. Teams that built on the old rates now pay more for the same work.\n";
+  const timed = dryRunWords(script, { wpm: 155 });
+  const map = directLongForm({ words: timed.words, chapters: timed.chapters, title: timed.title });
+  const client = { provider: "openai", runStructured: async () => ({ model: "gpt-6.1-terra", status: "completed", value: { states: [] }, usage: { input_tokens: 1_000, output_tokens: 100 } }) };
+  const { chunks } = await directLongFormVisuals({ client, model: "gpt-6.1-terra", provider: "openai", map });
+  const asked = chunks.filter((chunk) => chunk.failed);
+  assert.ok(asked.length > 0, "the chunk with clauses was asked");
+  for (const chunk of asked) {
+    assert.match(chunk.failed, /no clauses/);
+    assert.deepEqual(chunk.usage, { input_tokens: 1_000, output_tokens: 100 });
+    assert.equal(chunk.cost_usd, .0015); // $1 in + $5 out per 1M
+    assert.equal(chunk.model, "gpt-6.1-terra");
   }
 });
 
