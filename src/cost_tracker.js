@@ -26,9 +26,9 @@ const OPENAI_RATES = [
   { pattern: /^gpt-6-astra(?!-law)(?:-|$)/, input: 10, cached: 1, cacheWrite: 12.5, output: 50, longContext: { above: 272_000, input: 20, cached: 2, cacheWrite: 25, output: 75 }, source: SOURCES.openaiPricing },
   { pattern: /^gpt-6-sol(?:-|$)/, input: 2, cached: .2, cacheWrite: 2.5, output: 10, longContext: { above: 272_000, input: 4, cached: .4, cacheWrite: 5, output: 15 }, source: SOURCES.openaiPricing },
   { pattern: /^gpt-6-luna(?:-|$)/, input: .1, cached: .01, cacheWrite: .125, output: .5, longContext: { above: 272_000, input: .2, cached: .02, cacheWrite: .25, output: .75 }, source: SOURCES.openaiPricing },
-  { pattern: /^gpt-5\.6-terra(?:-|$)/, input: 2.5, cached: .25, cacheWrite: 3.125, output: 15 },
-  { pattern: /^gpt-5\.6-luna(?:-|$)/, input: 1, cached: .1, cacheWrite: 1.25, output: 6 },
-  { pattern: /^gpt-5\.6(?:-sol)?(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30 },
+  { pattern: /^gpt-5\.6-terra(?:-|$)/, input: 2, cached: .2, cacheWrite: 2.5, output: 12, longContext: { above: 272_000, input: 4, cached: .4, cacheWrite: 5, output: 18 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.6-luna(?:-|$)/, input: .2, cached: .02, cacheWrite: .25, output: 1.2, longContext: { above: 272_000, input: .4, cached: .04, cacheWrite: .5, output: 1.8 }, source: SOURCES.openaiPricing },
+  { pattern: /^gpt-5\.6(?:-sol)?(?:-|$)/, input: 4, cached: .4, cacheWrite: 5, output: 20, longContext: { above: 272_000, input: 8, cached: .8, cacheWrite: 10, output: 30 }, source: SOURCES.openaiPricing },
   { pattern: /^gpt-5\.5-pro(?:-|$)/, input: 30, cached: null, cacheWrite: null, output: 180, longContext: { above: 272_000, input: 60, cached: null, cacheWrite: null, output: 270 } },
   { pattern: /^gpt-5\.5(?:-|$)/, input: 5, cached: .5, cacheWrite: 6.25, output: 30, longContext: { above: 272_000, input: 10, cached: 1, cacheWrite: 12.5, output: 45 } }
 ];

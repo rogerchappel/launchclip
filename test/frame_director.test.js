@@ -843,7 +843,7 @@ test("stops before the next frame after the observed dollar limit is reached", a
   }
   assert.match(error.message, /Observed frame cost reached/);
   assert.equal(error.code, "LAUNCHCLIP_FRAME_COST_LIMIT");
-  assert.equal(error.frame_cost.estimated_usd, .0035);
+  assert.equal(error.frame_cost.estimated_usd, .0024);
   assert.deepEqual(calls, ["shot-1"]);
 });
 

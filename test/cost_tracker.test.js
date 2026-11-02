@@ -10,7 +10,7 @@ test("prices normalized OpenAI usage for an in-process circuit breaker", () => {
     reasoning_tokens: 8
   });
   assert.equal(estimate.complete, true);
-  assert.equal(estimate.estimated_usd, .00092);
+  assert.equal(estimate.estimated_usd, .000656);
 });
 
 test("totals OpenAI token usage and deduplicates background response polling", async () => {
@@ -32,7 +32,7 @@ test("totals OpenAI token usage and deduplicates background response polling", a
 
   const costs = tracker.summary();
   assert.equal(costs.calls, 1);
-  assert.equal(costs.total_usd, .00092);
+  assert.equal(costs.total_usd, .000656);
   assert.equal(costs.by_provider.openai.calls, 1);
   assert.equal(costs.line_items[0].usage.cached_input_tokens, 40);
   assert.equal(costs.line_items[0].usage.reasoning_tokens, 8);
@@ -202,7 +202,7 @@ test("tracks OpenRouter calls: its reported cost, else the vendor's rates", asyn
 
   const items = tracker.summary().line_items;
   assert.deepEqual(items.map((item) => [item.provider, item.model, item.estimated_usd]), [
-    ["openrouter", "openai/gpt-5.6-terra", 4], // $2.50 in + $1.50 out
+    ["openrouter", "openai/gpt-5.6-terra", 5.8], // over 272K input: $4 in + $1.80 out at the long-context rate
     ["openrouter", "anthropic/claude-opus-4-8", 4.2],
     ["openrouter", "acme/mystery-1", 10] // unknown vendor model: the OpenAI fallback rate
   ]);
