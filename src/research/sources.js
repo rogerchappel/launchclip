@@ -32,10 +32,12 @@ export async function findSources(http, entities, options = {}) {
   const models = entities.filter((entity) => entity.kind === "model").map((entity) => entity.name);
   const papers = entities.filter((entity) => entity.kind === "paper").map((entity) => entity.name.replace(/^arXiv:/i, ""));
   const orgs = entities.filter((entity) => entity.kind === "org").map((entity) => entity.name);
+  // Whose own words a page can be: the companies, products and models the claims name.
+  const owners = unique([...orgs, ...models, ...entities.filter((entity) => entity.kind === "name").map((entity) => entity.name), ...repos.map((repo) => repo.split("/")[0])]);
 
   // Links the script names are checked first: they are what the writer relied on.
   for (const url of options.urls ?? []) {
-    for (const snapshot of await snapshotUrl(http, url)) keep(snapshot, { finder: "script-link", ...classifyUrl(snapshot.url ?? url, orgs) });
+    for (const snapshot of await snapshotUrl(http, url)) keep(snapshot, { finder: "script-link", ...classifySnapshot(snapshot, owners) });
   }
   // Hugging Face: a named repo id, else a search on each model name.
   const hfIds = new Set(repos);
@@ -43,7 +45,7 @@ export async function findSources(http, entities, options = {}) {
     for (const id of await searchHuggingFace(http, model, orgs)) hfIds.add(id);
   }
   for (const id of hfIds) {
-    for (const snapshot of await huggingFaceModel(http, id)) keep(snapshot, { finder: "huggingface", kind: "model-card", primary: true });
+    for (const snapshot of await huggingFaceModel(http, id)) keep(snapshot, { finder: "huggingface", kind: "model-card", primary: true, source_class: "primary" });
   }
   // GitHub: the same ids as repos, plus a repository search on model names.
   const ghRepos = new Set(repos);
@@ -51,33 +53,79 @@ export async function findSources(http, entities, options = {}) {
     for (const full of await searchGithub(http, model, orgs)) ghRepos.add(full);
   }
   for (const full of ghRepos) {
-    for (const snapshot of await githubRepository(http, full)) keep(snapshot, { finder: "github", kind: snapshot.kind ?? "repo", primary: true });
+    for (const snapshot of await githubRepository(http, full)) keep(snapshot, { finder: "github", kind: snapshot.kind ?? "repo", primary: true, source_class: "primary" });
   }
   // arXiv: named papers, then a title search on model names.
   const arxivIds = new Set(papers);
   for (const model of models.slice(0, 3)) for (const id of await searchArxiv(http, model)) arxivIds.add(id);
   for (const id of arxivIds) {
     const snapshot = await arxivPaper(http, id);
-    if (snapshot) keep(snapshot, { finder: "arxiv", kind: "article", primary: true });
+    if (snapshot) keep(snapshot, { finder: "arxiv", kind: "article", primary: true, source_class: "primary" });
   }
   // Web search, when a key is configured: one query per claim hint, else per model or the topic.
   const search = webSearchProvider(env);
   if (search) {
     const queries = unique([...(options.searches ?? []), ...models.slice(0, 4).map((model) => `${model} announcement`), ...(options.topic && !models.length ? [options.topic] : [])]).slice(0, options.maxSearches ?? 12);
-    for (const query of queries) {
+    const fetchResults = async (query, { primaryOnly = false } = {}) => {
+      const kept = [];
       for (const result of await search.run(http, query)) {
-        const tags = classifyUrl(result.url, orgs);
         if (/youtube\.com|youtu\.be/.test(result.url)) continue;
+        // A follow-up for the primary source fetches only pages that can be one.
+        if (primaryOnly && classifyUrl(result.url, owners).source_class === "aggregator") continue;
         const snapshot = await http.snapshot(result.url, { title: result.title, published_at: result.published_at ?? undefined });
-        if (snapshot) keep(snapshot, { finder: `search:${search.name}`, query, ...tags });
+        if (!snapshot) continue;
+        const tags = classifySnapshot(snapshot, owners);
+        if (primaryOnly && !tags.primary) continue;
+        const before = found.length;
+        keep(snapshot, { finder: `search:${search.name}`, query, ...tags });
+        if (found.length > before) kept.push(found.at(-1));
+      }
+      return kept;
+    };
+    for (const query of queries) {
+      const results = await fetchResults(query);
+      if (results.some((entry) => entry.primary)) continue;
+      // Only aggregators or rewrites answered: ask again for the company's own page.
+      for (const followUp of primaryQueries(query, owners, found).slice(0, 2)) {
+        const primaries = await fetchResults(followUp, { primaryOnly: true });
+        if (primaries.length) break;
       }
     }
   }
   return { sources: found, search: search?.name ?? null };
 }
 
-/** github.com/o/r/pull/N → pr, …/commit/sha → commit, huggingface.co/o/m → model-card, and whether the host is primary. */
-export function classifyUrl(url, orgs = []) {
+/**
+ * A query that found no primary source → queries for one: "<company>
+ * <product> announcement", restricted to the company's domain when a page on
+ * it is already known (site: works on Brave, Serper and Tavily).
+ */
+export function primaryQueries(query, owners = [], found = []) {
+  const named = owners.filter((name) => looseIn(query, name));
+  if (!named.length) return [`${query} official announcement`];
+  // The versioned name is the product ("Nimbus-7B"); a plain one is the company ("Nimbus AI").
+  const product = named.find((name) => /\d/.test(name)) ?? named[0];
+  const company = named.find((name) => name !== product && !/\d/.test(name)) ?? product.split(/[- ]/)[0];
+  const subject = company === product ? product : `${company} ${product}`;
+  const domain = found.map((entry) => safeHost(entry.url) ?? "").find((host) => host && !PRIMARY_HOSTS.includes(host) && !SOCIAL_HOST.test(host) && officialHost(host, ownerWords([company])));
+  return unique([domain ? `${subject} announcement site:${domain.replace(/^www\./, "")}` : null, `${subject} announcement`, `${subject} blog`]);
+}
+
+function looseIn(text, name) {
+  return normalise(text).includes(normalise(name));
+}
+
+/**
+ * url + the names a claim mentions → {kind, primary, source_class}.
+ *
+ * source_class is "primary" (the party's own words: its domain, its official
+ * account, the paper, the code host), "aggregator" (a roundup, digest or
+ * listing of other people's news) or "secondary" (anything else: a rewrite,
+ * a third-party page). The rule is structural, not an allowlist: a page on the
+ * domain of an entity it names is that entity's own word. classifySnapshot
+ * refines it with the page's text (an outlet's original report is primary).
+ */
+export function classifyUrl(url, names = []) {
   const host = safeHost(url) ?? "";
   let pathname = "";
   try { pathname = new URL(url).pathname; } catch { /* left empty */ }
@@ -88,16 +136,77 @@ export function classifyUrl(url, orgs = []) {
     else if (/\/commit\/[0-9a-f]{7,40}/.test(pathname)) kind = "commit";
     else if (/^\/[^/]+\/[^/]+\/?$/.test(pathname) || /\/releases/.test(pathname)) kind = "repo";
   } else if (host === "huggingface.co" && /^\/(?!datasets|spaces|blog|papers)[^/]+\/[^/]+/.test(pathname)) kind = "model-card";
-  else if (/(^|\.)(x\.com|twitter\.com|bsky\.app|threads\.net|mastodon\.social)$/.test(host)) kind = "post";
+  else if (SOCIAL_HOST.test(host)) kind = "post";
   else if (/arxiv\.org|openreview\.net|news|blog|techcrunch|theverge|wired|reuters|bloomberg/.test(host + pathname)) kind = "article";
-  // "Nimbus AI" owns nimbus.ai and nimbusai.com: the org's name without its suffix word.
-  const orgWords = orgs.flatMap((org) => [org, org.replace(/\b(?:AI|Labs?|Inc|Corp|Research|Technologies|Systems|Group)\b/gi, "")]).map((org) => org.toLowerCase().replace(/[^a-z0-9]/g, "")).filter((word) => word.length >= 3);
-  const hostWord = host.replace(/^www\./, "").split(".").slice(0, -1).join("");
-  // The org's own domain: nimbus.ai for "Nimbus AI", but not openrouter.ai for "OpenAI" (a stripped name must keep five letters).
-  const official = orgWords.some((word) => hostWord === word || (word.length >= 5 && hostWord.startsWith(word)));
-  const primary = PRIMARY_HOSTS.some((primaryHost) => host === primaryHost || host.endsWith(`.${primaryHost}`)) || official;
-  return { kind, primary };
+  const words = ownerWords(names);
+  const codeHost = PRIMARY_HOSTS.some((primaryHost) => host === primaryHost || host.endsWith(`.${primaryHost}`));
+  // An official account: x.com/<handle> where the handle is the entity's own name.
+  const handle = kind === "post" ? normalise(pathname.split("/")[1] ?? "") : "";
+  const officialPost = Boolean(handle) && words.some((word) => ownsLabel(handle, word));
+  const official = !SOCIAL_HOST.test(host) && officialHost(host, words);
+  const roundup = ROUNDUP_URL.test(pathname.toLowerCase()) || ROUNDUP_HOST.test(host);
+  // Even on an owner's domain, a roundup page is a roundup.
+  const primary = codeHost || officialPost || (official && !roundup);
+  const source_class = primary ? "primary" : roundup ? "aggregator" : "secondary";
+  return { kind, primary, source_class };
 }
+
+/**
+ * A fetched snapshot + names → the same tags, refined by what the page says.
+ * A third-party page that covers several of the named companies, or is titled
+ * as a roundup, is an aggregator; one that reports first-hand (a statement
+ * given to the outlet, an interview, a filing) is an original report and
+ * counts as primary.
+ */
+export function classifySnapshot(snapshot, names = []) {
+  const tags = classifyUrl(snapshot.final_url ?? snapshot.url, names);
+  const title = String(snapshot.title ?? "");
+  const roundupTitle = ROUNDUP_TITLE.test(title);
+  if (tags.primary && !roundupTitle) return tags;
+  if (tags.kind === "post" || ["pr", "commit", "diff", "repo", "model-card"].includes(tags.kind)) return tags;
+  const text = String(snapshot.text ?? "");
+  const host = safeHost(snapshot.final_url ?? snapshot.url) ?? "";
+  // How many of the named companies this one page covers: a roundup covers many.
+  const flat = normalise(text);
+  // One company counts once ("Nimbus AI" and "Nimbus-7B" are both nimbus), and the host's own name not at all.
+  const covered = new Set(names.map((name) => ownerWords([name]).sort((a, b) => a.length - b.length)[0]).filter((word) => word && word.length >= 4 && !officialHost(host, [word]) && flat.includes(word))).size;
+  if (tags.source_class === "aggregator" || roundupTitle || covered >= 3) {
+    return { ...tags, primary: false, source_class: "aggregator" };
+  }
+  if (ORIGINAL_REPORT.test(text)) return { ...tags, primary: true, source_class: "primary", report: true };
+  return tags;
+}
+
+// The names an owner's domain or handle is spelled with: "Nimbus AI" → nimbusai, nimbus; "Nimbus-7B" → nimbus.
+function ownerWords(names) {
+  return unique(names.flatMap((name) => {
+    const plain = String(name).split("/").pop();
+    const head = plain.split(/[- ]/)[0];
+    return [plain, plain.replace(/\b(?:AI|Labs?|Inc|Corp|Research|Technologies|Systems|Group)\b/gi, ""), /\d/.test(plain) ? head : null];
+  }).filter(Boolean).map(normalise).filter((word) => word.length >= 3 && !/^\d/.test(word)));
+}
+
+// The owner's own domain: nimbus.ai, nimbusai.com, news.nimbus.com or blog.nimbus for "Nimbus AI";
+// not openrouter.ai for "OpenAI", not nimbus-news-digest.com.
+function officialHost(host, words) {
+  const labels = host.replace(/^www\./, "").split(".").map(normalise).filter(Boolean);
+  return words.some((word) => labels.some((label) => ownsLabel(label, word)));
+}
+
+function ownsLabel(label, word) {
+  return label === word || (label.startsWith(word) && OWNER_SUFFIX.test(label.slice(word.length)));
+}
+
+const SOCIAL_HOST = /(^|\.)(x\.com|twitter\.com|bsky\.app|threads\.net|mastodon\.social)$/;
+// What may follow an owner's name in its own domain label or handle: nimbusai, nimbuslabs, nimbushq.
+const OWNER_SUFFIX = /^(?:ai|labs?|hq|inc|app|io|corp|co|research|tech|dev|official|team)$/;
+const MONTH = "(?:january|february|march|april|may|june|july|august|september|october|november|december)";
+// A page that lists other people's news, whoever hosts it.
+const ROUNDUP_URL = new RegExp(`(?:round-?up|digest|newsletter|this-week|weekly|week-in|recap|top-\\d+-|best-|${MONTH}-(?:\\d{4}-)?(?:ai-)?(?:releases|updates|news|launches)|(?:^|/)(?:ai|tech)-news|what-happened|everything-announced|/tags?/|/category/|/directory/)`);
+const ROUNDUP_HOST = /(?:digest|roundup|newsletter|weekly|tracker|insider|aggregat)/;
+const ROUNDUP_TITLE = new RegExp(`(?:round-?up|digest|newsletter|this week in|weekly|recap|\\btop \\d+\\b|\\b\\d+ (?:biggest|best|top)\\b|everything (?:announced|you need)|${MONTH} (?:\\d{4} )?(?:ai )?(?:releases|updates|news|launches))`, "i");
+// First-hand reporting: the company spoke to the outlet, or the outlet read the filing.
+const ORIGINAL_REPORT = /\b(?:said in a statement|told [A-Z]\w+|confirmed to [A-Z]\w+|in an interview with|a spokesperson (?:for|said)|according to (?:a|the) (?:company|filing|statement|press release))/;
 
 async function snapshotUrl(http, url) {
   const github = String(url).match(/^https?:\/\/github\.com\/([^/]+)\/([^/#?]+)(?:\/(pull|commit)\/([0-9a-f]+|\d+))?/i);
