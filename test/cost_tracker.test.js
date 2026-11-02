@@ -165,6 +165,32 @@ test("prices an unknown model at its vendor's highest standard rate and marks th
   assert.match(costs.warnings[0], /gpt-future.*highest standard OpenAI rate/);
 });
 
+test("itemises research web searches: Brave, Tavily and Serper", async () => {
+  const replies = [{ web: { results: [] } }, { results: [] }, { results: [], usage: { credits: 2 } }, { organic: [] }];
+  const tracker = createCostTracker({ fetch: async () => jsonResponse(replies.shift()) });
+  await tracker.fetch("https://api.search.brave.com/res/v1/web/search?q=launch&count=5", { headers: { accept: "application/json" } });
+  await tracker.fetch("https://api.tavily.com/search", { method: "POST", body: JSON.stringify({ query: "launch", max_results: 5 }) });
+  await tracker.fetch("https://api.tavily.com/search", { method: "POST", body: JSON.stringify({ query: "launch", search_depth: "advanced" }) });
+  await tracker.fetch("https://google.serper.dev/search", { method: "POST", body: JSON.stringify({ q: "launch", num: 5 }) });
+
+  const costs = tracker.summary();
+  assert.equal(costs.complete, true);
+  assert.deepEqual(costs.line_items.map((item) => [item.provider, item.product, item.model, item.usage, item.estimated_usd, item.fallback]), [
+    ["brave", "web-search", "web-search", { requests: 1 }, .005, false],
+    ["tavily", "web-search", "search-basic", { requests: 1, credits: 1 }, .008, false],
+    ["tavily", "web-search", "search-advanced", { requests: 1, credits: 2 }, .016, false],
+    ["serper", "web-search", "google-search", { requests: 1 }, .001, false]
+  ]);
+  assert.equal(costs.total_usd, .03);
+});
+
+test("the spending limit stops a new web search, GET included", async () => {
+  const tracker = createCostTracker({ limitUsd: .004, fetch: async () => jsonResponse({ web: { results: [] } }) });
+  const search = () => tracker.fetch("https://api.search.brave.com/res/v1/web/search?q=launch");
+  await search();
+  await assert.rejects(search, (error) => error.code === "LAUNCHCLIP_COST_LIMIT");
+});
+
 test("tracks OpenRouter calls: its reported cost, else the vendor's rates", async () => {
   const replies = [
     { id: "gen-1", model: "openai/gpt-5.6-terra", choices: [{}], usage: { prompt_tokens: 1_000_000, completion_tokens: 100_000 } },

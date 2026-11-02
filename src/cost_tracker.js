@@ -5,8 +5,17 @@ const SOURCES = {
   openaiPricing: "https://developers.openai.com/api/docs/pricing",
   anthropic: "https://www.anthropic.com/news/claude-opus-4-8",
   anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
-  elevenlabs: "https://elevenlabs.io/pricing/api"
+  elevenlabs: "https://elevenlabs.io/pricing/api",
+  brave: "https://brave.com/search/api/",
+  tavily: "https://docs.tavily.com/documentation/api-credits",
+  serper: "https://serper.dev/"
 };
+
+// Web search, USD per request (Tavily: per credit). Brave's Search plan;
+// Tavily's pay-as-you-go credit (a basic search is 1 credit, advanced 2);
+// Serper's smallest top-up pack (Starter, $1.00 per 1K queries), the highest
+// per-query rate it sells. Free monthly allowances are not subtracted.
+const WEB_SEARCH_RATES = { brave: .005, tavily: .008, serper: .001 };
 
 // USD per 1M tokens, Standard tier. cacheWrite is OpenAI's 30-minute cache
 // write. A longContext entry replaces every rate once a request's input passes
@@ -58,7 +67,8 @@ export function createCostTracker(options = {}) {
   async function trackedFetch(input, init) {
     const request = await describeRequest(input, init);
     // Only a POST to a paid provider starts new work; polling a background response must still finish it.
-    if (limitUsd != null && requestMethod(input, init) === "POST" && providerForUrl(request.url) !== "unknown") {
+    // A web search is new paid work even as a GET (Brave).
+    if (limitUsd != null && (requestMethod(input, init) === "POST" || isWebSearch(request.url)) && providerForUrl(request.url) !== "unknown") {
       const spent = summarize(items).total_usd;
       if (spent >= limitUsd) throw (limitError = costLimitError(spent, limitUsd));
     }
@@ -173,7 +183,22 @@ async function lineItemFor(request, response) {
   if (isOpenRouter(url)) return openRouterLineItem(request, await responseJson(response));
   if (isAnthropic(url)) return anthropicLineItem(request, await responseJson(response));
   if (isElevenLabs(url)) return elevenLabsLineItem(url, request, response);
+  if (isWebSearch(url)) return webSearchLineItem(url, request, response);
   return null;
+}
+
+async function webSearchLineItem(url, request, response) {
+  const provider = providerForUrl(url.href);
+  const requestId = response.headers?.get?.("x-request-id") ?? response.headers?.get?.("request-id") ?? null;
+  if (provider === "tavily") {
+    const payload = await responseJson(response);
+    const depth = String(request.json?.search_depth ?? "basic");
+    const reported = Number(payload?.usage?.credits);
+    const credits = Number.isFinite(reported) && reported > 0 ? reported : depth === "advanced" ? 2 : 1;
+    return pricedItem({ provider, product: "web-search", model: `search-${depth}`, requestId: payload?.request_id ?? requestId, usage: { requests: 1, credits }, cost: credits * WEB_SEARCH_RATES.tavily, rates: { unit: "USD per credit", web_search: WEB_SEARCH_RATES.tavily }, source: SOURCES.tavily });
+  }
+  const model = provider === "brave" ? "web-search" : "google-search";
+  return pricedItem({ provider, product: "web-search", model, requestId, usage: { requests: 1 }, cost: WEB_SEARCH_RATES[provider], rates: { unit: "USD per request", web_search: WEB_SEARCH_RATES[provider] }, source: SOURCES[provider] });
 }
 
 function openAiLineItem(request, payload) {
@@ -368,6 +393,15 @@ function isOpenAi(url) { return /(^|\.)openai\.com$/i.test(url.hostname); }
 function isOpenRouter(url) { return /(^|\.)openrouter\.ai$/i.test(url.hostname); }
 function isAnthropic(url) { return /(^|\.)anthropic\.com$/i.test(url.hostname); }
 function isElevenLabs(url) { return /(^|\.)elevenlabs\.io$/i.test(url.hostname); }
+function isBrave(url) { return /^api\.search\.brave\.com$/i.test(url.hostname); }
+function isTavily(url) { return /^api\.tavily\.com$/i.test(url.hostname); }
+function isSerper(url) { return /^google\.serper\.dev$/i.test(url.hostname); }
+function isWebSearch(value) {
+  try {
+    const url = value instanceof URL ? value : new URL(value);
+    return isBrave(url) || isTavily(url) || isSerper(url);
+  } catch { return false; }
+}
 
 function providerForUrl(value) {
   try {
@@ -376,6 +410,9 @@ function providerForUrl(value) {
     if (isOpenRouter(url)) return "openrouter";
     if (isAnthropic(url)) return "anthropic";
     if (isElevenLabs(url)) return "elevenlabs";
+    if (isBrave(url)) return "brave";
+    if (isTavily(url)) return "tavily";
+    if (isSerper(url)) return "serper";
   } catch {}
   return "unknown";
 }
