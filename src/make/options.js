@@ -44,6 +44,9 @@ export const MAKE_FLAGS = Object.freeze([
   ["visual-similarity-limit", { setting: true }],
   // The app's shot source (src/asset_provider_cmd.js): a property of the host, not a recipe.
   ["asset-provider-cmd", {}],
+  // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
+  ["capture-cmd", {}],
+  ["capture-concurrency", {}],
   // A footage-led base the app already edited (bad takes, pauses): used as is.
   ["base-edited", { boolean: true }],
   ["base-transcript", {}],
@@ -72,6 +75,8 @@ export function makeOptionsFromFlags(flags = {}) {
     voice: flags.voice,
     voiceId: flags["voice-id"],
     assetProviderCmd: flags["asset-provider-cmd"],
+    captureCmd: flags["capture-cmd"],
+    captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
     baseTranscript: flags["base-transcript"],
     music: flags.music,

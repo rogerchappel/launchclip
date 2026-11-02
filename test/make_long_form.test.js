@@ -261,3 +261,44 @@ test("a directed card that does not resolve in the finished storyboard gets its 
   // A rule-made card is never touched.
   assert.deepEqual(revertCards(map, ruled, [state.id]), []);
 });
+
+test("with research on, make records the source pages while it writes, and the director is offered them", async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-long-form-captures-"));
+  try {
+    const { model } = longFormModel();
+    const inputs = [];
+    const client = { ...model, client: { provider: model.provider, async runStructured(request) { if (request.schemaName === "launchclip_long_form_direct") inputs.push(request.input); return model.client.runStructured(request); } } };
+    const finish = async (project) => {
+      await mkdir(path.join(project, "renders"), { recursive: true });
+      await writeFile(path.join(project, "renders/draft.mp4"), "video");
+      return { status: "done", seconds: 1, stages: [], gates: {}, final: path.join(project, "renders/draft.mp4"), warnings: [] };
+    };
+    const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
+    const research = async (briefFile, { out }) => {
+      await mkdir(path.join(out, "captures"), { recursive: true });
+      const source = { url: "https://atlas.example/blog/atlas-2", publisher: "Atlas", primary: true, supports: true, quote: { text: "Atlas 2 is available today" } };
+      await writeFile(path.join(out, "evidence.json"), JSON.stringify({ schema: "launchclip.evidence.v1", summary: { claims: 1 }, claims: [{ id: "c-atlas", kind: "date", text: "Atlas 2 shipped October 6", status: "verified", sources: [source], capture: "atlas-2-post" }] }));
+      await writeFile(path.join(out, "captures", "atlas-2-post.json"), JSON.stringify({ schema: "launchclip.capture.v1", id: "atlas-2-post", url: source.url, kind: "article", claim: "c-atlas", viewport: { width: 1280, height: 800 }, beats: [{ action: "scroll", at: 0.5, dur: 1.5 }], out: "assets/evidence/atlas-2-post.mp4" }));
+      return { summary: { claims: 1 } };
+    };
+    const recorded = [];
+    const capture = async (request, { root }) => {
+      recorded.push(request.id);
+      await mkdir(path.join(root, "assets/evidence"), { recursive: true });
+      await writeFile(path.join(root, request.out), "mp4");
+      await writeFile(path.join(root, `assets/evidence/${request.id}.evidence.json`), JSON.stringify({ schema: "launchclip.evidence.v1", id: request.id, video: `${request.id}.mp4`, duration: 6, viewport: request.viewport, final_url: request.url, provenance: { source_title: "Atlas 2 is here", publisher: "Atlas", published_at: "2026-10-06T09:00:00Z" } }));
+    };
+    const adapters = { env: {}, client, inventory: emptyInventory, finish, joinVoice, research, capture, notice: () => {} };
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", research: "on" }, adapters);
+    // The fake narration says things the one-claim ledger does not back, so the research gate holds it for review.
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.deepEqual(recorded, ["atlas-2-post"]);
+    assert.deepEqual({ requested: report.captures.requested, recorded: report.captures.recorded, failed: report.captures.failed }, { requested: 1, recorded: 1, failed: [] });
+    // Every chunk's director call lists the recording as an evidence-clip with its sidecar's params.
+    assert.ok(inputs.length > 0 && inputs.every((input) => input.includes("assets/evidence/atlas-2-post.mp4 — screen recording of the source page \"Atlas 2 is here\"")), inputs[0]);
+    assert.match(inputs[0], /"module": "evidence-clip", "params": \{"media":\{"src":"assets\/evidence\/atlas-2-post.mp4"/);
+    assert.match(inputs[0], /"source":\{"publisher":"Atlas","date":"Oct 6, 2026"\}/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
