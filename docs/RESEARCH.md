@@ -42,7 +42,19 @@ Primary sources come first and are called directly:
 | GitHub | `/search/repositories`, `/repos/<o>/<r>`, raw README, releases, `/pulls/<n>`, `/commits/<sha>` | README plus API facts; release notes; PR title, body and merge state; commit message and files |
 | arXiv | `export.arxiv.org/api/query` (id or title search) | title, abstract, authors, date |
 | Links in the script, `--url` | fetched as pages | readable text, title, site name, publish date |
-| Web search (optional) | Brave (`BRAVE_API_KEY`), Tavily (`TAVILY_API_KEY`) or Serper (`SERPER_API_KEY`) | secondary unless the host is primary or the org's own domain |
+| Web search (optional) | Brave (`BRAVE_API_KEY`), Tavily (`TAVILY_API_KEY`) or Serper (`SERPER_API_KEY`) | classified per page (below); a search that finds no primary source is asked again for the company's own page |
+
+Every source gets a `source_class`. **primary**: the party's own words: a
+page on the domain of an entity the claims name (`nimbus.ai` or
+`news.nimbusai.com` for "Nimbus AI", not `openrouter.ai` for "OpenAI"), its
+official account (`x.com/nimbusai`), the paper, the code host, or an outlet's
+first-hand report (a statement given to it, an interview, a filing).
+**aggregator**: a roundup, digest or monthly-releases page (by its URL, host or
+title), or a third-party page that covers three or more of the named
+companies. **secondary**: anything else. The rule is structural; there is no
+domain allowlist. When a web search returns no primary source, research
+searches again for "<company> <product> announcement", restricted with
+`site:` to the company's domain once a page on it is known.
 
 A Hugging Face search keeps the named organisation's upload over re-uploads,
 quantisations and fine-tunes; with no org match, a repo needs 25 likes to
@@ -105,6 +117,9 @@ The rules, all enforced by `validateLedger`:
   **contradicted**, and the flag gives X's real figure.
 - **contradicted**: a primary source states a different value for the same
   measure (same unit, most of the claim's words) and no source supports it.
+- **unverified, no primary source**: only aggregators or rewrites state it.
+  The claim carries `no_primary_source: true` and a `drop` flag: the story
+  is dropped, never hedged.
 - **unverified**: nothing fetched states it. The flag says to cut a quote, or
   to soften or source anything else. Unverified claims always carry a flag;
   they are never kept silently.
@@ -113,7 +128,8 @@ The rules, all enforced by `validateLedger`:
 
 One per source that a verified claim puts on screen, at most three claims
 each. The source is the best primary supporting source whose quote the page
-actually shows (API facts are checked, never captured). The schema is the one
+actually shows (API facts are checked, never captured); an aggregator is never
+captured. The schema is the one
 `src/evidence/` implements:
 
 ```json
@@ -209,7 +225,9 @@ reason. A photo is never scraped from a page.
 the brief (prompt plus notes) is written to `research/brief.md` and
 researched, and the result is reused while the brief hashes the same. The
 script pass gets `researchNotes()`: verified claims, facts from primary
-sources, and what not to state. Flagged brief claims become warnings. After
+sources, what not to state, the stories to drop, and the source rules: never
+name an aggregator or "a report" in the narration or on screen, and state each
+fact as the company's. Flagged brief claims become warnings. After
 the script, `auditScript()` checks the narration: each claim must match a
 verified ledger claim or a primary-source excerpt. Otherwise it is a warning,
 and the `research` gate stays `pending`, so the video is ready for review
