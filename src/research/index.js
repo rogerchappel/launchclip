@@ -3,7 +3,8 @@
 //
 //   claims (patterns + optional model/agent claims) → sources (HF, GitHub,
 //   arXiv, script links, optional web search) → verify (ledger) → captures
-//   → data (tables) → media (metaphor beats) → people → files + RESEARCH.md
+//   → official X posts (social.js) → data (tables) → media (metaphor beats)
+//   → people → files + RESEARCH.md
 //
 // No model is needed: the metered make pipeline may add a model claim pass,
 // and the subscription agent may hand in its own claims.json, but the stage
@@ -14,21 +15,23 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { entityIndex, extractClaims, mergeClaims, modelClaims, splitSentences } from "./claims.js";
 import { createHttp } from "./http.js";
-import { findSources } from "./sources.js";
+import { findSources, webSearchProvider } from "./sources.js";
 import { buildLedger, keywordsFor, numberAppears, passagesOf } from "./verify.js";
 import { buildCaptureRequests } from "./capture.js";
 import { extractData } from "./data.js";
 import { findMedia, metaphorQueries } from "./media.js";
 import { findPeople } from "./people.js";
+import { findSocialPosts } from "./social.js";
 import { attachEvidenceData } from "./evidence_data.js";
-import { ASSETS_SCHEMA, RESEARCH_PATHS, validateAssets, validateCapture, validateLedger } from "./schema.js";
+import { ASSETS_SCHEMA, RESEARCH_PATHS, SOCIAL_SCHEMA, validateAssets, validateCapture, validateLedger, validateSocial } from "./schema.js";
 
 export { RESEARCH_PATHS } from "./schema.js";
 
 /**
  * input: a topic string, or a path to a script or outline (.md/.txt).
  * options: {out, cwd, urls[], claims (claims.json path or array), media (queries[] | "none"),
- *   people ("none" to skip), maxCaptures, maxTables, theme, now}
+ *   people ("none" to skip), social ("none" to skip), handles ({entity: X handle}), maxPosts,
+ *   maxCaptures, maxTables, theme, now}
  * adapters: {fetch, env, client ({client}: a make model for the claim pass), log}
  * → the report (also what the CLI prints)
  */
@@ -70,6 +73,15 @@ export async function runResearch(input, options = {}, adapters = {}) {
 
   // 4. Captures, 5. data.
   let { requests, byClaim } = buildCaptureRequests(ledger, { maxCaptures: options.maxCaptures, theme: options.theme });
+  // 4b. The entity's own announcement posts on X: a clip each (x-embed route) and a social-post card.
+  const social = String(options.social ?? "") === "none"
+    ? { manifest: { schema: SOCIAL_SCHEMA, created_at: now, search: null, posts: [], rejected: [] }, requests: [] }
+    : await findSocialPosts(http, ledger, { snapshots, search: webSearchProvider(env), handles: options.handles, maxPosts: options.maxPosts, theme: options.theme, now, existing: requests });
+  for (const claim of ledger.claims) {
+    const posts = social.manifest.posts.filter((post) => post.claims.includes(claim.id)).map((post) => post.id);
+    if (posts.length) claim.posts = posts;
+  }
+  if (social.manifest.posts.length) log(`research: ${social.manifest.posts.length} official X post(s), ${social.manifest.rejected.length} rejected`);
   const subject = entities.find((entity) => entity.kind === "model" || entity.kind === "repo")?.name?.split("/").pop() ?? null;
   const data = extractData(snapshots, ledger, { subject, maxTables: options.maxTables });
   for (const claim of ledger.claims) {
@@ -101,13 +113,14 @@ export async function runResearch(input, options = {}, adapters = {}) {
   };
 
   // Contracts before anything is written.
-  const problems = [...validateLedger(ledger), ...requests.flatMap(validateCapture), ...validateAssets(assets)];
+  const problems = [...validateLedger(ledger), ...requests.flatMap(validateCapture), ...social.requests.flatMap(validateCapture), ...validateSocial(social.manifest), ...validateAssets(assets)];
   if (problems.length) throw new Error(`research contract failed: ${problems.join("; ")}`);
 
   // Module-ready data for the evidence builders (src/research/evidence_data.js); post captures get theirs once captured (research attach).
   const attached = await attachEvidenceData({ ledger, captures: requests, tables: data, assets }, { root: path.dirname(outDir) }, { fetch: adapters.fetch, tokenize: adapters.tokenize, tex: adapters.tex });
   ledger = attached.ledger;
-  requests = attached.captures;
+  // Post captures carry their card data already (social.js), so they join after the attach pass.
+  requests = [...attached.captures, ...social.requests];
 
   await writeJson(path.join(outDir, RESEARCH_PATHS.ledger), ledger);
   await rm(path.join(outDir, RESEARCH_PATHS.captures), { recursive: true, force: true });
@@ -115,7 +128,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
   await rm(path.join(outDir, RESEARCH_PATHS.data), { recursive: true, force: true });
   for (const file of data) await writeJson(path.join(outDir, RESEARCH_PATHS.data, `${file.id}.json`), file);
   await writeJson(path.join(outDir, RESEARCH_PATHS.assets), assets);
-  await writeFile(path.join(outDir, RESEARCH_PATHS.digest), renderDigest({ ledger, requests, data, assets }));
+  await writeJson(path.join(outDir, RESEARCH_PATHS.social), social.manifest);
+  await writeFile(path.join(outDir, RESEARCH_PATHS.digest), renderDigest({ ledger, requests, data, assets, social: social.manifest }));
 
   const flagged = ledger.claims.filter((claim) => claim.status !== "verified");
   return {
@@ -127,9 +141,10 @@ export async function runResearch(input, options = {}, adapters = {}) {
       digest: path.join(outDir, RESEARCH_PATHS.digest),
       captures: requests.map((request) => path.join(outDir, RESEARCH_PATHS.captures, `${request.id}.json`)),
       data: data.map((file) => path.join(outDir, RESEARCH_PATHS.data, `${file.id}.json`)),
-      assets: path.join(outDir, RESEARCH_PATHS.assets)
+      assets: path.join(outDir, RESEARCH_PATHS.assets),
+      social: path.join(outDir, RESEARCH_PATHS.social)
     },
-    summary: { ...ledger.summary, captures: requests.length, tables: data.length, assets: media.assets.length, people: people.length, portraits: portraits.length },
+    summary: { ...ledger.summary, captures: requests.length, tables: data.length, assets: media.assets.length, people: people.length, portraits: portraits.length, posts: social.manifest.posts.length },
     flagged: flagged.map((claim) => ({ id: claim.id, status: claim.status, text: claim.text, action: claim.flag?.action, message: claim.flag?.message })),
     requests: http.calls.length,
     evidence_data: attached.report,
@@ -201,7 +216,7 @@ export function auditScript(narration, ledger, excerpts = ledger.excerpts ?? [])
   return { ok: results.every((entry) => entry.status === "verified" || entry.status === "sourced"), claims: results };
 }
 
-export function renderDigest({ ledger, requests, data, assets }) {
+export function renderDigest({ ledger, requests, data, assets, social = null }) {
   const lines = [`# Research`, "", `${ledger.summary.claims} claims: ${ledger.summary.verified} verified, ${ledger.summary.contradicted} contradicted, ${ledger.summary.unverified} unverified. ${ledger.summary.sources_checked} sources checked (${ledger.summary.primary_sources} primary)${ledger.summary.web_search ? `, web search: ${ledger.summary.web_search}` : ", no web search key set"}.`, ""];
   const flagged = ledger.claims.filter((claim) => claim.status !== "verified");
   if (flagged.length) {
@@ -223,6 +238,10 @@ export function renderDigest({ ledger, requests, data, assets }) {
   lines.push("", "## Assets", "");
   for (const asset of assets.assets) lines.push(`- \`${asset.id}\` ${asset.type ?? asset.role}, ${asset.licence.name}: ${asset.attribution} <${asset.source_url}>`);
   if (!assets.assets.length) lines.push("None.");
+  if (social?.posts?.length) {
+    lines.push("", "## Posts on X", "");
+    for (const post of social.posts) lines.push(`- ${post.name} (${post.handle}) ${post.url} for ${post.claims.join(", ")} → capture \`${post.capture}\`, social-post card: “${truncate(post.text, 120)}”`);
+  }
   if (assets.people.length) {
     lines.push("", "## People", "");
     for (const person of assets.people) lines.push(`- ${person.name}: ${[person.role, person.affiliation].filter(Boolean).join(", ") || "role unknown"}${person.wikidata ? ` ([${person.wikidata.id}](${person.wikidata.url}))` : ""}; ${person.portrait ? `portrait \`${person.portrait}\`` : person.portrait_note}`);
