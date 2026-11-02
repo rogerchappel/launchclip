@@ -105,7 +105,9 @@ export function primaryQueries(query, owners = [], found = []) {
   if (!named.length) return [`${query} official announcement`];
   // The versioned name is the product ("Nimbus-7B"); a plain one is the company ("Nimbus AI").
   const product = named.find((name) => /\d/.test(name)) ?? named[0];
-  const company = named.find((name) => name !== product && !/\d/.test(name)) ?? product.split(/[- ]/)[0];
+  const head = product.split(/[- ]/)[0];
+  // The maker: a company the query names, else the named company whose name the product starts with.
+  const company = named.find((name) => name !== product && !/\d/.test(name)) ?? owners.find((name) => !/\d/.test(name) && ownerWords([name]).includes(normalise(head))) ?? head;
   const subject = company === product ? product : `${company} ${product}`;
   const domain = found.map((entry) => safeHost(entry.url) ?? "").find((host) => host && !PRIMARY_HOSTS.includes(host) && !SOCIAL_HOST.test(host) && officialHost(host, ownerWords([company])));
   return unique([domain ? `${subject} announcement site:${domain.replace(/^www\./, "")}` : null, `${subject} announcement`, `${subject} blog`]);
