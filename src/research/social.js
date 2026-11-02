@@ -190,7 +190,12 @@ export function isOfficial(handle, owners, configured = new Map()) {
 /** The entities that made a claim: its organisations, a repo or model id's owner, and the owner of its primary sources. */
 export function ownersOf(claim) {
   const out = [];
-  const push = (name) => { const clean = String(name ?? "").trim(); if (clean && ownerWords(clean).length && !out.some((entry) => norm(entry) === norm(clean))) out.push(clean); };
+  // A name adds nothing when every word of it is already an owner's ("nimbus" after "Nimbus AI").
+  const push = (name) => {
+    const clean = String(name ?? "").trim();
+    const words = ownerWords(clean);
+    if (words.length && !words.every((word) => out.some((entry) => ownerWords(entry).includes(word)))) out.push(clean);
+  };
   for (const entity of claim.entities ?? []) {
     if (entity.kind === "org") push(entity.name);
     if ((entity.kind === "repo" || entity.kind === "model") && entity.name.includes("/")) push(entity.name.split("/")[0]);
