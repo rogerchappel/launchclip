@@ -7,6 +7,7 @@
 // and carries a flag for the script.
 import { LEDGER_SCHEMA } from "./schema.js";
 import { numericValue } from "./claims.js";
+import { safeHost } from "./http.js";
 
 const WINDOW = 320;
 const STOP = new Set(["the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with", "by", "is", "are", "was", "were", "be", "it", "its", "this", "that", "as", "from", "has", "have", "had", "just", "now", "than", "more", "most", "up", "out", "into", "over", "about", "which", "who", "what", "their", "they", "them", "we", "our", "you", "your", "can", "will", "new"]);
@@ -26,6 +27,7 @@ export function verifyClaim(claim, snapshots) {
       sha256: snapshot.sha256 ?? null,
       kind: snapshot.kind ?? "page",
       primary: Boolean(snapshot.primary),
+      source_class: snapshot.source_class ?? (snapshot.primary ? "primary" : "secondary"),
       finder: snapshot.finder ?? null,
       supports: result.supports,
       confidence: round2(result.score * (snapshot.primary ? 1 : 0.75)),
@@ -36,13 +38,18 @@ export function verifyClaim(claim, snapshots) {
   sources.sort((a, b) => Number(b.supports) - Number(a.supports) || Number(b.primary) - Number(a.primary) || b.confidence - a.confidence);
   const support = sources.filter((source) => source.supports && source.confidence >= 0.5);
   const conflicts = sources.filter((source) => !source.supports && source.primary && source.conflict);
-  if (support.length) {
+  // Only the party's own words verify: a roundup or rewrite repeating a claim is not evidence of it.
+  if (support.some((source) => source.primary)) {
     const best = Math.min(0.99, support[0].confidence + 0.05 * (support.length - 1));
-    return { status: "verified", confidence: round2(best), primary_support: support.some((source) => source.primary), sources: sources.slice(0, 6) };
+    return { status: "verified", confidence: round2(best), primary_support: true, sources: sources.slice(0, 6) };
   }
   if (conflicts.length) {
     const conflict = conflicts[0].conflict;
     return { status: "contradicted", confidence: round2(conflicts[0].confidence), sources: sources.slice(0, 6), flag: { action: "fix", message: `${conflicts[0].publisher ?? conflicts[0].url} says ${conflict.found} where the script says ${conflict.claimed}` } };
+  }
+  if (support.length) {
+    const hosts = [...new Set(support.map((source) => source.publisher ?? safeHost(source.url) ?? source.url))].slice(0, 3).join(", ");
+    return { status: "unverified", confidence: 0, primary_support: false, no_primary_source: true, sources: sources.slice(0, 6), flag: { action: "drop", message: `only secondary pages (${hosts}) state this, never the company's own page, account or paper; find the primary source or drop the story, and never cite these pages` } };
   }
   return { status: "unverified", confidence: 0, sources: sources.slice(0, 6), flag: { action: claim.kind === "quote" ? "cut" : "soften-or-cite", message: unverifiedMessage(claim, snapshots.length) } };
 }
