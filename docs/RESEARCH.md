@@ -14,10 +14,11 @@ script.md / topic
   └─ sources       src/research/sources.js   HF, GitHub, arXiv APIs, script links, optional web search
   └─ verify        src/research/verify.js    ledger: verified / contradicted / unverified + quote span
   └─ captures      src/research/capture.js   launchclip.capture.v1 per on-screen source
+  └─ social        src/research/social.js    the entity's own X posts: x-embed capture + social-post card
   └─ data          src/research/data.js      tables → cited chart data
   └─ media         src/research/media.js     licence-clear footage and stills (gap map C4)
   └─ people        src/research/people.js    Wikidata role and affiliation, Commons portrait or none
-  → research/{evidence.json, captures/, data/, assets.json, snapshots/, RESEARCH.md}
+  → research/{evidence.json, captures/, data/, assets.json, social.json, snapshots/, RESEARCH.md}
 ```
 
 ## Claims
@@ -161,6 +162,40 @@ sidecar, so after `launchclip evidence capture` run
 `launchclip research attach research/ [--root .]`, which rewrites the
 ledger and capture requests with the data. `eval/beat-map-dry-run.mjs`
 attaches in memory when it loads a folder.
+
+## Posts on X: `research/social.json` (`launchclip.research-social.v1`)
+
+For each verified claim, research looks for the announcement post the
+entity that made the claim put on X. Candidates are the status links and
+embeds in the claim's sources (an announcement page usually links or embeds
+its post; the raw HTML comes from the fetch memo) and, when a web search
+key is set, one x.com-restricted query per claim (`site:x.com/<handle>`
+when the entity's handle is known from its own page). Each candidate's
+author and text come from the publish.twitter.com oEmbed record
+(`fetchXOembed`); when there is none, the `twitter-tweet` embed markup on
+the entity's own page stands in, and otherwise the post is left out.
+
+Only official accounts count: the handle must be the entity's name with at
+most affix words (`@nimbusai`, `@nimbus_hq`, `@AIatNimbus`), or a handle
+given for it in `options.handles`. A fan, tester or reporter is rejected
+whatever the post says, and the reason is listed in `rejected`. Research
+never signs in and never opens x.com.
+
+```
+{schema, created_at, search,
+ posts: [{id (status id), url (https://x.com/<handle>/status/<id>), handle, name, text,
+          published_at (from the status id), fetched_at, entity, official: {reason},
+          found_via ("source:<url>" | "search:<provider>"), confirmed_by ("oembed" | "embed markup"),
+          claims: [claim id], capture (capture id),
+          card: {module: "social-post", params: {platform, name, handle, text, date, source, highlight?}}}],
+ rejected: [{url, handle?, reason}]}
+```
+
+Each post also gets a capture request (`kind: "post"`) on the `x-embed`
+route, highlighting the claim's figure when the post states it, with the
+card's post fields as its `data`. The card renders even when the clip
+can't be recorded. Ledger claims list their posts in `posts`.
+`options.social: "none"` (runResearch) skips the step.
 
 ## Data: `research/data/<id>.json` (`launchclip.research-data.v1`)
 
