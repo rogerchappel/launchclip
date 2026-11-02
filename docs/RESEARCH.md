@@ -244,8 +244,26 @@ NC, ND, fair-use and unlabelled items are dropped at search time and counted
 in `rejected`. YouTube, streaming services and social video hosts are blocked
 (`BLOCKED_MEDIA_HOSTS`). Each asset has `licence {id, name, url}`, `author`,
 `attribution` (a credit line ready to paste), `source_url`, `media_url`,
-`query` and `beat`. Icons, logos, music and SFX are resolved by the media-use
+`query` and `beat`. Icons, music and SFX are resolved by the media-use
 skill, not here.
+
+`logos.json` (`launchclip.research-logos.v1`, `src/research/logos.js`): each
+organisation the research names, resolved to its official domain (Wikidata's
+official website, or `logoDomains`), then its logo fetched at run time from
+its own home page (a header SVG, a `<link rel=icon>` SVG, the
+apple-touch-icon, an `og:image` only when it is plainly a logo), else the
+Simple Icons CDN by slug. No logo pack ships with LaunchClip. Public hosts
+only (the evidence capture guard), no credentials, an 8 s timeout and a
+512 KB cap per file. Files land in `research/logos/<slug>.svg|png`; each
+entry is `{name, domain, file, source_url, kind: "site"|"simple-icons",
+colors?}` plus `asset` (the `assets/logos/` path to stage it at, since kit
+modules read assets/ paths only; `stageLogos` copies them), `via`,
+`monochrome`, `path` (a single-path SVG's `{d, viewBox}`) and `params` ready
+for `logo-row`, `brand-lockup`, `orbit-cards` and, with a `path`,
+`particle-logo`. `runResearch` returns the entries as `logos` and the files
+as `files.logos` / `files.logo_files`. Set `LAUNCHCLIP_LOGO_CACHE` (or the
+`logoCache` option) to a directory to cache by domain; `logos: "none"` skips
+the step.
 
 `people`: each person the script names, matched on Wikidata only when the
 item is a human who is either tied to an organisation the script names or

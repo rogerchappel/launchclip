@@ -4,7 +4,7 @@
   "policy": {
     "licences": "public domain, CC0, CC BY, CC BY-SA, Pexels and Pixabay licences, NASA media; NC, ND, fair use and unlabelled items are dropped",
     "never": "YouTube, streaming services, film or TV releases, or a photo scraped from a page",
-    "icons_logos_audio": "resolve through the media-use skill, not here"
+    "icons_logos_audio": "logos: logos.json; icons and audio resolve through the media-use skill, not here"
   },
   "providers": [
     "wikimedia-commons",
