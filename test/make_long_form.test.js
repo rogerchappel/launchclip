@@ -279,6 +279,8 @@ test("with research on, make records the source pages while it writes, and the d
       const source = { url: "https://atlas.example/blog/atlas-2", publisher: "Atlas", primary: true, supports: true, quote: { text: "Atlas 2 is available today" } };
       await writeFile(path.join(out, "evidence.json"), JSON.stringify({ schema: "launchclip.evidence.v1", summary: { claims: 1 }, claims: [{ id: "c-atlas", kind: "date", text: "Atlas 2 shipped October 6", status: "verified", sources: [source], capture: "atlas-2-post" }] }));
       await writeFile(path.join(out, "captures", "atlas-2-post.json"), JSON.stringify({ schema: "launchclip.capture.v1", id: "atlas-2-post", url: source.url, kind: "article", claim: "c-atlas", viewport: { width: 1280, height: 800 }, beats: [{ action: "scroll", at: 0.5, dur: 1.5 }], out: "assets/evidence/atlas-2-post.mp4" }));
+      const card = { module: "social-post", params: { platform: "x", name: "Atlas", handle: "atlas_ai", text: "Atlas 2 is available today.", date: "Oct 6, 2026" } };
+      await writeFile(path.join(out, "social.json"), JSON.stringify({ schema: "launchclip.research-social.v1", posts: [{ id: "1", url: "https://x.com/atlas_ai/status/1", handle: "atlas_ai", name: "Atlas", text: "Atlas 2 is available today.", published_at: "2026-10-06T09:00:00Z", claims: ["c-atlas"], card }], rejected: [] }));
       return { summary: { claims: 1 } };
     };
     const recorded = [];
@@ -298,6 +300,8 @@ test("with research on, make records the source pages while it writes, and the d
     assert.ok(inputs.length > 0 && inputs.every((input) => input.includes("assets/evidence/atlas-2-post.mp4 — screen recording of the source page \"Atlas 2 is here\"")), inputs[0]);
     assert.match(inputs[0], /"module": "evidence-clip", "params": \{"media":\{"src":"assets\/evidence\/atlas-2-post.mp4"/);
     assert.match(inputs[0], /"source":\{"publisher":"Atlas","date":"Oct 6, 2026"\}/);
+    // The company's own post is offered as a ready social-post card.
+    assert.match(inputs[0], /Post by @atlas_ai \(Atlas, 2026-10-06\): "Atlas 2 is available today\."\. Use as \{"module": "social-post", "params": \{"platform":"x"/);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

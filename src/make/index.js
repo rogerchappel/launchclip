@@ -1047,7 +1047,7 @@ async function settleCaptures(ctx) {
   if (!ctx.capturing && researchMode(ctx.options.research) === "on") startCaptures(ctx);
   const result = ctx.capturing ? await ctx.capturing : null;
   ctx.captures = [];
-  if (!result) return;
+  if (!result) { ctx.posts = await readPosts(ctx.project); if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })); return; }
   for (const request of result.recorded) {
     const files = captureFiles(request);
     try {
@@ -1057,7 +1057,16 @@ async function settleCaptures(ctx) {
   }
   ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, ...(Object.keys(result.usage ?? {}).length ? { usage: result.usage } : {}), failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
   for (const entry of result.failed) ctx.report.warnings.push(`capture ${entry.id}${entry.url ? ` (${entry.url})` : ""} was not recorded: ${entry.reason}`);
+  ctx.posts = await readPosts(ctx.project);
   if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
+}
+
+/** Research's official posts (research/social.json), each with its ready social-post card. */
+async function readPosts(project) {
+  try {
+    const social = JSON.parse(await readFile(path.join(project, RESEARCH_PATHS.dir, RESEARCH_PATHS.social), "utf8"));
+    return (social.posts ?? []).filter((post) => post?.card?.module === "social-post" && post.card.params);
+  } catch { return []; }
 }
 
 /** The research ledger beside the project, or null. */
@@ -1083,6 +1092,10 @@ export function assetManifestLines(ctx) {
     const params = evidenceClipParams(record, { src: files.clip });
     const title = record.provenance?.source_title ?? request.provenance?.source_title ?? record.final_url ?? request.url;
     out.push({ src: files.clip, kind: "video", line: `${files.clip} — screen recording of the source page "${String(title).slice(0, 80)}" (${request.url}), ${record.duration ?? "?"} s, ${request.kind ?? "page"}${request.claim ? `, backs claim ${request.claim}` : ""}. Use as {"module": "evidence-clip", "params": ${JSON.stringify(params)}} on the clause that states what the page shows.` });
+  }
+  // The companies' own posts on X: a designed social-post card (the recording of the post, when there is one, is listed above).
+  for (const post of ctx.posts ?? []) {
+    out.push({ src: null, kind: "card", line: `Post by @${post.handle} (${post.name}${post.published_at ? `, ${String(post.published_at).slice(0, 10)}` : ""}): "${String(post.card.params.text).slice(0, 140)}". Use as {"module": "social-post", "params": ${JSON.stringify(post.card.params)}} on the clause that reports it.` });
   }
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;
