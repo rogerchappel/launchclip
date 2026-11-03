@@ -23,6 +23,15 @@ test("requires flag values", () => {
   assert.deepEqual(parseFlags(["--prototype", "--no-direction", "--refresh-free-vision-models"]), { prototype: true, "no-direction": true, "refresh-free-vision-models": true });
 });
 
+test("every make switch parses without a value", async () => {
+  const { MAKE_FLAGS } = await import("../src/make/options.js");
+  for (const [flag] of MAKE_FLAGS.filter(([, spec]) => spec.boolean)) {
+    assert.deepEqual(parseFlags([`--${flag}`, "--out", "x"]), { [flag]: true, out: "x" }, flag);
+  }
+  // The footage-led lane as ClutchCut calls it.
+  assert.deepEqual(parseFlags(["--base-edited", "--base-transcript", "t.json"]), { "base-edited": true, "base-transcript": "t.json" });
+});
+
 test("prints the package version without initializing runtime services", async () => {
   const output = [];
   await runCli(["--version"], { stdout: { write: (value) => output.push(value) } });
