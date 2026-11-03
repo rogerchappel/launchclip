@@ -1,0 +1,64 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 8
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#5b4dff",
+        "accent": "#22c3ee",
+        "paper": "#f4efe6",
+        "ink": "#0b0d12"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "motion": {
+      "grammar": "snappy"
+    },
+    "scenes": [
+      {
+        "id": "clip",
+        "module": "clip",
+        "start": 0.5,
+        "end": 7.5,
+        "params": {
+          "media": {
+            "src": "assets/evidence-static.mp4",
+            "sourceStart": 0.5
+          },
+          "focus": {
+            "x": 0.3,
+            "y": 0.5
+          },
+          "move": "push-in",
+          "zoom": 0.04,
+          "callouts": [
+            {
+              "text": "Payload 1,100 kg",
+              "at": 1
+            },
+            {
+              "text": "Built for corrugations",
+              "at": 3.6,
+              "emphasis": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "clip",
+  "threshold": {
+    "ssim": 0.87
+  },
+  "threshold_note": "Every sample matches at PSNR 36-44 dB (frame, crop, push, settle and callouts). SSIM sits at 0.885-0.893 at every sample, not only during the moves: the 800x500 static BT.709 clip (evidence-static.mp4) is cropped to 9:16 about x 30%, so Chrome upscales about 3.8x and filters the <video> differently in each renderer, the same cause as d-evidence-clip and b-media-window-video with more upscaling. A moving testsrc would add seek lag (a different decoded frame per renderer), so the fixture uses the static clip."
+}

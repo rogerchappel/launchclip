@@ -23,10 +23,11 @@ import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDens
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "@launchclip/core/layout-check.mjs";
+import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
 import { captionZones } from "@launchclip/core/footage-layout.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
+import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { resolveShots, shotPrompt } from "./asset_provider.js";
@@ -121,7 +122,12 @@ export async function planStoryboard(options = {}) {
   if (assets && typeof assets.findShot !== "function") throw new Error("assets must be an asset provider with findShot(request)");
   // assets: the app's asset provider (src/asset_provider.js). The model may
   // then ask for shots, which are found or generated before the checks.
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction }), ...(assets ? [shotPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  // Clip-led planning (kit/core/clip-led.mjs): with footage to cut (options.clips,
+  // [{src, kind, duration?}] from the asset manifest, or the asset provider) and
+  // a low density dial (options.density, else the style pack's dials.density),
+  // supplied footage carries the video in full-frame clip scenes.
+  const clipLed = clipLedPlan({ lane, ...densityDial(options.density, style), clips: Array.isArray(options.clips) ? options.clips : [], provider: Boolean(assets), profile });
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -177,7 +183,7 @@ export async function planStoryboard(options = {}) {
       }
       // The map names the inserts that really cover each hidden range.
       if (constraints && direction) direction = reconcileMap(direction, resolvedOrNull(pinned.storyboard, wordList, beats), constraints, wordList);
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given", constraints };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // An event time just outside its module's window is tooling's to fix,
       // not a repair call's; a fix can expose the next one, so a few rounds.
@@ -301,6 +307,8 @@ export async function planStoryboard(options = {}) {
     ...(assets ? { shots } : {}),
     profile: profile?.id ?? null,
     cadence: last?.cadence ?? null,
+    // The clip-led rule the plan ran under, and the clip share it reached.
+    clip_led: { ...clipLed, share: last?.clip_share ?? null },
     long_form: longForm,
     usage: totals,
     cost: {
@@ -322,7 +330,7 @@ export async function planStoryboard(options = {}) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, constraints = null } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -374,13 +382,22 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     warnings.push(...found.warnings);
   }
 
+  // Clip-led plans (kit/core/clip-led.mjs): the share of the runtime the footage carries.
+  let clipShareValue = null;
+  if (second.ok && clipLed && clipLed.mode !== "graphics") {
+    const clips = clipLedFindings(clipLed, resolved);
+    clipShareValue = clips.share;
+    errors.push(...clips.errors.map((entry) => `clips: ${entry}`));
+    warnings.push(...clips.warnings.map((entry) => `clips: ${entry}`));
+  }
+
   const models = new Map();
   for (const scene of resolved.scenes) {
     if (scene.module === "custom") { warnings.push(`${scene.id} is a custom module; its params and layout are not checked here`); continue; }
     try { models.set(scene.id, resolveModule(scene, resolved)); }
     catch (error) { errors.push(`params: ${message(error)}`); }
   }
-  if (errors.length) return { ok: false, errors, warnings, storyboard, layout };
+  if (errors.length) return { ok: false, errors, warnings, storyboard, layout, clip_share: clipShareValue };
 
   const canvas = { width: resolved.format.width, height: resolved.format.height };
   try {
@@ -388,15 +405,18 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
       moduleLayout: (scene) => {
         const model = models.get(scene.id);
         if (!model?.layout?.rect) return [];
-        return elementsFromEditorialLayout(model.layout, {
+        const hidesCaptions = model.hidesCaptions === true || model.layout.hidesCaptions === true;
+        const extras = layoutExtras(model.layout, { id: scene.id, start: Number(scene.start), end: Number(scene.end), canvas, hidesCaptions });
+        return [...elementsFromEditorialLayout(model.layout, {
           id: scene.id,
           role: model.layout.role ?? (scene.module === "media-window" ? "media" : "text"),
           start: Number(scene.start),
           end: Number(scene.end),
           canvas,
           ...(model.layout.minTextPx !== undefined ? { minTextPx: model.layout.minTextPx } : {}),
-          hidesCaptions: model.hidesCaptions === true || model.layout.hidesCaptions === true
-        });
+          ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
+          hidesCaptions
+        }), ...extras.parts];
       },
       captionZones: resolved.base ? captionZones(resolved) : []
     });
@@ -412,7 +432,23 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   } catch (error) {
     errors.push(`layout: ${message(error)}`);
   }
-  return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence };
+  return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
+}
+
+/**
+ * The density dial a plan runs under: the planner's density option, else the
+ * style pack's dials.density; null when neither sets one (the clip-led rule
+ * then stays off). → {density, densitySource}
+ */
+export function densityDial(density, style = null) {
+  if (density !== undefined && density !== null && density !== "") {
+    const value = Number(density);
+    if (!(Number.isFinite(value) && value >= 0 && value <= 1)) throw new Error(`density must be a number from 0 to 1; got ${density}`);
+    return { density: value, densitySource: "density option" };
+  }
+  const own = style?.dials?.density;
+  if (typeof own === "number" && Number.isFinite(own)) return { density: own, densitySource: `style ${style.name ?? "pack"} dials` };
+  return { density: null, densitySource: null };
 }
 
 /**
