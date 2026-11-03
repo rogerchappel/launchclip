@@ -42,7 +42,8 @@ export function routeLane(inventory, options = {}) {
   const ignored = [];
   const byRole = (kind, role) => entries.filter((entry) => entry.kind === kind && (!role || entry.role === role));
   const longest = (list) => [...list].sort((a, b) => (b.media?.duration ?? 0) - (a.media?.duration ?? 0) || a.path.localeCompare(b.path));
-  const spoken = entries.filter((entry) => entry.kind === "video" && entry.speech?.present);
+  // A clip the app's notes call b-roll is never the base, whatever its audio holds.
+  const spoken = entries.filter((entry) => entry.kind === "video" && entry.speech?.present && entry.notes?.role !== "b-roll");
   const heads = longest(spoken.filter((entry) => entry.role === "talking-head"));
   const narrated = longest(spoken.filter((entry) => entry.role !== "talking-head"));
   const voiceovers = longest(byRole("audio", "voiceover"));
@@ -70,11 +71,13 @@ export function routeLane(inventory, options = {}) {
   for (const entry of entries) {
     if (entry === base) continue;
     if (entry.kind === "image" && entry.role !== "logo") media.push(mediaItem(entry, "image"));
-    else if (entry.kind === "video" && !entry.speech?.present) {
+    else if (entry.kind === "video" && (!entry.speech?.present || entry.notes?.role === "b-roll")) {
       if (entry.media?.mountable === false) ignored.push({ path: entry.path, reason: "this video container cannot be mounted by the renderers (use .mp4, .mov, .m4v or .webm)" });
       else media.push(mediaItem(entry, "video"));
     }
   }
+  // The app's notes rank clips: higher quality first (no notes counts as 0.5; ties keep file order).
+  if (media.some((item) => item.notes?.quality !== undefined)) media.sort((a, b) => (b.notes?.quality ?? 0.5) - (a.notes?.quality ?? 0.5));
   if (media.length) reasons.push(`${media.length} media file${media.length === 1 ? "" : "s"} (${media.map((item) => item.path).join(", ")}) ${lane === "footage-led" ? "can be full-frame inserts over the base" : "can be shown in media-window scenes"}`);
   const logos = byRole("image", "logo").map((entry) => mediaItem(entry, "image"));
   const music = longest(byRole("audio", "music"))[0] ?? null;
@@ -107,7 +110,7 @@ export function routeLane(inventory, options = {}) {
 }
 
 function mediaItem(entry, kind) {
-  return { path: entry.path, kind, role: entry.role, description: entry.description, width: entry.media?.width ?? null, height: entry.media?.height ?? null, ...(kind === "video" ? { duration: entry.media?.duration ?? null } : {}) };
+  return { path: entry.path, kind, role: entry.role, description: entry.description, width: entry.media?.width ?? null, height: entry.media?.height ?? null, ...(kind === "video" ? { duration: entry.media?.duration ?? null } : {}), ...(entry.notes ? { notes: entry.notes } : {}) };
 }
 
 export function resolveAspect(flag, base) {

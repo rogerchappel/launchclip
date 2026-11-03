@@ -50,6 +50,8 @@ export const MAKE_FLAGS = Object.freeze([
   // A footage-led base the app already edited (bad takes, pauses): used as is.
   ["base-edited", { boolean: true }],
   ["base-transcript", {}],
+  // The app's hard rules (src/constraints.js): hidden ranges, must_use and never_use media.
+  ["constraints", {}],
   ["repo", {}],
   ["approve-demo", { boolean: true }],
   ["redemo", { boolean: true }],
@@ -79,6 +81,7 @@ export function makeOptionsFromFlags(flags = {}) {
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
     baseTranscript: flags["base-transcript"],
+    constraints: flags.constraints,
     music: flags.music,
     renderer: flags.renderer,
     quality: flags.quality,

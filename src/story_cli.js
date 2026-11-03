@@ -21,6 +21,7 @@ import { constraintFlags, generateProjectStyle, projectSeedStyle, promptConstrai
 import { DIRECTION_FILE, DIRECTION_LANES, directionJson, directionMeasures, validateDirection } from "@launchclip/core/direction.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
 import { profileForStory } from "./profile_store.js";
+import { PROJECT_CONSTRAINTS_FILE, checkConstraints, constraintsDocument, loadConstraints, storySrc } from "./constraints.js";
 
 const PACKAGE_VERSION = createRequire(import.meta.url)("../package.json").version;
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
@@ -115,6 +116,28 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   };
 }
 
+/**
+ * The constraints check `story validate` runs: CONSTRAINTS.json beside the
+ * storyboard (or flag), against the resolved story and its direction map.
+ * No file: nothing to check (summary null). → {errors, warnings, summary}
+ */
+export async function checkStoryConstraints({ story, resolved = null, words = null, storyDir, storyFile = null, flag = null, directionFlag = null }) {
+  const file = flag && flag !== true ? path.resolve(String(flag)) : path.join(storyDir, PROJECT_CONSTRAINTS_FILE);
+  if (!(await exists(file))) {
+    if (flag && flag !== true) return { errors: [`constraints: cannot read ${file}`], warnings: [], summary: { file, status: "missing" } };
+    return { errors: [], warnings: [], summary: null };
+  }
+  let constraints;
+  try { constraints = await loadConstraints(file); }
+  catch (error) { return { errors: [`constraints: ${error.message}`], warnings: [], summary: { file, status: "invalid" } }; }
+  if (!resolved) return { errors: [], warnings: ["constraints: the story did not resolve, so its constraints were not checked"], summary: { file, status: "unchecked" } };
+  const mapFile = directionFlag && directionFlag !== true ? path.resolve(String(directionFlag)) : directionFileFor(storyFile ?? path.join(storyDir, "storyboard.json"));
+  let map = null;
+  try { map = (await exists(mapFile)) ? JSON.parse(await readFile(mapFile, "utf8")) : null; } catch { map = null; }
+  const check = checkConstraints(resolved, constraints, { map, words, story });
+  return { errors: check.errors, warnings: check.warnings, summary: { file, status: check.ok ? "passed" : "failed", ...check.summary } };
+}
+
 // launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
 // launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
@@ -169,6 +192,11 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
       errors.push(...gate.findings.map((finding) => `cast: ${finding.detail}`).filter((entry) => !errors.includes(entry)));
     }
     if (resolvedStory) for (const warning of subjectDensityWarnings(resolvedStory, { profile: direction.profileDoc })) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
+    // The app's constraints (src/constraints.js): CONSTRAINTS.json beside the
+    // storyboard, or --constraints <file>.
+    const constraints = await checkStoryConstraints({ story, resolved: resolvedStory, words: words?.list ?? null, storyDir: path.dirname(file), storyFile: file, flag: flags.constraints, directionFlag: flags.direction });
+    errors.push(...constraints.errors.filter((entry) => !errors.includes(entry)));
+    validation.warnings.push(...constraints.warnings);
     const result = {
       stage: "story",
       action,
@@ -180,6 +208,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
       warnings: [...(styled.style?.warnings ?? []), ...validation.warnings],
       style: styled.style ? { name: styled.style.name, source: styled.style.source, file: styled.style.file, applied: styled.style.applied } : null,
       direction: direction.summary,
+      constraints: constraints.summary,
       boundaries
     };
     if (flags.out) {
@@ -309,8 +338,13 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   // The cadence profile the plan aims at (RFC §5.5): --profile, the style's,
   // else the shipped one for the lane, aspect, duration and platform.
   const { profile: cadence } = profileForStory({ lane, format }, { profile: flags.profile && flags.profile !== true ? String(flags.profile) : null, style: style?.pack ?? null, projectDir: outDir });
+  // --constraints: the app's hard rules; the planner enforces them and
+  // places the must_use files itself when the model leaves one out.
+  const constraints = flags.constraints && flags.constraints !== true ? await loadConstraints(path.resolve(String(flags.constraints))) : null;
+  const media = (constraints?.must_use ?? []).map((entry) => ({ src: storySrc(entry.src), kind: /\.(mp4|mov|m4v|webm)$/i.test(entry.src) ? "video" : "image" }));
   const report = await planStoryboard({
     brief,
+    ...(constraints ? { constraints, media } : {}),
     words: words?.list ?? null,
     direction: !flags["no-direction"],
     profile: cadence,
@@ -352,6 +386,8 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     // The stamp says which engine wrote the story (kit/core/story-migrations.mjs).
     await writeJson(out, stampStory(generated ? adoptStyleLook(report.storyboard, style.pack) : report.storyboard, { version: PACKAGE_VERSION }));
     if (report.direction) await writeFile(path.join(outDir, DIRECTION_FILE), directionJson(report.direction));
+    // story validate and finish read the rules from beside the storyboard.
+    if (constraints) await writeJson(path.join(outDir, PROJECT_CONSTRAINTS_FILE), constraintsDocument(constraints));
     return summary;
   }
   let rejected = null;

@@ -43,6 +43,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { applyNotes, readInventoryNotes } from "../inventory_notes.js";
 
 const run = promisify(execFile);
 
@@ -64,14 +65,29 @@ const MUSIC_HINT = /(^|[^a-z])(music|bed|track|song|soundtrack|bgm)([^a-z]|$)/i;
 /**
  * Inventory a folder. options: {transcribe(file) → whisper-style JSON | null,
  * cache (a previous ASSETS.json document: entries with the same size+mtime
- * are reused, transcripts included), probe, speech, frames (adapters)}.
- * → {schema_version, dir, entries: [...], counts, summary}
+ * are reused, transcripts included), probe, speech, frames (adapters),
+ * exclude(relative path) → reason | null (files left out entirely, such as
+ * the constraints' never_use media), metadata (relative paths that are
+ * app metadata, not assets, such as constraints.json)}.
+ * Footage notes (src/inventory_notes.js: <file>.json sidecars and
+ * inventory.json) are read on every run and land in entry.notes.
+ * → {schema_version, dir, entries: [...], counts, summary, excluded?, notes?}
  */
 export async function inventoryAssets(dir, options = {}) {
   const root = path.resolve(dir);
   if (!existsSync(root)) throw new Error(`--assets ${root} does not exist`);
   const adapters = { probe: probeFile, speech: speechProfile, frames: flatnessProfile, transcribe: null, ...options };
-  const files = await listFiles(root);
+  const all = await listFiles(root);
+  const noted = await readInventoryNotes(root, all);
+  const metadata = new Set([...noted.metadata, ...(options.metadata ?? [])]);
+  const excluded = [];
+  const files = all.filter((file) => {
+    const relative = path.relative(root, file).split(path.sep).join("/");
+    if (metadata.has(relative)) return false;
+    const reason = typeof options.exclude === "function" ? options.exclude(relative) : null;
+    if (reason) excluded.push({ path: relative, reason });
+    return !reason;
+  });
   const cached = new Map((options.cache?.entries ?? []).map((entry) => [entry.path, entry]));
   const entries = [];
   for (const file of files) {
@@ -79,18 +95,26 @@ export async function inventoryAssets(dir, options = {}) {
     const info = await stat(file);
     const fingerprint = `${info.size}:${Math.round(info.mtimeMs)}`;
     const previous = cached.get(relative);
-    if (previous && previous.fingerprint === fingerprint) { entries.push(previous); continue; }
+    if (previous && previous.fingerprint === fingerprint) { entries.push(applyNotes(previous, noted.notes.get(relative) ?? null)); continue; }
     const entry = await classifyFile(file, relative, adapters);
     entry.fingerprint = fingerprint;
     entry.bytes = info.size;
-    entries.push(entry);
+    entries.push(applyNotes(entry, noted.notes.get(relative) ?? null));
   }
   const counts = {};
   for (const entry of entries) {
     const key = entry.role ? `${entry.kind}:${entry.role}` : entry.kind;
     counts[key] = (counts[key] ?? 0) + 1;
   }
-  return { schema_version: ASSETS_VERSION, dir: root, entries, counts, summary: entries.map((entry) => `${entry.path}: ${entry.description}`) };
+  return {
+    schema_version: ASSETS_VERSION,
+    dir: root,
+    entries,
+    counts,
+    summary: entries.map((entry) => `${entry.path}: ${entry.description}${entry.notes?.description ? ` (notes: ${clip(entry.notes.description, 80)})` : ""}`),
+    ...(excluded.length ? { excluded } : {}),
+    ...(metadata.size || noted.warnings.length ? { notes: { files: [...metadata].sort(), warnings: noted.warnings } } : {})
+  };
 }
 
 /** Classify one file. → {path, kind, role, confidence, signals, description, media?, transcript?} */
