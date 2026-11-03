@@ -27,6 +27,7 @@ import { actingPromptLines } from './characters/actions.mjs';
 import { compositionPromptLines } from './composition.mjs';
 import { ACTION_VERBS } from './direction.mjs';
 import { COVER_MAX_WORDS, COVER_SECONDS } from './story.mjs';
+import { clipLedLines } from './clip-led.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -113,6 +114,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'audience-grid', when: 'speaks to several audiences or groups', patterns: ['\\bfor (developers|designers|teams|everyone|students)\\b', '\\bwhether you\\b'] },
   { module: 'focus-flow', when: 'picks one option from several', patterns: ['\\b(choose|pick|instead of|which one|options?)\\b'] },
   { module: 'photo-scene', lanes: ['motion', 'voiceover-motion'], when: 'sets a scene or mood with a real photo or clip (assets/… image or video, full bleed)', patterns: ['\\b(picture|imagine|out (in|on) the|on location|at the|scene|landscape|outdoors?|in the field)\\b'] },
+  { module: 'clip', lanes: ['motion', 'voiceover-motion'], when: 'shows the real thing in supplied footage, cut to the line (assets/… video or still, full frame, with callouts for the key words)', patterns: ['\\b(footage|on camera|you can see|look at (this|that|it)|here it is|in the real world|for real)\\b'] },
   { module: 'brand-lockup', when: 'names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card)', patterns: ['\\b(introducing|meet|presenting)\\b', '\\b(app store|google play|download (it|now|today))\\b'] },
   { module: 'cta', when: 'calls to action, or the loop ending', patterns: ['\\b(follow|subscribe|try it|get started|star|download|sign up|learn more|link in bio)\\b'] },
   // Channel furniture: the subscribe prompt mid-video and the channel's sting at the open and close.
@@ -506,6 +508,7 @@ function contractLines() {
     ...worldLines(),
     'Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.',
     'Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page\'s own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.',
+    'Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.',
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
   ];
 }
@@ -833,7 +836,7 @@ export function profilesReference(profiles = []) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null, clipLed = null } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   // Subject modules are offered only to a footage-led story whose presenter can be cut out.
@@ -852,6 +855,8 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane, profile).map((line) => `- ${line}`)),
     ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
+    // clipLed: the clip-led rule in force (kit/core/clip-led.mjs clipLedPlan), when footage and a low density dial call for it.
+    ...(clipLedLines(clipLed).length ? section('Footage and graphics (density)', clipLedLines(clipLed).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),

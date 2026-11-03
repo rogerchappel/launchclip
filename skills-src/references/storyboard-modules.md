@@ -30,6 +30,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
+- Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -199,6 +200,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | speaks to several audiences or groups | audience-grid |
 | picks one option from several | focus-flow |
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
+| shows the real thing in supplied footage, cut to the line (assets/… video or still, full frame, with callouts for the key words) [motion, voiceover-motion] | clip |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
@@ -770,6 +772,20 @@ params:
 - cursor: [{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time
 - title: string ≤ 60 (optional, for logs)
 events: enter, source, focus-<i>, click-<i>
+
+### clip (keeps captions)
+One full-frame shot of supplied footage (an assets/ video or still) cut to the narration: cropped to the frame about a focus point, played from a source window, a gentle Ken Burns move on stills, an entrance in the motion grammar, and 0–3 short callout pills above the caption band. The footage-led look for narrated videos; keeps captions.
+params:
+- media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video, s into the file, default 0), sourceEnd? (video; the scene must fit inside sourceStart–sourceEnd)}
+- focus: {x, y} 0–1 fractions of the source kept in frame when it is cropped to the canvas aspect (default {x: 0.5, y: 0.5}); the move centres on it
+- move: none|push-in|pull-out|pan-left|pan-right|pan-up|pan-down (default push-in on a still, none on a video, push-in under the cinematic grammar); linear over the whole scene
+- zoom: 0.02–0.15, how far the move scales (default 0.06 on a still, 0.03 on a video)
+- enter: cut|fade|settle (default cut, settle under snappy and playful): cut lets the scene's in transition do the dressing; settle eases a 6% scale in without dipping to the background
+- exit: cut|fade (default cut)
+- callouts: [{text ≤ 36, at?, until?, emphasis?: true colours it primary}] 1–3: pills in one slot, one after another, each on screen for its reading time (0.22 s a word, at least 1.2 s)
+- position: bottom|top (default bottom): the callout slot, inside the safe zone and above the caption band
+- title: string ≤ 60, what the shot shows (alt text, optional)
+events: enter, callout-<i>
 
 ### feed-frame (hides captions, needs the subject)
 Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
@@ -2215,6 +2231,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 | evidence-clip | 2 s | 0 s | scene − 0.3 s | focus[].at in order; each zooms in over 0.8 s, holds to until (default 2 s after landing) and eases out over 0.7 s unless the next starts first; cursor[].at at least 0.2 s apart; each glide takes up to 0.7 s and lands on the point's time |
+| clip | 1 s | 0 s | scene − 1.55 s | callouts[].at in order, each at least 0.15 s after the previous one leaves; every callout ends at least 0.35 s before the scene ends and stays 0.22 s a word (at least 1.2 s); a video scene fits its source window: media.sourceEnd − media.sourceStart ≥ the scene length |
 | feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
 | pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |

@@ -23,6 +23,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["skeleton", { setting: true }],
   ["style", { setting: true }],
   ["seed", { setting: true }],
+  // The density dial (0–1): low lets supplied footage carry the video (clip-led planning).
+  ["density", { setting: true }],
   ["profile", { setting: true }],
   ["model", { setting: true }],
   ["voice", { setting: true }],
@@ -70,6 +72,7 @@ export function makeOptionsFromFlags(flags = {}) {
     duration: flags.duration,
     style: flags.style,
     seed: flags.seed,
+    density: flags.density,
     profile: flags.profile,
     model: flags.model,
     voice: flags.voice,
@@ -123,6 +126,7 @@ export function validateMakeOptions(options = {}) {
   if (!MAKE_QUALITIES.includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.aspect != null) resolveAspect(options.aspect, null);
   if (options.duration != null) resolveDuration({ duration: options.duration }, {});
+  if (options.density != null && !(options.density !== true && options.density !== "" && Number(options.density) >= 0 && Number(options.density) <= 1)) throw new Error(`--density must be a number from 0 to 1; got ${options.density}`);
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);

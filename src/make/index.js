@@ -137,7 +137,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -776,7 +776,7 @@ async function stageStoryboard(ctx) {
   // shipped one for the routed lane, aspect, duration and platform.
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even
@@ -815,6 +815,9 @@ async function stageStoryboard(ctx) {
     direction: true,
     profile,
     maxRepairs,
+    // Clip-led planning: the footage the plan may cut, and the density dial (--density, else the style's).
+    ...(lane !== "footage-led" ? { clips: manifest.filter((item) => item.clip) } : {}),
+    ...(options.density != null ? { density: Number(options.density) } : {}),
     ...(history?.prompt ? { history: history.prompt } : {}),
     ...(assets ? { assets, project: ctx.project } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
@@ -826,6 +829,7 @@ async function stageStoryboard(ctx) {
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
+  if (plan.clip_led?.mode && plan.clip_led.mode !== "graphics") report.clip_led = { mode: plan.clip_led.mode, density: plan.clip_led.density, target: plan.clip_led.target, share: plan.clip_led.share };
   report.repairs = { tier, used: plan.repairs_used, max: plan.max_repairs, valid_first_attempt: plan.valid_first_attempt, attempts: plan.attempts.map((attempt) => ({ attempt: attempt.attempt, kind: attempt.kind, ok: attempt.ok, errors: attempt.errors.slice(0, 12) })) };
   if (plan.status !== "passed") {
     if (plan.storyboard) await writeJson(path.join(project, "storyboard.rejected.json"), plan.storyboard);
@@ -1098,10 +1102,15 @@ export function assetManifestLines(ctx) {
   for (const item of routing.media) {
     const src = `assets/${item.path}`;
     const size = item.width && item.height ? `${item.width}×${item.height}` : "unknown size";
-    const use = lane === "footage-led"
+    const window = `a media-window scene with params.media {kind: "${item.kind}", src: "${src}"${item.kind === "video" ? ", sourceStart?" : ""}}`;
+    // Outside footage-led, any supplied image or video can carry the narration full frame
+    // (a clip, cut to its line); what reads as a screen capture is offered as a window first.
+    const footage = lane !== "footage-led";
+    const clip = `a full-frame clip scene cut to its line, {"module": "clip", "params": {"media": {"kind": "${item.kind}", "src": "${src}"${item.kind === "video" ? `, "sourceStart": 0${item.duration ? `, "sourceEnd": ${item.duration}` : ""}` : ""}}, "focus"?, "callouts"?}}`;
+    const use = !footage
       ? `a full-frame insert that covers the speaker: {"module": "media-window", "insert": true, "params": {"title": "…", "media": {"kind": "${item.kind}", "src": "${src}"}}} (insert is a scene key, never inside params; no track)`
-      : `a media-window scene with params.media {kind: "${item.kind}", src: "${src}"${item.kind === "video" ? ", sourceStart?" : ""}}`;
-    out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
+      : ["screenshot", "screen-recording"].includes(item.role) ? `${window}, or ${clip}` : `${clip}, or ${window}`;
+    out.push({ src, kind: item.kind, ...(footage ? { clip: true } : {}), line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
   }
   out.push(...demoManifestLines(ctx));
   // Recorded source pages: the real page on screen, as an evidence-clip with the params its sidecar gives.

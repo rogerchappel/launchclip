@@ -56,6 +56,7 @@ Useful flags:
 | `--format` | from the prompt | The kind of script: `short-form`, `long-form`, `explainer`, `data-explainer`, `story` or `promo`. See [Script formats](prompts.md#script-formats-goal-and-awareness). |
 | `--goal` | `convert` for a promo, else `reach` | `reach` (views and watch time) or `convert` (an action: sign-ups, sales). |
 | `--awareness` | depends on the format | What the viewer already knows: `unaware`, `problem`, `solution`, `product` or `most`. It decides the opening line. |
+| `--density` | the style's dial, else off | 0–1. Low lets your footage carry the video: below 0.35, full-frame clips of your `--assets` videos and photos cut to the narration, with short callouts and graphics only for numbers and steps; 0.35–0.5 mixes clips and graphics; 0.5 and up is the motion-graphics plan. |
 | `--voice` | `kokoro` | `elevenlabs` is paid. |
 | `--music` | finish's default | `synth` (free), `elevenlabs` (paid) or `none`. |
 | `--renderer` | `remotion` | Or `hyperframes`. |

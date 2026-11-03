@@ -3632,6 +3632,107 @@ the module frames it and can add post moves on top. It keeps captions.
   an `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
   same tree and ops.
 
+## Clip (catalogue D, `kit/core/catalog-d-clip.mjs`)
+
+`clip` plays one full-frame shot of supplied footage (an `assets/` video or
+still) cut to the narration, so a narrated (`voiceover-motion` or `motion`)
+story can be carried by real footage. Graphics sit on top of it (higher
+tracks, or the clip's own callouts) or are cut between clips. It keeps
+captions. `photo-scene` stays the mood shot with a scrim and kinetic lines;
+`clip` is the edit's workhorse: crop, source window, grammar entrance and
+callouts.
+
+```json
+{ "module": "clip", "start": "word:corrugations", "end": "word:weight", "params": {
+  "media": { "src": "assets/footage/beach.mp4", "sourceStart": 4.2, "sourceEnd": 18 },
+  "focus": { "x": 0.35, "y": 0.55 },
+  "callouts": [{ "text": "Built for corrugations" }, { "text": "1,100 kg payload", "emphasis": true }] } }
+```
+
+- **`media`:** an `assets/` video (`.mp4`, `.webm`, `.mov`, `.m4v`) or still
+  (`.jpg`, `.png`, `.webp`, `.svg`), or `{src, kind?, sourceStart?,
+  sourceEnd?}`. A video plays from `sourceStart` (default 0). With
+  `sourceEnd`, the scene must fit inside the window (`sourceEnd − sourceStart`
+  ≥ the scene length), else a param error says by how much. A shot request
+  (`{kind: "shot", shows, type?}`, src/asset_provider.js) is answered before
+  the checks; the shot's `focus` (or a flat `crop_hint {x, y}`) becomes the
+  clip's `focus` when the plan set none.
+- **`focus`:** `{x, y}` (0–1) of the source kept in frame when it is cropped
+  to the canvas aspect: the footage is drawn `object-fit: cover` with
+  `object-position` at the focus, so a 16:9 clip in a 9:16 story keeps the
+  subject. The move scales about the focus, clamped to 0.15–0.85.
+- **`move` / `zoom`:** `none`, `push-in`, `pull-out` or a pan, linear over the
+  scene (`kenBurnsAt`, shared with `photo-scene`), keeping the canvas
+  covered. Defaults: a still pushes in 6%; a video holds its frame (the
+  footage moves), except under the cinematic grammar (a 3% push). `zoom` is
+  0.02–0.15 and needs a move.
+- **`enter` / `exit`:** the entrance follows the motion grammar: `cut` (the
+  default; the scene's `in` transition does the dressing, so consecutive
+  clips hard-cut with no dip to the background), `fade` (the grammar's enter
+  duration), or `settle` (a 6% scale easing to rest on the grammar's enter
+  ease, with no opacity dip; the default under `snappy` and `playful`).
+  `exit` is `cut` (default) or `fade`. The opening plate and carried
+  transitions rest the opacity as for every module (`kit/core/modules.mjs`),
+  and the timeline reads it from `model.motion`.
+- **`callouts`:** 1–3 `{text ≤ 36, at?, until?, emphasis?}` pills in one slot
+  (`position`: `bottom`, the default, or `top` of the safe zone; always above
+  the caption band), one after another at least 0.15 s apart. Each stays on
+  for its reading time (0.22 s a word, at least 1.2 s) and ends 0.35 s before
+  the scene does. Defaults share the scene evenly; a scene hit on
+  `callout-<i>` times one. `emphasis` colours the text `brand.colors.primary`.
+- **Sampling:** the move and the settle compose into one per-frame set op on
+  the footage, so both renderers read the same numbers.
+- **Layout:** `role: "media"` with the full canvas rect and
+  `layout.allowOcclusion: ["*"]` (scenes may sit over it without a collision),
+  and `layout.parts: [{id: "callouts", role: "text", rect, minTextPx,
+  motion}]`, checked as element `<id>-callouts` (safe zone, caption band,
+  text size). `layoutExtras(layout, …)` in `kit/core/layout-check.mjs` turns
+  both into elements for `launchclip layout-check`, the planner's check and
+  story patches.
+- **Gates:** `layout.drift` is false (the ambient hold drift leaves it
+  alone), and `layout.live` is true while a video plays or a still moves, so
+  the hold gate (`src/movement_guardrails.js`) counts the whole scene as
+  motion. A still with `move: "none"` is not live and can fail the hold gate.
+  The density gate counts the footage as filling every third of the frame.
+- **Events:** `enter`, `callout-<i>`.
+- **Compilers:** as `photo-scene`: a video is root media (HyperFrames
+  `{html: <video data-media-start>, overlay}`, the overlay one z-index above;
+  on a world plate both stay in the plate); a still stays in the scene layer
+  with its overlay. Remotion (`kit/remotion/catalog/Clip.tsx`) draws an
+  `<OffthreadVideo>` trimmed to `sourceStart` (and `sourceEnd`) or an `<Img>`,
+  then the overlay. Parity fixtures: `test/fixtures/parity/d-clip-video.json`,
+  `d-clip-still.json`.
+
+## Clip-led planning (`kit/core/clip-led.mjs`)
+
+How much of a narrated video supplied footage carries, from the density dial
+and the cadence profile. `planStoryboard` computes the rule once
+(`clipLedPlan`), adds a "Footage and graphics (density)" section to the
+planning prompt (`planningPrompt({clipLed})`), and checks every attempt
+(`checkStoryboard({clipLed})`, errors and warnings prefixed `clips:`). The
+report carries `clip_led: {mode, density, target, band, shot, share, …}`.
+
+- **When it is on:** the lane is `voiceover-motion` or `motion`; a density dial
+  is set (the planner's `density` option, `launchclip make --density`, else
+  the style pack's `dials.density`); and there is footage: `options.clips`
+  (`make` passes every image and video in its asset manifest) or an asset
+  provider. Otherwise the mode is `graphics` and the plan is unchanged.
+- **Modes:** density below 0.35 is `clip-led` (a clip share below the band is
+  an error, so the repair loop adds clips); 0.35–0.5 is `mixed` (off the band
+  is a warning); 0.5 and up is `graphics` (no rule; today's motion-graphics
+  plan). The shipped styles at 0.5 or more stay unchanged; `warm-documentary`
+  (0.4) plans mixed when footage is supplied.
+- **Band:** the share of the runtime under track-0 `clip` scenes
+  (`clipShare`). From the profile's `clip_share` measure when it has one
+  (p10–p90, the target moving up the band as density falls), else target
+  `0.85 − density`, ±0.15 (density 0.2 → 65%, 50–80%).
+- **Cadence:** clips aim at the profile's `shot_seconds` p50 and stay under its
+  p90 (seed 3 s and 8 s); a longer clip is a warning.
+- **Prompt:** cut clips on word anchors, a new clip or source window per line;
+  dress them with callouts; motion graphics only for numbers, steps and
+  comparisons; crop with `focus`; hard cuts by default, the grammar's
+  transition at a change of idea; shot requests when there is a provider.
+
 ## Icon set (`kit/core/icons.mjs`)
 
 One family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):

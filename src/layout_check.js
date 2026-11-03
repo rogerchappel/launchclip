@@ -6,7 +6,7 @@ import { profileForStory } from "./profile_store.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
+import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
 import { captionDipHidden, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
 import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
@@ -120,12 +120,15 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
       try {
         const model = resolveModule(scene, resolved);
         const role = PARAM_ROLES.has(model.layout?.role) ? model.layout.role : "text";
+        // Full-frame footage lets scenes sit over it, and a module may add parts (clip's callouts).
+        const extras = layoutExtras(model.layout, { id: scene.id, start: Number(scene.start), end: Number(scene.end), canvas, hidesCaptions: Boolean(model.hidesCaptions) });
         return [{
           id: scene.id, role, rect: model.layout.rect, start: Number(scene.start), end: Number(scene.end),
           motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
           ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
+          ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
           ...(model.hidesCaptions ? { hidesCaptions: true } : {})
-        }];
+        }, ...extras.parts];
       } catch (error) {
         specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
         return [];

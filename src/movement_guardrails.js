@@ -17,6 +17,7 @@ import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
 import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
 import { productDemoTimeline } from "@launchclip/core/catalog-d.mjs";
 import { photoSceneTimeline } from "@launchclip/core/catalog-d-photo-scene.mjs";
+import { clipTimeline } from "@launchclip/core/catalog-d-clip.mjs";
 import { MODULES as B } from "@launchclip/core/catalog-b.mjs";
 import { MODULES as C } from "@launchclip/core/catalog-c.mjs";
 import { MODULES as E } from "@launchclip/core/catalog-e.mjs";
@@ -41,7 +42,7 @@ const TIMELINES = new Map([
   ...Object.keys(E ?? {}).map((id) => [id, catalogETimeline]), ...Object.keys(F ?? {}).map((id) => [id, catalogFTimeline]),
   ...Object.keys(G ?? {}).map((id) => [id, catalogGTimeline]), ...Object.keys(H ?? {}).map((id) => [id, catalogHTimeline]),
   ...Object.keys(CHARACTERS ?? {}).map((id) => [id, charactersTimeline]), ...Object.keys(WORLD ?? {}).map((id) => [id, worldTimeline]),
-  ["product-demo", productDemoTimeline], ["photo-scene", photoSceneTimeline]
+  ["product-demo", productDemoTimeline], ["photo-scene", photoSceneTimeline], ["clip", clipTimeline]
 ]);
 
 /** [from, to] spans in which a model's ops change something on screen. */
@@ -85,7 +86,8 @@ function gateResult(findings, extra = {}) {
 /**
  * Nothing static (§7.1), sampled every 0.25 s:
  * - static-hold (error): over 3 s in which nothing moves: no hold drift or
- *   world camera, no transition, no module tween, loop, count or state;
+ *   world camera, no transition, no module tween, loop, count or state, and
+ *   no module that moves on its own (layout.live: a playing clip);
  * - drift-only (warning): over 3 s in which only the hold drift moves; give
  *   the hold a live mover (a state, a counter, a sweep, a cursor).
  */
@@ -97,7 +99,8 @@ export function holdGate(story) {
     for (const tw of entry.tweens) if (tw.duration > 0) live.push([tw.at, tw.at + tw.duration]);
     const model = entries.get(entry.id)?.model;
     if (!model) { live.push([entry.start, entry.renderEnd]); continue; }
-    if (model.camera || entry.transitionIn?.camera) live.push([entry.start, entry.renderEnd]);
+    // A module whose content moves on its own the whole time (layout.live: clip's playing footage or still move).
+    if (model.camera || entry.transitionIn?.camera || model.layout?.live === true) live.push([entry.start, entry.renderEnd]);
     else if (driftEligible(story, entry.scene, model)) drift.push([entry.start, entry.renderEnd]);
     live.push(...opSpans(model));
   }
