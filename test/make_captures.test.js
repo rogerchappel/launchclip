@@ -2,9 +2,11 @@
 // app's command (JSON lines, concurrent, answers in any order) or the local
 // recorder; a clip already on disk is kept, and a failure never fails make.
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import test from "node:test";
 import { captureFiles, readCaptureRequests, recordCaptures } from "../src/make/captures.js";
 
@@ -63,6 +65,29 @@ test("a request the command never answers times out; a command that exits fails 
     assert.match(silent.failed[0].reason, /no answer from the capture command/);
     const gone = await recordCaptures([request("c")], { project: dir, command: "exit 3" });
     assert.match(gone.failed[0].reason, /exited/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+// A fake child for the races CI hits: it exits before the first request is written, or its stdin breaks with EPIPE.
+function fakeSpawn({ exitAt, epipe = false }) {
+  return () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = new Writable({ write(_chunk, _encoding, done) { done(epipe ? Object.assign(new Error("write EPIPE"), { code: "EPIPE" }) : null); if (exitAt === "write") setImmediate(() => child.emit("exit", 3, null)); } });
+    child.kill = () => {};
+    if (exitAt === "spawn") process.nextTick(() => child.emit("exit", 3, null));
+    return child;
+  };
+}
+
+test("a command that exits while a request is being prepared, or breaks the pipe, fails it at once", async () => {
+  const dir = await project();
+  try {
+    const early = await recordCaptures([request("d")], { project: dir, command: "unused", spawn: fakeSpawn({ exitAt: "spawn" }) });
+    assert.match(early.failed[0].reason, /exited \(3\)/);
+    const broken = await recordCaptures([request("e")], { project: dir, command: "unused", spawn: fakeSpawn({ exitAt: "write", epipe: true }) });
+    assert.match(broken.failed[0].reason, /exited \(3\)/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

@@ -112,6 +112,8 @@ function commandRecorder({ project, command, timeoutMs = CAPTURE_TIMEOUT_MS, env
   const fail = (reason) => { for (const [, entry] of open) entry.reject(new Error(reason)); open.clear(); };
   child.on("exit", (code, signal) => { exited = `the capture command exited (${signal ?? code})`; fail(exited); });
   child.on("error", (error) => { exited = `the capture command failed to start (${error.message})`; fail(exited); });
+  // A command that exits before reading closes the pipe (EPIPE); its exit fails what is open, so the write error is not one.
+  child.stdin.on("error", () => {});
   createInterface({ input: child.stderr }).on("line", (line) => say(`captures: ${line}`));
   createInterface({ input: child.stdout }).on("line", (line) => {
     let answer;
@@ -129,6 +131,7 @@ function commandRecorder({ project, command, timeoutMs = CAPTURE_TIMEOUT_MS, env
       const outDir = path.join(project, path.dirname(files.clip));
       await mkdir(outDir, { recursive: true });
       const answer = await new Promise((resolve, reject) => {
+        if (exited) { reject(new Error(exited)); return; }
         const timer = setTimeout(() => { open.delete(request.id); reject(new Error(`no answer from the capture command in ${Math.round(timeoutMs / 1000)} s`)); }, timeoutMs);
         open.set(request.id, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
         child.stdin.write(`${JSON.stringify({ id: request.id, request, out_dir: outDir })}\n`);
