@@ -17,7 +17,7 @@ import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR } from "../asset_provider.js";
-import { createCommandAssetProvider } from "../asset_provider_cmd.js";
+import { assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
@@ -252,7 +252,9 @@ async function stageInventory(ctx) {
     // never_use media is not inventoried, copied or offered; constraints.json is the app's, not an asset.
     metadata: [CONSTRAINTS_FILE],
     ...(never ? { exclude: (relative) => (never({ src: relative }) ? "never_use (constraints)" : null) } : {}),
-    transcribe: adapters.transcribe ?? (async (file) => {
+    // --base-transcript: the app has the recording's words already, so make
+    // never runs local Whisper (slow on a busy CPU, and its words are unused).
+    transcribe: adapters.transcribe ?? (ctx.options.baseTranscript ? null : async (file) => {
       const { transcribeRecording } = await import("../recording_workflow.js");
       return transcribeRecording(file, { model: "base.en", language: "en" });
     })
@@ -841,7 +843,7 @@ async function stageStoryboard(ctx) {
   ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
   // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
   // planner may ask it for shots, filed under assets/shots/.
-  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: assetProviderTimeoutMs(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
   // never_use: the provider is told, and a shot that is one is refused.
   const assets = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   if (assets) ctx.say(`assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);

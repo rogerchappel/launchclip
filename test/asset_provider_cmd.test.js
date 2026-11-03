@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createCommandAssetProvider } from "../src/asset_provider_cmd.js";
+import { ASSET_PROVIDER_TIMEOUT_MS, assetProviderTimeoutMs, createCommandAssetProvider } from "../src/asset_provider_cmd.js";
 import { normalizeShot } from "../src/asset_provider.js";
 import { assetErrors, runMake } from "../src/make/index.js";
 import { makeOptionsFromFlags } from "../src/make/options.js";
@@ -106,4 +106,11 @@ test("make --asset-provider-cmd plans with the command's shot and records its co
   assert.deepEqual(report.costs.items.find((item) => item.stage === "shot"), { stage: "shot", scene_id: "s1", provider: "imagegen", model: "img-2", estimated_usd: 0.04, fallback: false });
   assert.ok(report.costs.items.some((item) => item.stage.startsWith("storyboard-")), "model calls are itemised too");
   assert.ok(existsSync(path.join(report.project, shot.src)));
+});
+
+test("LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS raises the wait for an answer; anything else keeps the default", () => {
+  assert.equal(assetProviderTimeoutMs({ LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS: "600000" }), 600_000);
+  assert.equal(assetProviderTimeoutMs({}), ASSET_PROVIDER_TIMEOUT_MS);
+  assert.equal(assetProviderTimeoutMs({ LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS: "soon" }), ASSET_PROVIDER_TIMEOUT_MS);
+  assert.equal(assetProviderTimeoutMs({ LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS: "0" }), ASSET_PROVIDER_TIMEOUT_MS);
 });
