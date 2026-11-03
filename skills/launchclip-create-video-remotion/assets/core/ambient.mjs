@@ -327,7 +327,7 @@ function intersects(a, b) {
  * Whether a scene's content may drift: its ambient drift is on, it resolved to
  * a real module (not a placeholder), and its content is not full-frame decor
  * (a punch-in camera), a module that moves on its own (layout.drift false:
- * photo-scene's Ken Burns) or a root <video> (media-window video: HyperFrames lifts
+ * photo-scene's Ken Burns, clip's footage) or a root <video> (media-window video: HyperFrames lifts
  * the video out of the scene layer, so it would not follow the wrapper).
  */
 export function driftEligible(story, scene, model) {

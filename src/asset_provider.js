@@ -6,7 +6,7 @@
 //   {module: "photo-scene", params: {media: {kind: "shot", shows: "a barista
 //     pouring latte art, close up", type?: "image" | "video" | "any"}, ...}}
 //
-// (photo-scene and media-window take media). Before the storyboard is
+// (photo-scene, media-window and clip take media). Before the storyboard is
 // checked, each request goes to provider.findShot(request) with the line it
 // sits under; the shot that comes back replaces the request as a project
 // assets/ path, so the story contract (assets/ media only) and both renderers
@@ -22,7 +22,8 @@
 //   file: an absolute path the engine copies into <project>/assets/shots/,
 //   url: a URL the app serves (the story names assets/shots/<id>.<ext>; the
 //     app maps it back, e.g. @launchclip/remotion setAssetResolver),
-//   sourceStart?: seconds into a video, source?: {provider, id, license,
+//   sourceStart?: seconds into a video, focus?: {x, y} 0–1 (where the subject
+//   sits, so a clip scene crops around it), source?: {provider, id, license,
 //   generated, prompt, ...} (recorded in the plan report), cost_usd?} | null
 // (or the flat shape normalizeShot() accepts).
 import { createHash } from "node:crypto";
@@ -31,7 +32,7 @@ import path from "node:path";
 import { resolveStory } from "@launchclip/core/story.mjs";
 
 export const SHOT_REQUEST = "shot";
-export const SHOT_MODULES = Object.freeze(["photo-scene", "media-window"]);
+export const SHOT_MODULES = Object.freeze(["photo-scene", "media-window", "clip"]);
 export const SHOTS_DIR = "assets/shots";
 const IMAGE = /\.(jpe?g|png|webp|svg)$/i;
 const VIDEO = /\.(mp4|webm|mov)$/i;
@@ -39,7 +40,7 @@ const VIDEO = /\.(mp4|webm|mov)$/i;
 /** The planning-prompt section that offers shot requests (only with a provider). */
 export function shotPrompt({ max = 6 } = {}) {
   return [
-    "Shots from the app's media library: in a photo-scene or media-window scene you may set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path.",
+    "Shots from the app's media library: in a clip, photo-scene or media-window scene you may set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
     "The app finds or generates that shot for the line the scene sits under, after you plan. Ask for one where a real photo or clip of a concrete subject (a place, an object, people doing something) says more than a graphic; keep data, steps and comparisons as motion graphics.",
     `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
   ].join("\n");
@@ -129,7 +130,9 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       continue;
     }
     const kind = placed.kind;
-    story.scenes[index] = { ...scene, params: { ...scene.params, media: { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}) } } };
+    // A clip crops around the subject: the shot's focus (or a flat crop_hint {x, y}) when the plan set none.
+    const focus = scene.module === "clip" && scene.params.focus === undefined ? shotFocus(shot) : null;
+    story.scenes[index] = { ...scene, params: { ...scene.params, media: { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}) }, ...(focus ? { focus } : {}) } };
     shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}) });
   }
   return { storyboard: story, shots, errors };
@@ -151,6 +154,13 @@ export function normalizeShot(shot) {
     ...(source ? { source } : {}),
     cost_usd: Number.isFinite(cost) && cost > 0 ? cost : 0
   };
+}
+
+/** A shot's subject point {x, y} (0–1 fractions) from shot.focus or a flat crop_hint, else null. */
+function shotFocus(shot) {
+  const hint = shot.focus ?? shot.crop_hint ?? shot.source?.crop_hint;
+  const x = Number(hint?.x), y = Number(hint?.y);
+  return hint && typeof hint === "object" && x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
 }
 
 async function placeShot(shot, request, project) {

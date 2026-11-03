@@ -1,7 +1,9 @@
 // Catalogue D: full-frame media modules. product-demo, a recorded product
 // flow (demo autopilot, src/demo/record.js) edited by its own action log
 // (docs/KIT_CONTRACTS.md, "Product demo"), and photo-scene, a full-bleed photo
-// or clip with a Ken Burns move (kit/core/catalog-d-photo-scene.mjs).
+// or clip with a Ken Burns move (kit/core/catalog-d-photo-scene.mjs), and
+// clip, one full-frame shot of supplied footage cut to the narration, with a
+// crop focus, a source window and callouts (kit/core/catalog-d-clip.mjs).
 //
 //   product-demo   the flow's clip in a window (or full bleed), a camera that
 //                  zooms to each clicked or typed-into element's bounding box,
@@ -35,9 +37,11 @@ import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarTweens} from './grammar.mjs';
 import {photoScene} from './catalog-d-photo-scene.mjs';
 import {evidenceClip} from './catalog-d-evidence-clip.mjs';
+import {clip} from './catalog-d-clip.mjs';
 
 export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
 export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from './catalog-d-evidence-clip.mjs';
+export {CLIP_ENTERS, CLIP_MOVES, CLIP_TIMING, clipTimeline, clipView} from './catalog-d-clip.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
@@ -549,5 +553,6 @@ const TIMING_D = {
 export const MODULES = {
   ...Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}])),
   [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve},
-  [evidenceClip.id]: {describe: evidenceClip.describe, params: evidenceClip.params, events: evidenceClip.events, timing: evidenceClip.timing, resolve: evidenceClip.resolve}
+  [evidenceClip.id]: {describe: evidenceClip.describe, params: evidenceClip.params, events: evidenceClip.events, timing: evidenceClip.timing, resolve: evidenceClip.resolve},
+  [clip.id]: {describe: clip.describe, params: clip.params, events: clip.events, timing: clip.timing, resolve: clip.resolve}
 };

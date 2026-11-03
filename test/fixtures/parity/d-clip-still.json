@@ -1,0 +1,49 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 8
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#5b4dff",
+        "accent": "#22c3ee",
+        "paper": "#f4efe6",
+        "ink": "#0b0d12"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "clip",
+        "module": "clip",
+        "start": 0.5,
+        "end": 7.5,
+        "params": {
+          "media": "assets/testsrc.png",
+          "focus": {
+            "x": 0.6,
+            "y": 0.4
+          },
+          "move": "pan-right",
+          "callouts": [
+            {
+              "text": "Sets up in two minutes",
+              "at": 1.2
+            }
+          ],
+          "position": "top"
+        }
+      }
+    ]
+  },
+  "sceneId": "clip"
+}

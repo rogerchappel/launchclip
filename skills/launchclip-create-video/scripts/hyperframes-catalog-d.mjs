@@ -1,4 +1,4 @@
-// HyperFrames emitters for catalogue D (product-demo, photo-scene, evidence-clip).
+// HyperFrames emitters for catalogue D (product-demo, photo-scene, evidence-clip, clip).
 //
 // The model comes from kit/core/catalog-d.mjs. Markup is the shared view
 // serialised by catalogue B's renderNode, motion the shared op list as
@@ -8,7 +8,7 @@
 // it annotates. On a world plate both stay in the plate, in that order, and
 // ride the camera (story-compiler.mjs soleVideo).
 
-import {evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
+import {clipTimeline, clipView, evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 /** {html: the <video>, overlay: the annotation layer, css, motion, events, layout}. */
@@ -50,8 +50,26 @@ export function emitEvidenceClip(model) {
   return {html, overlay, css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 
+/**
+ * clip: like photo-scene, a video is hoisted (html: the <video>, overlay: the
+ * callout pills one z-index above), trimmed to media.sourceStart; a still stays
+ * in the scene layer with its overlay, so it also follows a world camera.
+ */
+export function emitClip(model) {
+  const {view, ops} = gsapOwnedTransforms(clipView(model), clipTimeline(model), model.start);
+  const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
+  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+  if (model.content.media.kind === 'video') {
+    return {...out, html: renderNode(view.media, `${timed(model.track)} data-media-start="${model.content.media.sourceStart}" data-module="clip"`),
+      overlay: renderNode(view.overlay, timed(model.track + 1, ' data-layout-allow-occlusion="true" data-module="clip"'))};
+  }
+  const frame = {tag: 'div', id: `${model.id}-frame`, style: {position: 'absolute', left: 0, top: 0, width: model.canvas.width, height: model.canvas.height}, children: [view.media, view.overlay]};
+  return {...out, html: renderNode(frame, `${timed(model.track)} data-module="clip"`)};
+}
+
 export const EMITTERS = {
   'product-demo': emitProductDemo,
   'photo-scene': emitPhotoScene,
   'evidence-clip': emitEvidenceClip,
+  clip: emitClip,
 };

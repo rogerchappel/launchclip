@@ -9,7 +9,7 @@
 // Canonical copy: kit/core/story-patch.mjs.
 
 import { captionZones } from './footage-layout.mjs';
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from './layout-check.mjs';
+import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from './layout-check.mjs';
 import { validateModuleParams } from './module-schemas.mjs';
 import { knownModules, resolveModule } from './modules.mjs';
 import { hashSegments, planSegments, sceneModels } from './render-segments.mjs';
@@ -230,15 +230,18 @@ export function applyStoryPatch(story, patch, { words = [], beats = null, layout
       moduleLayout: (scene) => {
         const model = models.get(scene.id);
         if (!model?.layout?.rect) return [];
-        return elementsFromEditorialLayout(model.layout, {
+        const hidesCaptions = model.hidesCaptions === true || model.layout.hidesCaptions === true;
+        const extras = layoutExtras(model.layout, { id: scene.id, start: Number(scene.start), end: Number(scene.end), canvas, hidesCaptions });
+        return [...elementsFromEditorialLayout(model.layout, {
           id: scene.id,
           role: model.layout.role ?? (scene.module === 'media-window' ? 'media' : 'text'),
           start: Number(scene.start),
           end: Number(scene.end),
           canvas,
           ...(model.layout.minTextPx !== undefined ? { minTextPx: model.layout.minTextPx } : {}),
-          hidesCaptions: model.hidesCaptions === true || model.layout.hidesCaptions === true
-        });
+          ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
+          hidesCaptions
+        }), ...extras.parts];
       },
       captionZones: resolved.base ? captionZones(resolved) : []
     });

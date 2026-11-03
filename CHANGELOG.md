@@ -4,6 +4,16 @@
 
 ### Added
 
+- A `clip` module: one full-frame shot of your footage cut to the narration,
+  cropped to the frame about a focus point, played from a source window, with
+  a gentle Ken Burns move on stills, an entrance in the style's motion grammar
+  and up to three callouts above the captions. Clip-led planning lets a
+  narrated video be carried mostly by your footage: with `--assets` footage
+  (or an asset provider) and a low density dial (`launchclip make --density
+  0.2`, or the style's `dials.density`), the planner cuts clips to the
+  narration and keeps motion graphics for numbers and steps; high density
+  keeps today's motion-graphics plan. See
+  [KIT_CONTRACTS.md](docs/KIT_CONTRACTS.md#clip-catalogue-d-kitcorecatalog-d-clipmjs).
 - Direction constraints: an app can give `make`, `story plan` and `story
   validate` hard rules in `constraints.json` (in `--assets`, or
   `--constraints <file>`): picture-hidden ranges that full-frame inserts must

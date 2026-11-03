@@ -285,6 +285,20 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
   return [element];
 }
 
+// A catalogue model's layout beyond its own rect: the scenes it lets sit over
+// it (layout.allowOcclusion, e.g. ["*"] for full-frame footage) and its extra
+// parts (layout.parts: [{id, role, rect, minTextPx?, start?, end?, motion?}],
+// e.g. clip's callout pills over its footage), each checked as its own
+// element `<id>-<part id>`. → {allowOcclusion?, parts: [elements]}.
+export function layoutExtras(layout, { id, start, end, track, canvas, hidesCaptions } = {}) {
+  const allowOcclusion = Array.isArray(layout?.allowOcclusion) ? layout.allowOcclusion.map(String) : null;
+  const parts = (Array.isArray(layout?.parts) ? layout.parts : []).flatMap((part) => elementsFromEditorialLayout(
+    { canvas: layout.canvas, rect: part.rect, ...(part.motion ? { motion: part.motion } : {}) },
+    { id: `${id}-${part.id}`, role: part.role ?? "text", start: part.start ?? start, end: part.end ?? end, track, canvas, hidesCaptions,
+      ...(part.minTextPx != null ? { minTextPx: part.minTextPx } : {}) }));
+  return { ...(allowOcclusion ? { allowOcclusion } : {}), parts };
+}
+
 // Builds elements for a resolved story. `moduleLayout(scene, story)` returns the
 // scene's elements (or nothing to skip it), so this file never imports module
 // code. A captions overlay becomes one caption element over the delivery band,
