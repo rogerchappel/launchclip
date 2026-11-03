@@ -346,7 +346,11 @@ test("--base-edited mounts the app's own edit as is, with its transcript, and ne
     const transcriptFile = path.join(out, "..", `${path.basename(out)}-words.json`);
     await writeFile(transcriptFile, JSON.stringify({ words: theirs }));
     // The inventory's own transcription differs: the supplied one must win.
-    const inventory = async (dir) => ({ dir, entries: [{ path: "talking-head.mp4", kind: "video", role: "talking-head", confidence: 0.9, signals: ["camera-look"], description: "Talking-head recording", media: { kind: "video", width: 720, height: 1280, duration: 3.2, orientation: "portrait", mountable: true }, speech: { present: true }, transcript: { text: "x", words: [{ text: "whisper", start: 0, end: 0.5 }] }, fingerprint: "1" }], counts: {}, summary: [] });
+    let transcriber;
+    const inventory = async (dir, options) => {
+      transcriber = options.transcribe;
+      return { dir, entries: [{ path: "talking-head.mp4", kind: "video", role: "talking-head", confidence: 0.9, signals: ["camera-look"], description: "Talking-head recording", media: { kind: "video", width: 720, height: 1280, duration: 3.2, orientation: "portrait", mountable: true }, speech: { present: true }, transcript: { text: "x", words: [{ text: "whisper", start: 0, end: 0.5 }] }, fingerprint: "1" }], counts: {}, summary: [] };
+    };
     const prepareRecording = async () => { throw new Error("edit-recording must not run on a supplied edit"); };
     const client = {
       provider: "openai",
@@ -369,6 +373,7 @@ test("--base-edited mounts the app's own edit as is, with its transcript, and ne
     const narration = JSON.parse(await readFile(path.join(out, "NARRATION.json"), "utf8"));
     assert.deepEqual(narration.words.map((word) => word.text), ["Ledgerly", "matches", "every", "payout", "today."]);
     assert.equal(existsSync(path.join(out, "assets/base-edit.mp4")), false);
+    assert.equal(transcriber, null, "a supplied transcript means no local Whisper");
   } finally {
     await rm(assets, { recursive: true, force: true });
     await rm(out, { recursive: true, force: true });

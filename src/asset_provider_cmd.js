@@ -14,6 +14,13 @@ import { createInterface } from "node:readline";
 
 export const ASSET_PROVIDER_TIMEOUT_MS = 120_000;
 
+// An app whose provider makes AI shots (an image, then a video from it) can
+// need minutes per answer: LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS raises the wait.
+export function assetProviderTimeoutMs(env = process.env) {
+  const value = Number(env.LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? value : ASSET_PROVIDER_TIMEOUT_MS;
+}
+
 export function createCommandAssetProvider(command, { timeoutMs = ASSET_PROVIDER_TIMEOUT_MS, notice = (line) => process.stderr.write(`${line}\n`), env = process.env, cwd = process.cwd() } = {}) {
   if (!String(command ?? "").trim()) throw new Error("--asset-provider-cmd needs a command");
   let child = null;
