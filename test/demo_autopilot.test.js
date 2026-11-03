@@ -101,9 +101,12 @@ test("records the demo-app fixture: clip, action log, contact sheet, review, pro
   assert.equal(scene.params.media.src, "assets/demo/sign-in.mp4");
   assert.ok(scene.params.actions.some((action) => action.type === "click"));
 
-  // The log drives a product-demo scene that resolves.
-  const params = productDemoParams(approved.record, { src: "assets/demo/sign-in.mp4", sourceStart: 0.5, duration: Math.min(8, approved.record.duration - 0.5) });
-  const story = resolveStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 9 }, brand: { colors: { bg: "#0b0d12", primary: "#5b4dff", accent: "#22c3ee", paper: "#f4efe6", ink: "#0b0d12" } }, scenes: [{ id: "demo", module: "product-demo", start: 0.5, end: 0.5 + Math.min(8, approved.record.duration - 0.5), params }] });
+  // The log drives a product-demo scene that resolves. The window opens just before the click:
+  // a slow runner records the same flow at half speed, so a fixed slice can miss it.
+  const sourceStart = Math.max(0, Math.round((click.at - 2) * 1000) / 1000);
+  const window = Math.min(8, approved.record.duration - sourceStart);
+  const params = productDemoParams(approved.record, { src: "assets/demo/sign-in.mp4", sourceStart, duration: window });
+  const story = resolveStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 9 }, brand: { colors: { bg: "#0b0d12", primary: "#5b4dff", accent: "#22c3ee", paper: "#f4efe6", ink: "#0b0d12" } }, scenes: [{ id: "demo", module: "product-demo", start: 0.5, end: 0.5 + window, params }] });
   const model = resolveModule(story.scenes[0], story);
   assert.ok(model.events.some((event) => event.cue === "click"));
   assert.ok(model.content.samples.some((sample) => sample.scale > 1.5));
