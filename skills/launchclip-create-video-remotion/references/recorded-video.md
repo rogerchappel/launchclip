@@ -247,6 +247,24 @@ overlays, punch-ins and full-frame inserts:
 recording, its edit plan, three punch-ins, two callouts, a lower-third, an
 insert, an emphasis caption and captions.
 
+### Rules and notes from the app
+
+When the project has `CONSTRAINTS.json` (or the assets folder has
+`constraints.json`), its rules are hard. Cover every `"picture": "hidden"`
+range (story seconds) with full-frame inserts the whole way, starting a little
+before it, make every direction line over it an `insert` line, and keep subject
+effects out of it. Give each `media.must_use` file a scene on the line it fits
+best, and never reference a `media.never_use` file. `launchclip story validate`
+reports each broken rule as a `constraints:` error, and finish's `constraints`
+gate fails on it.
+
+Footage notes (`<file>.json` beside a clip, or `inventory.json` keyed by
+path) describe what each clip shows (`description`, `subjects`, `tags`), its
+`quality` (0–1), `orientation`, `people`/`faces`, `role` and its usable
+`windows` (`[{start, end, quality?}]` seconds into the clip). Prefer
+high-quality clips that match the line, and set `params.media.sourceStart` to a
+usable window's start with the scene no longer than the window.
+
 ## Subject effects
 
 When the recording has one presenter and the treatment calls for depth (the

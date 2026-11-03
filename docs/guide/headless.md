@@ -63,6 +63,7 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
+| `--constraints <file>` | `constraints.json` in `--assets` | Hard rules from your app: hidden picture ranges, must-use and never-use media. See [Rules and notes from your app](#rules-and-notes-from-your-app). |
 
 ## What it does
 
@@ -107,6 +108,57 @@ Before the script, make starts your app, seeds it, plans 2–4 flows with the sa
 - **Same guardrails as `demo record`:** local or staging URLs only (`--allow-host <host>` to opt in), seed data or `LAUNCHCLIP_DEMO_*` test accounts only, and secrets redacted.
 - `--demo-plan DEMO-PLAN.json` records your own plan instead of a planned one. `--start` and `--url` override detection, and `--redemo` records again.
 
+## Rules and notes from your app
+
+An app that runs make on its users' footage can set hard rules and describe
+the media it supplies. LaunchClip still decides how to edit; it never breaks
+the rules.
+
+**Rules** go in `constraints.json` in the assets folder (or `--constraints
+<file>`):
+
+```json
+{ "version": 1,
+  "ranges": [ { "start": 4.2, "end": 9.8, "picture": "hidden", "reason": "voiceover_only" } ],
+  "media": { "must_use": [ { "src": "broll/pinned-03.mp4", "reason": "pinned" } ],
+             "never_use": [ "broll/x.mp4" ] } }
+```
+
+- A **hidden** range (seconds on the video's timeline; with `--base-edited`,
+  the supplied recording's own time) is covered by full-frame inserts the
+  whole way, so the presenter is never seen there while the voice plays on.
+  Every line of the direction map over it is an insert line.
+- **must_use** files appear at least once, where they fit best.
+- **never_use** files are left out of the inventory, never copied into the
+  project and refused from `--asset-provider-cmd` (each request lists them in
+  `never_use`).
+
+The model is told the rules. If its plan still breaks one, tooling fixes it
+without another paid call: it covers a hidden range with the supplied clip
+that best matches those words (in its best usable window), and gives a missing
+must-use file a scene on the line it matches best. make writes the rules to
+`CONSTRAINTS.json` in the project; `launchclip story validate` reports any
+broken rule as an error and finish's `constraints` gate fails on one.
+
+**Notes** describe a file: a sidecar `<file>.json` beside it
+(`broll/ute.mp4.json`), or one `inventory.json` keyed by path:
+
+```json
+{ "version": 1,
+  "assets": { "broll/ute.mp4": {
+    "description": "Ute crossing corrugations, low angle",
+    "subjects": ["ute"], "tags": ["corrugations", "dirt road"],
+    "windows": [ { "start": 2.0, "end": 7.5, "quality": 0.9 } ],
+    "quality": 0.8, "orientation": "landscape", "people": 1, "faces": false,
+    "role": "b-roll" } } }
+```
+
+The planner reads them in the asset manifest and picks clips that match the
+line, preferring higher quality. A video scene that starts outside a usable
+window is moved to the best one. `orientation` overrides the probe, and
+`role: "b-roll"` keeps a clip with wind or chatter on it from becoming the
+base. Field by field: [Footage inventory notes](../KIT_CONTRACTS.md#footage-inventory-notes-srcinventory_notesjs).
+
 ## Where the output lands
 
 ```
@@ -116,6 +168,7 @@ launchclip-<slug>/
   video/cover.png          the designed cover, when the storyboard has one
   MAKE.json                routing and reasons, models, costs, timings, gate results
   storyboard.json          the plan; edit it and run `launchclip finish` to iterate
+  CONSTRAINTS.json         your app's rules, when it set any
   SCRIPT.json, NARRATION.json, ASSETS.json, BRIEF.md
   qa/                      contact sheets, evidence, gate reports, critic.json
 ```
