@@ -14,6 +14,21 @@
   narration and keeps motion graphics for numbers and steps; high density
   keeps today's motion-graphics plan. See
   [KIT_CONTRACTS.md](docs/KIT_CONTRACTS.md#clip-catalogue-d-kitcorecatalog-d-clipmjs).
+- Direction constraints: an app can give `make`, `story plan` and `story
+  validate` hard rules in `constraints.json` (in `--assets`, or
+  `--constraints <file>`): picture-hidden ranges that full-frame inserts must
+  cover, media that must appear and media that never may. The planner tells
+  the model, makes every direction line over a hidden range an insert line,
+  and fixes what the model leaves broken itself (the best-matching clip over
+  the range, a must-use file on the line it fits). never_use files are left
+  out of the inventory and refused from the asset provider. `story validate`
+  and finish's `constraints` gate fail on a broken rule. See
+  [docs/KIT_CONTRACTS.md](docs/KIT_CONTRACTS.md#direction-constraints-srcconstraintsjs).
+- Footage inventory notes: a `<file>.json` sidecar or one `inventory.json`
+  describes supplied media (description, subjects, tags, usable windows,
+  quality, orientation, people and faces, role). The planner reads them in
+  the asset manifest, clips are ranked by quality and matched to the line,
+  and video scenes start inside a usable window.
 - The storyboard engine is its own npm package, `@launchclip/core`: the
   `launchclip.story.v1` contract, the module registry with a JSON Schema per
   module, story migrations, story patches (RFC 6902), captions, transitions,

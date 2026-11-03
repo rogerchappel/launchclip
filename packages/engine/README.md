@@ -60,7 +60,7 @@ const report = await engine.finish('launch-001', { renderer: 'remotion', quality
 
 | Member | Does |
 | --- | --- |
-| `planStoryboard(options)` | Plans a storyboard (`src/storyboard_planner.js`). It sends structured LLM calls through `llm` and fixes a failed plan with repair passes. Shots come from `assets` when you pass it. The report has `status`, `storyboard`, `errors`, `attempts`, `usage`, `cost` and `shots`. |
+| `planStoryboard(options)` | Plans a storyboard (`src/storyboard_planner.js`). It sends structured LLM calls through `llm` and fixes a failed plan with repair passes. Shots come from `assets` when you pass it. Pass `constraints` (from `parseConstraints`) and `media` (the supplied clips, `[{src, kind, duration?, width?, height?, notes?}]`) to enforce hidden ranges, must-use and never-use media and to use footage notes; see "Direction constraints" in `docs/KIT_CONTRACTS.md`. The report has `status`, `storyboard`, `errors`, `attempts`, `usage`, `cost` and `shots`. |
 | `finish(project, options, overrides?)` | Runs `storyboard.json` through voice, captions, sound, render, master, evidence and gates (`src/finish.js runFinish`). Options: `renderer`, `quality`, `voice`, `music`, `scenes`, `chapter`, `previewScene`, `force` and the rest of the `launchclip finish` flags. Returns the `finish.json` report. |
 | `renderSegments(options)` | Renders by segments (`src/render_segments.js renderWithSegments`). Only changed segments re-render. |
 | `exportNle(project, options?)` | Exports FCPXML, xmeml, OTIO or EDL with overlay plates (`src/nle/export.js runExport`). |

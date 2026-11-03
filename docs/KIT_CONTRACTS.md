@@ -2430,6 +2430,122 @@ The example is `examples/story/footage/`; regenerate its recording with
   default registry font, at the settle and mid-hold times, plus two stills of
   `examples/story/minimal`, with one shared Remotion bundle.
 
+## Direction constraints (`src/constraints.js`)
+
+An app that embeds LaunchClip decides what footage is allowed; LaunchClip
+decides how to edit inside those rules. The rules are one JSON file:
+`constraints.json` in `make --assets`, or `--constraints <file>` on `make`,
+`story plan` and `story validate`. make and `story plan` write the normalised copy to
+`CONSTRAINTS.json` beside `storyboard.json` (and removes a stale copy on a run
+without constraints), where `story validate` and `finish` read it.
+
+```json
+{ "version": 1,
+  "ranges": [ { "start": 4.2, "end": 9.8, "picture": "hidden", "reason": "voiceover_only" } ],
+  "media": {
+    "must_use": [ { "src": "broll/pinned-03.mp4", "reason": "pinned" } ],
+    "never_use": [ "broll/x.mp4", { "id": "asset-118", "reason": "licence" } ] } }
+```
+
+- `version` (required): `1`. Unknown fields are errors, so a typo never drops
+  a rule silently.
+- `ranges`: `{start, end, picture, reason?}` in seconds on the story's
+  timeline: the base as it plays (with `--base-edited`, the supplied file's
+  own time). `picture` is `"hidden"`. Overlapping ranges merge.
+  - A hidden range is covered the whole way by full-frame inserts
+    (`insert: true`) or sections laid out as `insert`. An insert's `in`
+    transition from the base (a fade, push…) shows the base, so it does not
+    count; a hand-off from another insert does. Gaps under one frame are
+    ignored.
+  - Every direction-map line whose words overlap a hidden range is an
+    `insert` line, and no scene draws the presenter's cut-out (a subject
+    effect) over one.
+  - Ranges apply to a base recording; in the motion lanes there is no
+    picture to hide and validation only warns.
+- `media.must_use`: paths (or `{src, reason?}`) under the assets folder
+  (`assets/` is optional). Each is an image or video and appears in the story
+  at least once.
+- `media.never_use`: paths, or `{src?, id?, reason?}`. The file never appears
+  in the story. make leaves it out of the inventory (`ASSETS.json`
+  `excluded`), never copies it into the project, and refuses it from the
+  asset provider: each provider request carries `never_use` (the paths, and
+  `id:<id>` for id entries), and a shot whose `src`, `file` (under `--assets`,
+  or ending in the path) or `asset_id` / `source.id` matches is dropped (no
+  shot). A path in both lists is an error.
+
+Checks (`checkConstraints(resolved, constraints, {map, words, story})`):
+errors prefixed `constraints:` for a hidden range the base shows through (with
+the exposed spans), a direction line over one that is not an insert, a subject
+effect over one, a missing `must_use` file and a `never_use` file in the story
+(with where). `story validate` adds them to its errors and a `constraints`
+summary (`{file, status, ranges, exposed, must_use, missing, never_use,
+present}`); finish's `constraints` gate fails on them (in a `--prototype`,
+`must_use` is advisory). Without the file, both skip.
+
+Planning (`planStoryboard({constraints, media})`, used by `make` and `story
+plan`):
+
+1. The direction pass is told the rules, and tooling then makes every line
+   over a hidden range an `insert` line (naming `hidden-<n>` when it had no
+   scenes).
+2. The storyboard prompt gets a "Constraints from the app" section: each
+   hidden range with its words, each `must_use` file with its notes.
+3. Each attempt is checked with the constraints. When they are all that is
+   left broken (or on the last attempt), the deterministic pass
+   (`fillConstraints`) fixes them without another model call: each exposed
+   span gets a `photo-scene` insert (padded 0.4 s past the range where the
+   timeline is free, at least 2 s) showing the supplied clip that best
+   matches the span's words (`pickMedia`: notes match, quality, orientation,
+   an unplaced `must_use` file first, never a `never_use` one), started in its
+   best usable window; a `hook-title` of the line's words when there is no
+   media; or the neighbouring insert is stretched over a span too short for
+   its own scene. Each missing `must_use` file gets a scene on the free line
+   it matches best, or replaces the media of an existing media scene. The map
+   is then pointed at the inserts that really cover each line. A pass that
+   leaves more errors than it found is discarded.
+
+Limits: a module's own entrance (a photo-scene fades its picture in over about
+0.4 s) is not modelled, which is why the fill pads; ranges are on the story's
+timeline, not source time, so an app that lets make cut the base should
+express them after the cut (or use `--base-edited`); subject effects over a
+hidden range are reported, not removed; the long-form beat-director path does
+not place `must_use` files (finish's gate still checks them).
+
+## Footage inventory notes (`src/inventory_notes.js`)
+
+An app can describe the media it supplies so the planner chooses clips and in
+points well. Notes are a sidecar beside the file, `<file>.json`
+(`broll/ute.mp4.json`; `broll/ute.json` also works when only one media file
+has that stem), or one `inventory.json` at the assets root, keyed by path:
+
+```json
+{ "version": 1,
+  "assets": {
+    "broll/ute.mp4": {
+      "description": "Ute crossing corrugations, low angle",
+      "subjects": ["ute", "slide-on camper"], "tags": ["corrugations", "dirt road"],
+      "windows": [ { "start": 2.0, "end": 7.5, "quality": 0.9, "note": "wheel close-up" } ],
+      "quality": 0.8, "orientation": "landscape", "people": 1, "faces": false,
+      "role": "b-roll" } } }
+```
+
+(`assets` may also be a list of `{src, ...}`.) A sidecar's fields win over
+`inventory.json`'s. Every field is optional; a bad field is a warning
+(`notes:` in MAKE.json) and is dropped. Notes files are metadata: they are not
+inventoried, and are re-read on every run (a cached entry gets the new notes).
+
+| Field | Type | What uses it |
+| --- | --- | --- |
+| `description` | text ≤ 500 | the manifest line the planner reads; clip matching (`matchScore`) |
+| `subjects`, `tags` | lists of words or phrases | the manifest line; clip matching (weighted double) |
+| `windows` | `[{start, end, quality?, note?}]` seconds into the clip | the manifest line (with how to use them); tooling moves a video scene whose `params.media.sourceStart` (plus its length) is outside every window to the best window's start (`snapMediaWindows`: one long enough first, then quality, then the note's match); the fill's in points |
+| `quality` | 0–1 | the manifest line (below 0.4 it says "use only when nothing better fits"); the media order (higher first); clip choice |
+| `orientation` | `landscape` / `portrait` / `square` | overrides the probe (a rotated phone clip probes the wrong way); clip choice prefers the canvas's orientation |
+| `people`, `faces` | true/false, or a count of people | the manifest line only |
+| `role` | the inventory's roles for the file's kind (`talking-head`, `screen-recording`, `b-roll`; `logo`, `screenshot`, `product-image`; `voiceover`, `music`) | overrides the heuristic (kept in `entry.detected`); a `b-roll` clip is never the base, even with speech on it |
+
+`ASSETS.json` entries carry `notes`; the routing's media items carry them too.
+
 ## Subject layer (`kit/core/subject-layer.mjs`)
 
 Depth against the cut-out presenter in the footage-led lane
