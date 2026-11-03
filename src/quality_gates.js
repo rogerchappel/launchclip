@@ -5,6 +5,7 @@
 //   directionGate(ctx)  → {status, file, errors, …}
 //   coverageGate(ctx)   → {status, profile, measures, bands, findings}
 //   faceGate(ctx)       → {status, source, face_time, findings}
+//   constraintsGate(ctx) → {status, file, errors, …}: the app's CONSTRAINTS.json
 //   qualityFindings(measures, profile) → critic-style findings
 //     (missed-opportunity, sparseness) the headless critic carries
 //   prototypeCut(resolved, words, {min, max}) → {cut, story} | null
@@ -23,6 +24,7 @@ import { storyBase } from "@launchclip/core/story.mjs";
 import { faceIntervalsFromProbe } from "./cadence_measures.js";
 import { profileForStory } from "./profile_store.js";
 import { directionFileFor } from "./story_cli.js";
+import { PROJECT_CONSTRAINTS_FILE, checkConstraints, loadConstraints } from "./constraints.js";
 import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
 
 // The measures the coverage gate fails on; the rest of the band is reported.
@@ -68,17 +70,38 @@ export async function directionGate({ project, resolved, words, direction }) {
 }
 
 /**
+ * Constraints: the app's hard rules in CONSTRAINTS.json beside the
+ * storyboard (src/constraints.js): no hidden range shows the base, every
+ * direction line over one is an insert, must_use media appears and
+ * never_use media does not. Skipped without the file. In a prototype the
+ * must_use check is advisory (the file may be placed after the cut).
+ */
+export async function constraintsGate({ project, resolved, words, map = null, story = null, prototype = false }) {
+  const file = path.join(project, PROJECT_CONSTRAINTS_FILE);
+  if (!existsSync(file)) return { status: "skipped", reason: `no ${PROJECT_CONSTRAINTS_FILE}` };
+  let constraints;
+  try { constraints = await loadConstraints(file); }
+  catch (error) { return { status: "failed", file: PROJECT_CONSTRAINTS_FILE, errors: [error.message] }; }
+  const check = checkConstraints(resolved, constraints, { map, words, story });
+  const advisory = prototype ? check.errors.filter((entry) => /must_use/.test(entry)) : [];
+  const errors = check.errors.filter((entry) => !advisory.includes(entry));
+  return { status: errors.length ? "failed" : "passed", file: PROJECT_CONSTRAINTS_FILE, ...check.summary, errors: errors.slice(0, 20), warnings: check.warnings, ...(advisory.length ? { advisory } : {}) };
+}
+
+/**
  * Coverage: coverage, face time, the longest undressed run and (long form)
  * the longest run without an attention reset against the profile band, measured exactly from the resolved storyboard (and the
  * direction map's sections and lines when there is one). Other measures in
  * the band are reported and never fail the gate.
  */
-export function coverageGate({ resolved, words, map, profile, face = null, prototype = false }) {
+export function coverageGate({ resolved, words, map, profile, face = null, prototype = false, hidden = false }) {
   if (!profile) return { status: "skipped", reason: "no cadence profile fits this story" };
   const measures = map && words?.length ? directionMeasures(map, resolved, { words, face }) : storyboardMeasures(resolved, { face });
   const bands = compareMeasures(measures, profile);
   const outside = bands.filter((band) => band.status !== "inside" && COVERAGE_GATE_MEASURES.includes(band.measure));
-  const advisory = prototype ? outside.filter((band) => PROTOTYPE_ADVISORY_MEASURES.includes(band.measure)) : [];
+  // hidden: the app's constraints hide the picture for ranges (src/constraints.js),
+  // so coverage above the band and face time below it are forced, not chosen.
+  const advisory = outside.filter((band) => (prototype && PROTOTYPE_ADVISORY_MEASURES.includes(band.measure)) || (hidden && ((band.measure === "coverage" && band.status === "above") || (band.measure === "face_time" && band.status === "below"))));
   const failing = outside.filter((band) => !advisory.includes(band));
   const findings = qualityFindings(measures, profile);
   return {

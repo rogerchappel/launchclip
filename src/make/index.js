@@ -18,6 +18,8 @@ import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.m
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR } from "../asset_provider.js";
 import { createCommandAssetProvider } from "../asset_provider_cmd.js";
+import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
+import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { profileForStory } from "../profile_store.js";
@@ -67,6 +69,7 @@ export const MAKE_PATHS = Object.freeze({
   words: "NARRATION.json",
   story: "storyboard.json",
   direction: "DIRECTION.json",
+  constraints: PROJECT_CONSTRAINTS_FILE,
   beatMap: "BEATMAP.json",
   scriptMarkdown: "SCRIPT.md",
   chapterTakes: ".launchclip/make/chapters",
@@ -232,6 +235,7 @@ async function stageModel(ctx) {
 
 async function stageInventory(ctx) {
   const { project, report, adapters, state, assetsDir } = ctx;
+  const constraints = await loadMakeConstraints(ctx);
   const brandDir = ctx.options.brandAssets ? path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.brandAssets)) : null;
   const brand = brandDir ? await brandEntries(ctx, brandDir) : [];
   if (!assetsDir) {
@@ -242,8 +246,12 @@ async function stageInventory(ctx) {
     return brand.length ? { status: "done", reason: `no --assets folder; ${brand.length} brand asset(s)` } : { status: "skipped", reason: "no --assets folder" };
   }
   const cache = await readJson(path.join(project, MAKE_PATHS.assets));
+  const never = constraints ? neverUseMatcher(constraints, { assetsDir }) : null;
   const inventory = await (adapters.inventory ?? inventoryAssets)(assetsDir, {
     cache: cache?.dir === assetsDir ? cache : null,
+    // never_use media is not inventoried, copied or offered; constraints.json is the app's, not an asset.
+    metadata: [CONSTRAINTS_FILE],
+    ...(never ? { exclude: (relative) => (never({ src: relative }) ? "never_use (constraints)" : null) } : {}),
     transcribe: adapters.transcribe ?? (async (file) => {
       const { transcribeRecording } = await import("../recording_workflow.js");
       return transcribeRecording(file, { model: "base.en", language: "en" });
@@ -263,12 +271,39 @@ async function stageInventory(ctx) {
     if (entry.kind === "other") continue;
     await linkOrCopy(path.join(assetsDir, entry.path), path.join(project, "assets", entry.path));
   }
+  for (const warning of inventory.notes?.warnings ?? []) report.warnings.push(`notes: ${warning}`);
+  if (constraints) {
+    const missing = constraints.must_use.filter((entry) => !inventory.entries.some((item) => item.path === entry.src));
+    if (missing.length) throw new Error(`constraints: must_use ${missing.map((entry) => entry.src).join(", ")} ${missing.length === 1 ? "is" : "are"} not in --assets ${assetsDir}`);
+    report.constraints = { ...report.constraints, excluded: (inventory.excluded ?? []).map((entry) => entry.path) };
+  }
   inventory.entries.push(...brand);
   ctx.inventory = inventory;
   state.inventory = inventory.entries.map((entry) => [entry.path, entry.fingerprint]);
   await writeJson(path.join(project, MAKE_PATHS.assets), inventory);
   report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}) };
   return { status: "done" };
+}
+
+// The app's constraints (src/constraints.js): --constraints <file>, else
+// constraints.json in --assets. The normalised copy goes to CONSTRAINTS.json
+// beside the storyboard, where story validate and finish's gate read it; a
+// run without constraints removes a stale copy.
+async function loadMakeConstraints(ctx) {
+  const { project, report, assetsDir, options } = ctx;
+  const flag = options.constraints && options.constraints !== true ? path.resolve(options.cwd ?? process.cwd(), String(options.constraints)) : null;
+  const file = flag ?? (assetsDir && existsSync(path.join(assetsDir, CONSTRAINTS_FILE)) ? path.join(assetsDir, CONSTRAINTS_FILE) : null);
+  const target = path.join(project, MAKE_PATHS.constraints);
+  if (!file) {
+    ctx.constraints = null;
+    await rm(target, { force: true });
+    return null;
+  }
+  const constraints = await loadConstraints(file);
+  ctx.constraints = hasConstraints(constraints) ? constraints : null;
+  await writeJson(target, constraintsDocument(constraints));
+  report.constraints = { file: MAKE_PATHS.constraints, source: file, ranges: constraints.ranges.length, must_use: constraints.must_use.map((entry) => entry.src), never_use: constraints.never_use.map((entry) => entry.src ?? `id:${entry.id}`) };
+  return ctx.constraints;
 }
 
 // A collection's brand folder (docs/COLLECTIONS_RFC.md §3.2): its logos,
@@ -776,7 +811,8 @@ async function stageStoryboard(ctx) {
   // shipped one for the routed lane, aspect, duration and platform.
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}) });
+  const constraints = ctx.constraints ?? null;
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even
@@ -788,6 +824,14 @@ async function stageStoryboard(ctx) {
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
   const allowed = new Set([...manifest.map((item) => item.src), ...(ctx.base ? [ctx.base.src] : []), ...Object.values(fixedAudio).filter((value) => String(value).startsWith("assets/"))]);
+  // The supplied clips and images, with their notes: the planner's
+  // deterministic pass places from these and snaps videos into usable windows.
+  const media = routing.media.map((item) => ({ src: `assets/${item.path}`, kind: item.kind, duration: item.duration ?? null, width: item.width, height: item.height, description: item.description, ...(item.notes ? { notes: item.notes } : {}) }));
+  for (const entry of constraints?.must_use ?? []) {
+    if (media.some((item) => item.src === storySrc(entry.src))) continue;
+    const ignored = routing.ignored.find((item) => item.path === entry.src);
+    throw new Error(`constraints: must_use ${entry.src} cannot be shown in a scene (${ignored?.reason ?? (routing.base?.path === entry.src ? "it is the base recording" : "it is not a screenshot, image or b-roll video")}); fix its notes role or the constraints`);
+  }
   // Headless runs have no one to hand a near-miss to, so make allows more
   // repairs than story plan (each repair is one cheap call; the planner caps it at 5).
   const maxRepairs = options.maxRepairs === undefined ? MAKE_MAX_REPAIRS : Number(options.maxRepairs);
@@ -797,7 +841,9 @@ async function stageStoryboard(ctx) {
   ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
   // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
   // planner may ask it for shots, filed under assets/shots/.
-  const assets = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  // never_use: the provider is told, and a shot that is one is refused.
+  const assets = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   if (assets) ctx.say(`assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
   const plan = await planStoryboard({
     brief,
@@ -817,6 +863,8 @@ async function stageStoryboard(ctx) {
     maxRepairs,
     ...(history?.prompt ? { history: history.prompt } : {}),
     ...(assets ? { assets, project: ctx.project } : {}),
+    ...(constraints ? { constraints } : {}),
+    ...(media.length ? { media } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
   for (const shot of plan.shots ?? []) {
@@ -835,7 +883,7 @@ async function stageStoryboard(ctx) {
   // The look dials that would repeat the latest videos move to unused values
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
-  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false });
+  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
@@ -1101,7 +1149,7 @@ export function assetManifestLines(ctx) {
     const use = lane === "footage-led"
       ? `a full-frame insert that covers the speaker: {"module": "media-window", "insert": true, "params": {"title": "…", "media": {"kind": "${item.kind}", "src": "${src}"}}} (insert is a scene key, never inside params; no track)`
       : `a media-window scene with params.media {kind: "${item.kind}", src: "${src}"${item.kind === "video" ? ", sourceStart?" : ""}}`;
-    out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
+    out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}.${mediaNotesLine(item)} Use as ${use}.` });
   }
   out.push(...demoManifestLines(ctx));
   // Recorded source pages: the real page on screen, as an evidence-clip with the params its sidecar gives.

@@ -31,7 +31,7 @@ import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from 
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
 import { holdGate, stateGate } from "./movement_guardrails.js";
-import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -1232,6 +1232,8 @@ const STAGES = [
         audio_manifest: await fileHash(path.join(ctx.project, PATHS.audioManifest)),
         // The direction and coverage gates read the map.
         direction: await fileHash(directionFileFor(path.join(ctx.project, "storyboard.json"))),
+        // The constraints gate reads the app's rules.
+        ...(await fileHash(path.join(ctx.project, "CONSTRAINTS.json")).then((hash) => (hash ? { constraints: hash } : {}))),
         layout: ctx.layout,
         story: ctx.resolved,
         style: ctx.style?.file ? await fileHash(ctx.style.file) : ctx.style?.name ?? null,
@@ -1570,8 +1572,12 @@ async function runGates(ctx) {
     const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words, rects: ctx.layout?.rects ?? [] });
     if (acting.status !== "skipped") gates.acting = acting;
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
-    gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype });
+    const hidden = await readOptionalJson(path.join(ctx.project, "CONSTRAINTS.json")).then((doc) => Array.isArray(doc?.ranges) && doc.ranges.some((range) => range?.picture === "hidden")).catch(() => false);
+    gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype, hidden });
     if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });
+    // The app's constraints (CONSTRAINTS.json): hidden ranges, must_use, never_use.
+    const constraints = await constraintsGate({ project: ctx.project, resolved: ctx.resolved, words: scope.words, map: direction.map, prototype });
+    if (constraints.status !== "skipped") gates.constraints = constraints;
     if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
     const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });

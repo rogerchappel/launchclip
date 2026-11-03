@@ -31,6 +31,8 @@ import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { resolveShots, shotPrompt } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
+import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
+import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -76,6 +78,12 @@ const PLAN_BAND_ERRORS = Object.freeze(["coverage", "longest_undressed_seconds"]
  */
 export async function planStoryboard(options = {}) {
   const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null } = options;
+  // constraints: the app's hard rules (src/constraints.js, parsed); media:
+  // the supplied clips and images [{src, kind, duration?, width?, height?,
+  // notes?, description?}] the deterministic pass may place, whose notes'
+  // usable windows set video in points.
+  const constraints = hasConstraints(options.constraints) ? options.constraints : null;
+  const media = Array.isArray(options.media) ? options.media : [];
   // direction: true plans DIRECTION.json first (one call, RFC §6.4), a map
   // object plans against that map, false or omitted plans no map.
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
@@ -99,14 +107,21 @@ export async function planStoryboard(options = {}) {
   let directionSource = direction ? "given" : null;
   let directionPlan = { attempts: [], warnings: [] };
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
+  }
+  // Lines over a hidden range are insert lines, whatever the model chose.
+  const constraintWarnings = [];
+  if (constraints && direction) {
+    const enforced = enforceHiddenLines(direction, constraints, wordList);
+    direction = enforced.map;
+    for (const change of enforced.changed) constraintWarnings.push(`constraints: direction line words [${change.words.join(", ")}] was "${change.from}" over a hidden range; it is an insert line`);
   }
   if (assets && typeof assets.findShot !== "function") throw new Error("assets must be an asset provider with findShot(request)");
   // assets: the app's asset provider (src/asset_provider.js). The model may
   // then ask for shots, which are found or generated before the checks.
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction }), ...(assets ? [shotPrompt()] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction }), ...(assets ? [shotPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -154,7 +169,15 @@ export async function planStoryboard(options = {}) {
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given" };
+      // Notes' usable windows: a video scene outside them starts in the best one.
+      if (media.length) {
+        const snapped = snapMediaWindows(pinned.storyboard, media, { times: sceneTimes(pinned.storyboard, wordList, beats), words: wordList });
+        pinned.storyboard = snapped.storyboard;
+        if (snapped.moved.length) pinned.warnings = [...pinned.warnings, `notes: tooling moved ${snapped.moved.join("; ")}`];
+      }
+      // The map names the inserts that really cover each hidden range.
+      if (constraints && direction) direction = reconcileMap(direction, resolvedOrNull(pinned.storyboard, wordList, beats), constraints, wordList);
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, bandErrors: directionSource === "model" || directionSource === "given", constraints };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // An event time just outside its module's window is tooling's to fix,
       // not a repair call's; a fix can expose the next one, so a few rounds.
@@ -167,6 +190,23 @@ export async function planStoryboard(options = {}) {
         checked = checkStoryboard(pinned.storyboard, checkOptions);
       }
       if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];
+      // The deterministic pass (src/constraints.js fillConstraints): when the
+      // constraints are all that is left, or on the last attempt, tooling
+      // covers hidden ranges and places must_use media itself.
+      if (constraints && !checked.ok && checked.storyboard && (attempt === repairs || checked.errors.every(isConstraintError))) {
+        const fill = fillConstraints(pinned.storyboard, constraints, { words: wordList, media, beats });
+        if (fill.added.length || fill.changed.length) {
+          const map = direction ? reconcileMap(direction, resolvedOrNull(fill.storyboard, wordList, beats), constraints, wordList, { added: fill.added }) : direction;
+          const rechecked = checkStoryboard(fill.storyboard, { ...checkOptions, direction: map });
+          if (rechecked.ok || rechecked.errors.length < checked.errors.length) {
+            pinned.storyboard = fill.storyboard;
+            direction = map;
+            checked = rechecked;
+            pinned.warnings = [...pinned.warnings, ...fill.added.map((entry) => `constraints: tooling added ${entry.id} (${entry.src ?? "a title card"}) over ${entry.start}–${entry.end} s (${entry.reason})`), ...fill.changed.map((entry) => `constraints: tooling ${entry}`)];
+          }
+        }
+        if (fill.errors.length && !checked.ok) checked.errors = [...checked.errors, ...fill.errors.filter((entry) => !checked.errors.includes(entry))];
+      }
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
@@ -203,6 +243,7 @@ export async function planStoryboard(options = {}) {
     try {
       const resolved = resolveStory(JSON.parse(JSON.stringify(last.storyboard)), { words: wordList, beats });
       direction = draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null });
+      if (constraints) direction = reconcileMap(direction, resolved, constraints, wordList);
       directionSource = "drafted";
       last.warnings = [...last.warnings, "direction: the model returned no valid direction map; DIRECTION.json was drafted from the storyboard (check its treatments)"];
     } catch (error) {
@@ -251,7 +292,7 @@ export async function planStoryboard(options = {}) {
     max_repairs: repairs,
     valid_first_attempt: Boolean(attempts[0]?.ok),
     errors: last?.errors ?? [],
-    warnings: [...directionPlan.warnings, ...(last?.warnings ?? [])],
+    warnings: [...directionPlan.warnings, ...constraintWarnings, ...(last?.warnings ?? [])],
     layout: last?.layout ?? emptyLayout(),
     direction,
     direction_source: directionSource,
@@ -281,7 +322,7 @@ export async function planStoryboard(options = {}) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, constraints = null } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -318,10 +359,19 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
       for (const band of bands) {
         if (band.status === "inside") continue;
         const line = `cadence: ${band.detail} (profile ${profile.id}); ${band.measure === "coverage" ? (band.status === "below" ? "dress more lines (turn face lines whose intent calls for a visual into dress or insert lines with scenes)" : "hold more lines on the presenter") : band.measure === "longest_undressed_seconds" ? "dress a line inside the longest undressed run" : "adjust the scenes"}`;
-        if (bandErrors && PLAN_BAND_ERRORS.includes(band.measure)) errors.push(line);
+        // The app's hidden ranges force coverage up; that is not the plan's to fix.
+        const forced = band.measure === "coverage" && band.status === "above" && (constraints?.ranges ?? []).some((range) => range.picture === "hidden");
+        if (bandErrors && PLAN_BAND_ERRORS.includes(band.measure) && !forced) errors.push(line);
         else warnings.push(line);
       }
     }
+  }
+  // The app's constraints (src/constraints.js): hidden ranges covered,
+  // must_use present, never_use absent; errors are prefixed "constraints:".
+  if (second.ok && hasConstraints(constraints)) {
+    const found = checkConstraints(resolved, constraints, { map: direction, words, story: storyboard });
+    errors.push(...found.errors);
+    warnings.push(...found.warnings);
   }
 
   const models = new Map();
@@ -445,9 +495,10 @@ export function pinInputs(story, fixed) {
  * for shape only; the storyboard pass checks them against real scenes.
  * → {map | null, attempts, warnings}
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now() }) {
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null }) {
   const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments });
-  const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, ""].join("\n");
+  const rules = constraints ? constraintsPrompt(constraints, { words }) : "";
+  const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, "", ...(rules ? [rules] : [])].join("\n");
   const attempts = [];
   const warnings = [];
   let previous = null;
@@ -711,6 +762,26 @@ function providerOf(client, model) {
   if (client?.provider) return client.provider;
   const spec = String(model ?? "");
   return spec.includes(":") ? spec.split(":")[0] : "unknown";
+}
+
+// Errors the deterministic constraints pass can fix: the constraints'
+// own, and a map line naming an insert the fill gives (hidden-<n>).
+function isConstraintError(entry) {
+  return /^constraints: /.test(entry) || /^direction: .*names scene "(hidden|must-use)-\d+", which is not in the storyboard/.test(entry);
+}
+
+function resolvedOrNull(storyboard, words, beats) {
+  try { return resolveStory(JSON.parse(JSON.stringify(storyboard)), { words, beats }); } catch { return null; }
+}
+
+function sceneTimes(storyboard, words, beats) {
+  const resolved = resolvedOrNull(storyboard, words, beats);
+  return new Map((resolved?.scenes ?? []).map((scene) => [scene.id, { start: Number(scene.start), end: Number(scene.end) }]));
+}
+
+// assets-relative src → the notes text the constraints prompt quotes for a must_use file.
+function mediaNoteMap(media) {
+  return new Map(media.filter((item) => item?.notes).map((item) => [String(item.src).replace(/^assets\//, ""), mediaNotesLine(item).replace(/^ Notes from the app: /, "").replace(/\.$/, "")]));
 }
 
 function moduleIds(story) {
