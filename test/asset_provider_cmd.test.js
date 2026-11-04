@@ -108,6 +108,60 @@ test("make --asset-provider-cmd plans with the command's shot and records its co
   assert.ok(existsSync(path.join(report.project, shot.src)));
 });
 
+// A fake model that asks for one shot in the opening media-window.
+function oneShotModel() {
+  const { model } = fakeModel();
+  const inner = model.client.runStructured.bind(model.client);
+  model.client.runStructured = async (request) => {
+    const result = await inner(request);
+    if (request.schemaName !== "launchclip_storyboard") return result;
+    const board = JSON.parse(result.value.storyboard_json);
+    board.scenes[0].params.media = { kind: "shot", shows: "a messy spreadsheet of payouts", type: "image" };
+    return { ...result, value: { storyboard_json: JSON.stringify(board) } };
+  };
+  return model;
+}
+
+test("make --min-shots records shot counts, and too few shots after the repairs is a warning, not a failure", async (t) => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-min-shots-"));
+  t.after(() => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]));
+  const library = path.join(cwd, "library-shot.jpg");
+  await writeFile(library, "jpeg");
+  const { command } = await script(t, answering(`() => ({ path: ${JSON.stringify(library)}, kind: "image", source: "library" })`));
+  const run = (flags, out) => runMake(PROMPT, { ...makeOptionsFromFlags({ "asset-provider-cmd": command, ...flags }), assets, voice: "test", music: "synth", cwd, out }, { env: {}, client: oneShotModel(), inventory: fakeInventory, finish: fakeFinish([]), notice: () => {} });
+
+  const enough = await run({ "min-shots": "1" }, "enough");
+  assert.equal(enough.status, "ready-for-review", JSON.stringify(enough.stages));
+  assert.deepEqual(enough.shot_counts, { min: 1, requested: 1, answered: 1 });
+  assert.equal(enough.shots.length, 1);
+  assert.ok(!enough.warnings.some((warning) => /shots/.test(warning)), enough.warnings.join("\n"));
+
+  const short = await run({ "min-shots": "3", "max-repairs": "1" }, "short");
+  assert.equal(short.status, "ready-for-review", JSON.stringify(short.stages));
+  assert.deepEqual(short.shot_counts, { min: 3, requested: 1, answered: 1 });
+  assert.equal(short.repairs.used, 1);
+  assert.ok(short.warnings.some((warning) => /shots: the storyboard asks for 1 shot, fewer than the 3 wanted, after 1 repair; kept the best storyboard/.test(warning)), short.warnings.join("\n"));
+
+  const clamped = await run({ "min-shots": "9", "max-repairs": "0" }, "clamped");
+  assert.equal(clamped.status, "ready-for-review", JSON.stringify(clamped.stages));
+  assert.equal(clamped.shot_counts.min, 6);
+  assert.ok(clamped.warnings.some((warning) => /--min-shots 9 is more than a plan may ask for; using 6/.test(warning)), clamped.warnings.join("\n"));
+});
+
+test("make ignores --min-shots without an asset provider, with a note", async (t) => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-min-shots-"));
+  t.after(() => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]));
+  const { model } = fakeModel();
+  const report = await runMake(PROMPT, { ...makeOptionsFromFlags({ "min-shots": "2" }), assets, voice: "test", music: "synth", cwd }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice: () => {} });
+  assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+  assert.equal(report.shot_counts, undefined);
+  assert.equal(report.shots, undefined);
+  assert.ok(report.warnings.some((warning) => /--min-shots 2 ignored: there is no asset provider/.test(warning)), report.warnings.join("\n"));
+  assert.ok(report.repairs.attempts.every((attempt) => !attempt.errors.some((error) => /^shots:/.test(error))), JSON.stringify(report.repairs.attempts));
+});
+
 test("LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS raises the wait for an answer; anything else keeps the default", () => {
   assert.equal(assetProviderTimeoutMs({ LAUNCHCLIP_ASSET_PROVIDER_TIMEOUT_MS: "600000" }), 600_000);
   assert.equal(assetProviderTimeoutMs({}), ASSET_PROVIDER_TIMEOUT_MS);

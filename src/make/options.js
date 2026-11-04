@@ -46,6 +46,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["visual-similarity-limit", { setting: true }],
   // The app's shot source (src/asset_provider_cmd.js): a property of the host, not a recipe.
   ["asset-provider-cmd", {}],
+  // The fewest shots the plan must ask the asset provider for (0, the default, leaves them optional).
+  ["min-shots", {}],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
   ["capture-cmd", {}],
   ["capture-concurrency", {}],
@@ -80,6 +82,7 @@ export function makeOptionsFromFlags(flags = {}) {
     voice: flags.voice,
     voiceId: flags["voice-id"],
     assetProviderCmd: flags["asset-provider-cmd"],
+    minShots: flags["min-shots"],
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
@@ -131,6 +134,7 @@ export function validateMakeOptions(options = {}) {
   if (options.duration != null) resolveDuration({ duration: options.duration }, {});
   if (options.density != null && !(options.density !== true && options.density !== "" && Number(options.density) >= 0 && Number(options.density) <= 1)) throw new Error(`--density must be a number from 0 to 1; got ${options.density}`);
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
+  if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);

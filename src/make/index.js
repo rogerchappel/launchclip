@@ -16,7 +16,7 @@ import { copyFile, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/pr
 import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
-import { SHOTS_DIR } from "../asset_provider.js";
+import { MAX_SHOT_REQUESTS, SHOTS_DIR } from "../asset_provider.js";
 import { assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
@@ -98,7 +98,7 @@ export function slugify(prompt) {
 
 /**
  * options: {assets, aspect, duration, style, seed, profile, model, voice, voiceId, music, renderer,
- *   quality, concurrency (cores per render), out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
+ *   quality, concurrency (cores per render), out, replan, critic (true|false|undefined = auto), maxRepairs, minShots, cwd,
  *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
  *   subject (false: no presenter probe or subject effects), rules (a collection's
  *   RULES.md text: the script pass, the planner and the critic follow it),
@@ -140,7 +140,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -814,7 +814,12 @@ async function stageStoryboard(ctx) {
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
   const constraints = ctx.constraints ?? null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(ctx.adapters.assets || ctx.options.assetProviderCmd ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
+  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
+  const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), MAX_SHOT_REQUESTS) : 0;
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
+  // --min-shots: only an asset provider can supply shots; above the cap it is clamped.
+  if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
+  if (hasProvider && Number(options.minShots) > MAX_SHOT_REQUESTS) report.warnings.push(`--min-shots ${options.minShots} is more than a plan may ask for; using ${MAX_SHOT_REQUESTS}`);
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even
@@ -822,6 +827,7 @@ async function stageStoryboard(ctx) {
   const history = await loadHistory(ctx);
   if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
     report.repairs = state.plan.repairs ?? null;
+    if (state.plan.shot_counts) report.shot_counts = state.plan.shot_counts;
     if (history) await lintVariety(ctx, await readJson(storyFile), style, history, state.plan.variety ?? []);
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
@@ -867,7 +873,7 @@ async function stageStoryboard(ctx) {
     ...(lane !== "footage-led" ? { clips: manifest.filter((item) => item.clip) } : {}),
     ...(options.density != null ? { density: Number(options.density) } : {}),
     ...(history?.prompt ? { history: history.prompt } : {}),
-    ...(assets ? { assets, project: ctx.project } : {}),
+    ...(assets ? { assets, project: ctx.project, minShots } : {}),
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
@@ -876,6 +882,9 @@ async function stageStoryboard(ctx) {
     if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd, fallback: false });
   }
   if (assets) report.shots = plan.shots ?? [];
+  // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
+  if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
+  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ")) report.warnings.push(warning);
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
@@ -895,7 +904,7 @@ async function stageStoryboard(ctx) {
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
   if (history) await lintVariety(ctx, story, style, history, varied);
   report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
-  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(history ? { variety: varied } : {}) };
+  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(report.shot_counts ? { shot_counts: report.shot_counts } : {}), ...(history ? { variety: varied } : {}) };
   return { status: "done" };
 }
 

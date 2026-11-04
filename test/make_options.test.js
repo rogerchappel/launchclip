@@ -39,6 +39,18 @@ test("validateMakeOptions refuses what runMake cannot use, naming the flag", () 
   assert.throws(() => validateMakeOptions({ seed: "7f3a91c2", style: "editorial-dark" }), /--seed or --style, not both/);
 });
 
+test("--min-shots parses as a value into options.minShots, and is validated", () => {
+  assert.deepEqual(parseFlags(["--min-shots", "3", "--asset-provider-cmd", "./shots.sh"]), { "min-shots": "3", "asset-provider-cmd": "./shots.sh" });
+  assert.deepEqual(parseFlags(["--min-shots", "0", "--replan"]), { "min-shots": "0", replan: true });
+  assert.throws(() => parseFlags(["--min-shots", "--replan"]), /Missing value for --min-shots/);
+  assert.equal(makeOptionsFromFlags(parseFlags(["--min-shots", "3"])).minShots, "3");
+  assert.equal(makeOptionsFromFlags({}).minShots, undefined);
+  assert.ok(MAKE_FLAGS.some(([flag]) => flag === "min-shots"));
+  assert.ok(!MAKE_SETTING_FLAGS.includes("min-shots"));
+  for (const value of ["0", "3", "12", 2]) assert.doesNotThrow(() => validateMakeOptions({ minShots: value }), String(value));
+  for (const value of ["-1", "2.5", "three", "", -1, 1.5, true]) assert.throws(() => validateMakeOptions({ minShots: value }), /--min-shots must be a whole number of 0 or more/, String(value));
+});
+
 test("settingsFromMakeReport repeats what a finished video became, not only what was typed", () => {
   const report = {
     options: { aspect: null, duration: null, style: null, seed: null, voice: "kokoro", voice_id: null, music: "synth", renderer: "hyperframes", quality: "draft", critic: "auto", goal: null, format: null, awareness: null },
