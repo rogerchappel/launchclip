@@ -150,8 +150,8 @@ export async function planStoryboard(options = {}) {
   // The storyboard that passed everything but the shot minimum, with the most requests.
   let best = null;
   // A storyboard that misses only the cadence bands (a run of face time a
-  // second over the profile's limit), kept in case the repairs run out: a
-  // video slightly off the pacing target beats no video.
+  // second over the profile's limit) or has a card the model left as
+  // placeholders, kept in case the repairs run out: a near miss beats no video.
   let paced = null;
 
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
@@ -273,7 +273,7 @@ export async function planStoryboard(options = {}) {
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the
       // same budget; a storyboard that fails only this is kept as a fallback.
-      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => entry.startsWith("cadence: ")) && (!paced || checked.errors.length < paced.cadence.length)) {
+      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix))) && (!paced || checked.errors.length < paced.cadence.length)) {
         paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], cadence: [...checked.errors], direction };
       }
       const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
@@ -305,7 +305,7 @@ export async function planStoryboard(options = {}) {
   if (!last?.ok && !best && paced) {
     direction = paced.direction;
     const { cadence, ...kept } = paced;
-    last = { ...kept, warnings: [...kept.warnings, ...cadence, `cadence: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
+    last = { ...kept, warnings: [...kept.warnings, ...cadence, `${cadence.every((entry) => entry.startsWith("cadence: ")) ? "cadence" : "plan"}: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
     delete last.direction;
   }
   if (!last?.ok && best) {
@@ -506,7 +506,41 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   } catch (error) {
     errors.push(`layout: ${message(error)}`);
   }
+  errors.push(...placeholderErrors(storyboard));
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
+}
+
+// Errors a storyboard may still ship with when the repairs run out.
+const NEAR_MISS = ["cadence: ", "placeholder: "];
+
+// A card's text that only holds its place: dashes, question marks, an
+// ellipsis, "TBD". A model with nothing to say fills a list or a table with
+// these, and the card ships empty.
+const PLACEHOLDER_TEXT = /^\s*(?:[-–—?…·.*_]+|tbd|tbc|n\/?a|xx+)\s*$/i;
+
+/**
+ * Scenes whose text is mostly placeholders (at least two, and 40% of the
+ * text fields; a table's empty cells count): one error each, prefixed
+ * "placeholder:". A single dash for "no" in a full table stays.
+ */
+export function placeholderErrors(storyboard) {
+  const errors = [];
+  const scenes = Array.isArray(storyboard?.scenes) ? storyboard.scenes : [];
+  scenes.forEach((scene, index) => {
+    if (!scene?.params || typeof scene.params !== "object") return;
+    let texts = 0, empty = 0;
+    const walk = (value, inArray) => {
+      if (typeof value === "string") { texts += 1; if (PLACEHOLDER_TEXT.test(value)) empty += 1; }
+      else if (value === null && inArray) { texts += 1; empty += 1; }
+      else if (Array.isArray(value)) value.forEach((item) => walk(item, true));
+      else if (value && typeof value === "object") Object.values(value).forEach((item) => walk(item, false));
+    };
+    walk(scene.params, false);
+    if (empty >= 2 && empty / texts >= 0.4) {
+      errors.push(`placeholder: scenes[${index}]${scene.id ? ` (${scene.id})` : ""} (${scene.module}): ${empty} of ${texts} text fields are placeholders ("—", "?", empty cells); write the real words from the script, or use a module that needs fewer`);
+    }
+  });
+  return errors;
 }
 
 /**
