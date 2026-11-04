@@ -1,0 +1,45 @@
+name: Container smoke
+
+# One footage-led make in a CPU-only container with a memory limit
+# (docs/CONTAINER_SMOKE.md). By hand before a pin bump, and weekly; never on
+# push, since it builds an image and renders a minute of video.
+on:
+  workflow_dispatch:
+    inputs:
+      memory:
+        description: Container memory limit
+        default: 7.5g
+      repeat:
+        description: Copies of the 20 s clip
+        default: "3"
+      browser:
+        description: "default (Remotion finds its browser from make's cwd, as a host app runs it) or image (the browser installed in the image)"
+        default: default
+  schedule:
+    - cron: "17 4 * * 1"
+
+jobs:
+  smoke:
+    name: CPU-only make in Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Hosted runners have 4 vCPU and 16 GB, so the container gets every CPU
+      # there is (fewer than a production worker's 8) and the full memory limit.
+      - run: >
+          node scripts/container-smoke.mjs
+          --cpus "$(nproc)"
+          --memory "${{ inputs.memory || '7.5g' }}"
+          --repeat "${{ inputs.repeat || '3' }}"
+          --browser "${{ inputs.browser || 'default' }}"
+          --budget 1800
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-smoke
+          path: .smoke/container
+          if-no-files-found: ignore
