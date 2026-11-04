@@ -70,7 +70,8 @@ test("a container's cgroup quota and memory limit beat the host's cores and RAM"
 });
 
 test("a 7.5 GB, 8-core container renders with 4 tabs and a 1.1 GB video cache, not one tab per core", () => {
-  const machine = measureMachine({ platform: "linux", limits: { cores: 8, ram_gb: 7.5 } });
+  // A large host, so the container's limits are what count (CI runners can have fewer cores).
+  const machine = measureMachine({ platform: "linux", limits: { cores: 8, ram_gb: 7.5 }, host: { cores: 32, ram_gb: 128 } });
   const budget = renderBudget({ machine, env: {} });
   assert.equal(budget.tabs, 4);
   assert.equal(budget.video_cache_bytes, Math.round(1.125 * 1024 ** 3));
