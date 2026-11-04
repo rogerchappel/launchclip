@@ -29,6 +29,7 @@
 import { createHash } from "node:crypto";
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 
 export const SHOT_REQUEST = "shot";
@@ -65,14 +66,23 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
       "Shots from the app's media library: in a clip, photo-scene or media-window scene set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
       "The app's library has real footage for this brand, and the app finds or generates each shot for the line the scene sits under, after you plan. Show concrete subjects (places, products, people doing things) as shots, not drawn; keep data, steps and comparisons as motion graphics.",
       "Short-form moves fast: cut to a shot whenever the narration names something real, and as often as it keeps the video fast, dynamic and engaging. Asking for more shots than the app can find is fine: it answers what it can, and you design the rest as motion graphics.",
-      `Ask for at least ${floor} and up to ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
-    ].join("\n");
+      `Ask for at least ${floor} and up to ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
+      shotLengthLine()
+    ].filter(Boolean).join("\n");
   }
   return [
     "Shots from the app's media library: in a clip, photo-scene or media-window scene you may set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
     "The app finds or generates that shot for the line the scene sits under, after you plan. Ask for one where a real photo or clip of a concrete subject (a place, an object, people doing something) says more than a graphic; keep data, steps and comparisons as motion graphics.",
-    `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
-  ].join("\n");
+    `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
+    shotLengthLine()
+  ].filter(Boolean).join("\n");
+}
+
+// Each shot module's shortest scene, from the modules' own timing tables.
+function shotLengthLine() {
+  const lengths = SHOT_MODULES.map((id) => [id, Number(moduleTiming(id)?.minDuration)]).filter(([, seconds]) => seconds > 0);
+  if (!lengths.length) return "";
+  return `A shot scene is no shorter than ${lengths.map(([id, seconds]) => `${seconds} s (${id})`).join(", ")}, measured between the words it is anchored to; one or two spoken words are usually shorter. For a quick list of things, give each item a shot about 2 s long, anchored across its words, or one shot that shows the whole list.`;
 }
 
 /** The repair note when a storyboard asks for fewer than min shots ("" when it asks for enough). */
