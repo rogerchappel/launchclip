@@ -25,7 +25,7 @@ machine: 10 cores, 24 GB RAM, GPU Apple M4 (10 GPU cores)
   local-model  1
   render       2
   io           1
-each render uses 5 cores (--concurrency overrides)
+each render uses 5 cores (--concurrency overrides), video cache 1.8 GB
 ```
 
 | Slot | Work | Starting rule |
@@ -57,6 +57,14 @@ gets it as `--concurrency`, HyperFrames as `--workers`. Set it yourself with
 launchclip finish my-video --quality high --concurrency 8
 launchclip make "..." --concurrency 8
 ```
+
+The share is also capped by memory: each render's share of the RAM (the
+container's limit, when there is one) keeps 1.5 GB for Node, the browser
+process and FFmpeg, then a video frame cache of 15% of the share (0.5–2 GB),
+and allows one Chrome tab per remaining GB. An 8-core, 7.5 GB container
+renders with 4 tabs and a 1.1 GB cache; an 8-core, 16 GB one with 8 tabs and
+a 2 GB cache. The cache size is passed to Remotion, whose own default (half
+the host's free memory) can outgrow a container's limit.
 
 ## What is running
 

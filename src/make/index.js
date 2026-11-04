@@ -56,7 +56,7 @@ import { packCaptionsFor } from "@launchclip/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
 import { progressLine } from "../progress.js";
-import { measureMachine, renderShare } from "../capacity.js";
+import { measureMachine, renderBudget } from "../capacity.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -1052,7 +1052,8 @@ function machineLine(concurrency) {
   try {
     const machine = measureMachine();
     const limit = machine.container ? ` (container limit${machine.container.cores ? ` ${round1(machine.container.cores)} cores` : ""}${machine.container.ram_gb ? ` ${machine.container.ram_gb} GB` : ""})` : "";
-    return `machine: ${machine.cores} cores, ${machine.ram_gb} GB${limit}; render tabs ${concurrency ?? renderShare({ machine })}`;
+    const budget = renderBudget({ machine });
+    return `machine: ${machine.cores} cores, ${machine.ram_gb} GB${limit}; render tabs ${concurrency ?? budget.tabs}, video cache ${round1(budget.video_cache_bytes / 1024 ** 3)} GB`;
   } catch (error) {
     return `machine: not measured (${String(error?.message ?? error).split("\n")[0]})`;
   }

@@ -22,7 +22,7 @@ export const SLOT_KINDS = Object.freeze(["plan", "local-model", "render", "io"])
 // The §5.2 starting rule. RENDER_CORES and RENDER_GB are what one render
 // needs; BASE_GB is left for the system and the other slots.
 // benchmarks/RENDER_CAPACITY.md has the measurements behind them.
-export const RULE = Object.freeze({ PLAN: 4, RENDER_CORES: 5, RENDER_GB: 7, BASE_GB: 4, LOCAL_MODEL_TWO_AT_GB: 32 });
+export const RULE = Object.freeze({ PLAN: 4, RENDER_CORES: 5, RENDER_GB: 7, BASE_GB: 4, LOCAL_MODEL_TWO_AT_GB: 32, TAB_GB: 1, RENDER_OVERHEAD_GB: 1.5, VIDEO_CACHE_SHARE: 0.15, VIDEO_CACHE_MAX_GB: 2, VIDEO_CACHE_MIN_GB: 0.5 });
 
 /**
  * The machine as Node sees it, inside a container's limits: a Linux container
@@ -112,11 +112,31 @@ export function resolveSlots({ machine = measureMachine(), env = process.env, li
 
 /**
  * Cores for one render: the machine's cores split across the render slots,
- * at least 1. Passed to Remotion as --concurrency and HyperFrames as --workers.
+ * at least 1, and no more tabs than its memory share holds (renderBudget).
+ * Passed to Remotion as --concurrency and HyperFrames as --workers.
  */
 export function renderShare({ machine = measureMachine(), env = process.env, librarySlots = null } = {}) {
+  return renderBudget({ machine, env, librarySlots }).tabs;
+}
+
+/**
+ * What one render may use: {tabs, ram_gb, video_cache_bytes}. ram_gb is the
+ * machine's (container's) RAM split across the render slots. Out of it come
+ * the <OffthreadVideo> frame cache, the Node process, the browser process and
+ * FFmpeg (RENDER_OVERHEAD_GB), and TAB_GB per Chrome tab.
+ *
+ * Remotion's own cache default is half the memory free when the render
+ * starts, and its compositor reads that from the host, not the cgroup: in a
+ * 7.5 GB container on a large host the cache alone can outgrow the limit,
+ * and the kernel SIGKILLs the compositor.
+ */
+export function renderBudget({ machine = measureMachine(), env = process.env, librarySlots = null } = {}) {
   const { slots } = resolveSlots({ machine, env, librarySlots });
-  return Math.max(1, Math.floor(machine.cores / slots.render));
+  const ramGb = machine.ram_gb / slots.render;
+  const cacheGb = Math.min(RULE.VIDEO_CACHE_MAX_GB, Math.max(RULE.VIDEO_CACHE_MIN_GB, ramGb * RULE.VIDEO_CACHE_SHARE));
+  const byCores = Math.floor(machine.cores / slots.render);
+  const byRam = Math.floor((ramGb - RULE.RENDER_OVERHEAD_GB - cacheGb) / RULE.TAB_GB);
+  return { tabs: Math.max(1, Math.min(byCores, byRam)), ram_gb: round1(ramGb), video_cache_bytes: Math.round(cacheGb * GB) };
 }
 
 /** Best effort: Apple silicon GPU cores, or NVIDIA name and memory. null when nothing is found. */
@@ -147,8 +167,9 @@ export async function diagnoseCapacity({ env = process.env, librarySlots = null,
     slots,
     sources,
     recommended,
-    render_concurrency: Math.max(1, Math.floor(machine.cores / slots.render)),
-    rule: `render = min(cores ÷ ${RULE.RENDER_CORES}, (RAM − ${RULE.BASE_GB} GB) ÷ ${RULE.RENDER_GB} GB), at least 1; local-model = 1, or 2 with ${RULE.LOCAL_MODEL_TWO_AT_GB} GB+; plan = ${RULE.PLAN}; io = 1 per disk`
+    render_concurrency: renderShare({ machine, env, librarySlots }),
+    video_cache_gb: round1(renderBudget({ machine, env, librarySlots }).video_cache_bytes / GB),
+    rule: `render = min(cores ÷ ${RULE.RENDER_CORES}, (RAM − ${RULE.BASE_GB} GB) ÷ ${RULE.RENDER_GB} GB), at least 1; local-model = 1, or 2 with ${RULE.LOCAL_MODEL_TWO_AT_GB} GB+; plan = ${RULE.PLAN}; io = 1 per disk; tabs per render = min(cores, (RAM − ${RULE.RENDER_OVERHEAD_GB} GB − video cache) ÷ ${RULE.TAB_GB} GB)`
   };
 }
 
@@ -158,7 +179,7 @@ export function formatCapacity(report) {
   const lines = [
     `machine: ${machine.cores} cores, ${machine.ram_gb} GB RAM, GPU ${gpu}`,
     ...SLOT_KINDS.map((kind) => `  ${kind.padEnd(12)}${String(report.slots[kind]).padStart(2)}${report.sources[kind] === "rule" ? "" : `  (${report.sources[kind]}; rule says ${report.recommended[kind]})`}`),
-    `each render uses ${report.render_concurrency} core${report.render_concurrency === 1 ? "" : "s"} (--concurrency overrides)`,
+    `each render uses ${report.render_concurrency} core${report.render_concurrency === 1 ? "" : "s"} (--concurrency overrides), video cache ${report.video_cache_gb} GB`,
     `rule: ${report.rule}`
   ];
   return `${lines.join("\n")}\n`;
