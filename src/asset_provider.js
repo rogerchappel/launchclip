@@ -37,13 +37,34 @@ export const SHOTS_DIR = "assets/shots";
 const IMAGE = /\.(jpe?g|png|webp|svg)$/i;
 const VIDEO = /\.(mp4|webm|mov)$/i;
 
-/** The planning-prompt section that offers shot requests (only with a provider). */
-export function shotPrompt({ max = 6 } = {}) {
+/** The most shots one plan may ask for (the prompt's cap, and --min-shots' ceiling). */
+export const MAX_SHOT_REQUESTS = 6;
+
+/**
+ * The planning-prompt section that offers shot requests (only with a
+ * provider). min > 0 (make --min-shots) requires at least that many; with
+ * min 0 the text is the optional offer.
+ */
+export function shotPrompt({ min = 0, max = MAX_SHOT_REQUESTS } = {}) {
+  const floor = Math.min(Math.max(0, Math.floor(Number(min) || 0)), max);
+  if (floor > 0) {
+    return [
+      "Shots from the app's media library: in a clip, photo-scene or media-window scene set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
+      "The app's library has real footage for this brand, and the app finds or generates each shot for the line the scene sits under, after you plan. Show concrete subjects (places, products, people doing things) as shots, not drawn; keep data, steps and comparisons as motion graphics.",
+      `Ask for at least ${floor} and at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
+    ].join("\n");
+  }
   return [
     "Shots from the app's media library: in a clip, photo-scene or media-window scene you may set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
     "The app finds or generates that shot for the line the scene sits under, after you plan. Ask for one where a real photo or clip of a concrete subject (a place, an object, people doing something) says more than a graphic; keep data, steps and comparisons as motion graphics.",
     `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
   ].join("\n");
+}
+
+/** The repair note when a storyboard asks for fewer than min shots ("" when it asks for enough). */
+export function minShotsError(requested, min) {
+  if (!(min > 0) || requested >= min) return "";
+  return `shots: ask for at least ${min} shot${min === 1 ? "" : "s"} from the app's library; this storyboard asks for ${requested}. Show concrete subjects (places, products, people doing things) as {kind: "shot"} media in clip, photo-scene or media-window scenes instead of drawing them`;
 }
 
 const isRequest = (media) => media && typeof media === "object" && media.kind === SHOT_REQUEST;

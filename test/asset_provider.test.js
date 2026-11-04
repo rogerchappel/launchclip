@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { planStoryboard } from "../src/storyboard_planner.js";
-import { resolveShots, shotRequests } from "../src/asset_provider.js";
+import { MAX_SHOT_REQUESTS, resolveShots, shotPrompt, shotRequests } from "../src/asset_provider.js";
 import { createEngine } from "../src/engine/index.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 6, platform: "youtube-shorts" };
@@ -127,4 +127,97 @@ test("the engine passes its assets adapter and the project to the planner", asyn
   const report = await engine.planStoryboard({ brief: "A calm morning coffee short.", words: WORDS, lane: "voiceover-motion", format: FORMAT, audio: AUDIO, tier: "structured", model: "app-model", project: "coffee" });
   assert.equal(report.status, "passed", report.errors.join("\n"));
   assert.equal(await readFile(path.join(root, "work", "coffee", report.shots[0].src), "utf8"), "png");
+});
+
+// --min-shots: with a provider, a storyboard that asks for too few shots gets a
+// repair note; when the repairs run out it is kept with a warning, never failed.
+function threeShots() {
+  const shot = (shows) => ({ kind: "shot", shows, type: "image" });
+  return {
+    ...story(null),
+    scenes: [
+      { id: "s1", module: "photo-scene", start: 0, end: 2, energy: 1, params: { media: shot("a barista grinding coffee beans, close up"), title: "Every morning" } },
+      { id: "s2", module: "photo-scene", start: 2, end: 4, energy: 1, in: { type: "fade", dur: 0.3 }, params: { media: shot("steam rising from a fresh espresso"), title: "Starts here" } },
+      { id: "s3", module: "photo-scene", start: 4, end: 6, energy: 1, in: { type: "fade", dur: 0.3 }, params: { media: shot("a hand lifting a cup by a sunny window"), title: "Coffee first" } }
+    ]
+  };
+}
+
+async function shotFile(t) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-min-shots-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "library.jpg");
+  await writeFile(file, "jpeg");
+  return { project: dir, assets: { findShot: async () => ({ file }) } };
+}
+
+test("shotPrompt is unchanged without a minimum and asks for at least min shots with one", () => {
+  const optional = shotPrompt();
+  assert.equal(shotPrompt({ min: 0 }), optional);
+  assert.match(optional, /you may set params\.media/);
+  assert.match(optional, /Ask for at most 6 shots/);
+  assert.doesNotMatch(optional, /at least/);
+  const required = shotPrompt({ min: 3 });
+  assert.match(required, /Ask for at least 3 and at most 6 shots/);
+  assert.match(required, /library has real footage for this brand/);
+  assert.match(required, /places, products, people doing things\) as shots, not drawn/);
+  assert.match(required, /no brand names or text in the frame/);
+  assert.match(shotPrompt({ min: 9 }), /at least 6 and at most 6/);
+  assert.equal(MAX_SHOT_REQUESTS, 6);
+});
+
+test("minShots asks for shots, repairs a storyboard with too few and ends with the requests", async (t) => {
+  const { project, assets } = await shotFile(t);
+  const client = llm([story(null), threeShots()]);
+  const report = await plan(client, { assets, project, minShots: 3 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.match(client.requests[0].instructions, /Ask for at least 3 and at most 6 shots/);
+  assert.equal(report.attempts.length, 2);
+  assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene or media-window scenes instead of drawing them"), report.attempts[0].errors.join("\n"));
+  assert.match(client.requests[1].input, /ask for at least 3 shots from the app's library; this storyboard asks for 0/);
+  assert.equal(report.attempts[1].ok, true, report.attempts[1].errors.join("\n"));
+  assert.deepEqual(report.shot_counts, { min: 3, requested: 3, answered: 3 });
+  assert.equal(report.shots.length, 3);
+});
+
+test("a model that never adds shots keeps the best storyboard with a warning, not a failure", async () => {
+  const assets = { findShot: async () => null };
+  const client = llm([story(null)]);
+  const report = await plan(client, { assets, minShots: 2, maxRepairs: 2 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(report.attempts.length, 3);
+  assert.ok(report.attempts.every((attempt) => !attempt.ok && attempt.errors.some((error) => /ask for at least 2 shots/.test(error))));
+  assert.deepEqual(report.errors, []);
+  assert.ok(report.warnings.some((warning) => /shots: the storyboard asks for 0 shots, fewer than the 2 wanted, after 2 repairs; kept the best storyboard/.test(warning)), report.warnings.join("\n"));
+  assert.deepEqual(report.shot_counts, { min: 2, requested: 0, answered: 0 });
+  assert.equal(report.storyboard.scenes[0].module, "hook-title");
+});
+
+test("minShots counts requests, not answers", async () => {
+  const assets = { findShot: async () => null };
+  const client = llm([threeShots(), story(null)]);
+  const report = await plan(client, { assets, minShots: 3, maxRepairs: 1 });
+  // Three requests meet the minimum; the misses are the usual repair notes.
+  assert.ok(!report.attempts[0].errors.some((error) => /ask for at least/.test(error)), report.attempts[0].errors.join("\n"));
+  assert.ok(report.attempts[0].errors.some((error) => /no shot that shows/.test(error)));
+});
+
+test("minShots is clamped to the most a plan may ask for, with a warning", async (t) => {
+  const { project, assets } = await shotFile(t);
+  const client = llm([threeShots()]);
+  const report = await plan(client, { assets, project, minShots: 10, maxRepairs: 0 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.match(client.requests[0].instructions, /Ask for at least 6 and at most 6 shots/);
+  assert.ok(report.warnings.some((warning) => /minShots 10 is more than a plan may ask for; using 6/.test(warning)));
+  assert.equal(report.shot_counts.min, 6);
+});
+
+test("minShots is ignored without an asset provider", async () => {
+  const client = llm([story(null)]);
+  const report = await plan(client, { minShots: 3 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(report.attempts.length, 1);
+  assert.doesNotMatch(client.requests[0].instructions, /kind: "shot"/);
+  assert.equal(report.shot_counts, undefined);
+  assert.ok(report.warnings.some((warning) => /minShots 3 ignored: there is no asset provider/.test(warning)));
 });

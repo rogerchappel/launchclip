@@ -30,7 +30,7 @@ import { applyStyle } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
-import { resolveShots, shotPrompt } from "./asset_provider.js";
+import { MAX_SHOT_REQUESTS, minShotsError, resolveShots, shotPrompt, shotRequests } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
@@ -126,8 +126,16 @@ export async function planStoryboard(options = {}) {
   // [{src, kind, duration?}] from the asset manifest, or the asset provider) and
   // a low density dial (options.density, else the style pack's dials.density),
   // supplied footage carries the video in full-frame clip scenes.
+  // minShots (make --min-shots): with a provider, a storyboard asking for
+  // fewer shots gets a repair note; when the repairs run out the best one is
+  // kept with a warning, never failed. Without a provider it is ignored.
+  const askedMin = Number.isFinite(Number(options.minShots)) ? Math.max(0, Math.floor(Number(options.minShots))) : 0;
+  const minShots = assets ? Math.min(askedMin, MAX_SHOT_REQUESTS) : 0;
+  const shotWarnings = [];
+  if (assets && askedMin > MAX_SHOT_REQUESTS) shotWarnings.push(`shots: minShots ${askedMin} is more than a plan may ask for; using ${MAX_SHOT_REQUESTS}`);
+  if (!assets && askedMin > 0) shotWarnings.push(`shots: minShots ${askedMin} ignored: there is no asset provider to ask for shots`);
   const clipLed = clipLedPlan({ lane, ...densityDial(options.density, style), clips: Array.isArray(options.clips) ? options.clips : [], provider: Boolean(assets), profile });
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots })] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -136,6 +144,8 @@ export async function planStoryboard(options = {}) {
   const request = planRequest({ brief, fixed, hints, direction, history: options.history ?? null });
   let previous = null;
   let last = null;
+  // The storyboard that passed everything but the shot minimum, with the most requests.
+  let best = null;
 
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
     const kind = attempt === 0 ? "plan" : "repair";
@@ -169,11 +179,14 @@ export async function planStoryboard(options = {}) {
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
       if (repairedMap?.ok) direction = repairedMap.map;
       let shotErrors = [];
+      let shotCounts = null;
       if (assets) {
+        const requested = shotRequests(pinned.storyboard).length;
         const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
         pinned.storyboard = found.storyboard;
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
+        shotCounts = { requested, answered: found.shots.length, shots: found.shots };
       }
       // Notes' usable windows: a video scene outside them starts in the best one.
       if (media.length) {
@@ -222,6 +235,15 @@ export async function planStoryboard(options = {}) {
         const extra = (extraCheck(checked.storyboard) ?? []).map((entry) => `assets: ${entry}`);
         if (extra.length) { checked.errors = [...checked.errors, ...extra]; checked.ok = false; }
       }
+      checked.shotCounts = shotCounts;
+      // Fewer shot requests than minShots: a repair note, counted against the
+      // same budget; a storyboard that fails only this is kept as a fallback.
+      const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
+      if (shortfall) {
+        if (checked.ok && checked.storyboard && (!best || shotCounts.requested > best.shotCounts.requested)) best = { ...checked, errors: [], warnings: [...checked.warnings], direction };
+        checked.errors = [...checked.errors, shortfall];
+        checked.ok = false;
+      }
     }
     attempts.push({
       attempt,
@@ -242,6 +264,12 @@ export async function planStoryboard(options = {}) {
     previous = checked;
     if (checked.ok) break;
   }
+  if (!last?.ok && best) {
+    direction = best.direction;
+    last = { ...best, warnings: [...best.warnings, `shots: the storyboard asks for ${best.shotCounts.requested} shot${best.shotCounts.requested === 1 ? "" : "s"}, fewer than the ${minShots} wanted, after ${repairs} repair${repairs === 1 ? "" : "s"}; kept the best storyboard`] };
+    delete last.direction;
+  }
+  if (assets) shots = last?.shotCounts?.shots ?? shots;
 
   // The model returned no usable map: draft one from the planned storyboard
   // so validation and the gates still have one, and say so.
@@ -298,13 +326,15 @@ export async function planStoryboard(options = {}) {
     max_repairs: repairs,
     valid_first_attempt: Boolean(attempts[0]?.ok),
     errors: last?.errors ?? [],
-    warnings: [...directionPlan.warnings, ...constraintWarnings, ...(last?.warnings ?? [])],
+    warnings: [...directionPlan.warnings, ...constraintWarnings, ...shotWarnings, ...(last?.warnings ?? [])],
     layout: last?.layout ?? emptyLayout(),
     direction,
     direction_source: directionSource,
     direction_attempts: directionPlan.attempts,
     // Shots the app's asset provider supplied for the final storyboard.
     ...(assets ? { shots } : {}),
+    // How many shots the final storyboard asked for and got, against minShots.
+    ...(assets ? { shot_counts: { min: minShots, requested: last?.shotCounts?.requested ?? 0, answered: last?.shotCounts?.answered ?? 0 } } : {}),
     profile: profile?.id ?? null,
     cadence: last?.cadence ?? null,
     // The clip-led rule the plan ran under, and the clip share it reached.
