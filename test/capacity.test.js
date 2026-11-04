@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containerLimits, detectGpu, diagnoseCapacity, measureMachine, formatCapacity, parseSlotOverrides, recommendSlots, renderShare, resolveSlots } from "../src/capacity.js";
+import { containerLimits, detectGpu, diagnoseCapacity, measureMachine, formatCapacity, parseSlotOverrides, recommendSlots, renderBudget, renderShare, resolveSlots } from "../src/capacity.js";
 import { runCli } from "../src/cli.js";
 
 const MAC = { platform: "darwin", arch: "arm64", cores: 10, cpu_model: "Apple M4", ram_gb: 24 };
@@ -67,4 +67,27 @@ test("a container's cgroup quota and memory limit beat the host's cores and RAM"
   assert.equal(machine.ram_gb, 0.3);
   assert.deepEqual(machine.container, { cores: 0.5, ram_gb: 0.3 });
   assert.equal(measureMachine({ platform: "linux", limits: {} }).container, undefined);
+});
+
+test("a 7.5 GB, 8-core container renders with 4 tabs and a 1.1 GB video cache, not one tab per core", () => {
+  const machine = measureMachine({ platform: "linux", limits: { cores: 8, ram_gb: 7.5 } });
+  const budget = renderBudget({ machine, env: {} });
+  assert.equal(budget.tabs, 4);
+  assert.equal(budget.video_cache_bytes, Math.round(1.125 * 1024 ** 3));
+  assert.equal(renderShare({ machine, env: {} }), 4);
+  assert.equal(renderShare({ machine, env: { LAUNCHCLIP_SLOTS: "render:2" } }), 1, "two renders split the memory too");
+});
+
+test("a 16 GB, 8-core container gets a tab per core and the 2 GB cache cap", () => {
+  const budget = renderBudget({ machine: { cores: 8, ram_gb: 16 }, env: {} });
+  assert.deepEqual(budget, { tabs: 8, ram_gb: 16, video_cache_bytes: 2 * 1024 ** 3 });
+});
+
+test("with no cgroup limit the budget comes from the host's RAM and the cache stays capped", () => {
+  const host = { cores: 16, ram_gb: 64 };
+  assert.deepEqual(renderBudget({ machine: host, env: { LAUNCHCLIP_SLOTS: "render:1" } }), { tabs: 16, ram_gb: 64, video_cache_bytes: 2 * 1024 ** 3 });
+  const measured = renderBudget({ machine: measureMachine({ platform: "linux", limits: {} }), env: {} });
+  assert.ok(measured.tabs >= 1);
+  assert.ok(measured.video_cache_bytes >= 0.5 * 1024 ** 3 && measured.video_cache_bytes <= 2 * 1024 ** 3);
+  assert.equal(renderBudget({ machine: { cores: 4, ram_gb: 2 }, env: {} }).tabs, 1, "a tiny machine still renders");
 });
