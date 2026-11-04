@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { planStoryboard } from "../src/storyboard_planner.js";
-import { MAX_SHOT_REQUESTS, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "../src/asset_provider.js";
+import { MAX_SHOT_REQUESTS, SHOT_CARD_SLOTS, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "../src/asset_provider.js";
 import { createEngine } from "../src/engine/index.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 6, platform: "youtube-shorts" };
@@ -185,7 +185,7 @@ test("minShots asks for shots, repairs a storyboard with too few and ends with t
   assert.equal(report.status, "passed", report.errors.join("\n"));
   assert.match(client.requests[0].instructions, /Ask for at least 3 and up to 6 shots/);
   assert.equal(report.attempts.length, 2);
-  assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene or media-window scenes instead of drawing them"), report.attempts[0].errors.join("\n"));
+  assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene or media-window scenes, or in a card's image slot, instead of drawing them"), report.attempts[0].errors.join("\n"));
   assert.match(client.requests[1].input, /ask for at least 3 shots from the app's library; this storyboard asks for 0/);
   assert.equal(report.attempts[1].ok, true, report.attempts[1].errors.join("\n"));
   assert.deepEqual(report.shot_counts, { min: 3, requested: 3, answered: 3 });
@@ -232,4 +232,89 @@ test("minShots is ignored without an asset provider", async () => {
   assert.doesNotMatch(client.requests[0].instructions, /kind: "shot"/);
   assert.equal(report.shot_counts, undefined);
   assert.ok(report.warnings.some((warning) => /minShots 3 ignored: there is no asset provider/.test(warning)));
+});
+
+// Cards with an image slot (SHOT_CARD_SLOTS) take shot requests too.
+function cardStory(module, params) {
+  const board = story(null);
+  board.scenes[0] = { id: "s1", module, start: 0, end: "word:with", energy: 1, params };
+  return board;
+}
+
+test("a card's image slot takes a shot request and gets the app's image as an assets/ path", async (t) => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-card-shots-"));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const library = path.join(project, "..", `${path.basename(project)}-cafe.jpg`);
+  await writeFile(library, "jpeg bytes");
+  t.after(() => rm(library, { force: true }));
+  const asked = [];
+  const assets = { async findShot(request) { asked.push(request); return { file: library, source: { provider: "app-library", id: "img-7" } }; } };
+  const client = llm([cardStory("polaroid", { image: { kind: "shot", shows: "a sunlit corner cafe with a striped awning" }, caption: "Every morning" })]);
+  const report = await plan(client, { assets, project });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.match(client.requests[0].instructions, /Cards can carry library shots too/);
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0].module, "polaroid");
+  assert.equal(asked[0].slot, "image");
+  assert.equal(asked[0].still, true);
+  assert.equal(asked[0].line, "Every morning starts here");
+  const image = report.storyboard.scenes[0].params.image;
+  assert.match(image, /^assets\/shots\/s1-[0-9a-f]{10}\.jpg$/);
+  assert.equal(await readFile(path.join(project, image), "utf8"), "jpeg bytes");
+  assert.equal(report.shots[0].slot, "image");
+});
+
+test("every card slot is found, nested slots included, and written back as a plain path", async () => {
+  const assets = { findShot: async () => ({ src: "assets/library/hands.jpg", kind: "image" }) };
+  for (const [module, slot] of Object.entries(SHOT_CARD_SLOTS)) {
+    const request = { kind: "shot", shows: "hands typing on a laptop" };
+    const params = slot === "media.image" ? { media: { image: request, layout: "side" } } : { image: request };
+    const board = cardStory(module, params);
+    assert.deepEqual(shotRequests(board).map(({ slot: at, still }) => ({ at, still })), [{ at: slot, still: true }], module);
+    const found = await resolveShots(board, { assets, words: WORDS });
+    assert.deepEqual(found.errors, [], module);
+    const value = slot.split(".").reduce((node, key) => node[key], found.storyboard.scenes[0].params);
+    assert.equal(value, "assets/library/hands.jpg", module);
+    if (slot === "media.image") assert.equal(found.storyboard.scenes[0].params.media.layout, "side", "sibling params are kept");
+    assert.equal(shotRequests(found.storyboard).length, 0);
+  }
+});
+
+test("a video shot in a card's image slot lands as a still frame of it", async (t) => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-card-still-"));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const frames = [];
+  const stillFrame = async (video, at, target) => { frames.push({ video, at }); await writeFile(target, "still bytes"); };
+  const assets = { findShot: async () => ({ src: "assets/library/pour.mp4", kind: "video", sourceStart: 2 }) };
+  const board = cardStory("device-frame", { device: "phone", image: { kind: "shot", shows: "a phone showing a coffee order app", type: "video" } });
+  const found = await resolveShots(board, { assets, words: WORDS, project, stillFrame });
+  assert.deepEqual(found.errors, []);
+  const image = found.storyboard.scenes[0].params.image;
+  assert.match(image, /^assets\/shots\/s1-[0-9a-f]{10}-still\.jpg$/);
+  assert.equal(await readFile(path.join(project, image), "utf8"), "still bytes");
+  assert.deepEqual(frames, [{ video: path.join(project, "assets/library/pour.mp4"), at: 2.5 }]);
+  assert.deepEqual({ kind: found.shots[0].kind, still_of: found.shots[0].still_of }, { kind: "image", still_of: "assets/library/pour.mp4" });
+  // A video by URL cannot give a still here; that is a repair note, not a broken card.
+  const byUrl = await resolveShots(board, { assets: { findShot: async () => ({ url: "https://media.example/pour.mp4", kind: "video" }) }, words: WORDS, project, stillFrame });
+  assert.match(byUrl.errors[0], /video by URL for a card's image slot \(device-frame params\.image\)/);
+  assert.equal(byUrl.storyboard.scenes[0].params.image.kind, "shot");
+});
+
+test("a shot request outside a shot module or card slot is still refused, and the module schema stays strict", async () => {
+  const assets = { findShot: async () => ({ src: "assets/library/hands.jpg", kind: "image" }) };
+  const found = await resolveShots(cardStory("hook-title", { headline: "Every morning", media: { kind: "shot", shows: "a cup" } }), { assets, words: WORDS });
+  assert.match(found.errors[0], /shot requests are for photo-scene, media-window, clip scenes and card image slots \(.*polaroid params\.image.*\), not hook-title/);
+  // An unanswered card request is not an assets/ path, so the card's own check fails and the plan repairs it.
+  const client = llm([cardStory("polaroid", { image: { kind: "shot", shows: "a cafe" } }), story(null)]);
+  const report = await plan(client, { assets: { findShot: async () => null } });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.ok(report.attempts[0].errors.some((error) => /params\.image must be a project-local assets\/ path/.test(error)), report.attempts[0].errors.join("\n"));
+});
+
+test("shotPrompt tells the planner that cards carry library shots", () => {
+  for (const text of [shotPrompt(), shotPrompt({ min: 3 })]) {
+    assert.match(text, /Cards can carry library shots too/);
+    for (const [module, slot] of Object.entries(SHOT_CARD_SLOTS)) assert.ok(text.includes(`${module} params.${slot}`), module);
+    assert.match(text, /a video shot lands there as one frame of it/);
+  }
 });
