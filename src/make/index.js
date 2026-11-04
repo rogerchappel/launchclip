@@ -440,18 +440,21 @@ async function prepareFootage(ctx) {
 // start, end}]}) when given, else from the inventory's transcription.
 async function suppliedFootage(ctx, entry) {
   const { report } = ctx;
-  let words = entry.transcript?.words ?? [];
-  if (ctx.options.baseTranscript) {
-    const file = path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.baseTranscript));
-    const transcript = await readJson(file);
-    if (!transcript) throw new Error(`--base-transcript ${file} is not readable JSON`);
-    const { normalizeRecordingTranscript } = await import("../recording_edit.js");
-    words = normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
-  }
+  const words = (await baseTranscriptWords(ctx)) ?? entry.transcript?.words ?? [];
   const duration = Number(entry.media?.duration) || Number(words.at(-1)?.end ?? 0);
   report.base_edit = { source: `assets/${entry.path}`, status: "supplied", output: `assets/${entry.path}`, edited_seconds: duration, transcript: ctx.options.baseTranscript ? "supplied" : "inventory" };
   ctx.base = { src: `assets/${entry.path}`, fit: "cover" };
   return footageWords(ctx, entry, words, duration);
+}
+
+// --base-transcript's words ({text, start, end}), or null without the flag.
+async function baseTranscriptWords(ctx) {
+  if (!ctx.options.baseTranscript) return null;
+  const file = path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.baseTranscript));
+  const transcript = await readJson(file);
+  if (!transcript) throw new Error(`--base-transcript ${file} is not readable JSON`);
+  const { normalizeRecordingTranscript } = await import("../recording_edit.js");
+  return normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
 }
 
 async function footageWords(ctx, entry, words, duration) {
@@ -517,15 +520,21 @@ async function trackFootageSubject(ctx, src) {
 
 // Voiceover-motion: the supplied voiceover is prepared (pauses tightened,
 // levelled, transcribed with word timings) into assets/audio/voiceover.wav.
+// --base-transcript supplies its words (no Whisper pass in the inventory);
+// --base-edited says the app already edited it: no pause edit and no second
+// Whisper pass, only levelling, with the supplied (or inventory) word timings.
 async function prepareVoiceover(ctx) {
-  const { project, routing, report, adapters, state } = ctx;
+  const { project, routing, report, adapters, state, options } = ctx;
   const entry = ctx.inventory.entries.find((item) => item.path === routing.voiceover.path);
-  const text = entry.transcript?.text?.trim();
-  if (!text) throw new Error(`the voiceover ${entry.path} has no transcript; make needs its words (is local Whisper installed? run: launchclip doctor)`);
+  const supplied = await baseTranscriptWords(ctx);
+  const text = supplied ? supplied.map((word) => word.text).join(" ") : entry.transcript?.text?.trim();
+  if (!text) throw new Error(`the voiceover ${entry.path} has no transcript; make needs its words (pass --base-transcript, or install local Whisper: launchclip doctor)`);
+  const edited = Boolean(options.baseEdited);
+  const timed = edited ? supplied ?? (entry.transcript?.words?.length ? entry.transcript.words : null) : null;
   const sourceFile = path.join(project, "assets", entry.path);
   const voiceFile = path.join(project, MAKE_PATHS.voiceover);
   const doc = path.join(project, MAKE_PATHS.words);
-  const sourceHash = await fileHash(sourceFile);
+  const sourceHash = hashValue({ source: await fileHash(sourceFile), edited, words: supplied });
   let take;
   const previous = await readJson(doc);
   if (state.prepare?.voiceover_hash === sourceHash && previous?.words?.length && existsSync(voiceFile)) {
@@ -536,7 +545,9 @@ async function prepareVoiceover(ctx) {
       outFile: voiceFile,
       voiceProvider: adapters.voiceProvider ?? ((name, providerOptions) => getVoiceProvider(name, providerOptions)),
       normalizeVoice: adapters.normalizeVoice,
-      source: sourceFile
+      source: sourceFile,
+      ...(edited ? { edited: true } : {}),
+      ...(timed ? { words: timed } : {})
     });
     await writeJson(doc, narrationDocument(request, take));
   }
@@ -544,7 +555,7 @@ async function prepareVoiceover(ctx) {
   ctx.narrationText = take.words.map((word) => word.text).join(" ");
   ctx.format = { ...routing.format, duration: round1(take.duration + 0.6) };
   ctx.audio = { voice: MAKE_PATHS.voiceover, words: MAKE_PATHS.words };
-  report.script = { source: "voiceover", words: take.words.length, seconds: take.duration, note: "voiceover-motion: the supplied voiceover is the narration; no script pass" };
+  report.script = { source: "voiceover", words: take.words.length, seconds: take.duration, transcript: supplied ? "supplied" : "inventory", edited, note: "voiceover-motion: the supplied voiceover is the narration; no script pass" };
   state.prepare = { lane: "voiceover-motion", voiceover_hash: sourceHash };
   return { status: "done" };
 }

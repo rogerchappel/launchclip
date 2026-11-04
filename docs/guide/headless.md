@@ -64,6 +64,8 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
+| `--base-edited` | off | The talking-head recording or voiceover in `--assets` is already edited by your app: make skips its own edit (bad takes, pauses) and only levels the audio. |
+| `--base-transcript <file>` | local Whisper | Word-timed JSON for that recording or voiceover (Whisper's, or `{words: [{text, start, end}]}`): make uses these words and skips Whisper. |
 | `--constraints <file>` | `constraints.json` in `--assets` | Hard rules from your app: hidden picture ranges, must-use and never-use media. See [Rules and notes from your app](#rules-and-notes-from-your-app). |
 
 ## What it does
