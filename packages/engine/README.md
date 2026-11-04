@@ -237,9 +237,13 @@ your command once, through the shell, for the length of the plan:
   within 120 s counts as no shot.
 - **stderr.** It shows up in make's progress lines.
 
-**Requiring shots.** Shot requests are optional by default. `--min-shots <n>`
-(or `minShots` in the make options) tells the planner to ask for at least `n`
-shots (at most 6; a higher value is clamped, with a warning). A storyboard
+**How many shots.** A plan may ask for about one shot per 3 seconds of
+video: at least 6, at most 24. Shot requests are optional by default.
+`--min-shots <n>` (or `minShots` in the make options) says the app has a
+library to cut to. The planner is told to cut to real footage as often as it
+keeps the video fast and engaging, and that asking for more than the app can
+find is fine; `n` is a floor, not a target (above the length's limit it is
+clamped, with a warning). A storyboard
 that asks for fewer gets a repair note, which uses the usual repair budget.
 If the repairs run out, make keeps the best storyboard and adds a warning; it
 never fails because of the minimum. The minimum counts requests, not answers:

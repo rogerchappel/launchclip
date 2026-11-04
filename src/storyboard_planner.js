@@ -30,7 +30,7 @@ import { applyStyle } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
-import { MAX_SHOT_REQUESTS, minShotsError, resolveShots, shotPrompt, shotRequests } from "./asset_provider.js";
+import { minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
@@ -130,12 +130,13 @@ export async function planStoryboard(options = {}) {
   // fewer shots gets a repair note; when the repairs run out the best one is
   // kept with a warning, never failed. Without a provider it is ignored.
   const askedMin = Number.isFinite(Number(options.minShots)) ? Math.max(0, Math.floor(Number(options.minShots))) : 0;
-  const minShots = assets ? Math.min(askedMin, MAX_SHOT_REQUESTS) : 0;
+  const shotLimit = shotRequestLimit(fixed.format?.duration);
+  const minShots = assets ? Math.min(askedMin, shotLimit) : 0;
   const shotWarnings = [];
-  if (assets && askedMin > MAX_SHOT_REQUESTS) shotWarnings.push(`shots: minShots ${askedMin} is more than a plan may ask for; using ${MAX_SHOT_REQUESTS}`);
+  if (assets && askedMin > shotLimit) shotWarnings.push(`shots: minShots ${askedMin} is more than a plan may ask for; using ${shotLimit}`);
   if (!assets && askedMin > 0) shotWarnings.push(`shots: minShots ${askedMin} ignored: there is no asset provider to ask for shots`);
   const clipLed = clipLedPlan({ lane, ...densityDial(options.density, style), clips: Array.isArray(options.clips) ? options.clips : [], provider: Boolean(assets), profile });
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots })] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });

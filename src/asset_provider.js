@@ -37,21 +37,35 @@ export const SHOTS_DIR = "assets/shots";
 const IMAGE = /\.(jpe?g|png|webp|svg)$/i;
 const VIDEO = /\.(mp4|webm|mov)$/i;
 
-/** The most shots one plan may ask for (the prompt's cap, and --min-shots' ceiling). */
-export const MAX_SHOT_REQUESTS = 6;
+/** The most shots any plan may ask for, however long (--min-shots' ceiling). */
+export const MAX_SHOT_REQUESTS = 24;
+// Short-form cuts every few seconds: a plan may ask for about one shot per
+// SHOT_SECONDS of video, and never fewer than DEFAULT_SHOT_REQUESTS.
+const SHOT_SECONDS = 3;
+const DEFAULT_SHOT_REQUESTS = 6;
+
+/** How many shots a plan of this length may ask for (DEFAULT_SHOT_REQUESTS when the length is unknown). */
+export function shotRequestLimit(durationSeconds) {
+  const seconds = Number(durationSeconds);
+  if (!(seconds > 0)) return DEFAULT_SHOT_REQUESTS;
+  return Math.min(MAX_SHOT_REQUESTS, Math.max(DEFAULT_SHOT_REQUESTS, Math.ceil(seconds / SHOT_SECONDS)));
+}
 
 /**
  * The planning-prompt section that offers shot requests (only with a
- * provider). min > 0 (make --min-shots) requires at least that many; with
- * min 0 the text is the optional offer.
+ * provider). min > 0 (make --min-shots) means the app has a library to cut
+ * to: the text asks for real footage as often as it keeps the video moving,
+ * with min as a floor, not a target; with min 0 it is the optional offer.
+ * max is shotRequestLimit() for the video's length.
  */
-export function shotPrompt({ min = 0, max = MAX_SHOT_REQUESTS } = {}) {
+export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
   const floor = Math.min(Math.max(0, Math.floor(Number(min) || 0)), max);
   if (floor > 0) {
     return [
       "Shots from the app's media library: in a clip, photo-scene or media-window scene set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
       "The app's library has real footage for this brand, and the app finds or generates each shot for the line the scene sits under, after you plan. Show concrete subjects (places, products, people doing things) as shots, not drawn; keep data, steps and comparisons as motion graphics.",
-      `Ask for at least ${floor} and at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
+      "Short-form moves fast: cut to a shot whenever the narration names something real, and as often as it keeps the video fast, dynamic and engaging. Asking for more shots than the app can find is fine: it answers what it can, and you design the rest as motion graphics.",
+      `Ask for at least ${floor} and up to ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`
     ].join("\n");
   }
   return [
