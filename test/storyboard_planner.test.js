@@ -392,6 +392,17 @@ test("direction: with no map from the model, one is drafted from the storyboard 
   assert.ok(report.warnings.some((warning) => /drafted from the storyboard/.test(warning)));
 });
 
+test("direction: a plan that misses only the cadence bands after every repair is kept, with the bands as warnings", async () => {
+  const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 }, shot_seconds: { p10: 0.1, p50: 0.2, p90: 0.3 } } };
+  const client = fakeClient([envelope(goodStoryboard()), envelope(goodStoryboard()), envelope(goodStoryboard())]);
+  const report = await plan(client, { direction: MAP, profile: tight });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.ok(report.attempts.length > 1, "the loop still tried to repair it");
+  assert.ok(report.attempts.every((attempt) => !attempt.ok));
+  assert.ok(report.warnings.some((line) => /^cadence: coverage 100% is above the profile band/.test(line)), report.warnings.join("\n"));
+  assert.ok(report.warnings.some((line) => /kept the storyboard closest to the profile/.test(line)));
+});
+
 test("direction: coverage outside the profile band fails the plan so the loop repairs it", () => {
   const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 }, shot_seconds: { p10: 0.1, p50: 0.2, p90: 0.3 } } };
   const result = checkStoryboard(goodStoryboard(), { words: WORDS, tier: "structured", direction: MAP, profile: tight });

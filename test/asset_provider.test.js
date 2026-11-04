@@ -336,21 +336,44 @@ test("a video shot in a card's image slot lands as a still frame of it", async (
   assert.equal(await readFile(path.join(project, image), "utf8"), "still bytes");
   assert.deepEqual(frames, [{ video: path.join(project, "assets/library/pour.mp4"), at: 2.5 }]);
   assert.deepEqual({ kind: found.shots[0].kind, still_of: found.shots[0].still_of }, { kind: "image", still_of: "assets/library/pour.mp4" });
-  // A video by URL cannot give a still here; that is a repair note, not a broken card.
+  // A video by URL cannot give a still here: the card keeps its placeholder, with a warning.
   const byUrl = await resolveShots(board, { assets: { findShot: async () => ({ url: "https://media.example/pour.mp4", kind: "video" }) }, words: WORDS, project, stillFrame });
-  assert.match(byUrl.errors[0], /video by URL for a card's image slot \(device-frame params\.image\)/);
-  assert.equal(byUrl.storyboard.scenes[0].params.image.kind, "shot");
+  assert.deepEqual(byUrl.errors, []);
+  assert.match(byUrl.warnings[0], /video by URL for a card's image slot \(device-frame params\.image\).*the device-frame card keeps its placeholder/);
+  assert.equal(byUrl.storyboard.scenes[0].params.image, undefined);
+  assert.equal(byUrl.storyboard.scenes[0].params.device, "phone");
+});
+
+test("an image request in a card slot takes a video answer as a still; a miss leaves the card's placeholder", async (t) => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-card-miss-"));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const stillFrame = async (_video, _at, target) => { await writeFile(target, "still bytes"); };
+  const video = { findShot: async () => ({ src: "assets/library/deck.mp4", kind: "video" }) };
+  const board = cardStory("polaroid", { image: { kind: "shot", shows: "a finished timber deck", type: "image" }, caption: "Done" });
+  const found = await resolveShots(board, { assets: video, words: WORDS, project, stillFrame });
+  assert.deepEqual(found.errors, []);
+  assert.match(found.storyboard.scenes[0].params.image, /^assets\/shots\/.*-still\.jpg$/);
+  // No shot: the request goes, the card keeps its caption and placeholder photo.
+  const missed = await resolveShots(board, { assets: { findShot: async () => null }, words: WORDS, project, stillFrame });
+  assert.deepEqual(missed.errors, []);
+  assert.deepEqual(missed.storyboard.scenes[0].params, { caption: "Done" });
+  assert.match(missed.warnings[0], /has no shot that shows "a finished timber deck"; the polaroid card keeps its placeholder$/);
+  // A nested slot: social-post media.image goes, and media with it when it is left empty.
+  const post = cardStory("social-post", { name: "Ana", text: "Look", media: { image: { kind: "shot", shows: "a deck" } } });
+  const gone = await resolveShots(post, { assets: { findShot: async () => null }, words: WORDS, project });
+  assert.deepEqual(gone.storyboard.scenes[0].params, { name: "Ana", text: "Look" });
 });
 
 test("a shot request outside a shot module or card slot is still refused, and the module schema stays strict", async () => {
   const assets = { findShot: async () => ({ src: "assets/library/hands.jpg", kind: "image" }) };
   const found = await resolveShots(cardStory("hook-title", { headline: "Every morning", media: { kind: "shot", shows: "a cup" } }), { assets, words: WORDS });
   assert.match(found.errors[0], /shot requests are for photo-scene, media-window, clip scenes and card image slots \(.*polaroid params\.image.*\), not hook-title/);
-  // An unanswered card request is not an assets/ path, so the card's own check fails and the plan repairs it.
+  // An unanswered card request leaves the card's placeholder: the first plan passes, with a warning.
   const client = llm([cardStory("polaroid", { image: { kind: "shot", shows: "a cafe" } }), story(null)]);
   const report = await plan(client, { assets: { findShot: async () => null } });
   assert.equal(report.status, "passed", report.errors.join("\n"));
-  assert.ok(report.attempts[0].errors.some((error) => /params\.image must be a project-local assets\/ path/.test(error)), report.attempts[0].errors.join("\n"));
+  assert.equal(report.attempts.length, 1, report.attempts.map((attempt) => attempt.errors.join("; ")).join("\n"));
+  assert.ok(report.attempts[0].warnings.some((line) => /the polaroid card keeps its placeholder/.test(line)), report.attempts[0].warnings.join("\n"));
 });
 
 test("shotPrompt tells the planner that cards carry library shots", () => {
