@@ -23,6 +23,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, write
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { renderBudget } from "../capacity.js";
 import { systemTempDir } from "../render_temp.js";
@@ -184,13 +185,41 @@ async function listFonts(project) {
 
 /**
  * The Chrome to render with: LAUNCHCLIP_REMOTION_BROWSER (a chrome-headless-shell
- * or Chrome binary) when set, else Remotion's own download. An escape hatch
- * for a Chrome build that crashes on a story (Remotion's 157.0.8080.0 hits a
- * V8 fatal check, MigrateToMap/TrustedCast, on some module combinations).
+ * or Chrome binary) when set; else the headless shell `remotion browser ensure`
+ * put in LaunchClip's own node_modules; else Remotion's own download. The env
+ * is an escape hatch for a Chrome build that crashes on a story (Remotion's
+ * 157.0.8080.0 hits a V8 fatal check, MigrateToMap/TrustedCast, on some module
+ * combinations).
+ *
+ * Remotion looks for its download under the package.json nearest the cwd, so
+ * an app that runs make from a job folder never found the shell baked into its
+ * image and downloaded Chrome (about 94 MB) on every render.
  */
-export function remotionBrowserExecutable(env = process.env) {
+export function remotionBrowserExecutable(env = process.env, { root = LAUNCHCLIP_ROOT, platform = remotionPlatform() } = {}) {
   const value = env.LAUNCHCLIP_REMOTION_BROWSER?.trim();
-  return value ? value : null;
+  if (value) return value;
+  return ownHeadlessShell(root, platform);
+}
+
+const LAUNCHCLIP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+// Remotion's platform folder names (@remotion/renderer BrowserFetcher getPlatform).
+function remotionPlatform() {
+  if (process.platform === "darwin") return process.arch === "arm64" ? "mac-arm64" : "mac-x64";
+  if (process.platform === "linux") return process.arch === "arm64" ? "linux-arm64" : "linux64";
+  if (process.platform === "win32") return "win64";
+  return null;
+}
+
+// The layout BrowserFetcher's getExecutablePath reads for "headless-shell".
+function ownHeadlessShell(root, platform) {
+  if (!platform) return null;
+  const folder = path.join(root, "node_modules", ".remotion", "chrome-headless-shell", platform, `chrome-headless-shell-${platform}`);
+  for (const name of ["headless_shell", platform === "win64" ? "chrome-headless-shell.exe" : "chrome-headless-shell"]) {
+    const file = path.join(folder, name);
+    if (existsSync(file)) return file;
+  }
+  return null;
 }
 
 /**
