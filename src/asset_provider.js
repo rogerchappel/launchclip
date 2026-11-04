@@ -125,6 +125,16 @@ export function minShotsError(requested, min) {
 const isRequest = (media) => media && typeof media === "object" && media.kind === SHOT_REQUEST;
 
 const pathValue = (params, slot) => slot.split(".").reduce((value, key) => (value && typeof value === "object" ? value[key] : undefined), params);
+// A card's slot without its value (and without an object left empty by it).
+const withoutPath = (params, slot) => {
+  const [key, ...rest] = slot.split(".");
+  const copy = { ...(params ?? {}) };
+  if (!rest.length) { delete copy[key]; return copy; }
+  const inner = withoutPath(copy[key], rest.join("."));
+  if (Object.keys(inner).length) copy[key] = inner;
+  else delete copy[key];
+  return copy;
+};
 const withPath = (params, slot, value) => {
   const [key, ...rest] = slot.split(".");
   return { ...params, [key]: rest.length ? withPath(params?.[key] ?? {}, rest.join("."), value) : value };
@@ -183,6 +193,14 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   const shots = [];
   const described = [];
   const errors = [];
+  const warnings = [];
+  // A card's image slot is optional: a shot that can't fill it leaves the
+  // card with its own placeholder (a warning), not a failed plan.
+  const miss = (still, index, scene, slot, line) => {
+    if (!still) { errors.push(line); return; }
+    story.scenes[index] = { ...scene, params: withoutPath(scene.params, slot) };
+    warnings.push(`${line.replace(/; design this scene without one$/, "")}; the ${scene.module} card keeps its placeholder`);
+  };
   for (const { index, scene, slot, still } of requests) {
     const media = pathValue(scene.params, slot);
     const shows = String(media.shows ?? "").trim();
@@ -212,11 +230,11 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     try {
       shot = await cache.get(key);
     } catch (error) {
-      errors.push(`${where}: the app could not find a shot that shows "${shows}" (${error?.message ?? error}); design this scene without one`);
+      miss(still, index, scene, slot, `${where}: the app could not find a shot that shows "${shows}" (${error?.message ?? error}); design this scene without one`);
       continue;
     }
     shot = normalizeShot(shot);
-    if (!shot) { errors.push(`${where}: the app has no shot that shows "${shows}"; design this scene without one`); continue; }
+    if (!shot) { miss(still, index, scene, slot, `${where}: the app has no shot that shows "${shows}"; design this scene without one`); continue; }
     // A video with usable windows and no start of its own starts in the window that best fits the line.
     const window = shot.notes?.windows?.length && shot.sourceStart == null ? bestWindow(shot.notes, request.duration ?? 3, request.line ?? shows) : null;
     if (window) shot = { ...shot, sourceStart: window.start };
@@ -226,7 +244,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       placed = await placeShot(shot, request, project);
       if (still && placed.kind === "video") placed = await placeStill(shot, placed, request, project, stillFrame);
     } catch (error) {
-      errors.push(`${where}: ${error.message}`);
+      miss(still, index, scene, slot, `${where}: ${error.message}`);
       continue;
     }
     const kind = placed.kind;
@@ -241,7 +259,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
     if (shot.notes) described.push({ src: placed.src, kind, ...(shot.duration > 0 ? { duration: shot.duration } : {}), notes: shot.notes });
   }
-  return { storyboard: story, shots, media: described, errors };
+  return { storyboard: story, shots, media: described, errors, warnings };
 }
 
 // The flat shape some apps answer with is accepted too: {path (= file), kind,
@@ -325,7 +343,7 @@ async function placeShot(shot, request, project) {
   const ext = extensionOf(from);
   const kind = shot.kind ?? (VIDEO.test(ext) ? "video" : IMAGE.test(ext) ? "image" : null);
   if (!["image", "video"].includes(kind) || !(kind === "video" ? VIDEO : IMAGE).test(ext)) throw new Error(`the app's shot ${from} is not an image (.jpg, .png, .webp, .svg) or video (.mp4, .webm, .mov)`);
-  if (request.type !== "any" && request.type !== kind) throw new Error(`the app returned a ${kind} for a ${request.type} request`);
+  if (request.type !== "any" && request.type !== kind && !(request.still && kind === "video")) throw new Error(`the app returned a ${kind} for a ${request.type} request`);
   if (shot.src) {
     const src = String(shot.src);
     if (!src.startsWith("assets/") || src.split(/[\\/]/).includes("..")) throw new Error(`the app's shot src ${src} is not a project assets/ path`);

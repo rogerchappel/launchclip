@@ -149,6 +149,10 @@ export async function planStoryboard(options = {}) {
   let last = null;
   // The storyboard that passed everything but the shot minimum, with the most requests.
   let best = null;
+  // A storyboard that misses only the cadence bands (a run of face time a
+  // second over the profile's limit), kept in case the repairs run out: a
+  // video slightly off the pacing target beats no video.
+  let paced = null;
 
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
     const kind = attempt === 0 ? "plan" : "repair";
@@ -190,6 +194,7 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = found.storyboard;
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
+        if (found.warnings?.length) pinned.warnings = [...pinned.warnings, ...found.warnings.map((entry) => `assets: ${entry}`)];
         shotCounts = { requested, answered: found.shots.length, shots: found.shots };
         shotMedia = found.media ?? [];
       }
@@ -268,6 +273,9 @@ export async function planStoryboard(options = {}) {
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the
       // same budget; a storyboard that fails only this is kept as a fallback.
+      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => entry.startsWith("cadence: ")) && (!paced || checked.errors.length < paced.cadence.length)) {
+        paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], cadence: [...checked.errors], direction };
+      }
       const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
       if (shortfall) {
         if (checked.ok && checked.storyboard && (!best || shotCounts.requested > best.shotCounts.requested)) best = { ...checked, errors: [], warnings: [...checked.warnings], direction };
@@ -293,6 +301,12 @@ export async function planStoryboard(options = {}) {
     last = checked;
     previous = checked;
     if (checked.ok) break;
+  }
+  if (!last?.ok && !best && paced) {
+    direction = paced.direction;
+    const { cadence, ...kept } = paced;
+    last = { ...kept, warnings: [...kept.warnings, ...cadence, `cadence: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
+    delete last.direction;
   }
   if (!last?.ok && best) {
     direction = best.direction;
