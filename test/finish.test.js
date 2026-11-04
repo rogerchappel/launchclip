@@ -1121,6 +1121,35 @@ test("runFinish drops a collapsing matte's subject scenes to their fallback", as
   }
 });
 
+test("footage-led: the base recording's own speech ducks the bed and the manifest says so", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-duck-"));
+  try {
+    await cp(path.join(ROOT, "examples/story/subject"), project, { recursive: true });
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.base = { ...story.base, volume: 1, trim: [[0.5, 3.5], [4, 7]] };
+    delete story.base.subject;
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story, null, 2));
+    const adapters = fakeAdapters();
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.stages.find((stage) => stage.name === "sound").status, "done", JSON.stringify(report.stages.map((stage) => [stage.name, stage.status, stage.error ?? stage.reason])));
+    assert.equal(adapters.lastMix.voice, null);
+    assert.equal(adapters.lastMix.key, path.join(project, "assets/recording.mp4"));
+    assert.deepEqual(adapters.lastMix.keySegments, [{ sourceStart: 0.5, duration: 3 }, { sourceStart: 4, duration: 3 }]);
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    assert.equal(manifest.mix.ducking, "sidechain under footage speech");
+    assert.equal(manifest.mix.ducking_key, "assets/recording.mp4");
+
+    // A muted base carries no speech: nothing keys the bed.
+    story.base.volume = 0;
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story, null, 2));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(adapters.lastMix.key, undefined);
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8")).mix.ducking, null);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("finish --prototype gates only the direction lines and scenes inside the window", async () => {
   // Narration that runs past the cut with no sentence end inside 20–30 s, so the cut is s2's end (24 s).
   const project = await narratedProject({ mutate: (story) => {

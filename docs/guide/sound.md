@@ -16,6 +16,10 @@ The first time the built-in voice runs, it downloads its model (about 325 MB) on
 
 Drop in a recorded voiceover and LaunchClip uses your timing and words: it tightens long pauses, levels the loudness and lines up captions to what you said.
 
+## Talking-head recordings
+
+When the video is built on a recording of someone speaking (the footage-led lane), the speaker's own audio is the voice. The music bed and any ambience duck under it exactly as they would under a voiceover: the recording's audio keys the sidechain, lined up with the stretches of the recording the video plays, and `AUDIO-MANIFEST.json` records `mix.ducking: "sidechain under footage speech"`. A muted recording (`base.volume: 0`) keys nothing.
+
 ## Music that follows the edit
 
 With an ElevenLabs key, LaunchClip composes an instrumental track sized to your video, with calm sections where the video is calm and lift where it builds. It then lines the beat up with the cuts:

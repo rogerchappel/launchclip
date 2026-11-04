@@ -463,6 +463,18 @@ export function kitArgs(kit) {
   return args;
 }
 
+
+/**
+ * The footage base whose own audio carries the speech (footage-led), as the
+ * mix's ducking key: its src and the stretches the video plays, so the key
+ * lines up with what is heard. Null with no base, a muted base or a missing file.
+ */
+export function footageSpeechKey(ctx) {
+  const base = storyBase(ctx.resolved);
+  if (!base || !(base.volume > 0) || !existsSync(path.join(ctx.project, base.src))) return null;
+  return { src: base.src, segments: base.segments.map((segment) => ({ sourceStart: segment.sourceStart, duration: segment.duration })) };
+}
+
 /**
  * audio.music → {kind: "synth"|"file"|"elevenlabs"|"none", file?, bpm?, key?, volume?}.
  * Absent means synth here; the run-time default (ElevenLabs when a key is
@@ -580,7 +592,7 @@ export function defaultAdapters() {
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
       const cues = normalizeCues(options.cues, options.sfxDir);
-      buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, ambienceVolume: options.ambienceVolume });
+      buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
       return { cues };
     },
     async master(input, output, target) {
@@ -985,6 +997,7 @@ const STAGES = [
       const fallbacks = libraryFallbacks(used, libraries);
       if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
+      const speechKey = voice ? null : footageSpeechKey(ctx);
       if (!bound.cues.length && !typing.length && music.kind === "none" && !sound.ambience) return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
       const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, { ...music, bpm_range: audio.music_hints?.bpm_range }), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
@@ -1037,6 +1050,7 @@ const STAGES = [
         music: { kind: music.kind, request, sync, lufs: music.kind === "synth" ? null : MUSIC_LUFS },
         music_file: music.kind === "file" ? await fileHash(path.join(ctx.project, music.file)) : null,
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
+        speech_key: speechKey,
         duration: ctx.resolved.resolved.duration,
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
@@ -1045,7 +1059,7 @@ const STAGES = [
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
+      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -1057,6 +1071,10 @@ const STAGES = [
       let kitReused = previousKit === kitKey && existsSync(path.join(kitDir, "AUDIO-KIT.json")) && (!synthBed || existsSync(path.join(kitDir, "music", "bed.wav"))) && (!ambienceFile || existsSync(ambienceFile));
       if (!kitReused) await ctx.adapters.synthKit(kitDir, synthBed, plan.kit);
       const voiceFile = plan.voice ? path.join(ctx.project, plan.voice) : null;
+      // Footage-led: the speaker's own audio plays beside the mix, so it keys
+      // the bed's ducking in place of a voice track (a silent base keys nothing).
+      const keyFile = plan.speechKey ? path.join(ctx.project, plan.speechKey.src) : null;
+      const speechKey = keyFile && await ctx.adapters.hasAudio(keyFile) ? { file: keyFile, segments: plan.speechKey.segments } : null;
       const duration = Number(ctx.resolved.resolved.duration);
       // Music: generate or reuse the track, analyse its beats, then beat sync.
       const track = await resolveMusicTrack(ctx, plan, kitDir);
@@ -1085,7 +1103,7 @@ const STAGES = [
         cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
       }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}) });
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}) });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
@@ -1101,10 +1119,11 @@ const STAGES = [
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
       if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
+      const ducking = voiceFile ? "sidechain under voice" : speechKey ? "sidechain under footage speech" : null;
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
         generated_by: "launchclip finish",
-        mix: { path: mixFile, duration_seconds: duration, ducking: voiceFile && musicFile ? "sidechain under voice" : null },
+        mix: { path: mixFile, duration_seconds: duration, ducking: musicFile ? ducking : null, ...(speechKey ? { ducking_key: rel(ctx.project, speechKey.file) } : {}) },
         voiceover: voiceFile ? { path: voiceFile, provider: ctx.state.stages?.voice?.details?.provider ?? "supplied" } : null,
         music: musicFile ? {
           path: musicFile,
@@ -1124,7 +1143,7 @@ const STAGES = [
           generation: track.generation ?? null,
           ...(plan.bed.genre ? { genre: plan.bed.genre, progression: plan.bed.progression } : {})
         } : null,
-        ...(ambienceFile ? { ambience: { path: ambienceFile, bed: plan.sound.ambience, world: plan.sound.world, volume: AMBIENCE_VOLUME, ducking: voiceFile ? "sidechain under voice" : null } } : {}),
+        ...(ambienceFile ? { ambience: { path: ambienceFile, bed: plan.sound.ambience, world: plan.sound.world, volume: AMBIENCE_VOLUME, ducking } } : {}),
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {}),
         sfx_manifest: sfxManifest,
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
@@ -1142,6 +1161,7 @@ const STAGES = [
         layout: synced?.changed ? ctx.layout : null,
         beats_file: synced?.beats_file ?? null,
         voice: Boolean(voiceFile),
+        ducking: musicFile || ambienceFile ? ducking : null,
         kit_key: kitKey,
         kit_reused: kitReused,
         sfx_density: plan.density,
