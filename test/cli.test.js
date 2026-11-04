@@ -28,7 +28,7 @@ test("every make switch parses without a value", async () => {
   for (const [flag] of MAKE_FLAGS.filter(([, spec]) => spec.boolean)) {
     assert.deepEqual(parseFlags([`--${flag}`, "--out", "x"]), { [flag]: true, out: "x" }, flag);
   }
-  // The footage-led lane as ClutchCut calls it.
+  // The footage-led lane as a host app calls it: its own edit, then its transcript.
   assert.deepEqual(parseFlags(["--base-edited", "--base-transcript", "t.json"]), { "base-edited": true, "base-transcript": "t.json" });
 });
 
