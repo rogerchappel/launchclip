@@ -7,7 +7,7 @@ import { applyPronunciation, normalizePronunciation, restoreWords } from "../src
 import { narrationCacheKey, narrationDocument, narrationRequest, normalizeVoiceSettings, synthesizeNarration } from "../src/voice/narrate.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
 import * as elevenlabs from "../src/voice/elevenlabs.js";
-import { validateStory } from "../kit/core/story.mjs";
+import { validateStory } from "@launchclip/core/story.mjs";
 
 async function tempDir(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-pronounce-"));
