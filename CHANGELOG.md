@@ -59,6 +59,11 @@
   answer per line on its stdout, from your media library or generated. Shots
   land in the project's `assets/shots/`, and what they cost shows up in
   `make --json` under `costs`.
+- `launchclip make --min-shots <n>`, with an asset provider, makes the
+  planner ask for at least `n` shots (at most 6) from your library instead of
+  drawing everything as motion graphics. Too few is a repair note, never a
+  failure: when the repairs run out make keeps the best storyboard and warns.
+  `make --json` reports `shot_counts: {min, requested, answered}`.
 - `launchclip make --base-edited` takes a talking-head or screen recording
   you have already edited (bad takes, pauses) as the final base: make skips
   its own recording edit and dresses your cut as is. Add
