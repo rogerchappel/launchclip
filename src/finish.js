@@ -67,6 +67,7 @@ import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } 
 import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
 import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
+import { guardRejections } from "./rejection_guard.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -744,7 +745,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
 
 async function finishCover(ctx) {
   try {
-    return await (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint: await treeFingerprint(path.join(ROOT, "kit")), force: Boolean(ctx.options.force), video: ctx.out });
+    const fingerprint = await treeFingerprint(path.join(ROOT, "kit"));
+    return await guardRejections(() => (ctx.adapters.renderCover ?? renderCover)({ project: ctx.project, story: ctx.copy, renderer: ctx.rendererName, adapter: ctx.adapters.renderer(ctx.rendererName), compile: ctx.adapters.compileHyperFrames, fingerprint, force: Boolean(ctx.options.force), video: ctx.out }));
   } catch (error) {
     ctx.warnings.push(`cover: ${COVER_PATH} was not rendered (${firstLine(error.message)})`);
     return { file: null, status: "failed", error: firstLine(error.message) };
@@ -783,7 +785,9 @@ async function runStage(ctx, definition) {
         entry.details = previous.details ?? {};
         definition.restore?.(ctx, previous.details ?? {});
       } else {
-        const details = (await definition.run(ctx, plan)) ?? {};
+        // A rejection that escapes the awaited chain (Remotion's browser
+        // download, say) fails this stage instead of crashing the process.
+        const details = (await guardRejections(() => definition.run(ctx, plan))) ?? {};
         entry.details = details;
         if (!plan.always) {
           const written = {};

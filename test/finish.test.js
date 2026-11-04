@@ -13,6 +13,8 @@ import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
 import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
+import { PROMPT, assetsDir, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
+import { asInTheCli, lateHandledRejection } from "./helpers/rejections.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -532,6 +534,54 @@ function segmentAdapters() {
   };
   return adapters;
 }
+
+// The segment renderer fails the way Remotion's offline browser download
+// does: the rejection is unhandled for a few turns before it reaches finish.
+function offlineBrowserAdapters() {
+  const adapters = segmentAdapters();
+  const renderer = adapters.renderer;
+  adapters.renderer = (name) => ({ ...renderer(name), renderSegments: () => lateHandledRejection("getaddrinfo EAI_AGAIN remotion.media") });
+  return adapters;
+}
+
+test("a render rejection that escapes the awaited chain fails the render stage instead of crashing", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-escape-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const report = await asInTheCli(() => runFinish(project, { renderer: "remotion" }, offlineBrowserAdapters()));
+    assert.equal(report.status, "failed");
+    const render = report.stages.find((stage) => stage.name === "render");
+    assert.equal(render.status, "failed");
+    assert.equal(render.error, "getaddrinfo EAI_AGAIN remotion.media");
+    assert.deepEqual(report.stages.slice(STAGE_NAMES.indexOf("render") + 1).map((stage) => stage.status), ["blocked", "blocked", "blocked"]);
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.report), "utf8")).status, "failed", "finish.json records the failure");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("launchclip make --json reports an escaped render rejection as a failed finish stage, render step, and fails", async () => {
+  const assets = await assetsDir();
+  const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-escape-"));
+  try {
+    const stdout = { text: "", write(chunk) { this.text += chunk; } };
+    const make = { env: {}, client: fakeModel().model, inventory: fakeInventory, finishAdapters: offlineBrowserAdapters() };
+    await asInTheCli(() => assert.rejects(
+      runCli(["make", PROMPT, "--assets", assets, "--out", out, "--voice", "test", "--music", "synth", "--json"], { stdout, stderr: { write() {} }, productionAdapters: { make } }),
+      /launchclip make failed at the finish stage: finish failed at the render stage: getaddrinfo EAI_AGAIN remotion\.media/
+    ));
+    const report = JSON.parse(stdout.text);
+    assert.equal(report.status, "failed");
+    assert.equal(report.failed_stage, "finish");
+    const render = report.finish.stages.find((stage) => stage.name === "render");
+    assert.equal(render.status, "failed");
+    assert.equal(render.error, "getaddrinfo EAI_AGAIN remotion.media");
+    assert.equal(JSON.parse(await readFile(path.join(out, "MAKE.json"), "utf8")).failed_stage, "finish", "MAKE.json records the failure");
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(out, { recursive: true, force: true });
+  }
+});
 
 test("each render holds a render slot and an explicit core share: the render slots' split by default, --concurrency when given", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-share-"));
