@@ -237,6 +237,16 @@ your command once, through the shell, for the length of the plan:
   within 120 s counts as no shot.
 - **stderr.** It shows up in make's progress lines.
 
+**Requiring shots.** Shot requests are optional by default. `--min-shots <n>`
+(or `minShots` in the make options) tells the planner to ask for at least `n`
+shots (at most 6; a higher value is clamped, with a warning). A storyboard
+that asks for fewer gets a repair note, which uses the usual repair budget.
+If the repairs run out, make keeps the best storyboard and adds a warning; it
+never fails because of the minimum. The minimum counts requests, not answers:
+a `null` answer still becomes a motion-graphics scene. Without an asset
+provider, `--min-shots` is ignored with a warning. `make --json` reports
+`shot_counts: {min, requested, answered}` beside `shots`.
+
 ### `renderer` and `notice`
 
 `renderer: (name) → renderer adapter` replaces the bundled HyperFrames and
