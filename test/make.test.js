@@ -233,6 +233,43 @@ test("make runs the script checks after the script pass and repairs errors once"
   }
 });
 
+test("pronunciation.json and voice.json in --assets shape the narration take, not the captions", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-voice-"));
+  try {
+    await writeFile(path.join(assets, "pronunciation.json"), JSON.stringify({ Ledgerly: "ledger lee" }));
+    await writeFile(path.join(assets, "voice.json"), JSON.stringify({ speed: 1.1, stability: 0.4, similarity: 0.8, style: 0.2, speaker_boost: true }));
+    const { model } = fakeModel();
+    const spoken = [];
+    const testVoice = (await import("../src/voice/index.js")).createTestVoiceProvider();
+    const voiceProvider = () => ({ name: "test", synthesize: (request) => { spoken.push(request); return testVoice.synthesize(request); } });
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), voiceProvider, notice() {} });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.deepEqual(report.voice_inputs, { pronunciation: 1, speed: 1.1, settings: { stability: 0.4, similarity: 0.8, style: 0.2, speaker_boost: true } });
+    assert.ok(spoken.length >= 1);
+    assert.deepEqual(spoken[0].settings, { stability: 0.4, similarity: 0.8, style: 0.2, speaker_boost: true });
+    assert.equal(spoken[0].speed, 1.1);
+    assert.match(spoken[0].text, /ledger lee/);
+    assert.doesNotMatch(spoken[0].text, /Ledgerly/);
+    const project = path.join(cwd, `launchclip-${slugify(PROMPT)}`);
+    const words = JSON.parse(await readFile(path.join(project, "NARRATION.json"), "utf8"));
+    assert.ok(words.words.some((word) => /^Ledgerly/.test(word.text)), "the words keep the script's spelling");
+    assert.ok(!words.words.some((word) => /^ledger$/i.test(word.text)));
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    assert.deepEqual(story.audio.narration.pronunciation, { Ledgerly: "ledger lee" });
+    assert.deepEqual(story.audio.narration.settings, { stability: 0.4, similarity: 0.8, style: 0.2, speaker_boost: true });
+    assert.equal(story.audio.narration.speed, 1.1);
+
+    await writeFile(path.join(assets, "voice.json"), JSON.stringify({ stability: 4 }));
+    const bad = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), voiceProvider, notice() {} });
+    assert.equal(bad.status, "failed");
+    assert.match(bad.stages.inventory.error, /voice\.json\.stability must be a number from 0 to 1/);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("errors left after the one repair pass are a warning, not a failure", async () => {
   const assets = await assetsDir();
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-check-"));

@@ -26,7 +26,8 @@ import { profileForStory } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
-import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
+import { VOICE_SETTINGS, narrationDocument, narrationRequest, normalizeVoiceSettings, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
+import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
 import { isLongForm, routeLane } from "./routing.js";
@@ -236,6 +237,7 @@ async function stageModel(ctx) {
 async function stageInventory(ctx) {
   const { project, report, adapters, state, assetsDir } = ctx;
   const constraints = await loadMakeConstraints(ctx);
+  ctx.voiceInputs = await loadVoiceInputs(ctx);
   const brandDir = ctx.options.brandAssets ? path.resolve(ctx.options.cwd ?? process.cwd(), String(ctx.options.brandAssets)) : null;
   const brand = brandDir ? await brandEntries(ctx, brandDir) : [];
   if (!assetsDir) {
@@ -250,7 +252,7 @@ async function stageInventory(ctx) {
   const inventory = await (adapters.inventory ?? inventoryAssets)(assetsDir, {
     cache: cache?.dir === assetsDir ? cache : null,
     // never_use media is not inventoried, copied or offered; constraints.json is the app's, not an asset.
-    metadata: [CONSTRAINTS_FILE],
+    metadata: [CONSTRAINTS_FILE, PRONUNCIATION_FILE, VOICE_FILE],
     ...(never ? { exclude: (relative) => (never({ src: relative }) ? "never_use (constraints)" : null) } : {}),
     // --base-transcript: the app has the recording's words already, so make
     // never runs local Whisper (slow on a busy CPU, and its words are unused).
@@ -306,6 +308,44 @@ async function loadMakeConstraints(ctx) {
   await writeJson(target, constraintsDocument(constraints));
   report.constraints = { file: MAKE_PATHS.constraints, source: file, ranges: constraints.ranges.length, must_use: constraints.must_use.map((entry) => entry.src), never_use: constraints.never_use.map((entry) => entry.src ?? `id:${entry.id}`) };
   return ctx.constraints;
+}
+
+// The app's narration settings in --assets (app metadata, not assets):
+// pronunciation.json { "term": "say-as" } respells terms in the text the
+// voice speaks, never in the captions; voice.json { voice?, speed?,
+// stability?, similarity?, style?, speaker_boost? } tunes the voice where the
+// provider has the setting (--voice-id wins over its voice).
+export const PRONUNCIATION_FILE = "pronunciation.json";
+export const VOICE_FILE = "voice.json";
+
+async function loadVoiceInputs(ctx) {
+  const { assetsDir, report } = ctx;
+  if (!assetsDir) return {};
+  const read = async (name) => {
+    const file = path.join(assetsDir, name);
+    if (!existsSync(file)) return undefined;
+    const value = await readJson(file);
+    if (value === null || value === undefined) throw new Error(`${name} in --assets is not readable JSON`);
+    return value;
+  };
+  const pronunciation = normalizePronunciation(await read(PRONUNCIATION_FILE), PRONUNCIATION_FILE);
+  const voice = await read(VOICE_FILE);
+  if (voice !== undefined && (typeof voice !== "object" || Array.isArray(voice))) throw new Error(`${VOICE_FILE} must be an object of voice, speed, ${Object.keys(VOICE_SETTINGS).join(", ")}`);
+  const { voice: voiceId, speed, ...rest } = voice ?? {};
+  if (voiceId !== undefined && !(typeof voiceId === "string" && voiceId.trim())) throw new Error(`${VOICE_FILE}.voice must be a non-empty voice id`);
+  if (speed !== undefined && !(typeof speed === "number" && speed >= 0.5 && speed <= 2)) throw new Error(`${VOICE_FILE}.speed must be a number between 0.5 and 2; got ${JSON.stringify(speed)}`);
+  const settings = normalizeVoiceSettings(rest, VOICE_FILE);
+  const inputs = { ...(voiceId !== undefined ? { voice: voiceId.trim() } : {}), ...(speed !== undefined ? { speed } : {}), ...(pronunciation ? { pronunciation } : {}), ...(settings ? { settings } : {}) };
+  if (Object.keys(inputs).length) report.voice_inputs = { ...(pronunciation ? { pronunciation: Object.keys(pronunciation).length } : {}), ...(voiceId !== undefined ? { voice: inputs.voice } : {}), ...(speed !== undefined ? { speed } : {}), ...(settings ? { settings } : {}) };
+  return inputs;
+}
+
+// The voice fields of every narration request make sends: voice.json and
+// pronunciation.json, then --voice-id over voice.json's voice.
+function narrationVoice(ctx) {
+  const inputs = ctx.voiceInputs ?? {};
+  const voice = ctx.options.voiceId ? String(ctx.options.voiceId) : inputs.voice;
+  return { provider: ctx.voiceProvider, ...(voice ? { voice } : {}), ...(inputs.speed !== undefined ? { speed: inputs.speed } : {}), ...(inputs.pronunciation ? { pronunciation: inputs.pronunciation } : {}), ...(inputs.settings ? { settings: inputs.settings } : {}) };
 }
 
 // A collection's brand folder (docs/COLLECTIONS_RFC.md §3.2): its logos,
@@ -570,7 +610,7 @@ async function prepareMotion(ctx) {
   ctx.format = { ...routing.format, duration: round1(take.duration + 0.8) };
   if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
-  ctx.narration = { text: script.narration, provider: voiceProvider, ...(options.voiceId ? { voice: String(options.voiceId) } : {}) };
+  ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
@@ -591,7 +631,7 @@ async function prepareLongForm(ctx) {
   const rules = rulesText(ctx);
   const assets = assetManifestLines(ctx).map((item) => item.line);
   const writer = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets };
-  const voice = { provider: voiceProvider, ...(options.voiceId ? { voice: String(options.voiceId) } : {}) };
+  const voice = narrationVoice(ctx);
   const saved = (await readJson(path.join(project, MAKE_PATHS.script)))?.long_form ?? null;
   const outlineHash = hashValue({ prompt: ctx.text, notes, assets, target, model: ctx.model.spec, ...(rules ? { rules } : {}), v: 1 });
   let outline = saved?.outline_hash === outlineHash ? saved.outline : null;
@@ -785,8 +825,8 @@ function skeletonMedium(ctx) {
 }
 
 async function synthesize(ctx, text) {
-  const { project, adapters, voiceProvider } = ctx;
-  const request = narrationRequest({ text, provider: voiceProvider, ...(ctx.options.voiceId ? { voice: String(ctx.options.voiceId) } : {}) });
+  const { project, adapters } = ctx;
+  const request = narrationRequest({ text, ...narrationVoice(ctx) });
   const take = await synthesizeNarration(request, {
     outFile: path.join(project, MAKE_PATHS.take),
     cacheDir: voiceCacheDir(project),

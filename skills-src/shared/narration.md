@@ -21,6 +21,8 @@ For a synthesised voice, write the script into `storyboard.json` and let
 | `provider` | no | `kokoro` | `kokoro` (local, free), `elevenlabs` (paid, needs `ELEVENLABS_API_KEY` and the user's approval), `supplied` (audio you already have in `audio.voice`), `test` (offline placeholder tone). |
 | `voice` | no | `af_heart` for Kokoro | The provider's voice id. |
 | `speed` | no | `1.2` for Kokoro, else `1` | 0.5 to 2. Speed is a generation parameter, not a time-stretch, so change it to fit a target length. |
+| `pronunciation` | no | | `{ "term": "say-as" }`: respellings for the voice only. A term matches whole words or a phrase, ignoring case; captions and `NARRATION.json` keep the script's spelling. |
+| `settings` | no | | Voice settings beyond speed where the provider has them (ElevenLabs): `stability`, `similarity`, `style` (0–1) and `speaker_boost` (true/false). |
 | `lines` | instead of `text` | | Dialogue: `[{speaker, text, gap?}]`. `speaker` is a cast id (that character's `voice`) or `"narrator"` (this `voice`). Each line is its own take and every word keeps its `speaker`. |
 | `gap` | no | `0.3` | Dialogue only: seconds of pause from the end of one line's speech to the start of the next (0 to 3). Each take is trimmed to its speech, so this is the whole pause; the default keeps a conversation moving, 0.5 or more reads as a beat. A line's own `gap` sets the pause after that line, for a beat that needs to land. |
 

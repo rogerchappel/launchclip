@@ -17,7 +17,7 @@ export function create(options = {}) {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   return {
     name: "elevenlabs",
-    async synthesize({ text, voice, speed, outFile, signal } = {}) {
+    async synthesize({ text, voice, speed, settings, outFile, signal } = {}) {
       const apiKey = options.apiKey ?? env.ELEVENLABS_API_KEY;
       if (!apiKey) throw new Error("ElevenLabs voice is opt-in and needs ELEVENLABS_API_KEY. Nothing was sent. Set the key, or use the default Kokoro voice.");
       if (typeof text !== "string" || !text.trim()) throw new Error("ElevenLabs needs non-empty text");
@@ -29,6 +29,7 @@ export function create(options = {}) {
       const effectiveSpeed = speed ?? options.speed;
       // ElevenLabs accepts speed between 0.7 and 1.2.
       if (effectiveSpeed !== undefined) voiceSettings.speed = Math.max(0.7, Math.min(1.2, Number(effectiveSpeed)));
+      Object.assign(voiceSettings, elevenLabsVoiceSettings(settings));
       const body = { text, model_id: options.model ?? DEFAULT_ELEVENLABS_MODEL };
       if (Object.keys(voiceSettings).length) body.voice_settings = voiceSettings;
       const url = `${options.baseUrl ?? ELEVENLABS_API}/v1/text-to-speech/${encodeURIComponent(voiceId)}/with-timestamps?output_format=pcm_${SAMPLE_RATE}`;
@@ -56,6 +57,12 @@ export function create(options = {}) {
       return { file: outFile, words, sampleRate: SAMPLE_RATE, duration, provider: "elevenlabs", voice: voiceId, speed: voiceSettings.speed ?? null, model: body.model_id, timing: { method: "provider-character-alignment" } };
     }
   };
+}
+
+/** The request's voice settings ({stability, similarity, style, speaker_boost}) in ElevenLabs' names. */
+export function elevenLabsVoiceSettings(settings = {}) {
+  const names = { stability: "stability", similarity: "similarity_boost", style: "style", speaker_boost: "use_speaker_boost" };
+  return Object.fromEntries(Object.entries(settings ?? {}).filter(([key]) => names[key]).map(([key, value]) => [names[key], value]));
 }
 
 /**
