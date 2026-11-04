@@ -4,6 +4,7 @@ import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
 import { knownModules, resolveModule, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
+import { captionColorWarnings } from "@launchclip/core/captions.mjs";
 import { CAST_MODULES } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { migrateStory, stampStory } from "@launchclip/core/story-migrations.mjs";
@@ -28,12 +29,14 @@ const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
 // Validation against the kit's module registry and each module's params
 // schema (kit/core/module-schemas.mjs). An unknown module is a warning here:
-// both compilers render it as a labelled placeholder.
+// both compilers render it as a labelled placeholder. Caption colours the
+// story sets that would not read over footage are replaced, with a warning.
 export function validateStory(story) {
   const result = validateStoryShape(story, { modules: knownModules(), moduleParams: validateModuleParams });
   const unknown = result.errors.filter((message) => UNKNOWN_MODULE.test(message));
   const errors = result.errors.filter((message) => !UNKNOWN_MODULE.test(message));
-  return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`)] };
+  const captions = captionColorWarnings(story);
+  return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`), ...captions] };
 }
 
 // Resolves every known-module scene of a resolved story through the kit's
