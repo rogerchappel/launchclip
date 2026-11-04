@@ -43,3 +43,22 @@ test("script-pass hooks: notes list only sourced facts, and the audit catches wh
   assert.deepEqual(audit.claims.map((claim) => claim.status), ["verified", "contradicted", "unverified"]);
   assert.equal(audit.ok, false);
 });
+
+test("with no source fetched, the notes ask for general knowledge, not only listed facts", async () => {
+  const { researchNotes } = await import("../src/research/index.js");
+  const ledger = {
+    summary: { claims: 2, verified: 0, contradicted: 0, unverified: 2, sources_checked: 0, primary_sources: 0 },
+    claims: [
+      { id: "c001", text: "3 common deck materials in Australia", kind: "claim", values: [{ raw: "3" }], dates: [], status: "unverified", flag: { action: "soften-or-cite", message: "no sources could be fetched; check it by hand or cut it" } },
+      { id: "c002", text: "Acme Decks builds decks in Brisbane", kind: "claim", values: [], dates: [], status: "unverified", flag: { action: "soften-or-cite", message: "no sources could be fetched; check it by hand or cut it" } }
+    ]
+  };
+  const notes = researchNotes(ledger);
+  assert.doesNotMatch(notes, /state only facts listed here/);
+  assert.match(notes, /could not fetch any source/);
+  assert.match(notes, /well-established, widely known facts/);
+  assert.match(notes, /Never write about the research itself/);
+  assert.match(notes, /Unchecked specifics[\s\S]*- 3 common deck materials in Australia/);
+  assert.doesNotMatch(notes, /Acme Decks builds decks/, "a plain claim is not repeated as an unchecked specific");
+  assert.doesNotMatch(notes, /Do not state these as fact/);
+});

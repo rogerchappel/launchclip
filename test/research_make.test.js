@@ -67,3 +67,24 @@ test("--research takes on or off, default off", () => {
   assert.throws(() => researchMode("maybe"), /--research must be on or off/);
   assert.throws(() => validateMakeOptions({ research: "maybe" }), /--research must be on or off/);
 });
+
+test("research skips the brief's direction sections: they tell the writer how, they claim nothing", async () => {
+  const { withoutDirection } = await import("../src/research/make.js");
+  const brief = [
+    "3 common deck materials in Australia",
+    "",
+    "## Direction",
+    "Motion: balanced. Mix the speaker with inserts.",
+    "### Pacing",
+    "Cut on every line.",
+    "",
+    "## House style (follow these rules)",
+    "- No URLs. End with a CTA. Never AI sounding.",
+    "",
+    "## Facts",
+    "Spotted gum is a common hardwood decking timber."
+  ].join("\n");
+  const kept = withoutDirection(brief);
+  assert.equal(kept, "3 common deck materials in Australia\n\n## Facts\nSpotted gum is a common hardwood decking timber.");
+  assert.equal(withoutDirection("A brief with no headings."), "A brief with no headings.");
+});

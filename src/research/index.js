@@ -169,6 +169,12 @@ export async function runResearch(input, options = {}, adapters = {}) {
  * the first two lists.
  */
 export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
+  // Nothing could be fetched (offline, no web search key, every source down):
+  // research checked nothing, so "state only facts listed here" would leave a
+  // general topic ("3 common deck materials") with nothing to say. The script
+  // keeps to well-established general knowledge instead, and the audit still
+  // holds the research gate at pending for review.
+  if (!Number(ledger?.summary?.sources_checked)) return unresearchedNotes(ledger);
   const lines = ["## Research (launchclip research; state only facts listed here)", "", ...SOURCE_RULES.map((rule) => `- ${rule}`)];
   const verified = ledger.claims.filter((claim) => claim.status === "verified");
   if (verified.length) {
@@ -192,6 +198,23 @@ export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
   if (flagged.length) {
     lines.push("", "Do not state these as fact (cut, soften or attribute to the company):");
     for (const claim of flagged) lines.push(`- [${claim.status}] ${claim.text}: ${claim.flag?.message ?? ""}`);
+  }
+  return lines.join("\n");
+}
+
+/** Notes when research fetched no source: general knowledge only, nothing specific unchecked. */
+function unresearchedNotes(ledger) {
+  const lines = [
+    "## Research (launchclip research could not fetch any source; nothing here is verified)",
+    "",
+    "- Write from well-established, widely known facts about the topic: name the common options, what each is and how they differ in general terms.",
+    "- Do not state unchecked specifics: exact numbers, prices, dates, ratings, quotes, or claims about a named company, product or person that the brief does not state itself.",
+    "- Never write about the research itself (no \"not verified\", \"names not supplied\" or \"on hold\"): the viewer never sees it."
+  ];
+  const specific = (ledger?.claims ?? []).filter((claim) => claim.kind === "quote" || claim.values?.length || claim.dates?.length);
+  if (specific.length) {
+    lines.push("", "Unchecked specifics from the brief (state them only as the brief does, or leave them out):");
+    for (const claim of specific) lines.push(`- ${claim.text}`);
   }
   return lines.join("\n");
 }
