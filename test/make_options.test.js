@@ -66,3 +66,11 @@ test("settingsFromMakeReport repeats what a finished video became, not only what
   assert.equal(profile, "short-motion");
   assert.equal(settingsFromMakeReport({ ...report, model: { spec: "anthropic:claude-sonnet-5-5", source: "--model" } }).flags.model, "anthropic:claude-sonnet-5-5");
 });
+
+test("--music-volume parses into options.musicVolume, takes a gain from 0 to 1, and a recipe may save it", () => {
+  assert.equal(makeOptionsFromFlags(parseFlags(["--music-volume", "0.15"])).musicVolume, "0.15");
+  assert.equal(makeOptionsFromFlags({}).musicVolume, undefined);
+  assert.ok(MAKE_SETTING_FLAGS.includes("music-volume"));
+  for (const value of ["0", "0.15", "1", 0.3]) assert.doesNotThrow(() => validateMakeOptions({ musicVolume: value }), String(value));
+  for (const value of ["-0.1", "1.5", "loud", "", true]) assert.throws(() => validateMakeOptions({ musicVolume: value }), /--music-volume must be a number from 0 to 1/, String(value));
+});

@@ -24,7 +24,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     const finishCalls = [];
     const notices = [];
     const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish(finishCalls), notice: (line) => notices.push(line) };
-    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, adapters);
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", cwd }, adapters);
     const project = path.join(cwd, `launchclip-${slugify(PROMPT)}`);
     assert.equal(report.project, project);
     assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
@@ -49,7 +49,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     assert.equal(story.grammar, undefined);
     const expected = Math.round((testVoiceTimings(NARRATION).duration + 0.8) * 10) / 10;
     assert.equal(story.format.duration, expected);
-    assert.deepEqual(finishCalls[0].options, { renderer: "remotion", quality: "draft", music: "synth" });
+    assert.deepEqual(finishCalls[0].options, { renderer: "remotion", quality: "draft", music: "synth", musicVolume: 0.2 });
     const brief = await readFile(path.join(project, "BRIEF.md"), "utf8");
     assert.match(brief, /assets\/ui\.mp4 — video, screen-recording/);
     assert.match(brief, /Ledgerly reconciles Stripe payouts/);
@@ -58,7 +58,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
 
     // Rerun: script and storyboard are reused, no model calls.
     const before = calls.length;
-    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd }, adapters);
+    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", cwd }, adapters);
     assert.equal(calls.length, before);
     assert.equal(again.stages.storyboard.status, "cached");
     assert.equal(again.script.reused, true);

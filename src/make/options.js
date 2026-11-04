@@ -4,7 +4,7 @@
 // choices a recipe saves. The rest (the prompt's own assets, --out, --repo
 // and the demo flags, --replan) belong to one video.
 import { scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
-import { MUSIC_FLAG_VALUES } from "../music/index.js";
+import { MUSIC_FLAG_VALUES, parseMusicVolume } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 
@@ -30,6 +30,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["voice", { setting: true }],
   ["voice-id", { setting: true }],
   ["music", { setting: true }],
+  // The music bed's gain, 0–1 (unset: the bed's own level, from the scene energy or audio.music.volume).
+  ["music-volume", { setting: true }],
   ["renderer", { setting: true }],
   ["quality", { setting: true }],
   // Cores per render: a property of the machine, not of a recipe.
@@ -78,6 +80,7 @@ export function makeOptionsFromFlags(flags = {}) {
     seed: flags.seed,
     density: flags.density,
     profile: flags.profile,
+    musicVolume: flags["music-volume"],
     model: flags.model,
     voice: flags.voice,
     voiceId: flags["voice-id"],
@@ -126,6 +129,7 @@ export function validateMakeOptions(options = {}) {
   researchMode(options.research);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
+  if (options.musicVolume != null) parseMusicVolume(options.musicVolume);
   const renderer = String(options.renderer ?? "remotion").toLowerCase();
   if (!MAKE_RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
   const quality = String(options.quality ?? "draft").toLowerCase();

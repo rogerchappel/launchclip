@@ -28,6 +28,10 @@ With an ElevenLabs key, LaunchClip composes an instrumental track sized to your 
 
 Once a project has a track, it is **locked**. Change scenes as much as you like and LaunchClip reuses the same track (it prints `REUSE` or `PAID` before any request), unless you ask for a new one with `--music-regenerate`.
 
+## How loud the music sits
+
+The bed's level follows the video's energy (about 0.24–0.44 of full gain), or `audio.music.volume` in the story when set. `--music-volume <0-1>` on `launchclip make` or `launchclip finish` overrides both, for every music source (synth, ElevenLabs or your own file); for example `--music-volume 0.15` keeps it well under the voice. The level is recorded in `AUDIO-MANIFEST.json` as `music.volume`.
+
 ## A sound for every style
 
 A style can carry a `sound` block. A seeded style (see the seeded styles RFC) gets one drawn from its seed, so two videos made from bare prompts don't sound alike, and the same project always sounds the same.
