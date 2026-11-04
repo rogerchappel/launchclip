@@ -6,7 +6,7 @@ import test from "node:test";
 import { catalogModules, knownModules } from "@launchclip/core/modules.mjs";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { STYLE_SCHEMA } from "@launchclip/core/style.mjs";
-import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
+import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, placeholderErrors, planStoryboard } from "../src/storyboard_planner.js";
 import { planStoryCommand } from "../src/story_cli.js";
 import { fitCaptionBand } from "../src/caption_band_fit.js";
 import { runCli } from "../src/cli.js";
@@ -411,4 +411,17 @@ test("direction: coverage outside the profile band fails the plan so the loop re
   assert.match(result.warnings.join("\n"), /cadence: shot_seconds .* above the profile band/, "the rest of the band only warns");
   const advisory = checkStoryboard(goodStoryboard(), { words: WORDS, tier: "structured", direction: MAP, profile: tight, bandErrors: false });
   assert.equal(advisory.ok, true);
+});
+
+test("a card the model left as placeholders is a plan error; a dash for no in a full table is not", () => {
+  const empty = { scenes: [
+    { id: "list", module: "checklist", params: { title: "Compare the options", rows: [{ label: "—" }, { label: "—" }, { label: "—" }] } },
+    { id: "table", module: "comparison", params: { title: "Board options", columns: ["Board 1", "Board 2"], rows: [{ label: "Name", values: [null, null] }, { label: "Cost", values: [null, "?"] }] } },
+    { id: "window", module: "window-chrome", params: { title: "Avoid guesswork", lines: ["?", "?", "?"] } }
+  ] };
+  const errors = placeholderErrors(empty);
+  assert.deepEqual(errors.map((entry) => entry.match(/\((\w+)\) \(/)[1]), ["list", "table", "window"]);
+  assert.match(errors[0], /^placeholder: scenes\[0\] \(list\) \(checklist\): 3 of 4 text fields are placeholders/);
+  const full = { scenes: [{ id: "table", module: "comparison", params: { title: "Deck boards", columns: ["Treated pine", "Spotted gum", "Composite"], rows: [{ label: "Cost", values: ["Low", "High", "Medium"] }, { label: "Oiling", values: ["Yearly", "Yearly", null] }] } }] };
+  assert.deepEqual(placeholderErrors(full), []);
 });

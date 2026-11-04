@@ -1,5 +1,6 @@
 // The research stage inside `launchclip make` (--research on), motion lane:
-// before the script pass the brief (prompt plus notes) is researched into
+// before the script pass the brief (prompt plus notes, without their
+// direction sections) is researched into
 // <project>/research/, and the script pass gets researchNotes(): verified
 // claims, what the primary sources state, and what not to state. After the
 // script, its narration is audited against the ledger; anything the ledger
@@ -30,7 +31,7 @@ export async function researchBrief(ctx, briefNotes = []) {
   if (researchMode(ctx.options.research) === "off") return null;
   const { project, report, state } = ctx;
   const dir = path.join(project, RESEARCH_PATHS.dir);
-  const brief = [`# Brief`, "", ctx.text, ...briefNotes.map((note) => `\n${note}`)].join("\n");
+  const brief = [`# Brief`, "", withoutDirection(ctx.text), ...briefNotes.map((note) => `\n${withoutDirection(note)}`)].join("\n");
   const hash = createHash("sha256").update(brief).digest("hex").slice(0, 16);
   const ledgerFile = path.join(dir, RESEARCH_PATHS.ledger);
   let summary;
@@ -49,6 +50,24 @@ export async function researchBrief(ctx, briefNotes = []) {
   report.research = { dir: RESEARCH_PATHS.dir, ledger: path.join(RESEARCH_PATHS.dir, RESEARCH_PATHS.ledger), summary: ledger.summary, reused: Boolean(summary.reused) };
   for (const claim of ledger.claims.filter((entry) => entry.status !== "verified")) report.warnings.push(`research: the brief's claim "${claim.text}" is ${claim.status}: ${claim.flag?.message ?? ""}`);
   return { notes: researchNotes(ledger), ledger };
+}
+
+// A brief's direction sections ("## Direction", "## House style", "## Style",
+// "## Instructions", "## Rules") tell the writer how to write; they state
+// nothing to check, and researching them searches for "CTA" and "AI sounding".
+const DIRECTION_HEADING = /^#{1,6}\s+(?:direction|house style|style|instructions|rules)\b/i;
+
+/** The brief without its direction sections: up to the next heading of the same or a higher level. */
+export function withoutDirection(text) {
+  const out = [];
+  let skipping = 0;
+  for (const line of String(text ?? "").split("\n")) {
+    const heading = line.trim().match(/^(#{1,6})\s+/);
+    if (heading && skipping && heading[1].length <= skipping) skipping = 0;
+    if (!skipping && heading && DIRECTION_HEADING.test(line.trim())) { skipping = heading[1].length; continue; }
+    if (!skipping) out.push(line);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /** The final narration against the ledger → the research gate. */

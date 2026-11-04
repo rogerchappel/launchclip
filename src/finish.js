@@ -68,6 +68,7 @@ import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate
 import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
+import { fitCaptionBand } from "./caption_band_fit.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -939,7 +940,25 @@ const STAGES = [
       ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject } = await import("./layout_check.js");
-      const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
+      const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
+      let layout = await checkLayoutProject(ctx.project, layoutOptions());
+      // A card in the caption band while captions show: the captions dip out
+      // under it, as the planner does. The timings here are the final ones
+      // (the real narration's words, a card's settled window), so a clash the
+      // planner's fit just missed (captions from 0 s, hidden from 0.34 s) is
+      // closed here instead of failing the render.
+      if (layout.status === "failed") {
+        const errors = layout.findings.filter((finding) => finding.severity === "error");
+        const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
+        const fitted = errors.every((finding) => finding.rule === "caption-band") ? fitCaptionBand(ctx.copy, lines) : { hidden: [] };
+        if (fitted.hidden.length) {
+          ctx.copy = fitted.storyboard;
+          ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+          ctx.boundaries = deriveBoundaries(ctx.resolved);
+          layout = await checkLayoutProject(ctx.project, layoutOptions());
+          ctx.warnings.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
+        }
+      }
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
