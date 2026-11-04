@@ -29,8 +29,13 @@
 //     app maps it back, e.g. @launchclip/remotion setAssetResolver),
 //   sourceStart?: seconds into a video, focus?: {x, y} 0–1 (where the subject
 //   sits, so a clip scene crops around it), source?: {provider, id, license,
-//   generated, prompt, ...} (recorded in the plan report), cost_usd?} | null
-// (or the flat shape normalizeShot() accepts).
+//   generated, prompt, ...} (recorded in the plan report), cost_usd?,
+//   description?: what the shot shows, notes?: text or footage notes
+//   (src/inventory_notes.js: description, subjects, tags, quality, people,
+//   faces, windows...), windows?: [{start, end, quality?, note?}] (its usable
+//   stretches, seconds into a video), duration?: its length in seconds} | null
+// (or the flat shape normalizeShot() accepts). A shot's notes go to the
+// planner's repair passes and its usable windows set where a video starts.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, stat } from "node:fs/promises";
@@ -38,6 +43,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
+import { bestWindow, normalizeNotes } from "./inventory_notes.js";
 
 export const SHOT_REQUEST = "shot";
 export const SHOT_MODULES = Object.freeze(["photo-scene", "media-window", "clip"]);
@@ -162,17 +168,20 @@ const extensionOf = (value) => {
 /**
  * Asks the provider for every shot request in the storyboard and writes the
  * answers in. → {storyboard (a copy), shots: [{scene_id, shows, src, kind,
- * url?, source?}], errors: ["scene <id>: …"]}. cache: a Map reused across
- * repair attempts, so the same request is asked once.
+ * url?, source?, notes?, duration?}], media: [{src, kind, duration?, notes}]
+ * (the placed shots that carry notes, in the planner's media shape),
+ * errors: ["scene <id>: …"]}. cache: a Map reused across repair attempts, so
+ * the same request is asked once.
  */
 export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill } = {}) {
   const requests = shotRequests(storyboard);
-  if (!requests.length) return { storyboard, shots: [], errors: [] };
+  if (!requests.length) return { storyboard, shots: [], media: [], errors: [] };
   const story = structuredClone(storyboard);
   const times = sceneTimes(storyboard, words);
   const width = Number(format?.width ?? storyboard.format?.width) || null;
   const height = Number(format?.height ?? storyboard.format?.height) || null;
   const shots = [];
+  const described = [];
   const errors = [];
   for (const { index, scene, slot, still } of requests) {
     const media = pathValue(scene.params, slot);
@@ -208,6 +217,10 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     }
     shot = normalizeShot(shot);
     if (!shot) { errors.push(`${where}: the app has no shot that shows "${shows}"; design this scene without one`); continue; }
+    // A video with usable windows and no start of its own starts in the window that best fits the line.
+    const window = shot.notes?.windows?.length && shot.sourceStart == null ? bestWindow(shot.notes, request.duration ?? 3, request.line ?? shows) : null;
+    if (window) shot = { ...shot, sourceStart: window.start };
+    const known = { ...(shot.notes ? { notes: shot.notes } : {}), ...(shot.duration > 0 ? { duration: shot.duration } : {}) };
     let placed;
     try {
       placed = await placeShot(shot, request, project);
@@ -219,15 +232,16 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     const kind = placed.kind;
     if (still) {
       story.scenes[index] = { ...scene, params: withPath(scene.params, slot, placed.src) };
-      shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, slot, ...(placed.from ? { still_of: placed.from } : {}), ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}) });
+      shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, slot, ...(placed.from ? { still_of: placed.from } : {}), ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
       continue;
     }
     // A clip crops around the subject: the shot's focus (or a flat crop_hint {x, y}) when the plan set none.
     const focus = scene.module === "clip" && scene.params.focus === undefined ? shotFocus(shot) : null;
     story.scenes[index] = { ...scene, params: { ...scene.params, media: { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}) }, ...(focus ? { focus } : {}) } };
-    shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}) });
+    shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
+    if (shot.notes) described.push({ src: placed.src, kind, ...(shot.duration > 0 ? { duration: shot.duration } : {}), notes: shot.notes });
   }
-  return { storyboard: story, shots, errors };
+  return { storyboard: story, shots, media: described, errors };
 }
 
 // The flat shape some apps answer with is accepted too: {path (= file), kind,
@@ -240,13 +254,35 @@ export function normalizeShot(shot) {
   const flat = typeof shot.source === "string";
   const source = flat ? { origin: shot.source, ...Object.fromEntries(FLAT_FIELDS.filter((key) => shot[key] != null).map((key) => [key, shot[key]])) } : shot.source;
   const cost = Number(shot.cost_usd ?? source?.cost_usd);
+  const duration = Number(shot.duration ?? shot.duration_s);
+  const { notes, ...rest } = shot;
+  const known = shotNotes(shot);
   return {
-    ...shot,
+    ...rest,
     file: shot.file ?? shot.path,
     ...(source ? { source } : {}),
-    cost_usd: Number.isFinite(cost) && cost > 0 ? cost : 0
+    cost_usd: Number.isFinite(cost) && cost > 0 ? cost : 0,
+    ...(Number.isFinite(duration) && duration > 0 ? { duration } : {}),
+    ...(known ? { notes: known } : {})
   };
 }
+
+/**
+ * What the app says a shot shows, in the footage-notes shape
+ * (src/inventory_notes.js): shot.notes (text, or a notes object), with
+ * shot.description and shot.windows (or one shot.window) filling what notes
+ * leave out. Fields that are not notes are dropped. → notes | null
+ */
+export function shotNotes(shot) {
+  const given = typeof shot?.notes === "string" ? { description: shot.notes } : shot?.notes && typeof shot.notes === "object" && !Array.isArray(shot.notes) ? { ...shot.notes } : {};
+  if (given.description === undefined && typeof shot?.description === "string") given.description = shot.description;
+  if (given.windows === undefined && Array.isArray(shot?.windows)) given.windows = shot.windows;
+  if (given.windows === undefined && shot?.window && typeof shot.window === "object") given.windows = [shot.window];
+  if (!Object.keys(given).length) return null;
+  const { version: _version, src: _src, ...raw } = given;
+  return normalizeNotes(Object.fromEntries(Object.entries(raw).filter(([key]) => SHOT_NOTE_KEYS.includes(key))), "shot notes").notes;
+}
+const SHOT_NOTE_KEYS = Object.freeze(["description", "subjects", "tags", "quality", "orientation", "people", "faces", "role", "windows"]);
 
 /** A shot's subject point {x, y} (0–1 fractions) from shot.focus or a flat crop_hint, else null. */
 function shotFocus(shot) {

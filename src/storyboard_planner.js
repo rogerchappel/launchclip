@@ -151,7 +151,7 @@ export async function planStoryboard(options = {}) {
 
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
     const kind = attempt === 0 ? "plan" : "repair";
-    const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction });
+    const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction, shots: previous?.shotCounts?.shots ?? [] });
     const callStarted = now();
     let result;
     try {
@@ -182,6 +182,7 @@ export async function planStoryboard(options = {}) {
       if (repairedMap?.ok) direction = repairedMap.map;
       let shotErrors = [];
       let shotCounts = null;
+      let shotMedia = [];
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
         const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
@@ -189,10 +190,12 @@ export async function planStoryboard(options = {}) {
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
         shotCounts = { requested, answered: found.shots.length, shots: found.shots };
+        shotMedia = found.media ?? [];
       }
-      // Notes' usable windows: a video scene outside them starts in the best one.
-      if (media.length) {
-        const snapped = snapMediaWindows(pinned.storyboard, media, { times: sceneTimes(pinned.storyboard, wordList, beats), words: wordList });
+      // Notes' usable windows (the supplied media's, and the shots' the app
+      // described): a video scene outside them starts in the best one.
+      if (media.length || shotMedia.length) {
+        const snapped = snapMediaWindows(pinned.storyboard, [...media, ...shotMedia], { times: sceneTimes(pinned.storyboard, wordList, beats), words: wordList });
         pinned.storyboard = snapped.storyboard;
         if (snapped.moved.length) pinned.warnings = [...pinned.warnings, `notes: tooling moved ${snapped.moved.join("; ")}`];
       }
@@ -665,7 +668,20 @@ function planRequest({ brief, fixed, hints, direction = null, history = null }) 
   return `${lines.join("\n")}\n`;
 }
 
-function repairRequest({ request, previous, errors, attempt, repairs, direction = null }) {
+// The shots the app found for the previous storyboard, with what it says they
+// show, so a repair places and trims them knowing (only when the app sent notes).
+function shotNotesSection(shots) {
+  const described = shots.filter((shot) => shot.notes);
+  if (!described.length) return [];
+  return [
+    "",
+    "Shots the app found for your previous storyboard, with the app's notes on what each shows. Keep a shot only on a line it fits; ask again with a different \"shows\" where it does not. A video starts at params.media.sourceStart: keep it inside a usable window and the scene no longer than that window.",
+    "",
+    ...described.map((shot) => `- scene ${shot.scene_id} (${shot.kind}${shot.duration ? `, ${Math.round(shot.duration * 10) / 10} s` : ""}) for "${shot.shows}":${mediaNotesLine({ notes: shot.notes })}`)
+  ];
+}
+
+function repairRequest({ request, previous, errors, attempt, repairs, direction = null, shots = [] }) {
   const prior = previous == null ? "(no parseable JSON object was returned)" : typeof previous === "string" ? previous.slice(0, 40_000) : JSON.stringify(previous);
   return [
     request.trimEnd(),
@@ -679,6 +695,7 @@ function repairRequest({ request, previous, errors, attempt, repairs, direction 
     "Previous storyboard:",
     "",
     prior,
+    ...shotNotesSection(shots),
     "",
     "A params error names the first offending item a module found (rows[1], steps[0], left.label…); the same rule applies to every sibling item, so fix all of them in that scene, not only the one named.",
     "",
