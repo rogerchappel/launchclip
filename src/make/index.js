@@ -16,7 +16,7 @@ import { copyFile, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/pr
 import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
-import { MAX_SHOT_REQUESTS, SHOTS_DIR } from "../asset_provider.js";
+import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
 import { assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
@@ -815,11 +815,12 @@ async function stageStoryboard(ctx) {
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
   const constraints = ctx.constraints ?? null;
   const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
-  const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), MAX_SHOT_REQUESTS) : 0;
+  const shotLimit = shotRequestLimit(ctx.format?.duration);
+  const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
   const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
-  // --min-shots: only an asset provider can supply shots; above the cap it is clamped.
+  // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
-  if (hasProvider && Number(options.minShots) > MAX_SHOT_REQUESTS) report.warnings.push(`--min-shots ${options.minShots} is more than a plan may ask for; using ${MAX_SHOT_REQUESTS}`);
+  if (hasProvider && Number(options.minShots) > shotLimit) report.warnings.push(`--min-shots ${options.minShots} is more than a plan may ask for; using ${shotLimit}`);
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
   // The history is left out of planHash: a rerun keeps its storyboard even

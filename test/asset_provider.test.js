@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { planStoryboard } from "../src/storyboard_planner.js";
-import { MAX_SHOT_REQUESTS, resolveShots, shotPrompt, shotRequests } from "../src/asset_provider.js";
+import { MAX_SHOT_REQUESTS, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "../src/asset_provider.js";
 import { createEngine } from "../src/engine/index.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 6, platform: "youtube-shorts" };
@@ -158,12 +158,24 @@ test("shotPrompt is unchanged without a minimum and asks for at least min shots 
   assert.match(optional, /Ask for at most 6 shots/);
   assert.doesNotMatch(optional, /at least/);
   const required = shotPrompt({ min: 3 });
-  assert.match(required, /Ask for at least 3 and at most 6 shots/);
+  assert.match(required, /Ask for at least 3 and up to 6 shots/);
   assert.match(required, /library has real footage for this brand/);
   assert.match(required, /places, products, people doing things\) as shots, not drawn/);
+  assert.match(required, /as often as it keeps the video fast, dynamic and engaging/);
+  assert.match(required, /more shots than the app can find is fine/);
   assert.match(required, /no brand names or text in the frame/);
-  assert.match(shotPrompt({ min: 9 }), /at least 6 and at most 6/);
-  assert.equal(MAX_SHOT_REQUESTS, 6);
+  assert.match(shotPrompt({ min: 9 }), /at least 6 and up to 6/);
+  assert.match(shotPrompt({ min: 1, max: 20 }), /at least 1 and up to 20 shots/);
+});
+
+test("a plan may ask for about one shot per 3 seconds, from 6 up to MAX_SHOT_REQUESTS", () => {
+  assert.equal(shotRequestLimit(undefined), 6);
+  assert.equal(shotRequestLimit(0), 6);
+  assert.equal(shotRequestLimit(15), 6);
+  assert.equal(shotRequestLimit(30), 10);
+  assert.equal(shotRequestLimit(60), 20);
+  assert.equal(shotRequestLimit(600), MAX_SHOT_REQUESTS);
+  assert.equal(MAX_SHOT_REQUESTS, 24);
 });
 
 test("minShots asks for shots, repairs a storyboard with too few and ends with the requests", async (t) => {
@@ -171,7 +183,7 @@ test("minShots asks for shots, repairs a storyboard with too few and ends with t
   const client = llm([story(null), threeShots()]);
   const report = await plan(client, { assets, project, minShots: 3 });
   assert.equal(report.status, "passed", report.errors.join("\n"));
-  assert.match(client.requests[0].instructions, /Ask for at least 3 and at most 6 shots/);
+  assert.match(client.requests[0].instructions, /Ask for at least 3 and up to 6 shots/);
   assert.equal(report.attempts.length, 2);
   assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene or media-window scenes instead of drawing them"), report.attempts[0].errors.join("\n"));
   assert.match(client.requests[1].input, /ask for at least 3 shots from the app's library; this storyboard asks for 0/);
@@ -207,7 +219,7 @@ test("minShots is clamped to the most a plan may ask for, with a warning", async
   const client = llm([threeShots()]);
   const report = await plan(client, { assets, project, minShots: 10, maxRepairs: 0 });
   assert.equal(report.status, "passed", report.errors.join("\n"));
-  assert.match(client.requests[0].instructions, /Ask for at least 6 and at most 6 shots/);
+  assert.match(client.requests[0].instructions, /Ask for at least 6 and up to 6 shots/);
   assert.ok(report.warnings.some((warning) => /minShots 10 is more than a plan may ask for; using 6/.test(warning)));
   assert.equal(report.shot_counts.min, 6);
 });
