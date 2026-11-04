@@ -24,6 +24,7 @@ import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { renderBudget } from "../capacity.js";
 import { systemTempDir } from "../render_temp.js";
 
 const require = createRequire(import.meta.url);
@@ -125,11 +126,16 @@ export function pruneRemotionRoots(roots, current) {
 // dir, linked rather than copied, so a bundle inside it would link to itself).
 // The key covers the kit sources, the entry and the font files the bundle
 // lists through getStaticFiles().
-async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
+/** Where the bundle for this entry, project, kit and font set lives: {root, key, dir}. */
+export async function remotionBundleDir({ entry, project, kitHash, bundleRoot }) {
   const fonts = await listFonts(project);
   const key = createHash("sha256").update(JSON.stringify({ remotion: REMOTION_VERSION, entry: path.resolve(entry), project: path.resolve(project), kitHash, fonts })).digest("hex").slice(0, 24);
   const root = bundleRoot ?? path.join(systemTempDir(), "launchclip-remotion-bundles");
-  const dir = path.join(root, key);
+  return { root, key, dir: path.join(root, key) };
+}
+
+async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
+  const { root, key, dir } = await remotionBundleDir({ entry, project, kitHash, bundleRoot });
   if (existsSync(path.join(dir, "index.html")) && existsSync(path.join(dir, "bundle.js"))) {
     const now = new Date();
     await utimes(dir, now, now).catch(() => {});
@@ -188,13 +194,23 @@ export function remotionBrowserExecutable(env = process.env) {
 }
 
 /**
+ * The memory knobs every render and still takes: the <OffthreadVideo> frame
+ * cache sized from this machine's (container's) memory (renderBudget in
+ * src/capacity.js). Remotion's default sizes it from the host's free memory,
+ * which in a container can be far more than the cgroup allows.
+ */
+export function remotionMemoryOptions(budget = renderBudget()) {
+  return { offthreadVideoCacheSizeInBytes: budget.video_cache_bytes };
+}
+
+/**
  * Render segments of the LaunchclipStory composition.
  * segments: [{startFrame, endFrame (exclusive), output}]
  * Calls onSegment(segment, seconds) after each one. Returns
  * {bundle: {cached, seconds}, segments: [{output, seconds}]}.
  */
-export async function renderRemotionSegments({ entry, project, props, segments, kitHash, concurrency, bundleRoot, onSegment, logLevel = "error", browserExecutable = remotionBrowserExecutable() }) {
-  const { openBrowser, renderMedia, selectComposition } = await import("@remotion/renderer");
+export async function renderRemotionSegments({ entry, project, props, segments, kitHash, concurrency, bundleRoot, onSegment, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null }) {
+  const { openBrowser, renderMedia, selectComposition } = renderer ?? await import("@remotion/renderer");
   const bundleStarted = performance.now();
   const { serveUrl, cached } = await cachedBundle({ entry, project, kitHash, bundleRoot });
   const bundleSeconds = (performance.now() - bundleStarted) / 1000;
@@ -202,7 +218,7 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
   if (!segments.length) return { bundle: { cached, seconds: bundleSeconds }, segments: results };
   const browser = await openBrowser("chrome", { logLevel, browserExecutable });
   try {
-    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel });
+    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel, ...memory });
     for (const segment of segments) {
       const started = performance.now();
       await mkdir(path.dirname(segment.output), { recursive: true });
@@ -219,6 +235,7 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
         overwrite: true,
         puppeteerInstance: browser,
         logLevel,
+        ...memory,
         ...(concurrency != null && concurrency !== "auto" ? { concurrency: Number(concurrency) || concurrency } : {}),
         ffmpegOverride: ({ args }) => losslessArgs(args)
       });
@@ -238,16 +255,16 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
  * The evidence stage took each still with its own `remotion still` process,
  * a fresh Chrome per frame: up to 64 of them on a long video.
  */
-export async function renderRemotionStills({ entry, project, props, stills, kitHash, bundleRoot, onStill, logLevel = "error", browserExecutable = remotionBrowserExecutable() }) {
-  const { openBrowser, renderStill, selectComposition } = await import("@remotion/renderer");
+export async function renderRemotionStills({ entry, project, props, stills, kitHash, bundleRoot, onStill, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null }) {
+  const { openBrowser, renderStill, selectComposition } = renderer ?? await import("@remotion/renderer");
   const { serveUrl, cached } = await cachedBundle({ entry, project, kitHash, bundleRoot });
   if (!stills.length) return { bundle: { cached }, stills: [] };
   const browser = await openBrowser("chrome", { logLevel, browserExecutable });
   try {
-    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel });
+    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel, ...memory });
     for (const still of stills) {
       await mkdir(path.dirname(still.output), { recursive: true });
-      await renderStill({ serveUrl, composition, inputProps: props, frame: still.frame, output: path.resolve(still.output), imageFormat: "png", overwrite: true, puppeteerInstance: browser, logLevel });
+      await renderStill({ serveUrl, composition, inputProps: props, frame: still.frame, output: path.resolve(still.output), imageFormat: "png", overwrite: true, puppeteerInstance: browser, logLevel, ...memory });
       onStill?.(still);
     }
   } finally {
@@ -261,12 +278,12 @@ export async function renderRemotionStills({ entry, project, props, stills, kitH
  * a footage base plays its own audio under the mix, which a plain mux of
  * audio.mix cannot reproduce.
  */
-export async function renderRemotionAudio({ entry, project, props, output, kitHash, bundleRoot, logLevel = "error", browserExecutable = remotionBrowserExecutable() }) {
+export async function renderRemotionAudio({ entry, project, props, output, kitHash, bundleRoot, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions() }) {
   const { renderMedia, selectComposition } = await import("@remotion/renderer");
   const { serveUrl } = await cachedBundle({ entry, project, kitHash, bundleRoot });
-  const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, logLevel, browserExecutable });
+  const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, logLevel, browserExecutable, ...memory });
   await mkdir(path.dirname(output), { recursive: true });
-  await renderMedia({ serveUrl, composition, inputProps: props, codec: "aac", outputLocation: path.resolve(output), overwrite: true, logLevel, browserExecutable });
+  await renderMedia({ serveUrl, composition, inputProps: props, codec: "aac", outputLocation: path.resolve(output), overwrite: true, logLevel, browserExecutable, ...memory });
   return { output };
 }
 
