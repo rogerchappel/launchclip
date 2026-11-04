@@ -123,7 +123,8 @@ test("remotion adapter resolves the story and builds render, still and preview i
   }));
   await writeFile(path.join(project, "NARRATION.json"), JSON.stringify({ words: [{ text: "Cools", start: 1.2, end: 1.5 }] }));
   const { calls, run } = recorder();
-  const adapter = getRenderer("remotion", { run, entry: FIXTURE_ENTRY, storyModule });
+  // browserExecutable null: Remotion's own browser, so the args don't depend on this machine's install.
+  const adapter = getRenderer("remotion", { run, entry: FIXTURE_ENTRY, storyModule, browserExecutable: null });
   const props = path.join(project, ".launchclip", "story.resolved.json");
   const shared = ["--props", props, "--public-dir", project, "--overwrite", "--log", "warn"];
 
@@ -309,19 +310,41 @@ test("old Remotion roots are pruned, keeping the recent few and any in use", asy
 });
 
 test("LAUNCHCLIP_REMOTION_BROWSER picks the Chrome that Remotion renders with", () => {
-  assert.equal(remotionBrowserExecutable({}), null);
-  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "  " }), null);
-  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome/chrome-headless-shell" }), "/opt/chrome/chrome-headless-shell");
+  const none = { root: "/nowhere", platform: "linux64" };
+  assert.equal(remotionBrowserExecutable({}, none), null);
+  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "  " }, none), null);
+  assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome/chrome-headless-shell" }, none), "/opt/chrome/chrome-headless-shell");
   const remotion = getRenderer("remotion");
   const prepared = { entry: "/p/remotion/entry.tsx", propsFile: "/p/props.json", project: "/p" };
   const previous = process.env.LAUNCHCLIP_REMOTION_BROWSER;
   try {
     delete process.env.LAUNCHCLIP_REMOTION_BROWSER;
-    assert.equal(remotion.renderArgs(prepared, "/p/out.mp4").includes("--browser-executable"), false);
+    // Unset: LaunchClip's own headless shell when this checkout has one, else Remotion's download.
+    const own = remotionBrowserExecutable();
+    const unset = remotion.renderArgs(prepared, "/p/out.mp4");
+    assert.equal(unset.includes("--browser-executable"), own !== null);
+    if (own) assert.equal(unset[unset.indexOf("--browser-executable") + 1], own);
     process.env.LAUNCHCLIP_REMOTION_BROWSER = "/opt/chrome/chrome-headless-shell";
     const args = remotion.renderArgs(prepared, "/p/out.mp4");
     assert.equal(args[args.indexOf("--browser-executable") + 1], "/opt/chrome/chrome-headless-shell");
   } finally {
     if (previous === undefined) delete process.env.LAUNCHCLIP_REMOTION_BROWSER; else process.env.LAUNCHCLIP_REMOTION_BROWSER = previous;
+  }
+});
+
+test("without LAUNCHCLIP_REMOTION_BROWSER, renders use the headless shell in LaunchClip's own node_modules, whatever the cwd", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-own-browser-"));
+  try {
+    assert.equal(remotionBrowserExecutable({}, { root, platform: "linux64" }), null, "no shell installed: Remotion's own download");
+    const folder = path.join(root, "node_modules/.remotion/chrome-headless-shell/linux64/chrome-headless-shell-linux64");
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, "chrome-headless-shell"), "");
+    assert.equal(remotionBrowserExecutable({}, { root, platform: "linux64" }), path.join(folder, "chrome-headless-shell"));
+    // Remotion's own build of the shell is named headless_shell and wins, as in BrowserFetcher.
+    await writeFile(path.join(folder, "headless_shell"), "");
+    assert.equal(remotionBrowserExecutable({}, { root, platform: "linux64" }), path.join(folder, "headless_shell"));
+    assert.equal(remotionBrowserExecutable({ LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome" }, { root, platform: "linux64" }), "/opt/chrome", "the env still wins");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { remotionBrowserExecutable } from "../src/renderers/remotion_segments.js";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { ADAPTER_KEYS, createEngine, engineAdapters, withStateDirs } from "../src/engine/index.js";
 import { queueDir } from "../src/queue.js";
@@ -116,7 +117,8 @@ test("the default Remotion renderer takes its Chrome from the engine's env, not 
   const prepared = { entry: "/p/remotion/entry.tsx", propsFile: "/p/props.json", project: "/p", format: { fps: 30 } };
   const browserOf = (args) => args.includes("--browser-executable") ? args[args.indexOf("--browser-executable") + 1] : null;
   const isolated = createEngine({ workDir, cacheDir }).adapters.renderer("remotion");
-  assert.equal(browserOf(isolated.renderArgs(prepared, "/p/out.mp4")), null);
+  // The engine's own env has no LAUNCHCLIP_REMOTION_BROWSER: LaunchClip's own shell (or Remotion's download), never process.env's.
+  assert.equal(browserOf(isolated.renderArgs(prepared, "/p/out.mp4")), remotionBrowserExecutable({}));
   const chosen = createEngine({ workDir, cacheDir, env: { LAUNCHCLIP_REMOTION_BROWSER: "/opt/chrome/chrome-headless-shell" } }).adapters.renderer("remotion");
   assert.equal(browserOf(chosen.renderArgs(prepared, "/p/out.mp4")), "/opt/chrome/chrome-headless-shell");
   assert.equal(browserOf(chosen.stillArgs(prepared, 1, "/p/s.png")), "/opt/chrome/chrome-headless-shell");
