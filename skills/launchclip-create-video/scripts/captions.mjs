@@ -348,6 +348,19 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
   const stroke = overlay?.stroke === false ? 0 : Number.isFinite(Number(overlay?.stroke)) && overlay?.stroke !== null && overlay?.stroke !== true ? Math.max(0, Number(overlay.stroke)) : p.stroke;
   const shadow = overlay?.shadow === false ? 'none' : typeof overlay?.shadow === 'string' ? overlay.shadow : p.shadow;
   const position = CAPTION_POSITIONS.includes(overlay?.position) ? overlay.position : 'auto';
+  const emphasis = overlay?.emphasis === false || overlay?.emphasis === 'none' ? false : p.emphasis || Array.isArray(overlay?.emphasis);
+  // Highlight colours are text over footage: one that would not read there
+  // is replaced (captionHighlightColor) and the change noted in colorFixes.
+  const spoken = own.spoken ? captionColor(own.spoken, brandColors, idle) : p.colors.spoken ? role('spoken') : idle;
+  const under = p.plate ? role('plate') : p.layout === 'band' ? role('band') : CAPTION_SHADOW_BACKDROP;
+  const drawn = { active: CAPTION_ACTIVE_TEXT_WORDS.includes(p.word), spoken: true, accent: emphasis };
+  const colorFixes = [];
+  const highlight = (key, hex) => {
+    if (!drawn[key]) return hex;
+    const fixed = captionHighlightColor(hex, { key, idle, under, brandColors });
+    if (fixed.color !== hex) colorFixes.push({ key, from: hex, to: fixed.color, via: fixed.via, explicit: typeof own[key] === 'string' && HEX6.test(own[key]) });
+    return fixed.color;
+  };
   return {
     preset: name,
     position,
@@ -367,16 +380,16 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     layout: p.layout,
     word: p.word,
     plate: p.plate,
-    emphasis: overlay?.emphasis === false || overlay?.emphasis === 'none' ? false : p.emphasis || Array.isArray(overlay?.emphasis),
+    emphasis,
     accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
     exit: Object.hasOwn(CAPTION_EXITS, overlay?.exit) ? overlay.exit : p.exit,
     offset: Number.isFinite(Number(overlay?.offset)) ? Math.max(-0.5, Math.min(0.5, Number(overlay.offset))) : 0,
     colors: {
       idle,
-      active: role('active'),
-      spoken: own.spoken ? captionColor(own.spoken, brandColors, idle) : p.colors.spoken ? role('spoken') : idle,
-      accent: role('accent'),
+      active: highlight('active', role('active')),
+      spoken: spoken === idle ? idle : highlight('spoken', spoken),
+      accent: highlight('accent', role('accent')),
       box: role('box'),
       boxText: role('boxText'),
       plate: role('plate'),
@@ -391,7 +404,8 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     // own text best. finish fills it from what is behind each line; a style
     // sets the look but never switches it off.
     plates: captionPlateIds(overlay?.plates),
-    legiblePlate: captionLegiblePlate(idle, brandColors)
+    legiblePlate: captionLegiblePlate(idle, brandColors),
+    colorFixes
   };
 }
 
@@ -465,6 +479,59 @@ export function captionContrast(a, b) {
   return (x + 0.05) / (y + 0.05);
 }
 const mixHex = (a, b, t) => `#${hexRgb(a).map((c, i) => Math.round((c * (1 - t) + hexRgb(b)[i] * t) * 255).toString(16).padStart(2, '0')).join('')}`;
+
+// --- highlight colours over footage --------------------------------------------
+// The active, spoken and accent colours are text over footage, held up only
+// by the caption's own dark stroke or shadow (or its plate or band). A brand
+// colour that reads on a card can vanish there (a dark green over foliage),
+// so each must hold CAPTION_HIGHLIGHT_CONTRAST against what is under it
+// (CAPTION_FOOTAGE_CONTRAST against the shadow, which footage shows through)
+// and stay CAPTION_HIGHLIGHT_DISTANCE (RGB) from the idle colour (or be the
+// idle colour itself: no highlight), or it is
+// replaced: the brand colour that contrasts most, else the colour lightened
+// (or darkened) toward a tint that reads, else the default highlight.
+
+export const CAPTION_HIGHLIGHT_CONTRAST = 3;
+export const CAPTION_FOOTAGE_CONTRAST = 4.5;
+export const CAPTION_HIGHLIGHT_DISTANCE = 60;
+// A dark stroke or shadow over mid-tone footage (60% black over mid grey).
+export const CAPTION_SHADOW_BACKDROP = '#333333';
+// Word styles that draw the active colour as text (or a bar beside it).
+export const CAPTION_ACTIVE_TEXT_WORDS = Object.freeze(['highlight', 'highlight-big', 'fill', 'bounce', 'glow', 'underline']);
+const HIGHLIGHT_DEFAULTS = Object.freeze({ active: '#ffd23f', spoken: '#ffd23f', accent: '#46d4ff' });
+const HIGHLIGHT_ROLES = ['primary', 'accent', 'paper', 'ink', 'bg'];
+const rgbDistance = (a, b) => Math.hypot(...hexRgb(a).map((c, i) => (c - hexRgb(b)[i]) * 255));
+
+/**
+ * A highlight colour that reads as caption text over footage.
+ * ctx: {key (active | spoken | accent), idle, under (the colour behind the
+ * text), brandColors}. → {color, via: "kept" | "brand" | "tint" | "default"}
+ */
+export function captionHighlightColor(hex, { key = 'active', idle = '#ffffff', under = CAPTION_SHADOW_BACKDROP, brandColors = {} } = {}) {
+  const six = (value) => (typeof value === 'string' && HEX6.test(value) ? value.slice(0, 7).toLowerCase() : null);
+  const base = six(idle) ?? '#ffffff', back = six(under) ?? CAPTION_SHADOW_BACKDROP;
+  const floor = back === CAPTION_SHADOW_BACKDROP ? CAPTION_FOOTAGE_CONTRAST : CAPTION_HIGHLIGHT_CONTRAST;
+  const reads = (color) => captionContrast(color, back) >= floor && rgbDistance(color, base) >= CAPTION_HIGHLIGHT_DISTANCE;
+  const own = six(hex);
+  // The idle colour itself is a choice of no highlight, not a clash.
+  if (!own || reads(own) || (own === base && captionContrast(own, back) >= floor)) return { color: hex, via: 'kept' };
+  const brand = [...new Set(HIGHLIGHT_ROLES.map((role) => six(brandColors[role])).filter(Boolean))].filter(reads);
+  if (brand.length) return { color: brand.reduce((best, color) => (captionContrast(color, back) > captionContrast(best, back) + 1e-9 ? color : best)), via: 'brand' };
+  const toward = captionContrast('#ffffff', back) >= captionContrast('#000000', back) ? '#ffffff' : '#000000';
+  for (let t = 0.15; t < 0.9; t += 0.15) {
+    const tint = mixHex(own, toward, t);
+    if (reads(tint)) return { color: tint, via: 'tint' };
+  }
+  return { color: HIGHLIGHT_DEFAULTS[key] ?? HIGHLIGHT_DEFAULTS.active, via: 'default' };
+}
+
+/** Report lines for the caption colours a host set explicitly that were changed to read over footage. */
+export function captionColorWarnings(story) {
+  const overlay = captionsOverlayOf(story);
+  if (!overlay) return [];
+  const { colorFixes } = captionOptions(overlay, { brand: story?.brand, format: story?.format, story });
+  return colorFixes.filter((fix) => fix.explicit).map((fix) => `captions.colors.${fix.key} ${fix.from} does not read over footage (too little contrast against the caption's shadow, plate or band, or too close to the idle colour); using ${fix.to}`);
+}
 
 /** Track-0 world scenes of a (resolved) story as [{start, end, tone}] (tone: night | dusk | day). */
 export function captionWorldSpans(story) {
