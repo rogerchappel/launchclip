@@ -32,6 +32,7 @@ import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
+import { fitDurations } from "./duration_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 
@@ -199,16 +200,29 @@ export async function planStoryboard(options = {}) {
       if (constraints && direction) direction = reconcileMap(direction, resolvedOrNull(pinned.storyboard, wordList, beats), constraints, wordList);
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
-      // An event time just outside its module's window is tooling's to fix,
-      // not a repair call's; a fix can expose the next one, so a few rounds.
+      // A scene shorter than its module allows, or an event time just outside
+      // its module's window, is tooling's to fix, not a repair call's; a fix
+      // can expose the next one, so a few rounds.
       const moved = [];
+      const lengthened = [];
       for (let round = 0; round < 3 && !checked.ok; round += 1) {
+        const sized = fitDurations(pinned.storyboard, checked.errors, { words: wordList, beats, direction });
+        if (sized.changed.length) {
+          pinned.storyboard = sized.storyboard;
+          direction = sized.direction;
+          checkOptions.direction = direction;
+          lengthened.push(...sized.changed);
+          checked = checkStoryboard(pinned.storyboard, checkOptions);
+          if (checked.ok) break;
+        }
         const fitted = fitTimings(pinned.storyboard, checked.errors);
-        if (!fitted.moved.length) break;
+        if (!fitted.moved.length && !sized.changed.length) break;
+        if (!fitted.moved.length) continue;
         pinned.storyboard = fitted.storyboard;
         moved.push(...fitted.moved);
         checked = checkStoryboard(pinned.storyboard, checkOptions);
       }
+      if (lengthened.length) pinned.warnings = [...pinned.warnings, `timing: tooling fitted scenes to their module's minimum length: ${lengthened.join("; ")}`];
       if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];
       // The deterministic pass (src/constraints.js fillConstraints): when the
       // constraints are all that is left, or on the last attempt, tooling

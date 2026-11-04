@@ -122,6 +122,21 @@ test("repair success: the exact validation and tier errors go back, then the fix
   assert.equal(report.usage.total_tokens, 20400);
 });
 
+test("a scene shorter than its module allows is lengthened by tooling, not a repair call", async () => {
+  const story = goodStoryboard();
+  // A photo on "law of cooling": 1 s where photo-scene needs 2 s.
+  story.scenes[1].end = "word:law";
+  story.scenes[1].hits = [{ at: "word:named", event: "lockup" }];
+  story.scenes.splice(2, 0, { id: "newton", module: "photo-scene", start: "word:law", end: 6.2, params: { media: "assets/newton.jpg" } });
+  const client = fakeClient([envelope(story)]);
+  const report = await plan(client);
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(client.calls.length, 1);
+  const photo = report.storyboard.scenes.find((scene) => scene.id === "newton");
+  assert.ok(photo.end - photo.start >= 2, `newton is ${photo.end - photo.start} s`);
+  assert.ok(report.warnings.some((entry) => /^timing: tooling fitted scenes to their module's minimum length: newton lengthened/.test(entry)), report.warnings.join("\n"));
+});
+
 test("param errors surface with the param's path, from the module's schema", async () => {
   const story = goodStoryboard();
   story.scenes[0].params.headline = "Why does a hot cup of coffee on your desk cool so quickly at first and then so slowly afterwards?";
