@@ -33,6 +33,7 @@ import { estimateModelUsageCost } from "./cost_tracker.js";
 import { minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
 import { fitDurations } from "./duration_fit.js";
+import { fitCaptionBand } from "./caption_band_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 
@@ -224,6 +225,17 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = fitted.storyboard;
         moved.push(...fitted.moved);
         checked = checkStoryboard(pinned.storyboard, checkOptions);
+      }
+      // A card in the caption band while captions show: the captions dip out
+      // under it (a caption position the module layout does not plan for, such
+      // as the middle of the frame, otherwise fails every attempt).
+      if (!checked.ok) {
+        const fitted = fitCaptionBand(pinned.storyboard, checked.errors);
+        if (fitted.hidden.length) {
+          pinned.storyboard = fitted.storyboard;
+          checked = checkStoryboard(pinned.storyboard, checkOptions);
+          pinned.warnings = [...pinned.warnings, `layout: tooling hid ${fitted.hidden.join("; ")}`];
+        }
       }
       if (lengthened.length) pinned.warnings = [...pinned.warnings, `timing: tooling fitted scenes to their module's minimum length: ${lengthened.join("; ")}`];
       if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];

@@ -8,6 +8,7 @@ import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { STYLE_SCHEMA } from "@launchclip/core/style.mjs";
 import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
 import { planStoryCommand } from "../src/story_cli.js";
+import { fitCaptionBand } from "../src/caption_band_fit.js";
 import { runCli } from "../src/cli.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 12, platform: "youtube-shorts" };
@@ -176,6 +177,17 @@ test("layout errors from guided-tier coordinates are reported as layout errors",
   assert.ok(checked.errors.some((entry) => /^layout: safe-zone .*\[s3\]/.test(entry)), checked.errors.join("\n"));
   assert.ok(checked.errors.some((entry) => /^layout: caption-band .*\[s3, captions\]/.test(entry)));
   assert.ok(checked.layout.errors >= 2);
+});
+
+test("hiding the captions over a caption-band clash clears it for the layout check", () => {
+  const story = goodStoryboard();
+  story.scenes[2].params.rect = { x: 90, y: 1100, width: 850, height: 500 };
+  const checked = checkStoryboard(story, { words: WORDS, tier: "guided" });
+  assert.ok(checked.errors.some((entry) => /^layout: caption-band /.test(entry)));
+  const fitted = fitCaptionBand(story, checked.errors);
+  assert.ok(fitted.hidden.length >= 1, fitted.hidden.join("; "));
+  const rechecked = checkStoryboard(fitted.storyboard, { words: WORDS, tier: "guided" });
+  assert.ok(!rechecked.errors.some((entry) => /^layout: caption-band /.test(entry)), rechecked.errors.join("\n"));
 });
 
 test("repair exhaustion: stops after two repairs and reports the last errors", async () => {
