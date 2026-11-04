@@ -11,6 +11,7 @@
     "test:media": "node ./scripts/media-tests.mjs",
     "test:all": "LAUNCHCLIP_MEDIA_TESTS=1 node ./scripts/test.mjs",
     "smoke": "node ./scripts/smoke.js",
+    "smoke:container": "node ./scripts/container-smoke.mjs",
     "check": "npm test && npm run typecheck && npm run smoke",
     "typecheck": "tsc -p tsconfig.json",
     "parity:ci": "node ./scripts/parity-ci.mjs",
