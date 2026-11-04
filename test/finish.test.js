@@ -326,6 +326,23 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
   }
 });
 
+test("a card in a mid-frame caption band from 0 s hides the captions under it instead of failing validate", async () => {
+  // Captions in the middle of the frame, where every card sits, and a card up
+  // from the first frame: the clash is closed with overlay.hide, not a failure.
+  const project = await narratedProject({ mutate: (story) => { story.overlays[0].position = "middle"; } });
+  try {
+    const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    assert.equal(report.stages.find((stage) => stage.name === "validate").status, "done", JSON.stringify(report.stages.find((stage) => stage.name === "validate")));
+    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions 0–/.test(line)), report.warnings.join("\n"));
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.ok(resolved.overlays.find((overlay) => overlay.type === "captions").hide.some(([start]) => start === 0));
+    const user = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    assert.equal(user.overlays[0].hide, undefined, "the user's storyboard is not touched");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("--music-volume sets the bed's gain over the story's and the energy default", async () => {
   const project = await narratedProject({ mutate: (story) => { story.audio.music = { provider: "synth", volume: 0.3 }; } });
   try {
