@@ -7,7 +7,9 @@
 //   node build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s>
 //     [--voice narration.wav] [--music bed.wav] [--sfx-dir assets/audio/sfx]
 //     [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5]
-//     [--sfx-manifest qa/sfx.json]
+//     [--sfx-manifest qa/sfx.json] [--key footage.mp4]
+// --key: speech that plays outside this mix (a talking-head recording's own
+// audio): it ducks the bed and ambience like --voice but is not mixed in.
 // cues.json: [{ "cue": "whoosh", "at": 5.72, "volume": 0.5, "shot": "B1", "intent": "pan" }]
 // A cue may name a file instead: { "file": "assets/audio/hit.wav", "at": 1.2 }.
 import { execFileSync } from 'node:child_process';
@@ -28,14 +30,31 @@ export function normalizeCues(cues, sfxDir) {
   });
 }
 
-export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, hasAmbience = false, ambienceVolume = 0.5 }) {
+// Key segments: [{ sourceStart, duration }] — the stretches of the key file
+// the video plays, in order (a trimmed footage base); none plays it from 0.
+function keySource(index, segments) {
+  if (!segments?.length) return `[${index}]anull`;
+  const cuts = segments.map((segment, i) => `[${index}]atrim=start=${segment.sourceStart}:duration=${segment.duration},asetpts=PTS-STARTPTS[kc${i}]`);
+  return segments.length === 1 ? cuts[0].replace(/\[kc0\]$/, '') : `${cuts.join(';')};${segments.map((_, i) => `[kc${i}]`).join('')}concat=n=${segments.length}:v=0:a=1`;
+}
+
+export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null }) {
   const parts = [];
   const mixInputs = [];
   let index = 0;
+  const keys = (hasMusic ? 1 : 0) + (hasAmbience ? 1 : 0);
   if (hasVoice) {
-    const keys = (hasMusic ? 1 : 0) + (hasAmbience ? 1 : 0);
     parts.push(keys === 2 ? `[${index}]asplit=3[vo][key][akey]` : keys === 1 ? `[${index}]asplit=2[vo][${hasMusic ? 'key' : 'akey'}]` : `[${index}]anull[vo]`);
     mixInputs.push('[vo]');
+    index += 1;
+  }
+  // A key without a voice: the speech is heard elsewhere, so it only feeds
+  // the sidechains. With a voice the voice keys, and the key is ignored.
+  const keyed = hasVoice || (hasKey && keys > 0);
+  if (keyed && !hasVoice) {
+    parts.push(`${keySource(index, keySegments)},aformat=channel_layouts=stereo${keys === 2 ? ',asplit=2[key][akey]' : `[${hasMusic ? 'key' : 'akey'}]`}`);
+    index += 1;
+  } else if (hasKey && !hasVoice) {
     index += 1;
   }
   if (hasMusic) {
@@ -43,14 +62,14 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     // Duck the bed under speech; with no voice the bed plays as is. The key is
     // padded to the full duration because sidechaincompress stops when its
     // sidechain ends, which would cut the bed off after the last word.
-    parts.push(hasVoice ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]` : '[bedraw]anull[bed]');
+    parts.push(keyed ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]` : '[bedraw]anull[bed]');
     mixInputs.push('[bed]');
     index += 1;
   }
   if (hasAmbience) {
     // The loop arrives endless (-stream_loop -1): cut it to length first.
     parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}[ambraw]`);
-    parts.push(hasVoice ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]sidechaincompress=threshold=0.03:ratio=4:attack=40:release=600:makeup=1[amb]` : '[ambraw]anull[amb]');
+    parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]sidechaincompress=threshold=0.03:ratio=4:attack=40:release=600:makeup=1[amb]` : '[ambraw]anull[amb]');
     mixInputs.push('[amb]');
     index += 1;
   }
@@ -65,13 +84,15 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
   return parts.join(';');
 }
 
-export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, ambienceVolume = 0.5 }) {
+export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, ambienceVolume = 0.5, key = null, keySegments = null }) {
   const inputs = [];
+  const useKey = Boolean(key) && !voice && Boolean(music || ambience);
   if (voice) inputs.push('-i', voice);
+  else if (useKey) inputs.push('-vn', '-i', key);
   if (music) inputs.push('-i', music);
   if (ambience) inputs.push('-stream_loop', '-1', '-i', ambience);
   for (const cue of cues) inputs.push('-i', cue.file);
-  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, hasAmbience: Boolean(ambience), ambienceVolume });
+  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
   mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
 }
@@ -80,10 +101,10 @@ async function main(argv) {
   const flag = (name, fallback) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : fallback; };
   const out = flag('--out');
   const duration = Number(flag('--duration'));
-  if (!out || !Number.isFinite(duration) || duration <= 0) throw new Error('usage: build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s> [--voice v.wav] [--music bed.wav] [--sfx-dir dir] [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5] [--sfx-manifest qa/sfx.json]');
+  if (!out || !Number.isFinite(duration) || duration <= 0) throw new Error('usage: build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s> [--voice v.wav] [--music bed.wav] [--sfx-dir dir] [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5] [--sfx-manifest qa/sfx.json] [--key footage.mp4]');
   const cuesPath = flag('--cues');
   const cues = cuesPath ? normalizeCues(JSON.parse(readFileSync(cuesPath, 'utf8')), flag('--sfx-dir', 'assets/audio/sfx')) : [];
-  buildMix({ voice: flag('--voice'), music: flag('--music'), ambience: flag('--ambience'), cues, duration, out, musicVolume: Number(flag('--music-volume', 0.42)), ambienceVolume: Number(flag('--ambience-volume', 0.5)) });
+  buildMix({ voice: flag('--voice'), music: flag('--music'), ambience: flag('--ambience'), cues, duration, out, musicVolume: Number(flag('--music-volume', 0.42)), ambienceVolume: Number(flag('--ambience-volume', 0.5)), key: flag('--key') });
   const manifest = flag('--sfx-manifest');
   if (manifest) {
     mkdirSync(path.dirname(path.resolve(manifest)), { recursive: true });

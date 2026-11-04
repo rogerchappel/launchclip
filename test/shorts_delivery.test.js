@@ -75,6 +75,17 @@ test("builds a ducked mix graph with event-bound SFX", () => {
   assert.match(mixGraph({ cues: fitted, duration: 10, hasVoice: false, hasMusic: false }), /\[0\]atrim=start=0\.6,asetpts=PTS-STARTPTS,afade=t=in:d=0\.004,adelay=2000:all=1,volume=0\.16\[s0\]/);
 });
 
+test("a speech key ducks the bed without being mixed in", () => {
+  const graph = mixGraph({ cues: [], duration: 9, hasVoice: false, hasMusic: true, hasKey: true, keySegments: [{ sourceStart: 1, duration: 4 }, { sourceStart: 6, duration: 5 }] });
+  assert.match(graph, /\[0\]atrim=start=1:duration=4,asetpts=PTS-STARTPTS\[kc0\];\[0\]atrim=start=6:duration=5,asetpts=PTS-STARTPTS\[kc1\];\[kc0\]\[kc1\]concat=n=2:v=0:a=1,aformat=channel_layouts=stereo\[key\]/);
+  assert.match(graph, /\[1\]volume=0\.42\[bedraw\]/);
+  assert.match(graph, /\[bedraw\]\[keypad\]sidechaincompress/);
+  assert.match(graph, /\[bed\]amix=inputs=1:/, "the key itself is not in the mix");
+  // A voice keys as before; the key is then ignored.
+  assert.equal(mixGraph({ cues: [], duration: 9, hasVoice: true, hasMusic: true }), mixGraph({ cues: [], duration: 9, hasVoice: true, hasMusic: true, hasKey: false }));
+  assert.match(mixGraph({ cues: [], duration: 9, hasVoice: false, hasMusic: true, hasKey: true }), /\[0\]anull,aformat=channel_layouts=stereo\[key\]/);
+});
+
 test("derives the phase-2 evidence schedule from declared boundaries", () => {
   const html = '<div id="root" data-composition-id="main" data-duration="12"><div data-launchclip-sequence-id="b" data-launchclip-boundary-id="b1" data-launchclip-transition-kind="shared-world" data-launchclip-transition-start="5" data-launchclip-transition-duration="0.5"></div></div>';
   const schedule = evidenceSchedule(html);
