@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { planStoryboard } from "../src/storyboard_planner.js";
-import { MAX_SHOT_REQUESTS, SHOT_CARD_SLOTS, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "../src/asset_provider.js";
+import { MAX_SHOT_REQUESTS, SHOT_CARD_SLOTS, normalizeShot, resolveShots, shotNotes, shotPrompt, shotRequestLimit, shotRequests } from "../src/asset_provider.js";
 import { createEngine } from "../src/engine/index.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 6, platform: "youtube-shorts" };
@@ -102,6 +102,48 @@ test("a URL shot keeps an assets/ path in the story and reports the URL for the 
   assert.equal(found.storyboard.scenes[0].params.media.sourceStart, 0);
   assert.equal(found.shots[0].url, "https://media.example/gen/abc.mp4?sig=1");
   assert.equal(shotRequests(found.storyboard).length, 0);
+});
+
+test("a shot's notes say what it shows, and its usable window sets where the video starts", async () => {
+  const answer = { url: "https://media.example/lib/pour.mp4", kind: "video", duration: 14, description: "Barista pours latte art, close up", windows: [{ start: 0, end: 1.5, quality: 0.3, note: "out of focus" }, { start: 6, end: 11, quality: 0.9, note: "the pour" }], source: { provider: "app-library", id: "v7" } };
+  const found = await resolveShots(story({ kind: "shot", shows: "a barista pouring latte art", type: "video" }), { assets: { findShot: async () => answer }, words: WORDS });
+  assert.deepEqual(found.errors, []);
+  const media = found.storyboard.scenes[0].params.media;
+  assert.equal(media.sourceStart, 6, "the higher-quality window that fits the scene");
+  assert.deepEqual(found.shots[0].notes, { description: "Barista pours latte art, close up", windows: [{ start: 0, end: 1.5, quality: 0.3, note: "out of focus" }, { start: 6, end: 11, quality: 0.9, note: "the pour" }] });
+  assert.equal(found.shots[0].duration, 14);
+  assert.deepEqual(found.media, [{ src: media.src, kind: "video", duration: 14, notes: found.shots[0].notes }]);
+  // A start of the app's own wins over the windows.
+  const pinned = await resolveShots(story({ kind: "shot", shows: "a barista pouring latte art", type: "video" }), { assets: { findShot: async () => ({ ...answer, sourceStart: 2 }) }, words: WORDS });
+  assert.equal(pinned.storyboard.scenes[0].params.media.sourceStart, 2);
+});
+
+test("shot notes take text, a footage-notes object or the flat fields, and drop what is not a note", () => {
+  assert.deepEqual(shotNotes({ notes: "A cup on a sunny table" }), { description: "A cup on a sunny table" });
+  assert.deepEqual(shotNotes({ notes: { subjects: ["cup"], people: false, license: "x" }, description: "Cup", window: { start: 1, end: 4 } }), { description: "Cup", subjects: ["cup"], people: false, windows: [{ start: 1, end: 4 }] });
+  assert.equal(shotNotes({ file: "/a.jpg" }), null);
+  // The flat shape's duration_s is the shot's length; an answer without notes is unchanged.
+  assert.equal(normalizeShot({ path: "/a.mp4", source: "library", duration_s: 9 }).duration, 9);
+  assert.equal("notes" in normalizeShot({ file: "/a.jpg" }), false);
+});
+
+test("a repair pass sees what the app said each shot shows", async (t) => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-shot-notes-"));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const assets = { findShot: async () => ({ src: "assets/lib/cup.jpg", kind: "image", description: "An empty cup on a counter, no barista" }) };
+  // The first board also breaks a check (an unknown module), so there is a repair.
+  const broken = story({ kind: "shot", shows: "a barista pouring latte art", type: "image" });
+  broken.scenes[1] = { ...broken.scenes[1], module: "not-a-module" };
+  const client = llm([broken, story(null)]);
+  const report = await plan(client, { assets, project });
+  assert.equal(report.attempts.length, 2);
+  const repair = client.requests[1].input;
+  assert.match(repair, /Shots the app found for your previous storyboard/);
+  assert.match(repair, /- scene s1 \(image\) for "a barista pouring latte art": Notes from the app: An empty cup on a counter, no barista\./);
+  // Without notes the repair prompt is as before.
+  const plainClient = llm([broken, story(null)]);
+  await plan(plainClient, { assets: { findShot: async () => ({ src: "assets/lib/cup.jpg", kind: "image" }) }, project });
+  assert.doesNotMatch(plainClient.requests[1].input, /Shots the app found/);
 });
 
 test("wrong shots are reported, never written in", async () => {

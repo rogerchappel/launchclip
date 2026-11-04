@@ -207,9 +207,23 @@ interface AssetProvider {
     url?: string;                    // you serve it; the story names assets/shots/<id>.<ext>
     sourceStart?: number;            // seconds into a video
     source?: object;                 // e.g. {provider, id, license, generated, prompt}: echoed in plan.shots
+    description?: string;            // what the shot shows
+    notes?: string | object;         // text, or footage notes: {description, subjects, tags, quality, people, faces, windows, ...}
+    windows?: { start: number; end: number; quality?: number; note?: string }[]; // usable stretches of a video, in seconds
+    duration?: number;               // the shot's length in seconds (duration_s in the flat shape)
   }>;
 }
 ```
+
+The optional `description`, `notes`, `windows` and `duration` tell the
+planner what it got. A video with usable windows and no `sourceStart` of its
+own starts in the window that best fits the scene (one long enough for it,
+then the highest quality), and a scene placed outside them is moved into
+one, as with footage notes on supplied clips. When a storyboard needs a
+repair pass, the repair sees each found shot with its notes, so it keeps a
+shot only on a line it fits and trims to a usable window. All four are
+echoed per shot in `plan.shots`. `request.line` is the narration the scene
+covers.
 
 The shot is written into the story as an `assets/` path, so the story contract
 and both renderers are unchanged. For a `url`, map that path back to your URL
