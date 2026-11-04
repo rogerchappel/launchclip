@@ -38,7 +38,8 @@ export async function guardRejections(fn, { graceMs = 5000 } = {}) {
         pending.delete(promise);
         fail(escapedError(reason));
       }, graceMs);
-      timer.unref?.();
+      // Not unref'd: when the work hangs on nothing, this timer is what keeps
+      // the process alive long enough to fail it (cleared once the work settles).
       pending.set(promise, { reason, timer });
     },
     handled(promise) {

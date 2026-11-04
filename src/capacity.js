@@ -29,10 +29,11 @@ export const RULE = Object.freeze({ PLAN: 4, RENDER_CORES: 5, RENDER_GB: 7, BASE
  * reports the host's cores and RAM, so a cgroup CPU quota or memory limit
  * lower than those wins. No GPU probe (detectGpu does that).
  */
-export function measureMachine({ platform = process.platform, arch = process.arch, limits = platform === "linux" ? containerLimits() : {} } = {}) {
+export function measureMachine({ platform = process.platform, arch = process.arch, limits = platform === "linux" ? containerLimits() : {}, host = null } = {}) {
   const cpus = os.cpus();
-  const hostCores = typeof os.availableParallelism === "function" ? os.availableParallelism() : cpus.length;
-  const hostGb = os.totalmem() / GB;
+  // host {cores, ram_gb} stands in for this machine's (tests).
+  const hostCores = host?.cores ?? (typeof os.availableParallelism === "function" ? os.availableParallelism() : cpus.length);
+  const hostGb = host?.ram_gb ?? os.totalmem() / GB;
   return {
     platform,
     arch,
