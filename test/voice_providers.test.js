@@ -339,6 +339,20 @@ test("supplied voiceover trims edges, tightens long pauses, normalises loudness 
   await assert.rejects(supplied.create({ source }).synthesize({ outFile: source }), /overwrite/);
 });
 
+test("an edited supplied voiceover with its words is levelled only: no pause edit, no Whisper pass", { skip: hasFfmpeg ? false : "ffmpeg is not installed" }, async (t) => {
+  const directory = await tempDir(t);
+  const sampleRate = 48000;
+  const source = await writeWav(path.join(directory, "take.wav"), bursts(sampleRate, 5.1, [[0.8, 1.3], [2.8, 3.3], [3.6, 4.1]], { amplitude: 0.05 }), sampleRate);
+  const provider = supplied.create({ transcribe: async () => { throw new Error("Whisper must not run"); }, analyze: async () => { throw new Error("no pause analysis"); } });
+  const words = [{ text: "Hello,", start: 0.8, end: 1.3 }, { text: "big", start: 2.8, end: 3.3 }, { text: "world.", start: 3.6, end: 4.1 }];
+  const result = await provider.synthesize({ text: "Hello, big world.", outFile: path.join(directory, "voice.wav"), source, edited: true, words });
+  assert.ok(Math.abs(result.duration - 5.1) < 0.05, `the edit is kept: duration ${result.duration}`);
+  assert.deepEqual(result.words, words);
+  assert.equal(result.timing.method, "supplied");
+  assert.equal(result.prep.edited, true);
+  assert.ok(Math.abs(result.prep.loudness_measured_lufs - supplied.TARGET_LUFS) < 1.5, `loudness ${result.prep.loudness_measured_lufs}`);
+});
+
 test("planPauseEdit only shortens pauses longer than 0.6 s", () => {
   const sampleRate = 16000;
   const samples = bursts(sampleRate, 4, [[0.5, 1], [1.5, 2], [3, 3.5]]);

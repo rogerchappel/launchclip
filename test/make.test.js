@@ -270,6 +270,46 @@ test("pronunciation.json and voice.json in --assets shape the narration take, no
   }
 });
 
+test("voiceover lane: --base-transcript supplies the words and --base-edited keeps the take as edited", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-vo-"));
+  try {
+    await writeFile(path.join(assets, "vo.wav"), "not really audio");
+    const transcript = path.join(cwd, "vo.words.json");
+    await writeFile(transcript, JSON.stringify({ words: [{ text: "Ledgerly", start: 0.1, end: 0.5 }, { word: "reconciles", start: 0.6, end: 1.1 }, { text: "payouts.", start: 1.2, end: 1.8 }] }));
+    // No Whisper ran: the voiceover entry has no transcript.
+    const inventory = async (dir) => { const base = await fakeInventory(dir); return { ...base, entries: [...base.entries, { path: "vo.wav", kind: "audio", role: "voiceover", confidence: 0.9, signals: ["speech"], description: "Voiceover", media: { kind: "audio", duration: 2 }, speech: { present: true }, fingerprint: "4" }] }; };
+    const takes = [];
+    const voiceProvider = () => ({ name: "supplied", async synthesize(request) {
+      takes.push(request);
+      await writeFile(request.outFile, "levelled");
+      return { file: request.outFile, words: request.words ?? [{ text: "x", start: 0, end: 1 }], duration: 2, sampleRate: 48000 };
+    } });
+    const { model } = fakeModel();
+    const run = (extra) => runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, baseTranscript: transcript, ...extra }, { env: {}, client: model, inventory, finish: fakeFinish([]), voiceProvider, transcribe: async () => { throw new Error("no Whisper"); }, notice() {} });
+    const report = await run({ baseEdited: true });
+    assert.equal(report.routing.lane, "voiceover-motion");
+    assert.equal(report.stages.prepare.status, "done", JSON.stringify(report.stages));
+    assert.equal(takes.length, 1);
+    assert.equal(takes[0].text, "Ledgerly reconciles payouts.");
+    assert.equal(takes[0].edited, true);
+    assert.deepEqual(takes[0].words.map((word) => [word.text, word.start, word.end]), [["Ledgerly", 0.1, 0.5], ["reconciles", 0.6, 1.1], ["payouts.", 1.2, 1.8]]);
+    assert.equal(takes[0].source, path.join(report.project, "assets", "vo.wav"));
+    assert.equal(report.script.transcript, "supplied");
+    assert.equal(report.script.edited, true);
+
+    // Not edited: the supplied words are the text, and the provider edits and times the take itself.
+    await run({ baseEdited: false });
+    assert.equal(takes.length, 2, "a change of --base-edited prepares the take again");
+    assert.equal(takes[1].edited, undefined);
+    assert.equal(takes[1].words, undefined);
+    assert.equal(takes[1].text, "Ledgerly reconciles payouts.");
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("errors left after the one repair pass are a warning, not a failure", async () => {
   const assets = await assetsDir();
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-check-"));

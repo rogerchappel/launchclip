@@ -15,6 +15,9 @@
 //      about -17 LUFS integrated, -1.5 dBTP, because mono voice plays about
 //      3 LU louder as stereo; `enhance: "off"` keeps the plain two-pass
 //      loudnorm (linear gain);
+//   With `edited` (the app already edited the recording) steps 2–3 are
+//   skipped, and with `words` too (its word timings) so is step 5.
+//
 //   5. transcribe the prepared audio with the repo's local Whisper path
 //      (transcribeRecording), align the recognised words back to `text` when
 //      given, pull word boundaries off quiet audio (Whisper tends to start a
@@ -47,8 +50,8 @@ export function create(options = {}) {
   const run = options.run ?? execute;
   return {
     name: "supplied",
-    async synthesize({ text, outFile, signal } = {}) {
-      const source = options.source;
+    async synthesize({ text, outFile, signal, source: given, edited = false, words: timed = null } = {}) {
+      const source = given ?? options.source;
       if (!source) throw new Error("Supplied voice needs create({ source })");
       if (!outFile) throw new Error("Supplied voice needs outFile");
       if (path.resolve(source) === path.resolve(outFile)) throw new Error("Supplied voice output must not overwrite the source recording");
@@ -57,13 +60,23 @@ export function create(options = {}) {
         const decoded = path.join(temporary, "decoded.wav");
         await run("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", source, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(SUPPLIED_SAMPLE_RATE), "-c:a", "pcm_f32le", decoded], { signal, maxBuffer: 8 * 1024 * 1024 });
         const audio = await readWav(decoded);
-        const analysis = await (options.analyze ?? analyzeRecordingAudio)(decoded, { durationSeconds: audio.duration, silenceDuration: PAUSE_LIMIT_SECONDS }, { run });
-        const plan = planPauseEdit(audio.samples, audio.sampleRate, analysis);
-        const tightened = applyPauseEdit(audio.samples, audio.sampleRate, plan.keep);
+        const analysis = edited ? null : await (options.analyze ?? analyzeRecordingAudio)(decoded, { durationSeconds: audio.duration, silenceDuration: PAUSE_LIMIT_SECONDS }, { run });
+        const plan = edited ? { keep: [[0, audio.duration]], leading: 0, trailing: 0, tightened: 0 } : planPauseEdit(audio.samples, audio.sampleRate, analysis);
+        const tightened = edited ? audio.samples : applyPauseEdit(audio.samples, audio.sampleRate, plan.keep);
         const tightenedFile = path.join(temporary, "tightened.wav");
         await writeWav(tightenedFile, tightened, audio.sampleRate);
         const { loudness, enhancement } = await prepareLoudness(tightenedFile, outFile, { preset: options.enhance ?? "light", run, signal, enhance: options.enhanceAudio, notice: options.notice });
         const prepared = await readWav(outFile);
+        // An edited recording with its words: levelled only, its timings kept.
+        if (edited && timed?.length) {
+          const words = finalizeWords(timed.map((word) => ({ text: String(word.text ?? word.word), start: Number(word.start), end: Number(word.end) })), prepared.duration);
+          return {
+            file: outFile, words, sampleRate: prepared.sampleRate, duration: prepared.duration,
+            provider: "supplied", source,
+            prep: { source_duration_seconds: audio.duration, edited: true, loudness_target_lufs: TARGET_LUFS, loudness_measured_lufs: loudness.output_i, true_peak_dbtp: loudness.output_tp, enhancement },
+            timing: { method: "supplied" }
+          };
+        }
         const transcript = await (options.transcribe ?? defaultTranscribe)(outFile, { model: options.model ?? "base.en", language: options.language ?? "en", signal });
         const recognised = normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
         const aligned = typeof text === "string" && text.trim() ? alignWordsToText(recognised, text) : recognised;

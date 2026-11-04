@@ -78,12 +78,14 @@ export function voiceCacheDir(project, env = process.env) {
 /**
  * Synthesise (or reuse) one take into outFile.
  * options: {outFile, cacheDir, voiceProvider(name) → provider, normalizeVoice(input, output) → loudness,
- *   source (the supplied provider's audio file)}
+ *   source (the supplied provider's audio file), edited (supplied: the app
+ *   already edited it, so no pause edit), words (supplied: its word timings,
+ *   so no Whisper pass; used with edited)}
  * Synthesised voices are levelled to the supplied-voiceover loudness (Kokoro
  * arrives near -22 LUFS); the offline test tone and supplied audio are not.
  * → {file, words: [{text, start, end}], duration, sampleRate, loudness, cached, cache_key}
  */
-export async function synthesizeNarration(request, { outFile, cacheDir = null, voiceProvider, normalizeVoice, source } = {}) {
+export async function synthesizeNarration(request, { outFile, cacheDir = null, voiceProvider, normalizeVoice, source, edited = false, words: timed = null } = {}) {
   if (!request?.text) throw new Error("narration text is empty: set audio.narration.text (or pass --text)");
   if (!outFile) throw new Error("synthesizeNarration needs outFile");
   await mkdir(path.dirname(outFile), { recursive: true });
@@ -103,6 +105,7 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
   const spoken = request.pronunciation && request.provider !== "supplied" ? applyPronunciation(request.text, request.pronunciation) : null;
   const synthesis = { text: spoken?.text ?? request.text, voice: request.voice ?? undefined, speed: request.speed, outFile, ...(request.settings ? { settings: request.settings } : {}) };
   if (request.provider === "supplied" && source) synthesis.source = source;
+  if (request.provider === "supplied" && edited) Object.assign(synthesis, { edited: true, ...(timed?.length ? { words: timed } : {}) });
   const result = await provider.synthesize(synthesis);
   if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
   const produced = path.resolve(result.file ?? outFile);
