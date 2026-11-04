@@ -127,6 +127,12 @@
 
 ### Fixed
 
+- Remotion renders fit the container they run in: the `<OffthreadVideo>`
+  frame cache is sized from the cgroup memory limit (Remotion's default is
+  half the host's free memory, which a container may not have), and render
+  tabs are capped by memory as well as cores, so an 8-core 7.5 GB container
+  renders with 4 tabs, not 8. The `machine:` line shows the tabs and the cache.
+
 - HyperFrames snapshots, evidence and gates work on long compositions. A
   page load had HyperFrames' 10 s navigation timeout, which an 8.5-minute
   explainer exceeds, so evidence failed although the render worked. Every
