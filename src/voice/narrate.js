@@ -3,7 +3,8 @@
 // storyboard's scenes are frozen).
 //
 // The request is {text, provider, voice, speed} from audio.narration, with
-// per-provider defaults (Kokoro: af_heart at 1.2). Every take is cached by a
+// per-provider defaults (Kokoro: af_heart at 1.2), plus its pronunciation map
+// and voice settings when it has them. Every take is cached by a
 // hash of that request (and the normaliser) under <project>/.launchclip/voice,
 // or $LAUNCHCLIP_CACHE/voice without a project, so measuring with
 // `launchclip voice` and then running finish synthesises once.
@@ -14,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { copyFileAtomic, writeFileAtomic } from "../atomic_write.js";
 import { pinnedCache } from "../state_dirs.js";
+import { applyPronunciation, normalizePronunciation, restoreWords } from "./pronunciation.js";
 
 export const DEFAULT_NARRATION_PROVIDER = "kokoro";
 // Provider defaults when audio.narration leaves voice or speed out.
@@ -24,11 +26,28 @@ export const NARRATION_DEFAULTS = Object.freeze({
   supplied: Object.freeze({ voice: null, speed: 1 })
 });
 const CACHE_VERSION = 1;
+// Voice settings a provider may honour beyond speed, each 0–1 but
+// speaker_boost (true/false). ElevenLabs takes them all; Kokoro has none.
+export const VOICE_SETTINGS = Object.freeze({ stability: "unit", similarity: "unit", style: "unit", speaker_boost: "boolean" });
+
+/** Throws unless settings holds only VOICE_SETTINGS in range. Returns a clean copy, or null when empty. */
+export function normalizeVoiceSettings(settings, label = "voice settings") {
+  if (settings === undefined || settings === null) return null;
+  if (typeof settings !== "object" || Array.isArray(settings)) throw new Error(`${label} must be an object of ${Object.keys(VOICE_SETTINGS).join(", ")}`);
+  const clean = {};
+  for (const [key, value] of Object.entries(settings)) {
+    const kind = VOICE_SETTINGS[key];
+    if (!kind) throw new Error(`${label}: unknown setting "${key}" (use ${Object.keys(VOICE_SETTINGS).join(", ")})`);
+    if (kind === "boolean" ? typeof value !== "boolean" : !(typeof value === "number" && value >= 0 && value <= 1)) throw new Error(`${label}.${key} must be ${kind === "boolean" ? "true or false" : "a number from 0 to 1"}; got ${JSON.stringify(value)}`);
+    clean[key] = value;
+  }
+  return Object.keys(clean).length ? clean : null;
+}
 
 /**
  * The synthesis request for audio.narration plus CLI overrides.
- * overrides: {provider, voice, speed, text}
- * → {text, provider, voice, speed}
+ * overrides: {provider, voice, speed, text, pronunciation, settings}
+ * → {text, provider, voice, speed, pronunciation?, settings?}
  */
 export function narrationRequest(narration = {}, overrides = {}) {
   const text = String(overrides.text ?? narration?.text ?? "").trim();
@@ -38,12 +57,15 @@ export function narrationRequest(narration = {}, overrides = {}) {
   const rawSpeed = overrides.speed ?? narration?.speed ?? defaults.speed ?? 1;
   const speed = Number(rawSpeed);
   if (!(speed >= 0.5 && speed <= 2)) throw new Error(`narration speed must be a number between 0.5 and 2; got ${rawSpeed}`);
-  return { text, provider, voice, speed };
+  const pronunciation = normalizePronunciation(overrides.pronunciation ?? narration?.pronunciation, "audio.narration.pronunciation");
+  const settings = normalizeVoiceSettings(overrides.settings ?? narration?.settings, "audio.narration.settings");
+  return { text, provider, voice, speed, ...(pronunciation ? { pronunciation } : {}), ...(settings ? { settings } : {}) };
 }
 
 /** Cache key of one take: sha256 of the request and the cache version. */
 export function narrationCacheKey(request) {
-  const identity = { v: CACHE_VERSION, text: request.text, provider: request.provider, voice: request.voice ?? null, speed: request.speed };
+  // Pronunciation and settings join the key only when set, so older takes stay cached.
+  const identity = { v: CACHE_VERSION, text: request.text, provider: request.provider, voice: request.voice ?? null, speed: request.speed, ...(request.pronunciation ? { pronunciation: request.pronunciation } : {}), ...(request.settings ? { settings: request.settings } : {}) };
   return createHash("sha256").update(JSON.stringify(identity)).digest("hex").slice(0, 24);
 }
 
@@ -77,7 +99,9 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
     }
   }
   const provider = voiceProvider(request.provider, {});
-  const synthesis = { text: request.text, voice: request.voice ?? undefined, speed: request.speed, outFile };
+  // The provider speaks the respelled text; the words come back as the script's.
+  const spoken = request.pronunciation && request.provider !== "supplied" ? applyPronunciation(request.text, request.pronunciation) : null;
+  const synthesis = { text: spoken?.text ?? request.text, voice: request.voice ?? undefined, speed: request.speed, outFile, ...(request.settings ? { settings: request.settings } : {}) };
   if (request.provider === "supplied" && source) synthesis.source = source;
   const result = await provider.synthesize(synthesis);
   if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
@@ -89,7 +113,8 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
     loudness = await normalizeVoice(outFile, normalized);
     await rename(normalized, outFile);
   }
-  const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
+  const taken = spoken ? restoreWords(result.words, request.text, spoken) : result.words;
+  const words = taken.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
   const duration = round3(Number(result.duration ?? words.at(-1).end));
   if (cacheable) {
     // Other processes may read or write the same take: whole files only.
@@ -106,6 +131,8 @@ export function narrationDocument(request, take) {
     provider: request.provider,
     voice: request.voice,
     speed: request.speed,
+    ...(request.settings ? { settings: request.settings } : {}),
+    ...(request.pronunciation ? { pronunciation: request.pronunciation } : {}),
     text: request.text,
     sample_rate: take.sampleRate ?? null,
     duration_seconds: take.duration,

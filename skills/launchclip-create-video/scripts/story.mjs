@@ -366,6 +366,16 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (narration.provider !== undefined && !STORY_VOICE_PROVIDERS.includes(narration.provider)) err(`audio.narration.provider must be one of ${STORY_VOICE_PROVIDERS.join(", ")}`);
         if (narration.voice !== undefined && !nonEmpty(narration.voice)) err("audio.narration.voice must be a non-empty string");
         if (narration.speed !== undefined && !(typeof narration.speed === "number" && narration.speed >= 0.5 && narration.speed <= 2)) err("audio.narration.speed must be a number between 0.5 and 2");
+        // pronunciation: {term: say-as}, applied to the text the voice speaks (never the captions).
+        if (narration.pronunciation !== undefined && !(isObject(narration.pronunciation) && Object.values(narration.pronunciation).every(nonEmpty))) err("audio.narration.pronunciation must be an object of { \"term\": \"say-as\" } strings");
+        // settings: voice settings beyond speed, where the provider has them (ElevenLabs).
+        if (narration.settings !== undefined) {
+          const settings = narration.settings;
+          if (!isObject(settings)) err("audio.narration.settings must be an object of stability, similarity, style (0–1) and speaker_boost (true/false)");
+          else for (const [key, value] of Object.entries(settings)) {
+            if (key === "speaker_boost" ? typeof value !== "boolean" : !(["stability", "similarity", "style"].includes(key) && typeof value === "number" && value >= 0 && value <= 1)) err(`audio.narration.settings.${key} must be ${key === "speaker_boost" ? "true or false" : ["stability", "similarity", "style"].includes(key) ? "a number from 0 to 1" : "one of stability, similarity, style, speaker_boost"}`);
+          }
+        }
       }
     }
   }

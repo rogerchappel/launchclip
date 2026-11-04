@@ -2,8 +2,11 @@
 //
 // A provider turns narration text into a WAV plus measured word timings:
 //
-//   { name, async synthesize({ text, voice, speed, outFile, signal })
+//   { name, async synthesize({ text, voice, speed, settings, outFile, signal })
 //       → { file, words: [{ text, start, end }], sampleRate, duration } }
+//
+// settings ({stability, similarity, style, speaker_boost}, src/voice/narrate.js)
+// are honoured where the provider has them (ElevenLabs) and ignored elsewhere.
 //
 // Providers register a factory (options → provider). The real kokoro,
 // elevenlabs and supplied providers live beside this file and are imported

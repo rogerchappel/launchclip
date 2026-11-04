@@ -160,6 +160,31 @@ window is moved to the best one. `orientation` overrides the probe, and
 `role: "b-roll"` keeps a clip with wind or chatter on it from becoming the
 base. Field by field: [Footage inventory notes](../KIT_CONTRACTS.md#footage-inventory-notes-srcinventory_notesjs).
 
+**Pronunciation and voice** for a synthesised narration go in the assets
+folder too (app settings, not assets: never inventoried or copied).
+`pronunciation.json` respells terms in the text the voice speaks, and only
+there: captions, `NARRATION.json` and word anchors keep the script's spelling.
+A term matches whole words (or a phrase), ignoring case, and keeps the
+punctuation around it:
+
+```json
+{ "SQL": "sequel", "AWS": "A W S", "Ledgerly": "ledger lee" }
+```
+
+`voice.json` tunes the voice. Every field is optional; `--voice-id` wins over
+`voice`, and ElevenLabs is the provider that honours the settings beyond speed
+(Kokoro takes `voice` and `speed` and ignores the rest):
+
+```json
+{ "voice": "21m00Tcm4TlvDq8ikWAM", "speed": 1.05,
+  "stability": 0.45, "similarity": 0.8, "style": 0.15, "speaker_boost": true }
+```
+
+`speed` is 0.5–2 (ElevenLabs clamps it to 0.7–1.2); `stability`,
+`similarity` and `style` are 0–1. make writes both into the story as
+`audio.narration.pronunciation` and `audio.narration.settings`, so finish
+re-voices the same way, and `MAKE.json` lists them under `voice_inputs`.
+
 ## Where the output lands
 
 ```
