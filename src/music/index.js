@@ -34,6 +34,13 @@ export function parseMusicSpec(music) {
   return spec;
 }
 
+/** --music-volume: a gain from 0 to 1. Throws on anything else. */
+export function parseMusicVolume(value) {
+  const volume = value === true || value === "" ? NaN : Number(value);
+  if (!(Number.isFinite(volume) && volume >= 0 && volume <= 1)) throw new Error(`--music-volume must be a number from 0 to 1; got ${value}`);
+  return volume;
+}
+
 /**
  * The music decision for one finish run.
  * flag: --music synth|elevenlabs|none (wins); env: for ELEVENLABS_API_KEY.

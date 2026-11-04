@@ -190,6 +190,7 @@ export async function runCli(argv, io = {}) {
         quality: flags.quality,
         voice: flags.voice,
         music: flags.music,
+        musicVolume: flags["music-volume"],
         out: flags.out,
         concurrency: flags.concurrency,
         force: Boolean(flags.force),

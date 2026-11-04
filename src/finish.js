@@ -60,7 +60,7 @@ import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kit
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
-import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
+import { getMusicProvider, parseMusicSpec, parseMusicVolume, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
 import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "./voice/dialogue.js";
@@ -616,7 +616,8 @@ export function defaultAdapters() {
  * options: {renderer, quality: "draft"|"high", concurrency (browser tabs or
  * workers for the render; default: the cores split across render slots,
  * src/capacity.js), voice: provider name, music:
- * "synth"|"elevenlabs"|"none", musicHints (style-pack sound.music hints for
+ * "synth"|"elevenlabs"|"none", musicVolume (the bed's gain, 0–1;
+ * --music-volume), musicHints (style-pack sound.music hints for
  * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
  * and the cache: a new, paid ElevenLabs generation; --music-regenerate),
  *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
@@ -647,6 +648,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`Unknown --music ${options.music}. Use one of ${MUSIC_FLAG_VALUES.join(", ")}`);
+  if (options.musicVolume != null) parseMusicVolume(options.musicVolume);
   const rendererName = resolveRendererName(project, options.renderer);
   const concurrency = options.concurrency == null ? adapters.renderShare() : Number(options.concurrency);
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error(`--concurrency must be a whole number of at least 1; got ${options.concurrency}`);
@@ -970,6 +972,8 @@ const STAGES = [
       const sound = soundSettings(await stylePack(ctx), ctx.copy);
       const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env });
       const music = musicPlanSpec(choice);
+      // --music-volume sets the bed's gain over audio.music.volume and the energy default.
+      if (ctx.options.musicVolume != null) music.volume = parseMusicVolume(ctx.options.musicVolume);
       // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density).
       const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density ?? "normal").toLowerCase();
       try { densityAmount(density); } catch { throw new Error(`--sfx-density must be low, normal, high or a number from 0 to 1; got ${ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density}`); }

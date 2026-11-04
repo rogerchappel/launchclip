@@ -326,6 +326,22 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
   }
 });
 
+test("--music-volume sets the bed's gain over the story's and the energy default", async () => {
+  const project = await narratedProject({ mutate: (story) => { story.audio.music = { provider: "synth", volume: 0.3 }; } });
+  try {
+    const adapters = fakeAdapters();
+    await assert.rejects(runFinish(project, { renderer: "remotion", musicVolume: "2" }, adapters), /--music-volume must be a number from 0 to 1/);
+    await runFinish(project, { renderer: "remotion", musicVolume: 0.12 }, adapters);
+    assert.equal(adapters.lastMix.musicVolume, 0.12);
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8")).music.volume, 0.12);
+    // Without the flag the story's volume is back.
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(adapters.lastMix.musicVolume, 0.3);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("runFinish respects supplied voice and mix, quality and --out", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-supplied-"));
   try {
