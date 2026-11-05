@@ -491,11 +491,21 @@ launchclip style check ./episode-3 --against my-channel
 launchclip style upgrade ai-news   # v1 or v2 pack → v3
 ```
 
-Captions have 15 presets shared by both renderers (`word-highlight`,
+Captions have 17 presets shared by both renderers (`word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
 `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
-`split-color`, `lower-band`, `bubble`, `quiet-accent`), chosen with
-`{"type": "captions", "preset": "<name>"}` or by the style pack.
+`split-color`, `lower-band`, `bubble`, `quiet-accent`, `kinetic-hierarchy`,
+`soft-card`), chosen with `{"type": "captions", "preset": "<name>"}` or by the
+style pack. `weight`, `letter_spacing` (em), `case` (`as-is`, `upper`,
+`title`, `lower`) and `plate_style` (`box` or `scrim`: how a line that does
+not read over the footage is helped) tune any preset.
+
+Captions never sit on a card's text. The layout check counts a card's whole
+time on screen against the caption band, its enter, its exit and the time it
+is held under the next scene's transition, and grows the band to the
+preset's tallest line; `launchclip finish` hides the captions over each clash.
+A line that repeats the words of a title card on screen (a call to action, a
+hook or section title) is hidden while the card is up.
 
 Every planned shot carries semantic visual objects, continuity handoffs, and
 named visible events. SFX cues must bind to those events, and production

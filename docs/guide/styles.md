@@ -108,7 +108,7 @@ launchclip style upgrade my-channel
   - `cuts`: classic scene changes.
   - `world`: scenes laid out on one canvas, and the camera pans, pushes, orbits and whip-pans between them, with depth and motion blur.
 - **Ambient motion (`ambient.level`):** `off`, `subtle`, `standard` or `lively`. Gentle drifting light and a slow push keep frames from ever sitting dead still.
-- **Captions (`captions.preset`):** `word-highlight`, `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`, `lower-band`, `bubble` and `quiet-accent`. Each one also takes options for position, words per line, case, emphasis words, colours, outline and shadow.
+- **Captions (`captions.preset`):** `word-highlight`, `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`, `lower-band`, `bubble`, `quiet-accent`, `kinetic-hierarchy` and `soft-card`. Each one also takes options for position, words per line, case, weight, letter spacing, emphasis words, colours, outline, shadow and plate style.
 - **Captions per kind of video (`captions.lanes`):** a different caption look for talking-head footage than for motion graphics, for example `"lanes": { "footage-led": { "preset": "quiet-accent" } }`. Footage with no style at all already gets `quiet-accent`: calm sentence-case lines with one word picked out in your accent colour. Ask for `word-highlight` when you want the loud look.
 - **Sound (`sound`):**
   - effect density: `low`, `normal` or `high`;
