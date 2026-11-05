@@ -326,20 +326,32 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
   }
 });
 
-test("a card in a mid-frame caption band from 0 s hides the captions under it instead of failing validate", async () => {
+test("a card in a mid-frame caption band from 0 s: captions are planned off under it, or hidden by the fit", async () => {
   // Captions in the middle of the frame, where every card sits, and a card up
-  // from the first frame: the clash is closed with overlay.hide, not a failure.
+  // from the first frame. Planned captions turn them off under each card;
+  // with schedule "fit" the safety net closes the clash with overlay.hide.
   const project = await narratedProject({ mutate: (story) => { story.overlays[0].position = "middle"; } });
   try {
     const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
     assert.equal(report.stages.find((stage) => stage.name === "validate").status, "done", JSON.stringify(report.stages.find((stage) => stage.name === "validate")));
-    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions 0–/.test(line)), report.warnings.join("\n"));
+    assert.ok(report.warnings.some((line) => /^captions: planned off while s1, s2 show/.test(line)), report.warnings.join("\n"));
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
-    assert.ok(resolved.overlays.find((overlay) => overlay.type === "captions").hide.some(([start]) => start === 0));
+    assert.deepEqual(resolved.scenes.map((scene) => scene.captions), ["off", "off"]);
     const user = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.equal(user.overlays[0].hide, undefined, "the user's storyboard is not touched");
+    assert.equal(user.scenes[0].captions, undefined);
   } finally {
     await rm(project, { recursive: true, force: true });
+  }
+  const fit = await narratedProject({ mutate: (story) => { story.overlays[0].position = "middle"; story.overlays[0].schedule = "fit"; } });
+  try {
+    const report = await runFinish(fit, { renderer: "remotion" }, fakeAdapters());
+    assert.equal(report.stages.find((stage) => stage.name === "validate").status, "done");
+    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions 0–/.test(line)), report.warnings.join("\n"));
+    const resolved = JSON.parse(await readFile(path.join(fit, PATHS.resolved), "utf8"));
+    assert.ok(resolved.overlays.find((overlay) => overlay.type === "captions").hide.some(([start]) => start === 0));
+  } finally {
+    await rm(fit, { recursive: true, force: true });
   }
 });
 
@@ -1253,6 +1265,11 @@ test("finish plates caption lines that do not read on the render, renders once m
     const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-captions-"));
     try {
       await cp(MINIMAL, project, { recursive: true });
+      // The captions stay up over the cards (the fit, not the plan), so there are lines to measure.
+      const storyFile = path.join(project, "storyboard.json");
+      const minimal = JSON.parse(await readFile(storyFile, "utf8"));
+      minimal.overlays = minimal.overlays.map((entry) => (entry.type === "captions" ? { ...entry, schedule: "fit" } : entry));
+      await writeFile(storyFile, JSON.stringify(minimal));
       const adapters = fakeAdapters();
       const seen = [];
       adapters.captionLegibility = async (_video, story, { chunks }) => {

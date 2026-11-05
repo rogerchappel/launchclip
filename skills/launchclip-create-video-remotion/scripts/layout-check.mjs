@@ -333,7 +333,7 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
     const band = overlay.rect ?? captionBandAt(captionBand ?? profileGeometry(canvas, profile).captionBand, canvas, overlay.position);
     const hide = [
       ...(Array.isArray(overlay.hide) ? overlay.hide : []),
-      ...resolvedStory.scenes.filter((scene) => scene.hides_captions === true).map((scene) => [Number(scene.start), Number(scene.end)])
+      ...resolvedStory.scenes.filter((scene) => scene.hides_captions === true || scene.captions === "off" || scene.captions?.show === false).map((scene) => [Number(scene.start), Number(scene.end)])
     ];
     const id = index ? `captions-${index + 1}` : "captions";
     const start = Number(overlay.start ?? 0), end = Number(overlay.end ?? duration);

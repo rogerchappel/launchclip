@@ -93,6 +93,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 
 - Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice, except in the footage-led lane. In the footage-led lane write {"type": "captions"} with no style or preset: the default is the quiet sentence-case quiet-accent preset with one accent word per line; name word-highlight only when the brief asks for loud captions.
 - A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble, quiet-accent, kinetic-hierarchy, soft-card. With a style pack, write {"type": "captions"} and let the pack choose the preset.
+- Captions are part of the motion: they need not show on every beat. A scene may plan them with "captions": "off" (the scene carries the words itself), "on", or {"position": "top" | "middle" | "bottom"}. Leave it out and tooling turns captions off under every scene that draws text, so plan "off" or a position only to say more than that.
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 
@@ -1345,7 +1346,7 @@ events: show, line-<i>
 variants: mac (default), minimal, terminal
 
 ### polaroid (keeps captions)
-An instant photo drops in, tilts to rest and develops from dark, with a handwritten-style caption; single, a stack of three, or pinned.
+An instant photo drops in, tilts to rest and develops as it lands, with a handwritten-style caption; single, a stack of three, or pinned.
 params:
 - image: assets/… photo (optional; else a brand gradient with an icon)
 - icon: icon for the placeholder photo (default "image")

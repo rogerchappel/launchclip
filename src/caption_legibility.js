@@ -18,7 +18,7 @@
 // that is still illegible after that.
 
 import { spawn } from "node:child_process";
-import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
+import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions, sceneCaptionsOff } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 
@@ -41,7 +41,7 @@ export function captionLines(story, chunks) {
   const format = story.format;
   // Hidden as the compilers hide them: under a scene that hides captions, and overlay.hide.
   const hide = (Array.isArray(overlay.hide) ? overlay.hide : []).map((range) => [Number(range[0]), Number(range[1])]);
-  try { for (const { entry, model } of renderedModels(story).entries.values()) if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]); } catch { /* unresolvable story: no scene hides */ }
+  try { for (const { entry, model } of renderedModels(story).entries.values()) if (model.hidesCaptions || sceneCaptionsOff(entry.scene)) hide.push([entry.start, entry.renderEnd]); } catch { /* unresolvable story: no scene hides */ }
   const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
   const o = plan.options;
   // The plan's own lines: a preset with its own chunk size re-chunks the words.

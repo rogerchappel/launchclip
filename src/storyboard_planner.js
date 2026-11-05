@@ -34,6 +34,8 @@ import { minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests
 import { fitTimings } from "./timing_fit.js";
 import { fitDurations } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+import { planCaptions } from "./caption_schedule.js";
+import { sceneCaptionsOff } from "@launchclip/core/captions.mjs";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 
@@ -234,7 +236,15 @@ export async function planStoryboard(options = {}) {
       // A card in the caption band while captions show: the captions dip out
       // under it (a caption position the module layout does not plan for, such
       // as the middle of the frame, otherwise fails every attempt).
-      // Repeated, as finish does: one round can expose the next clash.
+      // Captions are planned with the motion: off under every scene that
+      // draws designed text (src/caption_schedule.js), before any fit.
+      const planned = planCaptions(pinned.storyboard, { words: wordList, beats });
+      if (planned.off.length) {
+        pinned.storyboard = planned.storyboard;
+        checked = checkStoryboard(pinned.storyboard, checkOptions);
+        pinned.warnings = [...pinned.warnings, `captions: planned off while ${planned.off.join(", ")} show${planned.off.length === 1 ? "s" : ""} its own text`];
+      }
+      // The safety net, repeated as finish does: one round can expose the next clash.
       for (let pass = 0; pass < 4 && !checked.ok; pass += 1) {
         const fitted = fitCaptionBand(pinned.storyboard, checked.errors);
         if (!fitted.hidden.length) break;
@@ -479,7 +489,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
       moduleLayout: (scene) => {
         const model = models.get(scene.id);
         if (!model?.layout?.rect) return [];
-        const hidesCaptions = model.hidesCaptions === true || model.layout.hidesCaptions === true;
+        const hidesCaptions = model.hidesCaptions === true || model.layout.hidesCaptions === true || sceneCaptionsOff(scene);
         const extras = layoutExtras(model.layout, { id: scene.id, start: Number(scene.start), end: Number(scene.end), canvas, hidesCaptions });
         return [...elementsFromEditorialLayout(model.layout, {
           id: scene.id,

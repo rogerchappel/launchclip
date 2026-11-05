@@ -69,6 +69,7 @@ import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+import { planCaptions } from "./caption_schedule.js";
 
 // Rounds of hiding captions under cards before the layout check fails the render.
 const CAPTION_FIT_PASSES = 4;
@@ -943,6 +944,15 @@ const STAGES = [
       ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject } = await import("./layout_check.js");
+      // Captions are planned with the motion: off under every scene that
+      // draws designed text, unless the story planned it (src/caption_schedule.js).
+      const planned = planCaptions(ctx.copy, { resolved: ctx.resolved });
+      if (planned.off.length) {
+        ctx.copy = planned.storyboard;
+        ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+        ctx.boundaries = deriveBoundaries(ctx.resolved);
+        ctx.warnings.push(`captions: planned off while ${planned.off.join(", ")} show${planned.off.length === 1 ? "s" : ""} its own text`);
+      }
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       let layout = await checkLayoutProject(ctx.project, layoutOptions());
       // A card in the caption band while captions show: the captions dip out

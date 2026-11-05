@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
-import { captionDipHidden, captionLineExtent, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
+import { captionDipHidden, captionLineExtent, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords, sceneCaptionsOff } from "@launchclip/core/captions.mjs";
 import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
 import { driftExtent, sceneDrift } from "@launchclip/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
@@ -147,10 +147,14 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const captionBand = captionBandFor(resolved, canvas, profile);
   const shownEnd = plateShownEnds(resolved);
   const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => {
-    const produced = ambient.inflate(scene, moduleLayout(scene, story));
-    if (!produced || !shownEnd.has(scene.id)) return produced;
+    let produced = ambient.inflate(scene, moduleLayout(scene, story));
+    if (!produced) return produced;
+    produced = Array.isArray(produced) ? produced : [produced];
+    // A scene that plans its captions off has none over it, its parts included.
+    if (sceneCaptionsOff(scene)) produced = produced.map((element) => (element ? { ...element, hidesCaptions: true } : element));
+    if (!shownEnd.has(scene.id)) return produced;
     // Only the scene's own element: a part (clip callouts) keeps its own timing.
-    return (Array.isArray(produced) ? produced : [produced]).map((element) => (element && (element.id ?? scene.id) === scene.id ? { ...element, shownEnd: shownEnd.get(scene.id) } : element));
+    return produced.map((element) => (element && (element.id ?? scene.id) === scene.id ? { ...element, shownEnd: shownEnd.get(scene.id) } : element));
   }, profile, captionBand, captionZones: resolved.base ? captionZones(resolved) : [] });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });

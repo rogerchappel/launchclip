@@ -425,6 +425,7 @@ function captionLines(lane) {
   return [
     `Captions are one overlay: {"type": "captions", "style": ${STORY_CAPTION_STYLES.map((value) => JSON.stringify(value)).join(' | ')}}. ${lane === 'footage-led' ? FOOTAGE_CAPTIONS : lane ? 'Use "word-highlight" whenever there is a voice.' : `Use "word-highlight" whenever there is a voice, except in the footage-led lane. ${FOOTAGE_CAPTIONS}`}`,
     `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
+    `Captions are part of the motion: they need not show on every beat. A scene may plan them with "captions": "off" (the scene carries the words itself), "on", or {"position": "top" | "middle" | "bottom"}. Leave it out and tooling turns captions off under every scene that draws text, so plan "off" or a position only to say more than that.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
   ];
