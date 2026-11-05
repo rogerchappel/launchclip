@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ASSET_PROVIDER_TIMEOUT_MS, assetProviderTimeoutMs, createCommandAssetProvider } from "../src/asset_provider_cmd.js";
+import { ASSET_PROVIDER_TIMEOUT_MS, MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../src/asset_provider_cmd.js";
 import { normalizeShot } from "../src/asset_provider.js";
 import { assetErrors, runMake } from "../src/make/index.js";
 import { makeOptionsFromFlags } from "../src/make/options.js";
@@ -68,6 +68,26 @@ test("no answer in time, a non-JSON line or a dead command is no shot, and answe
   const dead = createCommandAssetProvider(`${node} -e "process.exit(3)"`, { notice: () => {} });
   assert.equal(await dead.findShot({ id: "x" }), null);
   assert.equal(await dead.findShot({ id: "y" }), null);
+});
+
+test("with concurrency, several requests are open at once and answers out of order find their request by id", async (t) => {
+  // Answers "slow" last, though it is asked first; reports how many it held at once.
+  const { command } = await script(t, answering(`(() => { let open = 0, most = 0; return async (request) => { open += 1; most = Math.max(most, open); await new Promise((done) => setTimeout(done, request.id === "slow" ? 150 : 20)); open -= 1; return { id: request.id, path: "/lib/" + request.id + ".jpg", most }; }; })()`));
+  const provider = createCommandAssetProvider(command, { concurrency: 3, notice: () => {} });
+  t.after(() => provider.close());
+  assert.equal(provider.concurrency, 3);
+  const [slow, b, c, d] = await Promise.all(["slow", "b", "c", "d"].map((id) => provider.findShot({ id, shows: id })));
+  assert.deepEqual([slow.path, b.path, c.path, d.path], ["/lib/slow.jpg", "/lib/b.jpg", "/lib/c.jpg", "/lib/d.jpg"]);
+  assert.equal(Math.max(slow.most, b.most, c.most, d.most), 3, "never more than three open");
+});
+
+test("LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY sets how many requests are open at once; anything else is one", () => {
+  assert.equal(assetProviderConcurrency({}), 1);
+  assert.equal(assetProviderConcurrency({ LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY: "4" }), 4);
+  assert.equal(assetProviderConcurrency({ LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY: "0" }), 1);
+  assert.equal(assetProviderConcurrency({ LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY: "lots" }), 1);
+  assert.equal(assetProviderConcurrency({ LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY: "500" }), MAX_ASSET_PROVIDER_CONCURRENCY);
+  assert.equal(createCommandAssetProvider("true").concurrency, 1);
 });
 
 test("assetErrors allows the provider's assets/shots/ files only when shots are on", () => {

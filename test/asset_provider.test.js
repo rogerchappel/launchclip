@@ -146,6 +146,59 @@ test("a repair pass sees what the app said each shot shows", async (t) => {
   assert.doesNotMatch(plainClient.requests[1].input, /Shots the app found/);
 });
 
+// Two clip scenes asking for different shots.
+function twoShots(first, second) {
+  const board = story({ kind: "shot", shows: first, type: "video" });
+  board.scenes[1] = { ...board.scenes[1], module: "clip", params: { media: { kind: "shot", shows: second, type: "video" } } };
+  return board;
+}
+
+test("an app that writes every shot to one scratch file still places each scene's own shot, on every pass", async (t) => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-scratch-"));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const scratch = path.join(project, "..", `${path.basename(project)}-scratch.mp4`);
+  t.after(() => rm(scratch, { force: true }));
+  const assets = { async findShot(request) { await writeFile(scratch, request.shows); return { path: scratch, kind: "video", source: "library" }; } };
+  const board = twoShots("a deck board close up", "a builder screwing boards down");
+  const cache = new Map();
+  const first = await resolveShots(board, { assets, words: WORDS, project, cache });
+  assert.deepEqual(first.errors, []);
+  await writeFile(scratch, "something the app wrote later");
+  // A repair pass reuses the cached answers: each scene keeps the shot it was given.
+  const again = await resolveShots(board, { assets, words: WORDS, project, cache });
+  for (const found of [first, again]) {
+    const [one, two] = found.shots.map((shot) => shot.src);
+    assert.notEqual(one, two);
+    assert.equal(await readFile(path.join(project, one), "utf8"), "a deck board close up");
+    assert.equal(await readFile(path.join(project, two), "utf8"), "a builder screwing boards down");
+  }
+  assert.equal(again.shots[0].source.origin, "library");
+});
+
+test("a provider with concurrency is asked for every shot before the first answer is placed", async () => {
+  const asked = [];
+  let release;
+  const gate = new Promise((done) => { release = done; });
+  const assets = {
+    concurrency: 4,
+    async findShot(request) {
+      asked.push(request.shows);
+      if (asked.length === 2) release();
+      await gate;
+      return { url: `https://media.example/${request.scene_id}.mp4`, kind: "video" };
+    }
+  };
+  const found = await resolveShots(twoShots("boards", "a builder"), { assets, words: WORDS });
+  assert.deepEqual(found.errors, []);
+  assert.deepEqual(asked, ["boards", "a builder"]);
+  assert.equal(found.shots.length, 2);
+  // Without concurrency the second is asked only after the first is answered.
+  const order = [];
+  const serial = { async findShot(request) { order.push(`ask ${request.shows}`); await new Promise((done) => setTimeout(done, 5)); order.push(`answer ${request.shows}`); return { url: `https://media.example/${request.scene_id}.mp4`, kind: "video" }; } };
+  await resolveShots(twoShots("boards", "a builder"), { assets: serial, words: WORDS });
+  assert.deepEqual(order, ["ask boards", "answer boards", "ask a builder", "answer a builder"]);
+});
+
 test("wrong shots are reported, never written in", async () => {
   const cases = [
     [{ src: "../outside.jpg" }, /not an image|not a project assets/],

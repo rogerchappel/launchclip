@@ -191,7 +191,8 @@ export function constrainProvider(provider, constraints, { assetsDir = null, not
       notice(`constraints: refused the asset provider's shot for ${request.scene_id ?? request.id} (${hit.src ?? `id ${hit.id}`} is never_use${hit.reason ? `: ${hit.reason}` : ""})`);
       return null;
     },
-    close: () => provider.close?.()
+    close: () => provider.close?.(),
+    concurrency: provider.concurrency
   };
 }
 
