@@ -127,3 +127,18 @@ test("world fades hand over: the outgoing plate clears before the incoming one i
   // Cuts mode keeps the plain crossfade over an opaque plate.
   assert.equal(transitionTweens({ type: "fade", dur: 1 }, { width: W, height: H, mode: "cuts" }).in[0].start, 0);
 });
+
+test("a clip's callouts in one slot never overlap: each is gone by its until", async () => {
+  const { clipTimeline } = await import("@launchclip/core/catalog-d-clip.mjs");
+  const story = resolveStory({
+    schema: "launchclip.story.v1", lane: "motion", format: FORMAT, brand: BRAND,
+    scenes: [{ id: "shot", module: "clip", start: 0, end: 6, params: { media: { src: "assets/deck.mp4", kind: "video" }, callouts: ["Treated pine", "Composite"] } }]
+  });
+  const model = resolveModule(story.scenes[0], story);
+  const ops = clipTimeline(model).filter((op) => op.type === "tween" && /callout/.test(op.target) && op.to?.opacity !== undefined);
+  const [first, second] = model.content.callouts;
+  const out = ops.find((op) => op.target === "shot-callout-0" && op.to.opacity === 0);
+  const into = ops.find((op) => op.target === "shot-callout-1" && op.to.opacity === 1);
+  assert.ok(out.start + out.duration <= first.until + 1e-6, `${out.start} + ${out.duration} > ${first.until}`);
+  assert.ok(into.start >= first.until - 1e-6 && second.at === into.start);
+});

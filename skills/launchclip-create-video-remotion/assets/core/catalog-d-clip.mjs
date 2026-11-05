@@ -170,7 +170,7 @@ function resolveClip(params, ctx) {
   model.layout.live = media.kind === 'video' || move !== 'none';
   if (block) {
     const settled = [Math.min(...callouts.map(c => c.at)) + T.calloutFade, Math.max(...callouts.map(c => c.until))];
-    model.layout.parts = [{id: 'callouts', role: 'text', rect: block, minTextPx: model.minTextPx, start: Math.min(...callouts.map(c => c.at)), end: settled[1] + T.calloutFade, motion: {enterEnd: rt(settled[0]), exitStart: rt(settled[1])}}];
+    model.layout.parts = [{id: 'callouts', role: 'text', rect: block, minTextPx: model.minTextPx, start: Math.min(...callouts.map(c => c.at)), end: settled[1], motion: {enterEnd: rt(settled[0]), exitStart: rt(settled[1] - T.calloutFade)}}];
   }
   return model;
 }
@@ -217,7 +217,9 @@ export function clipTimeline(model) {
     set(ops, target, start, {opacity: 0, x: 0, y: c.rise, scaleX: 1, scaleY: 1});
     tw(ops, target, callout.at, c.calloutFade, c.fadeEase, {opacity: 0}, {opacity: 1});
     tw(ops, target, callout.at, c.calloutFade * 1.6, c.riseEase, {y: c.rise}, {y: 0});
-    tw(ops, target, callout.until, c.calloutFade, 'power2.in', {opacity: 1}, {opacity: 0});
+    // Gone by its until, so the next callout in the slot (at least
+    // calloutGap later) never shows over it.
+    tw(ops, target, Math.max(callout.at + c.calloutFade, callout.until - c.calloutFade), c.calloutFade, 'power2.in', {opacity: 1}, {opacity: 0});
   }
   return ops;
 }
