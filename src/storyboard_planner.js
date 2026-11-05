@@ -33,7 +33,7 @@ import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
-import { fitDurations } from "./duration_fit.js";
+import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
@@ -231,7 +231,7 @@ export async function planStoryboard(options = {}) {
       }
       // The map names the inserts that really cover each hidden range.
       if (constraints && direction) direction = reconcileMap(direction, resolvedOrNull(pinned.storyboard, wordList, beats), constraints, wordList);
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -265,6 +265,15 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = fitted.storyboard;
         checked = checkStoryboard(pinned.storyboard, checkOptions);
         pinned.warnings = [...pinned.warnings, `layout: tooling hid ${fitted.hidden.join("; ")}`];
+      }
+      // A shot tooling could not give the short-form hold (no neighbour had
+      // time to lend) ships as a warning: a repair call for pace alone costs
+      // more than a quick shot does.
+      const quick = checked.errors.filter((entry) => entry.startsWith("pace: "));
+      if (quick.length) {
+        checked.errors = checked.errors.filter((entry) => !entry.startsWith("pace: "));
+        checked.ok = checked.errors.length === 0;
+        pinned.warnings = [...pinned.warnings, ...quick];
       }
       if (lengthened.length) pinned.warnings = [...pinned.warnings, `timing: tooling fitted scenes to their module's minimum length: ${lengthened.join("; ")}`];
       if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];
@@ -428,7 +437,7 @@ export async function planStoryboard(options = {}) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0 } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -533,6 +542,8 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     errors.push(`layout: ${message(error)}`);
   }
   errors.push(...placeholderErrors(storyboard));
+  // minHold: a short video's shots hold at least this long (src/duration_fit.js paceErrors).
+  if (minHold > 0) errors.push(...paceErrors(resolved, { hold: minHold }));
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
 }
 

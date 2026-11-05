@@ -559,6 +559,7 @@ export function guardrailLines() {
     ...actingPromptLines(),
     'No ghosting: one copy of a person on screen at a time. Never put a character in two scenes that overlap; the next shot\'s copy of a character appears by itself when the transition ends. Never fade a character in or out over a world that is already there.',
     'Text reads or is gone: cards fade in and out fast (0.5 s at most, whatever the grammar) and stay fully shown for their reading time (about 0.22 s a word, at least 1.2 s).',
+    'Let shots breathe: in a video under 90 s every shot after the opening hook holds at least 2.5 s. A quick list ("hardwood, treated pine, composite") is one shot whose items build in on their words, not a 1.5 s card per item; tooling lengthens shorter shots from their neighbours.',
     'Captions must read on what is behind them: finish measures every line on the render and adds a backing plate where it does not; keep captions out of a character\'s face and off busy props where you can.',
     ...compositionPromptLines()
   ];
