@@ -41,6 +41,24 @@ export function parseMusicVolume(value) {
   return volume;
 }
 
+/** --music-prompt: a non-empty style prompt for the ElevenLabs track (trimmed, at most 1000 characters). Throws on anything else. */
+export function parseMusicPrompt(value) {
+  const prompt = typeof value === "string" ? value.trim() : "";
+  if (!prompt) throw new Error("--music-prompt needs the music's style in words, for example \"warm acoustic guitar, steady, unobtrusive\"");
+  return prompt.slice(0, 1000);
+}
+
+/**
+ * --music-duck: the bed's level under speech as a share of its level in the
+ * pauses, 0–1 (0.42: it drops to 42 %, about -7.5 dB; 1: no ducking).
+ * Throws on anything else.
+ */
+export function parseMusicDuck(value) {
+  const duck = value === true || value === "" ? NaN : Number(value);
+  if (!(Number.isFinite(duck) && duck >= 0 && duck <= 1)) throw new Error(`--music-duck must be a number from 0 to 1 (the music's level under speech as a share of its level in pauses); got ${value}`);
+  return duck;
+}
+
 /**
  * The music decision for one finish run.
  * flag: --music synth|elevenlabs|none (wins); env: for ELEVENLABS_API_KEY.

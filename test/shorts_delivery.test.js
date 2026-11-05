@@ -6,7 +6,7 @@ import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_prof
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
 import { SFX, bedExpressions } from "../src/scripts/synth-audio-kit.mjs";
 import { parseEbur128Summary, parseLoudnormJson } from "../src/scripts/master-loudness.mjs";
-import { AMBIENCE_DUCK, MUSIC_DUCK, mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
+import { AMBIENCE_DUCK, MUSIC_DUCK, duckSettings, mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
 import { evidenceSchedule } from "../src/scripts/build-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -104,4 +104,18 @@ test("the music ducks about 12 dB under a voice, not out of hearing", () => {
   const db = (gain) => 20 * Math.log10(gain);
   assert.ok(reduction(db(MUSIC_DUCK.threshold), -17.5, MUSIC_DUCK.ratio) < 2);
   assert.ok(AMBIENCE_DUCK.ratio <= MUSIC_DUCK.ratio);
+});
+
+test("--music-duck sets the depth: a share of the bed's level in pauses, 1 for none", () => {
+  assert.equal(duckSettings(null), MUSIC_DUCK);
+  assert.equal(duckSettings(1), null);
+  const deep = duckSettings(0.2);
+  const mid = duckSettings(0.42);
+  // A deeper duck starts lower: the voice sits further over its threshold.
+  assert.ok(deep.threshold < mid.threshold && mid.threshold < duckSettings(0.7).threshold);
+  assert.equal(mid.ratio, 4);
+  assert.match(mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, musicDuck: 0.42 }), new RegExp(`sidechaincompress=threshold=${mid.threshold}:ratio=4:`));
+  const none = mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, musicDuck: 1 });
+  assert.doesNotMatch(none, /\[bedraw\]\[keypad\]sidechaincompress/);
+  assert.match(none, /\[key\]anullsink;\[bedraw\]anull\[bed\]/);
 });

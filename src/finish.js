@@ -61,7 +61,7 @@ import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
 import { clipShare } from "@launchclip/core/clip-led.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
-import { getMusicProvider, parseMusicSpec, parseMusicVolume, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
+import { getMusicProvider, parseMusicDuck, parseMusicPrompt, parseMusicSpec, parseMusicVolume, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
 import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "./voice/dialogue.js";
@@ -678,7 +678,7 @@ export function defaultAdapters() {
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
       const cues = normalizeCues(options.cues, options.sfxDir);
-      buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
+      buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
       return { cues };
     },
     async master(input, output, target) {
@@ -715,7 +715,9 @@ export function defaultAdapters() {
  * workers for the render; default: the cores split across render slots,
  * src/capacity.js), voice: provider name, music:
  * "synth"|"elevenlabs"|"none", musicVolume (the bed's gain, 0–1;
- * --music-volume), musicHints (style-pack sound.music hints for
+ * --music-volume), musicDuck (the bed's level under speech as a share of
+ * its level in pauses, 0–1; --music-duck), musicPrompt (the ElevenLabs
+ * music style prompt, over audio.music.prompt; --music-prompt), musicHints (style-pack sound.music hints for
  * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
  * and the cache: a new, paid ElevenLabs generation; --music-regenerate),
  *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
@@ -747,6 +749,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`Unknown --music ${options.music}. Use one of ${MUSIC_FLAG_VALUES.join(", ")}`);
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);
+  if (options.musicDuck != null) parseMusicDuck(options.musicDuck);
+  if (options.musicPrompt != null) parseMusicPrompt(options.musicPrompt);
   const rendererName = resolveRendererName(project, options.renderer);
   const concurrency = options.concurrency == null ? adapters.renderShare() : Number(options.concurrency);
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error(`--concurrency must be a whole number of at least 1; got ${options.concurrency}`);
@@ -1092,6 +1096,10 @@ const STAGES = [
       const music = musicPlanSpec(choice);
       // --music-volume sets the bed's gain over audio.music.volume and the energy default.
       if (ctx.options.musicVolume != null) music.volume = parseMusicVolume(ctx.options.musicVolume);
+      // --music-prompt: the ElevenLabs track's style (over audio.music.prompt); part of the music brief, so a new prompt is a new track.
+      if (ctx.options.musicPrompt != null && music.kind === "elevenlabs") music.prompt = parseMusicPrompt(ctx.options.musicPrompt);
+      // --music-duck: how far the bed dips under speech (unset: the mix's default duck).
+      if (ctx.options.musicDuck != null) music.duck = parseMusicDuck(ctx.options.musicDuck);
       // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density);
       // without either, a footage-led or clip-led story defaults to low.
       const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density ?? defaultSfxDensity(ctx.resolved)).toLowerCase();
@@ -1158,7 +1166,7 @@ const STAGES = [
       const inputHash = hashValue({
         cues: bound.cues,
         bed,
-        music: { kind: music.kind, request, sync, lufs: music.kind === "synth" ? null : MUSIC_LUFS },
+        music: { kind: music.kind, request, sync, lufs: music.kind === "synth" ? null : MUSIC_LUFS, ...(music.duck != null ? { duck: music.duck } : {}) },
         music_file: music.kind === "file" ? await fileHash(path.join(ctx.project, music.file)) : null,
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         speech_key: speechKey,
@@ -1214,7 +1222,7 @@ const STAGES = [
         cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
       }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}) });
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}) });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
