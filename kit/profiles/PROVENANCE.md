@@ -36,7 +36,7 @@ Short talking head: footage-led, 5–60 s, 9:16.
 
 - Provenance: seed
 - References: 0
-- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.
+- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to. face_time p90 0.85: a short that never cuts away from the presenter reads as static; lines that name something the viewer could see cut to full-frame inserts.
 
 ## story-characters
 

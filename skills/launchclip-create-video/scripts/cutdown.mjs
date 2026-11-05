@@ -314,11 +314,41 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
     cut.scenes.push(card);
     added.push(id);
   }
+  cutAway(cut, local, profile, { hook, added, lines, hookLine, window, warnings });
   cut.scenes.sort((x, y) => Number(sceneTime(x.start, local)) - Number(sceneTime(y.start, local)));
 
   const draft = shortMap(cut, local, window, lines.map((line) => ({ ...line, words: line.words.map((index) => index - window.words[0]) })), profile?.id ?? target.profile);
   fitZooms(cut, local, warnings);
   return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, warnings };
+}
+
+// Cut away until the presenter is on screen no more than the profile allows
+// (face_time p90): the cards the cutdown added become full-frame inserts,
+// longest first, then new inserts go into the longest run on the presenter.
+function cutAway(cut, local, profile, { hook, added, lines, hookLine, window, warnings }) {
+  const ceiling = profile?.measures?.face_time?.p90;
+  if (!(ceiling < 1)) return;
+  const length = (scene) => Number(sceneTime(scene.end, local)) - Number(sceneTime(scene.start, local));
+  for (let pass = 0; pass < 40; pass += 1) {
+    const measures = storyboardMeasures(withNumbers(cut, local));
+    if (measures.face_time == null || measures.face_time <= ceiling + 1e-6) return;
+    const overlay = cut.scenes.filter((scene) => added.includes(scene.id) && scene.id !== hook.id && scene.insert !== true).sort((x, y) => length(y) - length(x))[0];
+    if (overlay) {
+      const { track: _track, ...rest } = overlay;
+      const { sub: _sub, ...params } = overlay.params ?? {};
+      cut.scenes[cut.scenes.indexOf(overlay)] = { ...rest, params, insert: true, in: { type: 'fade', dur: 0.2 } };
+      continue;
+    }
+    const run = [...measures.intervals.face].sort((x, y) => (y[1] - y[0]) - (x[1] - x[0]))[0];
+    if (!run || run[1] - run[0] < 2.3) return;
+    const a = round(run[0] + 0.15), b = round(Math.min(run[1] - 0.1, run[0] + Math.min(3.2, Math.max(2.1, (run[1] - run[0]) / 2))));
+    const line = lines.find((entry) => entry.start < b && entry.end > a) ?? hookLine;
+    const id = `insert-${added.length}`;
+    const card = fitCard({ id, module: 'concept-card', start: a, end: b, insert: true, in: { type: 'fade', dur: 0.2 }, params: { text: keyWords(lineText(local, line, window.words[0]), added.length) } }, cut, local, warnings);
+    if (!card) return;
+    cut.scenes.push(card);
+    added.push(id);
+  }
 }
 
 // The Short's map: the window's lines with their intents (word indexes on the

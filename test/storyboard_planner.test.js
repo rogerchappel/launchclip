@@ -425,3 +425,43 @@ test("a card the model left as placeholders is a plan error; a dash for no in a 
   const full = { scenes: [{ id: "table", module: "comparison", params: { title: "Deck boards", columns: ["Treated pine", "Spotted gum", "Composite"], rows: [{ label: "Cost", values: ["Low", "High", "Medium"] }, { label: "Oiling", values: ["Yearly", "Yearly", null] }] } }] };
   assert.deepEqual(placeholderErrors(full), []);
 });
+
+// A talking-head Short that never leaves the presenter reads as static: face
+// time above the profile's ceiling is the plan's to fix, by cutting away.
+test("a footage-led plan that never cuts away from the presenter is repaired toward inserts", async () => {
+  const dir = new URL("../examples/story/footage/", import.meta.url);
+  const story = JSON.parse(await readFile(new URL("storyboard.json", dir), "utf8"));
+  const map = JSON.parse(await readFile(new URL("DIRECTION.json", dir), "utf8"));
+  const words = JSON.parse(await readFile(new URL("NARRATION.json", dir), "utf8")).words;
+  const profile = JSON.parse(await readFile(new URL("../kit/profiles/short-talking-head.json", import.meta.url), "utf8"));
+  const options = { words, direction: map, profile, tier: "guided" };
+  const cut = checkStoryboard(story, options);
+  assert.ok(!cut.errors.some((line) => /face_time/.test(line)), cut.errors.join("\n"));
+
+  // The example's one insert held beside the presenter instead: face time 100%.
+  const held = structuredClone(story);
+  const twelve = held.scenes.find((scene) => scene.id === "twelve");
+  delete twelve.insert;
+  twelve.track = 1;
+  const heldMap = structuredClone(map);
+  for (const line of heldMap.sections.flatMap((section) => section.lines)) if (line.treatment === "insert") line.treatment = "dress";
+  const checked = checkStoryboard(held, { ...options, direction: heldMap });
+  const error = checked.errors.find((line) => /^cadence: face_time 100% is above the profile band/.test(line));
+  assert.ok(error, checked.errors.join("\n"));
+  assert.match(error, /cut away from the presenter: make the lines that name something the viewer could see .* insert lines/);
+  // Too little face is only a warning: the footage may force it.
+  const quiet = checkStoryboard(held, { ...options, direction: heldMap, profile: { ...profile, measures: { ...profile.measures, face_time: { p10: 1, p50: 1, p90: 1 } } } });
+  assert.ok(!quiet.errors.some((line) => /face_time/.test(line)), quiet.errors.join("\n"));
+});
+
+test("the talking-head prompts ask for cutaways: face time's target and ceiling, and insert lines for what the viewer could see", async () => {
+  const { directionPrompt, planningPrompt } = await import("@launchclip/core/planning-prompt.mjs");
+  const profile = JSON.parse(await readFile(new URL("../kit/profiles/short-talking-head.json", import.meta.url), "utf8"));
+  const plan = planningPrompt({ lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 30 }, profile });
+  assert.match(plan, /presenter is on screen for about 55% of the runtime and never more than 85%: lines that name something the viewer could see .* cut away to a full-frame insert/);
+  assert.match(directionPrompt({ lane: "footage-led", profile, words: [] }), /only insert lines take the presenter off screen/);
+  // A profile that allows 100% face says nothing about cutting away.
+  const open = { ...profile, measures: { ...profile.measures, face_time: { p10: 0.45, p50: 0.75, p90: 1 } } };
+  assert.doesNotMatch(planningPrompt({ lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 30 }, profile: open }), /never more than/);
+  assert.doesNotMatch(directionPrompt({ lane: "footage-led", profile: open, words: [] }), /only insert lines take the presenter off screen/);
+});

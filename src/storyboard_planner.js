@@ -73,6 +73,14 @@ export const PLAN_REPAIR_ENVELOPE_SCHEMA = Object.freeze({
 // band is checked by finish and reported here as warnings.
 const PLAN_BAND_ERRORS = Object.freeze(["coverage", "longest_undressed_seconds"]);
 
+// What a repair does about a measure outside its band.
+function bandRepair(band) {
+  if (band.measure === "coverage") return band.status === "below" ? "dress more lines (turn face lines whose intent calls for a visual into dress or insert lines with scenes)" : "hold more lines on the presenter";
+  if (band.measure === "longest_undressed_seconds") return "dress a line inside the longest undressed run";
+  if (band.measure === "face_time" && band.status === "above") return "cut away from the presenter: make the lines that name something the viewer could see (a thing, a place, a step) insert lines with a full-frame scene (a shot, or a full-frame graphic)";
+  return "adjust the scenes";
+}
+
 /**
  * Plan a storyboard. Returns a report (never throws on a model or check
  * failure; status is "passed" or "failed"):
@@ -440,10 +448,12 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
       cadence = { profile: profile.id, coverage: measures.coverage, face_time: measures.face_time, longest_undressed_seconds: measures.longest_undressed_seconds, bands: bands.filter((band) => band.status !== "inside") };
       for (const band of bands) {
         if (band.status === "inside") continue;
-        const line = `cadence: ${band.detail} (profile ${profile.id}); ${band.measure === "coverage" ? (band.status === "below" ? "dress more lines (turn face lines whose intent calls for a visual into dress or insert lines with scenes)" : "hold more lines on the presenter") : band.measure === "longest_undressed_seconds" ? "dress a line inside the longest undressed run" : "adjust the scenes"}`;
+        const line = `cadence: ${band.detail} (profile ${profile.id}); ${bandRepair(band)}`;
         // The app's hidden ranges force coverage up; that is not the plan's to fix.
         const forced = band.measure === "coverage" && band.status === "above" && (constraints?.ranges ?? []).some((range) => range.picture === "hidden");
-        if (bandErrors && PLAN_BAND_ERRORS.includes(band.measure) && !forced) errors.push(line);
+        // Too much face is the plan's to fix (cut away); too little may be forced by the footage.
+        const planned = PLAN_BAND_ERRORS.includes(band.measure) || (band.measure === "face_time" && band.status === "above");
+        if (bandErrors && planned && !forced) errors.push(line);
         else warnings.push(line);
       }
     }
