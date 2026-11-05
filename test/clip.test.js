@@ -214,3 +214,19 @@ test('clip is registered in both renderers, the planner and the skill references
     assert.match(readFileSync(path.join(ROOT, `skills/${skill}/references/storyboard-modules.md`), 'utf8'), /### clip \(keeps captions\)/);
   }
 });
+
+test('clip: callout pills read on a phone and hug their text', () => {
+  const model = resolve({callouts: ['Hardwood: natural timber']});
+  const [callout] = model.content.callouts;
+  // A long label in a 9:16 frame wraps to two lines rather than shrinking to small print.
+  assert.ok(callout.size >= 68, `callout size ${callout.size}`);
+  assert.equal(callout.lines, 2);
+  assert.ok(callout.box.height > callout.size * 2, `pill height ${callout.box.height}`);
+  const short = resolve({callouts: ['Payload 1,100 kg']}).content.callouts[0];
+  assert.equal(short.lines, 1);
+  assert.ok(short.size > 64, `short callout size ${short.size}`);
+  const {overlay} = clipView(model);
+  const pill = JSON.stringify(overlay);
+  assert.match(pill, /"width":"fit-content"/);
+  assert.match(pill, new RegExp(`"maxWidth":${callout.box.width}`));
+});
