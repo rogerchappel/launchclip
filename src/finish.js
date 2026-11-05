@@ -69,6 +69,9 @@ import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+
+// Rounds of hiding captions under cards before the layout check fails the render.
+const CAPTION_FIT_PASSES = 4;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -947,17 +950,19 @@ const STAGES = [
       // (the real narration's words, a card's settled window), so a clash the
       // planner's fit just missed (captions from 0 s, hidden from 0.34 s) is
       // closed here instead of failing the render.
-      if (layout.status === "failed") {
+      // Repeated: hiding one clash can split a caption window and expose the
+      // next card's, so it runs until nothing new is hidden (at most
+      // CAPTION_FIT_PASSES times).
+      for (let pass = 0; pass < CAPTION_FIT_PASSES && layout.status === "failed"; pass += 1) {
         const errors = layout.findings.filter((finding) => finding.severity === "error");
         const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const fitted = errors.every((finding) => finding.rule === "caption-band") ? fitCaptionBand(ctx.copy, lines) : { hidden: [] };
-        if (fitted.hidden.length) {
-          ctx.copy = fitted.storyboard;
-          ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
-          ctx.boundaries = deriveBoundaries(ctx.resolved);
-          layout = await checkLayoutProject(ctx.project, layoutOptions());
-          ctx.warnings.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
-        }
+        if (!fitted.hidden.length) break;
+        ctx.copy = fitted.storyboard;
+        ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+        ctx.boundaries = deriveBoundaries(ctx.resolved);
+        layout = await checkLayoutProject(ctx.project, layoutOptions());
+        ctx.warnings.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
       }
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));

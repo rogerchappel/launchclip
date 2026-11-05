@@ -446,6 +446,23 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
   };
 }
 
+/**
+ * The height (px) one caption line can take on a format: the preset's lines
+ * at its size (a stack's words one per line, the larger hero or active word,
+ * a line that wraps in the band), with room for a plate's padding and the
+ * entrance's scale. The layout check grows the caption band to it, so a tall
+ * line never reaches a card the band alone would miss.
+ */
+export function captionLineExtent(o, format) {
+  const W = Number(format?.width) || 1080;
+  const width = (1 - o.band.left - o.band.right) * W;
+  const em = o.size;
+  if (o.layout === 'stack') return round(em * o.lineHeight * (o.maxWords - 1 + 1.42) + em * 0.9);
+  const big = o.word === 'hierarchy' ? CAPTION_HERO_SCALE : o.word === 'highlight-big' || o.word === 'pop' ? 1.12 : 1;
+  const lines = Math.max(1, Math.ceil((o.maxChars * 0.55 * em * (o.word === 'hierarchy' ? 1.3 : 1)) / width));
+  return round(em * o.lineHeight * (big + lines - 1) + em * 0.9);
+}
+
 /** overlay.plates → a Set of caption line ids, or "all". */
 export function captionPlateIds(value) {
   if (value === 'all') return 'all';
