@@ -1862,6 +1862,21 @@ with its `cycle`:
 { "plate": { "kind": "smoke", "cycle": { "every": 3, "plates": ["smoke", "starfield", { "kind": "wash", "params": { "intensity": 0.8 } }] } } }
 ```
 
+**Fallback plates** (`fallbackPlates(story, text)`): what `launchclip make`
+rotates through on a Motion video whose plan chose no plate (`worldLook`). The
+motif kinds (`MOTIF_PLATE_KINDS`: `hex-shell`, `strands`, `bokeh`,
+`starfield`) carry a subject of their own (tech, science, space), so they come
+up only by explicit choice or when the brief is about one (`plateMotif`:
+whole words such as AI, software, DNA, biotech, NASA; "technical", "solar
+cells" or "stargazing" do not count). Every other brief gets
+`NEUTRAL_PLATES` (silk and smoke lit in the brand's primary, accent and
+neutral), with the project's own footage between them when its shots have
+some: a shot's clip as a `video` plate (`treatment: "blur"`, from the shot's
+`sourceStart`) or its still as an `image` plate (blur 32, dim 0.62), up to
+four, from the middle of the story out. No two neighbours share a plate, and
+none is a `wash`, so the backdrop stays dark over `bg` where the brand frame
+and logo expect it.
+
 A plate replaces `story.background` on the scenes it covers. No plate is
 drawn when `ambient.background` is false for the story or scene, or on a
 footage-led story. One plan is memoised per story, plate and frame, so a cut
