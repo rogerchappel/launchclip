@@ -1416,3 +1416,28 @@ test("--music-prompt is the ElevenLabs track's style and part of its brief", asy
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("with musicFallback, ElevenLabs music with no key or a failed generation plays the synth bed", async () => {
+  const project = await narratedProject();
+  try {
+    const keyless = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { music: "elevenlabs", musicFallback: true }, keyless.adapters);
+    assert.equal(report.stages.find((stage) => stage.name === "sound").status, "done");
+    assert.equal(keyless.music.generated, 0);
+    assert.ok(report.warnings.some((warning) => /needs ELEVENLABS_API_KEY, which is not set; using the procedural synth bed/.test(warning)), report.warnings.join("\n"));
+
+    const failing = musicAdapters(fakeAdapters());
+    const provider = failing.adapters.musicProvider();
+    failing.adapters.musicProvider = () => ({ ...provider, async generate() { throw new Error("ElevenLabs music failed (HTTP 429): quota exceeded"); } });
+    const fellBack = await runFinish(project, { music: "elevenlabs", musicFallback: true, force: true }, failing.adapters);
+    const sound = fellBack.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done");
+    assert.match(failing.adapters.lastMix.music, /bed\.wav$/);
+    assert.ok(fellBack.warnings.some((warning) => /the ElevenLabs track failed \(ElevenLabs music failed \(HTTP 429\)/.test(warning)), fellBack.warnings.join("\n"));
+    // finish on its own stays strict.
+    const strict = await runFinish(project, { music: "elevenlabs", force: true }, failing.adapters);
+    assert.equal(strict.stages.find((stage) => stage.name === "sound").status, "failed");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});

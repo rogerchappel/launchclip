@@ -715,7 +715,8 @@ export function defaultAdapters() {
  * workers for the render; default: the cores split across render slots,
  * src/capacity.js), voice: provider name, music:
  * "synth"|"elevenlabs"|"none", musicVolume (the bed's gain, 0–1;
- * --music-volume), musicDuck (the bed's level under speech as a share of
+ * --music-volume), musicFallback (make: ElevenLabs music that is missing
+ * its key or fails falls back to the synth bed with a warning), musicDuck (the bed's level under speech as a share of
  * its level in pauses, 0–1; --music-duck), musicPrompt (the ElevenLabs
  * music style prompt, over audio.music.prompt; --music-prompt), musicHints (style-pack sound.music hints for
  * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
@@ -1092,7 +1093,7 @@ const STAGES = [
       const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
       // The style's sound block: palette, music genre, ambience, density.
       const sound = soundSettings(await stylePack(ctx), ctx.copy);
-      const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env });
+      const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env, fallback: Boolean(ctx.options.musicFallback) });
       const music = musicPlanSpec(choice);
       // --music-volume sets the bed's gain over audio.music.volume and the energy default.
       if (ctx.options.musicVolume != null) music.volume = parseMusicVolume(ctx.options.musicVolume);
@@ -1196,7 +1197,19 @@ const STAGES = [
       const speechKey = keyFile && await ctx.adapters.hasAudio(keyFile) ? { file: keyFile, segments: plan.speechKey.segments } : null;
       const duration = Number(ctx.resolved.resolved.duration);
       // Music: generate or reuse the track, analyse its beats, then beat sync.
-      const track = await resolveMusicTrack(ctx, plan, kitDir);
+      let track;
+      try {
+        track = await resolveMusicTrack(ctx, plan, kitDir);
+      } catch (error) {
+        // musicFallback (make): an ElevenLabs track that cannot be had (an
+        // API error, quota, the network) leaves the video on the synth bed
+        // rather than failing the run. The next run asks again.
+        if (!(ctx.options.musicFallback && plan.music.kind === "elevenlabs")) throw error;
+        ctx.warnings.push(`music: the ElevenLabs track failed (${firstLine(error.message)}); using the procedural synth bed instead`);
+        plan.music = { ...plan.music, kind: "synth" };
+        await ctx.adapters.synthKit(kitDir, plan.bed, plan.kit);
+        track = await resolveMusicTrack(ctx, plan, kitDir);
+      }
       const synced = track ? await beatSync(ctx, plan, track, { duration }) : null;
       const musicFile = synced?.file ?? null;
       // Snapping moved scenes and hits: bind the SFX cues and the typing track

@@ -314,6 +314,10 @@ test("parseMusicSpec and resolveMusicChoice: flag, story, then the key decide", 
   assert.equal(fallback.provider, "synth");
   assert.match(fallback.warnings[0], /ELEVENLABS_API_KEY is not set/);
   assert.throws(() => resolveMusicChoice({}, { flag: "elevenlabs", env: {} }), /needs ELEVENLABS_API_KEY/);
+  // make's fallback: the synth bed and a warning instead of the error.
+  const keyless = resolveMusicChoice({}, { flag: "elevenlabs", env: {}, fallback: true });
+  assert.equal(keyless.provider, "synth");
+  assert.match(keyless.warnings[0], /using the procedural synth bed/);
   assert.throws(() => resolveMusicChoice({}, { flag: "lofi", env: {} }), /--music must be one of/);
 });
 
