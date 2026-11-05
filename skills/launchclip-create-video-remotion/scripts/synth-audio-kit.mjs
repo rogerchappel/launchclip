@@ -58,9 +58,13 @@ function keystroke({ seed, click, leaf, thock, body, bottom, plate, clickGain = 
   return { duration, master: 'highpass=f=70,lowpass=f=13000', fade: 0.012, layers };
 }
 
-function whoosh({ seed, duration, bands, centres, width, pan = [0.8, 0.2], air = 0.5, phaser = true }) {
+// A soft, low sweep: band-passed noise layers peaking one after another under
+// a swell that rises over 60% of the cue (no sharp front) and falls faster.
+// The bands stay under about 2 kHz and the master low-passes at `top`, so the
+// sweep reads as moving air rather than bright hiss over the voice.
+function whoosh({ seed, duration, bands, centres, width, pan = [0.8, 0.2], air = 0.5, phaser = true, top = 4000 }) {
   const d = fmt(duration);
-  const shape = `pow(sin(PI*min(t/${d},1)),2)`;
+  const shape = `pow(sin(PI*pow(min(t/${d},1),1.36)),2)`;
   const panL = `(${pan[0]}+${fmt(pan[1] - pan[0])}*t/${d})`;
   const panR = `(${fmt(1 - pan[0])}+${fmt(pan[0] - pan[1])}*t/${d})`;
   const layers = bands.map((freq, index) => {
@@ -68,7 +72,7 @@ function whoosh({ seed, duration, bands, centres, width, pan = [0.8, 0.2], air =
     return layer(`${noise(index % 8)}*${env}*${panL}`, { right: `${noise((index + 4) % 8)}*${env}*${panR}`, filter: `bandpass=f=${freq}:width_type=q:w=1.1`, gain: 1.2, seed: seed + index });
   });
   layers.push(layer(`${noise(8)}*${shape}*${panL}`, { right: `${noise(9)}*${shape}*${panR}`, filter: 'lowpass=f=260', gain: air, seed: seed + 50 }));
-  return { duration, master: `highpass=f=120,lowpass=f=9000${phaser ? ',aphaser=type=t:speed=1.4:decay=0.4' : ''}`, fade: 0.06, layers };
+  return { duration, master: `highpass=f=90,lowpass=f=${top},lowpass=f=${top}${phaser ? ',aphaser=type=t:speed=1.4:decay=0.4' : ''}`, fade: 0.06, layers };
 }
 
 function impact({ seed, from, to, body, crack = 900, crackGain = 0.5, tail = 0.12, duration = 1.3 }) {
@@ -166,9 +170,9 @@ function uiClick({ seed, freq, body, noiseFreq = 3500, duration = 0.06 }) {
 // Families, in kit order. intent documents when to use them.
 export const SFX_FAMILIES = Object.freeze({
   whoosh: { intent: 'spatial travel, push, whip pan', variants: [
-    whoosh({ seed: 11, duration: 0.62, bands: [350, 700, 1400, 2800, 5600], centres: [0.2, 0.32, 0.45, 0.55, 0.62], width: 0.22, pan: [0.85, 0.15] }),
-    whoosh({ seed: 12, duration: 0.7, bands: [5200, 2600, 1300, 650, 320], centres: [0.25, 0.38, 0.5, 0.62, 0.72], width: 0.2, pan: [0.2, 0.85], air: 0.7 }),
-    whoosh({ seed: 13, duration: 0.45, bands: [500, 1200, 3000, 6500], centres: [0.3, 0.42, 0.52, 0.58], width: 0.16, pan: [0.7, 0.3], air: 0.3, phaser: false })
+    whoosh({ seed: 11, duration: 0.62, bands: [180, 320, 600, 1050, 1800], centres: [0.25, 0.37, 0.5, 0.6, 0.66], width: 0.24, pan: [0.85, 0.15], air: 0.8, top: 3600 }),
+    whoosh({ seed: 12, duration: 0.7, bands: [1600, 950, 560, 330, 190], centres: [0.3, 0.42, 0.54, 0.64, 0.74], width: 0.22, pan: [0.2, 0.85], air: 0.9, top: 3200 }),
+    whoosh({ seed: 13, duration: 0.45, bands: [260, 560, 1100, 2000], centres: [0.35, 0.47, 0.57, 0.63], width: 0.18, pan: [0.7, 0.3], air: 0.6, phaser: false, top: 4200 })
   ] },
   impact: { intent: 'big reveal, law/headline lock, scene slam', variants: [
     impact({ seed: 21, from: 140, to: 44, body: 0.3 }),

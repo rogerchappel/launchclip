@@ -739,10 +739,11 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     progress: frame.chance(0.5) ? { position: frame.pick(['top', 'bottom']), thickness: 3 + Math.floor(frame.random() * 4), ticks: frame.chance(0.5) } : false,
     show: 'always'
   };
-  // A brand name or logo makes the lockup: the frame turns on with the name as its kicker.
+  // A brand name or logo makes the lockup: the frame turns on with the logo
+  // as its kicker, else the name (a logo usually carries the wordmark already).
   if (ctx.brand.name || ctx.brand.logo?.src) {
     brand_frame.enabled = true;
-    if (ctx.brand.name) brand_frame.kicker.label = ctx.brand.name;
+    if (ctx.brand.name && !ctx.brand.logo?.src) brand_frame.kicker.label = ctx.brand.name;
     if (ctx.brand.logo?.src) { brand_frame.logo = ctx.brand.logo.src; brand_frame.kicker.logo = true; }
   }
   const plate = v2 ? drawBackdrops(draw('backdrops'), { dark: palette.dark }) : null;

@@ -189,5 +189,5 @@ test("worldLook keeps the plate cycle for the other shots when a card sits on fo
   const scenes = Array.from({ length: 6 }, (_, i) => ({ id: `s${i + 1}`, module: "stat-card", start: i * 3, end: i * 3 + 3 }));
   scenes[2].backdrop = { kind: "video", params: { src: "assets/shots/a.mp4" } };
   const plated = { lane: "motion", format: { duration: 18 }, scenes };
-  assert.deepEqual(worldLook(plated, ""), ["camera.mode world", "plate cycle every 3 shots"]);
+  assert.deepEqual(worldLook(plated, ""), ["camera.mode world", "plate cycle every 3 shots (neutral plates)"]);
 });

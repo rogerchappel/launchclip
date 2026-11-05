@@ -109,7 +109,14 @@ re-render is identical. `--sfx-density low|normal|high` or a number from 0
 to 1 (or a style pack's `sound.sfx_density`) thins cues deterministically:
 `normal` (0.6) and above keep every cue, `low` (0.25) keeps the hits and
 about half of the optional cues, values between scale linearly, and below
-0.25 the hits thin too (about a third remain at 0).
+0.25 the hits thin too (about a third remain at 0). Then the cues are paced:
+at most 2 (low), 3 (normal) or 5 (high) in any 10 s window, starts at least
+2.6, 1.76 or 0.8 s apart, hits kept before module events and transitions. No
+family group plays twice running and an air sweep (whoosh, shimmer, swipe,
+riser) plays at most every 4 s: a repeat becomes a pop or a tick (an impact
+on a narration hit), or drops. Typing sounds and hits with an explicit `cue`
+are never thinned. With no density set, a footage-led story, or one whose
+runtime is at least 40% full-frame clips, defaults to `low`.
 
 ## Seeding details
 
