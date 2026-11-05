@@ -136,7 +136,9 @@ function resolveClip(params, ctx) {
   if (callouts.length) {
     b.requireContrast('callouts', theme.paper, colors.bg, 'brand.colors.paper on the callout pill (brand.colors.bg)');
     const height = r2(Math.max(...callouts.map(c => c.size)) * 1.16 + 2 * padY);
-    const y = position === 'top' ? safe.y : r2(safe.y + safe.height - height);
+    // Pinned to an edge, so clear of the brand frame there (b.frameSafe).
+    const edge = b.frameSafe ?? safe;
+    const y = position === 'top' ? edge.y : r2(edge.y + edge.height - height);
     for (const c of callouts) {
       c.box = {x: r2(safe.x), y, width: c.width, height};
       b.events.push({id: `${b.id}-callout-${c.index}`, name: `callout-${c.index}`, time: c.at, endTime: c.until, role: 'beat'});
