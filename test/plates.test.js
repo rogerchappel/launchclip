@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_KINDS, DARK_PLATE_KINDS, VIDEO_PLATE_CONTRAST, VIDEO_TREATMENTS, videoPlateFloor, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
+import { CYCLE_KINDS, DARK_PLATE_KINDS, MOTIF_PLATE_KINDS, NEUTRAL_PLATES, PLATE_MOTIFS, fallbackPlates, plateMotif, VIDEO_PLATE_CONTRAST, VIDEO_TREATMENTS, videoPlateFloor, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
 import { layerStateAt, layerTweens } from "@launchclip/core/backgrounds.mjs";
 import { contrast, mix } from "@launchclip/core/panels.mjs";
 import { STORY_PLATE_KINDS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
@@ -330,4 +330,51 @@ test("a frame widens the plate with the same density per screen, and the default
   for (const layer of wide.layers.filter((entry) => !entry.fixed)) assert.ok(layer.box.x <= -1200 && layer.box.x + layer.box.width >= 1920, layer.id);
   assert.deepEqual(wide.layers.at(-1).box, { x: 0, y: 0, width: 1920, height: 1080 }, "the vignette stays on the canvas");
   assert.deepEqual(plateVignette(s, 0.4).fixed, true);
+});
+
+test("fallback plates: neutral and brand-lit for any brief, motif plates only when the brief is about one", () => {
+  const kinds = (plates) => plates.map((plate) => plate.kind);
+  // Trades, home and outdoors briefs never get a helix, a hex shell or a starfield.
+  for (const brief of [
+    "Choosing deck materials: hardwood vs composite, the technical trade-offs",
+    "Slide-on camper payload explained: solar cells, lithium batteries and a technical walk-through",
+    "Kitchen renovation: what a builder checks before the cabinets go in",
+    "Stargazing from the campsite: a weekend on the beach",
+    "Plumbing tips from a licensed trade: hot water systems",
+    "Our team's tech tips for cleaning a timber deck"
+  ]) {
+    assert.equal(plateMotif(brief), null, brief);
+    const plates = fallbackPlates({ scenes: [] }, brief);
+    assert.deepEqual(plates, NEUTRAL_PLATES.map((plate) => ({ kind: plate.kind, params: { ...plate.params } })));
+    assert.ok(plates.every((plate) => !MOTIF_PLATE_KINDS.includes(plate.kind) && plate.kind !== "wash"), brief);
+  }
+  assert.equal(plateMotif("Crazy AI news in October 2026"), "tech");
+  assert.equal(plateMotif("How our SaaS startup ships software"), "tech");
+  assert.equal(plateMotif("What DNA sequencing tells a biotech lab"), "science");
+  assert.equal(plateMotif("NASA's next rocket launch"), "space");
+  assert.deepEqual(kinds(fallbackPlates({}, "AI agents for developers")), kinds(PLATE_MOTIFS.tech.plates));
+  assert.ok(kinds(PLATE_MOTIFS.science.plates).includes("strands"));
+  assert.ok(kinds(PLATE_MOTIFS.space.plates).includes("starfield"));
+  // Every list is valid as a cycle, and no two neighbours (wrapping) share a kind.
+  const footage = { scenes: ["a", "b", "c"].map((id, i) => ({ id, params: { media: i === 1 ? { kind: "image", src: "assets/shots/b.jpg" } : { kind: "video", src: `assets/shots/${id}.mp4`, sourceStart: i } } })) };
+  for (const plates of [NEUTRAL_PLATES, ...Object.values(PLATE_MOTIFS).map((motif) => motif.plates), fallbackPlates(footage, "deck"), fallbackPlates(footage, "AI")]) {
+    assert.deepEqual(plateErrors({ kind: plates[0].kind, cycle: { every: 1, plates } }, "plate", { allowCycle: true }), []);
+    plates.forEach((plate, i) => { const next = plates[(i + 1) % plates.length]; assert.ok(plate.kind !== next.kind || plate.params.src !== next.params.src, `${plate.kind} twice in a row`); });
+  }
+});
+
+test("fallback plates take the project's own footage, blurred and dimmed, between the drawn plates", () => {
+  const scenes = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, module: "clip", params: { media: { kind: "video", src: `assets/shots/${id}.mp4`, sourceStart: i * 1.5 } } }));
+  scenes.push({ id: "f", module: "photo-scene", params: { media: { kind: "image", src: "assets/shots/f.jpg" } } }, { id: "g", module: "clip", params: { media: { kind: "video", src: "assets/shots/a.mp4" } } });
+  const plates = fallbackPlates({ scenes }, "");
+  assert.deepEqual(plates.map((plate) => plate.params.src ?? plate.kind), ["silk", "assets/shots/d.mp4", "smoke", "assets/shots/e.mp4", "silk", "assets/shots/f.jpg", "smoke", "assets/shots/a.mp4"]);
+  assert.deepEqual(plates[1].params, { src: "assets/shots/d.mp4", start: 4.5, treatment: "blur" });
+  assert.deepEqual(plates[5].params, { src: "assets/shots/f.jpg", blur: 32, dim: 0.62 });
+  // A footage plate keeps paper text readable: its dim is raised to the floor.
+  const s = resolveStory(story({ chapters: undefined, plate: { ...plates[0], cycle: { every: 1, plates } } }));
+  const spec = scenePlateSpec(s, s.scenes[1]);
+  assert.equal(spec.kind, "video");
+  assert.ok(platePlan(s, spec).contrast.ok);
+  // No footage on the shots: the drawn plates alone.
+  assert.equal(fallbackPlates({ scenes: [{ id: "x", module: "stat-card" }] }, "").length, NEUTRAL_PLATES.length);
 });

@@ -49,6 +49,8 @@
 //                       {every: n, plates?}: every n shots (track-0 scenes) the next of
 //                       `plates` (default ROTATION_KINDS), from the story's own plate
 //   story.plate         {kind, params?, cycle?} or a kind name
+// make's Motion videos rotate fallbackPlates when the plan chose none: neutral,
+// brand-lit plates and the project's footage, motif kinds only on a motif brief.
 // A plate replaces story.background on the scenes it covers. Absent
 // everywhere, nothing changes. In world mode the same per-scene plates are
 // the camera's backdrops (kit/core/world-backdrops.mjs).
@@ -262,6 +264,90 @@ export function scenePlateSpec(story, scene) {
     return at >= 0 ? list[(at + step) % list.length] : [storyPlate, ...list][step % (list.length + 1)];
   }
   return storyPlate;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback plates: what a generated video (make) puts behind its full-screen
+// cards when nothing else chose a plate. hex-shell, strands, bokeh and
+// starfield read as a motif (tech, science, space), so they only come up when
+// the brief is about one (plateMotif); everything else gets neutral plates lit
+// in the brand's own colours, and the project's own footage, blurred and
+// dimmed, when it has some. All of them are dark over bg (no wash), so the
+// brand frame and logo keep the backdrop they are drawn against.
+
+// The kinds that carry a subject of their own; kept for an explicit choice or a motif.
+export const MOTIF_PLATE_KINDS = Object.freeze(['hex-shell', 'strands', 'bokeh', 'starfield']);
+const plate = (kind, tint, extra = {}) => Object.freeze({ kind, params: Object.freeze({ tint, ...extra }) });
+// Neutral plates for any brand, in rotation order: no two neighbours share a kind.
+export const NEUTRAL_PLATES = Object.freeze([
+  plate('silk', 'primary'),
+  plate('smoke', 'neutral'),
+  plate('silk', 'accent'),
+  plate('smoke', 'primary')
+]);
+// A brief about one of these takes its plates instead (whole words only, so
+// "technical", "solar cells" or "stargazing" at a campsite do not count).
+export const PLATE_MOTIFS = Object.freeze({
+  tech: Object.freeze({
+    pattern: /\b(ai|a\.i\.|artificial intelligence|machine learning|llms?|software|saas|cloud computing|cyber ?security|crypto(currency)?|blockchain|semiconductors?|data cent(er|re)s?|robotics|start-?ups?|developers?|programming|tech (news|startups?|compan(y|ies)|industry))\b/i,
+    plates: Object.freeze([plate('hex-shell', 'neutral'), plate('silk', 'primary'), plate('hex-shell', 'accent'), plate('bokeh', 'primary')])
+  }),
+  science: Object.freeze({
+    pattern: /\b(dna|genetics?|genom(e|es|ics)|biotech(nology)?|molecul(e|es|ar)|biochemistry|laborator(y|ies)|pharma(ceuticals?)?|clinical trials?)\b/i,
+    plates: Object.freeze([plate('strands', 'primary'), plate('silk', 'neutral'), plate('strands', 'accent'), plate('smoke', 'primary')])
+  }),
+  space: Object.freeze({
+    pattern: /\b(outer space|space ?(x|flight|station|travel)|astronom(y|er|ers)|astrophysics|galax(y|ies)|nasa|rocket launch(es)?|cosmos)\b/i,
+    plates: Object.freeze([plate('starfield', 'neutral'), plate('bokeh', 'primary'), plate('starfield', 'accent'), plate('smoke', 'neutral')])
+  })
+});
+// Footage behind a card: blurred well out of focus, under the treatment's dim
+// (raised to the contrast floor; see videoPlateFloor).
+const FOOTAGE_PLATES = 4;
+const FOOTAGE_IMAGE = Object.freeze({ blur: 32, dim: 0.62 });
+
+/** The motif a brief is about (a PLATE_MOTIFS key), or null for most briefs. */
+export function plateMotif(text) {
+  const said = String(text ?? '');
+  return Object.keys(PLATE_MOTIFS).find((name) => PLATE_MOTIFS[name].pattern.test(said)) ?? null;
+}
+
+// The project's own footage on a story's shots → up to FOOTAGE_PLATES plates
+// (video: blur treatment from where the shot plays; image: blurred and dimmed).
+function footagePlates(story) {
+  const seen = new Set();
+  const found = [];
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+    const media = scene?.params?.media;
+    const src = typeof media === 'string' ? media : media?.src;
+    if (typeof src !== 'string' || seen.has(src)) continue;
+    seen.add(src);
+    const start = Math.max(0, Number(media?.sourceStart ?? 0) || 0);
+    if (plateVideoSrc(src)) found.push({ kind: 'video', params: { src, ...(start > 0 ? { start: round(start, 3) } : {}), treatment: 'blur' } });
+    else if (plateImageSrc(src)) found.push({ kind: 'image', params: { src, ...FOOTAGE_IMAGE } });
+  }
+  // From the middle out: the first card after the hook does not sit on the hook's own clip.
+  const half = Math.floor(found.length / 2);
+  return [...found.slice(half), ...found.slice(0, half)].slice(0, FOOTAGE_PLATES);
+}
+
+/**
+ * The plates a story with none of its own rotates through → [{kind, params}]:
+ * the brief's motif plates (plateMotif), else NEUTRAL_PLATES, with the
+ * project's own footage between them when its shots have some. Neighbours
+ * never repeat a plate.
+ */
+export function fallbackPlates(story, text = '') {
+  const motif = plateMotif(text);
+  const drawn = (motif ? PLATE_MOTIFS[motif].plates : NEUTRAL_PLATES).map((entry) => ({ kind: entry.kind, params: { ...entry.params } }));
+  const footage = footagePlates(story);
+  if (!footage.length) return drawn;
+  const out = [];
+  for (let i = 0; i < Math.max(drawn.length, footage.length); i += 1) {
+    if (drawn[i]) out.push(drawn[i]);
+    if (footage[i]) out.push(footage[i]);
+  }
+  return out.slice(0, CYCLE_MAX_PLATES);
 }
 
 /** Whether any scene, chapter or the story itself names a plate. */

@@ -34,6 +34,7 @@ import { isLongForm, routeLane } from "./routing.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
+import { fallbackPlates, plateMotif } from "@launchclip/core/plates.mjs";
 import { rewriteLongFormCopy } from "./long_form_copy.js";
 import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js";
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
@@ -1031,7 +1032,8 @@ const PLATE_SECONDS = 8;
 /**
  * Motion videos travel (suggestMotion): when the plan left the camera unset,
  * it becomes the world camera, and a world with no backdrop of its own gets
- * plates that change about every 8 s. A plan that chose cuts, a brief that
+ * plates that change about every 8 s (fallbackPlates: neutral and brand-lit,
+ * with the project's footage when it has some). A plan that chose cuts, a brief that
  * asks for them, or a drawn world scene keeps its own. → what was added.
  */
 export function worldLook(story, prompt = "") {
@@ -1051,8 +1053,13 @@ export function worldLook(story, prompt = "") {
   if (!drawn && !ownPlates && base.length > 1) {
     const duration = Number(story.format?.duration) || base.reduce((end, scene) => Math.max(end, Number(scene.end) || 0), 0);
     const every = Math.max(1, Math.min(50, Math.round(PLATE_SECONDS / Math.max(1, duration / base.length))));
-    story.plate = { kind: "hex-shell", cycle: { every } };
-    added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"}`);
+    // Neutral, brand-lit plates and the project's own footage; a motif
+    // (hex-shell, strands, starfield) only when the brief is about one.
+    const topic = [prompt, story.title].filter(Boolean).join("\n");
+    const plates = fallbackPlates(story, topic);
+    story.plate = { ...plates[0], cycle: { every, plates } };
+    const motif = plateMotif(topic);
+    added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"} (${motif ? `${motif} plates` : "neutral plates"}${plates.some((entry) => entry.kind === "video" || entry.kind === "image") ? " and project footage" : ""})`);
   }
   return added;
 }
