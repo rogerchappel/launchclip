@@ -500,7 +500,13 @@ style pack. `weight`, `letter_spacing` (em), `case` (`as-is`, `upper`,
 `title`, `lower`) and `plate_style` (`box` or `scrim`: how a line that does
 not read over the footage is helped) tune any preset.
 
-Captions never sit on a card's text. The layout check counts a card's whole
+Captions are planned with the motion. A scene's `captions` (`"on"`, `"off"`
+or `{position}`) says whether they show while it is on screen and where; the
+planner and `launchclip finish` turn them off under every scene that draws
+text (a card, a stat, a list, a clip's callouts), so the card carries the
+words and the captions come back when it goes. Filler sounds ("um", "uh")
+never show (`fillers: "keep"` keeps them). A captions overlay with
+`schedule: "fit"` skips the planning. Captions never sit on a card's text. The layout check counts a card's whole
 time on screen against the caption band, its enter, its exit and the time it
 is held under the next scene's transition, and grows the band to the
 preset's tallest line; `launchclip finish` hides the captions over each clash.

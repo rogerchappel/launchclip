@@ -32,7 +32,7 @@ import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
 import { profileGeometry } from './layout-check.mjs';
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords, sceneCaptionsOff } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from './medium.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
@@ -271,7 +271,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (depth.reason) warnings.push(`${entry.scene.id}: ${depth.reason}`);
     sceneLayers.push(depth.layer);
     const sceneZ = depth.layer === 'behind' ? zBehind : z;
-    if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]);
+    // A module that hides captions, or a scene that plans them off (captions.mjs sceneCaptionsOff).
+    if (model.hidesCaptions || sceneCaptionsOff(entry.scene)) hide.push([entry.start, entry.renderEnd]);
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const inWorld = Boolean(plan && (entry.plate || entry.rides));

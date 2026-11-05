@@ -142,3 +142,47 @@ test("a clip's callouts in one slot never overlap: each is gone by its until", a
   assert.ok(out.start + out.duration <= first.until + 1e-6, `${out.start} + ${out.duration} > ${first.until}`);
   assert.ok(into.start >= first.until - 1e-6 && second.at === into.start);
 });
+
+test("captions are planned with the motion: off under every scene that draws its own text", async () => {
+  const { planCaptions } = await import("../src/caption_schedule.js");
+  const { captionLines } = await import("../src/caption_legibility.js");
+  const words = timed("We built it on a sloped block with a height difference of two metres and it took three weeks to finish", 0.2, 0.75);
+  const storyboard = {
+    schema: "launchclip.story.v1", lane: "motion", format: { ...FORMAT, duration: 16 }, brand: BRAND,
+    overlays: [{ type: "captions", preset: "kinetic-hierarchy" }],
+    scenes: [
+      { id: "shot", module: "clip", start: 0, end: 4, params: { media: { src: "assets/deck.mp4", kind: "video" } } },
+      { id: "diff", module: "concept-card", start: 4, end: 8, params: { text: "Height difference", sub: "Two metres" } },
+      { id: "kept", module: "concept-card", start: 8, end: 12, captions: "on", params: { text: "Sloped block" } },
+      { id: "steps", module: "clip", start: 12, end: 16, params: { media: { src: "assets/deck.mp4", kind: "video" }, callouts: ["Three weeks"] } }
+    ]
+  };
+  const { storyboard: planned, off } = planCaptions(storyboard, { words });
+  assert.deepEqual(off, ["diff"], "a card carries the words; footage, chips clear of the band and an author's \"on\" keep captions");
+  // Chips that reach the caption band (callouts low in the frame, captions low too) turn them off.
+  const low = { ...storyboard, overlays: [{ type: "captions", preset: "kinetic-stack", size: 1.4 }] };
+  assert.deepEqual(planCaptions(low, { words }).off.sort(), ["diff", "steps"]);
+  const { captionSchedule } = await import("@launchclip/core/captions.mjs");
+  const resolvedPlain = resolveStory(storyboard, { words });
+  const models = new Map(resolvedPlain.scenes.map((scene) => [scene.id, resolveModule(scene, resolvedPlain)]));
+  assert.deepEqual(captionSchedule(resolvedPlain, models).sort(), ["diff", "steps"], "without a band, any text part counts");
+  assert.equal(planned.scenes.find((scene) => scene.id === "kept").captions, "on");
+  assert.equal(planCaptions({ ...storyboard, overlays: [{ type: "captions", schedule: "fit" }] }, { words }).off.length, 0);
+  const resolved = resolveStory(planned, { words });
+  const { lines } = captionLines(resolved, chunkWords(words));
+  assert.ok(lines.length > 0);
+  for (const line of lines) assert.ok(!(line.start >= 4 && line.start < 8), `${line.text} at ${line.start} s`);
+  assert.ok(lines.some((line) => line.start >= 12), "captions come back over the footage");
+});
+
+test("filler sounds never show as captions; a scene can move its captions", () => {
+  const chunks = chunkWords([...timed("um, we're just", 0), ...timed("uh building decks", 2)]);
+  const plan = captionPlan(chunks, { type: "captions", preset: "word-highlight" }, { brand: BRAND, format: FORMAT });
+  assert.deepEqual(plan.nodes.map((node) => node.children.map((child) => child.text).join(" ")), ["we're just", "building decks"]);
+  const kept = captionPlan(chunks, { type: "captions", preset: "word-highlight", fillers: "keep" }, { brand: BRAND, format: FORMAT });
+  assert.match(kept.nodes[0].children[0].text, /^um/i);
+  const story = { scenes: [{ id: "a", start: 0, end: 4, captions: { position: "top" } }] };
+  const moved = captionPlan(chunks, { type: "captions", preset: "word-highlight" }, { brand: BRAND, format: FORMAT, story });
+  assert.match(moved.nodes[0].cls, /lc-cap-z1/);
+  assert.match(moved.css, /\.lc-cap\.lc-cap-z1 \{/);
+});

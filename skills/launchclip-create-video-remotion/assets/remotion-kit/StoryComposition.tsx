@@ -40,7 +40,7 @@ import { holdTime, layerStateAt, layerStyle, sceneWindows } from "../core/transi
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
-import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
+import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords, sceneCaptionsOff } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -415,7 +415,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const overlay = captionOverlay(story);
   const hide: Array<[number, number]> = [
     ...((overlay?.hide ?? []) as Array<[number, number]>),
-    ...layers.filter((layer: any) => layer.model?.hidesCaptions).map((layer: any) => [layer.entry.start, layer.entry.renderEnd] as [number, number])
+    ...layers.filter((layer: any) => layer.model?.hidesCaptions || sceneCaptionsOff(layer.entry.scene)).map((layer: any) => [layer.entry.start, layer.entry.renderEnd] as [number, number])
   ];
   const base = React.useMemo(() => storyBase(story), [story]);
   // Footage layouts: the sections' frame and the reframing base camera.
