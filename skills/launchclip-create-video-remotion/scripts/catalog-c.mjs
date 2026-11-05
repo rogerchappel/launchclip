@@ -119,7 +119,16 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
   const bottom = hidesCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - 30 * unit);
   const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
   const sx = up(zone.x), sy = up(zone.y);
-  const safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
+  let safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
+  // A brand frame's safe area (ctx.frame.safe, kit/core/brand-frame.mjs):
+  // text over the footage (callouts, titles, stickers) stays clear of the
+  // logo kicker and section labels, as the card modules do.
+  const frame = ctx?.frame?.safe;
+  if (frame && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(frame[key]))) {
+    const fx = Math.max(safe.x, up(frame.x)), fy = Math.max(safe.y, up(frame.y));
+    const fw = r2(Math.min(safe.x + safe.width, down(frame.x + frame.width)) - fx), fh = r2(Math.min(safe.y + safe.height, down(frame.y + frame.height)) - fy);
+    if (fw > 0 && fh > 0) safe = {x: fx, y: fy, width: fw, height: fh};
+  }
 
   const end = rt(start + duration);
   const hits = Array.isArray(ctx.hits) ? ctx.hits.filter(hit => hit && typeof hit.event === 'string' && typeof hit.at === 'number') : [];
