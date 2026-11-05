@@ -36,6 +36,18 @@
 //   stretches, seconds into a video), duration?: its length in seconds} | null
 // (or the flat shape normalizeShot() accepts). A shot's notes go to the
 // planner's repair passes and its usable windows set where a video starts.
+//
+// Backdrop shots (make --card-backdrops footage): a full-screen card's plate
+// may be real footage instead of a stock plate. scenes[i].backdrop =
+// {kind: "shot", shows, treatment?: "dim" | "blur" | "tint"} asks for it
+// (backdropPrompt; cardBackdrops() fills the card scenes the plan left
+// without one). Its request adds role: "background", motion: "low" (a slow,
+// steady shot text can sit on) and avoid: [{scene_id, src, asset_id?}] (the
+// shots on the scenes either side, so the backdrop is not the shot just cut
+// from or to), and is asked after every other shot. The clip that comes back
+// is measured (measureFootage: its brightest level and how much it moves)
+// and becomes a video plate (kit/core/plates.mjs) whose dim keeps the card's
+// text at 4.5:1. No shot leaves the scene on the story's stock plate.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, stat } from "node:fs/promises";
@@ -60,6 +72,14 @@ export const SHOT_CARD_SLOTS = Object.freeze({
 export const SHOTS_DIR = "assets/shots";
 const IMAGE = /\.(jpe?g|png|webp|svg)$/i;
 const VIDEO = /\.(mp4|webm|mov)$/i;
+
+// Backdrop shots: their overlay treatments, how many a plan may ask for, the
+// shortest card worth one, and the movement (mean frame-to-frame change,
+// 0–1) past which the footage is too busy to sit text on.
+export const BACKDROP_TREATMENTS = Object.freeze(["dim", "blur", "tint"]);
+export const MAX_BACKDROP_REQUESTS = 6;
+export const BACKDROP_MIN_SECONDS = 2;
+export const BACKDROP_BUSY_MOTION = 0.08;
 
 /** The most shots any plan may ask for, however long (--min-shots' ceiling). */
 export const MAX_SHOT_REQUESTS = 24;
@@ -116,6 +136,15 @@ function shotLengthLine() {
   return `A shot scene is no shorter than ${lengths.map(([id, seconds]) => `${seconds} s (${id})`).join(", ")}, measured between the words it is anchored to; one or two spoken words are usually shorter. For a quick list of things, give each item a shot about 2 s long, anchored across its words, or one shot that shows the whole list.`;
 }
 
+/** The planning-prompt section that offers footage backdrops behind full-screen cards (with a provider and --card-backdrops footage). */
+export function backdropPrompt({ max = MAX_BACKDROP_REQUESTS } = {}) {
+  return [
+    `Card backdrops from the app's media library: a full-screen card (a title, stat, list or comparison scene with no footage of its own) can sit on a slow, calm library clip instead of a stock plate. Set scenes[i].backdrop to {kind: "shot", shows: "<a steady, low-motion shot that sets the scene for the card's topic>", treatment?: "dim" | "blur" | "tint"}.`,
+    "dim darkens the footage under the card (the default), blur softens it to an out-of-focus wash, tint lays a brand-coloured gradient over it. The app darkens it as far as the card's text needs to stay readable.",
+    `Ask for at most ${max}; choose footage that is calm (a slow pan, a still landscape, a product at rest), never the shot the scene before or after shows, and leave clip, photo-scene and media-window scenes without one (their footage is the frame).`
+  ].join("\n");
+}
+
 /** The repair note when a storyboard asks for fewer than min shots ("" when it asks for enough). */
 export function minShotsError(requested, min) {
   if (!(min > 0) || requested >= min) return "";
@@ -153,6 +182,54 @@ export function shotRequests(storyboard) {
   });
 }
 
+const isBackdropRequest = (value) => value && typeof value === "object" && !Array.isArray(value) && value.kind === SHOT_REQUEST;
+
+/** Backdrop shot requests in a storyboard: [{index, scene}] (scenes[i].backdrop {kind: "shot"}). */
+export function backdropRequests(storyboard) {
+  return (storyboard?.scenes ?? []).flatMap((scene, index) => (isBackdropRequest(scene?.backdrop) ? [{ index, scene }] : []));
+}
+
+// A scene that is a full-screen card: on track 0, drawn by the module (not a
+// shot module, a world or a scene naming footage or a still of its own) and
+// on a background (ambient.background not off).
+function isCardScene(story, scene) {
+  if ((scene?.track ?? 0) !== 0 || SHOT_MODULES.includes(scene?.module) || scene?.module === "world") return false;
+  if (scene?.backdrop !== undefined || scene?.plate !== undefined) return false;
+  if ((scene?.ambient?.background ?? story?.ambient?.background) === false) return false;
+  return !/"(?:assets\/[^"]+\.(?:mp4|webm|mov|jpe?g|png|webp|avif)|kind":"shot)"/i.test(JSON.stringify(scene?.params ?? {}));
+}
+
+/**
+ * Footage backdrops for the full-screen cards a plan left on a stock plate:
+ * up to `max` (less the backdrops it already asks for) of its card scenes at
+ * least BACKDROP_MIN_SECONDS long, longest first, each asking for a calm shot
+ * of what the narration under it says (or the card's own text, or the brief).
+ * → {storyboard (a copy), added: [scene ids]}
+ */
+export function cardBackdrops(storyboard, { words = [], brief = "", max = MAX_BACKDROP_REQUESTS, treatment = "dim" } = {}) {
+  const room = Math.max(0, max - backdropRequests(storyboard).length);
+  if (!room || storyboard?.lane === "footage-led") return { storyboard, added: [] };
+  const times = sceneTimes(storyboard, words);
+  const cards = (storyboard?.scenes ?? []).map((scene, index) => ({ scene, index, span: times.get(scene?.id) }))
+    .filter(({ scene, span }) => isCardScene(storyboard, scene) && span && span.end - span.start >= BACKDROP_MIN_SECONDS)
+    .sort((a, b) => (b.span.end - b.span.start) - (a.span.end - a.span.start) || a.index - b.index)
+    .slice(0, room);
+  if (!cards.length) return { storyboard, added: [] };
+  const story = structuredClone(storyboard);
+  for (const { scene, index, span } of cards) {
+    const said = lineUnder(words, span) ?? cardText(scene) ?? String(brief ?? "").trim();
+    story.scenes[index] = { ...story.scenes[index], backdrop: { kind: SHOT_REQUEST, shows: `a calm, steady shot that sets the scene for: ${said}`.slice(0, 300), treatment } };
+  }
+  return { storyboard: story, added: cards.map(({ scene }) => scene.id) };
+}
+
+// A card's own headline, for a backdrop request with no narration under it.
+function cardText(scene) {
+  const params = scene?.params ?? {};
+  const text = ["title", "text", "headline", "heading", "label", "quote"].map((key) => params[key]).find((value) => typeof value === "string" && value.trim());
+  return text ? text.trim() : null;
+}
+
 /** Scene id → {start, end} in seconds, from the story resolved against the words (empty when it cannot resolve yet). */
 function sceneTimes(storyboard, words) {
   try {
@@ -184,9 +261,10 @@ const extensionOf = (value) => {
  * the same request is asked once. A provider with concurrency > 1 is asked
  * for every shot at once; otherwise one at a time, in scene order.
  */
-export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill } = {}) {
+export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill, measure = measureFootage } = {}) {
   const requests = shotRequests(storyboard);
-  if (!requests.length) return { storyboard, shots: [], media: [], errors: [] };
+  const backdrops = backdropRequests(storyboard);
+  if (!requests.length && !backdrops.length) return { storyboard, shots: [], media: [], errors: [] };
   const story = structuredClone(storyboard);
   const times = sceneTimes(storyboard, words);
   const width = Number(format?.width ?? storyboard.format?.width) || null;
@@ -274,7 +352,130 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
     if (shot.notes) described.push({ src: placed.src, kind, ...(shot.duration > 0 ? { duration: shot.duration } : {}), notes: shot.notes });
   }
+  // Backdrops last, so the shots either side are known and avoided.
+  const context = { assets, words, brief, width, height, times, project, cache, signal, measure, story, shots, warnings };
+  for (const { index, scene } of backdrops) await resolveBackdrop(context, index, scene);
   return { storyboard: story, shots, media: described, errors, warnings };
+}
+
+// The shots on the track-0 scenes either side of scene `index` in start
+// order: placed this run (shots), or footage the scene names itself.
+function neighbourShots(story, index, times, shots) {
+  const base = story.scenes.map((scene, i) => ({ scene, i, start: times.get(scene?.id)?.start ?? Number(scene?.start ?? i) }))
+    .filter(({ scene }) => (scene?.track ?? 0) === 0).sort((a, b) => a.start - b.start || a.i - b.i);
+  const at = base.findIndex(({ i }) => i === index);
+  return [base[at - 1], base[at + 1]].filter(Boolean).flatMap(({ scene }) => {
+    const placed = shots.filter((shot) => shot.scene_id === scene.id).map((shot) => ({ scene_id: scene.id, src: shot.src, ...(shotAssetId(shot) ? { asset_id: shotAssetId(shot) } : {}) }));
+    const own = typeof scene?.params?.media?.src === "string" ? [{ scene_id: scene.id, src: scene.params.media.src }] : [];
+    const plate = scene?.backdrop?.kind === "video" && typeof scene.backdrop.params?.src === "string" ? [{ scene_id: scene.id, src: scene.backdrop.params.src }] : [];
+    return [...placed, ...(placed.length ? [] : own), ...plate];
+  });
+}
+
+const shotAssetId = (shot) => {
+  const id = shot?.source?.asset_id ?? shot?.source?.id ?? shot?.asset_id;
+  return id == null || id === "" ? null : String(id);
+};
+
+// One backdrop request → a video plate on the scene (or an image plate for a
+// still), or, with no usable shot, the scene back on the story's plate.
+async function resolveBackdrop({ assets, words, brief, width, height, times, project, cache, signal, measure, story, shots, warnings }, index, scene) {
+  const media = scene.backdrop;
+  const shows = String(media.shows ?? "").trim();
+  const where = `scene ${scene.id ?? index + 1}`;
+  const treatment = BACKDROP_TREATMENTS.includes(media.treatment) ? media.treatment : "dim";
+  const fallback = (why) => {
+    const { backdrop: _backdrop, ...rest } = story.scenes[index];
+    story.scenes[index] = rest;
+    warnings.push(`${where}: ${why}; the card keeps the story's plate`);
+  };
+  if (!shows) { fallback('a backdrop shot request needs "shows" (what the shot must show)'); return; }
+  const span = times.get(scene.id) ?? null;
+  const avoid = neighbourShots(story, index, times, shots);
+  const request = {
+    id: `${scene.id}-backdrop-${createHash("sha256").update(JSON.stringify([shows, width, height, avoid])).digest("hex").slice(0, 10)}`,
+    scene_id: scene.id ?? null,
+    module: scene.module,
+    slot: "backdrop",
+    still: false,
+    role: "background",
+    motion: "low",
+    avoid,
+    shows,
+    type: "video",
+    line: lineUnder(words, span),
+    start: span?.start ?? null,
+    end: span?.end ?? null,
+    duration: span ? Math.max(0, span.end - span.start) : null,
+    format: { width, height, aspect: width && height ? (width / height >= 1 ? (width / height > 1.2 ? "landscape" : "square") : "portrait") : null },
+    brief: String(brief ?? "")
+  };
+  const key = JSON.stringify(["backdrop", shows, width, height, avoid]);
+  if (!cache.has(key)) cache.set(key, Promise.resolve(assets.findShot(request, { signal })));
+  let shot;
+  try {
+    shot = normalizeShot(await cache.get(key));
+  } catch (error) {
+    fallback(`the app could not find a backdrop shot that shows "${shows}" (${error?.message ?? error})`);
+    return;
+  }
+  if (!shot) { fallback(`the app has no backdrop shot that shows "${shows}"`); return; }
+  const id = shotAssetId(shot);
+  if (id && avoid.some((entry) => entry.asset_id === id)) { fallback(`the app's backdrop shot is the one a scene beside it shows (${id})`); return; }
+  let placed;
+  try {
+    placed = await placeShot(shot, { ...request, type: "any" }, project);
+  } catch (error) {
+    fallback(error.message);
+    return;
+  }
+  if (placed.kind === "image") {
+    story.scenes[index] = { ...story.scenes[index], backdrop: { kind: "image", params: { src: placed.src } } };
+    shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind: "image", src: placed.src, slot: "backdrop", ...(shot.source ? { source: shot.source } : {}) });
+    return;
+  }
+  // Where it plays from: the shot's own start, else its usable window that best fits the line.
+  const window = shot.notes?.windows?.length && shot.sourceStart == null ? bestWindow(shot.notes, request.duration ?? 3, request.line ?? shows) : null;
+  const start = Math.max(0, Number(shot.sourceStart ?? window?.start ?? 0) || 0);
+  const file = project ? path.join(project, placed.src) : shot.file ? path.resolve(String(shot.file)) : null;
+  const measured = file ? await measure(file, { start, duration: request.duration ?? 4 }).catch(() => null) : null;
+  const params = { src: placed.src, ...(start > 0 ? { start: round3(start) } : {}), treatment, ...(measured ? { peak: measured.peak } : {}) };
+  story.scenes[index] = { ...story.scenes[index], backdrop: { kind: "video", params } };
+  if (measured && measured.motion > BACKDROP_BUSY_MOTION) warnings.push(`${where}: the backdrop shot moves a lot (motion ${measured.motion}); a calmer shot reads better behind the card`);
+  shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind: "video", src: placed.src, slot: "backdrop", treatment, ...(measured ? { footage: measured } : {}), ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...(shot.duration > 0 ? { duration: shot.duration } : {}) });
+}
+
+const round3 = (value) => Math.round(value * 1000) / 1000;
+
+/**
+ * How a clip reads as a backdrop, from `duration` s of it at `start`: frames
+ * at 2 fps, shrunk to 96 × 96 grey (about the blur a plate gives them) →
+ * {peak: the 99th-percentile level 0–1, motion: the mean change between
+ * frames 0–1, frames}. Read with ffmpeg.
+ */
+export async function measureFootage(file, { start = 0, duration = 4 } = {}) {
+  const size = 96;
+  const { stdout } = await promisify(execFile)("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(Math.max(0, start)), "-t", String(Math.max(0.5, duration)), "-i", file, "-vf", `fps=2,scale=${size}:${size},format=gray`, "-f", "rawvideo", "-"], { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
+  return footageStats(stdout, size * size);
+}
+
+/** Grey frames of `pixels` bytes each, back to back → {peak, motion, frames} (see measureFootage). */
+export function footageStats(bytes, pixels) {
+  const frames = Math.floor((bytes?.length ?? 0) / pixels);
+  if (!frames) return null;
+  const histogram = new Array(256).fill(0);
+  let change = 0;
+  for (let f = 0; f < frames; f += 1) {
+    for (let i = 0; i < pixels; i += 1) {
+      const value = bytes[f * pixels + i];
+      histogram[value] += 1;
+      if (f) change += Math.abs(value - bytes[(f - 1) * pixels + i]);
+    }
+  }
+  let seen = 0, peak = 255;
+  const cut = frames * pixels * 0.99;
+  for (let v = 0; v < 256; v += 1) { seen += histogram[v]; if (seen >= cut) { peak = v; break; } }
+  return { peak: Math.round((peak / 255) * 1000) / 1000, motion: frames > 1 ? Math.round((change / ((frames - 1) * pixels * 255)) * 1000) / 1000 : 0, frames };
 }
 
 // The flat shape some apps answer with is accepted too: {path (= file), kind,

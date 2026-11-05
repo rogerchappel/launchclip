@@ -136,13 +136,30 @@ export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSS
 // Background kinds (kit/core/backgrounds.mjs): the story's background layers
 // at absolute time t, in place of the blob field. Matches the HyperFrames
 // .lc-bg-layer markup.
+// A video plate's clip (kit/core/plates.mjs) starts where the enclosing
+// Sequence does, so a scene's plate plays from the scene's first frame.
 export const BackgroundField: React.FC<{ plan: any; t: number }> = ({ plan, t }) => (
   <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", ...fieldStyle(plan) }} aria-hidden>
-    {plan.layers.map((layer: any) => (
-      <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />
-    ))}
+    {plan.layers.map((layer: any) => <PlateLayer key={layer.id} layer={layer} t={t} />)}
   </AbsoluteFill>
 );
+
+// One background or plate layer at absolute time t: its style and SVG, or, for
+// a video plate, its clip muted and cover-cropped in the layer's box, playing
+// from video.start `from` frames into the enclosing Sequence. Matches the
+// HyperFrames .lc-bg-layer markup.
+export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({ layer, t, from = 0 }) => {
+  const { fps } = useVideoConfig();
+  const style = backgroundLayerStyle(layer, t) as React.CSSProperties;
+  if (!layer.video) return <div style={style} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />;
+  return (
+    <div style={{ ...style, overflow: "hidden" }}>
+      <Sequence from={from} name="plate video" layout="none">
+        <OffthreadVideo src={assetUrl(layer.video.src)} trimBefore={Math.round(Number(layer.video.start || 0) * fps)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </Sequence>
+    </div>
+  );
+};
 
 // A footage-layout panel fill (story.panel.fill): the pattern clipped to the
 // canvas minus the presenter's window, per frame from the layout plan's
@@ -221,7 +238,7 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
 // and shown by their opacity, with one fixed vignette over the stack. Matches
 // the HyperFrames #lc-wb markup.
 export const WorldBackdrops: React.FC<{ backdrops: any; background: string; t: number }> = ({ backdrops, background, t }) => {
-  const { width, height } = useVideoConfig();
+  const { width, height, fps } = useVideoConfig();
   const box: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, pointerEvents: "none" };
   return (
     <div style={{ ...box, overflow: "hidden" }} aria-hidden>
@@ -234,9 +251,7 @@ export const WorldBackdrops: React.FC<{ backdrops: any; background: string; t: n
           <div key={segment.index} style={{ ...box, overflow: "hidden", opacity: state.opacity }}>
             <div style={{ ...box, transform: containerTransform({ x: state.x, y: state.y }) }}>
               <div style={{ position: "absolute", left: c.x, top: c.y, width: c.width, height: c.height, overflow: "hidden", background, ...mask }}>
-                {segment.layers.map((layer: any) => (
-                  <div key={layer.id} style={backgroundLayerStyle(layer, t) as React.CSSProperties} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />
-                ))}
+                {segment.layers.map((layer: any) => <PlateLayer key={layer.id} layer={layer} t={t} from={Math.round(segment.from * fps)} />)}
               </div>
             </div>
           </div>

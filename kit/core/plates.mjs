@@ -23,6 +23,9 @@
 //   smoke      grey, low-saturation wisps (smoky silk)
 //   wash       a bright full-frame gradient in the tint, for punctuation shots
 //   image      a local still (params.src), full-bleed, blurred, dimmed, drifting
+//   video      a local clip (params.src from params.start s), full-bleed, under
+//              an overlay treatment: dim (bg over it), blur (soft focus and a
+//              lighter dim) or tint (a brand gradient over it)
 //
 // Params: focus 0–1 (how out of focus; 0.6), intensity 0–1 (how bright; 0.5),
 // speed 0–2 (drift speed; 1), depth 0–1 (parallax spread; 0.5), and tint
@@ -30,6 +33,13 @@
 // paper, a silver on a dark style). A style tints a plate through tint.
 // image also takes src (a project-relative still such as assets/bg.jpg),
 // blur (px at 1080p, 0–80; 24) and dim (0–1, how much bg covers it; 0.55).
+// video takes src (a project-relative .mp4, .webm or .mov), start (seconds
+// into the clip where it plays from; 0), treatment (dim, blur or tint; dim),
+// blur and dim (each treatment's own defaults, VIDEO_TREATMENTS) and peak
+// (0–1, the footage's brightest level once blurred, as measured; 1, white,
+// when unknown). Its dim is raised to the floor at which paper text keeps
+// 4.5:1 on a pixel at peak (videoPlateFloor), so a card over footage stays
+// readable whatever the footage does.
 //
 // Where the plate comes from (scenePlateSpec), first match wins:
 //   scenes[i].backdrop  a plate, or "none" for the story's background
@@ -47,7 +57,8 @@
 // (backgrounds.mjs safeAlpha) on every tone already laid, so text in paper
 // keeps 4.5:1 anywhere on the plate. A wash is bright by design and an
 // image's pixels are unknown: their tones are reported as they are, and
-// finish's caption check backs the captions where they need it.
+// finish's caption check backs the captions where they need it. A video's
+// pixels are bounded by its peak, and its dim is set from it (see above).
 // Motion follows the ambient level (off stills it) and is a function of
 // absolute time, so any seek gives the same pixels.
 //
@@ -56,9 +67,9 @@
 
 import { AMBIENT_PRESETS, ambientSeed, fieldLevel, hashString, seededRandom } from './ambient.mjs';
 import { LOGO_SRC, safeAlpha, svgUrl } from './backgrounds.mjs';
-import { mix } from './panels.mjs';
+import { contrast, mix } from './panels.mjs';
 
-export const PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'wash', 'image']);
+export const PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'wash', 'image', 'video']);
 // The kinds whose every tone keeps paper text at 4.5:1 (see the header).
 export const DARK_PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke']);
 // cycle: true walks the four original kinds, so the stories that use it keep their plates.
@@ -74,18 +85,36 @@ export const PLATE_PARAMS = Object.freeze({
   speed: range(0, 2, 1),
   depth: range(0, 1, 0.5)
 });
-// Params only one kind takes: an image's file (required), blur and dim.
+// A video plate's overlay treatments and the blur and dim each starts from:
+// dim keeps the footage nearly sharp under a heavy dim, blur softens it so a
+// lighter dim reads, tint lays a brand gradient (primary into bg) over it.
+export const VIDEO_TREATMENTS = Object.freeze({
+  dim: Object.freeze({ blur: 4, dim: 0.62 }),
+  blur: Object.freeze({ blur: 26, dim: 0.5 }),
+  tint: Object.freeze({ blur: 10, dim: 0.6 })
+});
+// Text on a plate over footage: paper keeps this ratio on a pixel at its peak.
+export const VIDEO_PLATE_CONTRAST = 4.5;
+// The darkest a floor may push the overlay: past it the footage is gone.
+const VIDEO_DIM_MAX = 0.92;
+// Params only one kind takes: an image's file (required), blur and dim; a
+// video's file (required), start, treatment, blur, dim and peak (a null
+// default comes from the treatment).
 export const PLATE_KIND_PARAMS = Object.freeze({
-  image: Object.freeze({ src: Object.freeze({ path: true }), blur: range(0, 80, 24), dim: range(0, 1, 0.55) })
+  image: Object.freeze({ src: Object.freeze({ path: 'image' }), blur: range(0, 80, 24), dim: range(0, 1, 0.55) }),
+  video: Object.freeze({ src: Object.freeze({ path: 'video' }), start: range(0, 86400, 0), treatment: Object.freeze({ values: Object.keys(VIDEO_TREATMENTS), default: 'dim' }), blur: range(0, 80, null), dim: range(0, 1, null), peak: range(0, 1, 1) })
 });
 // Each kind's own tint when params.tint is absent: silk, hex, starfield,
 // smoke and image read as silver (paper), strands, bokeh and a wash as light
 // in the brand's primary.
-export const PLATE_DEFAULT_TINT = Object.freeze({ 'hex-shell': 'neutral', silk: 'neutral', strands: 'primary', bokeh: 'primary', starfield: 'neutral', smoke: 'neutral', wash: 'primary', image: 'neutral' });
+export const PLATE_DEFAULT_TINT = Object.freeze({ 'hex-shell': 'neutral', silk: 'neutral', strands: 'primary', bokeh: 'primary', starfield: 'neutral', smoke: 'neutral', wash: 'primary', image: 'neutral', video: 'primary' });
 const LEVEL_SPEED = Object.freeze({ off: 0, subtle: 0.6, standard: 1, lively: 1.4 });
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // A project-relative still: no scheme, no leading slash, no "..", an image extension.
 const IMAGE_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(png|jpe?g|webp|avif)$/i;
+// A project-relative clip: the same, with a video extension.
+const VIDEO_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(mp4|webm|mov)$/i;
+const FILE_PLATE = Object.freeze({ image: 'a still under the project, e.g. assets/backdrop.jpg', video: 'a clip under the project, e.g. assets/broll.mp4' });
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const round = (value, digits = 2) => { const f = 10 ** digits; return Math.round(value * f) / f + 0; };
@@ -98,12 +127,17 @@ export function plateImageSrc(value) {
   return typeof value === 'string' && IMAGE_SRC.test(value) && !value.split('/').includes('..');
 }
 
+/** Whether a value is a project-relative clip a video plate can play. */
+export function plateVideoSrc(value) {
+  return typeof value === 'string' && VIDEO_SRC.test(value) && !value.split('/').includes('..');
+}
+
 /** Validation messages for one plate value: a kind name, {kind, params?, cycle?}, or "none" where allowNone. */
 export function plateErrors(value, path = 'plate', { allowNone = false, allowCycle = false } = {}) {
   if (value === undefined || value === null) return [];
   if (typeof value === 'string') {
     if (allowNone && value === 'none') return [];
-    if (value === 'image') return [`${path}: an image plate needs its file: {kind: "image", params: {src: "assets/…"}}`];
+    if (FILE_PLATE[value]) return [`${path}: ${value === 'image' ? 'an' : 'a'} ${value} plate needs its file: {kind: "${value}", params: {src: "assets/…"}}`];
     return PLATE_KINDS.includes(value) ? [] : [`${path} must be one of ${PLATE_KINDS.join(', ')}${allowNone ? ', none' : ''} (or {kind, params?})`];
   }
   if (!isObject(value)) return [`${path} must be a plate kind or {kind, params?}`];
@@ -113,15 +147,18 @@ export function plateErrors(value, path = 'plate', { allowNone = false, allowCyc
   if (!PLATE_KINDS.includes(value.kind)) { errors.push(`${path}.kind must be one of ${PLATE_KINDS.join(', ')}`); return errors; }
   if (value.cycle !== undefined) errors.push(...cycleErrors(value.cycle, `${path}.cycle`));
   const own = PLATE_KIND_PARAMS[value.kind] ?? {};
-  if (value.kind === 'image' && !isObject(value.params)) return [...errors, `${path}.params.src is required for an image plate (a still under the project, e.g. assets/backdrop.jpg)`];
+  const srcRequired = `${path}.params.src is required for ${value.kind === 'image' ? 'an' : 'a'} ${value.kind} plate (${FILE_PLATE[value.kind]})`;
+  if (FILE_PLATE[value.kind] && !isObject(value.params)) return [...errors, srcRequired];
   if (value.params === undefined) return errors;
   if (!isObject(value.params)) return [...errors, `${path}.params must be an object`];
-  if (value.kind === 'image' && value.params.src === undefined) errors.push(`${path}.params.src is required for an image plate (a still under the project, e.g. assets/backdrop.jpg)`);
+  if (FILE_PLATE[value.kind] && value.params.src === undefined) errors.push(srcRequired);
   for (const [key, given] of Object.entries(value.params)) {
     if (key === 'tint') { if (!PLATE_TINTS.includes(given)) errors.push(`${path}.params.tint must be one of ${PLATE_TINTS.join(', ')}`); continue; }
     const spec = PLATE_PARAMS[key] ?? own[key];
     if (!spec) { errors.push(`${path}.params.${key} is not supported (allowed: ${[...Object.keys(PLATE_PARAMS), ...Object.keys(own), 'tint'].join(', ')})`); continue; }
-    if (spec.path) { if (!plateImageSrc(given)) errors.push(`${path}.params.${key} must be a project-relative .png, .jpg, .webp or .avif path (no URL, no leading /, no ..)`); continue; }
+    if (spec.path === 'image') { if (!plateImageSrc(given)) errors.push(`${path}.params.${key} must be a project-relative .png, .jpg, .webp or .avif path (no URL, no leading /, no ..)`); continue; }
+    if (spec.path === 'video') { if (!plateVideoSrc(given)) errors.push(`${path}.params.${key} must be a project-relative .mp4, .webm or .mov path (no URL, no leading /, no ..)`); continue; }
+    if (spec.values) { if (!spec.values.includes(given)) errors.push(`${path}.params.${key} must be one of ${spec.values.join(', ')}`); continue; }
     if (!(typeof given === 'number' && given >= spec.min && given <= spec.max)) errors.push(`${path}.params.${key} must be a number from ${spec.min} to ${spec.max}`);
   }
   return errors;
@@ -160,6 +197,7 @@ export function resolvePlate(value) {
   const params = {};
   for (const [key, entry] of Object.entries(PLATE_PARAMS)) params[key] = spec.params?.[key] ?? entry.default;
   for (const [key, entry] of Object.entries(PLATE_KIND_PARAMS[spec.kind] ?? {})) params[key] = spec.params?.[key] ?? entry.default;
+  if (spec.kind === 'video') for (const key of ['blur', 'dim']) params[key] ??= VIDEO_TREATMENTS[params.treatment][key];
   params.tint = spec.params?.tint ?? PLATE_DEFAULT_TINT[spec.kind];
   return { kind: spec.kind, params };
 }
@@ -218,7 +256,7 @@ export function scenePlateSpec(story, scene) {
     // The rotation: the cycle's own plates (a kind takes the story's params),
     // or every dark kind; it starts from the story's plate when that is in it,
     // else the story's plate goes first.
-    const list = (Array.isArray(cycle.plates) ? cycle.plates : ROTATION_KINDS).map((entry) => (typeof entry === 'string' && entry !== 'image' ? rotated(storyPlate, story, entry) : resolvePlate(entry))).filter((entry) => entry && entry !== 'none');
+    const list = (Array.isArray(cycle.plates) ? cycle.plates : ROTATION_KINDS).map((entry) => (typeof entry === 'string' && !FILE_PLATE[entry] ? rotated(storyPlate, story, entry) : resolvePlate(entry))).filter((entry) => entry && entry !== 'none');
     if (!list.length) return storyPlate;
     const at = list.findIndex((entry) => entry.kind === storyPlate.kind);
     return at >= 0 ? list[(at + step) % list.length] : [storyPlate, ...list][step % (list.length + 1)];
@@ -350,6 +388,7 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
 
   if (kind === 'wash') wash(ctx);
   else if (kind === 'image') image(ctx);
+  else if (kind === 'video') video(ctx);
   else {
     // The atmosphere: a broad lift of the tint behind the subject, and a vignette.
     const glowAt = { 'hex-shell': [0.62, 0.42], silk: [0.5, 0.45], strands: [0.55, 0.5], bokeh: [0.5, 0.55], starfield: [0.42, 0.4], smoke: [0.5, 0.5] }[kind];
@@ -367,7 +406,7 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
   // Vignette: the edges sink toward black, which only deepens a dark plate
   // (a wash keeps most of its light).
   layers.push(vignetteLayer(W, H, lay('#000000', kind === 'wash' ? 0.25 : 0.55)));
-  return { kind, plate: true, level, params, colors, layers, tones: [...tones], frame: F, ...(kind === 'image' ? { src: params.src } : {}) };
+  return { kind, plate: true, level, params: ctx.params, colors, layers, tones: [...tones], frame: F, ...(FILE_PLATE[kind] ? { src: params.src } : {}), ...(ctx.contrast ? { contrast: ctx.contrast } : {}) };
 }
 
 const withA = (hex, alpha) => `${hex}${Math.max(0, Math.min(255, Math.round(alpha * 255))).toString(16).padStart(2, '0')}`;
@@ -635,6 +674,63 @@ function image({ u, colors, params, travel, period, layers, tones, over }) {
   layers.push({ id: 'image', box: b, src: params.src, svg, style: {}, axes: Object.fromEntries(Object.entries(axes).filter(([, axis]) => axis)) });
   layers.push({ id: 'dim', box: over(0), svg: null, style: { background: colors.bg, opacity: round(params.dim, 3) }, axes: {} });
   for (const ink of ['#ffffff', '#000000']) tones.add(mix(ink, colors.bg, params.dim));
+}
+
+/**
+ * The overlay a video plate needs → {dim, ratio, ok}: the least alpha, from
+ * `want` up, at which paper text keeps VIDEO_PLATE_CONTRAST under each
+ * overlay colour on a pixel at `peak` (0–1 grey, the footage's brightest once
+ * blurred) and on black (the worst pixel for dark paper on a light palette),
+ * capped at VIDEO_DIM_MAX; ratio is paper's worst contrast there and ok
+ * whether it meets the floor.
+ */
+export function videoPlateFloor({ paper, overlays, peak = 1, want = 0 }) {
+  const v = Math.round(Math.max(0, Math.min(1, peak)) * 255).toString(16).padStart(2, '0');
+  const pixels = [`#${v}${v}${v}`, '#000000'];
+  const worst = (alpha) => Math.min(...overlays.flatMap((color) => pixels.map((pixel) => contrast(paper, mix(pixel, color, alpha)))));
+  let dim = Math.max(0, Math.min(VIDEO_DIM_MAX, want));
+  if (worst(dim) < VIDEO_PLATE_CONTRAST) {
+    let lo = dim, hi = VIDEO_DIM_MAX;
+    if (worst(hi) >= VIDEO_PLATE_CONTRAST) {
+      for (let i = 0; i < 24; i += 1) { const m = (lo + hi) / 2; if (worst(m) >= VIDEO_PLATE_CONTRAST) hi = m; else lo = m; }
+    }
+    dim = hi;
+  }
+  const ratio = round(worst(dim), 2);
+  return { dim: round(Math.ceil(dim * 1000) / 1000, 3), ratio, ok: ratio >= VIDEO_PLATE_CONTRAST };
+}
+
+// Video: a clip from the project, full-bleed (cover) past every edge by twice
+// its blur, with the image plate's slow push and drift, playing from
+// params.start where the plate first shows (each renderer times it). Over it
+// the treatment's overlay: bg (dim, blur) or a gradient from the primary into
+// bg (tint), at the dim videoPlateFloor sets. Its tones are the black and the
+// peak pixel under each overlay colour.
+function video(ctx) {
+  const { u, colors, params, travel, period, layers, tones, over } = ctx;
+  const blur = params.blur * u;
+  const b = over(70 * u + 2 * blur);
+  const scale = period(40) < Infinity ? { kind: 'wave', center: 1.03, amp: 0.025, period: round(period(40), 4), phase: 0 } : undefined;
+  const axes = { x: wave(travel(20 * u), period(46), 1), y: wave(travel(10 * u), period(37), 0), scale };
+  layers.push({ id: 'video', box: b, src: params.src, video: { src: params.src, start: params.start }, svg: null, style: blur > 0.25 ? { filter: `blur(${round(blur)}px)` } : {}, axes: Object.fromEntries(Object.entries(axes).filter(([, axis]) => axis)) });
+  const tint = params.treatment === 'tint' ? tintOver(colors, params.tint === 'neutral' ? colors.paper : colors[params.tint], params.peak) : null;
+  const overlays = tint ? [tint, colors.bg] : [colors.bg];
+  const floor = videoPlateFloor({ paper: colors.paper, overlays, peak: params.peak, want: params.dim });
+  ctx.params = { ...params, dim: floor.dim };
+  ctx.contrast = { floor: VIDEO_PLATE_CONTRAST, ratio: floor.ratio, ok: floor.ok, raised: floor.dim > params.dim };
+  const background = tint ? `linear-gradient(160deg, ${tint} 0%, ${mix(tint, colors.bg, 0.5)} 45%, ${colors.bg} 100%)` : colors.bg;
+  layers.push({ id: 'dim', box: over(0), svg: null, style: { background, opacity: floor.dim }, axes: {} });
+  const v = Math.round(params.peak * 255).toString(16).padStart(2, '0');
+  for (const color of overlays) for (const ink of [`#${v}${v}${v}`, '#000000']) tones.add(mix(ink, color, floor.dim));
+}
+
+// The tint treatment's lead colour: bg mixed toward the light by up to 0.55,
+// held back until some overlay strength meets the floor on any footage (a
+// mid-tone primary under dark paper never would, however strong).
+function tintOver(colors, light, peak) {
+  let k = 0.55;
+  while (k > 0.05 && !videoPlateFloor({ paper: colors.paper, overlays: [mix(colors.bg, light, k), colors.bg], peak, want: VIDEO_DIM_MAX }).ok) k -= 0.05;
+  return mix(colors.bg, light, k);
 }
 
 // A grey of the same lightness (Rec. 709 luma).

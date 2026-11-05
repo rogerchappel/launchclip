@@ -265,6 +265,21 @@ a `null` answer still becomes a motion-graphics scene. Without an asset
 provider, `--min-shots` is ignored with a warning. `make --json` reports
 `shot_counts: {min, requested, answered}` beside `shots`.
 
+`--card-backdrops footage` (or `cardBackdrops: "footage"` in the make options)
+puts full-screen cards on the app's footage instead of a stock plate. The
+planner may set `scenes[i].backdrop` to `{kind: "shot", shows, treatment?:
+"dim" | "blur" | "tint"}`, and the card scenes it leaves on a stock plate (at
+least 2 s long, up to 6 in all, longest first) ask for one too. Each request
+is asked after every other shot, with `slot: "backdrop"`, `role:
+"background"`, `motion: "low"`, `type: "video"` and `avoid: [{scene_id, src,
+asset_id?}]` (the shots on the scenes either side, which the answer must not
+be). The clip is measured with ffmpeg (its brightest level and how much it
+moves) and becomes a `video` plate whose dim keeps the card's text at 4.5:1;
+a still becomes an `image` plate. No answer, or the shot beside it, leaves the
+card on the stock plate with a warning; busy footage is placed with one.
+`make --json` reports `card_backdrops: {mode, placed, kept_stock}`. Without an
+asset provider it is ignored with a warning.
+
 ### `renderer` and `notice`
 
 `renderer: (name) → renderer adapter` replaces the bundled HyperFrames and

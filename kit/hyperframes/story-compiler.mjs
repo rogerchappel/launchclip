@@ -162,7 +162,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const drawsBackground = (scene) => Boolean(plateFor(scene)) || sceneBackground(story, scene);
   const geometry = profileGeometry({ width: W, height: H });
   const backdropLayer = (key, from, to, backdrop) => {
-    const html = backdrop.layers.map((layer) => `<div id="lc-bg-${key}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`).join('');
+    const html = backdrop.layers.map((layer) => plateLayerHtml(layer, `lc-bg-${key}-${layer.id}`, from, to, allocate)).join('');
     const lines = backdrop.layers.flatMap((layer) => layerTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-bg-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
     const mask = Object.entries(fieldStyle(backdrop)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
     return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true"${mask ? ` style="${mask}"` : ''}>${html}</div>`, motion: lines };
@@ -221,7 +221,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // (in #lc-bg), in place of the depth layer's glows, where a shot has none.
   const backdrops = plan?.mode === 'world' ? worldBackdrops(story, plan, windows) : null;
   const covered = Boolean(backdrops?.segments.every((segment) => segment.plan));
-  const stack = backdrops ? worldBackdropStack(backdrops, bg) : null;
+  const stack = backdrops ? worldBackdropStack(backdrops, bg, allocate) : null;
   if (stack) cameraMotion.push(...stack.motion);
   const worldBackdrop = plan?.mode === 'world' && backdrop && !covered ? backdropLayer('world', 0, D, backdrop) : null;
   if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
@@ -665,13 +665,13 @@ const CAMERA_SELECTORS = Object.freeze({ pan: '#lc-cam-pan', zoom: '#lc-cam-zoom
 // layers inside a mover (#lc-wb-<n>-move, the ops' x / y) inside the segment
 // (#lc-wb-<n>, the ops' opacity as autoAlpha, so a hidden segment is not
 // painted), with one fixed vignette over the stack.
-function worldBackdropStack(backdrops, bg) {
+function worldBackdropStack(backdrops, bg, allocate) {
   const html = [], motion = [];
   for (const segment of backdrops.segments) {
     const id = `lc-wb-${segment.index}`;
     const c = segment.canvas;
     const mask = segment.mask ? `;-webkit-mask-image:${segment.mask};mask-image:${segment.mask};-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat` : '';
-    const layers = segment.layers.map((layer) => `<div id="${id}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, segment.from)}">${layerSvg(layer) ?? ''}</div>`).join('');
+    const layers = segment.layers.map((layer) => plateLayerHtml(layer, `${id}-${layer.id}`, segment.from, segment.to, allocate)).join('');
     const canvas = segment.plan ? `<div class="lc-wb-canvas" style="left:${num(c.x)}px;top:${num(c.y)}px;width:${num(c.width)}px;height:${num(c.height)}px;background:${bg}${mask}">${layers}</div>` : '';
     html.push(`<div id="${id}" class="lc-wb" data-launchclip-backdrop="${attr(segment.kind)}" style="${segment.index === 0 ? '' : 'opacity:0;visibility:hidden'}"><div id="${id}-move" class="lc-wb-move">${canvas}</div></div>`);
     for (const layer of segment.layers) {
@@ -788,6 +788,17 @@ function boundaryAttrs(boundary) {
   if (boundary.from_id) out += ` data-launchclip-transition-from="${attr(boundary.from_id)}"`;
   if (boundary.to_id) out += ` data-launchclip-transition-to="${attr(boundary.to_id)}"`;
   return out;
+}
+
+// One background or plate layer: its style and SVG, or, for a video plate
+// (kit/core/plates.mjs), a muted timed <video> of its clip, cover-cropped in
+// the layer's box and playing from video.start at `from` until `to`, on a
+// track of its own. HyperFrames seeks it where it sits: no wrapper above it
+// is timed. Matches the Remotion PlateLayer.
+function plateLayerHtml(layer, id, from, to, allocate) {
+  if (!layer.video) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`;
+  const timing = `data-start="${num(from)}" data-duration="${num(Math.max(0, to - from))}" data-media-start="${num(Number(layer.video.start) || 0)}" data-track-index="${allocate(from, to)}"`;
+  return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)};overflow:hidden"><video id="${id}-clip" class="clip lc-plate-video" src="${attr(layer.video.src)}" ${timing} muted playsinline style="width:100%;height:100%;object-fit:cover"></video></div>`;
 }
 
 // <video>/<audio> leave the scene layer for the root, where no layer
