@@ -30,7 +30,7 @@ import { applyStyle } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
-import { minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
+import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { fitTimings } from "./timing_fit.js";
 import { fitDurations } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
@@ -138,7 +138,12 @@ export async function planStoryboard(options = {}) {
   if (assets && askedMin > shotLimit) shotWarnings.push(`shots: minShots ${askedMin} is more than a plan may ask for; using ${shotLimit}`);
   if (!assets && askedMin > 0) shotWarnings.push(`shots: minShots ${askedMin} ignored: there is no asset provider to ask for shots`);
   const clipLed = clipLedPlan({ lane, ...densityDial(options.density, style), clips: Array.isArray(options.clips) ? options.clips : [], provider: Boolean(assets), profile });
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  // cardBackdrops "footage" (make --card-backdrops): with a provider, the
+  // model may put a full-screen card on a library clip, and the card scenes
+  // it leaves on a stock plate ask for one too (src/asset_provider.js).
+  const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
+  if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -190,12 +195,13 @@ export async function planStoryboard(options = {}) {
       let shotMedia = [];
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
+        if (footageBackdrops) pinned.storyboard = cardBackdrops(pinned.storyboard, { words: wordList, brief }).storyboard;
         const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
         pinned.storyboard = found.storyboard;
         shots = found.shots;
         shotErrors = found.errors.map((entry) => `assets: ${entry}`);
         if (found.warnings?.length) pinned.warnings = [...pinned.warnings, ...found.warnings.map((entry) => `assets: ${entry}`)];
-        shotCounts = { requested, answered: found.shots.length, shots: found.shots };
+        shotCounts = { requested, answered: found.shots.filter((shot) => shot.slot !== "backdrop").length, shots: found.shots };
         shotMedia = found.media ?? [];
       }
       // Notes' usable windows (the supplied media's, and the shots' the app

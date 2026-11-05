@@ -868,9 +868,11 @@ async function stageStoryboard(ctx) {
   const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
+  const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "off").toLowerCase() === "footage" ? "footage" : null;
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
+  if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
   if (hasProvider && Number(options.minShots) > shotLimit) report.warnings.push(`--min-shots ${options.minShots} is more than a plan may ask for; using ${shotLimit}`);
   const storyFile = path.join(project, MAKE_PATHS.story);
   const directionFile = path.join(project, MAKE_PATHS.direction);
@@ -925,7 +927,7 @@ async function stageStoryboard(ctx) {
     ...(lane !== "footage-led" ? { clips: manifest.filter((item) => item.clip) } : {}),
     ...(options.density != null ? { density: Number(options.density) } : {}),
     ...(history?.prompt ? { history: history.prompt } : {}),
-    ...(assets ? { assets, project: ctx.project, minShots } : {}),
+    ...(assets ? { assets, project: ctx.project, minShots, ...(cardBackdrops ? { cardBackdrops } : {}) } : {}),
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
@@ -936,7 +938,9 @@ async function stageStoryboard(ctx) {
   if (assets) report.shots = plan.shots ?? [];
   // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
   if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
-  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ")) report.warnings.push(warning);
+  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ")) report.warnings.push(warning);
+  // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
+  if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };
   for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
@@ -1040,7 +1044,10 @@ export function worldLook(story, prompt = "") {
   if (story.camera?.mode !== "world") return added;
   const base = (story.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0);
   const drawn = Boolean(story.world) || base.some((scene) => scene?.module === "world");
-  const ownPlates = story.plate || (story.chapters ?? []).some((chapter) => chapter?.plate) || base.some((scene) => scene?.backdrop || scene?.plate);
+  // A footage backdrop (--card-backdrops) is one card's, not the story's look:
+  // the other shots still get the plate cycle.
+  const footage = (plate) => ["video", "image"].includes(plate?.kind);
+  const ownPlates = story.plate || (story.chapters ?? []).some((chapter) => chapter?.plate) || base.some((scene) => (scene?.backdrop && !footage(scene.backdrop)) || scene?.plate);
   if (!drawn && !ownPlates && base.length > 1) {
     const duration = Number(story.format?.duration) || base.reduce((end, scene) => Math.max(end, Number(scene.end) || 0), 0);
     const every = Math.max(1, Math.min(50, Math.round(PLATE_SECONDS / Math.max(1, duration / base.length))));

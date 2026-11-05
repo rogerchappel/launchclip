@@ -11,6 +11,8 @@ import { researchMode } from "../research/make.js";
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
 export const MAKE_QUALITIES = Object.freeze(["draft", "high"]);
+// --card-backdrops: footage puts full-screen cards on the asset provider's clips (src/asset_provider.js).
+export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
 
 /** [flag, {boolean?, setting?}] in usage order. */
 export const MAKE_FLAGS = Object.freeze([
@@ -50,6 +52,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["asset-provider-cmd", {}],
   // The fewest shots the plan must ask the asset provider for (0, the default, leaves them optional).
   ["min-shots", {}],
+  // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
+  ["card-backdrops", {}],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
   ["capture-cmd", {}],
   ["capture-concurrency", {}],
@@ -86,6 +90,7 @@ export function makeOptionsFromFlags(flags = {}) {
     voiceId: flags["voice-id"],
     assetProviderCmd: flags["asset-provider-cmd"],
     minShots: flags["min-shots"],
+    cardBackdrops: flags["card-backdrops"],
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
@@ -139,6 +144,7 @@ export function validateMakeOptions(options = {}) {
   if (options.density != null && !(options.density !== true && options.density !== "" && Number(options.density) >= 0 && Number(options.density) <= 1)) throw new Error(`--density must be a number from 0 to 1; got ${options.density}`);
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
+  if (options.cardBackdrops != null && !CARD_BACKDROPS.includes(String(options.cardBackdrops).toLowerCase())) throw new Error(`--card-backdrops must be ${CARD_BACKDROPS.join(" or ")}; got ${options.cardBackdrops}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
