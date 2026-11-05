@@ -139,6 +139,16 @@
 
 ### Fixed
 
+- The brand frame's logo reads at a glance. A logo with no label is now a
+  logo mark: the logo alone at a visible size (a 22% × 6.5% box) in the
+  canvas corner, 30 px in, instead of a 40 px icon inset in the safe zone with
+  the story title beside it. A dark, mixed or unmeasured logo sits on a white
+  rounded plate so it never disappears on a dark card or footage; a light one
+  gets a dark plate unless every backdrop is dark (`brand_frame.kicker.plate`
+  overrides). The logo's tone and aspect are measured from the file
+  (`frame.logo_mark`), and modules keep clear of the mark. `style generate
+  --logo` no longer adds the brand name beside the logo.
+
 - Evergreen scripts say something again. When research sources confirm
   nothing on an evergreen topic ("3 common deck materials"), the script pass
   gets the general-knowledge notes instead of "state only facts listed here"
