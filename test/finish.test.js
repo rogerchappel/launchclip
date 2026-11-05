@@ -289,7 +289,8 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(manifest.music.source, "synth");
     assert.ok(existsSync(manifest.sfx_manifest));
     const sfx = JSON.parse(await readFile(path.join(project, PATHS.sfxManifest), "utf8"));
-    assert.deepEqual(sfx.cues.map((cue) => [cue.cue, cue.at_seconds, cue.shot_id]), [["tick", 1.72, "s1"], ["tick", 2.04, "s2"]]);
+    // The s2 tick (2.04 s) starts 0.32 s after s1's: the cue pace keeps one.
+    assert.deepEqual(sfx.cues.map((cue) => [cue.cue, cue.at_seconds, cue.shot_id]), [["tick", 1.72, "s1"]]);
     assert.equal(adapters.lastMix.musicVolume, 0.3);
     assert.equal(adapters.lastBed.bpm, 96);
     assert.equal(adapters.lastEvidence.renderer, "remotion");

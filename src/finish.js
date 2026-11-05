@@ -56,9 +56,10 @@ import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { guardCueTimbre } from "./sfx/timbre.js";
 import { structureGate } from "./skeletons.js";
-import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, userLibraryDir } from "./sfx/library.js";
+import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
+import { clipShare } from "@launchclip/core/clip-led.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, parseMusicVolume, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
@@ -297,10 +298,91 @@ export function bindCues(story, { models, palette = false } = {}) {
     // A riser lands on its moment; library risers are re-anchored on their measured peak.
     if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
     if (kit.cue === "tally" && tallyLead < TALLY_LANDS_AT) cue.offset = round3(TALLY_LANDS_AT - tallyLead);
+    if (entry.explicit) cue.explicit = true;
     cues.push(cue);
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
   return { cues, warnings };
+}
+
+// Cue pacing. Most catalogue modules tag their title and emphasis events
+// "whoosh", so a busy edit binds a bright sweep to nearly every moment. The
+// pace pass keeps the sound design sparse: at most `per10` cues in any 10 s
+// window and starts at least `gap` s apart (both from the density, cuePace),
+// and no family group twice running. A repeat swaps to a quieter family that
+// fits the moment, or drops. Typing sounds (keystrokes, clicks) are a
+// texture, not accents, so they pass untouched; so does a hit with an
+// explicit cue (the author asked for that sound there), though it still
+// fills its window.
+const PACE_EXEMPT = new Set(["keystroke", "keystroke-space", "keystroke-enter", "click"]);
+// Families that read as the same sound: bright noise and air sweeps; weight.
+const CUE_GROUPS = Object.freeze({ whoosh: "air", shimmer: "air", swipe: "air", slide: "air", sparkle: "air", riser: "air", impact: "weight", subdrop: "weight", thud: "weight" });
+// A group may not sound again within this many seconds (start to start).
+const GROUP_GAPS = Object.freeze({ air: 4, weight: 8 });
+// What a repeated cue becomes, in order of preference (the pick among the
+// ones that fit is hashed, so it is deterministic). An impact or subdrop only
+// replaces a narration hit, which marks a real emphasis.
+const CUE_SWAPS = Object.freeze({
+  whoosh: ["pop", "tick", "impact"], shimmer: ["pop", "tick"], swipe: ["pop", "tick"], slide: ["tick", "pop"], sparkle: ["tick", "pop"],
+  pop: ["tick"], tick: ["pop"], impact: ["pop", "tick"], subdrop: ["pop"], riser: []
+});
+const groupOf = (cue) => CUE_GROUPS[cue] ?? cue;
+
+/** {per10, gap} for a density: low 2 cues per 10 s, 2.6 s apart; normal 3, 1.76 s; high 5, 0.8 s. */
+export function cuePace(density = "normal") {
+  const value = densityAmount(density);
+  return { per10: Math.max(1, Math.round(1 + 4 * value)), gap: round3(3.2 - 2.4 * value) };
+}
+
+/**
+ * Pace bound cues for a density (see "Cue pacing" above). Cues are kept by
+ * priority (explicit hits, hits, module events, transitions; earlier first),
+ * then walked in time order to break same-group runs. Deterministic for a
+ * story id. A swapped cue carries swapped_from.
+ */
+export function paceCues(cues, density = "normal", storyId = "") {
+  const { per10, gap } = cuePace(density);
+  const rank = (cue) => (cue.explicit ? 0 : cue.source === "hit" ? 1 : cue.source === "module-event" ? 2 : 3);
+  const kept = [];
+  for (const cue of cues.filter((entry) => !PACE_EXEMPT.has(entry.cue)).sort((a, b) => rank(a) - rank(b) || a.at - b.at)) {
+    if (!cue.explicit) {
+      if (kept.some((other) => Math.abs(other.at - cue.at) < gap)) continue;
+      // No 10 s window holding this cue may go over per10.
+      const times = [...kept.map((other) => other.at), cue.at];
+      if (times.some((start) => start <= cue.at && cue.at < start + 10 && times.filter((at) => at >= start && at < start + 10).length > per10)) continue;
+    }
+    kept.push(cue);
+  }
+  kept.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
+  const out = [];
+  for (const cue of kept) {
+    const clashes = (family) => {
+      const group = groupOf(family);
+      const last = out.findLast((other) => groupOf(other.cue) === group);
+      return Boolean(last) && (last === out[out.length - 1] || cue.at - last.at < (GROUP_GAPS[group] ?? 0));
+    };
+    if (cue.explicit || !clashes(cue.cue)) {
+      out.push(cue);
+      continue;
+    }
+    const options = (CUE_SWAPS[cue.cue] ?? []).filter((family) => !clashes(family) && (groupOf(family) !== "weight" || cue.source === "hit"));
+    if (!options.length) continue;
+    const family = options[Math.floor(unitHash(`pace|${eventKey(storyId, cue)}`) * options.length)];
+    const gain = CUE_LEVELS[cue.cue] > 0 ? Math.min(1, cue.volume / CUE_LEVELS[cue.cue]) : 1;
+    out.push({ ...cue, cue: family, volume: round3(CUE_LEVELS[family] * gain), swapped_from: cue.cue });
+  }
+  return [...out, ...cues.filter((cue) => PACE_EXEMPT.has(cue.cue))].sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
+}
+
+/**
+ * The SFX density when neither --sfx-density, audio.sfx_density nor the
+ * style's sound.sfx_density sets one: "low" for a footage-led story or one
+ * whose runtime is mostly full-frame clips (the footage carries those, and
+ * the sound design should stay out of its way), else "normal".
+ */
+export function defaultSfxDensity(story) {
+  if (story?.lane === "footage-led") return "low";
+  return clipShare(story) >= 0.4 ? "low" : "normal";
 }
 
 /**
@@ -1010,13 +1092,14 @@ const STAGES = [
       const music = musicPlanSpec(choice);
       // --music-volume sets the bed's gain over audio.music.volume and the energy default.
       if (ctx.options.musicVolume != null) music.volume = parseMusicVolume(ctx.options.musicVolume);
-      // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density).
-      const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density ?? "normal").toLowerCase();
+      // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density);
+      // without either, a footage-led or clip-led story defaults to low.
+      const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density ?? defaultSfxDensity(ctx.resolved)).toLowerCase();
       try { densityAmount(density); } catch { throw new Error(`--sfx-density must be low, normal, high or a number from 0 to 1; got ${ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density}`); }
       const storyId = String(ctx.story.id ?? ctx.story.title ?? path.basename(ctx.project));
       const models = sceneModels(ctx.resolved);
       const bound = sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
-      bound.cues = applyDensity(bound.cues, density, storyId);
+      bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
@@ -1114,7 +1197,7 @@ const STAGES = [
       let typingPlan = plan.typing;
       if (synced?.changed && plan.sfxOn) {
         const models = sceneModels(ctx.resolved);
-        boundCues = applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette) }).cues, plan.density, plan.storyId);
+        boundCues = paceCues(applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette) }).cues, plan.density, plan.storyId), plan.density, plan.storyId);
         typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
       }
       const mixFile = path.join(ctx.project, PATHS.mix);
