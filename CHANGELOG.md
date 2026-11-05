@@ -139,6 +139,19 @@
 
 ### Fixed
 
+- Evergreen scripts say something again. When research sources confirm
+  nothing on an evergreen topic ("3 common deck materials"), the script pass
+  gets the general-knowledge notes instead of "state only facts listed here"
+  with an empty list, which named the options and explained none. An
+  evergreen topic with sourced facts may add well-established general
+  knowledge; stories (quotes, dated claims, news only an aggregator carried)
+  stay strict. The writer must say one usable thing about every option it
+  names, and a new script check, `options-unexplained`, sends a script that
+  lists three or more options and never comes back to them through the
+  repair pass. Research also skips brand voice, copy brief, guardrails and
+  brand facts notes: they direct the writer or are the brand's own account,
+  and searching them looked up "carousel/image" as a model.
+
 - Text no longer collides. The caption-band check counts a card's enter,
   exit and the time it is held under the next transition, reports every
   clash and grows the band to the preset's tallest line, and finish (and the

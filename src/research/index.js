@@ -165,18 +165,29 @@ export async function runResearch(input, options = {}, adapters = {}) {
 
 /**
  * Lines for a script pass: what the sources state (with ids to cite) and
- * which brief claims to cut or soften. The writer may only state facts from
- * the first two lists.
+ * which brief claims to cut or soften. For a story (quotes, dates, named
+ * models) the writer may only state facts from the first two lists; an
+ * evergreen topic may add well-established general knowledge.
  */
 export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
-  // Nothing could be fetched (offline, no web search key, every source down):
-  // research checked nothing, so "state only facts listed here" would leave a
-  // general topic ("3 common deck materials") with nothing to say. The script
-  // keeps to well-established general knowledge instead, and the audit still
-  // holds the research gate at pending for review.
-  if (!Number(ledger?.summary?.sources_checked)) return unresearchedNotes(ledger);
-  const lines = ["## Research (launchclip research; state only facts listed here)", "", ...SOURCE_RULES.map((rule) => `- ${rule}`)];
-  const verified = ledger.claims.filter((claim) => claim.status === "verified");
+  const claims = ledger?.claims ?? [];
+  const verified = claims.filter((claim) => claim.status === "verified");
+  const excerpts = ledger?.excerpts ?? (snapshotsOrNull ? keyExcerpts(snapshotsOrNull, options) : []);
+  // An evergreen topic (how a material, method or choice works) needs no
+  // primary source for its general knowledge; the strict rules are for
+  // stories: quotes, dated claims and news about a company or product.
+  const evergreen = !claims.some(isStoryClaim);
+  // Nothing fetched (offline, no web search key, every source down), or an
+  // evergreen topic whose sources confirm nothing: "state only facts listed
+  // here" with an empty list leaves "3 common deck materials" with nothing to
+  // say, and the script names the options and explains none. The script
+  // keeps to well-established general knowledge instead; the audit still
+  // holds the research gate at pending for review. A story with no primary
+  // source stays strict, so its "drop these stories" list still reaches it.
+  if (!Number(ledger?.summary?.sources_checked) || (evergreen && !verified.length && !excerpts.length)) return unresearchedNotes(ledger);
+  const lines = evergreen
+    ? ["## Research (launchclip research; state these facts as given, anything else only as well-established general knowledge)", "", ...SOURCE_RULES.slice(0, 2).map((rule) => `- ${rule}`), ...GENERAL_KNOWLEDGE_RULES.map((rule) => `- ${rule}`)]
+    : ["## Research (launchclip research; state only facts listed here)", "", ...SOURCE_RULES.map((rule) => `- ${rule}`)];
   if (verified.length) {
     lines.push("", "Verified claims:");
     for (const claim of verified) {
@@ -184,17 +195,16 @@ export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
       lines.push(`- [${claim.id}] ${claim.text} (source: ${source?.publisher ?? source?.url})`);
     }
   }
-  const excerpts = ledger.excerpts ?? (snapshotsOrNull ? keyExcerpts(snapshotsOrNull, options) : []);
   if (excerpts.length) {
     lines.push("", "Facts from primary sources:");
     for (const excerpt of excerpts) lines.push(`- ${excerpt.text} (source: ${excerpt.publisher ?? excerpt.url})`);
   }
-  const dropped = ledger.claims.filter((claim) => claim.status !== "verified" && claim.no_primary_source);
+  const dropped = claims.filter((claim) => claim.status !== "verified" && claim.no_primary_source);
   if (dropped.length) {
     lines.push("", "Drop these stories: no primary source states them, only aggregators or rewrites:");
     for (const claim of dropped) lines.push(`- [${claim.id}] ${claim.text}`);
   }
-  const flagged = ledger.claims.filter((claim) => claim.status !== "verified" && !claim.no_primary_source);
+  const flagged = claims.filter((claim) => claim.status !== "verified" && !claim.no_primary_source);
   if (flagged.length) {
     lines.push("", "Do not state these as fact (cut, soften or attribute to the company):");
     for (const claim of flagged) lines.push(`- [${claim.status}] ${claim.text}: ${claim.flag?.message ?? ""}`);
@@ -202,13 +212,31 @@ export function researchNotes(ledger, snapshotsOrNull = null, options = {}) {
   return lines.join("\n");
 }
 
-/** Notes when research fetched no source: general knowledge only, nothing specific unchecked. */
+// General knowledge the script may use without a source, and must use: an
+// option named and never explained teaches the viewer nothing.
+export const GENERAL_KNOWLEDGE_RULES = Object.freeze([
+  "Write from well-established, widely known facts about the topic: name the common options, what each is and how they differ.",
+  "For every option, step or item the script names, say at least one concrete, generally true thing about it the viewer can use: what it is good at, its trade-off, the upkeep or care it needs, where it suits.",
+  "Do not state unchecked specifics: exact numbers, prices, dates, ratings, quotes, or claims about a named company, product or person that the brief does not state itself."
+]);
+
+// A claim the strict source rules exist for: a quote, a date, or news only an
+// aggregator carried. Not a model-looking name: the entity pass reads any
+// "a/b" in a brief as a model id ("carousel/image"), so a deck-materials
+// brief would read as a model launch.
+function isStoryClaim(claim) {
+  return claim.kind === "quote" || Boolean(claim.dates?.length) || Boolean(claim.no_primary_source);
+}
+
+/** Notes when research confirmed nothing: general knowledge only, nothing specific unchecked. */
 function unresearchedNotes(ledger) {
+  const checked = Number(ledger?.summary?.sources_checked) || 0;
   const lines = [
-    "## Research (launchclip research could not fetch any source; nothing here is verified)",
+    checked
+      ? "## Research (launchclip research confirmed nothing from its sources; nothing here is verified)"
+      : "## Research (launchclip research could not fetch any source; nothing here is verified)",
     "",
-    "- Write from well-established, widely known facts about the topic: name the common options, what each is and how they differ in general terms.",
-    "- Do not state unchecked specifics: exact numbers, prices, dates, ratings, quotes, or claims about a named company, product or person that the brief does not state itself.",
+    ...GENERAL_KNOWLEDGE_RULES.map((rule) => `- ${rule}`),
     "- Never write about the research itself (no \"not verified\", \"names not supplied\" or \"on hold\"): the viewer never sees it."
   ];
   const specific = (ledger?.claims ?? []).filter((claim) => claim.kind === "quote" || claim.values?.length || claim.dates?.length);

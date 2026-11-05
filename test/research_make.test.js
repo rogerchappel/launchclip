@@ -88,3 +88,11 @@ test("research skips the brief's direction sections: they tell the writer how, t
   assert.equal(kept, "3 common deck materials in Australia\n\n## Facts\nSpotted gum is a common hardwood decking timber.");
   assert.equal(withoutDirection("A brief with no headings."), "A brief with no headings.");
 });
+
+test("research skips brand voice, copy brief and brand facts notes", async () => {
+  const { withoutDirection } = await import("../src/research/make.js");
+  const voice = "# Brand voice and copy brief\n\n## Copy brief\nUse this for script, on-screen text, carousel/image copy.\n\n## Brand guardrails\n- CTA: visit the site";
+  assert.equal(withoutDirection(voice), "");
+  assert.equal(withoutDirection("# Brand facts\n\nAcme Decks builds in spotted gum."), "");
+  assert.equal(withoutDirection("# Notes\nSpotted gum is a hardwood."), "# Notes\nSpotted gum is a hardwood.");
+});

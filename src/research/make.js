@@ -53,9 +53,12 @@ export async function researchBrief(ctx, briefNotes = []) {
 }
 
 // A brief's direction sections ("## Direction", "## House style", "## Style",
-// "## Instructions", "## Rules") tell the writer how to write; they state
-// nothing to check, and researching them searches for "CTA" and "AI sounding".
-const DIRECTION_HEADING = /^#{1,6}\s+(?:direction|house style|style|instructions|rules)\b/i;
+// "## Instructions", "## Rules", "# Brand voice", "## Copy brief",
+// "## Guardrails") tell the writer how to write; they state nothing to check,
+// and researching them searches for "CTA", "AI sounding" and "carousel/image".
+// "# Brand facts" is the brand's own account of itself: the script states it
+// as the brand's, so research does not mark it unverified either.
+const DIRECTION_HEADING = /^#{1,6}\s+(?:direction|house style|style|instructions|rules|brand voice|copy ?brief|(?:brand )?guardrails|brand facts)\b/i;
 
 /** The brief without its direction sections: up to the next heading of the same or a higher level. */
 export function withoutDirection(text) {

@@ -250,3 +250,17 @@ test("formatCheckErrors and formatScriptCheck name the fix", () => {
   assert.match(text, /error: \[fact-trace\]/);
   assert.match(text, /  fix: /);
 });
+
+test("options-unexplained: a named list of options nothing else explains is an error", () => {
+  const empty = checkScript({ narration: "Choosing deck boards? Your choice comes down to more than colour. Timber, composite and aluminium are options to consider. The best looking board isn't always the best fit. Visit our site today.", duration: 20 });
+  const error = empty.errors.find((entry) => entry.id === "options-unexplained");
+  assert.ok(error, "the empty list is flagged");
+  assert.match(error.message, /timber, composite, aluminium/);
+  const taught = checkScript({ narration: "Choosing deck boards? Timber, composite and aluminium are the three options. Timber looks warm but needs oiling. Composite needs little upkeep but heats up in sun. Aluminium won't rot, warp or feed termites. Visit our site today.", duration: 20 });
+  assert.equal(taught.errors.some((entry) => entry.id === "options-unexplained"), false);
+});
+
+test("options-unexplained: a verb list is not a list of options", () => {
+  const report = checkScript({ narration: "Aluminium won't rot, warp or crack. Plan it, build it and enjoy it. Visit our site today.", duration: 12 });
+  assert.equal(report.errors.some((entry) => entry.id === "options-unexplained"), false);
+});

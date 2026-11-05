@@ -24,6 +24,9 @@
 //   opener-length     the first sentence is longer than the hook budget
 //   cta-missing / cta-multiple / cta-early / cta-mismatch
 //   sentence-length   a sentence over 25 words
+//   options-unexplained  a list of three or more options ("timber, composite
+//                     and aluminium") whose items no other sentence comes back
+//                     to: the script names them and teaches nothing (derived)
 // Warnings:
 //   mean-sentence, reading-grade, additive-transitions, brand-first,
 //   superlative, numbers-per-sentence, number-precision, hook-payoff,
@@ -223,6 +226,18 @@ export function checkScript(input = {}) {
   const meanWords = round1(words / sentences.length);
   const meanMax = limits.meanSentenceWords ?? MEAN_SENTENCE_WORDS[format];
   if (meanWords > meanMax) add(warnings, "mean-sentence", `Sentences average ${meanWords} words; the ${format} budget is ${meanMax}.`, "Split the longest sentences; each should carry one idea and own one scene.");
+
+  // --- Substance (hard, derived): a named list has to be explained.
+  for (const sentence of sentences) {
+    const items = listItems(sentence.text);
+    if (items.length < 3) continue;
+    const others = sentences.filter((other) => other.index !== sentence.index).map((other) => new Set(normalise(other.text).split(" ").map(stem)));
+    const silent = items.filter((item) => !others.some((set) => set.has(stem(item))));
+    if (silent.length >= 2) {
+      add(errors, "options-unexplained", `"${sentence.text}" names ${items.join(", ")}, but no other sentence says anything about ${silent.join(" or ")}.`, "Give each option its own sentence with one concrete, generally true point the viewer can use: what it is good at, its trade-off, or the care it needs.", spanOf(sentence));
+      break;
+    }
+  }
 
   // --- CTA (hard).
   const ctas = findCtas(sentences, words, input.product);
@@ -597,6 +612,25 @@ function oneOf(value, allowed, label) {
   const id = String(value).toLowerCase();
   if (!allowed.includes(id)) throw new Error(`Unknown ${label} "${value}"; use one of: ${allowed.join(", ")}`);
   return id;
+}
+
+// A series of three or more choices ("timber, composite and aluminium are
+// the options", "pick pine, hardwood, or composite"): only in a sentence that
+// frames it as options, so a verb list ("won't rot, warp or crack") is not
+// one. Each item's key word: the first item's last word, the last item's
+// first word, the middle items whole.
+const LIST_SERIES = /([A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*)?)((?:,\s+[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*)?)+),?\s+(?:and|or)\s+([A-Za-z][\w'-]*)/;
+const LIST_FRAME = /\b(?:options?|choices?|types?|kinds?|materials?|ways?|steps?|things?|tips?|picks?|alternatives?|contenders?)\b/i;
+const LIST_STOP = new Set(["you", "your", "it", "its", "this", "that", "them", "they", "we", "our", "more", "less", "one", "two", "three"]);
+function listItems(text) {
+  if (!LIST_FRAME.test(text)) return [];
+  const match = LIST_SERIES.exec(text);
+  if (!match) return [];
+  const middle = match[2].split(",").map((part) => part.trim()).filter(Boolean);
+  const heads = [match[1].trim().split(/\s+/).pop(), ...middle.map((part) => part.split(/\s+/).pop()), match[3]]
+    .map((head) => normalise(head))
+    .filter((head) => head.length > 2 && !LIST_STOP.has(head));
+  return [...new Set(heads)];
 }
 
 function sentenceAt(sentences, offset) {
