@@ -14,7 +14,7 @@ const story = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", form
 
 test("a run of polaroids becomes varied footage inserts", () => {
   const { storyboard, changed, originals } = varyInserts(story([polaroid("a", 0, "Beyond looks"), polaroid("b", 3, "Beyond looks"), card("c", 6), polaroid("d", 9, "Regular oiling")]));
-  assert.deepEqual(storyboard.scenes.map((scene) => scene.module), ["polaroid", "photo-scene", "compare", "photo-scene"]);
+  assert.deepEqual(storyboard.scenes.map((scene) => scene.module), ["polaroid", "photo-scene", "compare", "split-screen"]);
   assert.equal(changed.length, 2);
   assert.match(changed[0], /scene b: polaroid → photo-scene \(at most 1 polaroid frame a video\)/);
   assert.deepEqual([...originals.keys()], ["b", "d"]);
@@ -23,19 +23,23 @@ test("a run of polaroids becomes varied footage inserts", () => {
   assert.deepEqual(b.params.media, { kind: "shot", shows: "Beyond looks close-up" });
   assert.deepEqual(b.params.lines, [{ text: "Beyond looks" }]);
   assert.equal(b.params.scrim, "bottom");
-  // Each converted Ken Burns scene moves differently.
-  assert.notEqual(b.params.move, storyboard.scenes[3].params.move);
+  // The next conversion takes the treatment used least so far: the caption becomes a split-screen's title.
+  assert.deepEqual(storyboard.scenes[3].params, { media: { kind: "shot", shows: "Regular oiling close-up" }, variant: "top", title: "Regular oiling" });
   for (const scene of [b, storyboard.scenes[3]]) assert.equal(scene.start !== undefined && scene.end !== undefined, true);
 });
 
 test("converted inserts alternate so no two in a row share a treatment", () => {
-  const { storyboard } = varyInserts(story([polaroid("a", 0, "One"), polaroid("b", 3, "Two"), polaroid("c", 6, "Three"), polaroid("d", 9, "Four")]));
+  const scenes = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"].map((caption, i) => polaroid(String.fromCharCode(97 + i), i * 3, caption));
+  const { storyboard } = varyInserts(story(scenes));
   const modules = storyboard.scenes.map((scene) => scene.module);
-  assert.deepEqual(modules, ["polaroid", "photo-scene", "clip", "photo-scene"]);
+  assert.deepEqual(modules, ["polaroid", "photo-scene", "split-screen", "clip", "photo-scene", "split-screen", "clip"]);
   for (let i = 1; i < modules.length; i += 1) assert.notEqual(modules[i], modules[i - 1]);
-  const clip = storyboard.scenes[2].params;
-  assert.deepEqual(clip.media, { kind: "shot", shows: "Three close-up" });
-  assert.deepEqual(clip.callouts, [{ text: "Three" }]);
+  // Each converted Ken Burns scene moves differently; each converted split puts its footage on the other side.
+  assert.notEqual(storyboard.scenes[1].params.move, storyboard.scenes[4].params.move);
+  assert.deepEqual([storyboard.scenes[2].params.variant, storyboard.scenes[5].params.variant], ["top", "bottom"]);
+  const clip = storyboard.scenes[3].params;
+  assert.deepEqual(clip.media, { kind: "shot", shows: "Four close-up" });
+  assert.deepEqual(clip.callouts, [{ text: "Four" }]);
   // From a card, a clip fades in and out rather than cutting.
   assert.deepEqual([clip.enter, clip.exit], ["fade", "fade"]);
 });
@@ -45,7 +49,7 @@ test("the playfulness dial sets how many polaroids a video may keep", () => {
   assert.equal(noveltyCap({ dials: { playfulness: 0.2 } }), 0);
   assert.equal(noveltyCap({ dials: { playfulness: 0.8 } }), 2);
   const scenes = [polaroid("a", 0, "One"), card("x", 3), polaroid("b", 6, "Two")];
-  assert.deepEqual(varyInserts(story(scenes), { style: { dials: { playfulness: 0.1 } } }).storyboard.scenes.map((scene) => scene.module), ["photo-scene", "compare", "photo-scene"]);
+  assert.deepEqual(varyInserts(story(scenes), { style: { dials: { playfulness: 0.1 } } }).storyboard.scenes.map((scene) => scene.module), ["photo-scene", "compare", "split-screen"]);
   assert.deepEqual(varyInserts(story(scenes), { style: { dials: { playfulness: 0.9 } } }).storyboard.scenes.map((scene) => scene.module), ["polaroid", "compare", "polaroid"]);
 });
 
@@ -95,4 +99,21 @@ test("a converted insert the library has no shot for goes back to its card", () 
   assert.equal(kept.scenes[1].module, "polaroid");
   assert.equal(kept.scenes[1].params.image, undefined);
   assert.equal(kept.scenes[1].params.caption, "Two");
+});
+
+test("media layouts count as framed footage: a repeat changes its variant", () => {
+  const split = (id, start, extra = {}) => ({ id, module: "split-screen", start, end: start + 3, params: { media: shot(`${id} footage`), title: "The line", ...extra } });
+  const pip = (id, start) => ({ id, module: "picture-in-picture", start, end: start + 3, params: { media: shot(`${id} footage`), title: "The line" } });
+  const { storyboard, changed } = varyInserts(story([split("a", 0), split("b", 3), pip("c", 6), pip("d", 9), split("e", 12, { variant: "bottom" })]));
+  assert.deepEqual(storyboard.scenes.map((scene) => [scene.module, scene.params.variant]), [
+    ["split-screen", undefined], ["split-screen", "bottom"], ["picture-in-picture", undefined], ["picture-in-picture", "bottom-left"], ["split-screen", "bottom"]
+  ]);
+  assert.equal(changed.length, 2);
+  assert.match(changed[0], /scene b: split-screen variant → bottom \(the same frame as the insert before\)/);
+});
+
+test("a layout scene breaks a polaroid run like any other framed footage", () => {
+  const grid = { id: "g", module: "media-grid", start: 3, end: 6, params: { items: [{ media: shot("hardwood") }, { media: shot("composite") }] } };
+  const { storyboard } = varyInserts(story([polaroid("a", 0, "One"), grid, polaroid("c", 6, "Two")]), { style: { dials: { playfulness: 0.9 } } });
+  assert.deepEqual(storyboard.scenes.map((scene) => scene.module), ["polaroid", "media-grid", "polaroid"]);
 });

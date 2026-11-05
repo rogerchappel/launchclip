@@ -4,6 +4,21 @@
 
 ### Added
 
+- Seven media layouts that show your footage inside the motion design, so a
+  photo or clip is not always a full-frame cut or a small polaroid:
+  `split-screen` (footage on the top or bottom half, the line's title, stat
+  or list on the other), `landscape-card` (a 16:9 clip in a rounded window
+  with a title and a caption or chip), `picture-in-picture` (a clip card in a
+  corner of a panel), `media-compare` (two options, each in its own footage),
+  `media-stat` (a figure that counts up beside or over footage), `media-list`
+  (rows with thumbnails) and `media-grid` (2–4 tiles revealed one by one).
+  Each works at 9:16, 16:9 and 1:1, enters in the style's motion grammar,
+  shows its footage from the first frame and keeps text clear of the
+  captions and the logo. The planner offers them for footage lines, a scene
+  may ask the asset provider for several shots (one per slot), and the
+  insert-variety pass rotates their variants and may turn a repeated polaroid
+  into a split-screen. See
+  [KIT_CONTRACTS.md](docs/KIT_CONTRACTS.md#media-layouts-catalogue-d-kitcorecatalog-d-media-layoutsmjs).
 - Two caption presets: `kinetic-hierarchy` (the line builds up word by word;
   small connecting words, one large hero word glowing in the active colour,
   no box) and `soft-card` (the line on a rounded card in the brand primary).

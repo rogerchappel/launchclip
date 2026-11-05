@@ -280,7 +280,7 @@ test("minShots asks for shots, repairs a storyboard with too few and ends with t
   assert.equal(report.status, "passed", report.errors.join("\n"));
   assert.match(client.requests[0].instructions, /Ask for at least 3 and up to 6 shots/);
   assert.equal(report.attempts.length, 2);
-  assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene or media-window scenes, or in a card's image slot, instead of drawing them"), report.attempts[0].errors.join("\n"));
+  assert.ok(report.attempts[0].errors.includes("shots: ask for at least 3 shots from the app's library; this storyboard asks for 0. Show concrete subjects (places, products, people doing things) as {kind: \"shot\"} media in clip, photo-scene, media-window or media layout scenes (split-screen, landscape-card, picture-in-picture, media-compare, media-stat, media-grid, media-list), or in a card's image slot, instead of drawing them"), report.attempts[0].errors.join("\n"));
   assert.match(client.requests[1].input, /ask for at least 3 shots from the app's library; this storyboard asks for 0/);
   assert.equal(report.attempts[1].ok, true, report.attempts[1].errors.join("\n"));
   assert.deepEqual(report.shot_counts, { min: 3, requested: 3, answered: 3 });
@@ -420,7 +420,7 @@ test("an image request in a card slot takes a video answer as a still; a miss le
 test("a shot request outside a shot module or card slot is still refused, and the module schema stays strict", async () => {
   const assets = { findShot: async () => ({ src: "assets/library/hands.jpg", kind: "image" }) };
   const found = await resolveShots(cardStory("hook-title", { headline: "Every morning", media: { kind: "shot", shows: "a cup" } }), { assets, words: WORDS });
-  assert.match(found.errors[0], /shot requests are for photo-scene, media-window, clip scenes and card image slots \(.*polaroid params\.image.*\), not hook-title/);
+  assert.match(found.errors[0], /shot requests are for photo-scene, media-window, clip scenes, the media layouts' footage slots \(split-screen, .*\) and card image slots \(.*polaroid params\.image.*\), not hook-title/);
   // An unanswered card request leaves the card's placeholder: the first plan passes, with a warning.
   const client = llm([cardStory("polaroid", { image: { kind: "shot", shows: "a cafe" } }), story(null)]);
   const report = await plan(client, { assets: { findShot: async () => null } });

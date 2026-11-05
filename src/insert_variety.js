@@ -18,30 +18,39 @@
 //
 // A full-screen insert over the cap, or repeating the one before it, becomes
 // a footage treatment instead (FOOTAGE_TREATMENTS: a Ken Burns photo-scene
-// with the card's caption as its line, or a clip with it as a callout that
-// fades in and out), whichever differs from the insert before; its shot request
-// moves to params.media and may now come back as a video. An overlay card
-// (track 1+) cannot go full frame, so it changes variant instead.
+// with the card's caption as its line, a split-screen with it as the title
+// beside the footage, or a clip with it as a callout that fades in and out),
+// the one used least so far that differs from the insert before; its shot
+// request moves to params.media and may now come back as a video. An overlay
+// card (track 1+) cannot go full frame, so it changes variant instead, as a
+// media layout (kit/core/catalog-d-media-layouts.mjs) repeating the one
+// before does (split-screen top → bottom, a picture-in-picture's corner, a
+// media-stat beside → behind).
 // restoreMisses() puts a converted card back (with its placeholder) when the
 // library has no shot for it, as an unconverted card would have been kept.
 import { dialChoices } from "@launchclip/core/style.mjs";
-import { SHOT_CARD_SLOTS, SHOT_REQUEST } from "./asset_provider.js";
+import { SHOT_CARD_SLOTS, SHOT_LAYOUT_SLOTS, SHOT_REQUEST, layoutSlots } from "./asset_provider.js";
 
 // Frames that read as a gimmick when they repeat.
 export const NOVELTY_FRAMES = Object.freeze(["polaroid"]);
 // What a converted insert becomes, in order of preference.
 // (media-window is not one: it letterboxes footage, as it should a screen capture.)
-export const FOOTAGE_TREATMENTS = Object.freeze(["photo-scene", "clip"]);
+export const FOOTAGE_TREATMENTS = Object.freeze(["photo-scene", "split-screen", "clip"]);
 // Each converted photo-scene moves differently from the last.
 const MOVES = Object.freeze(["push-in", "pan-left", "pull-out", "pan-right"]);
 // Overlay variants to rotate through, per card.
-const VARIANTS = Object.freeze({ polaroid: ["single", "pinned", "stack"], "device-frame": ["clay", "dark", "outline"], "window-chrome": ["mac", "minimal"] });
+const VARIANTS = Object.freeze({ polaroid: ["single", "pinned", "stack"], "device-frame": ["clay", "dark", "outline"], "window-chrome": ["mac", "minimal"],
+  "split-screen": ["top", "bottom"], "picture-in-picture": ["top-right", "bottom-left", "top-left", "bottom-right"], "media-stat": ["beside", "behind"] });
 // A converted photo-scene keeps the card's caption as its line up to this length (one display line).
 const LINE_CHARS = 28;
+// A converted split-screen takes the card's words as its title up to this length (two display lines).
+const TITLE_CHARS = 60;
 // A Ken Burns scene shorter than this reads as a jolt; a shorter insert becomes a clip.
 const PHOTO_SCENE_SECONDS = 2;
 // A converted clip carries the caption as a callout when it is at least this long (the callout's hold and lead-out).
 const CALLOUT_SECONDS = 2.5;
+// A split-screen's title needs as long to read beside its footage.
+const SPLIT_SECONDS = 2.5;
 
 /** How many novelty frames a video may use: 0 for a serious style, 2 for a playful one, else 1. */
 export function noveltyCap(style) {
@@ -57,9 +66,14 @@ const isAsset = (value) => typeof value === "string" ? value.startsWith("assets/
 const pathValue = (params, slot) => slot.split(".").reduce((value, key) => (isObject(value) ? value[key] : undefined), params);
 
 // The footage a scene frames ({slot, media}) or null: a card's image slot,
-// or params.media in a media-window. Full-bleed footage (clip, photo-scene)
-// is the cut itself, not a frame, so it never counts as a repeat.
+// params.media in a media-window, or a media layout's first footage slot.
+// Full-bleed footage (clip, photo-scene) is the cut itself, not a frame, so
+// it never counts as a repeat.
 function framedFootage(scene) {
+  if (SHOT_LAYOUT_SLOTS[scene?.module]) {
+    const slot = layoutSlots(scene).find((path) => isRequest(pathValue(scene.params, path)) || isAsset(pathValue(scene.params, path)));
+    return slot ? { slot, media: pathValue(scene.params, slot) } : null;
+  }
   const slot = SHOT_CARD_SLOTS[scene?.module];
   if (slot) {
     const media = pathValue(scene.params, slot);
@@ -93,10 +107,15 @@ function footageMedia(media) {
   return type === "video" ? media : rest;
 }
 
-function convert(scene, module, { media }, moveIndex) {
+function convert(scene, module, { media }, moveIndex, splits) {
   const words = cardWords(scene);
   const base = Object.fromEntries(Object.entries(scene).filter(([key]) => key !== "params" && key !== "module"));
   const params = { media: footageMedia(media) };
+  if (module === "split-screen") {
+    // The caption becomes the half that carries the line; the footage side alternates.
+    Object.assign(params, { variant: splits % 2 ? "bottom" : "top", title: words.slice(0, TITLE_CHARS) });
+    return { ...base, module, params };
+  }
   if (module === "photo-scene") {
     params.move = MOVES[moveIndex % MOVES.length];
     if (words && words.length <= LINE_CHARS) Object.assign(params, { lines: [{ text: words }], scrim: "bottom" });
@@ -126,6 +145,8 @@ export function varyInserts(storyboard, { style = null } = {}) {
   const used = new Map();
   let previous = null; // the treatment of the insert just before, or null after a non-footage scene
   let moves = 0;
+  let splits = 0;
+  const treated = new Map(); // conversions so far, by footage treatment
   for (let index = 0; index < out.length; index += 1) {
     const scene = out[index];
     const track = scene?.track ?? 0;
@@ -142,13 +163,17 @@ export function varyInserts(storyboard, { style = null } = {}) {
       // Novelty cards become footage; a card or window that names what it
       // shows (a phone, a browser, a post, a page capture) keeps its kind.
       const fullFrame = track === 0 && novelty;
-      const options = FOOTAGE_TREATMENTS.filter((module) => module !== previous && !(module === "photo-scene" && length !== null && length < PHOTO_SCENE_SECONDS));
+      const words = cardWords(scene);
+      const options = FOOTAGE_TREATMENTS.filter((module) => module !== previous?.split(":")[0] && !(module === "photo-scene" && length !== null && length < PHOTO_SCENE_SECONDS) && !(module === "split-screen" && (!words || (length !== null && length < SPLIT_SECONDS))))
+        .sort((a, b) => (treated.get(a) ?? 0) - (treated.get(b) ?? 0));
       if (fullFrame && options.length) {
         const module = options[0];
         originals.set(scene.id, scene);
-        out[index] = convert(scene, module, framed, moves);
+        out[index] = convert(scene, module, framed, moves, splits);
         if (module === "photo-scene") moves += 1;
-        treatment = module;
+        if (module === "split-screen") splits += 1;
+        treated.set(module, (treated.get(module) ?? 0) + 1);
+        treatment = treatmentOf(out[index], storyVariants);
         changed.push(`scene ${scene.id}: ${scene.module} → ${module} (${why})`);
       } else if (VARIANTS[scene.module]) {
         const names = VARIANTS[scene.module];

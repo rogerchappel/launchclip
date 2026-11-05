@@ -4,6 +4,9 @@
 // or clip with a Ken Burns move (kit/core/catalog-d-photo-scene.mjs), and
 // clip, one full-frame shot of supplied footage cut to the narration, with a
 // crop focus, a source window and callouts (kit/core/catalog-d-clip.mjs).
+// The media layouts (split-screen, landscape-card, picture-in-picture,
+// media-compare, media-stat, media-list, media-grid) put library footage
+// inside the design: kit/core/catalog-d-media-layouts.mjs.
 //
 //   product-demo   the flow's clip in a window (or full bleed), a camera that
 //                  zooms to each clicked or typed-into element's bounding box,
@@ -38,10 +41,12 @@ import {grammarDuration, grammarTweens} from './grammar.mjs';
 import {photoScene} from './catalog-d-photo-scene.mjs';
 import {evidenceClip} from './catalog-d-evidence-clip.mjs';
 import {clip} from './catalog-d-clip.mjs';
+import {MEDIA_LAYOUTS} from './catalog-d-media-layouts.mjs';
 
 export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
 export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from './catalog-d-evidence-clip.mjs';
 export {CLIP_ENTERS, CLIP_MOVES, CLIP_TIMING, clipTimeline, clipView} from './catalog-d-clip.mjs';
+export {MEDIA_LAYOUTS, MEDIA_LAYOUT_ENTRANCES, MEDIA_LAYOUT_TIMING, MEDIA_LAYOUT_VARIANTS, countUp, frameShape, layoutMedia, mediaLayoutTimeline, mediaLayoutView} from './catalog-d-media-layouts.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
@@ -554,5 +559,6 @@ export const MODULES = {
   ...Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}])),
   [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve},
   [evidenceClip.id]: {describe: evidenceClip.describe, params: evidenceClip.params, events: evidenceClip.events, timing: evidenceClip.timing, resolve: evidenceClip.resolve},
-  [clip.id]: {describe: clip.describe, params: clip.params, events: clip.events, timing: clip.timing, resolve: clip.resolve}
+  [clip.id]: {describe: clip.describe, params: clip.params, events: clip.events, timing: clip.timing, resolve: clip.resolve},
+  ...Object.fromEntries(MEDIA_LAYOUTS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve}]))
 };
