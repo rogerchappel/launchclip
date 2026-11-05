@@ -1,0 +1,61 @@
+{
+ "title": "30 s example",
+ "duration": 30,
+ "lane": "motion",
+ "default_density": "normal",
+ "before": {
+  "cues": 19,
+  "by": {
+   "whoosh": 4,
+   "keystroke": 3,
+   "tally": 1,
+   "impact": 1,
+   "pop": 9,
+   "tick": 1
+  },
+  "b2b": 6,
+  "timeline": [
+   "0.5s whoosh",
+   "0.9s keystroke",
+   "1.22s keystroke",
+   "1.54s keystroke",
+   "5.1s tally",
+   "6s impact",
+   "9.783s whoosh",
+   "10s pop",
+   "10.05s whoosh",
+   "15.05s pop",
+   "15.5s pop",
+   "15.95s pop",
+   "16.4s pop",
+   "20.15s whoosh",
+   "20.95s tick",
+   "25.05s pop",
+   "25.23s pop",
+   "25.41s pop",
+   "25.59s pop"
+  ]
+ },
+ "after": {
+  "cues": 9,
+  "by": {
+   "whoosh": 2,
+   "keystroke": 3,
+   "tally": 1,
+   "pop": 2,
+   "tick": 1
+  },
+  "b2b": 0,
+  "timeline": [
+   "0.5s whoosh",
+   "0.9s keystroke",
+   "1.22s keystroke",
+   "1.54s keystroke",
+   "5.1s tally",
+   "10s pop",
+   "15.05s tick (was pop)",
+   "20.15s whoosh",
+   "25.05s pop"
+  ]
+ }
+}

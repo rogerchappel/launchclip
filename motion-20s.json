@@ -1,0 +1,44 @@
+{
+ "title": "20 s Motion",
+ "duration": 20,
+ "lane": "footage-led",
+ "default_density": "low",
+ "before": {
+  "cues": 11,
+  "by": {
+   "impact": 3,
+   "whoosh": 5,
+   "pop": 2,
+   "tally": 1
+  },
+  "b2b": 2,
+  "timeline": [
+   "0.3s impact",
+   "1.92s whoosh",
+   "4.14s pop",
+   "6.16s whoosh",
+   "9.04s whoosh",
+   "11.3s tally",
+   "11.9s impact",
+   "14.4s pop",
+   "14.9s whoosh",
+   "15.84s whoosh",
+   "18.2s impact"
+  ]
+ },
+ "after": {
+  "cues": 4,
+  "by": {
+   "impact": 2,
+   "pop": 1,
+   "whoosh": 1
+  },
+  "b2b": 0,
+  "timeline": [
+   "0.3s impact",
+   "4.14s pop",
+   "11.9s impact",
+   "15.84s whoosh"
+  ]
+ }
+}
