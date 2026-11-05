@@ -808,7 +808,7 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  background?: {kind: <slug>, params?: {fade?: none|center|top|bottom|left|right, ...}},
  variants?: {<module>: <variant>},
  world?: {kind: <world id>, time?: day|dusk|night},
- brand_frame?: false | {enabled?, logo?: path, logo_mark?: {tone?: dark|light|mixed, aspect?: w/h}, color?: role|hex,
+ brand_frame?: false | {enabled?, logo?: path, logo_mark?: {tone?: dark|light|mixed, aspect?: w/h, trim?: {x, y, width, height}}, color?: role|hex,
                 kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?, plate?: auto|light|dark|none},
                 sections?: boolean | {position?, color?},
                 progress?: boolean | {position?: top|bottom, color?, thickness?: 2-16 px},
@@ -1121,11 +1121,13 @@ rounded plate (`8 × k` padding, `10 × k` radius, soft shadow) chosen by
 `frameLogoPlate(story)`: `kicker.plate` when not `auto`; else white behind a
 dark, mixed or unmeasured logo, so a dark mark never sits on a dark card or
 footage; behind a light logo none when every track-0 backdrop is known and
-dark, else a dark plate. `frame.logo_mark` holds the measured `tone` and
-`aspect` (width / height): `applyProjectStyle` (`src/story_style.js`) fills it
-from the file with ffprobe/ffmpeg (`src/logo_mark.js`; a logo with opaque
-edges is judged by its own background), and a known aspect fits the logo to
-the box. A logo with a label keeps the original lockup (logo, label,
+dark, else a dark plate. `frame.logo_mark` holds the measured `tone`,
+`aspect` (width / height) and `trim` (the visible part inside a transparent
+or plain white margin, `{x, y, width, height}` as shares of the file):
+`applyProjectStyle` (`src/story_style.js`) fills it from the file with
+ffprobe/ffmpeg (`src/logo_mark.js`; a logo with opaque edges is judged by its
+own background). A known aspect fits the visible logo to the box, the file
+drawn inside a clip that hides its margins. A logo with a label keeps the original lockup (logo, label,
 underline).
 
 - `brandFramePlan(story, {format})` → `{css, nodes, tweens, layout}` in the

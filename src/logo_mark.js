@@ -1,7 +1,8 @@
 // The brand frame's logo, measured (kit/core/brand-frame.mjs frameLogoPlate):
-// its tone (dark, light or mixed, from the opaque pixels' luminance) and its
-// aspect (width / height), so a logo-only kicker gets the plate that keeps it
-// readable and fills its box. Read with ffprobe and ffmpeg; a file they cannot
+// its tone (dark, light or mixed, from the opaque pixels' luminance), its
+// aspect (width / height) and the visible part inside any transparent or
+// plain white margin (trim), so a logo-only kicker gets the plate that keeps
+// it readable and fills its box with the mark rather than empty space. Read with ffprobe and ffmpeg; a file they cannot
 // read (an SVG without a decoder, say) gets no measurement, and the frame
 // falls back to the white plate, which holds any dark mark.
 import { execFile } from "node:child_process";
@@ -10,7 +11,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-const SIZE = 48;
+const SIZE = 128;
 // sRGB relative luminance cut-offs for a dark or light mark.
 export const DARK_MARK_MAX = 0.42;
 export const LIGHT_MARK_MIN = 0.62;
@@ -46,9 +47,42 @@ export function logoTone(bytes, size = SIZE) {
   return mean <= DARK_MARK_MAX ? "dark" : mean >= LIGHT_MARK_MIN ? "light" : "mixed";
 }
 
+/**
+ * RGBA pixels of a `size` × `size` image → the visible part {x, y, width,
+ * height} as shares of the image, inside a transparent or plain white
+ * margin, or null when there is no margin to trim (or the image is a photo).
+ */
+export function logoTrim(bytes, size = SIZE) {
+  if ((bytes?.length ?? 0) < size * size * 4) return null;
+  const at = (x, y) => { const i = (y * size + x) * 4; return [bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]; };
+  let edges = 0, clear = 0, white = 0;
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    if (x !== 0 && y !== 0 && x !== size - 1 && y !== size - 1) continue;
+    const [r, g, b, a] = at(x, y);
+    edges += 1;
+    if (a < 24) clear += 1;
+    else if (a >= 240 && Math.min(r, g, b) >= 245) white += 1;
+  }
+  const background = clear / edges > 0.85 ? "clear" : white / edges > 0.95 ? "white" : null;
+  if (!background) return null;
+  let minX = size, minY = size, maxX = -1, maxY = -1;
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    const [r, g, b, a] = at(x, y);
+    if (a < 24 || (background === "white" && Math.min(r, g, b) >= 230)) continue;
+    minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  }
+  if (maxX < minX) return null;
+  const pad = Math.max(1, Math.round(Math.max(maxX - minX + 1, maxY - minY + 1) * 0.03));
+  const left = Math.max(0, minX - pad), top = Math.max(0, minY - pad);
+  const right = Math.min(size, maxX + pad + 1), bottom = Math.min(size, maxY + pad + 1);
+  if (right - left >= size * 0.9 && bottom - top >= size * 0.9) return null;
+  const share = (value) => Math.round((value / size) * 10000) / 10000;
+  return { x: share(left), y: share(top), width: share(right - left), height: share(bottom - top) };
+}
+
 const cache = new Map();
 
-/** An image file → {tone?, aspect?} (either may be missing), or null when ffmpeg cannot read it. */
+/** An image file → {tone?, aspect?, trim?} (each may be missing), or null when ffmpeg cannot read it. */
 export async function measureLogoMark(file) {
   const key = `${file}:${(await stat(file).catch(() => null))?.mtimeMs ?? "missing"}`;
   if (!cache.has(key)) cache.set(key, readLogoMark(file).catch(() => null));
@@ -61,7 +95,8 @@ async function readLogoMark(file) {
   const aspect = stream.width > 0 && stream.height > 0 ? Math.round((stream.width / stream.height) * 1000) / 1000 : null;
   const { stdout } = await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-frames:v", "1", "-vf", `scale=${SIZE}:${SIZE},format=rgba`, "-f", "rawvideo", "-"], { encoding: "buffer", maxBuffer: 1024 * 1024 });
   const tone = logoTone(stdout);
-  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}) } : null;
+  const trim = aspect ? logoTrim(stdout) : null;
+  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}), ...(trim ? { trim } : {}) } : null;
 }
 
 /**
@@ -76,7 +111,9 @@ export async function withLogoMark(story, projectDir = process.cwd()) {
   if (known.tone && known.aspect) return story;
   const measured = await measureLogoMark(path.resolve(projectDir, frame.logo.trim()));
   if (!measured) return story;
-  const logo_mark = { ...measured, ...known };
+  // A stated aspect belongs with its own trim (or none), not the measured one.
+  const logo_mark = { ...(known.aspect ? { ...measured, trim: undefined } : measured), ...known };
+  if (logo_mark.trim === undefined) delete logo_mark.trim;
   if (logo_mark.tone === known.tone && logo_mark.aspect === known.aspect) return story;
   return { ...story, frame: { ...frame, logo_mark } };
 }

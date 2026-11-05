@@ -16,7 +16,7 @@ import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { brandFrameErrors } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { brandFrameFindings } from "../src/layout_check.js";
-import { logoTone } from "../src/logo_mark.js";
+import { logoTone, logoTrim } from "../src/logo_mark.js";
 
 const require = createRequire(import.meta.url);
 const { gsap } = require("gsap");
@@ -349,4 +349,23 @@ test("logoTone: opaque pixels of a transparent logo, else its own background", (
   assert.equal(logoTone(image((x, y) => (inside(x, y) ? [0, 0, 0, 255] : [255, 255, 255, 255])), size), "dark", "black on its own white rectangle: a white plate");
   assert.equal(logoTone(image((x, y) => (inside(x, y) ? [255, 255, 255, 255] : [20, 20, 20, 255])), size), "light");
   assert.equal(logoTone(image(() => [0, 0, 0, 0]), size), null);
+});
+
+test("logoTrim and a trimmed mark: the plate holds the visible logo, not the file's empty margin", () => {
+  const size = 10;
+  const image = (fill) => Buffer.from(Array.from({ length: size * size }, (_, i) => fill(i % size, Math.floor(i / size))).flat());
+  const wordmark = image((x, y) => (x >= 1 && x <= 4 && y >= 3 && y <= 6 ? [20, 20, 20, 255] : [0, 0, 0, 0]));
+  assert.deepEqual(logoTrim(wordmark, size), { x: 0, y: 0.2, width: 0.6, height: 0.6 }, "the mark plus a 1 px pad");
+  assert.deepEqual(logoTrim(image((x, y) => (x >= 2 && x <= 5 && y >= 2 && y <= 5 ? [0, 0, 0, 255] : [255, 255, 255, 255])), size), { x: 0.1, y: 0.1, width: 0.6, height: 0.6 }, "a plain white margin trims too");
+  assert.equal(logoTrim(image((x, y) => [(x * 25) % 255, (y * 25) % 255, 90, 255]), size), null, "a photo is left whole");
+  const portrait = { width: 1080, height: 1920, duration: 12 };
+  const s = story({ logo: "assets/logo.png", logo_mark: { tone: "dark", aspect: 3, trim: { x: 0, y: 0, width: 0.6, height: 1 } }, sections: false }, { format: portrait });
+  const plan = brandFramePlan(s, { format: portrait });
+  const clip = plan.nodes[0].children[0].children[0].children[0];
+  assert.equal(clip.id, "lc-frame-logo-clip");
+  assert.equal(clip.children[0].tag, "img");
+  // Visible aspect 3 × 0.6 = 1.8: height-bound at 108.8 px, 195.84 px wide; the file is drawn 326.4 px wide.
+  assert.match(plan.css, /\.lc-frame-logo-clip \{ width: 195\.84px; height: 108\.8px; overflow: hidden;/);
+  assert.match(plan.css, /\.lc-frame-logo \{[^}]*width: 326\.4px; height: 108\.8px; max-width: none; margin-left: 0px; margin-top: 0px;/);
+  assert.match(brandFrameErrors({ logo_mark: { trim: { x: 0, y: 0, width: 2, height: 1 } } }).join("\n"), /logo_mark\.trim must be/);
 });

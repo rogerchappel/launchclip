@@ -405,9 +405,11 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
     if (frame.kicker.plate !== undefined && !['auto', 'light', 'dark', 'none'].includes(frame.kicker.plate)) errors.push(`${where}.kicker.plate must be auto, light, dark or none (the plate behind a logo-only kicker)`);
   }
   if (frame.logo_mark !== undefined) {
-    if (!isObject(frame.logo_mark)) errors.push(`${where}.logo_mark must be {tone?, aspect?}`);
+    if (!isObject(frame.logo_mark)) errors.push(`${where}.logo_mark must be {tone?, aspect?, trim?}`);
     else {
-      for (const key of Object.keys(frame.logo_mark)) if (!['tone', 'aspect'].includes(key)) errors.push(`${where}.logo_mark.${key} is not supported (tone, aspect)`);
+      for (const key of Object.keys(frame.logo_mark)) if (!['tone', 'aspect', 'trim'].includes(key)) errors.push(`${where}.logo_mark.${key} is not supported (tone, aspect, trim)`);
+      const trim = frame.logo_mark.trim;
+      if (trim !== undefined && !(isObject(trim) && ['x', 'y', 'width', 'height'].every((key) => typeof trim[key] === 'number' && trim[key] >= 0 && trim[key] <= 1) && trim.width > 0 && trim.height > 0)) errors.push(`${where}.logo_mark.trim must be {x, y, width, height}, each a share of the logo file 0-1`);
       if (frame.logo_mark.tone !== undefined && !['dark', 'light', 'mixed'].includes(frame.logo_mark.tone)) errors.push(`${where}.logo_mark.tone must be dark, light or mixed`);
       if (frame.logo_mark.aspect !== undefined && !(typeof frame.logo_mark.aspect === 'number' && frame.logo_mark.aspect > 0)) errors.push(`${where}.logo_mark.aspect must be a positive number (width / height)`);
     }

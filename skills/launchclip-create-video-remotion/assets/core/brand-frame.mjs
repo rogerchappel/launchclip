@@ -39,7 +39,7 @@
 // on a plate chosen for its tone (frameLogoPlate): a white plate behind a
 // dark, mixed or unmeasured logo so it reads on dark cards and footage, a
 // dark plate behind a light one unless every backdrop behind it is dark.
-// frame.logo_mark ({tone, aspect}) is measured from the file
+// frame.logo_mark ({tone, aspect, trim}) is measured from the file
 // (src/logo_mark.js) when the story is read.
 //
 // Canonical copy: kit/core/brand-frame.mjs.
@@ -72,6 +72,9 @@ function color(value, brand, role) {
   return ROLE_FALLBACK[role] ?? '#ffffff';
 }
 
+// frame.logo_mark.trim: the visible part of the logo file as shares of it, or null.
+const logoTrimOf = (trim) => (isObject(trim) && ['x', 'y', 'width', 'height'].every((key) => typeof trim[key] === 'number' && trim[key] >= 0 && trim[key] <= 1) && trim.width > 0 && trim.height > 0 ? { x: trim.x, y: trim.y, width: trim.width, height: trim.height } : null);
+
 const part = (value, defaults) => (value === false ? null : { ...defaults, ...(isObject(value) ? value : {}) });
 
 /**
@@ -98,7 +101,7 @@ export function storyFrame(story) {
     progress: frame.progress === true || isObject(frame.progress) ? progress : null,
     show: frame.show === 'scenes' ? 'scenes' : 'always',
     logo: nonEmpty(frame.logo) ? frame.logo : null,
-    logoMark: { tone: LOGO_TONES.includes(mark.tone) ? mark.tone : null, aspect: Number(mark.aspect) > 0 ? Number(mark.aspect) : null },
+    logoMark: { tone: LOGO_TONES.includes(mark.tone) ? mark.tone : null, aspect: Number(mark.aspect) > 0 ? Number(mark.aspect) : null, trim: logoTrimOf(mark.trim) },
     color: frame.color ?? 'paper',
     labels: Array.isArray(frame.labels) ? frame.labels : [],
     sources: Array.isArray(frame.sources) ? frame.sources : []
@@ -336,17 +339,26 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     const { rect } = kickerRegion;
     const left = String(frame.kicker.position).endsWith('left');
     const room = { width: rect.width - 2 * pad, height: rect.height - 2 * pad };
-    // A known aspect fits the logo to the box (scaling a small file up); else it fills the height.
-    const aspect = frame.logoMark.aspect;
-    const size = aspect
-      ? (() => { const height = Math.min(room.height, room.width / aspect); return `width: ${px(height * aspect)}; height: ${px(height)};`; })()
-      : `height: ${px(room.height)}; width: auto; max-width: ${px(room.width)}; object-fit: contain; object-position: ${left ? 'left' : 'right'} center;`;
+    // A known aspect fits the logo's visible part (trim) to the box, scaling a
+    // small file up; the file is drawn whole inside a clip that hides its
+    // margins. Without one the logo fills the box height.
+    const { aspect, trim } = frame.logoMark;
+    const shown = aspect ? (trim ? aspect * trim.width / trim.height : aspect) : null;
+    const fit = shown ? { height: Math.min(room.height, room.width / shown) } : null;
+    if (fit) fit.width = fit.height * shown;
+    const size = !fit
+      ? `height: ${px(room.height)}; width: auto; max-width: ${px(room.width)}; object-fit: contain; object-position: ${left ? 'left' : 'right'} center;`
+      : trim
+        ? `width: ${px(fit.width / trim.width)}; height: ${px(fit.height / trim.height)}; max-width: none; margin-left: ${px(-trim.x * fit.width / trim.width)}; margin-top: ${px(-trim.y * fit.height / trim.height)};`
+        : `width: ${px(fit.width)}; height: ${px(fit.height)};`;
     css.push(`.lc-frame-kicker { left: ${px(rect.x)}; top: ${px(rect.y)}; width: ${px(rect.width)}; height: ${px(rect.height)}; align-items: ${isTop(frame.kicker.position) ? 'flex-start' : 'flex-end'}; justify-content: ${left ? 'flex-start' : 'flex-end'}; }`);
     css.push(plate === 'none'
       ? `.lc-frame-kicker-inner { display: inline-flex; filter: drop-shadow(0 ${px(2 * k)} ${px(6 * k)} rgba(0,0,0,.45)); }`
       : `.lc-frame-kicker-inner { display: inline-flex; box-sizing: border-box; padding: ${px(pad)}; border-radius: ${px(L.radius * k)}; background: ${PLATE_COLORS[plate]}; box-shadow: 0 ${px(3 * k)} ${px(10 * k)} rgba(0,0,0,.22); }`);
     css.push(`.lc-frame-logo { display: block; flex: none; ${size} }`);
-    const inner = { tag: 'div', id: 'lc-frame-kicker-inner', cls: `lc-frame-kicker-inner lc-frame-plate-${plate}`, children: [{ tag: 'img', id: 'lc-frame-logo', cls: 'lc-frame-logo', src: frame.logo }] };
+    const img = { tag: 'img', id: 'lc-frame-logo', cls: 'lc-frame-logo', src: frame.logo };
+    if (fit && trim) css.push(`.lc-frame-logo-clip { width: ${px(fit.width)}; height: ${px(fit.height)}; overflow: hidden; flex: none; }`);
+    const inner = { tag: 'div', id: 'lc-frame-kicker-inner', cls: `lc-frame-kicker-inner lc-frame-plate-${plate}`, children: [fit && trim ? { tag: 'div', id: 'lc-frame-logo-clip', cls: 'lc-frame-logo-clip', children: [img] } : img] };
     root.children.push({ tag: 'div', id: 'lc-frame-kicker', cls: 'lc-frame-corner lc-frame-kicker', children: [inner] });
   } else if (frame.kicker && kickerRegion) {
     const underline = color(frame.kicker.color, brand, 'primary');
