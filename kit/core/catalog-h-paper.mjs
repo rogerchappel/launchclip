@@ -58,6 +58,13 @@ const angle = (b, raw, path, fallback) => (raw === undefined ? fallback : b.chec
 
 const POLAROID_VARIANTS = Object.freeze(['single', 'stack', 'pinned']);
 
+// The develop layer: its opacity when the card appears, when (seconds after
+// the drop) it starts to clear and how long that takes.
+export const POLAROID_DEVELOP = Object.freeze({
+  photo: Object.freeze({from: 0.3, at: 0, duration: 0.45}),
+  placeholder: Object.freeze({from: 1, at: 0.45, duration: 0.9})
+});
+
 function polaroidResolve(params, ctx) {
   const b = createHBase('polaroid', params, ctx, {allowed: ['image', 'caption', 'icon', 'at', 'tilt'], required: [], variants: POLAROID_VARIANTS});
   const {check, u, rect} = b;
@@ -113,15 +120,19 @@ function polaroidTimeline(model, ops) {
   set(ops, `${id}-photo`, start, {opacity: 0, x: 0, y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08});
   tw(ops, `${id}-photo`, c.t, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
   tw(ops, `${id}-photo`, c.t, 0.75, 'back.out(1.3)', {y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08}, {y: 0, rotation: 0, scaleX: 1, scaleY: 1});
-  // The photo develops: the dark layer fades away.
-  set(ops, `${id}-develop`, start, {opacity: 1});
-  tw(ops, `${id}-develop`, rt(c.t + 0.45), 0.9, 'power2.out', {opacity: 1}, {opacity: 0});
+  // The photo develops: the dark layer fades away. A real photo shows from
+  // the card's first visible frame, under a light veil that clears as it
+  // lands (an opaque layer read as an empty frame); the placeholder keeps
+  // the full develop.
+  const develop = c.image ? POLAROID_DEVELOP.photo : POLAROID_DEVELOP.placeholder;
+  set(ops, `${id}-develop`, start, {opacity: develop.from});
+  tw(ops, `${id}-develop`, rt(c.t + develop.at), develop.duration, 'power2.out', {opacity: develop.from}, {opacity: 0});
   if (c.variant === 'pinned') popOps(ops, `${id}-pin`, start, rt(c.t + 0.6), {from: 1.8, duration: 0.35, ease: 'power3.out'});
 }
 
 export const polaroid = {
   id: 'polaroid',
-  describe: 'An instant photo drops in, tilts to rest and develops from dark, with a handwritten-style caption; single, a stack of three, or pinned.',
+  describe: 'An instant photo drops in and tilts to rest (a placeholder develops from dark), with a handwritten-style caption; single, a stack of three, or pinned. A novelty frame: once a video at most.',
   params: {image: 'assets/… photo (optional; else a brand gradient with an icon)', icon: 'icon for the placeholder photo (default "image")', caption: 'string ≤ 40 (optional)', tilt: 'degrees −20–20 (default −4)', at: `drops: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['show'], timing: TIMING, variants: POLAROID_VARIANTS,
   resolve: polaroidResolve, view: polaroidView, timeline: polaroidTimeline

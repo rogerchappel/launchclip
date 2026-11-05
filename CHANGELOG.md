@@ -139,6 +139,17 @@
 
 ### Fixed
 
+- Library footage inside motion graphics no longer lands in the same tilted
+  polaroid every time. A polaroid is a novelty frame: at most one a video
+  (none when the style's playfulness dial is low, two when it is high) and
+  never two inserts in a row in the same frame. The planner turns the rest
+  into footage treatments that alternate: a Ken Burns `photo-scene` with the
+  card's caption as its line, or a `clip` with it as a callout, fading in
+  and out. Their shot requests may now come back as moving clips. A
+  converted insert the library has no shot for goes back to its card.
+- A polaroid holding a real photo shows it from its first visible frame,
+  under a light veil that clears as it lands, instead of opening on a dark,
+  empty frame for most of a second.
 - Evergreen scripts say something again. When research sources confirm
   nothing on an evergreen topic ("3 common deck materials"), the script pass
   gets the general-knowledge notes instead of "state only facts listed here"

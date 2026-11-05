@@ -1345,7 +1345,7 @@ events: show, line-<i>
 variants: mac (default), minimal, terminal
 
 ### polaroid (keeps captions)
-An instant photo drops in, tilts to rest and develops from dark, with a handwritten-style caption; single, a stack of three, or pinned.
+An instant photo drops in and tilts to rest (a placeholder develops from dark), with a handwritten-style caption; single, a stack of three, or pinned. A novelty frame: once a video at most.
 params:
 - image: assets/… photo (optional; else a brand gradient with an icon)
 - icon: icon for the placeholder photo (default "image")
