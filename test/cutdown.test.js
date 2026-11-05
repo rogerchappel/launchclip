@@ -194,7 +194,8 @@ test("launchclip cutdown --model re-plans with the planner and keeps the base ed
         if (request.schemaName === "launchclip_direction") return { model: "m", value: { direction_json: "" }, usage: {} };
         const format = JSON.parse(/format: (\{[^\n]+\})/.exec(request.input)[1]);
         const story = { schema: "launchclip.story.v1", lane: "footage-led", format, brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } }, audio: { words: "NARRATION.json" }, base: "assets/recording.mp4",
-          scenes: Array.from({ length: Math.floor(format.duration / 5) }, (_, i) => ({ id: `p${i + 1}`, module: "concept-card", track: 1, start: i * 5 + (i ? 0.2 : 0), end: i * 5 + 3.5, params: { text: `Point ${i + 1}` } })) };
+          // Every other point cuts away from the presenter (a full-frame insert).
+          scenes: Array.from({ length: Math.floor(format.duration / 5) }, (_, i) => ({ id: `p${i + 1}`, module: "concept-card", ...(i % 2 ? { insert: true } : { track: 1 }), start: i * 5 + (i ? 0.2 : 0), end: i * 5 + 3.5, params: { text: `Point ${i + 1}` } })) };
         return { model: "m", value: { storyboard_json: JSON.stringify(story) }, usage: {} };
       }
     };

@@ -115,7 +115,7 @@ A presenter on camera, dressed with graphics, for Shorts, Reels and TikTok.
 | shot_seconds | 0.8 | 2.2 | 5 |
 | visual_changes_per_min | 10 | 22 | 45 |
 | coverage | 35% | 60% | 92% |
-| face_time | 45% | 75% | 100% |
+| face_time | 35% | 55% | 85% |
 | longest_undressed_seconds | — | 4 | 8 |
 | first_visual_seconds | — | 0.5 | 1.5 |
 | text_hold_seconds | 0.8 | 2 | 5 |

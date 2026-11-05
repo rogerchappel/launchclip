@@ -393,7 +393,7 @@ function laneRules(lane, profile = null) {
   const rules = {
     motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
     'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
-    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)} Add a captions overlay.`
+    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)}${faceTimeRule(profile)} Add a captions overlay.`
   };
   return lane && rules[lane] ? [rules[lane]] : STORY_LANES.map((name) => rules[name]);
 }
@@ -405,6 +405,14 @@ function coverageRule(profile) {
   if (!band) return 'Coverage (the share of the runtime with a graphic on screen) lands inside the story\'s cadence profile band (references/profiles.md); no undressed run longer than the profile allows.';
   const pct = (value) => `${Math.round(value * 100)}%`;
   return `Coverage (the share of the runtime with a graphic on screen) aims at ${pct(band.p50 ?? band.p10)} and stays between ${pct(band.p10 ?? 0)} and ${pct(band.p90 ?? 1)} (profile ${profile.id})${run?.p90 != null ? `; no stretch longer than ${run.p90} s without a graphic` : ''}.`;
+}
+
+// The footage-led face-time rule: cut away from the presenter, up to the band's ceiling.
+function faceTimeRule(profile) {
+  const band = profile?.measures?.face_time;
+  if (!band || band.p90 == null || band.p90 >= 1) return '';
+  const pct = (value) => `${Math.round(value * 100)}%`;
+  return ` The presenter is on screen for about ${pct(band.p50 ?? band.p90)} of the runtime and never more than ${pct(band.p90)}: lines that name something the viewer could see (a thing, a place, a step) cut away to a full-frame insert (a shot, or a full-frame graphic).`;
 }
 
 function safeZoneLines(format) {
@@ -729,7 +737,7 @@ export function directionPrompt({ lane, format, profile = null, words, subject =
     ...section('Fixed inputs', [`lane: ${lane ?? '(given)'}`, `format: ${format ? JSON.stringify(format) : '(given)'}`, `profile: ${profile?.id ?? '(none)'}`]),
     ...section('Contract', directionContractLines({ lane }).map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
-    ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.']) : []),
+    ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.', ...(lane === 'footage-led' && profile.measures?.face_time?.p90 < 1 ? ['- Face time comes from the treatments too: only insert lines take the presenter off screen. Make the lines that name something the viewer could see (a thing, a place, a step) insert lines, so face time lands near its target and never above its ceiling.'] : [])]) : []),
     ...(profile?.id === 'youtube-long-form' || Number(format?.duration) >= LONG_FORM_SECONDS ? section('Long form', longFormLines().map((line) => `- ${line}`)) : []),
     ...(Array.isArray(segments) && segments.length ? section('Recurring segments (the style\'s)', ['When a section is one of these, set its "segment" to the id and title it like the segment, so the series looks like a series:', ...segments.map((segment) => `- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}`)]) : []),
     ...(lane === 'footage-led' ? section('Presenter', [subject?.usable ? `The presenter can be cut out (${subject.framing ?? 'unknown'} framing): split and framed layouts and behind-the-presenter scenes are available.` : 'No presenter cut-out: use full and insert layouts, or split on the base camera.']) : []),

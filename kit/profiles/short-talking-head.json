@@ -24,7 +24,7 @@
   "references": 0,
   "provenance": {
     "kind": "seed",
-    "note": "Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.",
+    "note": "Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to. face_time p90 0.85: a short that never cuts away from the presenter reads as static; lines that name something the viewer could see cut to full-frame inserts.",
     "sources": []
   },
   "measures": {
@@ -44,9 +44,9 @@
       "p90": 0.92
     },
     "face_time": {
-      "p10": 0.45,
-      "p50": 0.75,
-      "p90": 1
+      "p10": 0.35,
+      "p50": 0.55,
+      "p90": 0.85
     },
     "longest_undressed_seconds": {
       "p50": 4,
