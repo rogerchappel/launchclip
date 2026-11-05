@@ -1,4 +1,5 @@
-// HyperFrames emitters for catalogue D (product-demo, photo-scene, evidence-clip, clip).
+// HyperFrames emitters for catalogue D (product-demo, photo-scene, evidence-clip,
+// clip and the media layouts).
 //
 // The model comes from kit/core/catalog-d.mjs. Markup is the shared view
 // serialised by catalogue B's renderNode, motion the shared op list as
@@ -8,7 +9,7 @@
 // it annotates. On a world plate both stay in the plate, in that order, and
 // ride the camera (story-compiler.mjs soleVideo).
 
-import {clipTimeline, clipView, evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
+import {MEDIA_LAYOUTS, clipTimeline, clipView, evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, mediaLayoutTimeline, mediaLayoutView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 /** {html: the <video>, overlay: the annotation layer, css, motion, events, layout}. */
@@ -67,9 +68,35 @@ export function emitClip(model) {
   return {...out, html: renderNode(frame, `${timed(model.track)} data-module="clip"`)};
 }
 
+/**
+ * The media layouts: html is the base (fill, panel) with every window in it;
+ * the story compiler hoists each <video> to the root (each on its own track,
+ * timed to the scene and trimmed to its sourceStart), so the overlay
+ * (dividers, chips, text) is hoisted one z-index above them. With no video
+ * the base, the framed stills and the overlay stay together in the scene
+ * layer, so they also follow a world camera.
+ */
+export function emitMediaLayout(model) {
+  const raw = mediaLayoutView(model);
+  const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
+  const windows = raw.windows.map((node, i) => {
+    const media = model.content.windows[i].media;
+    if (media.kind !== 'video') return node;
+    return {...node, attrs: {...node.attrs, class: 'clip', 'data-start': model.start, 'data-duration': model.duration, 'data-media-start': media.sourceStart, 'data-track-index': model.track}};
+  });
+  const hoists = model.content.windows.some(win => win.media.kind === 'video');
+  const frame = {tag: 'div', id: `${model.id}-frame`, style: {position: 'absolute', left: 0, top: 0, width: model.canvas.width, height: model.canvas.height}, children: [raw.base, ...windows, ...(hoists ? [] : [raw.overlay])]};
+  const {view, ops} = gsapOwnedTransforms({frame, overlay: raw.overlay}, mediaLayoutTimeline(model), model.start);
+  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+  if (!hoists) return {...out, html: renderNode(view.frame, timed(model.track, ` data-module="${model.module}"`))};
+  return {...out, html: renderNode(view.frame, timed(model.track, ` data-module="${model.module}"`)),
+    overlay: renderNode(view.overlay, timed(model.track + 1, ` data-layout-allow-occlusion="true" data-module="${model.module}"`))};
+}
+
 export const EMITTERS = {
   'product-demo': emitProductDemo,
   'photo-scene': emitPhotoScene,
   'evidence-clip': emitEvidenceClip,
   clip: emitClip,
+  ...Object.fromEntries(MEDIA_LAYOUTS.map(def => [def.id, emitMediaLayout])),
 };

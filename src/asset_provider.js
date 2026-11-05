@@ -69,6 +69,19 @@ export const SHOT_CARD_SLOTS = Object.freeze({
   "social-post": "media.image",
   "person-id": "image"
 });
+// Media layouts (kit/core/catalog-d-media-layouts.mjs): module → the param
+// paths that may hold a shot request ("*" is each item of a list). They take
+// moving footage, except media-list's thumbnails, which show a still.
+export const SHOT_LAYOUT_SLOTS = Object.freeze({
+  "split-screen": Object.freeze(["media"]),
+  "landscape-card": Object.freeze(["media"]),
+  "picture-in-picture": Object.freeze(["media"]),
+  "media-stat": Object.freeze(["media"]),
+  "media-compare": Object.freeze(["left.media", "right.media"]),
+  "media-grid": Object.freeze(["items.*.media"]),
+  "media-list": Object.freeze(["items.*.media"])
+});
+const STILL_LAYOUT_SLOTS = new Set(["media-list"]);
 export const SHOTS_DIR = "assets/shots";
 const IMAGE = /\.(jpe?g|png|webp|svg)$/i;
 const VIDEO = /\.(mp4|webm|mov)$/i;
@@ -108,6 +121,7 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
     return [
       "Shots from the app's media library: in a clip, photo-scene or media-window scene set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
       cardShotLine(),
+      layoutShotLine(),
       "The app's library has real footage for this brand, and the app finds or generates each shot for the line the scene sits under, after you plan. Show concrete subjects (places, products, people doing things) as shots, not drawn; keep data, steps and comparisons as motion graphics.",
       "Short-form moves fast: cut to a shot whenever the narration names something real, and as often as it keeps the video fast, dynamic and engaging. Asking for more shots than the app can find is fine: it answers what it can, and you design the rest as motion graphics.",
       `Ask for at least ${floor} and up to ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
@@ -117,6 +131,7 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
   return [
     "Shots from the app's media library: in a clip, photo-scene or media-window scene you may set params.media to {kind: \"shot\", shows: \"<what the shot must show, concretely>\", type?: \"image\" | \"video\" | \"any\"} instead of an assets/ path. A clip scene shows the shot full frame, cut to its line.",
     cardShotLine(),
+    layoutShotLine(),
     "The app finds or generates that shot for the line the scene sits under, after you plan. Ask for one where a real photo or clip of a concrete subject (a place, an object, people doing something) says more than a graphic; keep data, steps and comparisons as motion graphics.",
     `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
     shotLengthLine()
@@ -128,7 +143,16 @@ function cardShotLine() {
   const slots = Object.entries(SHOT_CARD_SLOTS).map(([id, slot]) => `${id} params.${slot}`).join(", ");
   return [
     `Cards can carry library shots too: the same {kind: "shot", shows, type?} request goes in a card's image slot (${slots}) where a real photo says more than the card's placeholder (a phone or browser showing the product in use, an archive photo, the image on a post). These slots show a still: a video shot lands there as one frame of it. Ask for a person-id image only for a shot of that very person. Count card shots with the rest.`,
-    "Vary how footage is framed: show real places, work and products in a clip (full frame, a callout for the key words) or a photo-scene (a slow Ken Burns push or pan with a short text line), keep media-window for a screen or page capture, and change the treatment from one shot to the next. A polaroid is a novelty frame: at most once a video, never two in a row; tooling turns the rest into photo-scene and clip inserts."
+    "Vary how footage is framed: show real places, work and products in a clip (full frame, a callout for the key words), a photo-scene (a slow Ken Burns push or pan with a short text line) or one of the media layouts below, keep media-window for a screen or page capture, and change the treatment from one shot to the next. A polaroid is a novelty frame: at most once a video, never two in a row; tooling turns the rest into photo-scene, split-screen and clip inserts."
+  ].join("\n");
+}
+
+// The media layouts: footage inside the design, with the line's words, a stat or a list beside it.
+function layoutShotLine() {
+  const slots = Object.entries(SHOT_LAYOUT_SLOTS).map(([id, paths]) => `${id} params.${paths.join(" and params.").replace(/\.\*\./g, "[i].")}`).join(", ");
+  return [
+    `Media layouts put library footage inside the design, so a footage line can also carry its point: the same {kind: "shot", shows, type?} request goes in ${slots} (media-list's thumbnails show a still).`,
+    "Use split-screen when the shot and the line's title, stat or short list share the frame (footage top or bottom on 9:16); landscape-card for a wide shot with a title and a caption or chip (ask for landscape footage); picture-in-picture when a stat or list leads and the footage backs it up; media-compare for two options with footage of each (hardwood vs composite); media-stat for a figure with footage of what it measures, beside it or behind it; media-grid for two to four options shown together (\"three options\"), revealed on their words; media-list for steps or checks with a thumbnail each. Mix them with clip and photo-scene: a short video uses several different frames."
   ].join("\n");
 }
 
@@ -151,7 +175,7 @@ export function backdropPrompt({ max = MAX_BACKDROP_REQUESTS } = {}) {
 /** The repair note when a storyboard asks for fewer than min shots ("" when it asks for enough). */
 export function minShotsError(requested, min) {
   if (!(min > 0) || requested >= min) return "";
-  return `shots: ask for at least ${min} shot${min === 1 ? "" : "s"} from the app's library; this storyboard asks for ${requested}. Show concrete subjects (places, products, people doing things) as {kind: "shot"} media in clip, photo-scene or media-window scenes, or in a card's image slot, instead of drawing them`;
+  return `shots: ask for at least ${min} shot${min === 1 ? "" : "s"} from the app's library; this storyboard asks for ${requested}. Show concrete subjects (places, products, people doing things) as {kind: "shot"} media in clip, photo-scene, media-window or media layout scenes (split-screen, landscape-card, picture-in-picture, media-compare, media-stat, media-grid, media-list), or in a card's image slot, instead of drawing them`;
 }
 
 const isRequest = (media) => media && typeof media === "object" && media.kind === SHOT_REQUEST;
@@ -160,17 +184,29 @@ const pathValue = (params, slot) => slot.split(".").reduce((value, key) => (valu
 // A card's slot without its value (and without an object left empty by it).
 const withoutPath = (params, slot) => {
   const [key, ...rest] = slot.split(".");
-  const copy = { ...(params ?? {}) };
+  const copy = Array.isArray(params) ? [...params] : { ...(params ?? {}) };
   if (!rest.length) { delete copy[key]; return copy; }
   const inner = withoutPath(copy[key], rest.join("."));
-  if (Object.keys(inner).length) copy[key] = inner;
+  if (Array.isArray(copy) || Object.keys(inner).length) copy[key] = inner;
   else delete copy[key];
   return copy;
 };
 const withPath = (params, slot, value) => {
   const [key, ...rest] = slot.split(".");
-  return { ...params, [key]: rest.length ? withPath(params?.[key] ?? {}, rest.join("."), value) : value };
+  const inner = rest.length ? withPath(params?.[key] ?? {}, rest.join("."), value) : value;
+  if (Array.isArray(params)) return params.map((item, i) => (String(i) === key ? inner : item));
+  return { ...params, [key]: inner };
 };
+
+/** A media layout scene's footage slots as concrete param paths ("items.*.media" → "items.0.media", …). */
+export function layoutSlots(scene) {
+  return (SHOT_LAYOUT_SLOTS[scene?.module] ?? []).flatMap((slot) => {
+    if (!slot.includes("*")) return [slot];
+    const [list, rest] = slot.split(".*.");
+    const items = pathValue(scene.params, list);
+    return Array.isArray(items) ? items.map((_, i) => `${list}.${i}.${rest}`) : [];
+  });
+}
 
 /**
  * Shot requests in a storyboard: [{index, scene, slot, still}]. slot is the
@@ -179,6 +215,10 @@ const withPath = (params, slot, value) => {
  */
 export function shotRequests(storyboard) {
   return (storyboard?.scenes ?? []).flatMap((scene, index) => {
+    if (SHOT_LAYOUT_SLOTS[scene?.module]) {
+      const still = STILL_LAYOUT_SLOTS.has(scene.module);
+      return layoutSlots(scene).filter((slot) => isRequest(pathValue(scene.params, slot))).map((slot) => ({ index, scene, slot, still, layout: true }));
+    }
     const card = SHOT_CARD_SLOTS[scene?.module];
     if (card && isRequest(pathValue(scene?.params, card))) return [{ index, scene, slot: card, still: true }];
     return isRequest(scene?.params?.media) ? [{ index, scene, slot: "media", still: false }] : [];
@@ -280,18 +320,19 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   // card with its own placeholder (a warning), not a failed plan.
   const miss = (still, index, scene, slot, line) => {
     if (!still) { errors.push(line); return; }
-    story.scenes[index] = { ...scene, params: withoutPath(scene.params, slot) };
+    const current = story.scenes[index];
+    story.scenes[index] = { ...current, params: withoutPath(current.params, slot) };
     warnings.push(`${line.replace(/; design this scene without one$/, "")}; the ${scene.module} card keeps its placeholder`);
   };
   // Each request, checked and built first, so a provider that takes several
   // at once (assets.concurrency > 1) gets them all in flight before the first
   // answer is placed.
   const asked = [];
-  for (const { index, scene, slot, still } of requests) {
+  for (const { index, scene, slot, still, layout } of requests) {
     const media = pathValue(scene.params, slot);
     const shows = String(media.shows ?? "").trim();
     const where = `scene ${scene.id ?? index + 1}`;
-    if (!still && !SHOT_MODULES.includes(scene.module)) { errors.push(`${where}: shot requests are for ${SHOT_MODULES.join(", ")} scenes and card image slots (${Object.entries(SHOT_CARD_SLOTS).map(([id, at]) => `${id} params.${at}`).join(", ")}), not ${scene.module}`); continue; }
+    if (!still && !layout && !SHOT_MODULES.includes(scene.module)) { errors.push(`${where}: shot requests are for ${SHOT_MODULES.join(", ")} scenes, the media layouts' footage slots (${Object.keys(SHOT_LAYOUT_SLOTS).join(", ")}) and card image slots (${Object.entries(SHOT_CARD_SLOTS).map(([id, at]) => `${id} params.${at}`).join(", ")}), not ${scene.module}`); continue; }
     if (!shows) { errors.push(`${where}: a shot request needs "shows" (what the shot must show)`); continue; }
     const type = ["image", "video", "any"].includes(media.type) ? media.type : "any";
     const span = times.get(scene.id) ?? null;
@@ -308,9 +349,11 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       end: span?.end ?? null,
       duration: span ? Math.max(0, span.end - span.start) : null,
       format: { width, height, aspect: width && height ? (width / height >= 1 ? (width / height > 1.2 ? "landscape" : "square") : "portrait") : null },
+      // A landscape-card letterboxes its footage in a 16:9 window: landscape footage fits it without a crop.
+      ...(scene.module === "landscape-card" ? { orientation: "landscape" } : {}),
       brief: String(brief ?? "")
     };
-    asked.push({ index, scene, slot, still, shows, where, request, key: JSON.stringify([request.shows, request.type, width, height]) });
+    asked.push({ index, scene, slot, still, layout, shows, where, request, key: JSON.stringify([request.shows, request.type, width, height]) });
   }
   const ask = (request) => {
     const answer = Promise.resolve(assets.findShot(request, { signal })).then((shot) => snapshotShot(shot, request, project));
@@ -320,7 +363,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   if (Number(assets.concurrency) > 1) {
     for (const { request, key } of asked) if (!cache.has(key)) cache.set(key, ask(request));
   }
-  for (const { index, scene, slot, still, shows, where, request, key } of asked) {
+  for (const { index, scene, slot, still, layout, shows, where, request, key } of asked) {
     if (!cache.has(key)) cache.set(key, ask(request));
     let shot;
     try {
@@ -344,12 +387,22 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       continue;
     }
     const kind = placed.kind;
+    // A scene may take several shots (a media layout's slots): each writes into the scene as placed so far.
+    const current = story.scenes[index];
     if (still) {
-      story.scenes[index] = { ...scene, params: withPath(scene.params, slot, placed.src) };
+      story.scenes[index] = { ...current, params: withPath(current.params, slot, placed.src) };
       shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, slot, ...(placed.from ? { still_of: placed.from } : {}), ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
       continue;
     }
     // A clip crops around the subject: the shot's focus (or a flat crop_hint {x, y}) when the plan set none.
+    if (layout) {
+      // A layout window crops about the shot's focus, as a clip does.
+      const focus = shotFocus(shot);
+      story.scenes[index] = { ...current, params: withPath(current.params, slot, { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}), ...(focus ? { focus } : {}) }) };
+      shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, slot, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });
+      if (shot.notes) described.push({ src: placed.src, kind, ...(shot.duration > 0 ? { duration: shot.duration } : {}), notes: shot.notes });
+      continue;
+    }
     const focus = scene.module === "clip" && scene.params.focus === undefined ? shotFocus(shot) : null;
     story.scenes[index] = { ...scene, params: { ...scene.params, media: { kind, src: placed.src, ...(kind === "video" ? { sourceStart: Number(shot.sourceStart ?? 0) || 0 } : {}) }, ...(focus ? { focus } : {}) } };
     shots.push({ scene_id: scene.id ?? null, request_id: request.id, shows, kind, src: placed.src, ...(shot.url ? { url: String(shot.url) } : {}), ...(shot.source ? { source: shot.source } : {}), ...(shot.cost_usd > 0 ? { cost_usd: shot.cost_usd } : {}), ...known });

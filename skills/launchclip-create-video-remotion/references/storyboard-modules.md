@@ -201,6 +201,13 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | picks one option from several | focus-flow |
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | shows the real thing in supplied footage, cut to the line (assets/… video or still, full frame, with callouts for the key words) [motion, voiceover-motion] | clip |
+| contrasts two real options you can show ("hardwood or composite", "slide-on vs caravan"): each option in its own footage with a label, the second on its word, the pick ringed [motion, voiceover-motion] | media-compare |
+| names two to four options, models or materials you can show together ("three options", "hardwood, composite and aluminium"): a tile of footage each (a grid, or a mosaic with one large), revealed on its word [motion, voiceover-motion] | media-grid |
+| lists steps or checks that each have something to show ("check the payload, measure the tray, ask about the warranty"): a row each with a small thumbnail, one by one [motion, voiceover-motion] | media-list |
+| gives a figure about something you can show (a payload, a weight, a build time, years in business): the figure counts up beside the footage, or over it full frame [motion, voiceover-motion] | media-stat |
+| leads with a point, a figure or a short list that real footage backs up ("payload explained", "what you can carry"): the point in a panel, a rounded clip card in its corner [motion, voiceover-motion] | picture-in-picture |
+| shows real footage while the line makes a point: the shot fills the top or bottom half (left or right on 16:9), the other half carries the title, a figure or a short list [motion, voiceover-motion] | split-screen |
+| shows a wide view in landscape footage (a vehicle side-on, a campsite, a road, a beach): the shot letterboxed in a rounded 16:9 window mid-frame, a title above and a caption or chip below, no heavy crop [motion, voiceover-motion] | landscape-card |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
@@ -786,6 +793,82 @@ params:
 - position: bottom|top (default bottom): the callout slot, inside the safe zone and above the caption band
 - title: string ≤ 60, what the shot shows (alt text, optional)
 events: enter, callout-<i>
+
+### split-screen (keeps captions)
+Footage fills the top or bottom half of the frame (left or right on a wide frame) and the other half carries the line: a title, a stat or a short list, across an accent line or a soft blend. Keeps captions.
+params:
+- media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
+- variant: top|bottom|left|right: where the footage sits (default top; on a 16:9 frame top → left, bottom → right)
+- share: 0.3–0.65, the footage's share of the frame (default 0.4 top on 9:16, else 0.5)
+- divider: line|blend (default line): an accent line that wipes across the seam, or the footage fading into the panel
+- kicker: string ≤ 32, a small label over the title (optional)
+- title: string ≤ 60, up to two lines (the line, in a few words)
+- body: string ≤ 90, one or two lines under the title (optional; one of body, stat, items)
+- stat: {value: string ≤ 12 (a figure like "1,200 kg" counts up), label?: string ≤ 40} (optional; one of body, stat, items)
+- items: [string ≤ 32 | {text, at?}] 2–4, revealed one by one on their words (optional; one of body, stat, items)
+- align: left|center (default left)
+events: item-<i>
+
+### landscape-card (keeps captions)
+A landscape clip letterboxed in a rounded window mid-frame (16:9 by default), a title above and a caption or chip below: landscape library footage without a heavy crop. Keeps captions.
+params:
+- media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
+- aspect: 16:9|4:3|1:1|4:5|21:9, the window (default 16:9)
+- kicker: string ≤ 32, a small label over the title (optional)
+- title: string ≤ 60 above the window (optional)
+- caption: string ≤ 60 under the window (optional)
+- chip: string ≤ 24, a pill under the window (optional)
+
+### picture-in-picture (keeps captions)
+A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside or under it. Keeps captions.
+params:
+- media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
+- variant: top-right|top-left|bottom-right|bottom-left (default top-right)
+- aspect: 16:9|4:3|1:1|4:5|21:9, the card (default 1:1 on 9:16, else 16:9)
+- kicker: string ≤ 32, a small label over the title (optional)
+- title: string ≤ 60, up to two lines (the line, in a few words)
+- body: string ≤ 90, one or two lines under the title (optional; one of body, stat, items)
+- stat: {value: string ≤ 12 (a figure like "1,200 kg" counts up), label?: string ≤ 40} (optional; one of body, stat, items)
+- items: [string ≤ 32 | {text, at?}] 2–4, revealed one by one on their words (optional; one of body, stat, items)
+- align: left|center (default left)
+events: item-<i>
+
+### media-compare (keeps captions)
+Two options, each in its own footage with a label (hardwood vs composite): stacked on a 9:16 frame, side by side on a wide one; the second lands on its word, a VS chip between, and the pick (optional) gets an accent ring. Keeps captions.
+params:
+- left: {media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}, label: string ≤ 24}
+- right: {media, label} as left
+- variant: stacked|side (default stacked on 9:16, else side)
+- title: string ≤ 60 over the pair (optional)
+- vs: boolean (default true): the VS chip
+- pick: left|right, the option to ring (optional)
+- at: seconds from scene start when the second option lands (optional; else the "right" hit, else 35% in)
+events: right, pick
+
+### media-stat (keeps captions)
+A figure that counts up with its label, beside a footage window or over full-frame footage under a dim scrim. Keeps captions.
+params:
+- media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
+- variant: beside|behind (default beside)
+- value: string ≤ 12, the figure ("1,200 kg", "87%", "$4.5M" count up)
+- label: string ≤ 40 (optional)
+- kicker: string ≤ 32, a small label over the title (optional)
+- source: string ≤ 60, where the figure comes from (optional)
+
+### media-list (keeps captions)
+A list of 2–5 rows, each with a small footage thumbnail (or its number) and a line of text, revealed one by one on their words. Keeps captions.
+params:
+- title: string ≤ 60 (optional)
+- items: [{text ≤ 40, media?: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}, at?}] 2–5, at least one with media; the first shows at the scene start
+events: item-<i>
+
+### media-grid (keeps captions)
+Two to four tiles of footage, each with an optional label, revealed one by one with the narration ("three options"): a grid, or a mosaic with one large tile. Keeps captions.
+params:
+- title: string ≤ 60 (optional)
+- items: [{media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}, label?: string ≤ 28, at?}] 2–4; the first shows at the scene start
+- variant: grid|mosaic (default mosaic for three on 9:16 and 1:1, else grid)
+events: item-<i>
 
 ### feed-frame (hides captions, needs the subject)
 Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
@@ -2232,6 +2315,13 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 | evidence-clip | 2 s | 0 s | scene − 0.3 s | focus[].at in order; each zooms in over 0.8 s, holds to until (default 2 s after landing) and eases out over 0.7 s unless the next starts first; cursor[].at at least 0.2 s apart; each glide takes up to 0.7 s and lands on the point's time |
 | clip | 1 s | 0 s | scene − 1.55 s | callouts[].at in order, each at least 0.15 s after the previous one leaves; every callout ends at least 0.35 s before the scene ends and stays 0.22 s a word (at least 1.2 s); a video scene fits its source window: media.sourceEnd − media.sourceStart ≥ the scene length |
+| split-screen | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| landscape-card | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| picture-in-picture | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| media-compare | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| media-stat | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| media-list | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| media-grid | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
 | feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
 | pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |

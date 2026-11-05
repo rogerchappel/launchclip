@@ -36,7 +36,7 @@ camera: whip-pan 16, push 10, overview 9, orbit 7, pull 5; longest push-in run 2
   overview 12:16  what-developers-found-in-week-one: after the chapter's last line
   overview 13:21  the-failure-table-and-what-it-admits: recap line "That is a good…"
   overview 14:42  how-the-rivals-answered: recap line "That is the real…"
-chunks: 12 (12 reused)
+chunks: 12 (0 reused)
 
 shorts: 4 cut for 9:16 at short-form cadence
   ok   short-1-reading-the-benchmarks-honestly       598.317–643.252  45.335 s  14 events, p50 2.801 s, 4 cuts  skeleton versus  opens on percent-fill

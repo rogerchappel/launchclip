@@ -3868,6 +3868,75 @@ callouts.
   then the overlay. Parity fixtures: `test/fixtures/parity/d-clip-video.json`,
   `d-clip-still.json`.
 
+## Media layouts (catalogue D, `kit/core/catalog-d-media-layouts.mjs`)
+
+Seven modules that put library footage inside the motion design, so showing
+a photo or clip is not always a full-frame cut (`clip`, `photo-scene`) or a
+small tilted `polaroid`. All keep captions.
+
+| Module | Footage | The rest of the frame |
+| --- | --- | --- |
+| `split-screen` | fills the top or bottom half (`variant` `top`, the default, or `bottom`; `left`/`right` on a wide frame, where `top` → `left` and `bottom` → `right`) | the line's `title` (with an optional `kicker`) and one of `body`, `stat {value, label?}` or `items` (2–4, on their words), across an accent `divider: "line"` that wipes in or a soft `"blend"` |
+| `landscape-card` | a rounded window mid-frame, letterboxed to `aspect` (16:9 by default) | a `title` (and `kicker`) above, a `caption` and/or `chip` below |
+| `picture-in-picture` | a rounded card in a corner of a panel (`variant`: `top-right`, the default, `top-left`, `bottom-right`, `bottom-left`) | the panel's content, as split-screen's |
+| `media-compare` | two windows, `left` and `right` (`{media, label}`), stacked on 9:16 and side by side on wider frames (`variant`) | a `title`, a VS chip between (`vs`), the `pick` ringed in the accent after the second lands (`at`, or a hit on `right`) |
+| `media-stat` | a window beside the figure (`variant: "beside"`), or the whole frame under a dim scrim (`"behind"`) | `value` (a figure like `1,200 kg` counts up), `label`, `kicker`, `source` |
+| `media-list` | a small thumbnail per row (a still; a row without one shows its number) | 2–5 rows of text, revealed one by one (`at` or hits on `item-<i>`) |
+| `media-grid` | 2–4 tiles (`grid`, or `mosaic`: one large and the rest beside it; the default for three on 9:16 and 1:1), each with an optional label pill | an optional `title` |
+
+```json
+{ "module": "split-screen", "start": "word:corrugations", "end": "word:weight", "params": {
+  "media": { "kind": "shot", "shows": "a ute camper on a corrugated dirt road", "type": "video" },
+  "kicker": "Corrugations", "title": "Why slide-ons ride smoother", "body": "Weight sits low, over the axle" } }
+```
+
+- **`media`** (every footage slot): an `assets/` video or still, or `{src,
+  kind?, sourceStart? (video), focus?: {x, y}}`. The window is drawn
+  `object-fit: cover` about `focus`. A shot request (`{kind: "shot", shows,
+  type?}`) may sit in any slot (`SHOT_LAYOUT_SLOTS`, src/asset_provider.js:
+  `media`, `left.media` / `right.media`, `items[i].media`); a scene may ask for
+  several, each placed as `{kind, src, sourceStart?, focus?}` from the shot's
+  crop hint. media-list's thumbnails take a still (a video shot lands as one
+  frame of it, and a miss leaves the row's number). A landscape-card request
+  carries `orientation: "landscape"`.
+- **Footage first:** a window is its media (no placeholder or develop layer),
+  the first one is revealed at the scene's start and text arrives after it;
+  media-grid's first tile and media-list's first thumbnail must show at 0.
+- **Safe areas:** text sits in the module safe area (the safe zone above the
+  caption band, inside the brand frame's logo-safe rect); floating windows
+  stay inside it. Full-bleed footage (a split half, media-stat `behind`) may
+  run under the captions and the logo, as a `clip` does. Text that does not
+  fit shrinks with its stack to the key-text floor, then fails with the room
+  it needs.
+- **Motion:** entrances follow the grammar (`MEDIA_LAYOUT_ENTRANCES`: a rise
+  for editorial, a pop for snappy and playful, a settle for cinematic, a
+  plain fade for documentary); a split's footage slides in from its own edge,
+  a picture-in-picture card from its corner. Everything fades out together.
+  Stills push in 5% over the scene; videos play from `sourceStart`. The
+  opening plate and carried transitions rest the opacity (`kit/core/modules.mjs`).
+- **Layout:** `role: "media"` with the first window's rect (landscape-card:
+  the card with its caption and chip; media-stat `behind`: the full canvas
+  with `allowOcclusion: ["*"]`), and `layout.parts` for each text block and
+  each further window. A part on its own footage (a tile's label, the figure
+  over a backdrop) names it in `over` (part ids, or `"self"` for the main
+  element): `layoutExtras()` turns that into the part's `allowOcclusion`, so
+  layout-check allows that overlap and checks the rest. `layout.drift` is
+  false and `layout.live` true (the hold gate counts the scene as moving).
+- **Events:** `item-<i>` (split-screen and picture-in-picture items,
+  media-list rows, media-grid tiles), `right` and `pick` (media-compare).
+- **Variety:** `src/insert_variety.js` treats each as framed footage: two in a
+  row with the same `variant` rotate it (split-screen, picture-in-picture,
+  media-stat), and a polaroid over the cap may become a split-screen with its
+  caption as the title.
+- **Compilers:** one shared view (`mediaLayoutView`: `{base, windows,
+  overlay}`) and op list (`mediaLayoutTimeline`). HyperFrames
+  (`emitMediaLayout`) emits the base with the windows in it; the story
+  compiler hoists each `<video>` to the root on its own track
+  (`data-media-start` = its `sourceStart`), so the overlay is hoisted one
+  z-index above; with stills only, all three stay in the scene layer.
+  Remotion (`kit/remotion/catalog/MediaLayout.tsx`) draws the base, an
+  `<OffthreadVideo>` or framed `<Img>` per window, then the overlay.
+
 ## Clip-led planning (`kit/core/clip-led.mjs`)
 
 How much of a narrated video supplied footage carries, from the density dial
