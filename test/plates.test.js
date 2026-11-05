@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
+import { CYCLE_KINDS, DARK_PLATE_KINDS, VIDEO_PLATE_CONTRAST, VIDEO_TREATMENTS, videoPlateFloor, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
 import { layerStateAt, layerTweens } from "@launchclip/core/backgrounds.mjs";
 import { contrast, mix } from "@launchclip/core/panels.mjs";
 import { STORY_PLATE_KINDS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
@@ -13,8 +13,9 @@ import path from "node:path";
 const DARK = Object.freeze({ bg: "#05070c", paper: "#f4f7fb", ink: "#05070c", primary: "#38e1ff", accent: "#ff8a3d" });
 const LIGHT = Object.freeze({ bg: "#f5f1e8", primary: "#c2410c", accent: "#0e7490", ink: "#f5f1e8", paper: "#1c1917" });
 
-// A valid value of every kind (an image needs its file).
-const specOf = (kind, params = {}) => (kind === "image" ? { kind, params: { src: "assets/backdrop.jpg", ...params } } : Object.keys(params).length ? { kind, params } : kind);
+// A valid value of every kind (an image or a video needs its file).
+const FILES = { image: "assets/backdrop.jpg", video: "assets/broll.mp4" };
+const specOf = (kind, params = {}) => (FILES[kind] ? { kind, params: { src: FILES[kind], ...params } } : Object.keys(params).length ? { kind, params } : kind);
 
 function story(extra = {}, colors = DARK) {
   return {
@@ -122,12 +123,61 @@ test("no plate without one named, on a footage-led story, or with ambient.backgr
 });
 
 test("every dark plate keeps paper text at 4.5:1 on every tone, on a dark and a light palette", () => {
-  assert.deepEqual(PLATE_KINDS.filter((kind) => !DARK_PLATE_KINDS.includes(kind)), ["wash", "image"]);
+  assert.deepEqual(PLATE_KINDS.filter((kind) => !DARK_PLATE_KINDS.includes(kind)), ["wash", "image", "video"]);
   for (const colors of [DARK, LIGHT]) for (const kind of DARK_PLATE_KINDS) for (const tint of PLATE_TINTS) for (const intensity of [0, 0.5, 1]) {
     const plan = platePlan(story({}, colors), { kind, params: { ...resolvePlate(kind).params, tint, intensity } });
     const floor = Math.min(4.5, contrast(colors.paper, colors.bg) - 0.01);
     for (const tone of plan.tones) assert.ok(contrast(colors.paper, tone) >= floor - 1e-6, `${kind} ${tint} ${intensity}: ${tone} ${contrast(colors.paper, tone)}`);
   }
+});
+
+test("a video plate: its file, start and treatment validate, in story.mjs too", () => {
+  assert.deepEqual(plateErrors({ kind: "video", params: { src: "assets/shots/a-1.mov", start: 3.5, treatment: "tint", blur: 0, dim: 1, peak: 0 } }), []);
+  for (const src of ["https://x.test/a.mp4", "/abs/a.mp4", "assets/../a.mp4", "assets/a.jpg", "assets/a.mkv"]) assert.match(plateErrors({ kind: "video", params: { src } })[0], /project-relative \.mp4, \.webm or \.mov/, src);
+  assert.match(plateErrors("video")[0], /a video plate needs its file/);
+  assert.match(plateErrors({ kind: "video", params: { dim: 0.2 } })[0], /src is required for a video plate/);
+  assert.match(plateErrors({ kind: "video", params: { src: "assets/a.mp4", treatment: "sepia" } })[0], /treatment must be one of dim, blur, tint/);
+  assert.match(plateErrors({ kind: "silk", params: { treatment: "dim" } })[0], /treatment is not supported/);
+  const bad = story();
+  bad.scenes[0].backdrop = { kind: "video", params: { src: "assets/a.gif" } };
+  bad.scenes[1].backdrop = { kind: "video", params: { src: "assets/a.mp4", treatment: "sepia", peak: 2 } };
+  bad.scenes[2].backdrop = "video";
+  const expected = storyPlateErrors(bad);
+  assert.equal(expected.length, 4);
+  for (const message of expected) assert.ok(validateStory(bad).errors.includes(message), message);
+  const good = story();
+  good.scenes[0].backdrop = { kind: "video", params: { src: "assets/broll.mp4", start: 2, treatment: "blur" } };
+  assert.deepEqual(validateStory(good).errors.filter((e) => /plate|backdrop/.test(e)), []);
+});
+
+test("a video plate plays its clip under its treatment, dimmed to keep paper at 4.5:1", () => {
+  for (const [treatment, own] of Object.entries(VIDEO_TREATMENTS)) {
+    const spec = resolvePlate({ kind: "video", params: { src: "assets/broll.mp4", start: 4, treatment } });
+    assert.deepEqual([spec.params.blur, spec.params.dim, spec.params.peak, spec.params.start], [own.blur, own.dim, 1, 4]);
+    for (const colors of [DARK, LIGHT]) {
+      const plan = platePlan(story({}, colors), spec);
+      const clip = plan.layers.find((layer) => layer.id === "video");
+      assert.deepEqual(clip.video, { src: "assets/broll.mp4", start: 4 });
+      assert.equal(clip.svg, null);
+      assert.equal(plan.src, "assets/broll.mp4");
+      if (own.blur) assert.match(clip.style.filter, /^blur\(\d+(\.\d+)?px\)$/);
+      const dim = plan.layers.find((layer) => layer.id === "dim");
+      assert.ok(dim.style.opacity >= own.dim, "the floor only raises the dim");
+      assert.equal(dim.style.opacity, plan.params.dim);
+      if (treatment === "tint") assert.match(dim.style.background, /^linear-gradient\(160deg/);
+      else assert.equal(dim.style.background, colors.bg);
+      // Paper meets the floor on white and on black footage, light palette or dark.
+      assert.ok(plan.contrast.ok, `${treatment}: ${plan.contrast.ratio}`);
+      for (const tone of plan.tones) assert.ok(contrast(colors.paper, tone) >= VIDEO_PLATE_CONTRAST - 0.05, `${treatment} ${tone}`);
+    }
+  }
+  // Measured footage that never gets bright keeps the treatment's own dim.
+  const calm = platePlan(story(), resolvePlate({ kind: "video", params: { src: "assets/broll.mp4", treatment: "blur", peak: 0.35 } }));
+  assert.equal(calm.params.dim, VIDEO_TREATMENTS.blur.dim);
+  assert.equal(calm.contrast.raised, false);
+  const floor = videoPlateFloor({ paper: "#ffffff", overlays: ["#000000"], peak: 1 });
+  assert.ok(floor.ok && floor.dim > 0.45 && floor.dim < 0.6, JSON.stringify(floor));
+  assert.equal(videoPlateFloor({ paper: "#ffffff", overlays: ["#000000"], peak: 1, want: 0.8 }).dim, 0.8);
 });
 
 test("wash and image report the tones they lay", () => {

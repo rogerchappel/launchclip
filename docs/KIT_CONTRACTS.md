@@ -1816,6 +1816,7 @@ and `./panels.mjs`.
 | `smoke` | grey, low-saturation wisps: billows far, a bank of thin wisps in focus, a soft near bank (the tint pulled 80% to a grey of its lightness) | neutral |
 | `wash` | a bright, opaque full-frame gradient in the tint (light upper left, deeper lower right) with two drifting highlights and a slow sheen: a punctuation shot | primary |
 | `image` | a still from the project (`params.src`), cover-fit, blurred inside its SVG past every edge, under a `bg` dim, with a slow push and drift | neutral |
+| `video` | a clip from the project (`params.src`, playing from `params.start`), cover-fit and muted, under an overlay treatment (`dim`, `blur` or `tint`), with the image plate's push and drift | primary |
 
 Params: `focus` 0–1 (how out of focus; 0.6), `intensity` 0–1 (0.5), `speed`
 0–2 (1), `depth` 0–1 (parallax spread; 0.5) and `tint` (`neutral` is paper,
@@ -1829,6 +1830,20 @@ copied `assets/`, Remotion through `staticFile`), `blur` (px at 1080p, 0–80;
 24) and `dim` (0–1, how much `bg` covers it; 0.55). `platePlan(story, spec,
 {frame})` draws a plate over a wider canvas-px rect than the screen with the
 same density per screen (world backdrops use it).
+`video` takes `src` (required: a project-relative `.mp4`, `.webm` or `.mov`),
+`start` (seconds into the clip; 0), `treatment` (`dim`: nearly sharp under a
+heavy `bg` dim, blur 4 and dim 0.62; `blur`: an out-of-focus wash under a
+lighter dim, blur 26 and dim 0.5; `tint`: blur 10 under a gradient from the
+tint into `bg`, dim 0.6), `blur`, `dim` and `peak` (0–1: the footage's
+brightest level once blurred, as measured; 1 when unknown). The dim is a
+floor raised by `videoPlateFloor` until paper keeps 4.5:1 on a pixel at
+`peak` and on black under every overlay colour (capped at 0.92; the plan's
+`contrast: {floor, ratio, ok, raised}` says how it went); a tint that could
+never reach it is mixed back toward `bg`. The clip layer carries
+`video: {src, start}` and no SVG: Remotion plays it as an `OffthreadVideo` in
+a `Sequence` from the scene's first frame (a world backdrop's: from the
+segment's `from`), HyperFrames as a muted timed `<video class="clip">` in the
+layer (`data-start`, `data-duration`, `data-media-start`) on a track of its own.
 Every axis is an ambient wave of absolute time, so any seek gives the same
 pixels; the ambient level scales the speed and `off` stills it.
 
