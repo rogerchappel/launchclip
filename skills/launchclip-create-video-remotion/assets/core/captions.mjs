@@ -197,7 +197,8 @@ function round(value) { return Math.round(value * 1000) / 1000; }
 /** Legacy overlay `style` values; `line` maps to the minimal-line preset. */
 export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-highlight', line: 'minimal-line', none: null });
 export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto']);
-export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title']);
+export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
+export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
 export const CAPTION_ENTRANCES = Object.freeze({
   pop: Object.freeze({ from: Object.freeze({ opacity: 0, y: 26, scale: 0.86 }), dur: 0.16, ease: 'back.out(2.2)' }),
@@ -217,6 +218,7 @@ export const CAPTION_EXITS = Object.freeze({
 
 const SHADOW_HARD = '0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45)';
 const SHADOW_SOFT = '0 2px 14px rgba(0,0,0,.6)';
+const SHADOW_LIFT = '0 3px 8px rgba(0,0,0,.88)';
 const PRESET_COLORS = Object.freeze({ idle: 'paper', active: 'primary', spoken: null, accent: 'accent', box: 'primary', boxText: 'ink', plate: 'ink', band: 'primary', bandEdge: 'accent', chip: 'paper' });
 const preset = (spec) => Object.freeze({
   font: 'display', weight: 900, size: 74, lineHeight: 1.05, letterSpacing: '-0.01em', case: 'upper', gap: 0.42,
@@ -247,7 +249,13 @@ export const CAPTION_PRESETS = Object.freeze({
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
-  'quiet-accent': preset({ description: 'Quiet sentence-case lines; one accent word per line in the accent colour.', font: 'body', weight: 600, size: 52, lineHeight: 1.16, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: SHADOW_SOFT, word: 'none', emphasis: true, accents: 1, maxWords: 6, maxChars: 32, entrance: 'fade', exit: 'fade' })
+  'quiet-accent': preset({ description: 'Quiet sentence-case lines; one accent word per line in the accent colour.', font: 'body', weight: 600, size: 52, lineHeight: 1.16, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: SHADOW_SOFT, word: 'none', emphasis: true, accents: 1, maxWords: 6, maxChars: 32, entrance: 'fade', exit: 'fade' }),
+  // Motion-graphics captions: the line builds up word by word and stays;
+  // connecting words are small, one hero word per line is large and glows
+  // in the active colour (captionHierarchy). No box: a line that needs help
+  // to read gets a soft scrim, not a plate.
+  'kinetic-hierarchy': preset({ description: 'The line builds up word by word; small connecting words, one large hero word per line glowing in the active colour.', weight: 900, size: 60, lineHeight: 1.05, case: 'as-is', letterSpacing: '-0.022em', gap: 0.24, stroke: 1, strokeColor: 'rgba(0,0,0,.38)', shadow: SHADOW_LIFT, word: 'hierarchy', maxWords: 3, maxChars: 24, entrance: 'none', exit: 'fade', plateStyle: 'scrim' }),
+  'soft-card': preset({ description: 'The whole line sits on a rounded card in the plate colour (the brand primary), in bold ink type.', colors: { idle: 'ink', plate: 'primary' }, font: 'body', weight: 900, size: 60, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 4, maxChars: 24, entrance: 'pop', exit: 'fade', plate: 'card' })
 });
 
 export const CAPTION_PRESET_NAMES = Object.freeze(Object.keys(CAPTION_PRESETS));
@@ -334,6 +342,32 @@ function accentWords(words, emphasis, limit) {
   return new Set(best >= 0 ? [best] : []);
 }
 
+// Connecting words a kinetic-hierarchy line sets small, and fillers.
+const CONTEXT_WORDS = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'but', 'by', 'for', 'from', 'had', 'has', 'have', 'he', 'her', 'here', 'him', 'his', 'i', 'if', 'in', 'is', 'it', 'its', 'me', 'my', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the', 'their', 'them', 'then', 'there', 'they', 'this', 'to', 'up', 'us', 'was', 'we', "we're", "we've", "we'll", 'were', 'what', "what's", 'when', 'where', 'which', 'who', 'will', "won't", 'with', 'you', "you'll", "you're", 'your', 'ah', 'er', 'hmm', 'like', 'mm', 'okay', 'right', 'uh', 'um', 'well', 'yeah']);
+export const CAPTION_HERO_SCALE = 1.85;
+export const CAPTION_CONTEXT_SCALE = 0.72;
+
+/**
+ * The visual hierarchy of a kinetic-hierarchy line: each word's role
+ * (context: a connecting word; body; hero: the one word that matters most)
+ * and its size (em). The hero is an emphasis word if the line has one, else
+ * the content word with digits, then the longest; a long hero shrinks toward
+ * 1 em so it still fits the band (about 16 characters at the base size).
+ * Lexical and deterministic. → [{role, scale}]
+ */
+export function captionHierarchy(words, emphasis = new Set()) {
+  const norm = words.map((word) => String(word.text ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}']+$/gu, ''));
+  const roles = norm.map((word) => ({ role: CONTEXT_WORDS.has(word) ? 'context' : 'body', scale: CONTEXT_WORDS.has(word) ? CAPTION_CONTEXT_SCALE : 1 }));
+  const score = (word, i) => {
+    if (!word || CONTEXT_WORDS.has(word)) return -1;
+    return (isEmphasis(emphasis, word) && !/\d/.test(word) ? 1000 : 0) + (/\d/.test(word) ? 400 : 0) + (word.length >= 3 ? 60 : 0) + (word.length >= 7 ? 100 + word.length : word.length) - i * 1e-3;
+  };
+  let hero = -1, best = -1;
+  norm.forEach((word, i) => { const value = score(word, i); if (value > best) { best = value; hero = i; } });
+  if (hero >= 0) roles[hero] = { role: 'hero', scale: Math.round(Math.min(CAPTION_HERO_SCALE, Math.max(1, 16 / Math.max(1, [...norm[hero]].length))) * 20) / 20 };
+  return roles;
+}
+
 /** Resolved options of a captions overlay: preset defaults overridden by the overlay's options. */
 export function captionOptions(overlay = {}, { brand, format, fonts, story } = {}) {
   const name = captionPresetName(overlay, story) ?? 'word-highlight';
@@ -369,10 +403,10 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     case: CAPTION_CASES.includes(overlay?.case) ? overlay.case : p.case,
     font: stacks[fontRole] ?? stacks.display,
     fontRole,
-    weight: p.weight,
+    weight: Number.isInteger(overlay?.weight) && overlay.weight >= 100 && overlay.weight <= 950 ? overlay.weight : p.weight,
     size: Math.round(p.size * scale * 100) / 100,
     lineHeight: p.lineHeight,
-    letterSpacing: p.letterSpacing,
+    letterSpacing: Number.isFinite(overlay?.letter_spacing) && overlay.letter_spacing >= -0.1 && overlay.letter_spacing <= 0.5 ? `${overlay.letter_spacing}em` : p.letterSpacing,
     gap: p.gap,
     stroke,
     strokeColor: p.strokeColor,
@@ -380,6 +414,9 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     layout: p.layout,
     word: p.word,
     plate: p.plate,
+    // How a line that does not read on what is behind it is helped: a solid
+    // box (the default) or a soft scrim that keeps a box-less look.
+    plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? 'box',
     emphasis,
     accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
@@ -606,8 +643,11 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     });
   }
 
+  const heroScales = new Set();
+  const heroWords = o.word === 'hierarchy' ? (o.emphasis ? emphasis : captionEmphasis(ctx.story, overlay)) : null;
   for (const chunk of list) {
     const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
+    const roles = heroWords ? captionHierarchy(chunk.words, heroWords) : null;
     // A legibility plate holds the preset's own colours, so it takes no world tone.
     const legible = !o.plate && captionLinePlated(o, chunk.id);
     const tone = o.plate || legible ? null : toneOf(...spoken(chunk));
@@ -683,6 +723,15 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
           tw(`${id}-u`, start, Math.max(0.12, r4(end - start)), 'power1.inOut', { scaleX: 1 }, { scaleX: 0 }, false);
           break;
         }
+        case 'hierarchy': {
+          span.text = word.text;
+          const role = roles[i];
+          if (role.role === 'context') span.cls += ' lc-cap-ctx';
+          if (role.role === 'hero') { span.cls += ` lc-cap-hero lc-cap-h${Math.round(role.scale * 100)}`; heroScales.add(role.scale); }
+          // Each word arrives as it is spoken and stays until the line goes.
+          tw(id, start, 0.1, 'power2.out', { opacity: 1, y: 0, scale: 1 }, { opacity: 0, y: r4(0.16 * o.size * role.scale), scale: 0.92 }, false);
+          break;
+        }
         case 'stack': {
           span.text = word.text;
           tw(id, onAt, 0.2, 'power3.out', { opacity: 1, y: 0, scale: 1 }, { opacity: 0, y: 36, scale: 0.9 }, false);
@@ -718,6 +767,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     });
     tw(chunk.id, Math.max(chunk.start + 0.12, chunk.end - exit.dur), exit.dur, exit.ease, { ...exit.to });
   }
+  o.heroScales = [...heroScales].sort((a, b) => a - b);
   const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect }));
   return { preset: o.preset, options: o, css: captionPlanCss(o, { zones: placed, format: ctx.format }), nodes, tweens };
 }
@@ -757,7 +807,7 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
   const b = o.band;
   const pct = (value) => `${round(value * 100)}%`;
   const C = o.colors;
-  const transform = o.case === 'upper' ? 'uppercase' : o.case === 'title' ? 'capitalize' : 'none';
+  const transform = o.case === 'upper' ? 'uppercase' : o.case === 'title' ? 'capitalize' : o.case === 'lower' ? 'lowercase' : 'none';
   const stroke = o.stroke > 0 ? ` paint-order: stroke fill; -webkit-text-stroke: ${o.stroke}px ${o.strokeColor};` : '';
   const shadow = o.shadow && o.shadow !== 'none' ? ` text-shadow: ${o.shadow};` : '';
   const lines = [
@@ -774,15 +824,26 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
     lines.push(`.lc-cap-on-${tone} .lc-cap-w { color: ${colors.idle};${halo} }`);
     if (o.emphasis) lines.push(`.lc-cap-on-${tone} .lc-cap-em { color: ${colors.accent}; }`);
   }
-  if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);
-  // A legibility plate: nearly opaque, so the line reads on anything behind it.
-  if (o.legible) lines.push(`.lc-cap-legible { background: ${o.legiblePlate}eb; padding: 0.18em 0.5em 0.22em; border-radius: 0.32em; }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
+  if (o.plate === 'card') lines.push(`.lc-cap-plate { background: ${C.plate}; padding: 0.3em 0.55em 0.38em; border-radius: 0.3em; box-shadow: 0 12px 28px rgba(0,0,0,.28); }`);
+  else if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);
+  // A legibility plate: nearly opaque, so the line reads on anything behind
+  // it; or, for a box-less preset, a scrim that fades out at its edges.
+  if (o.legible && o.plateStyle === 'scrim') lines.push(`.lc-cap-legible { background: radial-gradient(closest-side, ${o.legiblePlate}d0, ${o.legiblePlate}a6 60%, ${o.legiblePlate}00); padding: 0.45em 1.1em; }`);
+  else if (o.legible) lines.push(`.lc-cap-legible { background: ${o.legiblePlate}eb; padding: 0.18em 0.5em 0.22em; border-radius: 0.32em; }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
   switch (o.word) {
     case 'fill': lines.push(`.lc-cap-fill { position: absolute; left: 0; top: 0; width: 0%; overflow: hidden; white-space: nowrap; color: ${C.active}; }`); break;
     case 'pop': lines.push('.lc-cap { display: grid; place-items: center; }', '.lc-cap > .lc-cap-w { grid-area: 1 / 1; opacity: 0; transform-origin: 50% 50%; }'); break;
     case 'type': lines.push('.lc-cap-ch { opacity: 0; }'); break;
     case 'box': lines.push(`.lc-cap-box { position: absolute; left: -0.16em; right: -0.16em; top: -0.04em; bottom: -0.04em; background: ${C.box}; border-radius: 0.14em; opacity: 0; }`, '.lc-cap-t { position: relative; }'); break;
     case 'underline': lines.push(`.lc-cap-ul { position: absolute; left: 0; right: 0; bottom: -0.04em; height: 0.11em; background: ${C.active}; border-radius: 0.06em; transform-origin: 0% 50%; transform: scaleX(0); }`); break;
+    case 'hierarchy': {
+      // The hero glows: white light close in, then the active colour.
+      const glow = captionContrast(C.idle, '#000000') >= captionContrast(C.idle, '#ffffff') ? '0 0 28px rgba(255,255,255,.94), ' : '';
+      lines.push('.lc-cap { align-items: baseline; }', '.lc-cap-w { opacity: 0; transform-origin: 50% 75%; }', '.lc-cap-ctx { font-size: 0.72em; font-weight: 750; }',
+        `.lc-cap-hero { margin: 0 0.04em; letter-spacing: -0.035em; -webkit-text-stroke-width: 0.5px; text-shadow: ${SHADOW_LIFT}, ${glow}0 0 48px ${C.active}99; }`);
+      for (const scale of o.heroScales ?? []) lines.push(`.lc-cap-hero.lc-cap-h${Math.round(scale * 100)} { font-size: ${scale}em; }`);
+      break;
+    }
     case 'stack': lines.push('.lc-cap { flex-direction: column; flex-wrap: nowrap; align-items: center; }', '.lc-cap-w { opacity: 0; transform-origin: 50% 50%; }', '.lc-cap-em { font-size: 1.42em; }'); break;
     case 'glow': lines.push(`.lc-cap-glow { position: absolute; left: 0; top: 0; color: ${C.active}; filter: blur(14px); opacity: 0; }`, '.lc-cap-t { position: relative; }'); break;
     case 'chip': lines.push(`.lc-cap-w { background-color: ${C.chip}; padding: 0.06em 0.34em 0.1em; border-radius: 0.5em; box-shadow: 0 6px 18px rgba(0,0,0,.35); opacity: 0; transform-origin: 50% 50%; }`); break;

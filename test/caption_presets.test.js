@@ -128,8 +128,8 @@ test("backward compatible: legacy styles, defaults and word-highlight timing", (
 test("the captions overlay validates presets and options", () => {
   const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, brand: BRAND, scenes: [{ id: "s1", module: "hook-title", start: 0, end: 4, params: { headline: "Hi" } }] };
   assert.equal(validateStory({ ...base, overlays: [{ type: "captions", preset: "glow", position: "top", case: "upper", max_words: 4, size: 1.2, emphasis: ["hi"], colors: { active: "accent", idle: "#ffffff" }, entrance: "scale", exit: "shrink", offset: -0.05, stroke: false }] }).ok, true);
-  const bad = validateStory({ ...base, overlays: [{ type: "captions", preset: "sparkle", position: "left", case: "lower", max_words: 0, size: 9, colors: { glow: "#fff" }, entrance: "spin", offset: 2, style: "fancy" }] });
-  for (const pattern of [/preset/, /position/, /case/, /max_words/, /size/, /colors\.glow/, /entrance/, /offset/, /\.style/]) assert.ok(bad.errors.some((error) => pattern.test(error)), `${pattern}: ${bad.errors.join("; ")}`);
+  const bad = validateStory({ ...base, overlays: [{ type: "captions", preset: "sparkle", position: "left", case: "shout", weight: 2000, letter_spacing: 3, plate_style: "glass", max_words: 0, size: 9, colors: { glow: "#fff" }, entrance: "spin", offset: 2, style: "fancy" }] });
+  for (const pattern of [/preset/, /position/, /case/, /max_words/, /size/, /colors\.glow/, /entrance/, /offset/, /\.style/, /weight/, /letter_spacing/, /plate_style/]) assert.ok(bad.errors.some((error) => pattern.test(error)), `${pattern}: ${bad.errors.join("; ")}`);
 });
 
 test("every preset compiles into the HyperFrames project and the Remotion component draws the same plan", async () => {

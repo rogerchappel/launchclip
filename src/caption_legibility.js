@@ -57,7 +57,8 @@ export function captionLines(story, chunks) {
     if (start === null) continue;
     const time = round(Math.min(end - 0.15, Math.max(start + 0.35, (start + end) / 2)), 3);
     const plated = /lc-cap-(plate|legible)/.test(node.cls);
-    const plate = /lc-cap-legible/.test(node.cls) ? o.legiblePlate : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
+    // A scrim fades into what is behind it, so the line is judged on the pixels, as an unplated one.
+    const plate = /lc-cap-legible/.test(node.cls) ? (o.plateStyle === 'scrim' ? null : o.legiblePlate) : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
     lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated, plate });
   }
   return { plan, lines, options: o };
