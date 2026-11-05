@@ -18,7 +18,7 @@
 // that is still illegible after that.
 
 import { spawn } from "node:child_process";
-import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions, sceneCaptionsOff } from "@launchclip/core/captions.mjs";
+import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions, sceneCaptionsOff, withoutFillers } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 
@@ -45,7 +45,7 @@ export function captionLines(story, chunks) {
   const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
   const o = plan.options;
   // The plan's own lines: a preset with its own chunk size re-chunks the words.
-  const byId = new Map(chunksForCaptions(chunks, o).map((chunk) => [chunk.id, chunk]));
+  const byId = new Map(withoutFillers(chunksForCaptions(chunks, o), overlay).map((chunk) => [chunk.id, chunk]));
   const lines = [];
   for (const node of plan.nodes) {
     if (!String(node.cls ?? "").split(" ").includes("lc-cap")) continue;
