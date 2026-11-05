@@ -191,3 +191,46 @@ test("worldLook keeps the plate cycle for the other shots when a card sits on fo
   const plated = { lane: "motion", format: { duration: 18 }, scenes };
   assert.deepEqual(worldLook(plated, ""), ["camera.mode world", "plate cycle every 3 shots (neutral plates)"]);
 });
+
+test("cards on a plate the plan picked trade it for footage; a wash and a named video stay", () => {
+  const bokeh = cardBackdrops(story({ backdrop: { kind: "bokeh", params: { tint: "primary" } } }), { words: WORDS });
+  assert.deepEqual(bokeh.added, ["s2", "s3"]);
+  assert.equal(bokeh.storyboard.scenes[1].backdrop.kind, "shot");
+  const plated = story();
+  plated.scenes[1] = { ...plated.scenes[1], plate: { kind: "strands" } };
+  const swapped = cardBackdrops(plated, { words: WORDS });
+  assert.equal(swapped.storyboard.scenes[1].plate, undefined);
+  assert.equal(swapped.storyboard.scenes[1].backdrop.kind, "shot");
+  assert.deepEqual(cardBackdrops(story({ backdrop: { kind: "wash" } }), { words: WORDS }).added, ["s3"]);
+  assert.deepEqual(cardBackdrops(story({ backdrop: "none" }), { words: WORDS }).added, ["s3"]);
+});
+
+test("a card the app has no backdrop for borrows one another card placed, never the one beside it", async (t) => {
+  const { project, files } = await library(t);
+  // s2 and s3 are cards; s4 a third card two scenes from s2.
+  const base = story();
+  const three = {
+    ...base,
+    format: { ...FORMAT, duration: 12 },
+    scenes: [
+      base.scenes[0],
+      { ...base.scenes[1], backdrop: { kind: "shot", shows: "a quiet deck at dusk" } },
+      { ...base.scenes[2], end: 9.5, backdrop: { kind: "shot", shows: "nothing the library has" } },
+      { id: "s4", module: "hook-title", start: 9.5, end: 12, energy: 1, params: { headline: "Pick well" }, backdrop: { kind: "shot", shows: "nothing the library has either" } }
+    ]
+  };
+  const assets = { async findShot(request) {
+    if (request.slot !== "backdrop") return { file: files.sanding, kind: "video", source: "library", asset_id: "sand-1" };
+    return /dusk/.test(request.shows) ? { file: files.dusk, kind: "video", source: "library", asset_id: "dusk-1" } : null;
+  } };
+  const found = await resolveShots(three, { assets, words: WORDS, project, measure: calm });
+  const [, s2, s3, s4] = found.storyboard.scenes;
+  assert.equal(s2.backdrop.kind, "video");
+  // s3 sits beside s2, so it cannot borrow s2's dusk shot; s4 can.
+  assert.equal(s3.backdrop, undefined);
+  assert.equal(s4.backdrop.kind, "video");
+  assert.equal(s4.backdrop.params.src, s2.backdrop.params.src);
+  assert.equal(s4.backdrop.params.treatment, "dim");
+  assert.ok(found.warnings.some((warning) => /scene s4: .* borrows the backdrop/.test(warning)), found.warnings.join("\n"));
+  assert.ok(found.warnings.some((warning) => /scene s3: .* keeps the story's plate$/.test(warning)), found.warnings.join("\n"));
+});
