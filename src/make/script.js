@@ -99,7 +99,8 @@ const ROLE = `You write voiceover scripts for short product, explainer and story
 
 Write narration that will be read aloud by a text-to-speech voice:
 - Plain spoken sentences. No headings, bullet points, emoji, stage directions, sound cues or speaker labels.
-- Each sentence can own a scene: make every one concrete, and keep product names exactly as given.`;
+- Each sentence can own a scene: make every one concrete, and keep product names exactly as given.
+- Teach something: for every option, step or item you name, say at least one thing about it the viewer can use (what it is good at, its trade-off, what it needs). Naming options and moving on says nothing.`;
 
 const output = (titles) => `Output:
 - narration: the whole script. beats: the same sentences split by beat id, in the plan's order; their text joined is the narration.

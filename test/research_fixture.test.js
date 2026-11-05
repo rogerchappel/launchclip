@@ -62,3 +62,31 @@ test("with no source fetched, the notes ask for general knowledge, not only list
   assert.doesNotMatch(notes, /Acme Decks builds decks/, "a plain claim is not repeated as an unchecked specific");
   assert.doesNotMatch(notes, /Do not state these as fact/);
 });
+
+test("sources that confirm nothing get the general-knowledge notes, not an empty fact list", async () => {
+  const { researchNotes } = await import("../src/research/index.js");
+  const ledger = {
+    summary: { claims: 1, verified: 0, contradicted: 0, unverified: 1, sources_checked: 1, primary_sources: 0 },
+    claims: [{ id: "c001", text: "Timber, composite and aluminium are common deck boards", kind: "entity", values: [], dates: [], entities: [], status: "unverified", flag: { action: "soften-or-cite", message: "no primary source" } }],
+    excerpts: []
+  };
+  const notes = researchNotes(ledger);
+  assert.doesNotMatch(notes, /state only facts listed here/);
+  assert.match(notes, /confirmed nothing from its sources/);
+  assert.match(notes, /For every option, step or item the script names, say at least one concrete/);
+  assert.doesNotMatch(notes, /Drop any story with no primary source/);
+});
+
+test("an evergreen topic with a sourced fact may add general knowledge; a story stays strict", async () => {
+  const { researchNotes } = await import("../src/research/index.js");
+  const fact = { id: "c001", text: "Spotted gum is a durable Australian hardwood", kind: "entity", values: [], dates: [], entities: [], status: "verified", sources: [{ supports: true, primary: true, publisher: "timber.example" }] };
+  const evergreen = researchNotes({ summary: { sources_checked: 2 }, claims: [fact], excerpts: [] });
+  assert.match(evergreen, /state these facts as given, anything else only as well-established general knowledge/);
+  assert.match(evergreen, /\[c001\] Spotted gum/);
+  assert.doesNotMatch(evergreen, /Drop any story with no primary source/);
+  const story = researchNotes({ summary: { sources_checked: 2 }, claims: [fact, { id: "c002", text: "Nimbus released it on 3 March", kind: "date", values: [], dates: ["3 March"], entities: [], status: "unverified", flag: { message: "unverified" } }], excerpts: [] });
+  const modelish = researchNotes({ summary: { sources_checked: 1 }, claims: [{ id: "c001", text: "Use a carousel/image layout", kind: "entity", values: [], dates: [], entities: [{ name: "carousel/image", kind: "model" }], status: "unverified", flag: { message: "no primary source" } }], excerpts: [] });
+  assert.match(modelish, /confirmed nothing from its sources/, "a model-looking name alone does not make a story");
+  assert.match(story, /state only facts listed here/);
+  assert.match(story, /Drop any story with no primary source/);
+});
