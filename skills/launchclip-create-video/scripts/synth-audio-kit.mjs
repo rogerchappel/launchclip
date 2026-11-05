@@ -333,7 +333,15 @@ async function ffmpeg(args) {
     }
     return arg;
   }));
-  await run('ffmpeg', ffmpegArgs(portable), { maxBuffer: 1 << 26 });
+  try {
+    await run('ffmpeg', ffmpegArgs(portable), { maxBuffer: 1 << 26 });
+  } catch (error) {
+    // execFile's message leads with the whole command (hundreds of aevalsrc
+    // terms), so a log line is cut before ffmpeg's own reason; lead with it.
+    const reason = String(error.stderr ?? '').trim().split('\n').slice(-8).join(' | ') || error.message;
+    const output = portable[portable.length - 1];
+    throw new Error(`ffmpeg failed rendering ${output} (exit ${error.code ?? '?'}${error.signal ? `, ${error.signal}` : ''}): ${reason}`, { cause: error });
+  }
 }
 
 /**
