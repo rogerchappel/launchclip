@@ -38,6 +38,17 @@ function keySource(index, segments) {
   return segments.length === 1 ? cuts[0].replace(/\[kc0\]$/, '') : `${cuts.join(';')};${segments.map((_, i) => `[kc${i}]`).join('')}concat=n=${segments.length}:v=0:a=1`;
 }
 
+// How far speech pushes the beds down. The music sits about 12 dB under a
+// voice and comes back up in the pauses; a harder duck (threshold 0.03,
+// ratio 6) left it about 22 dB down, which is silent on a phone speaker.
+// Ambience ducks a little less: it is a room tone, not a tune.
+export const MUSIC_DUCK = Object.freeze({ threshold: 0.1, ratio: 3, attack: 30, release: 400 });
+export const AMBIENCE_DUCK = Object.freeze({ threshold: 0.1, ratio: 2.5, attack: 40, release: 600 });
+
+function duck({ threshold, ratio, attack, release }) {
+  return `sidechaincompress=threshold=${threshold}:ratio=${ratio}:attack=${attack}:release=${release}:makeup=1`;
+}
+
 export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null }) {
   const parts = [];
   const mixInputs = [];
@@ -62,14 +73,14 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     // Duck the bed under speech; with no voice the bed plays as is. The key is
     // padded to the full duration because sidechaincompress stops when its
     // sidechain ends, which would cut the bed off after the last word.
-    parts.push(keyed ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]` : '[bedraw]anull[bed]');
+    parts.push(keyed ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]${duck(MUSIC_DUCK)}[bed]` : '[bedraw]anull[bed]');
     mixInputs.push('[bed]');
     index += 1;
   }
   if (hasAmbience) {
     // The loop arrives endless (-stream_loop -1): cut it to length first.
     parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}[ambraw]`);
-    parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]sidechaincompress=threshold=0.03:ratio=4:attack=40:release=600:makeup=1[amb]` : '[ambraw]anull[amb]');
+    parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]${duck(AMBIENCE_DUCK)}[amb]` : '[ambraw]anull[amb]');
     mixInputs.push('[amb]');
     index += 1;
   }
