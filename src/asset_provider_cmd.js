@@ -3,9 +3,11 @@
 // started once, through the shell, and kept running for the plan; each
 // findShot(request) writes the request as one JSON line to its stdin and
 // reads one JSON line from its stdout: a shot, or null. Requests go one at a
-// time. An answer that echoes the request's `id` is matched by it (so a late
-// answer to a request that timed out is dropped); one without is the answer
-// to the oldest open request. A line that is not JSON, a command that exits,
+// time, or up to `concurrency` at once (LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY)
+// for an app that answers several in parallel, in any order. An answer that
+// echoes the request's `id` is matched by it (so a late answer to a request
+// that timed out is dropped); one without is the answer to the oldest open
+// request, so an app that takes more than one at a time must echo ids. A line that is not JSON, a command that exits,
 // or no answer within timeoutMs counts as no shot for that request (the
 // planner then designs the scene without one). stderr goes to notice().
 // close() ends the command.
@@ -21,13 +23,24 @@ export function assetProviderTimeoutMs(env = process.env) {
   return Number.isFinite(value) && value > 0 ? value : ASSET_PROVIDER_TIMEOUT_MS;
 }
 
-export function createCommandAssetProvider(command, { timeoutMs = ASSET_PROVIDER_TIMEOUT_MS, notice = (line) => process.stderr.write(`${line}\n`), env = process.env, cwd = process.cwd() } = {}) {
+export const MAX_ASSET_PROVIDER_CONCURRENCY = 16;
+
+/** How many requests the command may have open at once: LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY, else 1. */
+export function assetProviderConcurrency(env = process.env) {
+  const value = Math.floor(Number(env.LAUNCHCLIP_ASSET_PROVIDER_CONCURRENCY));
+  return Number.isFinite(value) && value > 1 ? Math.min(value, MAX_ASSET_PROVIDER_CONCURRENCY) : 1;
+}
+
+export function createCommandAssetProvider(command, { timeoutMs = ASSET_PROVIDER_TIMEOUT_MS, concurrency = 1, notice = (line) => process.stderr.write(`${line}\n`), env = process.env, cwd = process.cwd() } = {}) {
   if (!String(command ?? "").trim()) throw new Error("--asset-provider-cmd needs a command");
+  const limit = Math.max(1, Math.min(MAX_ASSET_PROVIDER_CONCURRENCY, Math.floor(Number(concurrency)) || 1));
   let child = null;
   let exited = null;
   let lines = null;
   const waiting = [];
-  let queue = Promise.resolve();
+  // Requests not yet sent, while `limit` are open.
+  const queued = [];
+  let open = 0;
 
   function start() {
     if (child) return;
@@ -82,11 +95,25 @@ export function createCommandAssetProvider(command, { timeoutMs = ASSET_PROVIDER
     });
   }
 
+  function pump() {
+    while (open < limit && queued.length) {
+      const { request, resolve } = queued.shift();
+      open += 1;
+      ask(request).catch(() => null).then((shot) => {
+        open -= 1;
+        resolve(shot);
+        pump();
+      });
+    }
+  }
+
   return {
+    concurrency: limit,
     findShot(request) {
-      const next = queue.then(() => ask(request));
-      queue = next.catch(() => null);
-      return next;
+      return new Promise((resolve) => {
+        queued.push({ request, resolve });
+        pump();
+      });
     },
     async close() {
       if (!child || exited) return;
