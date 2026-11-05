@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras, profileGeometry, SAFE_ZONE_PROFILES } from "@launchclip/core/layout-check.mjs";
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
-import { captionDipHidden, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
+import { captionDipHidden, captionLineExtent, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
 import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
 import { driftExtent, sceneDrift } from "@launchclip/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
@@ -144,10 +144,17 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // text out of the safe zone, into the caption band or onto a neighbour.
   const ambient = ambientDrift(resolved, canvas);
   // Footage layouts put the captions on the presenter's side (captionZones), as both compilers do.
-  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => ambient.inflate(scene, moduleLayout(scene, story)), profile, captionZones: resolved.base ? captionZones(resolved) : [] });
+  const captionBand = captionBandFor(resolved, canvas, profile);
+  const shownEnd = plateShownEnds(resolved);
+  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => {
+    const produced = ambient.inflate(scene, moduleLayout(scene, story));
+    if (!produced || !shownEnd.has(scene.id)) return produced;
+    // Only the scene's own element: a part (clip callouts) keeps its own timing.
+    return (Array.isArray(produced) ? produced : [produced]).map((element) => (element && (element.id ?? scene.id) === scene.id ? { ...element, shownEnd: shownEnd.get(scene.id) } : element));
+  }, profile, captionBand, captionZones: resolved.base ? captionZones(resolved) : [] });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
-  const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
+  const report = checkLayout({ canvas, elements, profile, captionBand, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
   // Empty plates: spans where no scene draws anything (a gap in scene timing,
   // or a module that has not drawn yet when the previous one has gone).
   // Footage-led stories show the recording there instead.
@@ -194,6 +201,26 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     warnings,
     findings
   };
+}
+
+// The caption band the captions overlay takes: the profile's band, grown
+// about its centre to the tallest line the preset can draw
+// (captionLineExtent: a stacked or hero line overflows the band).
+export function captionBandFor(resolved, canvas, profile) {
+  const band = profileGeometry(canvas, profile ?? undefined).captionBand;
+  const overlay = captionsOverlayOf(resolved);
+  if (!band || !overlay) return band;
+  let extent = 0;
+  try { extent = captionLineExtent(captionOptions(overlay, { brand: resolved.brand, format: resolved.format, story: resolved }), resolved.format); } catch { extent = 0; }
+  if (!(extent > band.height)) return band;
+  return { ...band, y: band.y - (extent - band.height) / 2, height: extent };
+}
+
+// When each plate is last drawn: an outgoing plate stays through the next
+// scene's transition (transitions.mjs renderEnd). → Map scene id → seconds
+function plateShownEnds(resolved) {
+  try { return new Map(sceneWindows(resolved).scenes.filter((entry) => entry.renderEnd > entry.end).map((entry) => [entry.id, entry.renderEnd])); }
+  catch { return new Map(); }
 }
 
 // Brand frame (kit/core/brand-frame.mjs): key text or hero content that

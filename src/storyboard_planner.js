@@ -240,13 +240,13 @@ export async function planStoryboard(options = {}) {
       // A card in the caption band while captions show: the captions dip out
       // under it (a caption position the module layout does not plan for, such
       // as the middle of the frame, otherwise fails every attempt).
-      if (!checked.ok) {
+      // Repeated, as finish does: one round can expose the next clash.
+      for (let pass = 0; pass < 4 && !checked.ok; pass += 1) {
         const fitted = fitCaptionBand(pinned.storyboard, checked.errors);
-        if (fitted.hidden.length) {
-          pinned.storyboard = fitted.storyboard;
-          checked = checkStoryboard(pinned.storyboard, checkOptions);
-          pinned.warnings = [...pinned.warnings, `layout: tooling hid ${fitted.hidden.join("; ")}`];
-        }
+        if (!fitted.hidden.length) break;
+        pinned.storyboard = fitted.storyboard;
+        checked = checkStoryboard(pinned.storyboard, checkOptions);
+        pinned.warnings = [...pinned.warnings, `layout: tooling hid ${fitted.hidden.join("; ")}`];
       }
       if (lengthened.length) pinned.warnings = [...pinned.warnings, `timing: tooling fitted scenes to their module's minimum length: ${lengthened.join("; ")}`];
       if (moved.length) pinned.warnings = [...pinned.warnings, `timing: tooling moved ${moved.join("; ")} into the module's window`];

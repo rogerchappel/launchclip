@@ -203,9 +203,12 @@ Captions come from presets shared by both renderers: `word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
 `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
 `split-color`, `lower-band`, `bubble`, `quiet-accent` (the footage-led
-default when no style is named). Options (position, max words, case,
-emphasis words, font role, size, brand-role colours, stroke, shadow, entrance,
-exit, timing offset) go on the overlay or in the pack's `captions`.
+default when no style is named), `kinetic-hierarchy` (the line builds word by
+word, one large glowing hero word) and `soft-card` (the line on a card in the
+brand primary). Options (position, max words, case, weight, letter spacing,
+emphasis words, font role, size, brand-role colours, stroke, shadow, plate
+style, entrance, exit, timing offset) go on the overlay or in the pack's
+`captions`.
 
 ## Mimic a reference
 

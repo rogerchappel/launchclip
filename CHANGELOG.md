@@ -4,6 +4,12 @@
 
 ### Added
 
+- Two caption presets: `kinetic-hierarchy` (the line builds up word by word;
+  small connecting words, one large hero word glowing in the active colour,
+  no box) and `soft-card` (the line on a rounded card in the brand primary).
+  Caption options `weight`, `letter_spacing`, `case: "lower"` and
+  `plate_style` (`box` or `scrim`, so a box-less preset that needs help to
+  read over footage gets a soft scrim rather than a box).
 - A `clip` module: one full-frame shot of your footage cut to the narration,
   cropped to the frame about a focus point, played from a source window, with
   a gentle Ken Burns move on stills, an entrance in the style's motion grammar
@@ -133,6 +139,15 @@
 
 ### Fixed
 
+- Text no longer collides. The caption-band check counts a card's enter,
+  exit and the time it is held under the next transition, reports every
+  clash and grows the band to the preset's tallest line, and finish (and the
+  planner) keep hiding captions until no clash is left. A caption line that
+  repeats a title card on screen is hidden while the card is up. Text over
+  footage (clip callouts, titles) keeps clear of the brand frame's logo
+  kicker. An overview no longer holds a shot that the next shot landed on,
+  so two cards never stack, and world-mode fades, pushes and pulls hand the
+  plates over in turn instead of showing both cards' text at once.
 - Remotion renders fit the container they run in: the `<OffthreadVideo>`
   frame cache is sized from the cgroup memory limit (Remotion's default is
   half the host's free memory, which a container may not have), and render

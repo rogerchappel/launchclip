@@ -26,8 +26,8 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent"];
-const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card"];
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
@@ -733,6 +733,8 @@ function validateCaptionOptions(overlay, path, err) {
   for (const key of ["max_words", "max_chars"]) if (overlay[key] !== undefined && !(Number.isInteger(overlay[key]) && overlay[key] >= 1 && overlay[key] <= 40)) err(`${path}.${key} must be an integer between 1 and 40`);
   if (overlay.size !== undefined && !(typeof overlay.size === "number" && overlay.size >= 0.4 && overlay.size <= 2.5)) err(`${path}.size must be a scale between 0.4 and 2.5`);
   if (overlay.offset !== undefined && !(typeof overlay.offset === "number" && Math.abs(overlay.offset) <= 0.5)) err(`${path}.offset must be seconds between -0.5 and 0.5`);
+  if (overlay.weight !== undefined && !(Number.isInteger(overlay.weight) && overlay.weight >= 100 && overlay.weight <= 950)) err(`${path}.weight must be a font weight between 100 and 950`);
+  if (overlay.letter_spacing !== undefined && !(typeof overlay.letter_spacing === "number" && overlay.letter_spacing >= -0.1 && overlay.letter_spacing <= 0.5)) err(`${path}.letter_spacing must be em between -0.1 and 0.5`);
   if (overlay.stroke !== undefined && overlay.stroke !== false && !(typeof overlay.stroke === "number" && overlay.stroke >= 0 && overlay.stroke <= 40)) err(`${path}.stroke must be false or a width in px (0-40)`);
   if (overlay.shadow !== undefined && overlay.shadow !== false && typeof overlay.shadow !== "string") err(`${path}.shadow must be false or a CSS text-shadow`);
   if (overlay.emphasis !== undefined && !(overlay.emphasis === "auto" || overlay.emphasis === "none" || overlay.emphasis === false || (Array.isArray(overlay.emphasis) && overlay.emphasis.every(nonEmpty)))) err(`${path}.emphasis must be "auto", "none", false or a list of words`);

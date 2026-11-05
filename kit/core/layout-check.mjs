@@ -120,18 +120,20 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
     }
   }
 
-  // 3. Caption-band clashes while captions are visible.
+  // 3. Caption-band clashes while captions are visible: over the element's
+  // whole time on screen, its enter and exit included (a card fading or
+  // sliding in is already text under the captions), one finding per clash.
   for (const caption of captions) {
     const captionRect = caption.rect ?? band;
     if (!captionRect) continue;
     const visible = subtractWindows([caption.start, caption.end], caption.hide);
     for (const item of keyed) {
-      if (!item.settled || item.hidesCaptions) continue;
+      if (item.hidesCaptions || !(item.shownEnd - item.start > EPSILON)) continue;
       if (intersectionArea(item.rect, captionRect) <= EPSILON) continue;
-      const clash = visible.map((window) => overlap(window, item.settled)).find(Boolean);
-      if (!clash) continue;
-      add("caption-band", "error", [item.id, caption.id], clash[0],
-        `${item.id} sits in the caption band ${rectText(captionRect)} while captions are visible (${round(clash[0])}s–${round(clash[1])}s); move it or set hidesCaptions`);
+      for (const clash of visible.map((window) => overlap(window, [item.start, item.shownEnd])).filter(Boolean)) {
+        add("caption-band", "error", [item.id, caption.id], clash[0],
+          `${item.id} sits in the caption band ${rectText(captionRect)} while captions are visible (${round(clash[0])}s–${round(clash[1])}s); move it or set hidesCaptions`);
+      }
     }
   }
 
@@ -373,6 +375,8 @@ function normalizeElement(element, index) {
     start,
     end,
     settled: exitStart - enterEnd > EPSILON ? [enterEnd, exitStart] : null,
+    // Still drawn after its end: an outgoing plate held through the next scene's transition.
+    shownEnd: Number.isFinite(Number(element.shownEnd)) ? Math.max(end, Number(element.shownEnd)) : end,
     minTextPx: element.minTextPx == null ? null : Number(element.minTextPx),
     minSecondaryTextPx: element.minSecondaryTextPx == null ? null : Number(element.minSecondaryTextPx),
     textRole: element.textRole === "body" ? "body" : "key",

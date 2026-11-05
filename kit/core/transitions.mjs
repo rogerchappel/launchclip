@@ -78,6 +78,19 @@ export function overviewSpan(story, plates, index) {
 }
 
 /**
+ * Ids of the plates (track-0 window entries in start order) that the next
+ * plate landed on: it arrived without a camera move (a cut, fade, dissolve or
+ * any layered reveal), so camera-world.mjs worldLayout puts it on the same
+ * spot. (A push or pull nests the next shot inside or around this one at
+ * another scale, so it stays visible.)
+ */
+export function coveredPlates(plates, mode = 'world') {
+  const covered = new Set();
+  for (let i = 1; i < plates.length; i += 1) if (!isCameraTransition(plates[i].scene?.in, mode)) covered.add(plates[i - 1].id);
+  return covered;
+}
+
+/**
  * Identity state of a scene layer. iris: null = no clip; wipeT/R/B/L: percent
  * insets of a straight-edged clip (null = none); glow: extra brightness (0 =
  * none, 0.8 = brightness(1.8)); rackIn: a rack-focus card arriving, 1 → 0
@@ -89,6 +102,9 @@ const WIPE_PROPS = ['wipeT', 'wipeR', 'wipeB', 'wipeL'];
 
 const EPS = 1e-6;
 const ADJACENT = 0.1;
+// World mode: the share of a fade the outgoing plate takes to clear (and the
+// incoming one to arrive), so the two overlap only near zero opacity.
+const WORLD_HANDOVER = 0.55;
 /** Empty spans shorter than this (seconds) are covered by holding the previous plate. */
 export const HOLD_GAP = 0.5;
 
@@ -164,20 +180,24 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     // crossfade while the camera moves.
     // The outgoing plate is gone before the object it zooms into fills the
     // frame, so its magnified content never sits on top of the new scene.
-    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.15, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.35)] };
-    if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.7)] };
+    // The plates are transparent, so the two hand over in turn (out, then
+    // in, meeting near zero) and two cards' text never shows at once.
+    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.1, d * 0.35)] };
+    if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', 0, d * 0.45)] };
     return { type, duration: d, camera: true, in: [], out: [] };
   }
   // World mode: plates are transparent, so a layered reveal also fades the
-  // outgoing plate (cuts mode covers it with the incoming opaque plate).
-  const fadeOut = mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut')] : [];
+  // outgoing plate (cuts mode covers it with the incoming opaque plate), in
+  // the first half, so its text is gone before the incoming text is up.
+  const fadeOut = mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut', 0, d * WORLD_HANDOVER)] : [];
   const axis = direction === 'up' || direction === 'down' ? 'y' : 'x';
   const span = axis === 'x' ? width : height;
   // "left" = the content travels left: the incoming plate enters from the right.
   const sign = direction === 'left' || direction === 'up' ? -1 : 1;
   switch (type) {
     case 'fade':
-      return { type, duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: fadeOut };
+      // World mode: out, then in (they meet at the middle, both near zero).
+      return { type, duration: d, in: [mode === 'world' ? t('opacity', 0, 1, 'power1.inOut', d * (1 - WORLD_HANDOVER), d * WORLD_HANDOVER) : t('opacity', 0, 1, 'power1.inOut')], out: fadeOut };
     case 'morph':
       // Crossfade; the module pair hands the named shared object across.
       return { type, duration: d, in: [t('opacity', 0, 1, 'power2.inOut')], out: [t('opacity', 1, 0, 'power2.inOut')] };
@@ -326,7 +346,11 @@ export function sceneWindows(story) {
       entry.transitionIn.span = span.map((other) => other.id);
       entry.transitionIn.hold = round(Math.min(Number.isFinite(Number(transition.hold)) ? Number(transition.hold) : OVERVIEW.hold, d(transition) - 1), 6);
       const end = round(Math.min(duration, entry.start + tweens.duration), 6);
-      for (const other of span) if (other !== before) other.holds.push({ start: entry.start, end, overview: entry.id });
+      // A shot the next one landed on (same spot: a cut, fade or dissolve) is
+      // under it in the world, so holding it would stack two cards' text in
+      // the overview; only the top shot of a spot is held.
+      const covered = coveredPlates(plates.slice(0, plates.indexOf(entry)), mode);
+      for (const other of span) if (other !== before && !covered.has(other.id)) other.holds.push({ start: entry.start, end, overview: entry.id });
     }
     entry.tweens.push(...tweens.in.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'in' })));
     if (!entry.plate || tweens.type === 'cut') continue;
