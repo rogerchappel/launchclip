@@ -181,7 +181,8 @@ const extensionOf = (value) => {
  * url?, source?, notes?, duration?}], media: [{src, kind, duration?, notes}]
  * (the placed shots that carry notes, in the planner's media shape),
  * errors: ["scene <id>: …"]}. cache: a Map reused across repair attempts, so
- * the same request is asked once.
+ * the same request is asked once. A provider with concurrency > 1 is asked
+ * for every shot at once; otherwise one at a time, in scene order.
  */
 export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill } = {}) {
   const requests = shotRequests(storyboard);
@@ -201,6 +202,10 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
     story.scenes[index] = { ...scene, params: withoutPath(scene.params, slot) };
     warnings.push(`${line.replace(/; design this scene without one$/, "")}; the ${scene.module} card keeps its placeholder`);
   };
+  // Each request, checked and built first, so a provider that takes several
+  // at once (assets.concurrency > 1) gets them all in flight before the first
+  // answer is placed.
+  const asked = [];
   for (const { index, scene, slot, still } of requests) {
     const media = pathValue(scene.params, slot);
     const shows = String(media.shows ?? "").trim();
@@ -224,8 +229,18 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       format: { width, height, aspect: width && height ? (width / height >= 1 ? (width / height > 1.2 ? "landscape" : "square") : "portrait") : null },
       brief: String(brief ?? "")
     };
-    const key = JSON.stringify([request.shows, request.type, width, height]);
-    if (!cache.has(key)) cache.set(key, Promise.resolve(assets.findShot(request, { signal })));
+    asked.push({ index, scene, slot, still, shows, where, request, key: JSON.stringify([request.shows, request.type, width, height]) });
+  }
+  const ask = (request) => {
+    const answer = Promise.resolve(assets.findShot(request, { signal })).then((shot) => snapshotShot(shot, request, project));
+    answer.catch(() => {}); // awaited below; a failure asked ahead is not unhandled
+    return answer;
+  };
+  if (Number(assets.concurrency) > 1) {
+    for (const { request, key } of asked) if (!cache.has(key)) cache.set(key, ask(request));
+  }
+  for (const { index, scene, slot, still, shows, where, request, key } of asked) {
+    if (!cache.has(key)) cache.set(key, ask(request));
     let shot;
     try {
       shot = await cache.get(key);
@@ -335,6 +350,23 @@ export async function ffmpegStill(video, at, target) {
   await run(at).catch(() => null);
   const size = await stat(target).then((info) => info.size, () => 0);
   if (!size) await run(0);
+}
+
+// An answer naming a file is copied into the project the moment it arrives.
+// An app may write every answer to one path (a scratch file it reuses), and a
+// cached answer is placed again on each repair pass: a copy taken later would
+// show whatever the app wrote there last. → the answer, with src for file.
+async function snapshotShot(answer, request, project) {
+  const shot = normalizeShot(answer);
+  if (!shot?.file || shot.src || !project) return answer;
+  const ext = extensionOf(shot.file);
+  if (!IMAGE.test(ext) && !VIDEO.test(ext)) return answer;
+  const src = `${SHOTS_DIR}/${request.id}${ext}`;
+  const target = path.join(project, src);
+  await mkdir(path.dirname(target), { recursive: true });
+  await copyFile(path.resolve(String(shot.file)), target);
+  const { file: _file, path: _path, ...rest } = answer;
+  return { ...rest, src };
 }
 
 async function placeShot(shot, request, project) {
