@@ -3,9 +3,11 @@
 // path) and merge it (kit/core/style.mjs applyStyle) before validation and
 // anchor resolution. story validate/resolve/compile, layout-check, finish, the
 // renderer adapters, cinematic checks and the renderer eval all call this, so
-// they see the same merged story.
+// they see the same merged story. The frame's logo is measured here too
+// (src/logo_mark.js), so every reader picks the same plate for it.
 import path from "node:path";
 import { applyStyle, storyStyleRequest } from "@launchclip/core/style.mjs";
+import { withLogoMark } from "./logo_mark.js";
 import { resolveStyleV2 } from "./style_store.js";
 
 /**
@@ -14,7 +16,13 @@ import { resolveStyleV2 } from "./style_store.js";
  * paths and the project style root. Throws when the named pack is missing or
  * invalid.
  */
-export async function applyProjectStyle(story, { projectDir = process.cwd(), home, root } = {}) {
+export async function applyProjectStyle(story, options = {}) {
+  const result = await mergeProjectStyle(story, options);
+  const measured = await withLogoMark(result.story, path.resolve(options.projectDir ?? process.cwd()));
+  return measured === result.story ? result : { ...result, story: measured };
+}
+
+async function mergeProjectStyle(story, { projectDir = process.cwd(), home, root } = {}) {
   const request = storyStyleRequest(story);
   if (!request) return { story, style: null };
   if (story?.meta?.style && Array.isArray(story.meta.style.applied)) {

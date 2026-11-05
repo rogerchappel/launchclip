@@ -31,6 +31,17 @@
 // `color` overrides it while that label shows. The changes are colour tweens
 // in the same plan, so both renderers switch on the same frame.
 //
+// A kicker with a logo and no label is a logo mark (frameLogoMark): the logo
+// alone, a visible size in the canvas corner (inside a 22% × 6.5% box, 30 × k
+// px from the edges, the usual social-video logo bug) rather than a small
+// icon inset in the profile safe zone. Most logos already carry the brand's
+// wordmark, so a story title never becomes a label beside one. The mark sits
+// on a plate chosen for its tone (frameLogoPlate): a white plate behind a
+// dark, mixed or unmeasured logo so it reads on dark cards and footage, a
+// dark plate behind a light one unless every backdrop behind it is dark.
+// frame.logo_mark ({tone, aspect}) is measured from the file
+// (src/logo_mark.js) when the story is read.
+//
 // Canonical copy: kit/core/brand-frame.mjs.
 
 import { profileGeometry } from './layout-check.mjs';
@@ -48,6 +59,12 @@ const r4 = (value) => Math.round(value * 10000) / 10000;
 
 // Sizes at k = 1 (the short side is 1080 px).
 export const BRAND_FRAME_METRICS = Object.freeze({ label: 30, section: 24, logo: 40, gap: 12, underline: 4, underlineGap: 10, band: 78, progress: 6, source: 24, sourceBand: 48 });
+// The logo mark: its box as a share of the canvas (plate included), and the
+// corner margin, plate padding and radius at k = 1.
+export const LOGO_MARK_METRICS = Object.freeze({ width: 0.22, height: 0.065, margin: 30, pad: 8, radius: 10 });
+export const LOGO_PLATES = Object.freeze(['auto', 'light', 'dark', 'none']);
+export const LOGO_TONES = Object.freeze(['dark', 'light', 'mixed']);
+const PLATE_COLORS = Object.freeze({ light: '#ffffff', dark: '#0c0e10' });
 
 /** A hex colour, else a brand role (`value`, then `role`), else the role's fallback. */
 function color(value, brand, role) {
@@ -67,8 +84,12 @@ export function storyFrame(story) {
   const frame = story?.frame;
   if (!isObject(frame) || frame.enabled === false) return null;
   const kicker = part(frame.kicker ?? true, { underline: true, position: 'top-left', logo: true });
-  if (kicker && !nonEmpty(kicker.label) && nonEmpty(story.title) && story.title.trim().length <= 32) kicker.label = story.title.trim();
-  if (kicker && !nonEmpty(kicker.label) && !(kicker.logo !== false && nonEmpty(frame.logo))) kicker.empty = true;
+  const showsLogo = Boolean(kicker && kicker.logo !== false && nonEmpty(frame.logo));
+  // A logo carries the brand on its own, so the title only fills a kicker without one.
+  if (kicker && !showsLogo && !nonEmpty(kicker.label) && nonEmpty(story.title) && story.title.trim().length <= 32) kicker.label = story.title.trim();
+  if (kicker && !nonEmpty(kicker.label) && !showsLogo) kicker.empty = true;
+  if (kicker && showsLogo && !nonEmpty(kicker.label)) kicker.mark = true;
+  const mark = isObject(frame.logo_mark) ? frame.logo_mark : {};
   const sections = part(frame.sections ?? true, { position: kicker?.position === 'top-right' ? 'top-left' : 'top-right' });
   const progress = part(frame.progress ?? false, { position: 'bottom' });
   return {
@@ -77,6 +98,7 @@ export function storyFrame(story) {
     progress: frame.progress === true || isObject(frame.progress) ? progress : null,
     show: frame.show === 'scenes' ? 'scenes' : 'always',
     logo: nonEmpty(frame.logo) ? frame.logo : null,
+    logoMark: { tone: LOGO_TONES.includes(mark.tone) ? mark.tone : null, aspect: Number(mark.aspect) > 0 ? Number(mark.aspect) : null },
     color: frame.color ?? 'paper',
     labels: Array.isArray(frame.labels) ? frame.labels : [],
     sources: Array.isArray(frame.sources) ? frame.sources : []
@@ -140,7 +162,8 @@ export function brandFrameLayout(story, format = story?.format) {
   // The kicker and labels claim up to half the safe width each.
   const half = zone.width / 2 - M.gap * k;
   const regions = [];
-  if (frame.kicker) regions.push({ id: 'frame-kicker', rect: corner(frame.kicker.position, half) });
+  if (frame.kicker?.mark) regions.push({ id: 'frame-kicker', rect: logoMarkRect(canvas, frame.kicker.position, k) });
+  else if (frame.kicker) regions.push({ id: 'frame-kicker', rect: corner(frame.kicker.position, half) });
   const labels = frameLabels(story, frame);
   if (frame.sections && labels.length) regions.push({ id: 'frame-section', rect: corner(frame.sections.position, half) });
   const sources = frameSources(story, frame);
@@ -150,8 +173,10 @@ export function brandFrameLayout(story, format = story?.format) {
   }
   let top = zone.y, bottom = zone.y + zone.height;
   for (const region of regions) {
-    if (region.rect.y <= zone.y + 1e-6) top = Math.max(top, region.rect.y + region.rect.height);
-    else bottom = Math.min(bottom, region.rect.y);
+    // The logo mark sits outside the band grid, so its rect keeps a gap to the modules.
+    const gap = region.id === 'frame-kicker' && frame.kicker?.mark ? M.gap * k : 0;
+    if (region.rect.y <= zone.y + 1e-6) top = Math.max(top, region.rect.y + region.rect.height + gap);
+    else bottom = Math.min(bottom, region.rect.y - gap);
   }
   const thickness = (isObject(frame.progress) && typeof frame.progress.thickness === 'number' ? frame.progress.thickness : M.progress) * k;
   // Chapter ticks: a mark on the progress line at each chapter start after the first.
@@ -164,6 +189,32 @@ export function brandFrameLayout(story, format = story?.format) {
     else bottom = Math.min(bottom, edge);
   }
   return { frame, k, zone, regions, labels, sources, progress, safe: { x: r2(zone.x), y: r2(top), width: r2(zone.width), height: r2(Math.max(0, bottom - top)) } };
+}
+
+/** The logo mark's box: LOGO_MARK_METRICS of the canvas, LOGO_MARK_METRICS.margin × k from the corner's edges. */
+export function logoMarkRect(canvas, position = 'top-left', k = Math.min(canvas.width, canvas.height) / 1080) {
+  const L = LOGO_MARK_METRICS;
+  const width = canvas.width * L.width, height = canvas.height * L.height, margin = L.margin * k;
+  return {
+    x: r2(String(position).endsWith('left') ? margin : canvas.width - margin - width),
+    y: r2(isTop(position) ? margin : canvas.height - margin - height),
+    width: r2(width),
+    height: r2(height)
+  };
+}
+
+/**
+ * The plate behind the logo mark: "light" | "dark" | "none". kicker.plate
+ * other than auto wins. Auto puts a white plate behind a dark, mixed or
+ * unmeasured logo (a dark mark never sits on a dark card), and behind a light
+ * one a dark plate, or none when every track-0 backdrop is known and dark.
+ */
+export function frameLogoPlate(story, frame = storyFrame(story)) {
+  const requested = frame?.kicker?.plate;
+  if (requested && requested !== 'auto' && LOGO_PLATES.includes(requested)) return requested;
+  if (frame?.logoMark?.tone !== 'light') return 'light';
+  const backdrops = (story?.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0).map((scene) => frameBackdrop(scene, story));
+  return backdrops.length && backdrops.every((hex) => hex && contrastRatio(PLATE_COLORS.light, hex) >= FRAME_MIN_CONTRAST) ? 'none' : 'dark';
 }
 
 /** The area modules may draw in without colliding with the frame, or null when the story has no frame. */
@@ -278,7 +329,26 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
   });
 
   const kickerRegion = regions.find((region) => region.id === 'frame-kicker');
-  if (frame.kicker && kickerRegion) {
+  if (frame.kicker?.mark && kickerRegion) {
+    const L = LOGO_MARK_METRICS;
+    const plate = frameLogoPlate(story, frame);
+    const pad = plate === 'none' ? 0 : L.pad * k;
+    const { rect } = kickerRegion;
+    const left = String(frame.kicker.position).endsWith('left');
+    const room = { width: rect.width - 2 * pad, height: rect.height - 2 * pad };
+    // A known aspect fits the logo to the box (scaling a small file up); else it fills the height.
+    const aspect = frame.logoMark.aspect;
+    const size = aspect
+      ? (() => { const height = Math.min(room.height, room.width / aspect); return `width: ${px(height * aspect)}; height: ${px(height)};`; })()
+      : `height: ${px(room.height)}; width: auto; max-width: ${px(room.width)}; object-fit: contain; object-position: ${left ? 'left' : 'right'} center;`;
+    css.push(`.lc-frame-kicker { left: ${px(rect.x)}; top: ${px(rect.y)}; width: ${px(rect.width)}; height: ${px(rect.height)}; align-items: ${isTop(frame.kicker.position) ? 'flex-start' : 'flex-end'}; justify-content: ${left ? 'flex-start' : 'flex-end'}; }`);
+    css.push(plate === 'none'
+      ? `.lc-frame-kicker-inner { display: inline-flex; filter: drop-shadow(0 ${px(2 * k)} ${px(6 * k)} rgba(0,0,0,.45)); }`
+      : `.lc-frame-kicker-inner { display: inline-flex; box-sizing: border-box; padding: ${px(pad)}; border-radius: ${px(L.radius * k)}; background: ${PLATE_COLORS[plate]}; box-shadow: 0 ${px(3 * k)} ${px(10 * k)} rgba(0,0,0,.22); }`);
+    css.push(`.lc-frame-logo { display: block; flex: none; ${size} }`);
+    const inner = { tag: 'div', id: 'lc-frame-kicker-inner', cls: `lc-frame-kicker-inner lc-frame-plate-${plate}`, children: [{ tag: 'img', id: 'lc-frame-logo', cls: 'lc-frame-logo', src: frame.logo }] };
+    root.children.push({ tag: 'div', id: 'lc-frame-kicker', cls: 'lc-frame-corner lc-frame-kicker', children: [inner] });
+  } else if (frame.kicker && kickerRegion) {
     const underline = color(frame.kicker.color, brand, 'primary');
     css.push(`.lc-frame-kicker { ${place(kickerRegion.rect, frame.kicker.position)} }`);
     css.push(`.lc-frame-kicker-inner { position: relative; display: inline-flex; align-items: center; gap: ${px(M.gap * k)}; max-width: 100%; padding-bottom: ${px((M.underline + M.underlineGap) * k)}; }`);

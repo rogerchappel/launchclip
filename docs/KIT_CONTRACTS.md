@@ -808,8 +808,8 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  background?: {kind: <slug>, params?: {fade?: none|center|top|bottom|left|right, ...}},
  variants?: {<module>: <variant>},
  world?: {kind: <world id>, time?: day|dusk|night},
- brand_frame?: false | {enabled?, logo?: path, color?: role|hex,
-                kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?},
+ brand_frame?: false | {enabled?, logo?: path, logo_mark?: {tone?: dark|light|mixed, aspect?: w/h}, color?: role|hex,
+                kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?, plate?: auto|light|dark|none},
                 sections?: boolean | {position?, color?},
                 progress?: boolean | {position?: top|bottom, color?, thickness?: 2-16 px},
                 show?: always|scenes},
@@ -1026,8 +1026,8 @@ exactly):
   bundled OFL families (`BRAND_FONT_NEAREST`, then `nearestBundledFont`), with
   each swap in `generated.substituted`. Tone words and industry choose the
   tone (`toneFromText`) and the industry the worlds (`suggestWorld`). A name
-  or logo turns the brand frame on, with the name as the kicker label and the
-  logo in the kicker (the lockup). A style with brand colours is never
+  or logo turns the brand frame on: the logo as the kicker (a logo mark), else
+  the name as its label. A style with brand colours is never
   redrawn away from the starters: its colours are its identity.
 - Motion feel (`kit/core/style-feel.mjs` `drawMotionFeel`): `motion.grammar`
   becomes `{base, ease, duration, overshoot: 0, stagger, camera: {whip,
@@ -1104,12 +1104,29 @@ a style name.
 `story.frame` (filled from the style's `brand_frame`, or written by hand;
 `false` for none) is drawn by the compilers around scenes, never by modules
 (RFC §9.2): a kicker (the `logo` image, a ≤ 40-character `label`, defaulting to
-a story `title` of ≤ 32 characters, and an underline that draws on), section
+a story `title` of ≤ 32 characters when no logo shows, and an underline that
+draws on), section
 labels (`labels: [{scene | start, label}]`, each shown from its start to the
 next) and an optional `progress` line along the bottom (or top) edge.
 `show: "scenes"` shows it only over runs of scenes. The kicker sits in a
 corner of the profile safe zone (`top-left` by default) and the labels in the
 opposite top corner, each claiming a `78 × k` px band (k = short side / 1080).
+
+A kicker with a logo and no label is a **logo mark**: the logo alone (logos
+usually carry the wordmark, so no title joins it), in a box of 22 % × 6.5 %
+of the canvas `30 × k` px in from its corner (`LOGO_MARK_METRICS`,
+`logoMarkRect`), above the 9:16 profile safe zone and kept out of
+`brandFrameSafe` with a `12 × k` px gap where it reaches into it. It sits on a
+rounded plate (`8 × k` padding, `10 × k` radius, soft shadow) chosen by
+`frameLogoPlate(story)`: `kicker.plate` when not `auto`; else white behind a
+dark, mixed or unmeasured logo, so a dark mark never sits on a dark card or
+footage; behind a light logo none when every track-0 backdrop is known and
+dark, else a dark plate. `frame.logo_mark` holds the measured `tone` and
+`aspect` (width / height): `applyProjectStyle` (`src/story_style.js`) fills it
+from the file with ffprobe/ffmpeg (`src/logo_mark.js`; a logo with opaque
+edges is judged by its own background), and a known aspect fits the logo to
+the box. A logo with a label keeps the original lockup (logo, label,
+underline).
 
 - `brandFramePlan(story, {format})` → `{css, nodes, tweens, layout}` in the
   caption-plan shape (same tween rules). HyperFrames mounts it in

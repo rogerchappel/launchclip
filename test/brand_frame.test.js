@@ -8,13 +8,15 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameSources, frameWindows, intersectRects, storyFrame } from "@launchclip/core/brand-frame.mjs";
+import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameLogoPlate, frameSources, frameWindows, intersectRects, storyFrame } from "@launchclip/core/brand-frame.mjs";
 import { captionStateAt, indexCaptionTweens } from "@launchclip/core/captions.mjs";
 import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
-import { resolveStory } from "@launchclip/core/story.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { brandFrameErrors } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { brandFrameFindings } from "../src/layout_check.js";
+import { logoTone } from "../src/logo_mark.js";
 
 const require = createRequire(import.meta.url);
 const { gsap } = require("gsap");
@@ -285,4 +287,66 @@ test("per-scene colour: the frame swaps to a contrasting colour on light cast se
   tl.kill();
   assert.ok(compared > 300, `compared ${compared} colour samples`);
   assert.ok(worst <= 1, `evaluator colour differs from GSAP by ${worst}`);
+});
+
+test("a logo-only kicker is a corner logo mark: a visible box, no title label, safe area kept clear", () => {
+  const portrait = { width: 1080, height: 1920, duration: 12 };
+  const s = story({ logo: "assets/logo.png", sections: false }, { format: portrait });
+  const frame = storyFrame(s);
+  assert.equal(frame.kicker.label, undefined, "a logo is never joined by the story title");
+  assert.equal(frame.kicker.mark, true);
+  assert.equal(storyFrame(story({ logo: "assets/logo.png", kicker: { label: "Ship" } })).kicker.mark, undefined, "an explicit label keeps the lockup");
+  assert.equal(storyFrame(story({ logo: "assets/logo.png", kicker: { logo: false } })).kicker.label, "Inside Ship Mode", "no logo shown: the title fills the kicker");
+  const layout = brandFrameLayout(s, portrait);
+  const rect = layout.regions.find((region) => region.id === "frame-kicker").rect;
+  assert.deepEqual(rect, { x: 30, y: 30, width: 237.6, height: 124.8 }, "22% × 6.5% of the canvas, 30 px in from the top-left corner");
+  assert.equal(layout.safe.y, profileGeometry(portrait).safeZone.y, "9:16: the mark sits above the profile safe zone");
+  const wide = brandFrameLayout(story({ logo: "assets/logo.png", sections: false }));
+  assert.ok(wide.safe.y >= 30 + 1080 * 0.065, "16:9: modules start below the mark");
+  const right = brandFrameLayout(story({ logo: "assets/logo.png", kicker: { position: "bottom-right" }, sections: false }), portrait).regions[0].rect;
+  assert.deepEqual([right.x, right.y], [r(1080 - 30 - 237.6), r(1920 - 30 - 124.8)]);
+  const plan = brandFramePlan(s, { format: portrait });
+  const inner = plan.nodes[0].children[0].children[0];
+  assert.equal(inner.cls, "lc-frame-kicker-inner lc-frame-plate-light");
+  assert.deepEqual(inner.children.map((node) => node.tag), ["img"], "logo only: no label, no underline");
+  assert.match(plan.css, /\.lc-frame-kicker-inner \{[^}]*padding: 8px; border-radius: 10px; background: #ffffff/);
+  assert.match(plan.css, /\.lc-frame-logo \{[^}]*height: 108\.8px; width: auto; max-width: 221\.6px/, "unmeasured: the logo fills the box height");
+  const measured = brandFramePlan(story({ logo: "assets/logo.png", logo_mark: { tone: "dark", aspect: 4 }, sections: false }, { format: portrait }), { format: portrait });
+  assert.match(measured.css, /\.lc-frame-logo \{[^}]*width: 221\.6px; height: 55\.4px;/, "a wide wordmark fits the box width");
+});
+
+const r = (value) => Math.round(value * 100) / 100;
+
+test("frameLogoPlate: a white plate behind dark, mixed or unmeasured logos; a light logo goes bare only over known dark backdrops", () => {
+  const with_ = (frame, overrides) => story({ logo: "assets/logo.png", ...frame }, overrides);
+  assert.equal(frameLogoPlate(with_({})), "light", "unmeasured");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "dark" } })), "light", "a dark logo never sits on the dark card background");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "mixed" } })), "light");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "light" } })), "none", "a light logo on the dark brand bg needs no plate");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "light" } }, { brand: { colors: { bg: "#f4f1ea", paper: "#111111" }, fonts: {} } })), "dark", "a light logo on a light bg gets the dark plate");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "light" } }, { base: { kind: "video", src: "assets/talk.mp4" } })), "dark", "over unknown footage: the dark plate");
+  assert.equal(frameLogoPlate(with_({ logo_mark: { tone: "dark" }, kicker: { plate: "none" } })), "none", "kicker.plate overrides");
+  const bare = brandFramePlan(with_({ logo_mark: { tone: "light" } }));
+  assert.match(bare.css, /\.lc-frame-kicker-inner \{ display: inline-flex; filter: drop-shadow/);
+  assert.doesNotMatch(bare.css, /background: #ffffff/);
+});
+
+test("brand frame validation takes kicker.plate and logo_mark", () => {
+  assert.deepEqual(brandFrameErrors({ logo: "assets/logo.png", kicker: { plate: "light" }, logo_mark: { tone: "dark", aspect: 2.5 } }), []);
+  assert.match(brandFrameErrors({ kicker: { plate: "white" } }).join("\n"), /kicker\.plate must be auto, light, dark or none/);
+  assert.match(brandFrameErrors({ logo_mark: { tone: "grey", aspect: 0 } }).join("\n"), /logo_mark\.tone[\s\S]*logo_mark\.aspect/);
+  const valid = validateStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, scenes: [{ id: "a", module: "hook-title", start: 0, end: 4, params: { headline: "Hi" } }], frame: { logo: "assets/logo.png", logo_mark: { tone: "dark" } } });
+  assert.doesNotMatch(valid.errors.join("\n"), /logo_mark/);
+});
+
+test("logoTone: opaque pixels of a transparent logo, else its own background", () => {
+  const size = 4;
+  const image = (fill) => Buffer.from(Array.from({ length: size * size }, (_, i) => fill(i % size, Math.floor(i / size))).flat());
+  const inside = (x, y) => x > 0 && y > 0 && x < size - 1 && y < size - 1;
+  assert.equal(logoTone(image((x, y) => (inside(x, y) ? [10, 10, 12, 255] : [0, 0, 0, 0])), size), "dark");
+  assert.equal(logoTone(image((x, y) => (inside(x, y) ? [250, 250, 250, 255] : [0, 0, 0, 0])), size), "light");
+  assert.equal(logoTone(image((x, y) => (inside(x, y) ? [188, 188, 188, 255] : [0, 0, 0, 0])), size), "mixed");
+  assert.equal(logoTone(image((x, y) => (inside(x, y) ? [0, 0, 0, 255] : [255, 255, 255, 255])), size), "dark", "black on its own white rectangle: a white plate");
+  assert.equal(logoTone(image((x, y) => (inside(x, y) ? [255, 255, 255, 255] : [20, 20, 20, 255])), size), "light");
+  assert.equal(logoTone(image(() => [0, 0, 0, 0]), size), null);
 });

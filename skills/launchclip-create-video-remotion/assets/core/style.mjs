@@ -381,7 +381,7 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
   if (frame === false) return [];
   if (!isObject(frame)) return [`${where} must be an object (or false)`];
   const errors = [];
-  const keys = new Set(['enabled', 'logo', 'kicker', 'sections', 'progress', 'show', 'labels', 'color', 'sources']);
+  const keys = new Set(['enabled', 'logo', 'logo_mark', 'kicker', 'sections', 'progress', 'show', 'labels', 'color', 'sources']);
   for (const key of Object.keys(frame)) if (!keys.has(key)) errors.push(`${where}.${key} is not a brand frame field (${[...keys].join(', ')})`);
   if (frame.enabled !== undefined && typeof frame.enabled !== 'boolean') errors.push(`${where}.enabled must be true or false`);
   if (frame.logo !== undefined && frame.logo !== null && !nonEmpty(frame.logo)) errors.push(`${where}.logo must be an image path in the project (assets/...)`);
@@ -394,7 +394,7 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
     if (value.position !== undefined && !STYLE_FRAME_POSITIONS.includes(value.position) && !(name === 'progress' && ['top', 'bottom'].includes(value.position))) errors.push(`${where}.${name}.position must be one of ${name === 'progress' ? 'top, bottom' : STYLE_FRAME_POSITIONS.join(', ')}`);
     if (value.color !== undefined && !isColorRef(value.color)) errors.push(`${where}.${name}.color must be a brand role or a hex colour`);
   };
-  part('kicker', ['label', 'underline', 'position', 'color', 'logo']);
+  part('kicker', ['label', 'underline', 'position', 'color', 'logo', 'plate']);
   part('sections', ['position', 'color']);
   part('progress', ['position', 'color', 'thickness', 'ticks']);
   if (isObject(frame.progress) && frame.progress.ticks !== undefined && typeof frame.progress.ticks !== 'boolean') errors.push(`${where}.progress.ticks must be true or false (a mark at each chapter start)`);
@@ -402,6 +402,15 @@ export function brandFrameErrors(frame, where = 'brand_frame') {
     if (frame.kicker.label !== undefined && !(nonEmpty(frame.kicker.label) && frame.kicker.label.length <= 40)) errors.push(`${where}.kicker.label must be 1-40 characters`);
     if (frame.kicker.underline !== undefined && typeof frame.kicker.underline !== 'boolean') errors.push(`${where}.kicker.underline must be true or false`);
     if (frame.kicker.logo !== undefined && typeof frame.kicker.logo !== 'boolean') errors.push(`${where}.kicker.logo must be true or false (show the frame logo in the kicker)`);
+    if (frame.kicker.plate !== undefined && !['auto', 'light', 'dark', 'none'].includes(frame.kicker.plate)) errors.push(`${where}.kicker.plate must be auto, light, dark or none (the plate behind a logo-only kicker)`);
+  }
+  if (frame.logo_mark !== undefined) {
+    if (!isObject(frame.logo_mark)) errors.push(`${where}.logo_mark must be {tone?, aspect?}`);
+    else {
+      for (const key of Object.keys(frame.logo_mark)) if (!['tone', 'aspect'].includes(key)) errors.push(`${where}.logo_mark.${key} is not supported (tone, aspect)`);
+      if (frame.logo_mark.tone !== undefined && !['dark', 'light', 'mixed'].includes(frame.logo_mark.tone)) errors.push(`${where}.logo_mark.tone must be dark, light or mixed`);
+      if (frame.logo_mark.aspect !== undefined && !(typeof frame.logo_mark.aspect === 'number' && frame.logo_mark.aspect > 0)) errors.push(`${where}.logo_mark.aspect must be a positive number (width / height)`);
+    }
   }
   if (isObject(frame.progress) && frame.progress.thickness !== undefined && !(typeof frame.progress.thickness === 'number' && frame.progress.thickness >= 2 && frame.progress.thickness <= 16)) errors.push(`${where}.progress.thickness must be 2-16 px`);
   if (frame.show !== undefined && !['always', 'scenes'].includes(frame.show)) errors.push(`${where}.show must be always or scenes`);

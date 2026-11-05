@@ -62,7 +62,7 @@ test("a brand conditions the pack: its colours, fonts, tone, worlds and lockup, 
   assert.equal(pack.generated.tone, "warm");
   assert.ok(["cafe", "kitchen", "shopfronts"].includes(pack.world.kind), pack.world.kind);
   assert.equal(pack.brand_frame.enabled, true);
-  assert.equal(pack.brand_frame.kicker.label, "Northwind");
+  assert.equal(pack.brand_frame.kicker.label, undefined, "a logo is the kicker on its own: no name beside it");
   assert.equal(pack.brand_frame.logo, "assets/logo.svg");
   assert.deepEqual(pack.generated.inputs.brand, normalizeBrand(NORTHWIND));
   assert.deepEqual(generateStyle({ seed: "7f3a91c2", brand: NORTHWIND }), pack, "deterministic");
