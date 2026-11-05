@@ -47,13 +47,16 @@
 // from or to), and is asked after every other shot. The clip that comes back
 // is measured (measureFootage: its brightest level and how much it moves)
 // and becomes a video plate (kit/core/plates.mjs) whose dim keeps the card's
-// text at 4.5:1. No shot leaves the scene on the story's stock plate.
+// text at 4.5:1. A request the app has no shot for borrows a backdrop
+// another card in the run already placed (not one beside it, least-used
+// first); with none to borrow, the scene keeps the story's stock plate.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { moduleTiming } from "@launchclip/core/modules.mjs";
+import { DARK_PLATE_KINDS } from "@launchclip/core/plates.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { bestWindow, normalizeNotes } from "./inventory_notes.js";
 
@@ -90,8 +93,9 @@ const VIDEO = /\.(mp4|webm|mov)$/i;
 // shortest card worth one, and the movement (mean frame-to-frame change,
 // 0–1) past which the footage is too busy to sit text on.
 export const BACKDROP_TREATMENTS = Object.freeze(["dim", "blur", "tint"]);
-export const MAX_BACKDROP_REQUESTS = 6;
-export const BACKDROP_MIN_SECONDS = 2;
+// Every full-screen card of a short video gets one (a 30–60 s piece has 6–12).
+export const MAX_BACKDROP_REQUESTS = 12;
+export const BACKDROP_MIN_SECONDS = 1.2;
 export const BACKDROP_BUSY_MOTION = 0.08;
 
 /** The most shots any plan may ask for, however long (--min-shots' ceiling). */
@@ -168,7 +172,7 @@ export function backdropPrompt({ max = MAX_BACKDROP_REQUESTS } = {}) {
   return [
     `Card backdrops from the app's media library: a full-screen card (a title, stat, list or comparison scene with no footage of its own) can sit on a slow, calm library clip instead of a stock plate. Set scenes[i].backdrop to {kind: "shot", shows: "<a steady, low-motion shot that sets the scene for the card's topic>", treatment?: "dim" | "blur" | "tint"}.`,
     "dim darkens the footage under the card (the default), blur softens it to an out-of-focus wash, tint lays a brand-coloured gradient over it. The app darkens it as far as the card's text needs to stay readable.",
-    `Ask for at most ${max}; choose footage that is calm (a slow pan, a still landscape, a product at rest), never the shot the scene before or after shows, and leave clip, photo-scene and media-window scenes without one (their footage is the frame).`
+    `Give every full-screen card one (at most ${max}) rather than a stock plate; choose footage that is calm (a slow pan, a still landscape, a product at rest), never the shot the scene before or after shows, and leave clip, photo-scene and media-window scenes without one (their footage is the frame).`
   ].join("\n");
 }
 
@@ -235,16 +239,23 @@ export function backdropRequests(storyboard) {
 // A scene that is a full-screen card: on track 0, drawn by the module (not a
 // shot module, a world or a scene naming footage or a still of its own) and
 // on a background (ambient.background not off).
+// A stock plate the plan chose for one scene (scenes[i].backdrop or .plate
+// {kind: "bokeh"} and the like): with footage backdrops on, a card trades it
+// for footage. A wash (a deliberate bright beat), "none", an image or a
+// video the plan named stay.
+const isStockPlate = (value) => Boolean(value) && typeof value === "object" && DARK_PLATE_KINDS.includes(value.kind);
+
 function isCardScene(story, scene) {
   if ((scene?.track ?? 0) !== 0 || SHOT_MODULES.includes(scene?.module) || scene?.module === "world") return false;
-  if (scene?.backdrop !== undefined || scene?.plate !== undefined) return false;
+  if ((scene?.backdrop !== undefined && !isStockPlate(scene.backdrop)) || (scene?.plate !== undefined && !isStockPlate(scene.plate))) return false;
   if ((scene?.ambient?.background ?? story?.ambient?.background) === false) return false;
   return !/"(?:assets\/[^"]+\.(?:mp4|webm|mov|jpe?g|png|webp|avif)|kind":"shot)"/i.test(JSON.stringify(scene?.params ?? {}));
 }
 
 /**
- * Footage backdrops for the full-screen cards a plan left on a stock plate:
- * up to `max` (less the backdrops it already asks for) of its card scenes at
+ * Footage backdrops for the full-screen cards a plan left on a stock plate
+ * (none, or one it picked for the scene): up to `max` (less the backdrops it
+ * already asks for) of its card scenes at
  * least BACKDROP_MIN_SECONDS long, longest first, each asking for a calm shot
  * of what the narration under it says (or the card's own text, or the brief).
  * → {storyboard (a copy), added: [scene ids]}
@@ -261,7 +272,8 @@ export function cardBackdrops(storyboard, { words = [], brief = "", max = MAX_BA
   const story = structuredClone(storyboard);
   for (const { scene, index, span } of cards) {
     const said = lineUnder(words, span) ?? cardText(scene) ?? String(brief ?? "").trim();
-    story.scenes[index] = { ...story.scenes[index], backdrop: { kind: SHOT_REQUEST, shows: `a calm, steady shot that sets the scene for: ${said}`.slice(0, 300), treatment } };
+    const { plate: _plate, ...rest } = story.scenes[index];
+    story.scenes[index] = { ...rest, backdrop: { kind: SHOT_REQUEST, shows: `a calm, steady shot that sets the scene for: ${said}`.slice(0, 300), treatment } };
   }
   return { storyboard: story, added: cards.map(({ scene }) => scene.id) };
 }
@@ -410,7 +422,9 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   }
   // Backdrops last, so the shots either side are known and avoided.
   const context = { assets, words, brief, width, height, times, project, cache, signal, measure, story, shots, warnings };
-  for (const { index, scene } of backdrops) await resolveBackdrop(context, index, scene);
+  const missed = [];
+  for (const { index, scene } of backdrops) await resolveBackdrop({ ...context, missed }, index, scene);
+  borrowBackdrops(context, missed);
   return { storyboard: story, shots, media: described, errors, warnings };
 }
 
@@ -433,9 +447,32 @@ const shotAssetId = (shot) => {
   return id == null || id === "" ? null : String(id);
 };
 
+// The cards whose backdrop request found nothing borrow a backdrop another
+// card placed this run: never one a scene beside them shows, least-used
+// first, so the run varies; with none to borrow, the story's plate stays.
+function borrowBackdrops({ story, times, shots, warnings }, missed) {
+  const placed = shots.filter((shot) => shot.slot === "backdrop");
+  const uses = new Map(placed.map((shot) => [shot.src, 1]));
+  for (const { index, scene, treatment, why } of missed) {
+    const avoid = new Set(neighbourShots(story, index, times, shots).map((entry) => entry.src));
+    const pick = [...new Map(placed.map((shot) => [shot.src, shot])).values()]
+      .filter((shot) => !avoid.has(shot.src))
+      .sort((a, b) => (uses.get(a.src) ?? 0) - (uses.get(b.src) ?? 0))[0];
+    if (!pick) { warnings.push(`${why}; the card keeps the story's plate`); continue; }
+    uses.set(pick.src, (uses.get(pick.src) ?? 0) + 1);
+    // The lender's plate as placed (its start and measured peak), under this card's own treatment.
+    const lent = story.scenes.find((entry) => entry?.id === pick.scene_id)?.backdrop;
+    const backdrop = pick.kind === "image"
+      ? { kind: "image", params: { src: pick.src } }
+      : { kind: "video", params: { ...(lent?.kind === "video" ? lent.params : { src: pick.src }), treatment } };
+    story.scenes[index] = { ...story.scenes[index], backdrop };
+    warnings.push(`${why}; it borrows the backdrop ${pick.src} from scene ${pick.scene_id}`);
+  }
+}
+
 // One backdrop request → a video plate on the scene (or an image plate for a
 // still), or, with no usable shot, the scene back on the story's plate.
-async function resolveBackdrop({ assets, words, brief, width, height, times, project, cache, signal, measure, story, shots, warnings }, index, scene) {
+async function resolveBackdrop({ assets, words, brief, width, height, times, project, cache, signal, measure, story, shots, warnings, missed = null }, index, scene) {
   const media = scene.backdrop;
   const shows = String(media.shows ?? "").trim();
   const where = `scene ${scene.id ?? index + 1}`;
@@ -443,6 +480,8 @@ async function resolveBackdrop({ assets, words, brief, width, height, times, pro
   const fallback = (why) => {
     const { backdrop: _backdrop, ...rest } = story.scenes[index];
     story.scenes[index] = rest;
+    // With other cards' backdrops still to come, borrowBackdrops may yet give it one.
+    if (missed) { missed.push({ index, scene, treatment, why: `${where}: ${why}` }); return; }
     warnings.push(`${where}: ${why}; the card keeps the story's plate`);
   };
   if (!shows) { fallback('a backdrop shot request needs "shows" (what the shot must show)'); return; }

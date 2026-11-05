@@ -41,19 +41,45 @@ export function parseMusicVolume(value) {
   return volume;
 }
 
+/** --music-prompt: a non-empty style prompt for the ElevenLabs track (trimmed, at most 1000 characters). Throws on anything else. */
+export function parseMusicPrompt(value) {
+  const prompt = typeof value === "string" ? value.trim() : "";
+  if (!prompt) throw new Error("--music-prompt needs the music's style in words, for example \"warm acoustic guitar, steady, unobtrusive\"");
+  return prompt.slice(0, 1000);
+}
+
+/**
+ * --music-duck: the bed's level under speech as a share of its level in the
+ * pauses, 0–1 (0.42: it drops to 42 %, about -7.5 dB; 1: no ducking).
+ * Throws on anything else.
+ */
+export function parseMusicDuck(value) {
+  const duck = value === true || value === "" ? NaN : Number(value);
+  if (!(Number.isFinite(duck) && duck >= 0 && duck <= 1)) throw new Error(`--music-duck must be a number from 0 to 1 (the music's level under speech as a share of its level in pauses); got ${value}`);
+  return duck;
+}
+
 /**
  * The music decision for one finish run.
- * flag: --music synth|elevenlabs|none (wins); env: for ELEVENLABS_API_KEY.
+ * flag: --music synth|elevenlabs|none (wins); env: for ELEVENLABS_API_KEY;
+ * fallback: --music elevenlabs without a key plays the synth bed with a
+ * warning instead of failing (make asks for this; finish alone stays strict).
  * Default: elevenlabs when the key is set and the story does not choose, else synth.
  * → {provider, ...spec, reason, warnings: []}
  */
-export function resolveMusicChoice(audio, { flag, env = process.env } = {}) {
+export function resolveMusicChoice(audio, { flag, env = process.env, fallback = false } = {}) {
   const spec = parseMusicSpec(audio?.music);
   const warnings = [];
   const hasKey = Boolean(env?.ELEVENLABS_API_KEY);
   if (flag !== undefined && flag !== null && flag !== true) {
     const value = String(flag).toLowerCase();
     if (!MUSIC_FLAG_VALUES.includes(value)) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${flag}`);
+    if (value === "elevenlabs" && !hasKey && fallback) {
+      warnings.push("--music elevenlabs needs ELEVENLABS_API_KEY, which is not set; using the procedural synth bed. Nothing was sent.");
+      const choice = { ...spec, provider: "synth", reason: "--music elevenlabs without a key", warnings };
+      delete choice.file;
+      return choice;
+    }
     if (value === "elevenlabs" && !hasKey) throw new Error("--music elevenlabs needs ELEVENLABS_API_KEY (set it in the shell or .env). Nothing was sent.");
     const choice = { ...spec, provider: value, reason: `--music ${value}`, warnings };
     if (value !== "file") delete choice.file;

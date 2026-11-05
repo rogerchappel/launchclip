@@ -7,7 +7,9 @@
 //   node build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s>
 //     [--voice narration.wav] [--music bed.wav] [--sfx-dir assets/audio/sfx]
 //     [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5]
-//     [--sfx-manifest qa/sfx.json] [--key footage.mp4]
+//     [--sfx-manifest qa/sfx.json] [--key footage.mp4] [--music-duck 0.42]
+// --music-duck: the bed's level under speech as a share of its level in the
+// pauses (0–1; 1 = no ducking). Unset: MUSIC_DUCK.
 // --key: speech that plays outside this mix (a talking-head recording's own
 // audio): it ducks the bed and ambience like --voice but is not mixed in.
 // cues.json: [{ "cue": "whoosh", "at": 5.72, "volume": 0.5, "shot": "B1", "intent": "pan" }]
@@ -38,7 +40,35 @@ function keySource(index, segments) {
   return segments.length === 1 ? cuts[0].replace(/\[kc0\]$/, '') : `${cuts.join(';')};${segments.map((_, i) => `[kc${i}]`).join('')}concat=n=${segments.length}:v=0:a=1`;
 }
 
-export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null }) {
+// How far speech pushes the beds down. The music sits about 12 dB under a
+// voice and comes back up in the pauses; a harder duck (threshold 0.03,
+// ratio 6) left it about 22 dB down, which is silent on a phone speaker.
+// Ambience ducks a little less: it is a room tone, not a tune.
+export const MUSIC_DUCK = Object.freeze({ threshold: 0.1, ratio: 3, attack: 30, release: 400 });
+export const AMBIENCE_DUCK = Object.freeze({ threshold: 0.1, ratio: 2.5, attack: 40, release: 600 });
+
+function duck({ threshold, ratio, attack, release }) {
+  return `sidechaincompress=threshold=${threshold}:ratio=${ratio}:attack=${attack}:release=${release}:makeup=1`;
+}
+
+// --music-duck as compressor settings. The duck's depth depends on how far
+// the voice sits over the threshold: the threshold is set that far under a
+// typical narration (its detector level, about DUCK_VOICE_DB) that the ratio
+// takes the asked-for dB off the bed. Checked against a real narration and
+// bed, it lands within about 1 dB (0.42 → -8.5 dB for -7.5 asked).
+const DUCK_VOICE_DB = -13;
+const DUCK_RATIO = 4;
+export function duckSettings(depth) {
+  if (depth === null || depth === undefined) return MUSIC_DUCK;
+  const share = Math.min(1, Math.max(0.03, Number(depth)));
+  if (share >= 1) return null;
+  const cut = -20 * Math.log10(share);
+  const thresholdDb = DUCK_VOICE_DB - cut / (1 - 1 / DUCK_RATIO);
+  const threshold = Math.min(0.5, Math.max(0.0005, Math.round(10 ** (thresholdDb / 20) * 100000) / 100000));
+  return Object.freeze({ threshold, ratio: DUCK_RATIO, attack: MUSIC_DUCK.attack, release: MUSIC_DUCK.release });
+}
+
+export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, musicDuck = null, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null }) {
   const parts = [];
   const mixInputs = [];
   let index = 0;
@@ -62,14 +92,16 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     // Duck the bed under speech; with no voice the bed plays as is. The key is
     // padded to the full duration because sidechaincompress stops when its
     // sidechain ends, which would cut the bed off after the last word.
-    parts.push(keyed ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]` : '[bedraw]anull[bed]');
+    const settings = duckSettings(musicDuck);
+    // --music-duck 1: the key still has to be read, so it feeds a null sink.
+    parts.push(!keyed ? '[bedraw]anull[bed]' : settings ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]${duck(settings)}[bed]` : '[key]anullsink;[bedraw]anull[bed]');
     mixInputs.push('[bed]');
     index += 1;
   }
   if (hasAmbience) {
     // The loop arrives endless (-stream_loop -1): cut it to length first.
     parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}[ambraw]`);
-    parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]sidechaincompress=threshold=0.03:ratio=4:attack=40:release=600:makeup=1[amb]` : '[ambraw]anull[amb]');
+    parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]${duck(AMBIENCE_DUCK)}[amb]` : '[ambraw]anull[amb]');
     mixInputs.push('[amb]');
     index += 1;
   }
@@ -84,7 +116,7 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
   return parts.join(';');
 }
 
-export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, ambienceVolume = 0.5, key = null, keySegments = null }) {
+export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, musicDuck = null, ambienceVolume = 0.5, key = null, keySegments = null }) {
   const inputs = [];
   const useKey = Boolean(key) && !voice && Boolean(music || ambience);
   if (voice) inputs.push('-i', voice);
@@ -92,7 +124,7 @@ export function buildMix({ voice, music, ambience = null, cues = [], duration, o
   if (music) inputs.push('-i', music);
   if (ambience) inputs.push('-stream_loop', '-1', '-i', ambience);
   for (const cue of cues) inputs.push('-i', cue.file);
-  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
+  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, musicDuck, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
   mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
 }
@@ -101,10 +133,10 @@ async function main(argv) {
   const flag = (name, fallback) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : fallback; };
   const out = flag('--out');
   const duration = Number(flag('--duration'));
-  if (!out || !Number.isFinite(duration) || duration <= 0) throw new Error('usage: build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s> [--voice v.wav] [--music bed.wav] [--sfx-dir dir] [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5] [--sfx-manifest qa/sfx.json] [--key footage.mp4]');
+  if (!out || !Number.isFinite(duration) || duration <= 0) throw new Error('usage: build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s> [--voice v.wav] [--music bed.wav] [--sfx-dir dir] [--music-volume 0.42] [--ambience loop.wav] [--ambience-volume 0.5] [--sfx-manifest qa/sfx.json] [--key footage.mp4] [--music-duck 0-1]');
   const cuesPath = flag('--cues');
   const cues = cuesPath ? normalizeCues(JSON.parse(readFileSync(cuesPath, 'utf8')), flag('--sfx-dir', 'assets/audio/sfx')) : [];
-  buildMix({ voice: flag('--voice'), music: flag('--music'), ambience: flag('--ambience'), cues, duration, out, musicVolume: Number(flag('--music-volume', 0.42)), ambienceVolume: Number(flag('--ambience-volume', 0.5)), key: flag('--key') });
+  buildMix({ voice: flag('--voice'), music: flag('--music'), ambience: flag('--ambience'), cues, duration, out, musicVolume: Number(flag('--music-volume', 0.42)), musicDuck: flag('--music-duck') == null ? null : Number(flag('--music-duck')), ambienceVolume: Number(flag('--ambience-volume', 0.5)), key: flag('--key') });
   const manifest = flag('--sfx-manifest');
   if (manifest) {
     mkdirSync(path.dirname(path.resolve(manifest)), { recursive: true });

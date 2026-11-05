@@ -49,7 +49,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     assert.equal(story.grammar, undefined);
     const expected = Math.round((testVoiceTimings(NARRATION).duration + 0.8) * 10) / 10;
     assert.equal(story.format.duration, expected);
-    assert.deepEqual(finishCalls[0].options, { renderer: "remotion", quality: "draft", music: "synth", musicVolume: 0.2 });
+    assert.deepEqual(finishCalls[0].options, { renderer: "remotion", quality: "draft", musicFallback: true, music: "synth", musicVolume: 0.2 });
     const brief = await readFile(path.join(project, "BRIEF.md"), "utf8");
     assert.match(brief, /assets\/ui\.mp4 — video, screen-recording/);
     assert.match(brief, /Ledgerly reconciles Stripe payouts/);

@@ -1390,3 +1390,54 @@ test("runFinish reports a cover that fails to render as a warning, not a failed 
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("--music-duck sets how far the bed dips under speech, and is part of the sound stage's inputs", async () => {
+  const project = await narratedProject({ mutate: (story) => { story.audio.music = { provider: "synth" }; } });
+  try {
+    const adapters = fakeAdapters();
+    await assert.rejects(runFinish(project, { renderer: "remotion", musicDuck: "2" }, adapters), /--music-duck must be a number from 0 to 1/);
+    await runFinish(project, { renderer: "remotion", musicDuck: 0.42 }, adapters);
+    assert.equal(adapters.lastMix.musicDuck, 0.42);
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(adapters.lastMix.musicDuck, undefined, "without the flag the mix's default duck");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("--music-prompt is the ElevenLabs track's style and part of its brief", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, music } = musicAdapters(fakeAdapters());
+    await runFinish(project, { music: "elevenlabs", musicPrompt: "  warm acoustic guitar, steady  " }, adapters);
+    assert.equal(music.lastParams.prompt, "warm acoustic guitar, steady");
+    await assert.rejects(runFinish(project, { music: "elevenlabs", musicPrompt: " " }, adapters), /--music-prompt needs the music's style/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("with musicFallback, ElevenLabs music with no key or a failed generation plays the synth bed", async () => {
+  const project = await narratedProject();
+  try {
+    const keyless = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { music: "elevenlabs", musicFallback: true }, keyless.adapters);
+    assert.equal(report.stages.find((stage) => stage.name === "sound").status, "done");
+    assert.equal(keyless.music.generated, 0);
+    assert.ok(report.warnings.some((warning) => /needs ELEVENLABS_API_KEY, which is not set; using the procedural synth bed/.test(warning)), report.warnings.join("\n"));
+
+    const failing = musicAdapters(fakeAdapters());
+    const provider = failing.adapters.musicProvider();
+    failing.adapters.musicProvider = () => ({ ...provider, async generate() { throw new Error("ElevenLabs music failed (HTTP 429): quota exceeded"); } });
+    const fellBack = await runFinish(project, { music: "elevenlabs", musicFallback: true, force: true }, failing.adapters);
+    const sound = fellBack.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done");
+    assert.match(failing.adapters.lastMix.music, /bed\.wav$/);
+    assert.ok(fellBack.warnings.some((warning) => /the ElevenLabs track failed \(ElevenLabs music failed \(HTTP 429\)/.test(warning)), fellBack.warnings.join("\n"));
+    // finish on its own stays strict.
+    const strict = await runFinish(project, { music: "elevenlabs", force: true }, failing.adapters);
+    assert.equal(strict.stages.find((stage) => stage.name === "sound").status, "failed");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});

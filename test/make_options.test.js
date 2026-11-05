@@ -74,3 +74,15 @@ test("--music-volume parses into options.musicVolume, takes a gain from 0 to 1, 
   for (const value of ["0", "0.15", "1", 0.3]) assert.doesNotThrow(() => validateMakeOptions({ musicVolume: value }), String(value));
   for (const value of ["-0.1", "1.5", "loud", "", true]) assert.throws(() => validateMakeOptions({ musicVolume: value }), /--music-volume must be a number from 0 to 1/, String(value));
 });
+
+test("--music-duck and --music-prompt are make settings, validated and saved", () => {
+  for (const flag of ["music-duck", "music-prompt"]) assert.ok(MAKE_SETTING_FLAGS.includes(flag), flag);
+  const options = makeOptionsFromFlags({ "music-duck": "0.42", "music-prompt": "warm acoustic guitar" });
+  assert.equal(options.musicDuck, "0.42");
+  assert.equal(options.musicPrompt, "warm acoustic guitar");
+  validateMakeOptions(options);
+  assert.throws(() => validateMakeOptions({ musicDuck: "1.5" }), /--music-duck must be a number from 0 to 1/);
+  assert.throws(() => validateMakeOptions({ musicPrompt: "" }), /--music-prompt needs/);
+  const { flags } = settingsFromMakeReport({ options: { music: "elevenlabs", music_volume: 0.38, music_duck: 0.42, music_prompt: "warm acoustic guitar" } });
+  assert.deepEqual([flags["music-volume"], flags["music-duck"], flags["music-prompt"]], [0.38, 0.42, "warm acoustic guitar"]);
+});

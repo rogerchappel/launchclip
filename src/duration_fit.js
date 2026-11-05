@@ -11,6 +11,9 @@
 // neighbour it touches (same module first), which stretches over its time, or,
 // with no neighbour, dropped: one shot fewer beats a plan that fails. The
 // modules stay strict; this only rewrites the storyboard the planner returned.
+//
+// The same pass fixes pace errors (paceErrors): a short video's shot under
+// SHORT_FORM_HOLD grows the same way, but is never merged or dropped for it.
 
 import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
@@ -19,7 +22,33 @@ import { resolveStory } from "@launchclip/core/story.mjs";
 // got 1.29") and the title modules' own ("hook-title needs a scene of at least 1.5 s").
 const DURATION_ERROR = /^params: scenes\[(\d+)\][^]*?\bduration must be between ([\d.]+) and ([\d.]+), got ([\d.]+)/;
 const MINIMUM_ERROR = /^params: scenes\[(\d+)\][^]*?\bneeds a scene of at least ([\d.]+) s/;
+// The pace check's wording (paceErrors below): a short video's shot that
+// passes so fast it reads as a flicker.
+const PACE_ERROR = /^pace: scenes\[(\d+)\][^]*?\bholds ([\d.]+) s; [^]*?\bat least ([\d.]+) s/;
 const TOUCH = 0.05;
+
+// A video this long or shorter is short-form: every main shot holds at least
+// SHORT_FORM_HOLD, so a quick list becomes one shot whose items build in
+// rather than a flicker of 1.5 s cards. The opening hook may be quicker.
+export const SHORT_FORM_SECONDS = 90;
+export const SHORT_FORM_HOLD = 2.5;
+
+/**
+ * Main-track shots of a resolved short video (no recorded base) that pass
+ * faster than `hold` seconds, the first one (the hook) aside: one
+ * "pace:" error each. Longer videos and footage-led stories get none.
+ */
+export function paceErrors(resolved, { hold = SHORT_FORM_HOLD, maxDuration = SHORT_FORM_SECONDS } = {}) {
+  const total = Number(resolved?.resolved?.duration ?? resolved?.format?.duration);
+  if (!(hold > 0) || !Number.isFinite(total) || total > maxDuration || resolved?.base) return [];
+  const main = (resolved.scenes ?? [])
+    .map((scene, index) => ({ scene, index, start: Number(scene.start), end: Number(scene.end) }))
+    .filter(({ scene, start, end }) => (scene.track ?? 0) === 0 && Number.isFinite(start) && Number.isFinite(end))
+    .sort((a, b) => a.start - b.start);
+  return main.slice(1)
+    .filter(({ start, end }) => end - start < hold - 0.005)
+    .map(({ scene, index, start, end }) => `pace: scenes[${index}]${scene.id ? ` (${scene.id})` : ""} holds ${round(end - start)} s; in a short video every shot after the hook holds at least ${hold} s: fold a quick list into one shot whose items build in, or give the line more time`);
+}
 
 /** The scene-length errors in a list of check errors: [{scene, min, max, got}] (max and got null when the error leaves them out). */
 export function durationErrors(errors) {
@@ -32,7 +61,9 @@ export function durationErrors(errors) {
       continue;
     }
     const titled = MINIMUM_ERROR.exec(String(error));
-    if (titled) out.push({ scene: Number(titled[1]), min: Number(titled[2]), max: null, got: null });
+    if (titled) { out.push({ scene: Number(titled[1]), min: Number(titled[2]), max: null, got: null }); continue; }
+    const paced = PACE_ERROR.exec(String(error));
+    if (paced) out.push({ scene: Number(paced[1]), min: Number(paced[3]), max: null, got: Number(paced[2]), pace: true });
   }
   return out;
 }
@@ -58,7 +89,11 @@ export function fitDurations(storyboard, errors, { words = [], beats = null, dir
   const touched = new Set();
 
   const track = (index) => (Number.isInteger(copy.scenes[index]?.track) ? copy.scenes[index].track : 0);
-  const minimum = (index) => Number(moduleTiming(copy.scenes[index]?.module)?.minDuration) || 0;
+  // A neighbour lends time only down to its own floor: its module's minimum,
+  // and the pace hold when a pace error is being fixed (so fixing one shot
+  // never makes the next one flicker).
+  const paceHold = Math.max(0, ...found.filter((entry) => entry.pace).map((entry) => entry.min));
+  const minimum = (index) => Math.max(Number(moduleTiming(copy.scenes[index]?.module)?.minDuration) || 0, track(index) === 0 ? paceHold : 0);
   const length = (index) => times[index].end - times[index].start;
   const siblings = (index) => times
     .map((time, i) => ({ i, ...time }))
@@ -66,7 +101,9 @@ export function fitDurations(storyboard, errors, { words = [], beats = null, dir
   const nextOf = (index) => siblings(index).filter((s) => s.start >= times[index].end - 1e-6).sort((a, b) => a.start - b.start)[0] ?? null;
   const prevOf = (index) => siblings(index).filter((s) => s.end <= times[index].start + 1e-6).sort((a, b) => b.end - a.end)[0] ?? null;
 
-  for (const { scene: index, min } of found.sort((a, b) => a.scene - b.scene)) {
+  // Module errors first (a scene the module cannot render), then pace.
+  const ordered = [...found.filter((entry) => !entry.pace), ...found.filter((entry) => entry.pace && !found.some((other) => !other.pace && other.scene === entry.scene))];
+  for (const { scene: index, min, pace } of ordered) {
     const scene = copy.scenes?.[index];
     if (!scene || removed.has(index) || !times[index] || !Number.isFinite(length(index))) continue;
     const before = length(index);
@@ -101,6 +138,9 @@ export function fitDurations(storyboard, errors, { words = [], beats = null, dir
       changed.push(`${scene.id ?? `scenes[${index}]`} lengthened ${round(before)} → ${round(length(index))} s`);
       continue;
     }
+    // A pace fix only lengthens: a shot the module can render is never
+    // merged away or dropped for pace (its line would lose its visual).
+    if (pace) continue;
     // No room: the touching neighbour (same module first) stretches over it, else it goes.
     const adjacent = [next, prev].filter((s) => s && (Math.abs(s.start - times[index].end) < TOUCH || Math.abs(times[index].start - s.end) < TOUCH));
     const host = adjacent.find((s) => copy.scenes[s.i]?.module === scene.module) ?? adjacent[0] ?? null;

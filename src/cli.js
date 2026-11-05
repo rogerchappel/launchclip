@@ -191,6 +191,8 @@ export async function runCli(argv, io = {}) {
         voice: flags.voice,
         music: flags.music,
         musicVolume: flags["music-volume"],
+        musicDuck: flags["music-duck"],
+        musicPrompt: flags["music-prompt"],
         out: flags.out,
         concurrency: flags.concurrency,
         force: Boolean(flags.force),

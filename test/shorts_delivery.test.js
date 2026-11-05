@@ -6,7 +6,7 @@ import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_prof
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
 import { SFX, bedExpressions } from "../src/scripts/synth-audio-kit.mjs";
 import { parseEbur128Summary, parseLoudnormJson } from "../src/scripts/master-loudness.mjs";
-import { mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
+import { AMBIENCE_DUCK, MUSIC_DUCK, duckSettings, mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
 import { evidenceSchedule } from "../src/scripts/build-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -92,4 +92,30 @@ test("derives the phase-2 evidence schedule from declared boundaries", () => {
   assert.equal(schedule.entries.filter((entry) => entry.boundary_id === "b1").length, 7);
   assert.equal(schedule.final_hold.at_seconds, 11.95);
   assert.throws(() => evidenceSchedule("<div></div>"), /data-duration/);
+});
+
+test("the music ducks about 12 dB under a voice, not out of hearing", () => {
+  const graph = mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, hasAmbience: true });
+  assert.match(graph, /\[bedraw\]\[keypad\]sidechaincompress=threshold=0\.1:ratio=3:attack=30:release=400:makeup=1\[bed\]/);
+  assert.match(graph, /\[ambraw\]\[akeypad\]sidechaincompress=threshold=0\.1:ratio=2\.5:attack=40:release=600:makeup=1\[amb\]/);
+  // A voice at about -17.5 dBFS sits ~2.5 dB over a 0.1 (-20 dB) threshold, so the duck takes
+  // only a few dB off the bed and the bed's own volume keeps it ~12 dB under the voice.
+  const reduction = (thresholdDb, voiceDb, ratio) => (voiceDb - thresholdDb) * (1 - 1 / ratio);
+  const db = (gain) => 20 * Math.log10(gain);
+  assert.ok(reduction(db(MUSIC_DUCK.threshold), -17.5, MUSIC_DUCK.ratio) < 2);
+  assert.ok(AMBIENCE_DUCK.ratio <= MUSIC_DUCK.ratio);
+});
+
+test("--music-duck sets the depth: a share of the bed's level in pauses, 1 for none", () => {
+  assert.equal(duckSettings(null), MUSIC_DUCK);
+  assert.equal(duckSettings(1), null);
+  const deep = duckSettings(0.2);
+  const mid = duckSettings(0.42);
+  // A deeper duck starts lower: the voice sits further over its threshold.
+  assert.ok(deep.threshold < mid.threshold && mid.threshold < duckSettings(0.7).threshold);
+  assert.equal(mid.ratio, 4);
+  assert.match(mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, musicDuck: 0.42 }), new RegExp(`sidechaincompress=threshold=${mid.threshold}:ratio=4:`));
+  const none = mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, musicDuck: 1 });
+  assert.doesNotMatch(none, /\[bedraw\]\[keypad\]sidechaincompress/);
+  assert.match(none, /\[key\]anullsink;\[bedraw\]anull\[bed\]/);
 });

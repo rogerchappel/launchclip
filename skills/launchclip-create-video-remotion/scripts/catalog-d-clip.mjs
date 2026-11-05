@@ -41,6 +41,11 @@ import {kenBurnsAt} from './catalog-d-photo-scene.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 import {getEase} from './motion.mjs';
 
+// The callout pills' preferred type size (canvas units, before fitting to
+// the width). A phone shows a 9:16 frame about 6 cm wide: at 64 the pills
+// read as small print beside the captions, so portrait pills start larger.
+// A portrait pill that would set under twoLineBelow on one line wraps to two.
+export const CALLOUT_PX = Object.freeze({portrait: 76, landscape: 58, twoLineBelow: 68});
 export const CLIP_TIMING = Object.freeze({minDuration: 1, fade: 0.35, settle: 0.6, settleScale: 0.06, calloutLead: 0.3, calloutFade: 0.3, calloutGap: 0.15, leadOut: 0.35, minHold: 1.2, perWord: 0.22});
 const T = CLIP_TIMING;
 export const CLIP_MOVES = Object.freeze(['none', 'push-in', 'pull-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down']);
@@ -128,14 +133,20 @@ function resolveClip(params, ctx) {
     if (until > start + lastEnd + 1e-6) check.fail(`${path}.until`, `must be at least ${T.leadOut} s before the scene ends`);
     previousUntil = until;
     const emphasis = raw.emphasis === undefined ? false : check.bool(raw.emphasis, `${path}.emphasis`);
-    const fit = fitText(check, `${path}.text`, text, {family: 'display', width: maxWidth - 2 * padX, preferred: u(portrait ? 64 : 52), min: b.min.key, maxLines: 1});
+    const fitWidth = maxWidth - 2 * padX;
+    const preferred = u(portrait ? CALLOUT_PX.portrait : CALLOUT_PX.landscape);
+    let fit = fitText(check, `${path}.text`, text, {family: 'display', width: fitWidth, preferred, min: b.min.key, maxLines: 1});
+    // A long pill in a portrait frame takes two lines rather than shrinking
+    // to small print (CALLOUT_PX.twoLineBelow).
+    if (portrait && fit.size < u(CALLOUT_PX.twoLineBelow) && /\s/.test(text)) fit = fitText(check, `${path}.text`, text, {family: 'display', width: fitWidth, preferred, min: fit.size, maxLines: 2});
     const color = emphasis ? b.resolveColor('primary', `${path}.emphasis colour`, 'primary', colors.bg, 'brand.colors.bg') : theme.paper;
-    return {index: i, text, at, until, emphasis, size: fit.size, color, width: r2(Math.min(maxWidth, textWidth(text, fit.size, 'display') + 2 * padX))};
+    const lineWidth = fit.lines > 1 ? fitWidth : textWidth(text, fit.size, 'display');
+    return {index: i, text, at, until, emphasis, size: fit.size, lines: fit.lines, color, width: r2(Math.min(maxWidth, lineWidth + 2 * padX))};
   });
   let block = null;
   if (callouts.length) {
     b.requireContrast('callouts', theme.paper, colors.bg, 'brand.colors.paper on the callout pill (brand.colors.bg)');
-    const height = r2(Math.max(...callouts.map(c => c.size)) * 1.16 + 2 * padY);
+    const height = r2(Math.max(...callouts.map(c => c.size * 1.16 * c.lines)) + 2 * padY);
     const y = position === 'top' ? safe.y : r2(safe.y + safe.height - height);
     for (const c of callouts) {
       c.box = {x: r2(safe.x), y, width: c.width, height};
@@ -190,7 +201,10 @@ export function clipView(model) {
     : el('img', `${id}-media`, style, [], {src: c.media.src, alt: c.title ?? ''});
   const kids = c.callouts.map(callout => el('div', `${id}-callout-${callout.index}`, abs(callout.box.x, callout.box.y, callout.box.width, callout.box.height, {
     boxSizing: 'border-box', padding: `${c.pill.padY}px ${c.pill.padX}px`, borderRadius: c.pill.radius, background: c.pill.background, opacity: 0,
-    margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: callout.size, lineHeight: '1.16', color: callout.color}), [callout.text]));
+    margin: 0, whiteSpace: callout.lines > 1 ? 'normal' : 'nowrap', fontFamily: fonts.display, fontSize: callout.size, lineHeight: '1.16', color: callout.color,
+    // The pill hugs the text the brand's face actually sets (narrower faces
+    // left a long empty tail); the planned width stays its limit.
+    width: 'fit-content', maxWidth: callout.box.width}), [callout.text]));
   const overlay = el('div', `${id}-overlay`, abs(0, 0, canvas.width, canvas.height, {opacity: 0, pointerEvents: 'none'}), kids);
   return {media, overlay};
 }

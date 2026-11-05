@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { durationErrors, fitDurations } from "../src/duration_fit.js";
+import { SHORT_FORM_HOLD, durationErrors, fitDurations, paceErrors } from "../src/duration_fit.js";
 
 const format = { width: 1080, height: 1920, fps: 30, duration: 20 };
 const short = (index, id, module, min, got) => `params: scenes[${index}] (${id}): module "${module}" params: ${id} (${module}): duration must be between ${min} and 3600, got ${got}`;
@@ -64,4 +64,29 @@ test("nothing short, nothing changed", () => {
   const result = fitDurations(storyboard, ["layout: overlap"]);
   assert.equal(result.storyboard, storyboard);
   assert.deepEqual(result.changed, []);
+});
+
+test("pace: a short video's quick shots after the hook are flagged; long and footage-led videos are not", () => {
+  const resolved = { format, resolved: { duration: 20 }, scenes: [scene("hook", "hook-title", 0, 1.2), scene("a", "photo-scene", 1.2, 2.7), scene("b", "photo-scene", 2.7, 8), scene("lt", "lower-third", 3, 4, { track: 1 })] };
+  const errors = paceErrors(resolved);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^pace: scenes\[1\] \(a\) holds 1\.5 s; .* at least 2\.5 s/);
+  assert.deepEqual(durationErrors(errors), [{ scene: 1, min: SHORT_FORM_HOLD, max: null, got: 1.5, pace: true }]);
+  assert.deepEqual(paceErrors({ ...resolved, resolved: { duration: 120 } }), []);
+  assert.deepEqual(paceErrors({ ...resolved, base: { src: "talk.mp4" } }), []);
+});
+
+test("pace: a quick shot takes time from a neighbour only down to the hold, and is never merged away", () => {
+  const storyboard = { format, scenes: [scene("hook", "hook-title", 0, 2), scene("quick", "photo-scene", 2, 3.5), scene("long", "photo-scene", 3.5, 8)] };
+  const resolved = { ...storyboard, resolved: { duration: 8 } };
+  const { storyboard: fitted, changed } = fitDurations(storyboard, paceErrors(resolved));
+  assert.equal(fitted.scenes[1].end, 4.51);
+  assert.equal(fitted.scenes[2].start, 4.51);
+  assert.deepEqual(changed, ["quick lengthened 1.5 → 2.51 s"]);
+
+  // Two quick shots and no room: both stay (a warning later), nothing is dropped.
+  const tight = { format: { ...format, duration: 6 }, scenes: [scene("hook", "hook-title", 0, 2), scene("x", "photo-scene", 2, 4), scene("y", "photo-scene", 4, 6)] };
+  const { storyboard: kept, changed: none } = fitDurations(tight, paceErrors({ ...tight, resolved: { duration: 6 } }));
+  assert.equal(kept.scenes.length, 3);
+  assert.deepEqual(none, []);
 });
