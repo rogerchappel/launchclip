@@ -31,6 +31,7 @@ import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
+import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { fitDurations } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
@@ -201,13 +202,22 @@ export async function planStoryboard(options = {}) {
       let shotErrors = [];
       let shotCounts = null;
       let shotMedia = [];
+      // Footage inserts vary their frame (src/insert_variety.js), before the
+      // shots are asked for, so a converted insert may get a moving clip.
+      const varied = varyInserts(pinned.storyboard, { style });
+      if (varied.changed.length) {
+        pinned.storyboard = varied.storyboard;
+        pinned.warnings = [...pinned.warnings, `inserts: tooling varied ${varied.changed.join("; ")}`];
+      }
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
         if (footageBackdrops) pinned.storyboard = cardBackdrops(pinned.storyboard, { words: wordList, brief }).storyboard;
         const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
-        pinned.storyboard = found.storyboard;
+        const kept = restoreMisses(found.storyboard, found.errors, varied.originals);
+        pinned.storyboard = kept.storyboard;
         shots = found.shots;
-        shotErrors = found.errors.map((entry) => `assets: ${entry}`);
+        shotErrors = kept.errors.map((entry) => `assets: ${entry}`);
+        if (kept.restored.length) pinned.warnings = [...pinned.warnings, `inserts: no shot for ${kept.restored.join(", ")}; kept the card${kept.restored.length === 1 ? "" : "s"} as planned, with the placeholder`];
         if (found.warnings?.length) pinned.warnings = [...pinned.warnings, ...found.warnings.map((entry) => `assets: ${entry}`)];
         shotCounts = { requested, answered: found.shots.filter((shot) => shot.slot !== "backdrop").length, shots: found.shots };
         shotMedia = found.media ?? [];

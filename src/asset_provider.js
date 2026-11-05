@@ -126,7 +126,10 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
 // Cards can carry library shots too, so the video shows real footage more often.
 function cardShotLine() {
   const slots = Object.entries(SHOT_CARD_SLOTS).map(([id, slot]) => `${id} params.${slot}`).join(", ");
-  return `Cards can carry library shots too: the same {kind: "shot", shows, type?} request goes in a card's image slot (${slots}) where a real photo says more than the card's placeholder (a phone or browser showing the product in use, a polaroid of the place, an archive photo, the image on a post). These slots show a still: a video shot lands there as one frame of it. Ask for a person-id image only for a shot of that very person. Count card shots with the rest.`;
+  return [
+    `Cards can carry library shots too: the same {kind: "shot", shows, type?} request goes in a card's image slot (${slots}) where a real photo says more than the card's placeholder (a phone or browser showing the product in use, an archive photo, the image on a post). These slots show a still: a video shot lands there as one frame of it. Ask for a person-id image only for a shot of that very person. Count card shots with the rest.`,
+    "Vary how footage is framed: show real places, work and products in a clip (full frame, a callout for the key words) or a photo-scene (a slow Ken Burns push or pan with a short text line), keep media-window for a screen or page capture, and change the treatment from one shot to the next. A polaroid is a novelty frame: at most once a video, never two in a row; tooling turns the rest into photo-scene and clip inserts."
+  ].join("\n");
 }
 
 // Each shot module's shortest scene, from the modules' own timing tables.

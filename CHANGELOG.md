@@ -139,6 +139,17 @@
 
 ### Fixed
 
+- Library footage inside motion graphics no longer lands in the same tilted
+  polaroid every time. A polaroid is a novelty frame: at most one a video
+  (none when the style's playfulness dial is low, two when it is high) and
+  never two inserts in a row in the same frame. The planner turns the rest
+  into footage treatments that alternate: a Ken Burns `photo-scene` with the
+  card's caption as its line, or a `clip` with it as a callout, fading in
+  and out. Their shot requests may now come back as moving clips. A
+  converted insert the library has no shot for goes back to its card.
+- A polaroid holding a real photo shows it from its first visible frame,
+  under a light veil that clears as it lands, instead of opening on a dark,
+  empty frame for most of a second.
 - The brand frame's logo reads at a glance. A logo with no label is now a
   logo mark: the logo alone at a visible size (a 22% × 6.5% box) in the
   canvas corner, 30 px in, instead of a 40 px icon inset in the safe zone with
