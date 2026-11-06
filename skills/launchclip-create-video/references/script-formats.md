@@ -109,7 +109,7 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 
 ## Rules for every format
 
-- Hook: the first sentence is 12 words or fewer and names the topic or the viewer's problem. Never open with a greeting, "in this video", "today we're going to" or the brand name (unless the awareness rule puts the offer first).
+- Hook: the first sentence is 12 words or fewer and carries stakes the viewer feels: a myth to bust, a common mistake, a number with its unit, or a bold claim the brief supports. Never a bare topic question ("Choosing X for your Y?", "Thinking about X?"): it names the topic and gives no reason to stay. Never open with a greeting, "in this video", "today we're going to" or the brand name (unless the awareness rule puts the offer first).
 - Join beats with "but", "so" or "therefore", never "and then": each beat changes what the next one means.
 - Close every question you open. The hook's promise is paid off in the final quarter, before the call to action.
 - One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. Hard maximum 25 words a sentence.

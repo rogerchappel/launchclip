@@ -59,6 +59,7 @@ import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { DARK_PLATE_KINDS } from "@launchclip/core/plates.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { bestWindow, normalizeNotes } from "./inventory_notes.js";
+import { MAX_SAME_CARD, SECONDS_PER_TEXT_CARD, TEXT_CARD_MODULES } from "./short_form_checks.js";
 
 export const SHOT_REQUEST = "shot";
 export const SHOT_MODULES = Object.freeze(["photo-scene", "media-window", "clip"]);
@@ -128,6 +129,7 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
       layoutShotLine(),
       "The app's library has real footage for this brand, and the app finds or generates each shot for the line the scene sits under, after you plan. Show concrete subjects (places, products, people doing things) as shots, not drawn; keep data, steps and comparisons as motion graphics.",
       "Short-form moves fast: cut to a shot whenever the narration names something real, and as often as it keeps the video fast, dynamic and engaging. Asking for more shots than the app can find is fine: it answers what it can, and you design the rest as motion graphics.",
+      footageFirstLine(),
       `Ask for at least ${floor} and up to ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
       shotLengthLine()
     ].filter(Boolean).join("\n");
@@ -138,8 +140,20 @@ export function shotPrompt({ min = 0, max = DEFAULT_SHOT_REQUESTS } = {}) {
     layoutShotLine(),
     "The app finds or generates that shot for the line the scene sits under, after you plan. Ask for one where a real photo or clip of a concrete subject (a place, an object, people doing something) says more than a graphic; keep data, steps and comparisons as motion graphics.",
     `Ask for at most ${max} shots; make each "shows" specific enough to search for (subject, action, framing), with no brand names or text in the frame.`,
+    footageFirstLine(),
     shotLengthLine()
   ].filter(Boolean).join("\n");
+}
+
+// With a library to cut from, footage carries the video: text and icon cards
+// are the exception (src/short_form_checks.js checks the same limits), and a
+// label on a shot says what the shot shows.
+function footageFirstLine() {
+  return [
+    `Footage first: a text or icon card (${TEXT_CARD_MODULES.join(", ")}) is the exception, at most one for every ${SECONDS_PER_TEXT_CARD} s, never two in a row and never the same card module more than ${MAX_SAME_CARD} times. Say the other lines over a shot, with a callout for the key words.`,
+    "Ask for what a working library of this subject plausibly holds (the finished result, the work in progress, the people, the place). A specific action or close-up (a product being applied, a material sample) may not exist: the line can still play over related footage.",
+    "A callout or grid label names what the shot shows, never what you hoped it would show: the app's notes on each shot say what it shows, and tooling drops a label the notes do not support."
+  ].join("\n");
 }
 
 // Cards can carry library shots too, so the video shows real footage more often.

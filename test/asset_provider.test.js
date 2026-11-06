@@ -231,7 +231,7 @@ function threeShots() {
   return {
     ...story(null),
     scenes: [
-      { id: "s1", module: "photo-scene", start: 0, end: 2, energy: 1, params: { media: shot("a barista grinding coffee beans, close up"), title: "Every morning" } },
+      { id: "s1", module: "photo-scene", start: 0, end: 2, energy: 1, params: { media: shot("a barista grinding coffee beans, close up"), title: "Most cafes grind beans wrong" } },
       { id: "s2", module: "photo-scene", start: 2, end: 4, energy: 1, in: { type: "fade", dur: 0.3 }, params: { media: shot("steam rising from a fresh espresso"), title: "Starts here" } },
       { id: "s3", module: "photo-scene", start: 4, end: 6, energy: 1, in: { type: "fade", dur: 0.3 }, params: { media: shot("a hand lifting a cup by a sunny window"), title: "Coffee first" } }
     ]

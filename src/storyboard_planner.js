@@ -37,6 +37,7 @@ import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
+import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -221,6 +222,14 @@ export async function planStoryboard(options = {}) {
         if (found.warnings?.length) pinned.warnings = [...pinned.warnings, ...found.warnings.map((entry) => `assets: ${entry}`)];
         shotCounts = { requested, answered: found.shots.filter((shot) => shot.slot !== "backdrop").length, shots: found.shots };
         shotMedia = found.media ?? [];
+        // A callout or grid label that names what the shot was asked for, on a
+        // shot the app's notes say shows something else, is dropped: the shot
+        // plays as B-roll under the line instead of contradicting it.
+        const fitted = fitShotCallouts(pinned.storyboard, found.shots);
+        if (fitted.dropped.length) {
+          pinned.storyboard = fitted.storyboard;
+          pinned.warnings = [...pinned.warnings, `assets: tooling dropped labels the shots do not show: ${fitted.dropped.join("; ")}`];
+        }
       }
       // Notes' usable windows (the supplied media's, and the shots' the app
       // described): a video scene outside them starts in the best one.
@@ -303,6 +312,13 @@ export async function planStoryboard(options = {}) {
         const extra = (extraCheck(checked.storyboard) ?? []).map((entry) => `assets: ${entry}`);
         if (extra.length) { checked.errors = [...checked.errors, ...extra]; checked.ok = false; }
       }
+      // The opening and the card mix of a short (src/short_form_checks.js).
+      if (checked.storyboard) {
+        const seconds = storyboardSeconds(checked.storyboard, wordList);
+        const footage = Boolean(assets) && lane !== "footage-led";
+        const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
+        if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
+      }
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the
       // same budget; a storyboard that fails only this is kept as a fallback.
@@ -311,7 +327,9 @@ export async function planStoryboard(options = {}) {
       }
       const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
       if (shortfall) {
-        if (checked.ok && checked.storyboard && (!best || shotCounts.requested > best.shotCounts.requested)) best = { ...checked, errors: [], warnings: [...checked.warnings], direction };
+        // Near misses (a weak hook, a card too many) ride along as warnings.
+        const nearOnly = checked.storyboard && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix)));
+        if (nearOnly && (!best || shotCounts.requested > best.shotCounts.requested)) best = { ...checked, ok: true, errors: [], warnings: [...checked.warnings, ...checked.errors], direction };
         checked.errors = [...checked.errors, shortfall];
         checked.ok = false;
       }
@@ -548,7 +566,9 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
 }
 
 // Errors a storyboard may still ship with when the repairs run out.
-const NEAR_MISS = ["cadence: ", "placeholder: "];
+// A storyboard that fails only these still ships when the repairs run out: a
+// weak hook or one card too many beats no video.
+const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: "];
 
 // A card's text that only holds its place: dashes, question marks, an
 // ellipsis, "TBD". A model with nothing to say fills a list or a table with

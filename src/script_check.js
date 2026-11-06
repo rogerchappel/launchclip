@@ -22,6 +22,9 @@
 //   urgency           "only 3 left", "ends Friday", "today only" with no deadline in the brief
 //   opener-filler     the first sentence opens with a greeting or filler
 //   opener-length     the first sentence is longer than the hook budget
+//   opener-topic-question  the first sentence is a bare topic question
+//                     ("Choosing deck boards for your home?"): no number, no
+//                     stakes, only the topic
 //   cta-missing / cta-multiple / cta-early / cta-mismatch
 //   sentence-length   a sentence over 25 words
 //   options-unexplained  a list of three or more options ("timber, composite
@@ -83,6 +86,19 @@ const HEDGE_OVER = /\b(?:over|more than|above|upwards of|at least|north of)\s*$/
 const HEDGE_UNDER = /\b(?:under|less than|below|up to|at most|fewer than)\s*$/i;
 
 const OPENER_FILLER = /^(?:hi|hello|hey|hiya|howdy|yo|what'?s up|welcome(?: back)?|good (?:morning|afternoon|evening)|greetings|ladies and gentlemen|in (?:this|today'?s) (?:video|episode|clip|tutorial)|today,? (?:we|i)(?:'re| are|'m| am|'ll| will) (?:going to|gonna|talk|look|show|cover)|so,|okay,|ok,|alright,|all right,|um+\b|uh+\b|let'?s (?:get started|dive in|jump in|talk about)|before we (?:start|begin|get started)|my name is|don'?t forget to)(?![a-z])/i;
+
+// A hook that only asks whether the viewer is doing the topic: "Choosing
+// deck boards for your home?", "Thinking about solar?", "Looking for a new
+// CRM?". A question with a number or a contrast in it is a real hook.
+const TOPIC_QUESTION = /^(?:are you |is it time to |)(?:choosing|picking|selecting|buying|thinking (?:about|of)|looking (?:for|at|into)|planning(?: on| to)?|considering|wondering (?:about|if|whether)|shopping for|in the market for|need(?:ing)?|want(?:ing)?)\b/i;
+
+/** Whether a sentence is a bare topic question (see TOPIC_QUESTION). */
+export function isTopicQuestion(text) {
+  const sentence = String(text ?? "").trim().replace(/^["“'(]+/, "");
+  if (!/\?["”')]*$/.test(sentence)) return false;
+  if (/\d/.test(sentence) || /\b(?:but|instead|vs\.?|versus|mistake|myth|wrong|never|stop)\b/i.test(sentence)) return false;
+  return TOPIC_QUESTION.test(sentence);
+}
 
 // CTA verb classes: one class is one action. A verb counts only in imperative
 // position (the clause start, or after "just", "so", "now", "then", "please",
@@ -215,6 +231,7 @@ export function checkScript(input = {}) {
   const hookMax = limits.hookWords ?? HOOK_WORDS[format];
   const filler = OPENER_FILLER.exec(hook.text.replace(/^["“'(]+/, ""));
   if (filler) add(errors, "opener-filler", `The first sentence opens with "${filler[0].trim()}".`, "Open on the hook itself: a sharp claim, the problem, or a question the viewer wants answered.", spanOf(hook));
+  if (isTopicQuestion(hook.text)) add(errors, "opener-topic-question", `The first sentence is a topic question ("${hook.text.trim().slice(0, 80)}"): it names the subject and gives no reason to stay.`, "Open on stakes instead: a myth to bust, a common mistake, a number with its unit, or a bold claim the brief supports.", spanOf(hook));
   if (hookWords > hookMax) add(errors, "opener-length", `The first sentence is ${hookWords} words; the ${format} hook budget is ${hookMax}.`, `Cut the hook to ${hookMax} words or fewer; move the detail to the next sentence.`, spanOf(hook));
 
   // --- Sentences (hard cap; soft mean).
