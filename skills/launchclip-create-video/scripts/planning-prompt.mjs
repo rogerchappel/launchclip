@@ -546,7 +546,7 @@ function worldLines() {
 export function scriptBeatLines() {
   return [
     'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
-    'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words. In a video of 90 s or less that scene is an image (a photo, object, number with its unit, chart, character or product scene), never a title card (hook-title, motion-title, kinetic-words, section-card, masthead, glass-word, emphasis-caption); a title card may follow it.',
+    'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words and keeps its stakes (the myth, the mistake, the number with its unit, the bold claim): never a bare topic such as "Deck care?" or "Solar panels", which gives no reason to stay. In a video of 90 s or less that scene is an image (a photo, object, number with its unit, chart, character or product scene), never a title card (hook-title, motion-title, kinetic-words, section-card, masthead, glass-word, emphasis-caption); a title card may follow it.',
     'A beat with the share role carries the line a viewer would send or comment on: give it a scene of its own that shows it, not a recap card.',
     'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
     'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.'

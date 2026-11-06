@@ -154,6 +154,17 @@
 
 ### Fixed
 
+- Library-backed shorts open on stakes, cut to footage and stop mislabelling
+  shots. The script's hook must carry a myth, a mistake, a number or a bold
+  claim (a bare topic question such as "Choosing X for your Y?" is now the
+  `opener-topic-question` script error). With an asset provider, the planner
+  repairs an opening whose on-screen text is a bare topic ("Fence care?"),
+  caps text and icon cards (concept-card, icon-row, icon-grid, checklist and
+  the title cards) at one per 15 s, never two in a row and no module more
+  than twice, and tooling drops a callout or grid label that the app's notes
+  on the shot do not support, so the shot plays as B-roll under its line. A
+  plan that misses only the hook or card limits still ships when the repairs
+  run out.
 - Library footage inside motion graphics no longer lands in the same tilted
   polaroid every time. A polaroid is a novelty frame: at most one a video
   (none when the style's playfulness dial is low, two when it is high) and
