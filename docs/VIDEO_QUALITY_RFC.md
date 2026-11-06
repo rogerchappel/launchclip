@@ -547,7 +547,12 @@ which fixes the false failure on locked-off talking heads. New gates:
 - **Direction:** every line covered by the direction map, and the scenes it
   names exist.
 - **Style:** the `style check` measures (section 9.5).
-- **Face:** the face rule over the whole-video track (section 7.2).
+- **Face:** the face rule over the whole-video track (section 7.2). With no
+  face data at all (no track, probe or matte) the gate is `not-checked`, with
+  a reason, rather than passed. Before render, the planner's face fit
+  (`src/face_clear_fit.js`) moves any front-layer card off the head (beside,
+  above or below it, resized to what the module needs), drops it as a last
+  resort, and reports each change as a `face:` warning.
 
 ### 11.3 Critic rubric
 

@@ -168,8 +168,13 @@ export async function faceGate({ project, resolved, layout, profile, prototype =
   const band = profile?.measures?.face_time ? compareMeasures({ face_time: measures.face_time }, profile)[0] : null;
   const outside = band && band.status !== "inside" ? [band.detail] : [];
   const errors = [...findings.map((finding) => `${finding.ids.join(", ")} @${finding.at}s: ${finding.detail}`), ...(prototype ? [] : outside)];
+  // With no head track, probe or matte the face rule had nothing to check:
+  // say so instead of passing.
+  const base = storyBase(resolved);
+  const measured = Boolean(data.intervals) || Boolean(resolved?.resolved?.subjectTrack) || (base.subject.mode !== "off" && (base.subject.mattes ?? []).length > 0);
   return {
-    status: errors.length ? "failed" : "passed",
+    status: errors.length ? "failed" : measured ? "passed" : "not-checked",
+    ...(measured ? {} : { reason: "no face data (no head track, presenter probe or matte): whether a card covers the face was not checked; run the subject stage, or pass the app's face boxes (constraints.json faces)" }),
     source: data.source,
     face_time: measures.face_time,
     ...(band ? { band: band.band, target: band.target } : {}),

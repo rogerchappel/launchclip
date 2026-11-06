@@ -35,6 +35,7 @@ import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
@@ -97,6 +98,9 @@ export async function planStoryboard(options = {}) {
   // notes?, description?}] the deterministic pass may place, whose notes'
   // usable windows set video in points.
   const constraints = hasConstraints(options.constraints) ? options.constraints : null;
+  // subjectTrack: the presenter's whole-video head track (src/subject/project.js
+  // readStoryTrack), so tooling keeps cards off the face; none → the default head.
+  const subjectTrack = options.subjectTrack ?? null;
   const media = Array.isArray(options.media) ? options.media : [];
   // direction: true plans DIRECTION.json first (one call, RFC §6.4), a map
   // object plans against that map, false or omitted plans no map.
@@ -323,6 +327,15 @@ export async function planStoryboard(options = {}) {
         }
         if (fill.errors.length && !checked.ok) checked.errors = [...checked.errors, ...fill.errors.filter((entry) => !checked.errors.includes(entry))];
       }
+      // Cards off the presenter's face (src/face_clear_fit.js): after every
+      // other fit, so nothing moves a card back; kept only when the checks
+      // are no worse for it.
+      if (lane === "footage-led" && checked.storyboard) {
+        const cleared = clearFace(pinned.storyboard, checked, { words: wordList, beats, track: subjectTrack, checkOptions: { ...checkOptions, direction } });
+        pinned.storyboard = cleared.storyboard;
+        checked = cleared.checked;
+        pinned.warnings = [...pinned.warnings, ...cleared.warnings];
+      }
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
@@ -474,6 +487,39 @@ export async function planStoryboard(options = {}) {
 
 // ---------------------------------------------------------------------------
 // Checks
+
+// fitFaceClear in the planner: cards moved (or, as a last resort, dropped)
+// off the face, the captions dipped under any card moved over their band,
+// and the result kept only when the checks are no worse for it; else the
+// moves alone; else nothing. → {storyboard, checked, warnings}
+function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
+  const warnings = [];
+  let kept = [];
+  for (const drop of [true, false]) {
+    const cleared = fitFaceClear(storyboard, { words, beats, track, drop });
+    kept = cleared.kept;
+    if (!cleared.moved.length && !cleared.dropped.length) break;
+    let candidate = cleared.storyboard;
+    let rechecked = checkStoryboard(candidate, checkOptions);
+    const hidden = [];
+    for (let pass = 0; pass < 4 && !rechecked.ok; pass += 1) {
+      const fitted = fitCaptionBand(candidate, rechecked.errors);
+      if (!fitted.hidden.length) break;
+      candidate = fitted.storyboard;
+      hidden.push(...fitted.hidden);
+      rechecked = checkStoryboard(candidate, checkOptions);
+    }
+    if (rechecked.errors.length > checked.errors.length) {
+      if (!drop) warnings.push(`face: tooling could not move ${cleared.moved.map((entry) => entry.split(" ")[0]).join(", ")} off the presenter's face without breaking other checks`);
+      continue;
+    }
+    if (cleared.moved.length) warnings.push(`face: tooling ${cleared.moved.join("; ")}`);
+    if (cleared.dropped.length) warnings.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
+    if (hidden.length) warnings.push(`layout: tooling hid ${hidden.join("; ")}`);
+    return { storyboard: candidate, checked: rechecked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+  }
+  return { storyboard, checked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+}
 
 /**
  * Check one storyboard the way the planner does. Returns

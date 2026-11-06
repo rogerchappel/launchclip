@@ -64,6 +64,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["critic-repairs", { setting: true }],
   ["long-form-visuals", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
+  // With --no-subject: still track the presenter's head (local, no subject effects) so cards keep off the face.
+  ["face-track", { boolean: true, setting: true }],
   ["visual-history-dir", {}],
   ["visual-history-limit", { setting: true }],
   ["visual-similarity-limit", { setting: true }],
@@ -151,7 +153,8 @@ export function makeOptionsFromFlags(flags = {}) {
     visualHistoryDir: flags["visual-history-dir"],
     visualHistoryLimit: flags["visual-history-limit"],
     visualSimilarityLimit: flags["visual-similarity-limit"],
-    ...(flags["no-subject"] ? { subject: false } : {})
+    ...(flags["no-subject"] ? { subject: false } : {}),
+    ...(flags["face-track"] ? { faceTrack: true } : {})
   };
 }
 

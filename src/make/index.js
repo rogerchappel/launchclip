@@ -52,7 +52,7 @@ import { runHeadlessCritic } from "./critic.js";
 import { changedScenes, criticBriefSection, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
-import { fileProjectMatte, fileProjectTrack } from "../subject/project.js";
+import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
 import { auditNarration, researchBrief, researchMode } from "../research/make.js";
@@ -303,11 +303,13 @@ async function loadMakeConstraints(ctx) {
   const target = path.join(project, MAKE_PATHS.constraints);
   if (!file) {
     ctx.constraints = null;
+    ctx.faces = [];
     await rm(target, { force: true });
     return null;
   }
   const constraints = await loadConstraints(file);
   ctx.constraints = hasConstraints(constraints) ? constraints : null;
+  ctx.faces = constraints.faces ?? [];
   await writeJson(target, constraintsDocument(constraints));
   report.constraints = { file: MAKE_PATHS.constraints, source: file, ranges: constraints.ranges.length, must_use: constraints.must_use.map((entry) => entry.src), never_use: constraints.never_use.map((entry) => entry.src ?? `id:${entry.id}`) };
   return ctx.constraints;
@@ -496,6 +498,10 @@ async function probeFootageSubject(ctx) {
   const { project, report, adapters, options } = ctx;
   if (options.subject === false) {
     report.subject = { status: "off", reason: "--no-subject" };
+    // --face-track: no subject effects, but the head track still runs so
+    // tooling keeps cards off the face (src/face_clear_fit.js).
+    if (options.faceTrack) await trackFootageSubject(ctx, path.join(project, ctx.base.src));
+    if (!report.subject.track?.src) await fileAppFaces(ctx);
     return null;
   }
   const src = path.join(project, ctx.base.src);
@@ -530,6 +536,28 @@ async function trackFootageSubject(ctx, src) {
     const reason = String(error?.message ?? error).split("\n")[0];
     report.subject.track = { status: "unavailable", reason };
     report.warnings.push(`presenter track skipped (${reason}); the face rule only sees the matted ranges`);
+  }
+}
+
+// The app's face boxes (constraints.json faces) filed as the head track,
+// when nothing tracked the presenter: only for the recording as supplied,
+// since the boxes are on its timeline (a base edit cuts it).
+async function fileAppFaces(ctx) {
+  const { project, report, adapters, options } = ctx;
+  const faces = ctx.faces ?? [];
+  if (!faces.length) return;
+  const supplied = report.base_edit?.source;
+  if (!supplied || ctx.base?.src !== supplied) {
+    report.warnings.push(`constraints faces ignored: they are on ${supplied ?? "the supplied recording"}'s timeline, and make edited it (pass --base-edited with an edited recording)`);
+    return;
+  }
+  try {
+    const src = path.join(project, ctx.base.src);
+    const source = await (adapters.subject?.describe ?? describeSource)(src);
+    const filed = await fileProjectTrack(project, src, appFacesTrack(faces, source));
+    report.subject.track = { src: filed.src, frames: faces.length, source: "constraints faces" };
+  } catch (error) {
+    report.warnings.push(`constraints faces not used (${String(error?.message ?? error).split("\n")[0]}); tooling places cards around the default head`);
   }
 }
 
@@ -886,6 +914,12 @@ async function stageStoryboard(ctx) {
   const { profile, reason: profileReason } = profileForStory({ lane, format: ctx.format }, { profile: options.profile ?? null, style: style?.pack ?? null, projectDir: project });
   report.profile = profile ? { id: profile.id, reason: profileReason, provenance: profile.provenance.kind } : null;
   const constraints = ctx.constraints ?? null;
+  // The presenter's head track (the subject stage's, or the app's faces), so
+  // tooling keeps cards off the face; an unreadable one only costs that.
+  let subjectTrack = null;
+  if (lane === "footage-led" && ctx.base) {
+    try { subjectTrack = await readStoryTrack(project, { base: ctx.base.src }); } catch (error) { report.warnings.push(`${TRACK_FILE} not used for placement (${String(error?.message ?? error).split("\n")[0]})`); }
+  }
   const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
@@ -895,7 +929,7 @@ async function stageStoryboard(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -958,6 +992,7 @@ async function stageStoryboard(ctx) {
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
+    ...(subjectTrack ? { subjectTrack } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
   for (const shot of plan.shots ?? []) {
@@ -966,7 +1001,7 @@ async function stageStoryboard(ctx) {
   if (assets) report.shots = plan.shots ?? [];
   // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
   if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
-  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ")) report.warnings.push(warning);
+  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ") || warning.startsWith("face: ")) report.warnings.push(warning);
   if (laidOut) report.layout = { name: laidOut, sections: (plan.storyboard?.sections ?? []).map((section) => ({ id: section.id, layout: section.layout, start: section.start, end: section.end })) };
   // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
   if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };

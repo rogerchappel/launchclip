@@ -15,7 +15,7 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { subjectMode } from "@launchclip/core/story.mjs";
-import { validateSubjectTrack } from "@launchclip/core/subject.mjs";
+import { TRACK_SCHEMA, summarizeSamples, validateSubjectTrack } from "@launchclip/core/subject.mjs";
 import { rangeDirName } from "./stage.js";
 
 export const MATTES_SCHEMA = "launchclip.subject-mattes.v1";
@@ -85,6 +85,29 @@ export async function fileProjectTrack(project, video, track) {
   await mkdir(path.join(root, "assets/subject"), { recursive: true });
   await writeFile(path.join(root, TRACK_FILE), `${JSON.stringify({ ...track, base })}\n`);
   return { base, src: TRACK_FILE };
+}
+
+// The model id a track built from the app's face boxes carries.
+export const APP_FACES_MODEL = "app-faces";
+
+/**
+ * A whole-video head track from the app's face boxes (constraints.json
+ * faces: [{t, box: {x, y, width, height} | null}], top-left fractions) for a
+ * recording described by `source` ({sha256, width, height, fps, duration}).
+ * The boxes become head boxes (centre and size); there is no body box.
+ * → a launchclip.subject-track.v1 object (validateSubjectTrack).
+ */
+export function appFacesTrack(faces, source) {
+  const r4 = (value) => Math.round(value * 1e4) / 1e4;
+  const frames = (faces ?? []).filter((face) => face.t <= source.duration).map((face) => {
+    const box = face.box;
+    const head = box ? { x: r4(box.x + box.width / 2), y: r4(box.y + box.height / 2), w: r4(box.width), h: r4(box.height) } : null;
+    return { t: face.t, coverage: head ? r4(Math.min(1, head.w * head.h)) : 0, people: head ? "one" : "none", head, body: null };
+  });
+  const gaps = frames.slice(1).map((frame, index) => frame.t - frames[index].t).filter((gap) => gap > 0).sort((a, b) => a - b);
+  // The track's rate is its median sample spacing: a sample holds that long.
+  const step = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 1;
+  return { schema: TRACK_SCHEMA, source, model: APP_FACES_MODEL, fps: Math.round((1 / step) * 1000) / 1000, ...summarizeSamples(frames), frames };
 }
 
 function projectAsset(root, video) {

@@ -128,3 +128,45 @@ test("--no-subject skips the probe entirely", async (t) => {
   assert.deepEqual(report.subject, { status: "off", reason: "--no-subject" });
   assert.match(prompts[0], /No subject modules/);
 });
+
+// A card the planner puts over the face: the polaroid's default box covers the
+// middle of the frame, where the presenter's head is.
+const hookScenes = () => [{ id: "hook", module: "polaroid", track: 1, start: 0.5, end: 3, params: { caption: "Before" } }];
+const meets = (a, b) => Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x) && Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y);
+const headPx = { x: (head.x - head.w / 2) * 1080, y: (head.y - head.h / 2) * 1920, width: head.w * 1080, height: head.h * 1920 };
+
+test("--no-subject --face-track tracks the head without subject effects, and the plan keeps the hook off the face", async (t) => {
+  const { assets, out } = await project(t);
+  const calls = [];
+  // The head over the whole recording, ten frames a second.
+  const adapters = subjectAdapters({ calls });
+  const short = adapters.track;
+  adapters.track = async (file) => {
+    const { track } = await short(file);
+    const frames = Array.from({ length: 67 }, (_, i) => ({ ...track.frames[0], t: i / 10 }));
+    return { track: { ...track, frames }, cached: false };
+  };
+  const report = await runMake("Dress my founder clip", { assets, out, voice: "test", subject: false, faceTrack: true }, { env: {}, client: client([], hookScenes()), inventory, prepareRecording, finish, subject: adapters, notice() {} });
+  // Only the track ran: no probe, no mattes.
+  assert.deepEqual(calls.map((call) => Object.keys(call)[0]), ["track"]);
+  assert.equal(report.subject.status, "off");
+  assert.equal(report.subject.track.src, "assets/subject/track.json");
+  assert.ok(report.warnings.some((warning) => /^face: tooling hook (resized and )?moved/.test(warning)), report.warnings.join("\n"));
+  const { story } = await readProjectStory(out);
+  const rect = story.scenes.find((scene) => scene.id === "hook").params.rect;
+  assert.ok(rect && !meets(rect, headPx), JSON.stringify(rect));
+});
+
+test("--no-subject with the app's face boxes (constraints faces) files them as the head track", async (t) => {
+  const { assets, out } = await project(t);
+  const calls = [];
+  const box = { x: head.x - head.w / 2, y: head.y - head.h / 2, width: head.w, height: head.h };
+  await writeFile(path.join(assets, "constraints.json"), JSON.stringify({ version: 1, faces: [0, 1, 2, 3, 4, 5, 6].map((t) => ({ t, box })) }));
+  const report = await runMake("Dress my founder clip", { assets, out, voice: "test", subject: false, baseEdited: true }, { env: {}, client: client([], hookScenes()), inventory, prepareRecording, finish, subject: subjectAdapters({ calls }), notice() {} });
+  assert.deepEqual(calls, [], "no model runs");
+  assert.deepEqual(report.subject.track, { src: "assets/subject/track.json", frames: 7, source: "constraints faces" });
+  const { resolved, story } = await readProjectStory(out);
+  assert.equal(resolved.resolved.subjectTrack.frames.length, 7);
+  const rect = story.scenes.find((scene) => scene.id === "hook").params.rect;
+  assert.ok(rect && !meets(rect, headPx), JSON.stringify(rect));
+});
