@@ -169,8 +169,13 @@ export async function planStoryboard(options = {}) {
   // placeholders, kept in case the repairs run out: a near miss beats no video.
   let paced = null;
 
+  // seed {storyboard, errors}: start from an existing storyboard and a list
+  // of known problems (a critic's findings on its render) instead of a fresh
+  // plan; every attempt is a repair, checked like any other.
+  const seed = options.seed?.storyboard ? options.seed : null;
+  if (seed) previous = { candidate: seed.storyboard, errors: Array.isArray(seed.errors) ? seed.errors : [] };
   for (let attempt = 0; attempt <= repairs; attempt += 1) {
-    const kind = attempt === 0 ? "plan" : "repair";
+    const kind = attempt === 0 && !seed ? "plan" : "repair";
     const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction, shots: previous?.shotCounts?.shots ?? [] });
     const callStarted = now();
     let result;
