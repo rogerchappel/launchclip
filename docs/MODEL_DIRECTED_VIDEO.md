@@ -403,7 +403,10 @@ critique and repair receipts.
 
 After encoding, Launchclip measures per-frame luminance difference, stillness,
 motion bursts, cut cadence, and shot duration. A separate block-matching pass
-measures displacement velocity, acceleration, deceleration, and jerk; luma
+measures displacement velocity, acceleration, deceleration, and jerk on a grid
+with the video's own aspect (short side 180 px, fine enough to see a drawn
+figure's limbs move), reported in px/s at a 36-px short side so profile floors
+keep their meaning; its motion onsets count as hook events with the bursts; luma
 derivatives are explicitly reported only as pixel-change metrics. Audio QA
 checks stream presence, integrated loudness, true peak, narrated silence,
 voice/music margin, and SFX transients at scheduled cue times. Reference
