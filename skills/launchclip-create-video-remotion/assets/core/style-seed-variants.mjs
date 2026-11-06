@@ -99,13 +99,14 @@ export const V1_MODULE_VARIANTS = freeze({
   'feynman-diagram': ['glow', 'ink']
 });
 
-// launchclip.style-seed.v2: v1 plus the lower-third variants and the
-// tactile modules (each variant is drawn by its own key, so the other picks
-// of a saved seed do not move).
+// launchclip.style-seed.v2: v1 plus the lower-third variants, the
+// tactile modules and line-diagram (each variant is drawn by its own key,
+// so the other picks of a saved seed do not move).
 export const V2_MODULE_VARIANTS = freeze({
   ...V1_MODULE_VARIANTS,
   'lower-third': ['bar', 'band', 'pill', 'outline'],
   'drop-grid': ['cards', 'coins', 'tiles'],
   'live-counter': ['plain', 'panel', 'ticket'],
-  'live-bars': ['slabs', 'flat']
+  'live-bars': ['slabs', 'flat'],
+  'line-diagram': ['blueprint', 'plain']
 });

@@ -296,7 +296,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
 | shows or changes a formula ("the equation", "a sign error", "this term"): typeset LaTeX that reveals term by term, boxes the term in question and diffs red to green | equation |
 | unpacks a paper or report title word by word ("the paper's title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss | title-decompose |
-| describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line | feynman-diagram |
+| describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line; particle physics only (any other line sketch is a line-diagram) | feynman-diagram |
+| explains how something is laid out, built or fits together ("square it up with string lines", "the beam sits on the post", "the planned roof line", "a floor plan"): a labelled line sketch on a drafting plate that fills the frame and draws itself stroke by stroke; few, short labels | line-diagram |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -2241,6 +2242,22 @@ params:
 events: build, line-<i>
 variants: glow (default), ink
 
+### line-diagram (keeps captions)
+A labelled line sketch on a drafting plate that draws itself stroke by stroke: how something is laid out, built or fits together (a deck squared with string lines and diagonals, a beam on a post on a footing, a floor plan, a wiring run). The drawing is scaled to fill the plate; solid strokes in the brand colour, dashed ones (string lines, planned or hidden parts) in the accent; labels sit in pills clear of the lines and stay up long enough to read; the note shows with the drawing.
+params:
+- points: {name: [x, y]} 2–16, any units 0–100, y down; draw in the frame's shape (taller than wide for 9:16), the sketch is scaled to fill the plate
+- lines: [{from, to (point names), style? (solid | dashed; default solid), weight? (normal | heavy: heavy for posts, beams, walls), accent? (true: the accent colour), bend? −1–1, label? ≤ 24, at?}] 1–16, drawn in order (events line-<i>)
+- marks: [{point, label ≤ 24}] 0–8: a label on a point ("footing", "new post"), shown when the first line reaches it
+- title: string ≤ 60 (optional)
+- note: string ≤ 80, a footnote shown with the drawing ("Illustrative layout, not to scale") (optional)
+- tone: line colour: primary (default) | accent | paper | #rrggbb
+- accent: dashed and accent lines: accent (default) | primary | paper | #rrggbb [guided and bespoke tiers only]
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, line-<i>
+variants: blueprint (default), plain
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
 params:
@@ -2488,7 +2505,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | lineage-graph | 2 s | 0.5 s | scene − 0.65 s | people land generation by generation about 0.9 s apart (squeezed to fit); each link draws in 0.6 s just before its child |
 | equation | 2 s | 0.5 s | scene − 0.65 s | the equation wipes in over 0.7 s from at; terms, the diff and the boxes follow 0.75–0.9 s apart (squeezed to fit) |
 | title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
-| feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
+| feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build |
+| line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |

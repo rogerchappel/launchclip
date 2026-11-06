@@ -35,6 +35,7 @@ import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+import { fitDiagrams } from "./diagram_fit.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
@@ -264,6 +265,13 @@ export async function planStoryboard(options = {}) {
       }
       // The map names the inserts that really cover each hidden range.
       if (constraints && direction) direction = reconcileMap(direction, resolvedOrNull(pinned.storyboard, wordList, beats), constraints, wordList);
+      // Line sketches planned as Feynman diagrams become line-diagrams, and
+      // labels a scene cannot hold for a read are dropped (src/diagram_fit.js).
+      const diagrams = fitDiagrams(pinned.storyboard, { words: wordList, beats });
+      if (diagrams.changed.length) {
+        pinned.storyboard = diagrams.storyboard;
+        pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
+      }
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside

@@ -26,7 +26,7 @@ export function chromeNodes(model) {
   return out;
 }
 
-/** Title and source fade in with the module (title first). */
+/** Title and source fade in with the module (title first); the source after the build, or at content.sourceAt. */
 export function chromeOps(model, ops) {
   const {id, start, motion} = model;
   const c = model.content;
@@ -36,7 +36,7 @@ export function chromeOps(model, ops) {
   }
   if (c.source) {
     set(ops, `${id}-source`, start, {opacity: 0});
-    tw(ops, `${id}-source`, c.buildEnd ?? motion.enterEnd, 0.4, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-source`, c.sourceAt ?? c.buildEnd ?? motion.enterEnd, 0.4, 'power1.out', {opacity: 0}, {opacity: 1});
   }
 }
 
