@@ -197,6 +197,10 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'race-bars', intents: ['number', 'proof'], when: 'says one thing is N times faster or finishes first ("3× faster", "in half the time"): rows fill like progress bars at their own speeds and the winner gets its badge', patterns: ['\\b\\d+(\\.\\d+)?\\s?(×|x|times) (faster|quicker|sooner)\\b', '\\bin (half|a third of|a quarter of) the time\\b', '\\b(finishe[sd]|done) (first|before)\\b'] },
   { module: 'small-multiples', intents: ['proof', 'number'], when: 'walks through several benchmarks or tests at once ("across four benchmarks", "wins 18 of 20"): a dashboard of mini bar charts with one legend, each lighting its winner', patterns: ['\\bacross (\\w+ )?(benchmarks|tests|evals)\\b', '\\bwins? \\d+ of \\d+\\b', '\\b(benchmarks?|evals?) (dashboard|suite)\\b'] },
   { module: 'date-carousel', intents: ['turn', 'proof'], when: 'goes back or forward to a date ("rewind to October 5th", "three weeks earlier", "on launch day"): day cards rewind under a REWIND sign and land on the day with its event', patterns: ['\\brewind\\b', '\\b(\\w+ )?(days|weeks) (earlier|before|later)\\b', '\\b(january|february|march|april|may|june|july|august|september|october|november|december) \\d{1,2}(st|nd|rd|th)?\\b', '\\bwhere it (all )?started\\b'] },
+  { module: 'drop-grid', intents: ['number', 'process'], when: 'counts things piling up ("10 times a day", "five posts a week", "every day for a week", "3 new clients"): cards, coins or tiles drop into a grid one per word with weight, dust and a climbing counter; time each drop with params.times', patterns: ['\\b(\\d+|ten|five|three|seven) (times|posts|reels|videos|clients|jobs|orders) (a|per|every) (day|week|month)\\b', '\\bevery (single )?day\\b', '\\b(piles? up|adds? up|stacks? up)\\b'] },
+  { module: 'live-counter', intents: ['number'], when: 'describes a number still climbing ("and it keeps going up", "every minute", "right now", "views today"): a big figure that ticks up for the whole scene, milestones stamping as it passes them', patterns: ['\\b(keeps? (going up|climbing|growing)|still (climbing|growing)|right now|as we speak)\\b', '\\bper (second|minute|hour)\\b', '\\b(views|sales|sign-?ups|followers) (today|this (hour|week))\\b'] },
+  { module: 'live-bars', intents: ['number', 'proof'], when: 'compares several things growing at once ("views per reel", "which hook is winning", "sales by product"): raised bars whose values tick up live, each number riding its bar', patterns: ['\\b(views|sales|clicks|leads) (per|by) (reel|post|video|product|channel)\\b', '\\bwhich (one|hook|post|ad) (is )?(winning|wins|is ahead)\\b'] },
+  { module: 'frame-counter', overlay: 'frame.counter', intents: ['number', 'process'], when: 'tracks progress across the whole video ("day 1… day 14", "step 2 of 4", a running total like "the liability so far"): a counter in a top corner that climbs step by step and never re-enters (story.frame.counter, not a scene)', patterns: ['\\bday (\\d+|one|two|three)\\b', '\\bstep (\\d+|one|two|three) (of|out of)\\b', '\\b(running total|so far that\'s|adds up to)\\b'] },
   { module: 'month-grid', intents: ['number', 'process'], when: 'counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter', patterns: ['\\b\\d{1,2} days\\b', '\\bevery (single )?day\\b', '\\b(daily|each day|day \\d+)\\b', '\\bfor a (whole )?month\\b'] },
   { module: 'person-id', intents: ['personal', 'proof'], when: 'introduces a real person by name and role in an explainer ("Professor X at Y", "the paper\'s author", "her advisor"): their photo with a glowing name pill and role', patterns: ['\\b(professor|researcher|scientist|author|physicist|mathematician)\\b', '\\b(phd|ph\\.d\\.|doctoral) (student|advisor)\\b'] },
   { module: 'lineage-graph', intents: ['personal', 'proof'], when: 'traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels', patterns: ['\\b(doctoral )?advis(or|er)\\b', '\\b(trained|studied) (under|with)\\b', '\\b(former )?student of\\b', '\\bmentor(ed)?\\b'] },
@@ -472,6 +476,17 @@ export function objectLines() {
     'Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.',
     'Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).',
     'Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.',
+  ];
+}
+
+// The satisfying-motion kit: things that pile up as they are said, numbers
+// that never stop, objects with weight, and a progress frame across scenes.
+export function satisfyingLines() {
+  return [
+    'Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.',
+    'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
+    'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
+    'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
   ];
 }
 
@@ -888,6 +903,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
+    ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -988,6 +1004,7 @@ export function storyboardModulesReference() {
     ...section('Builds, not cuts (shot states)', buildLines().map((line) => `- ${line}`)),
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
+    ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
