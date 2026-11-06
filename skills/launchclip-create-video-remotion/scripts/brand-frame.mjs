@@ -31,6 +31,15 @@
 // `color` overrides it while that label shows. The changes are colour tweens
 // in the same plan, so both renderers switch on the same frame.
 //
+// frameCounter() is the frame's running counter ("DAY 03", "STEP 2/4",
+// "LIABILITY $53,000"): a small label and a value in a top corner that climbs
+// step by step across the whole video. Each numeric step rolls up through a
+// few in-between values, then pulses as it lands, so the counter keeps the
+// viewer's sense of progress the way a day count or a running total does.
+// It never re-enters between scenes. frameCues() lists its landings for
+// sound design. A progress line with style "scrubber" carries a knob that
+// travels with the fill.
+//
 // A kicker with a logo and no label is a logo mark (frameLogoMark): the logo
 // alone, a visible size in the canvas corner (inside a 22% × 6.5% box, 30 × k
 // px from the edges, the usual social-video logo bug) rather than a small
@@ -58,7 +67,9 @@ const r2 = (value) => Math.round(value * 100) / 100;
 const r4 = (value) => Math.round(value * 10000) / 10000;
 
 // Sizes at k = 1 (the short side is 1080 px).
-export const BRAND_FRAME_METRICS = Object.freeze({ label: 30, section: 24, logo: 40, gap: 12, underline: 4, underlineGap: 10, band: 78, progress: 6, source: 24, sourceBand: 48 });
+export const BRAND_FRAME_METRICS = Object.freeze({ label: 30, section: 24, logo: 40, gap: 12, underline: 4, underlineGap: 10, band: 78, progress: 6, source: 24, sourceBand: 48, counter: 34, counterLabel: 22, scrubber: 8, knob: 22 });
+// The counter's roll between two numeric steps: seconds and in-between values.
+export const FRAME_COUNTER_ROLL = Object.freeze({ seconds: 0.5, samples: 7 });
 // The logo mark: its box as a share of the canvas (plate included), and the
 // corner margin, plate padding and radius at k = 1.
 export const LOGO_MARK_METRICS = Object.freeze({ width: 0.22, height: 0.065, margin: 30, pad: 8, radius: 10 });
@@ -104,7 +115,8 @@ export function storyFrame(story) {
     logoMark: { tone: LOGO_TONES.includes(mark.tone) ? mark.tone : null, aspect: Number(mark.aspect) > 0 ? Number(mark.aspect) : null, trim: logoTrimOf(mark.trim) },
     color: frame.color ?? 'paper',
     labels: Array.isArray(frame.labels) ? frame.labels : [],
-    sources: Array.isArray(frame.sources) ? frame.sources : []
+    sources: Array.isArray(frame.sources) ? frame.sources : [],
+    counter: isObject(frame.counter) ? frame.counter : null
   };
 }
 
@@ -141,6 +153,67 @@ export function frameSources(story, frame = storyFrame(story)) {
   return entries.map((entry, i) => ({ ...entry, end: Math.min(entry.end ?? duration, i + 1 < entries.length ? entries[i + 1].start : duration) }));
 }
 
+/** A counter value as text: frame.counter.format {prefix, suffix, pad, decimals, separator}. */
+export function counterText(value, format = {}) {
+  const f = isObject(format) ? format : {};
+  const decimals = Number.isInteger(f.decimals) && f.decimals >= 0 && f.decimals <= 2 ? f.decimals : 0;
+  const fixed = Math.abs(value).toFixed(decimals);
+  let [whole, fraction] = fixed.split('.');
+  if (Number.isInteger(f.pad) && f.pad > 0) whole = whole.padStart(Math.min(6, f.pad), '0');
+  if (f.separator !== false) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${typeof f.prefix === 'string' ? f.prefix : ''}${value < 0 ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}${typeof f.suffix === 'string' ? f.suffix : ''}`;
+}
+
+/**
+ * The running counter on the timeline, or null: {label, position, steps:
+ * [{start, text, value}], shown: [{at, text, step}]}. A step starts at
+ * `start` (seconds) or a scene's start (`scene`); `value` (a number, rolled
+ * up to from the step before) or `text` (shown as is). `shown` is every text
+ * the counter displays, the in-between roll values included.
+ */
+export function frameCounter(story, frame = storyFrame(story)) {
+  const counter = frame?.counter;
+  if (!counter || !Array.isArray(counter.steps)) return null;
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
+  const scenes = new Map((story?.scenes ?? []).map((scene) => [scene?.id, scene]));
+  const steps = counter.steps.map((entry) => {
+    if (!isObject(entry)) return null;
+    const start = typeof entry.start === 'number' ? entry.start : Number(scenes.get(entry.scene)?.start);
+    const value = typeof entry.value === 'number' && Number.isFinite(entry.value) ? entry.value : null;
+    const text = value !== null ? counterText(value, counter.format) : nonEmpty(entry.text) ? entry.text.trim() : null;
+    return Number.isFinite(start) && start >= 0 && start < duration && text ? { start, value, text } : null;
+  }).filter(Boolean).sort((a, b) => a.start - b.start);
+  if (!steps.length) return null;
+  const shown = [];
+  steps.forEach((step, i) => {
+    const before = steps[i - 1];
+    const gap = before ? step.start - before.start : 0;
+    // A numeric climb rolls through in-between values, finishing on the step's time.
+    if (before && before.value !== null && step.value !== null && step.value !== before.value && gap > 0.3) {
+      const roll = Math.min(FRAME_COUNTER_ROLL.seconds, gap * 0.6);
+      const n = FRAME_COUNTER_ROLL.samples;
+      for (let k = 1; k < n; k++) {
+        const p = 1 - (1 - k / n) ** 2;
+        const value = before.value + (step.value - before.value) * p;
+        const decimals = isObject(counter.format) && Number.isInteger(counter.format.decimals) ? counter.format.decimals : 0;
+        const rounded = Math.round(value * 10 ** decimals) / 10 ** decimals;
+        const text = counterText(rounded, counter.format);
+        if (text !== shown.at(-1)?.text && text !== step.text) shown.push({ at: r4(step.start - roll + (roll * k) / n), text, step: null });
+      }
+    }
+    shown.push({ at: r4(step.start), text: step.text, step: i });
+  });
+  const position = counter.position === 'top-left' || counter.position === 'top-right' ? counter.position : frame.kicker?.position === 'top-right' ? 'top-left' : 'top-right';
+  return { label: nonEmpty(counter.label) ? counter.label.trim().slice(0, 24) : null, position, steps, shown };
+}
+
+/** Sound cues for the frame: a tick as each counter step lands. [{at, cue, sfx, source, event}] */
+export function frameCues(story, frame = storyFrame(story)) {
+  const counter = frameCounter(story, frame);
+  if (!counter) return [];
+  return counter.steps.slice(1).map((step, i) => ({ at: step.start, cue: 'tick', sfx: 'tick', source: 'frame-counter', event: `counter-${i + 2}` }));
+}
+
 const isTop = (position) => String(position).startsWith('top');
 
 /**
@@ -168,7 +241,22 @@ export function brandFrameLayout(story, format = story?.format) {
   if (frame.kicker?.mark) regions.push({ id: 'frame-kicker', rect: logoMarkRect(canvas, frame.kicker.position, k) });
   else if (frame.kicker) regions.push({ id: 'frame-kicker', rect: corner(frame.kicker.position, half) });
   const labels = frameLabels(story, frame);
-  if (frame.sections && labels.length) regions.push({ id: 'frame-section', rect: corner(frame.sections.position, half) });
+  const counter = frameCounter(story, frame);
+  let counterWidth = 0;
+  if (counter) {
+    // Wide enough for its longest text and its label, so the corner never reflows as it climbs.
+    const longest = Math.max(...counter.shown.map((entry) => entry.text.length));
+    // Display digits run about 0.62 em; the label is spaced monospace caps, about 0.72 em a letter.
+    counterWidth = Math.min(half, (longest * M.counter * 0.62 + (counter.label ? counter.label.length * M.counterLabel * 0.72 + 2 * M.gap : 0) + M.gap) * k);
+    regions.push({ id: 'frame-counter', rect: corner(counter.position, counterWidth) });
+  }
+  if (frame.sections && labels.length) {
+    const shared = counter && counter.position === frame.sections.position;
+    const width = shared ? Math.max(0, half - counterWidth - M.gap * k) : half;
+    const rect = corner(frame.sections.position, width);
+    if (shared) rect.x = r2(String(frame.sections.position).endsWith('left') ? zone.x + counterWidth + M.gap * k : zone.x + zone.width - counterWidth - M.gap * k - width);
+    if (width > 0) regions.push({ id: 'frame-section', rect });
+  }
   const sources = frameSources(story, frame);
   if (sources.length) {
     const height = M.sourceBand * k;
@@ -181,17 +269,20 @@ export function brandFrameLayout(story, format = story?.format) {
     if (region.rect.y <= zone.y + 1e-6) top = Math.max(top, region.rect.y + region.rect.height + gap);
     else bottom = Math.min(bottom, region.rect.y - gap);
   }
-  const thickness = (isObject(frame.progress) && typeof frame.progress.thickness === 'number' ? frame.progress.thickness : M.progress) * k;
+  const scrubber = isObject(frame.progress) && frame.progress.style === 'scrubber';
+  const thickness = (isObject(frame.progress) && typeof frame.progress.thickness === 'number' ? frame.progress.thickness : scrubber ? M.scrubber : M.progress) * k;
   // Chapter ticks: a mark on the progress line at each chapter start after the first.
   const duration = Number(story?.resolved?.duration ?? format?.duration) || 0;
   const ticks = frame.progress && frame.progress.ticks !== false && duration > 0 ? storyChapters(story).slice(1).map((chapter) => r4(chapter.start / duration)) : [];
-  const progress = frame.progress ? { position: frame.progress.position === 'top' ? 'top' : 'bottom', thickness: r2(thickness), ticks } : null;
+  // A scrubber's knob is drawn whole, so its line sits in from the edge.
+  const inset = scrubber ? r2(M.knob * k * 0.9) : 0;
+  const progress = frame.progress ? { position: frame.progress.position === 'top' ? 'top' : 'bottom', thickness: r2(thickness), ticks, scrubber, inset, knob: scrubber ? r2(M.knob * k) : 0 } : null;
   if (progress) {
-    const edge = progress.position === 'top' ? thickness : canvas.height - thickness;
+    const edge = progress.position === 'top' ? thickness + inset + progress.knob / 2 : canvas.height - thickness - inset - progress.knob / 2;
     if (progress.position === 'top') top = Math.max(top, edge);
     else bottom = Math.min(bottom, edge);
   }
-  return { frame, k, zone, regions, labels, sources, progress, safe: { x: r2(zone.x), y: r2(top), width: r2(zone.width), height: r2(Math.max(0, bottom - top)) } };
+  return { frame, k, zone, canvas, regions, labels, sources, counter, progress, safe: { x: r2(zone.x), y: r2(top), width: r2(zone.width), height: r2(Math.max(0, bottom - top)) } };
 }
 
 /** The logo mark's box: LOGO_MARK_METRICS of the canvas, LOGO_MARK_METRICS.margin × k from the corner's edges. */
@@ -305,7 +396,7 @@ export function frameColorSpans(story, frame = storyFrame(story)) {
 export function brandFramePlan(story, { format = story?.format } = {}) {
   const layout = brandFrameLayout(story, format);
   if (!layout) return null;
-  const { frame, k, regions, labels, sources, progress } = layout;
+  const { frame, k, regions, labels, sources, counter, progress, canvas } = layout;
   const brand = story?.brand ?? {};
   const fonts = brandFontStacks(brand);
   const M = BRAND_FRAME_METRICS;
@@ -393,6 +484,37 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     root.children.push(holder);
   }
 
+  const counterRegion = regions.find((region) => region.id === 'frame-counter');
+  if (counter && counterRegion) {
+    const value = M.counter * k;
+    const tint = color(isObject(frame.counter) ? frame.counter.color : undefined, brand, 'primary');
+    const longest = Math.max(...counter.shown.map((entry) => entry.text.length));
+    const box = r2(longest * value * 0.62);
+    css.push(`.lc-frame-counter { ${place(counterRegion.rect, counter.position)} gap: ${px(M.gap * k)}; }`);
+    css.push(`.lc-frame-counter-label { font: 600 ${px(M.counterLabel * k)}/1.1 ${fonts.meta}; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }`);
+    css.push(`.lc-frame-counter-box { position: relative; flex: none; width: ${px(box)}; height: ${px(value * 1.2)}; overflow: hidden; transform-origin: 50% 60%; }`);
+    css.push(`.lc-frame-counter-v { position: absolute; left: 0; top: 0; width: 100%; ${counter.position.endsWith('left') ? 'text-align: left;' : 'text-align: right;'} font: 800 ${px(value)}/1.2 ${fonts.display}; font-variant-numeric: tabular-nums; color: ${tint}; opacity: 0; }`);
+    const holder = { tag: 'div', id: 'lc-frame-counter', cls: 'lc-frame-corner lc-frame-counter', children: [] };
+    if (counter.label) holder.children.push({ tag: 'span', id: 'lc-frame-counter-label', cls: 'lc-frame-text lc-frame-counter-label', text: counter.label });
+    const values = { tag: 'div', id: 'lc-frame-counter-box', cls: 'lc-frame-counter-box', children: [] };
+    const rise = r2(value * 0.7);
+    counter.shown.forEach((entry, i) => {
+      const id = `lc-frame-cv-${String(i + 1).padStart(3, '0')}`;
+      values.children.push({ tag: 'span', id, cls: 'lc-frame-counter-v', text: entry.text });
+      const next = counter.shown[i + 1];
+      const quick = entry.step === null || next?.step === null;
+      tw(id, entry.at, quick ? 0.05 : 0.18, 'power2.out', { opacity: 1, y: 0 }, { opacity: 0, y: rise }, i === 0);
+      if (next) tw(id, next.at, quick ? 0.05 : 0.14, 'power1.in', { opacity: 0, y: -rise });
+      // A landed step pulses.
+      if (entry.step !== null && entry.step > 0) {
+        tw('lc-frame-counter-box', entry.at, 0.08, 'power2.out', { scale: 1.16 });
+        tw('lc-frame-counter-box', r4(entry.at + 0.08), 0.3, 'back.out(2.4)', { scale: 1 });
+      }
+    });
+    holder.children.push(values);
+    root.children.push(holder);
+  }
+
   const sourceRegion = regions.find((region) => region.id === 'frame-source');
   if (sourceRegion) {
     css.push(`.lc-frame-source { position: absolute; left: ${px(sourceRegion.rect.x)}; top: ${px(sourceRegion.rect.y)}; width: ${px(sourceRegion.rect.width)}; height: ${px(sourceRegion.rect.height)}; }`);
@@ -410,15 +532,20 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
   if (progress) {
     const fill = color(isObject(frame.progress) ? frame.progress.color : undefined, brand, 'primary');
     const duration = Number(story?.resolved?.duration ?? format?.duration) || 1;
-    css.push(`.lc-frame-progress { position: absolute; left: 0; right: 0; ${progress.position}: 0; height: ${px(progress.thickness)}; background: ${ink}33; }`);
-    css.push(`.lc-frame-progress-fill { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: ${fill}; transform-origin: 0% 50%; transform: scaleX(0); }`);
+    const inset = progress.scrubber ? progress.inset + progress.knob / 2 : 0;
+    const edge = inset ? px(inset) : '0';
+    css.push(`.lc-frame-progress { position: absolute; left: ${edge}; right: ${edge}; ${progress.position}: ${edge}; height: ${px(progress.thickness)}; background: ${ink}33;${progress.scrubber ? ` border-radius: ${px(progress.thickness)};` : ''} }`);
+    css.push(`.lc-frame-progress-fill { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: ${fill}; transform-origin: 0% 50%; transform: scaleX(0);${progress.scrubber ? ` border-radius: ${px(progress.thickness)};` : ''} }`);
     const ticks = progress.ticks.map((at, i) => ({ tag: 'div', id: `lc-frame-tick-${String(i + 1).padStart(2, '0')}`, cls: 'lc-frame-tick', style: `left: ${r2(at * 100)}%;` }));
     if (ticks.length) {
       css.push(`.lc-frame-tick { position: absolute; top: ${px(-progress.thickness)}; width: ${px(Math.max(2, progress.thickness * 0.6))}; height: ${px(progress.thickness * 3)}; margin-left: ${px(-Math.max(2, progress.thickness * 0.6) / 2)}; background: ${ink}; border-radius: ${px(progress.thickness)}; opacity: 0.85; }`);
       for (const tick of ticks) css.push(`#${tick.id} { ${tick.style} }`);
     }
-    root.children.push({ tag: 'div', id: 'lc-frame-progress', cls: 'lc-frame-progress', children: [{ tag: 'div', id: 'lc-frame-progress-fill', cls: 'lc-frame-progress-fill' }, ...ticks.map(({ style, ...node }) => node)] });
+    const knob = progress.scrubber ? [{ tag: 'div', id: 'lc-frame-knob', cls: 'lc-frame-knob' }] : [];
+    if (knob.length) css.push(`.lc-frame-knob { position: absolute; left: ${px(-progress.knob / 2)}; top: ${px((progress.thickness - progress.knob) / 2)}; width: ${px(progress.knob)}; height: ${px(progress.knob)}; border-radius: 50%; background: ${fill}; box-shadow: 0 0 0 ${px(3 * k)} ${ink}, 0 ${px(3 * k)} ${px(10 * k)} rgba(0,0,0,.4); }`);
+    root.children.push({ tag: 'div', id: 'lc-frame-progress', cls: 'lc-frame-progress', children: [{ tag: 'div', id: 'lc-frame-progress-fill', cls: 'lc-frame-progress-fill' }, ...ticks.map(({ style, ...node }) => node), ...knob] });
     tw('lc-frame-progress-fill', 0, duration, 'none', { scaleX: 1 }, { scaleX: 0 }, true);
+    if (knob.length) tw('lc-frame-knob', 0, duration, 'none', { x: r2(canvas.width - 2 * inset) }, { x: 0 }, true);
   }
 
   // Per-scene colours (frameColorSpans): a colour tween per element at each
@@ -429,7 +556,7 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
     const walk = (node) => { ids.add(node.id); (node.children ?? []).forEach(walk); };
     nodes.forEach(walk);
     const targets = [
-      ['text', 'color', ['lc-frame-label', ...labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-t`), ...sources.map((_, i) => `lc-frame-src-${String(i + 1).padStart(2, '0')}`)]],
+      ['text', 'color', ['lc-frame-label', ...labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-t`), ...sources.map((_, i) => `lc-frame-src-${String(i + 1).padStart(2, '0')}`), ...(counter?.label ? ['lc-frame-counter-label'] : [])]],
       ['underline', 'backgroundColor', ['lc-frame-underline']],
       ['dot', 'backgroundColor', labels.map((_, i) => `lc-frame-sec-${String(i + 1).padStart(2, '0')}-dot`)],
       ['text', 'backgroundColor', progress ? progress.ticks.map((_, i) => `lc-frame-tick-${String(i + 1).padStart(2, '0')}`) : []]

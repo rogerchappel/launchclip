@@ -74,6 +74,36 @@
   Story-cast entries with `art` are illustrated characters, and a
   character's own non-Kokoro voice id is now used under ElevenLabs, so every
   character in a dialogue speaks in its own voice.
+- A satisfying-motion kit: things that pile up as they are said, numbers
+  that never stop climbing, and objects with weight.
+  - `drop-grid`: 1–40 cards, coins or tiles drop into a grid one by one,
+    each on its own word (`params.times`), with a gravity fall, a squash on
+    contact, an overshoot settle, a contact shadow and a puff of dust over
+    faint empty slots. An optional counter climbs with every landing, and
+    confetti bursts when the grid fills.
+  - `live-counter`: a big figure that ticks up for the whole scene (steady,
+    accelerating or easing) on a plain, panel or ticket face. Milestones
+    stamp the figure and burst as the count passes them, and a delta chip
+    ("+2,312 today") stamps in under it.
+  - `live-bars`: raised bars whose values tick up live, each number riding
+    the end of its bar.
+  - The brand frame's running counter, `frame.counter` (`label`, `format`
+    {prefix, suffix, pad, decimals, separator}, `steps` [{scene | start,
+    value | text}]): "DAY 03", "STEP 2/4" or "LIABILITY $53,000" in a top
+    corner, rolling up through in-between values and pulsing as each step
+    lands, without re-entering between scenes. `frame.progress.style:
+    "scrubber"` puts a knob on the progress line that travels with it.
+  - Caption presets `tag-chips` (the sentence builds word by word; key
+    phrases land in solid chips, ink on a light brand and paper on a dark
+    one) and `serif-accent` (one key word per line turns serif italic in the
+    brand colour).
+  - The physics are shared in `kit/core/tactile.mjs` (drops, contact
+    shadows, a stamp press, pulses and seeded particle bursts), so both
+    renderers and every seek draw the same frame. Every landing, tick, stamp
+    and burst is a model event with a kit cue and an `sfx` name (`land`,
+    `tick`, `stamp`, `burst`); `frameCues()` lists the counter's landings.
+  - The planner gets a "Satisfying motion" rule group and phrase rows for
+    each module and the frame counter.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict

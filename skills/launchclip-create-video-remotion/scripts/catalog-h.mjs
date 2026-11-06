@@ -33,6 +33,8 @@
 //             devices, paper and planets on a CSS 3D rig)
 //   explain   catalog-i-explain.mjs (catalogue I: the explainer modules,
 //             drawn with these same helpers)
+//   tactile   catalog-h-tactile.mjs (drop-grid, live-counter, live-bars: the
+//             satisfying-motion kit, on the physics in tactile.mjs)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -61,9 +63,10 @@ import {GRID_MODULES} from './catalog-i-grids.mjs';
 import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
 import {OBJECT_MODULES} from './catalog-i-3d.mjs';
 import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
+import {TACTILE_MODULES} from './catalog-h-tactile.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...SCATTER, ...EXPLAIN_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES];
 
 
 

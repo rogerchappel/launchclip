@@ -26,7 +26,7 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card"];
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
 const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
@@ -1016,7 +1016,9 @@ function validateMotion(motion, err) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
+const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
 const DATA_MODULES = ["unit-grid", "number-line", "cell-grid", "grid-race"];
 const FRAME_COLOR_ROLES = ["bg", "paper", "ink", "primary", "accent"];
@@ -1039,6 +1041,8 @@ function validateFrame(frame, { err, warn, scenes }) {
       for (const key of ["scene", "until"]) if (entry[key] !== undefined && (typeof entry[key] !== "string" || !ids.has(entry[key]))) warn(`${at}.${key} ${JSON.stringify(entry[key])} is not a scene id; the note ${key === "scene" ? "is skipped" : "runs to the next note"}`);
     });
   }
+  if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
+  if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {
@@ -1046,6 +1050,39 @@ function validateFrame(frame, { err, warn, scenes }) {
     else if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`frame.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
     else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`frame.labels[${i}].scene "${entry.scene}" is not a scene id; the label is skipped`);
     if (isObject(entry) && entry.color !== undefined && !(typeof entry.color === "string" && (HEX.test(entry.color) || FRAME_COLOR_ROLES.includes(entry.color)))) err(`frame.labels[${i}].color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour: the frame's text colour while this label shows`);
+  });
+}
+
+// frame.counter: a running counter in a top corner ("DAY 03", "LIABILITY
+// $53,000"), climbing step by step across the video (kit/core/brand-frame.mjs).
+function validateFrameCounter(counter, { err, warn, ids }) {
+  if (!isObject(counter)) { err("frame.counter must be {label?, steps, format?, position?, color?}"); return; }
+  for (const key of Object.keys(counter)) if (!FRAME_COUNTER_KEYS.includes(key)) err(`frame.counter.${key} is not supported (${FRAME_COUNTER_KEYS.join(", ")})`);
+  if (counter.label !== undefined && !(nonEmpty(counter.label) && counter.label.length <= 24)) err("frame.counter.label must be 1-24 characters (\"DAY\", \"LIABILITY\")");
+  if (counter.position !== undefined && !["top-left", "top-right"].includes(counter.position)) err("frame.counter.position must be top-left or top-right (default: the corner the kicker is not in)");
+  if (counter.color !== undefined && !(typeof counter.color === "string" && (HEX.test(counter.color) || FRAME_COLOR_ROLES.includes(counter.color)))) err(`frame.counter.color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour`);
+  if (counter.format !== undefined) {
+    if (!isObject(counter.format)) err("frame.counter.format must be {prefix?, suffix?, pad?, decimals?, separator?}");
+    else {
+      const f = counter.format;
+      for (const key of Object.keys(f)) if (!FRAME_COUNTER_FORMAT_KEYS.includes(key)) err(`frame.counter.format.${key} is not supported (${FRAME_COUNTER_FORMAT_KEYS.join(", ")})`);
+      for (const key of ["prefix", "suffix"]) if (f[key] !== undefined && !(typeof f[key] === "string" && f[key].length <= 8)) err(`frame.counter.format.${key} must be a string of up to 8 characters`);
+      if (f.pad !== undefined && !(Number.isInteger(f.pad) && f.pad >= 0 && f.pad <= 6)) err("frame.counter.format.pad must be an integer 0-6 (zero-pads the number: DAY 03)");
+      if (f.decimals !== undefined && !(Number.isInteger(f.decimals) && f.decimals >= 0 && f.decimals <= 2)) err("frame.counter.format.decimals must be 0, 1 or 2");
+      if (f.separator !== undefined && typeof f.separator !== "boolean") err("frame.counter.format.separator must be true or false");
+    }
+  }
+  if (!Array.isArray(counter.steps) || counter.steps.length < 1 || counter.steps.length > 40) { err("frame.counter.steps must be a list of 1-40 {start | scene, value | text}"); return; }
+  counter.steps.forEach((entry, i) => {
+    const at = `frame.counter.steps[${i}]`;
+    if (!isObject(entry)) { err(`${at} must be {start | scene, value | text}`); return; }
+    for (const key of Object.keys(entry)) if (!["start", "scene", "value", "text"].includes(key)) err(`${at}.${key} is not supported (start, scene, value, text)`);
+    if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`${at} needs exactly one of start (seconds) or scene (a scene id)`);
+    else if (typeof entry.start === "number" && !(entry.start >= 0)) err(`${at}.start must be seconds ≥ 0`);
+    else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`${at}.scene "${entry.scene}" is not a scene id; the step is skipped`);
+    const hasValue = typeof entry.value === "number" && Number.isFinite(entry.value);
+    if (hasValue === nonEmpty(entry.text)) err(`${at} needs exactly one of value (a number that rolls up) or text (shown as is)`);
+    else if (nonEmpty(entry.text) && entry.text.length > 14) err(`${at}.text must be up to 14 characters`);
   });
 }
 
