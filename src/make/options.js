@@ -8,6 +8,7 @@ import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume }
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
+import { parseSfxMode } from "../sfx/event_sounds.js";
 
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
@@ -39,6 +40,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["music-duck", { setting: true }],
   // The ElevenLabs track's style in words (over the story's audio.music.prompt; ignored for synth and none).
   ["music-prompt", { setting: true }],
+  // Sound effects: generated (described per event, ElevenLabs, PAID), kit, or off. Unset: generated with ELEVENLABS_API_KEY, else kit.
+  ["sfx", { setting: true }],
   ["renderer", { setting: true }],
   ["quality", { setting: true }],
   // Cores per render: a property of the machine, not of a recipe.
@@ -94,6 +97,7 @@ export function makeOptionsFromFlags(flags = {}) {
     musicVolume: flags["music-volume"],
     musicDuck: flags["music-duck"],
     musicPrompt: flags["music-prompt"],
+    sfx: flags.sfx,
     model: flags.model,
     voice: flags.voice,
     voiceId: flags["voice-id"],
@@ -147,6 +151,7 @@ export function validateMakeOptions(options = {}) {
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);
   if (options.musicDuck != null) parseMusicDuck(options.musicDuck);
   if (options.musicPrompt != null) parseMusicPrompt(options.musicPrompt);
+  if (options.sfx != null) parseSfxMode(options.sfx);
   const renderer = String(options.renderer ?? "remotion").toLowerCase();
   if (!MAKE_RENDERERS.includes(renderer)) throw new Error(`--renderer must be remotion or hyperframes; got ${options.renderer}`);
   const quality = String(options.quality ?? "draft").toLowerCase();

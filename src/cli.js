@@ -202,6 +202,7 @@ export async function runCli(argv, io = {}) {
         chapter: flags.chapter,
         sfxLibrary: flags["sfx-library"],
         sfxDensity: flags["sfx-density"],
+        sfx: flags.sfx,
         candidate: flags.candidate,
         prototype: Boolean(flags.prototype),
         into: flags.into,
