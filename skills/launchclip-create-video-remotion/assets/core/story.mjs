@@ -798,7 +798,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
       if (zoom.at !== undefined) zoom.at = resolve(zoom.at, `${path}.zooms[${z}].at`);
       if (zoom.until !== undefined) zoom.until = resolve(zoom.until, `${path}.zooms[${z}].until`);
     });
-    if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
+    if (SPEAKING_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
   });
   if (Array.isArray(copy.overlays)) copy.overlays.forEach((overlay, index) => {
     if (!isObject(overlay)) return;
@@ -838,6 +838,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
 // start, and a spoken range gains the timing of each narration word in it
 // (`words: [[start, end], ...]`), so a mouth opens on the voice's words.
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
+// Scenes whose cues and spoken ranges resolve here: the rig's cast modules and
+// the illustrated sprite-scene (kit/core/catalog-sprites.mjs).
+export const SPEAKING_MODULES = Object.freeze([...CAST_MODULES, "sprite-scene"]);
 
 // Cast references: a character scene may name a character by its place in
 // the story cast ("@1" is the first, "@2" the second), so a storyboard

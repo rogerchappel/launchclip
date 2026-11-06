@@ -1310,6 +1310,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]
   ```
 
+- `cast sprites`: Draw a project's illustrated cast (cast.sprites.json) with an image model: a picture per pose plus mouth-open and eyes-closed versions, cut out to assets/cast/<id>/. --dry-run shows the pictures and the estimated cost.
+
+  ```text
+  launchclip cast sprites <project> [--dry-run] [--ids rosa,lou] [--force]
+  ```
+
 - `collection new`: Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.
 
   ```text

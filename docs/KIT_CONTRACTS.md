@@ -3158,6 +3158,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 | --- | --- | --- | --- |
 | `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
+| `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
 ### The kit (`kit/core/characters/`)
 
@@ -3320,6 +3321,31 @@ name characters by id and never carry params, so a
 character cannot change inside a story. `storyCastErrors(cast)` and
 `resolveStoryCast(story)` validate it; a style pack's cast mapping reaches
 the story through `story.cast` (the style merge fills it).
+
+An entry with `art` (`{id, name?, voice?, art: "assets/cast/<id>", position?}`)
+is an illustrated character: it takes no rig params, acts only in
+`sprite-scene` (a drawn-rig scene refuses it), and its `voice` may be any
+provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
+ElevenLabs), so each character in a dialogue speaks in its own voice.
+
+### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
+
+```json
+{ "style": "flat 2D cartoon, thick outlines, warm palette",
+  "characters": [ { "id": "dre", "name": "Dre", "role": "the cousin",
+                    "design": "a young man in a red bomber jacket and black beanie",
+                    "voice": "<elevenlabs voice id>", "poses": ["idle", "shocked", "celebrate"] } ] }
+```
+
+`launchclip cast sprites <project> [--dry-run] [--ids dre] [--force]` draws
+each character's first pose (the anchor), then every other pose as an edit of
+the anchor and each `-talk` / `-blink` picture as an edit of its own pose, on
+flat green, keyed out to transparent PNGs in `assets/cast/<id>/` with a
+`character.json` record. `talk: false` / `blink: false` skip those pictures.
+Pictures that exist are kept, so a stopped run resumes. The image model is an
+adapter (`openaiImageAdapter`, `OPENAI_API_KEY`, `LAUNCHCLIP_SPRITE_MODEL`);
+a host app passes its own. `--dry-run` lists the pictures and the estimated
+cost (`SPRITE_IMAGE_USD` per picture).
 
 ### Cues and anchors
 

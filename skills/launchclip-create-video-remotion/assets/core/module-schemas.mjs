@@ -24,7 +24,7 @@
 import { EDITORIAL_VARIANTS } from './editorial-core.mjs';
 import { catalogModules, isEditorialKind, knownModules, moduleVariants } from './modules.mjs';
 import { EDITORIAL_SPECS, TUNING_PARAMS } from './planning-prompt.mjs';
-import { CAST_MODULES } from './story.mjs';
+import { SPEAKING_MODULES } from './story.mjs';
 
 export const JSON_SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
 /** `$id` of a module's schema. */
@@ -404,7 +404,7 @@ function buildSchema(id) {
   };
   // A module that declares its own schema keeps it; the header fills gaps.
   if (definition?.schema) return { ...header, ...structuredClone(definition.schema) };
-  const ctx = { anchors: CAST_MODULES.includes(id) };
+  const ctx = { anchors: SPEAKING_MODULES.includes(id) };
   const properties = {};
   const required = [];
   let order = 0;

@@ -82,7 +82,7 @@ export async function castList(target) {
   let storyRows = [];
   if (story?.cast) {
     const resolved = resolveStoryCast(story);
-    storyRows = [...resolved.members.values()].map((member) => ({ id: member.id, name: member.name, voice: member.voice, build: member.params.build, hair: member.params.hair.style, source: "story" }));
+    storyRows = [...resolved.members.values()].map((member) => ({ id: member.id, name: member.name, voice: member.voice, build: member.params?.build ?? null, hair: member.params?.hair?.style ?? null, ...(member.sprite ? { art: member.art } : {}), source: "story" }));
   }
   return { stage: "cast", action: "list", status: "ready", starter: rows, story: storyRows };
 }
@@ -186,7 +186,12 @@ export async function runCastCommand(action, name, flags = {}) {
   if (action === "list") return castList(name ?? flags.story);
   if (action === "show") return castShow(name, { story: flags.story });
   if (action === "sheet") return castSheet(name ?? flags.story, { out: flags.out, report: flags.report, ids: flags.ids });
-  throw new Error(`Unknown cast action: ${action ?? "(none)"}; use list, show or sheet`);
+  if (action === "sprites") {
+    const { makeSpriteCast } = await import("./sprite_cast.js");
+    const only = typeof flags.ids === "string" ? flags.ids.split(",").map((id) => id.trim()).filter(Boolean) : null;
+    return makeSpriteCast(name ?? flags.story ?? ".", { dryRun: Boolean(flags["dry-run"]), force: Boolean(flags.force), only, say: (line) => process.stderr.write(`${line}\n`) });
+  }
+  throw new Error(`Unknown cast action: ${action ?? "(none)"}; use list, show, sheet or sprites`);
 }
 
 // ---------------------------------------------------------------------------

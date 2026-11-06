@@ -243,6 +243,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
 | tells a story with people ("meet Maya, a…", "imagine you're…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture [motion, voiceover-motion] | cast-scene |
 | puts the story in a place and no photo or clip of it is supplied (an office, a kitchen, a city street at night, a park at dusk, a beach, space): a drawn environment at day, dusk or night as the plate, with characters, cards or captions on higher tracks over it; story.world sets the video-wide place [motion, voiceover-motion] | world |
+| an illustrated story with a recurring cast and dialogue (a series, a heist, a customer story told in episodes) when story.cast lists characters with art: each line plays as a painted scene, the speaker's mouth on its words, a new pose per line, a name card when someone is introduced; only for characters with art in story.cast [motion, voiceover-motion] | sprite-scene |
 | gives the viewer's situation a face for one beat ("if you're a…", "your customer", "someone like you"): one animated character beside a card or on a panel | character-cameo |
 | a short note, tip or warning card [motion, voiceover-motion] | callout |
 | compares a few real values side by side ("by platform", "per region", "each month"): bars grow to their values, one can stay lit | bar-chart |
@@ -2262,6 +2263,19 @@ params:
 - exit: fade | cut (as cast-scene)
 events: <character>-cue-<i>
 
+### sprite-scene (keeps captions)
+An illustrated story scene: a painted background plate on a slow push or pan, with one to three illustrated characters (a generated sprite cast: a picture per pose, plus mouth-open and eyes-closed versions) standing in it, swapping poses on cues, lip-syncing their own dialogue lines by sprite swap, blinking and breathing, with parallax against the plate; props slide in; an optional name card (NAME and ROLE). For animated stories with a recurring cast and dialogue.
+params:
+- plate: "assets/…" the background image (.png|.webp|.jpg)
+- move: push-in|pull-out|pan-left|pan-right|none (default push-in), over the whole scene
+- zoom: 0.02–0.15 (default 0.07)
+- cast: [{id, art?: "assets/cast/<id>" (the folder of <pose>.png, <pose>-talk.png, <pose>-blink.png; default the story cast entry's art), pose? (default idle), cues?: [{at, pose}], says?: [{from, to}] | "auto" (its own dialogue lines), talk?: true when <pose>-talk.png exists (else a jaw bounce), blink?: true when <pose>-blink.png exists, position?: left|centre|right, x?: 0.12–0.88, height?: 0.25–0.9 of the frame (default 0.62 alone, 0.55 in a group), aspect?: sprite width/height (default 0.75), facing?: left|right (left mirrors the sprite), depth?: 0–1 parallax (default 0.4)}] 1–3
+- props: [{src: "assets/…", box: {x, y, width, height} fractions of the frame, at?, from?: left|right|top|bottom|none}] 0–4
+- card: {name ≤ 24, role? ≤ 32, at?, for?: a cast id (default the first)}: a name card in the upper corner on that character's side
+- enter: fade|cut (default fade; cut when the scene opens the video)
+- exit: fade|cut (default fade)
+events: cast, <character>-cue-<i>, prop-<i>, card
+
 ### world (keeps captions)
 A layered environment drawn in code (inside rooms, streets and outdoor places) at day, dusk or night, recoloured from the brand, with props; the plate behind characters, cards or captions on higher tracks. A slow camera move gives parallax depth.
 params:
@@ -2416,6 +2430,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
 
 ## Example

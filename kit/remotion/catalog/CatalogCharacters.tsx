@@ -19,3 +19,4 @@ const typed = (id: string): React.FC<{model: any}> => {
 
 export const CastScene = typed('cast-scene');
 export const CharacterCameo = typed('character-cameo');
+export const SpriteScene = typed('sprite-scene');
