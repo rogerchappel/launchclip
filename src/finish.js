@@ -55,6 +55,7 @@ import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { guardCueTimbre } from "./sfx/timbre.js";
+import { applyEventSounds, planEventSounds, resolveSfxMode } from "./sfx/event_sounds.js";
 import { structureGate } from "./skeletons.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
@@ -1090,7 +1091,11 @@ const STAGES = [
     async plan(ctx) {
       if (ctx.story.audio?.mix) return { skip: `audio.mix is supplied (${ctx.story.audio.mix})` };
       const audio = ctx.copy.audio ?? {};
-      const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
+      // --sfx generated|kit|off (finish defaults to kit; make passes generated with a key).
+      const sfxChoice = resolveSfxMode(ctx.options.sfx, ctx.adapters.env ?? process.env);
+      if (sfxChoice.warning) ctx.warnings.push(sfxChoice.warning);
+      const sfxMode = audio.sfx === "none" || audio.sfx === false ? "off" : sfxChoice.mode;
+      const sfxOn = sfxMode !== "off";
       // The style's sound block: palette, music genre, ambience, density.
       const sound = soundSettings(await stylePack(ctx), ctx.copy);
       const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env, fallback: Boolean(ctx.options.musicFallback) });
@@ -1175,11 +1180,11 @@ const STAGES = [
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         kit: kit ?? undefined,
-        sfx: { density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
+        sfx: { mode: sfxMode, density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
+      return { inputHash, outputs, sfxOn, sfxMode, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -1226,8 +1231,17 @@ const STAGES = [
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
       // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
       const guarded = await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
-      const cues = guarded.cues;
+      let cues = guarded.cues;
       for (const finding of guarded.findings) ctx.warnings.push(`sfx ${finding.cue} at ${finding.at}s: ${path.basename(finding.file)} refused (${finding.problem}); ${finding.replacement ? `used ${path.basename(finding.replacement)}` : "cue dropped"}`);
+      // --sfx generated: the accent cues get a sound described from what is on
+      // screen and said (src/sfx/event_sounds.js); a miss keeps the kit file.
+      let eventSounds = { generated: [], cost_usd: 0, warnings: [] };
+      if (plan.sfxMode === "generated" && cues.length) {
+        const planned = await planEventSounds(cues, { story: ctx.resolved, words: ctx.words ?? [], duration, describe: ctx.adapters.describeSounds ?? null });
+        eventSounds = await applyEventSounds(cues, planned, { project: ctx.project, env: ctx.adapters.env ?? process.env, words: ctx.words ?? [], notice: ctx.adapters.notice, ...(ctx.adapters.generateSound ? { generate: ctx.adapters.generateSound } : {}), ...(ctx.adapters.eventSoundCacheDir ? { cacheDir: ctx.adapters.eventSoundCacheDir } : {}) });
+        cues = eventSounds.cues;
+        ctx.warnings.push(...eventSounds.warnings);
+      }
       let typing = null;
       if (typingPlan.length) {
         const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
@@ -1243,7 +1257,10 @@ const STAGES = [
       const typingCues = typing ? firstKeyPerShot(typing.keystrokes).map((key) => ({ cue: "typing", shot: key.shot, at: key.at, volume: 1, intent: "typing track", file: typing.file })) : [];
       const listed = [...placed.filter((cue) => cue.source !== "typing"), ...typingCues].sort((a, b) => a.at - b.at);
       await writeJson(sfxManifest, {
-        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null })),
+        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null, ...(cue.prompt ? { prompt: cue.prompt, replaced: cue.replaced, pre_roll: cue.pre_roll } : {}) })),
+        mode: plan.sfxMode,
+        generated: eventSounds.generated,
+        generated_cost_usd: eventSounds.cost_usd,
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
         timbre_refused: guarded.findings,
@@ -1297,6 +1314,8 @@ const STAGES = [
         kit_key: kitKey,
         kit_reused: kitReused,
         sfx_density: plan.density,
+        sfx_mode: plan.sfxMode,
+        sfx_generated: { count: eventSounds.generated.length, new: eventSounds.generated.filter((item) => !item.cached).length, cost_usd: eventSounds.cost_usd },
         sfx_sources: countBy(cues.map((cue) => ({ scope: cue.sfx_source ?? (cue.source === "typing" ? "typing" : "kit") })), "scope"),
         typing_keys: typing ? typing.keystrokes.length : 0,
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {})

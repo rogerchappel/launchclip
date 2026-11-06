@@ -143,7 +143,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -1101,9 +1101,10 @@ async function stageSubject(ctx) {
 async function stageFinish(ctx) {
   const { project, report, adapters, options } = ctx;
   // A run that cannot have its ElevenLabs track still finishes, on the synth bed (src/finish.js musicFallback).
-  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}), ...(ctx.finishScenes?.length ? { scenes: ctx.finishScenes } : {}) };
+  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}), sfx: makeSfxMode(options.sfx, ctx.env), ...(ctx.finishScenes?.length ? { scenes: ctx.finishScenes } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
-  ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}`);
+  const sfxNote = finishOptions.sfx === "generated" ? "generated per event (ElevenLabs sound effects; PAID unless the project lock or cache has them)" : finishOptions.sfx;
+  ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}; sfx: ${sfxNote}`);
   ctx.say(machineLine(options.concurrency));
   const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage: "finish", ...event }), ...(adapters.finishAdapters ?? {}) };
   if (adapters.voiceProvider) finishAdapters.voiceProvider = adapters.voiceProvider;
@@ -1120,6 +1121,8 @@ async function stageFinish(ctx) {
   if (finish.publish) report.publish = finish.publish;
   report.warnings.push(...(finish.warnings ?? []));
   const sound = finish.stages.find((stage) => stage.name === "sound");
+  const sfxCost = Number(sound?.details?.sfx_generated?.cost_usd);
+  if (Number.isFinite(sfxCost) && sfxCost > 0) report.costs.items.push({ stage: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", sounds: Number(sound.details.sfx_generated.new ?? 0), estimated_usd: sfxCost, fallback: false });
   const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);
   if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", model: sound?.details?.music?.model ?? sound?.details?.music?.generation?.model ?? null, generated_seconds: Number(sound?.details?.music?.generated_seconds ?? sound?.details?.music?.generation?.generated_seconds ?? 0), estimated_usd: musicCost, fallback: false });
   if (finish.status === "failed") {
@@ -1127,6 +1130,13 @@ async function stageFinish(ctx) {
     throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
   }
   return { status: "done" };
+}
+
+// make's sound effects: the flag, else described and generated per event
+// with an ElevenLabs key (PAID, cached and locked per project), else the kit.
+export function makeSfxMode(flag, env = process.env) {
+  if (flag != null && flag !== "") return String(flag).toLowerCase();
+  return env?.ELEVENLABS_API_KEY ? "generated" : "kit";
 }
 
 // What the render runs on: the log line that tells a slow render on a small

@@ -4,6 +4,22 @@
 
 ### Added
 
+- Sound effects that fit the moment. `--sfx generated` (`make`'s default
+  when `ELEVENLABS_API_KEY` is set; `finish` and keyless runs stay on `kit`)
+  gives the accent cues a sound described from the event, the words on
+  screen and the narration around it ("a small handful of metal coins
+  dropping onto a wooden table", "single heavy rubber stamp pressed hard onto
+  a sheet of paper"), generated once with ElevenLabs sound effects (PAID,
+  about $0.01 a sound) and reused from the cache and the project's
+  `.launchclip/sfx-events-lock.json` after that. Rules name most sounds; a
+  `describeSounds` adapter (a model) may name the rest. At most one per 6 s
+  (2 to 12 a video) and only accents, never transitions, risers or typing.
+  Each lands its peak on the event, is loudness-matched to the kit cue it
+  replaces and sits about 3 dB lower inside a spoken word. A cue with no
+  description, or whose generation fails, keeps its kit sound. `--sfx kit`
+  and `--sfx off` keep the kit or silence the effects. The SFX manifest
+  records each sound's prompt and the generated cost; `MAKE.json` costs list
+  them under `sfx`.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict
