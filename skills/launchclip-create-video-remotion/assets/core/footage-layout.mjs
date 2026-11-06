@@ -165,18 +165,40 @@ export function captionZone(layout, side, canvas, band, { share, position } = {}
 
 /**
  * The caption zones of a story's sections: [{section, start, end, rect}]
- * (px; sections whose band is unchanged are left out). Both compilers hand
- * them to captionPlan (ctx.zones) and the layout check checks the captions
- * there.
+ * (px; sections whose band is unchanged are left out). With the captions at
+ * the "chest", a full section's zone (or, with no sections, the whole
+ * video's) sits at the presenter's chest (chestZone). Both compilers hand them to captionPlan (ctx.zones) and the
+ * layout check checks the captions there.
  */
 export function captionZones(story) {
   const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
   if (!(canvas.width > 0 && canvas.height > 0)) return [];
   const band = storyCaptionBand(story, canvas);
   const position = captionsOverlayOf(story)?.position;
+  if (position === "chest" && !storySections(story).length) {
+    const duration = Number(story.resolved?.duration ?? story.format?.duration);
+    const rect = chestZone(story, canvas, band, 0, duration);
+    return rect ? [{ section: null, start: 0, end: duration, rect }] : [];
+  }
   return storySections(story)
-    .map((section) => ({ section: section.id, start: section.start, end: section.end, rect: captionZone(section.layout, section.side, canvas, band, { share: section.share, position }) }))
+    .map((section) => ({ section: section.id, start: section.start, end: section.end, rect: position === "chest" && section.layout === "full" ? chestZone(story, canvas, band, section.start, section.end) : captionZone(section.layout, section.side, canvas, band, { share: section.share, position }) }))
     .filter((zone) => zone.rect);
+}
+
+/** The presenter's head (px) where nothing measured it: a fifth of the width wide, its top at 30% of the height. */
+export const DEFAULT_HEAD = (canvas) => ({ x: canvas.width * 0.4, y: canvas.height * 0.3, width: canvas.width * 0.2, height: canvas.height * 0.13 });
+
+/**
+ * The caption band at the presenter's chest over [start, end]: centred a
+ * head-height under the chin, from the measured head (subjectContext), else
+ * DEFAULT_HEAD. → rect | null
+ */
+export function chestZone(story, canvas, band, start = 0, end = start) {
+  if (!band) return null;
+  const head = subjectContext(story, start, { end })?.head ?? DEFAULT_HEAD(canvas);
+  const centre = head.y + head.height * 1.6;
+  const y = Math.min(canvas.height - band.height - Math.round(0.04 * canvas.height), Math.max(0, centre - band.height / 2));
+  return { x: round6(band.x), y: round6(y), width: round6(band.width), height: round6(band.height) };
 }
 
 // The captions overlay's band (px) at its position.

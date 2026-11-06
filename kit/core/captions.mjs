@@ -245,8 +245,9 @@ function round(value) { return Math.round(value * 1000) / 1000; }
 /** Legacy overlay `style` values; `line` maps to the minimal-line preset. */
 export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-highlight', line: 'minimal-line', none: null });
 // 'seam': on the line between a stacked section's panel and presenter
-// (kit/core/footage-layout.mjs captionZone); elsewhere it sits as 'auto' does.
-export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto', 'seam']);
+// (kit/core/footage-layout.mjs captionZone); 'chest': at the presenter's chest
+// height, from the measured head (captionZones). Elsewhere both sit as 'auto' does.
+export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto', 'seam', 'chest']);
 export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
