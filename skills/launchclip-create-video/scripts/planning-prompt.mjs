@@ -23,7 +23,9 @@ import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREAT
 import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
 import { WORLD_KINDS, WORLD_TIMES } from './worlds/index.mjs';
 import { physicsPromptLines } from './physics.mjs';
-import { actingPromptLines } from './characters/actions.mjs';
+import { ACTIONS, actingPromptLines } from './characters/actions.mjs';
+import { EXPRESSIONS, POSES } from './characters/rig.mjs';
+import { SETS } from './characters/sets.mjs';
 import { compositionPromptLines } from './composition.mjs';
 import { ACTION_VERBS } from './direction.mjs';
 import { COVER_MAX_WORDS, COVER_SECONDS } from './story.mjs';
@@ -754,7 +756,7 @@ function intentRuleLines() {
  * storyboard. words: the narration words; the lines are pre-split with their
  * suggested intents from the shared rules, so both paths classify the same way.
  */
-export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null } = {}) {
+export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null, cast = null } = {}) {
   const hints = intentHints(words);
   const lines = [
     `You author DIRECTION.json (${DIRECTION_SCHEMA}) for LaunchClip: the visual decision for every line of the narration, made before the storyboard. The storyboard is planned against it next.`,
@@ -766,11 +768,32 @@ export function directionPrompt({ lane, format, profile = null, words, subject =
     ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.', ...(lane === 'footage-led' && profile.measures?.face_time?.p90 < 1 ? ['- Face time comes from the treatments too: only insert lines take the presenter off screen. Make the lines that name something the viewer could see (a thing, a place, a step) insert lines, so face time lands near its target and never above its ceiling.'] : [])]) : []),
     ...(profile?.id === 'youtube-long-form' || Number(format?.duration) >= LONG_FORM_SECONDS ? section('Long form', longFormLines().map((line) => `- ${line}`)) : []),
     ...(Array.isArray(segments) && segments.length ? section('Recurring segments (the style\'s)', ['When a section is one of these, set its "segment" to the id and title it like the segment, so the series looks like a series:', ...segments.map((segment) => `- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}`)]) : []),
+    ...(cast ? section('Cast (the character kit)', directionCastLines(cast).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter', [subject?.usable ? `The presenter can be cut out (${subject.framing ?? 'unknown'} framing): split and framed layouts and behind-the-presenter scenes are available.` : 'No presenter cut-out: use full and insert layouts, or split on the base camera.']) : []),
     ...section('Narration lines (suggested intents)', ['Keep these lines unless two belong together or one holds two ideas; keep the word ranges exact.', '', ...hints.map((hint) => `- [${hint.words[0]}, ${hint.words[1]}] ${hint.intent}: "${hint.text.slice(0, 200)}" (${round2(hint.start)}–${round2(hint.end)} s)`)]),
     ...section('Example', [JSON.stringify(exampleDirection())])
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}
+
+/**
+ * The cast section of the direction prompt. cast: {characters: [{id, name?}],
+ * bindable?}: the cast the story will have; bindable when it is a seeded
+ * style's default roster, whose names the story's own characters take.
+ */
+export function directionCastLines(cast) {
+  const members = (Array.isArray(cast?.characters) ? cast.characters : []).filter((member) => typeof member?.id === 'string');
+  const roster = members.map((member) => `"${member.id}"${member.name ? ` (${member.name})` : ''}`).join(', ');
+  const lines = cast?.bindable
+    ? [`The style supplies ${members.length} default character${members.length === 1 ? '' : 's'} (${roster}). When the story names its characters, use those names as cue ids, lowercase ("Mia" → "mia"), and in action.who: tooling gives each new name one of these looks and voices, in order of first appearance. At most ${members.length} characters.`]
+    : [`Cue ids and action.who name characters of the story cast only: ${roster || '(none yet)'}. Never invent an id.`];
+  return [
+    ...lines,
+    `pose: exactly one of ${POSES.join(', ')}.`,
+    `expression: exactly one of ${EXPRESSIONS.join(', ')}.`,
+    `set: exactly one of ${SETS.join(', ')}, or none.`,
+    `action.verb: one of ${ACTIONS.join(', ')}, or a pose. Say where someone stands or what they look at with the action's target, not in the pose.`
+  ];
 }
 
 function exampleDirection() {

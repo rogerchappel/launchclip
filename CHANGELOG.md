@@ -264,6 +264,18 @@
 
 ### Fixed
 
+- An animated character story made from a prompt alone no longer fails
+  `finish` with "cast check failed". The direction map's prompt now lists
+  the cast ids and the kit's poses, expressions, sets and actions; free-text
+  cues ("standing beside fridge", "hopeful, then wary", "shared kitchen")
+  take the nearest kit value, each reported as a `cast: tooling mapped`
+  warning; and cast cues are checked while planning (direction map and
+  storyboard), so the repair loop sees what the cast gate would. A seeded
+  style's generated default cast now takes the story's own character names
+  (in order of first appearance, look and voice kept), written into the
+  storyboard so the style does not re-apply its roster. A cast the story or
+  a hand-written style defines is never renamed.
+
 - Library-backed shorts open on stakes, cut to footage and stop mislabelling
   shots. The script's hook must carry a myth, a mistake, a number or a bold
   claim (a bare topic question such as "Choosing X for your Y?" is now the

@@ -28,11 +28,13 @@ import { captionZones } from "@launchclip/core/footage-layout.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
+import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
+import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
@@ -128,10 +130,29 @@ export async function planStoryboard(options = {}) {
   let direction = options.direction && typeof options.direction === "object" ? options.direction : null;
   let directionSource = direction ? "given" : null;
   let directionPlan = { attempts: [], warnings: [] };
+  // The cast the story will have (the seed storyboard's, else the style's):
+  // the direction map's cues are planned and checked against it, and a
+  // seeded style's default roster takes the story's own names (src/cast_fit.js).
+  const castPlan = plannedCast({ story: options.seed?.storyboard ?? null, style });
+  let boundCast = null;
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
+    if (direction && directionPlan.bound?.length) boundCast = directionPlan.cast;
+  } else if (direction) {
+    // A given map gets the same fit: kit values for free text, names bound.
+    const fit = fitDirectionCast(direction, { cast: castPlan, words: wordList });
+    direction = fit.map;
+    directionPlan.warnings.push(...fit.warnings);
+    if (fit.bound.length) boundCast = fit.cast;
+  }
+  // A bound cast is written into the storyboard (pinned like the brand), so
+  // the style never re-applies its own roster; the prompt names it too.
+  let planStyle = style;
+  if (boundCast) {
+    fixed.cast = boundCast;
+    planStyle = { ...style, cast: { ...style.cast, members: boundCast.characters } };
   }
   // Lines over a hidden range are insert lines, whatever the model chose.
   const constraintWarnings = [];
@@ -162,7 +183,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -213,7 +234,12 @@ export async function planStoryboard(options = {}) {
       const pinned = pinInputs(extracted.storyboard, fixed);
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
-      if (repairedMap?.ok) direction = repairedMap.map;
+      if (repairedMap?.ok) {
+        // A repaired map's free-text cues get the kit's values, as the first map's did.
+        const normalized = normalizeCastCues(repairedMap.map);
+        direction = normalized.map;
+        if (normalized.changed.length) pinned.warnings = [...pinned.warnings, ...normalized.changed.map((entry) => `cast: tooling mapped DIRECTION.json ${entry}`)];
+      }
       let shotErrors = [];
       let shotCounts = null;
       let shotMedia = [];
@@ -562,7 +588,9 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   // against the cadence profile (RFC §6.2).
   let cadence = null;
   if (second.ok && direction) {
-    const map = validateDirection(direction, { words, story: resolved, ...(Array.isArray(style?.segments) ? { segments: style.segments } : {}) });
+    // Cast cues are checked against the story's cast, as finish's cast gate
+    // does; a repair can fix either side (the map's cues or story.cast).
+    const map = validateDirection(direction, { words, story: resolved, cast: resolved.cast ?? direction.cast ?? null, validateCast: validateCastCues, ...(Array.isArray(style?.segments) ? { segments: style.segments } : {}) });
     errors.push(...map.errors.map((entry) => `direction: ${entry}`));
     warnings.push(...map.warnings.map((entry) => `direction: ${entry}`));
     if (map.ok && profile && words.length) {
@@ -763,6 +791,10 @@ export function pinInputs(story, fixed) {
   if (fixed.lane === "footage-led") copy.base = fixed.base;
   else if (copy.base !== undefined && copy.base !== null) { warnings.push("base is only for the footage-led lane and has been removed"); copy.base = null; }
   if (copy.schema === undefined) copy.schema = "launchclip.story.v1";
+  if (fixed.cast) {
+    if (copy.cast !== undefined && JSON.stringify(copy.cast) !== JSON.stringify(fixed.cast)) warnings.push("cast was changed by the model and has been reset to the story's bound cast");
+    copy.cast = JSON.parse(JSON.stringify(fixed.cast));
+  }
   if (fixed.style) {
     if (copy.style !== undefined && (typeof copy.style === "string" ? copy.style : copy.style?.name) !== fixed.style) warnings.push("style was changed by the model and has been reset to the fixed input");
     copy.style = typeof copy.style === "object" && copy.style?.name === fixed.style ? copy.style : fixed.style;
@@ -774,10 +806,13 @@ export function pinInputs(story, fixed) {
  * The planner's first call: DIRECTION.json from the brief and the narration
  * lines, with at most DIRECTION_MAX_REPAIRS repairs. Scene names are checked
  * for shape only; the storyboard pass checks them against real scenes.
- * → {map | null, attempts, warnings}
+ * → {map | null, attempts, warnings, cast?, bound?}: cast is the story cast
+ * the map's cues name (a style default cast with the story's names bound).
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null }) {
-  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments });
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null }) {
+  // cast: plannedCast() (src/cast_fit.js), the cast the story will have, or
+  // null when the storyboard defines it (its cues are then checked there).
+  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null });
   const rules = constraints ? constraintsPrompt(constraints, { words }) : "";
   const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, "", ...(rules ? [rules] : [])].join("\n");
   const attempts = [];
@@ -799,14 +834,20 @@ export async function planDirection({ client, model = null, brief, fixed, profil
     const cost = estimateModelUsageCost(providerOf(client, model), result?.model ?? model, usage);
     const extracted = extractDirection(result);
     let errors = extracted.ok ? [] : [`json: ${extracted.error}`];
+    let fit = null;
     if (extracted.ok) {
+      // Tooling first (src/cast_fit.js): free-text poses, expressions and
+      // sets take the kit's nearest values, and a style default cast takes
+      // the story's names; what is left goes back to the model.
+      fit = fitDirectionCast(extracted.map, { cast, words });
+      extracted.map = fit.map;
       const map = extracted.map;
       if (profile && !map.profile) map.profile = profile.id;
-      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(Array.isArray(segments) ? { segments } : {}) });
+      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(cast ? { cast: fit.cast, validateCast: validateCastCues } : {}), ...(Array.isArray(segments) ? { segments } : {}) });
       errors = check.errors;
     }
-    attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });
-    if (!errors.length) return { map: extracted.map, attempts, warnings };
+    attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: fit?.warnings ?? [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });
+    if (!errors.length) return { map: extracted.map, attempts, warnings: [...warnings, ...fit.warnings], cast: fit.cast, bound: fit.bound };
     previous = { errors, text: extracted.ok ? JSON.stringify(extracted.map) : extracted.text ?? null };
   }
   return { map: null, attempts, warnings };
