@@ -60,7 +60,7 @@ test("a skeleton's script plan writes on its beats, roles included, and lets its
   assert.match(lines, /Call to action: as the skeleton's last beat says/);
   // The short-video rules are in every short script, on a library skeleton or not; a long one has none.
   const short = chooseScriptPlan({ prompt: "Why sleep matters", duration: 40, aspect: "9:16" });
-  assert.deepEqual(scriptRuleLines(short).slice(0, 2), [...SHORT_VIDEO_RULES]);
+  assert.deepEqual(scriptRuleLines(short).slice(0, SHORT_VIDEO_RULES.length), [...SHORT_VIDEO_RULES]);
   assert.equal(scriptRuleLines(chooseScriptPlan({ prompt: "Why sleep matters", duration: 600 })).some((line) => SHORT_VIDEO_RULES.includes(line)), false);
   // --skeleton pins a script format's own skeleton too.
   assert.equal(chooseScriptPlan({ prompt: "x", duration: 30, aspect: "9:16", skeleton: "before-after-bridge" }).skeleton, "before-after-bridge");

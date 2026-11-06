@@ -362,7 +362,8 @@ export function scriptPlanLines(plan) {
 // The short-video rules for the script (every video of SHORT_VIDEO_SECONDS or less).
 export const SHORT_VIDEO_RULES = Object.freeze([
   'Share line: in the last 40% of the script, one spoken line that gives a viewer a reason to send the video or comment (a surprise they can repeat, a line they recognise themselves in, one small act, a claim the brief supports that people will argue with, or a takeaway worth saving). When the plan has a share beat, this is it.',
-  'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.'
+  'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.',
+  'Write to the footage: when the assets list what the footage shows, picture each sentence with something in that list. Do not promise a demonstration no asset shows (a product being applied, a close-up of a material, a before-and-after); say it over footage that exists, or leave it out.'
 ]);
 
 /** The writing rules every format shares, specialised for the plan's sentence lengths (and the short-video rules for a short plan). */
@@ -371,7 +372,7 @@ export function scriptRuleLines(plan = null) {
   const short = plan && Number(plan.duration) <= SHORT_VIDEO_SECONDS;
   return [
     ...(short ? SHORT_VIDEO_RULES : []),
-    `Hook: the first sentence is ${HOOK_MAX_WORDS} words or fewer and names the topic or the viewer's problem. Never open with a greeting, "in this video", "today we're going to" or the brand name (unless the awareness rule puts the offer first).`,
+    `Hook: the first sentence is ${HOOK_MAX_WORDS} words or fewer and carries stakes the viewer feels: a myth to bust, a common mistake, a number with its unit, or a bold claim the brief supports. Never a bare topic question ("Choosing X for your Y?", "Thinking about X?"): it names the topic and gives no reason to stay. Never open with a greeting, "in this video", "today we're going to" or the brand name (unless the awareness rule puts the offer first).`,
     'Join beats with "but", "so" or "therefore", never "and then": each beat changes what the next one means.',
     'Close every question you open. The hook\'s promise is paid off in the final quarter, before the call to action.',
     `${sentences.rule} Hard maximum ${sentences.hard} words a sentence.`,
