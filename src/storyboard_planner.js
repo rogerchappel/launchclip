@@ -38,6 +38,7 @@ import { fitCaptionBand } from "./caption_band_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
+import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -110,6 +111,9 @@ export async function planStoryboard(options = {}) {
   const repairs = Math.max(0, Math.min(5, Number.isInteger(maxRepairs) ? maxRepairs : DEFAULT_MAX_REPAIRS));
   const wordList = Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [];
   const fixed = fixedInputs({ lane, format, brand, audio, base });
+  // A talking-head layout for the whole video (src/talking_head_layout.js):
+  // options.layout full (default), stacked; footage-led only.
+  const layout = lane === "footage-led" ? layoutSpec(talkingHeadLayout(options.layout)) : null;
   if (style?.name) fixed.style = style.name;
   // subject: the presenter probe summary ({usable, reasons, framing, headroom,
   // head}); subject modules are offered only when it is usable.
@@ -153,7 +157,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -214,6 +218,17 @@ export async function planStoryboard(options = {}) {
       if (varied.changed.length) {
         pinned.storyboard = varied.storyboard;
         pinned.warnings = [...pinned.warnings, `inserts: tooling varied ${varied.changed.join("; ")}`];
+      }
+      // The talking-head layout rebuilds the sections over the whole video.
+      let laidOut = false;
+      if (layout) {
+        const laid = layout.apply(pinned.storyboard, { words: wordList, beats, duration: fixed.format?.duration });
+        if (laid.skipped) pinned.warnings = [...pinned.warnings, `layout: ${laid.skipped}; planned sections kept`];
+        else {
+          pinned.storyboard = laid.storyboard;
+          laidOut = true;
+          if (laid.changed.length) pinned.warnings = [...pinned.warnings, `layout: tooling ${laid.changed.join("; ")}`];
+        }
       }
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
@@ -323,6 +338,12 @@ export async function planStoryboard(options = {}) {
         const footage = Boolean(assets) && lane !== "footage-led";
         const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
+        if (laidOut) {
+          const resolved = resolvedOrNull(checked.storyboard, wordList, beats);
+          const laid = layout.check(resolved ?? checked.storyboard, { seconds });
+          checked.warnings = [...checked.warnings, ...laid.warnings, ...(resolved ? layout.faces(resolved) : [])];
+          if (laid.errors.length) { checked.errors = [...checked.errors, ...laid.errors]; checked.ok = false; }
+        }
       }
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the

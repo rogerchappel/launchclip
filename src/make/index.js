@@ -47,6 +47,7 @@ import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStructureErrors } from "@launchclip/core/skeleton-library.mjs";
 import { loadSkeletonLibrary } from "../skeletons.js";
+import { talkingHeadLayout } from "../talking_head_layout.js";
 import { runHeadlessCritic } from "./critic.js";
 import { changedScenes, criticBriefSection, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
@@ -143,7 +144,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -875,7 +876,12 @@ async function stageStoryboard(ctx) {
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
   const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "off").toLowerCase() === "footage" ? "footage" : null;
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
+  // --layout: a talking head's layout for the whole video (footage-led, 9:16 for stacked).
+  const layout = talkingHeadLayout(options.layout);
+  const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
+  if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
+  if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -937,6 +943,7 @@ async function stageStoryboard(ctx) {
     ...(assets ? { assets, project: ctx.project, minShots, ...(cardBackdrops ? { cardBackdrops } : {}) } : {}),
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
+    ...(laidOut ? { layout: laidOut } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
   for (const shot of plan.shots ?? []) {
@@ -945,7 +952,8 @@ async function stageStoryboard(ctx) {
   if (assets) report.shots = plan.shots ?? [];
   // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
   if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
-  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ")) report.warnings.push(warning);
+  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ")) report.warnings.push(warning);
+  if (laidOut) report.layout = { name: laidOut, sections: (plan.storyboard?.sections ?? []).map((section) => ({ id: section.id, layout: section.layout, start: section.start, end: section.end })) };
   // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
   if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };
   const costPrefix = round ? `critic-${round.round}-` : "";
@@ -1194,7 +1202,7 @@ async function critiqueOf(ctx, result) {
 
 // The files a critic round may overwrite, and the report fields it may change.
 const CRITIC_ROUND_FILES = ["storyboard.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
-const CRITIC_ROUND_FIELDS = ["critic", "gates", "final", "finish", "publish", "repairs", "shots", "shot_counts", "direction", "card_backdrops", "clip_led"];
+const CRITIC_ROUND_FIELDS = ["critic", "gates", "final", "finish", "publish", "repairs", "shots", "shot_counts", "direction", "card_backdrops", "clip_led", "layout"];
 
 async function snapshotRound(ctx) {
   const dir = path.join(ctx.project, ".launchclip", "critic-repair", "before");

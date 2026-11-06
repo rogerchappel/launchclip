@@ -244,7 +244,10 @@ function round(value) { return Math.round(value * 1000) / 1000; }
 
 /** Legacy overlay `style` values; `line` maps to the minimal-line preset. */
 export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-highlight', line: 'minimal-line', none: null });
-export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto']);
+// 'seam': on the line between a stacked section's panel and presenter
+// (kit/core/footage-layout.mjs captionZone); 'chest': at the presenter's chest
+// height, from the measured head (captionZones). Elsewhere both sit as 'auto' does.
+export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto', 'seam', 'chest']);
 export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
@@ -284,6 +287,7 @@ export const CAPTION_PRESETS = Object.freeze({
   'word-highlight': preset({ description: 'Bold uppercase chunks; the spoken word turns the brand primary and pops.' }),
   'karaoke-fill': preset({ description: 'A primary fill sweeps through each word as it is spoken.', word: 'fill' }),
   'pop-word': preset({ description: 'One big word at a time with a scale pop; keywords in the accent colour.', layout: 'single', word: 'pop', size: 104, emphasis: true, entrance: 'none', exit: 'fade' }),
+  'seam-word': preset({ description: 'One bold white word at a time, as spoken: the stacked talking head\'s caption on the seam between panel and presenter.', layout: 'single', word: 'none', font: 'body', weight: 800, size: 64, case: 'as-is', letterSpacing: '-0.01em', stroke: 4, strokeColor: 'rgba(0,0,0,.6)', shadow: SHADOW_LIFT, maxWords: 1, maxChars: 24, entrance: 'none', exit: 'none', colors: { idle: '#ffffff', active: '#ffffff' } }),
   bounce: preset({ description: 'Each word hops and lands with a bounce as it is spoken.', word: 'bounce', size: 72, emphasis: true, entrance: 'slide-up' }),
   typewriter: preset({ description: 'Monospace letters type on over a dark plate.', font: 'meta', weight: 600, size: 50, case: 'as-is', letterSpacing: '0em', gap: 0.5, stroke: 0, shadow: 'none', word: 'type', maxWords: 5, maxChars: 26, entrance: 'fade', exit: 'fade', plate: true }),
   'box-highlight': preset({ description: 'A rounded primary box sits behind the active word.', word: 'box', size: 70, stroke: 0, shadow: SHADOW_SOFT, gap: 0.34 }),
