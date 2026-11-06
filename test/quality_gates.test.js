@@ -98,13 +98,21 @@ test("the face gate fails on layout-check's face rule and on face time outside t
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-face-rule-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const story = await resolved();
-  const clean = await faceGate({ project: dir, resolved: story, layout: { findings: [] }, profile: profile("short-talking-head") });
-  assert.equal(clean.status, "passed");
-  assert.equal(clean.source, "storyboard");
+  // No head track, probe or matte: nothing was checked, and the gate says so.
+  const unchecked = await faceGate({ project: dir, resolved: story, layout: { findings: [] }, profile: profile("short-talking-head") });
+  assert.equal(unchecked.status, "not-checked");
+  assert.equal(unchecked.source, "storyboard");
+  assert.match(unchecked.reason, /no face data/);
   const covered = await faceGate({ project: dir, resolved: story, layout: { findings: [{ rule: "subject-face", ids: ["builder"], at: 3, detail: "builder covers the presenter's face for 0.6 s" }] }, profile: profile("short-talking-head") });
   assert.equal(covered.status, "failed");
   assert.match(covered.errors[0], /builder @3s/);
   await mkdir(path.join(dir, "assets/subject"), { recursive: true });
+  // A track with the face on screen throughout: checked, and clean.
+  await writeFile(path.join(dir, "assets/subject/track.json"), track(Array.from({ length: 23 }, (_, t) => [t, true])));
+  const clean = await faceGate({ project: dir, resolved: story, layout: { findings: [] }, profile: profile("short-talking-head") });
+  assert.equal(clean.status, "passed");
+  assert.equal(clean.source, "assets/subject/track.json");
+  assert.equal(clean.reason, undefined);
   await writeFile(path.join(dir, "assets/subject/track.json"), track([[0, false], [21, true]]));
   const away = await faceGate({ project: dir, resolved: story, layout: { findings: [] }, profile: profile("short-talking-head") });
   assert.equal(away.status, "failed");
