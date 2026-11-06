@@ -191,7 +191,8 @@ export function predictCaptionPlates(story, chunks, elements = []) {
   if (!lines.length) return [];
   const band = captionBandRect(options, story.format);
   // Characters and media under the band (a card in the band is already a layout collision).
-  const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base");
+  // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.
+  const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base" && !element.fullFrame);
   return lines.filter((line) => busy.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band))).map((line) => line.id);
 }
 

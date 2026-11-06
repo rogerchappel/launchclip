@@ -16,6 +16,7 @@ import { storyBase } from "@launchclip/core/story.mjs";
 import { brandFrameLayout, intersectRects } from "@launchclip/core/brand-frame.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "@launchclip/core/subject-layer.mjs";
 import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
+import { probeFullFrameMedia } from "./media_presence.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs"));
@@ -53,6 +54,9 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
 
   const warnings = [];
   const specFindings = [];
+  // Full-frame media (src/media_presence.js): a photo-scene whose asset is
+  // detailed or moving is content on screen, not an empty plate.
+  const media = options.mediaPresence ?? await probeFullFrameMedia(project, resolved, adapters.mediaPresence ?? {});
   const moduleLayout = (scene) => {
     const params = scene.params ?? {};
     if (EDITORIAL_KINDS.has(scene.module) && !adapters.buildEditorialModule) {
@@ -128,7 +132,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
           ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
           ...(model.hidesCaptions ? { hidesCaptions: true } : {})
-        }, ...extras.parts];
+        }, ...extras.parts, ...fullFrameMedia(scene, model, media[scene.id], canvas)];
       } catch (error) {
         specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
         return [];
@@ -195,12 +199,29 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     // Every element's rect and window (caption plates and the density gate read them).
-    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end })),
+    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}) })),
+    // Full-frame media facts by scene id (the hold gate reads the moving spans).
+    media,
     errors: findings.filter((finding) => finding.severity === "error").length,
     drifted: ambient.drifted,
     warnings,
     findings
   };
+}
+
+// A photo-scene's picture as content: a full-frame media element under
+// everything (others may sit over it, as over a clip), kept when its asset is
+// detailed or moving (facts from src/media_presence.js). Its own element
+// stays as it was (decor, or its text block).
+export function fullFrameMedia(scene, model, facts, canvas) {
+  if (!facts?.meaningful || !model?.layout?.motion) return [];
+  return [{
+    id: `${scene.id}-media`, role: "media", module: scene.module, fullFrame: true,
+    rect: { x: 0, y: 0, width: canvas.width, height: canvas.height },
+    start: Number(scene.start), end: Number(scene.end),
+    motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
+    allowOcclusion: ["*"]
+  }];
 }
 
 // The caption band the captions overlay takes: the profile's band, grown
@@ -354,7 +375,7 @@ export async function subjectFaceFindings(projectDir, resolved, elements, warnin
   const covered = (t) => insertScenes.some((scene) => t >= Number(scene.start) && t < Number(scene.end));
   const headAt = (t) => (covered(t) ? null : view.at(t)?.head ?? null);
   const candidates = elements
-    .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor" && !inserts.has(element.id))
+    .filter((element) => element.id !== "base" && !element.fullFrame && element.rect && element.role !== "caption" && element.role !== "decor" && !inserts.has(element.id))
     .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
   const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
   return checkSubjectFace({ elements: candidates, headAt, step: 1 / fps });
