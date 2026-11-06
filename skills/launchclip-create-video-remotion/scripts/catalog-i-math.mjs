@@ -14,6 +14,7 @@ import {abs, chromeNodes, chromeOps, drawOps, el, label, popOps, riseOps, set, s
 import {dataTone} from './catalog-h-data.mjs';
 import {iconNode, isIcon} from './icons.mjs';
 import {AT, RECT, dashedPath, drawMaskOps, glassStyle, pillNode, r2, rt, scheduleCues} from './catalog-i-base.mjs';
+import {boundsOf, fitDrawing, labelHold, latestStart, lineCurve, placeLabel, sampleCurve, scheduleDraw, strokeCandidates} from './diagram-layout.mjs';
 
 const GREENS = ['#3ddc84', '#2fbf71', '#1e9e5a', '#157347'];
 const PATH_DATA = /^[MLQTCHVZ0-9 .,-]*$/i;
@@ -359,15 +360,6 @@ const PRESETS = Object.freeze({
     lines: [{from: 'a', to: 'b', type: 'fermion', label: 'e⁻'}, {from: 'b', to: 'd', type: 'fermion', label: 'e⁺'}, {from: 'b', to: 'c', type: 'photon', label: 'γ'}, {from: 'c', to: 'e', type: 'fermion', label: 'μ⁻'}, {from: 'f', to: 'c', type: 'fermion', label: 'μ⁺'}]}
 });
 
-/** Points along a straight or bent (circular-ish) line from P to Q: a quadratic with its control off the midpoint. */
-function lineCurve(P, Q, bend) {
-  const mx = (P[0] + Q[0]) / 2, my = (P[1] + Q[1]) / 2, dx = Q[0] - P[0], dy = Q[1] - P[1];
-  const len = Math.hypot(dx, dy) || 1;
-  const C = [mx - dy / len * bend * len, my + dx / len * bend * len];
-  const at = s => [(1 - s) ** 2 * P[0] + 2 * (1 - s) * s * C[0] + s * s * Q[0], (1 - s) ** 2 * P[1] + 2 * (1 - s) * s * C[1] + s * s * Q[1]];
-  const tangent = s => { const tx = 2 * (1 - s) * (C[0] - P[0]) + 2 * s * (Q[0] - C[0]), ty = 2 * (1 - s) * (C[1] - P[1]) + 2 * s * (Q[1] - C[1]); const l = Math.hypot(tx, ty) || 1; return [tx / l, ty / l]; };
-  return {at, tangent, C, length: len * (1 + 0.6 * bend * bend)};
-}
 const fmt = pts => pts.map((pt, i) => `${i ? 'L' : 'M'}${r2(pt[0])} ${r2(pt[1])}`).join(' ');
 
 function feynmanResolve(params, ctx) {
@@ -399,14 +391,32 @@ function feynmanResolve(params, ctx) {
   const W = rect.width, H = rect.height - tb.top - tb.bottom;
   const labelSize = r2(Math.max(b.min.key, u(48)));
   const margin = labelSize * 1.4;
-  const s = Math.min((W - 2 * margin) / GRID.width, (H - 2 * margin) / GRID.height);
-  const ox = (W - GRID.width * s) / 2, oy = tb.top + (H - GRID.height * s) / 2;
-  const P = name => [ox + points[name][0] * s, oy + points[name][1] * s];
   const amp = u(14), wave = u(50);
+  // Fit the lines actually drawn (bends included), not the whole grid, so a
+  // small custom diagram still fills the frame.
+  const box = boundsOf(lines.flatMap(line => sampleCurve(lineCurve(points[line.from], points[line.to], line.bend), 16)));
+  const pad = Math.max(box.width, box.height) * 0.04;
+  const fit = fitDrawing({x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad, height: box.height + 2 * pad}, {x: margin, y: tb.top + margin, width: W - 2 * margin, height: H - 2 * margin});
+  const P = name => fit.map(points[name]);
   const buildAt = b.timeOf('build', p.at, 'params.at', 0.5);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: rt(buildAt + 0.4), role: 'emphasis', cue: 'whoosh-soft'});
-  const cues = lines.map((line, i) => ({name: `line-${i}`, at: line.at, path: `params.lines[${i}].at`, gap: 0.55}));
-  scheduleCues(b, cues, buildAt - b.start + 0.2, {tail: 0.8});
+  // Lines draw in order; each label stays up for its read before the exit
+  // (gaps and draws compress first; a label the scene has no time for is dropped).
+  const first = rt(buildAt - b.start + 0.2), readEnd = rt(b.motion.exitStart - b.start);
+  const holds = lines.map(line => (line.text ? labelHold(line.text) : 0));
+  const plan = scheduleDraw(holds.map(hold => ({hold})), {first, lastEvent: b.lastEvent, readEnd, gap: 0.55, draw: 0.6, minDraw: 0.35, lag: 0.6});
+  for (const i of plan.dropped) { lines[i].dropped = lines[i].text; lines[i].text = null; holds[i] = 0; }
+  const hits = Array.isArray(ctx.hits) ? ctx.hits : [];
+  const cues = lines.map((line, i) => {
+    const latest = Math.max(first, latestStart({hold: holds[i], draw: plan.draw, lag: 0.6, lastEvent: b.lastEvent, readEnd}));
+    let rel;
+    if (line.at !== undefined) rel = b.timeOf(`line-${i}`, line.at, `params.lines[${i}].at`, null, {min: Math.min(first, latest), max: latest}) - b.start;
+    else {
+      const hit = hits.find(entry => entry && entry.event === `line-${i}` && typeof entry.at === 'number');
+      rel = hit ? Math.min(latest, Math.max(first, hit.at - b.start)) : plan.starts[i];
+    }
+    return {name: `line-${i}`, time: rt(b.start + rel)};
+  });
   for (const cue of cues) b.events.push({id: `${b.id}-${cue.name}`, name: cue.name, time: cue.time, endTime: rt(cue.time + 0.6), role: 'emphasis', cue: 'whoosh-soft'});
   const items = lines.map((line, i) => {
     const A = P(line.from), B = P(line.to);
@@ -433,22 +443,36 @@ function feynmanResolve(params, ctx) {
     const mid = curve.at(0.5), [tx, ty] = curve.tangent(0.5);
     const dir = line.type === 'antifermion' ? -1 : 1;
     const arrow = line.type === 'fermion' || line.type === 'antifermion' ? {x: r2(mid[0]), y: r2(mid[1]), angle: r2(Math.atan2(ty * dir, tx * dir) * 180 / Math.PI)} : null;
-    // The label sits off the line's middle, on the side away from the diagram's centre.
-    const cx = ox + GRID.width * s / 2, cy = oy + GRID.height * s / 2;
-    const side = ((mid[0] - cx) * -ty + (mid[1] - cy) * tx) >= 0 ? 1 : -1;
-    const off = (line.type === 'scalar' || !line.text ? u(30) : amp + u(30)) + labelSize * 0.45;
-    const lw = line.text ? r2(textWidth(line.text, labelSize, 'serif') + u(10)) : 0;
-    const lx = r2(mid[0] - ty * off * side - lw / 2), ly = r2(mid[1] + tx * off * side - labelSize * 0.6);
-    return {...line, d, arrow, time: cues[i].time, duration: 0.6, labelBox: line.text ? {x: lx, y: ly, w: lw} : null, ends: [A, B]};
+    // Wavy and curly lines are as wide as their swing.
+    const half = (line.type === 'photon' || line.type === 'graviton' || line.type === 'gluon' ? amp * 1.8 : 0) + u(5) / 2;
+    return {...line, d, arrow, curve, half, time: cues[i].time, duration: plan.draw, ends: [A, B]};
   });
-  // Vertices: points two or more lines meet, popping when the first of them is drawn.
+  // Labels sit beside their line's middle (the side away from the diagram's
+  // centre first), clear of every line, vertex and other label.
   const touches = {};
   items.forEach(line => [line.from, line.to].forEach(name => { (touches[name] ??= []).push(line); }));
   const vertices = Object.entries(touches).filter(([, list]) => list.length >= 2).map(([name, list]) => {
     const [x, y] = P(name);
     return {name, x: r2(x), y: r2(y), time: rt(Math.min(...list.map(line => line.time + line.duration)))};
   });
-  const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'center', lines: items, vertices, labelSize, color, stroke: u(5), buildAt, buildEnd: rt(Math.max(...items.map(line => line.time + line.duration)) + 0.3),
+  const strokes = items.map(line => ({points: sampleCurve(line.curve, line.bend ? 24 : 1), half: line.half}));
+  const discs = vertices.map(v => ({x: v.x, y: v.y, r: u(11)}));
+  const centre = [W / 2, tb.top + H / 2];
+  const placed = [];
+  const bounds = {x: 0, y: tb.top, width: W, height: H};
+  for (const line of items) {
+    line.labelBox = null;
+    if (!line.text) continue;
+    const lw = r2(textWidth(line.text, labelSize, 'serif') + u(10)), lh = r2(labelSize * 1.2);
+    const [mx, my] = line.curve.at(0.5), [tx, ty] = line.curve.tangent(0.5);
+    const side = ((mx - centre[0]) * -ty + (my - centre[1]) * tx) >= 0 ? 1 : -1;
+    const spot = placeLabel({w: lw, h: lh, candidates: strokeCandidates(line.curve, lw, lh, {side, along: [0.5, 0.4, 0.6, 0.3, 0.7], offsets: [u(10), u(24), u(44), u(70)].map(o => o + line.half)}), strokes, discs, boxes: placed, bounds, clearance: u(8)});
+    placed.push(spot);
+    line.labelBox = {x: spot.x, y: spot.y, w: lw, clear: spot.clear};
+  }
+  for (const line of items) delete line.curve;
+  const content = {variant: b.variant, title: tb.title, source: tb.source, sourceAt: buildAt, align: 'center', lines: items, vertices, labelSize, color, stroke: u(5), buildAt, buildEnd: rt(Math.max(...items.map(line => line.time + line.duration)) + 0.3),
+    dropped: lines.filter(line => line.dropped).map(line => line.dropped),
     ink: b.theme.foreground, glow: b.variant === 'glow', muted: b.theme.muted};
   return b.finish(content, {minTextPx: Math.min(labelSize, tb.title ? tb.title.size : Infinity)});
 }
@@ -487,7 +511,7 @@ function feynmanTimeline(model, ops) {
     if (line.type === 'scalar') drawMaskOps(ops, `${id}-line-${i}`, start, line.time, line.duration, 'power1.inOut');
     else drawOps(ops, `${id}-line-${i}`, start, line.time, line.duration, 'power1.inOut');
     if (line.arrow) popOps(ops, `${id}-arrow-${i}`, start, rt(line.time + line.duration * 0.5), {from: 0.2, duration: 0.3, ease: 'back.out(2.4)'});
-    if (line.labelBox) riseOps(ops, `${id}-label-${i}`, start, rt(line.time + line.duration * 0.6), r2(10 * u));
+    if (line.labelBox) riseOps(ops, `${id}-label-${i}`, start, rt(line.time + line.duration * 0.6), r2(10 * u), {duration: 0.3});
   });
   c.vertices.forEach(v => popOps(ops, `${id}-v-${v.name}`, start, v.time, {from: 0.2, duration: 0.35, ease: 'back.out(2.6)'}));
 }
@@ -498,7 +522,7 @@ export const feynmanDiagram = {
   params: {preset: `${Object.keys(PRESETS).join(' | ')} (or give points and lines)`, points: '{name: [x, y]} on a 12 × 6 grid, y down (optional with a preset)',
     lines: `[{from, to (point names), type? (${LINE_TYPES.join(' | ')}; default fermion), bend? −1–1 (a loop or arc), label? ≤ 12, at?}] 1–12, drawn in order (events line-<i>)`,
     tone: 'boson and glow colour: primary | accent (default) | paper | #rrggbb', title: 'string ≤ 60 (optional)', caption: 'string ≤ 80 under it (optional)', at: `build start: ${AT}`, variant: VARIANT_PARAM, rect: RECT},
-  events: ['build', 'line-<i>'], timing: timingRules({rules: ['lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them']}), variants: FEYNMAN_VARIANTS,
+  events: ['build', 'line-<i>'], timing: timingRules({rules: ['lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build']}), variants: FEYNMAN_VARIANTS,
   resolve: feynmanResolve, view: feynmanView, timeline: feynmanTimeline
 };
 
