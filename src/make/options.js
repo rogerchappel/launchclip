@@ -8,6 +8,7 @@ import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume }
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
+import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
@@ -61,6 +62,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
   ["card-backdrops", {}],
+  // A talking head's layout for the whole video (src/talking_head_layout.js): full (default) or stacked.
+  ["layout", { setting: true }],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
   ["capture-cmd", {}],
   ["capture-concurrency", {}],
@@ -100,6 +103,7 @@ export function makeOptionsFromFlags(flags = {}) {
     assetProviderCmd: flags["asset-provider-cmd"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
+    layout: flags.layout,
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
@@ -156,6 +160,7 @@ export function validateMakeOptions(options = {}) {
   if (options.density != null && !(options.density !== true && options.density !== "" && Number(options.density) >= 0 && Number(options.density) <= 1)) throw new Error(`--density must be a number from 0 to 1; got ${options.density}`);
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
+  if (options.layout != null && talkingHeadLayoutError(options.layout)) throw new Error(talkingHeadLayoutError(options.layout));
   if (options.cardBackdrops != null && !CARD_BACKDROPS.includes(String(options.cardBackdrops).toLowerCase())) throw new Error(`--card-backdrops must be ${CARD_BACKDROPS.join(" or ")}; got ${options.cardBackdrops}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
@@ -190,6 +195,7 @@ export function settingsFromMakeReport(report) {
   set("music-volume", options.music_volume);
   set("music-duck", options.music_duck);
   set("music-prompt", options.music_prompt);
+  if (options.layout && options.layout !== "full") set("layout", options.layout);
   set("renderer", options.renderer);
   set("quality", options.quality);
   if (report?.model?.source === "--model") set("model", report.model.spec);

@@ -4,6 +4,19 @@
 
 ### Added
 
+- `make --layout stacked` lays a 9:16 talking head out as one stacked video:
+  the presenter stays on screen in the lower 45% of the frame, under a
+  graphics panel that the planner fills with a visual per sentence. The
+  planner writes only the moments that leave it: close-ups (a `full` section,
+  now framed on the head with its `zoom`, 1.5–4 s) on personal lines, and
+  inserts (at most 5 s) for a visual that needs the frame. Tooling builds the
+  stacked sections between them, cuts in and out, and puts the captions on
+  the seam one word at a time (the new `seam` caption position and
+  `seam-word` preset). A stacked section takes a `share` (0.35–0.6) of the
+  height. Checks hold close-ups and inserts to their limits, warn when 20 s
+  pass without a close-up, and warn when the face falls outside the
+  presenter's window. `--layout` is an enum (`full`, `stacked`, `overlay`);
+  `overlay` is named but not built yet.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict
