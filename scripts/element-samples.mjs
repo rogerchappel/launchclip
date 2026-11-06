@@ -98,6 +98,9 @@ export const SAMPLES = Object.freeze({
   'equation': {latex: SCHRODINGER, typeset: typesetLatex(SCHRODINGER), boxes: [{mark: 0, label: 'kinetic energy'}]},
   'title-decompose': {citation: 'A. Ruiz & S. Okafor, J. Example Phys. 12 (2008)', text: 'Quantum Gravity Corrections to the One Loop Scalar Self-Mass during Inflation', terms: [{text: 'Quantum Gravity', gloss: 'Quantum gravity', sub: 'gravitons', icon: 'audio-waveform'}, {text: 'Scalar', gloss: 'Scalar', sub: 'the simplest field', icon: 'circle-dot'}, {text: 'Self-Mass', gloss: 'Self-mass', sub: 'the field\'s own mass', icon: 'atom'}, {text: 'One Loop', gloss: 'One loop', sub: 'first correction', icon: 'refresh-cw'}]},
   'feynman-diagram': {preset: 'self-energy', title: 'The one-loop correction'},
+  'drop-grid': {items: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'], counter: {suffix: '×', label: 'trial reels a day'}, title: 'Ten tries, every day'},
+  'live-counter': {from: 1251, to: 48210, label: 'views today', format: {separator: true}, milestones: [10000, 25000], delta: '+2,312 this hour'},
+  'live-bars': {title: 'Views per trial reel', rows: [{label: 'Hook A', from: 1251, to: 5029}, {label: 'Hook B', from: 1043, to: 4529}, {label: 'Hook C', from: 857, to: 3803}, {label: 'Hook D', from: 637, to: 3376}], format: {separator: true}},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 
