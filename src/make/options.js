@@ -7,6 +7,7 @@ import { scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
+import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
@@ -47,6 +48,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
+  // Rounds of critic-driven repair after the first render (default 1; 0 ships the critic's verdict as is).
+  ["critic-repairs", { setting: true }],
   ["long-form-visuals", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
   ["visual-history-dir", {}],
@@ -114,6 +117,7 @@ export function makeOptionsFromFlags(flags = {}) {
     replan: Boolean(flags.replan),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
     maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
+    criticRepairs: flags["critic-repairs"] === undefined ? undefined : Number(flags["critic-repairs"]),
     longFormVisuals: flags["long-form-visuals"],
     repo: flags.repo,
     approveDemo: Boolean(flags["approve-demo"]),
@@ -190,5 +194,6 @@ export function settingsFromMakeReport(report) {
   set("quality", options.quality);
   if (report?.model?.source === "--model") set("model", report.model.spec);
   if (options.critic === false) flags["no-critic"] = true;
+  if (options.critic_repairs != null && options.critic_repairs !== DEFAULT_CRITIC_REPAIRS) set("critic-repairs", options.critic_repairs);
   return { flags, style: report?.style ?? null, profile: report?.profile?.id ?? null };
 }

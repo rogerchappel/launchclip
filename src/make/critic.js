@@ -150,7 +150,7 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   const cost = estimateModelUsageCost(provider ?? client?.provider ?? "openai", result?.model ?? model, usage);
   const unreviewed = [...known].filter((id) => !reviewed.includes(id));
   if (unreviewed.length) warnings.push(`${unreviewed.length} evidence id(s) were on sheets past --critic's sheet limit and were not reviewed`);
-  return { status: "written", file, verdict, findings: findings.length, reviewed: reviewed.length, unreviewed: unreviewed.length, warnings, usage, cost_usd: cost.estimated_usd, model: result?.model ?? model };
+  return { status: "written", file, critique, verdict, findings: findings.length, reviewed: reviewed.length, unreviewed: unreviewed.length, warnings, usage, cost_usd: cost.estimated_usd, model: result?.model ?? model };
 }
 
 /**

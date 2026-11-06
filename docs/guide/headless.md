@@ -64,6 +64,7 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
+| `--critic-repairs <n>` | `1` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
 | `--base-edited` | off | The talking-head recording or voiceover in `--assets` is already edited by your app: make skips its own edit (bad takes, pauses) and only levels the audio. |
 | `--base-transcript <file>` | local Whisper | Word-timed JSON for that recording or voiceover (Whisper's, or `{words: [{text, start, end}]}`): make uses these words and skips Whisper. |
 | `--constraints <file>` | `constraints.json` in `--assets` | Hard rules from your app: hidden picture ranges, must-use and never-use media. See [Rules and notes from your app](#rules-and-notes-from-your-app). |
@@ -95,7 +96,13 @@ Useful flags:
 5. **Finishes the video:** captions, music and sound effects, rendering,
    mastering to −14 LUFS, and quality gates.
 6. **Reviews the frames** with the model when it can see images (OpenAI), and
-   writes `qa/critic.json`.
+   writes `qa/critic.json`. When the critic asks for a repair, its findings go
+   back to the planner (`--critic-repairs`, one round by default): the scenes
+   it named are fixed and rendered again, or the plan is redone when the
+   critic asks for a replan or the hook is the problem. The critic then looks
+   again. A round that doesn't lower the blocking and major findings is
+   undone, so make never ships a worse cut than the one it had. Each round is
+   in `MAKE.json` `critic_repairs`.
 
 ## Record your product with `--repo`
 
@@ -332,6 +339,8 @@ close. It exits 1 when it finds one; `--json` gives the full report.
 - With `gpt-5.6-luna`, one run costs roughly $0.05–0.15 of model time: one
   script pass, maybe one repair and one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
+  A critic repair round adds a storyboard repair, the re-render and a second
+  critic pass.
   In testing, a 45 s motion video cost about $0.12 and a 17 s footage-led
   video about $0.08.
 - Kokoro voice, the synth music bed, Whisper transcription, rendering and
