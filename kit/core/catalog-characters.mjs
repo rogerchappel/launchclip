@@ -331,12 +331,13 @@ function castPassage(b, ctx, ids = []) {
     ...(after.length && nextPasses ? {leave: {ids: after, at: rt(b.start + b.duration)}} : {})
   };
   const sharedIn = before.length ? {type: 'cut'} : null;
-  // Riding a world plate in world mode (camera-world.mjs ridesPlate), the cast
-  // moves with the plate and its transition: it never fades on its own.
-  if (ctx.rides && p.enter === undefined && p.exit === undefined) return {entry: {type: 'cut'}, exit: {type: 'cut'}, single};
+  // Riding a plate (camera-world.mjs rideOf), the cast moves with the plate
+  // and takes its transitions: where it shares the plate's start or end it
+  // never fades on its own.
+  const ride = ctx.ride ?? (ctx.rides ? {start: true, end: true} : null);
   const named = (value, path) => (value === undefined ? undefined : check.oneOf(value, path, PASSAGES) === 'cut' ? {type: 'cut'} : {type: 'fade', dur: b.motion?.enterDuration ?? 0.5});
-  const entry = named(p.enter, 'params.enter') ?? (sharedIn && !throughPlate ? sharedIn : null) ?? (w && on(w.start, b.start) ? passage(w.in) : null);
-  const exit = named(p.exit, 'params.exit') ?? (w && on(w.end, b.start + b.duration) && w.nextIn ? passage(w.nextIn) : null);
+  const entry = named(p.enter, 'params.enter') ?? (ride?.start ? {type: 'cut'} : null) ?? (sharedIn && !throughPlate ? sharedIn : null) ?? (w && on(w.start, b.start) ? passage(w.in) : null);
+  const exit = named(p.exit, 'params.exit') ?? (ride?.end ? {type: 'cut'} : null) ?? (w && on(w.end, b.start + b.duration) && w.nextIn ? passage(w.nextIn) : null);
   return {entry, exit, single};
 }
 

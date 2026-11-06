@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
 import {
-  CAMERA_STACK, ridesPlate, rideWorldPlates,
+  CAMERA_STACK, rideOf, ridesPlate, rideWorldPlates,
   blurAt, cameraActive, cameraOps, cameraPlan, cameraStateAt, containerState, layoutDirection, objectRectFromModel, opsStateAt,
   overlayOps, PARALLAX, placementCentre, resolveCamera, restState, sceneObjectLookup, screenPoint, worldLayout, worldPoint
 } from "@launchclip/core/camera-world.mjs";
@@ -309,7 +309,9 @@ test("world mode: a cast standing in a world plate rides it inside the camera, w
   const story = resolveStory(JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8")));
   assert.equal(ridesPlate(story, story.scenes.find((s) => s.id === "pair")), "street");
   assert.equal(ridesPlate(story, story.scenes.find((s) => s.id === "bench")), "park");
-  assert.equal(ridesPlate({ ...story, camera: { mode: "cuts" } }, story.scenes.find((s) => s.id === "pair")), null);
+  // Cuts mode: the cast still rides its plate (its zooms, and the camera's
+  // pan into the park), but only the boundary the camera carries is joined.
+  assert.deepEqual(rideOf({ ...story, camera: { mode: "cuts" } }, story.scenes.find((s) => s.id === "pair")), { plate: "street", start: false, end: true });
   const windows = rideWorldPlates(story, sceneWindows(story));
   const byId = Object.fromEntries(windows.scenes.map((e) => [e.id, e]));
   // The street's rider is held through the pan into the park, like its plate.

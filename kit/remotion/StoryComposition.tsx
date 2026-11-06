@@ -467,7 +467,12 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
   // Cuts mode: a shot's zooms move its own container (world mode: the camera).
-  const zoomFor = (entry: any, model: any) => (entry.plate && !worldCamera ? zoomOps(shotZooms(story, entry, model?.zoomRects).keys, { width: story.format.width, height: story.format.height }) : undefined);
+  // A cast riding a plate (camera-world.mjs rideOf) takes the plate's zooms.
+  const zoomFor = (entry: any, model: any) => {
+    if (worldCamera) return undefined;
+    const plate = entry.plate ? { entry, model } : entry.rides ? layers.find((layer: any) => layer.entry.id === entry.rides) : null;
+    return plate ? zoomOps(shotZooms(story, plate.entry, plate.model?.zoomRects).keys, { width: story.format.width, height: story.format.height }) : undefined;
+  };
   const subject = React.useMemo(() => subjectPlan(story, base, layers, layout), [story, base, layers, layout]);
   const medium = React.useMemo(() => mediumPlan(story), [story]);
   if (plan) {
