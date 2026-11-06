@@ -3,7 +3,7 @@
 // block (docs/COLLECTIONS_RFC.md §3.3) is the subset marked `setting`: the
 // choices a recipe saves. The rest (the prompt's own assets, --out, --repo
 // and the demo flags, --replan) belong to one video.
-import { scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
+import { ctaPlanOptions, scriptPlanOptions, seriesPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
@@ -24,6 +24,14 @@ export const MAKE_FLAGS = Object.freeze([
   ["goal", { setting: true }],
   ["awareness", { setting: true }],
   ["skeleton", { setting: true }],
+  // The narration's rate: calm (~135 wpm), standard (~150) or fast (~215; short-form's default).
+  ["pace", { setting: true }],
+  // A comment-keyword call to action ("Comment WORD and I'll send you <offer>"), said at the end and in the post caption.
+  ["cta-keyword", { setting: true }],
+  ["cta-offer", { setting: true }],
+  // One episode of a series, ending on a viewer choice ("Comment A, B or C"): the label, and two to four one-word options.
+  ["episode", {}],
+  ["choices", {}],
   ["style", { setting: true }],
   ["seed", { setting: true }],
   // The density dial (0–1): low lets supplied footage carry the video (clip-led planning).
@@ -113,6 +121,11 @@ export function makeOptionsFromFlags(flags = {}) {
     format: flags.format,
     awareness: flags.awareness,
     skeleton: flags.skeleton,
+    pace: flags.pace,
+    ctaKeyword: flags["cta-keyword"],
+    ctaOffer: flags["cta-offer"],
+    episode: flags.episode,
+    choices: flags.choices,
     out: flags.out,
     replan: Boolean(flags.replan),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
@@ -161,6 +174,8 @@ export function validateMakeOptions(options = {}) {
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
+  ctaPlanOptions(options);
+  seriesPlanOptions(options);
   return { voice, renderer, quality, script: scriptPlanOptions(options) };
 }
 
@@ -182,6 +197,9 @@ export function settingsFromMakeReport(report) {
   set("format", plan.format ?? options.format);
   set("goal", plan.goal ?? options.goal);
   set("awareness", plan.awareness ?? options.awareness);
+  set("pace", options.pace);
+  set("cta-keyword", options.cta_keyword);
+  set("cta-offer", options.cta_offer);
   // The skeleton the video was built on, so a recipe makes more of the same series.
   set("skeleton", report?.skeleton?.library ? report.skeleton.id : options.skeleton && options.skeleton !== "auto" ? options.skeleton : undefined);
   set("voice", options.voice);

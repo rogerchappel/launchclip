@@ -26,7 +26,7 @@ test("every make flag is in make's usage, and only per-video flags are left out 
 });
 
 test("validateMakeOptions refuses what runMake cannot use, naming the flag", () => {
-  assert.deepEqual(validateMakeOptions({}), { voice: "kokoro", renderer: "remotion", quality: "draft", script: { goal: null, format: null, awareness: null } });
+  assert.deepEqual(validateMakeOptions({}), { voice: "kokoro", renderer: "remotion", quality: "draft", script: { goal: null, format: null, awareness: null, pace: null } });
   assert.throws(() => validateMakeOptions({ renderer: "blender" }), /--renderer must be remotion or hyperframes/);
   assert.throws(() => validateMakeOptions({ quality: "ultra" }), /--quality/);
   assert.throws(() => validateMakeOptions({ voice: "siri" }), /--voice/);
@@ -85,4 +85,17 @@ test("--music-duck and --music-prompt are make settings, validated and saved", (
   assert.throws(() => validateMakeOptions({ musicPrompt: "" }), /--music-prompt needs/);
   const { flags } = settingsFromMakeReport({ options: { music: "elevenlabs", music_volume: 0.38, music_duck: 0.42, music_prompt: "warm acoustic guitar" } });
   assert.deepEqual([flags["music-volume"], flags["music-duck"], flags["music-prompt"]], [0.38, 0.42, "warm acoustic guitar"]);
+});
+
+test("--pace, --cta-keyword/--cta-offer and --episode/--choices reach runMake and are validated", () => {
+  const options = makeOptionsFromFlags({ pace: "fast", "cta-keyword": "deck", "cta-offer": "our checklist", episode: "Job 1", choices: "ROSA,LOU,IKE" });
+  assert.deepEqual([options.pace, options.ctaKeyword, options.ctaOffer, options.episode, options.choices], ["fast", "deck", "our checklist", "Job 1", "ROSA,LOU,IKE"]);
+  for (const flag of ["pace", "cta-keyword", "cta-offer", "episode", "choices"]) assert.ok(MAKE_FLAGS.some(([name]) => name === flag), flag);
+  for (const flag of ["pace", "cta-keyword", "cta-offer"]) assert.ok(MAKE_SETTING_FLAGS.includes(flag), flag);
+  assert.equal(validateMakeOptions({ pace: "Fast" }).script.pace, "fast");
+  assert.throws(() => validateMakeOptions({ pace: "warp" }), /--pace must be one of calm, standard, fast/);
+  assert.throws(() => validateMakeOptions({ ctaKeyword: "two words" }), /--cta-keyword must be one word/);
+  assert.throws(() => validateMakeOptions({ choices: "A" }), /--choices must list two to four options/);
+  const { flags } = settingsFromMakeReport({ options: { pace: "calm", cta_keyword: "DECK", cta_offer: "our checklist" } });
+  assert.deepEqual([flags.pace, flags["cta-keyword"], flags["cta-offer"]], ["calm", "DECK", "our checklist"]);
 });
