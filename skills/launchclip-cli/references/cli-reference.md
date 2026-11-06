@@ -918,10 +918,26 @@ keystroke.
 
 ```bash
 launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] \
-  [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] \
-  [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
+  [--format short-form|long-form|explainer|data-explainer|story|promo] [--pace calm|standard|fast] \
+  [--cta-keyword WORD [--cta-offer "..."]] [--episode "Part 1" --choices A,B,C] \
+  [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] \
+  [--music synth|elevenlabs|none] [--sfx generated|kit|off] [--layout full|stacked|overlay] \
+  [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] \
+  [--critic | --no-critic] [--critic-repairs 1] [--max-repairs 4] [--json]
 ```
+
+The full option list is in [Command usage](#command-usage) below. The ones
+that shape the story and the finish:
+
+| Option | What it does |
+| --- | --- |
+| `--pace calm\|standard\|fast` | The narration's rate: calm about 135 words a minute (story and data-explainer default), standard about 150 (long-form, explainer and promo default), fast about 215 (short-form default; speech from the first frame, no pauses but the pattern interrupt). Sizes the script and sets the voice speed. |
+| `--cta-keyword WORD`, `--cta-offer "..."` | A comment-keyword call to action ("Comment WORD and I'll send you …"), said at the end and written into the post caption. Use it only when someone will answer the comments. |
+| `--episode "Part 1" --choices A,B,C` | One episode of a series: the label, and two to four one-word choices the ending asks viewers to comment. |
+| `--sfx generated\|kit\|off` | Sound effects. Unset: `generated` (described per event, ElevenLabs, paid) with `ELEVENLABS_API_KEY`, else `kit`. |
+| `--layout full\|stacked\|overlay` | A talking head's layout for the whole video (footage-led only). `full` (default): the planner picks footage layouts per section. `stacked`: the presenter low, a graphics panel above. `overlay`: one full-frame take with graphics around the presenter and captions at the chest. |
+| `--no-subject`, `--face-track` | `--no-subject` turns off the presenter cut-out effects and, with them, the head track. Add `--face-track` to keep just the head track, so cards are still moved off the presenter's face and the face gate can check it. |
+| `--critic-repairs <0-3>` | Rounds of critic-driven repair after the first render (default 1). A round that comes out no better is undone; `0` ships the critic's verdict as is. |
 
 `make` is the headless equivalent of the create-video skills: one command from
 a prompt and an optional folder of assets to a finished, mastered video. An
@@ -934,10 +950,10 @@ deterministic tooling. The project lands in `--out` (default
 | `model` | `--model`, else `LAUNCHCLIP_MAKE_MODEL`, else `openai:gpt-5.6-luna` when `OPENAI_API_KEY` is set, else `anthropic:claude-opus-4-8` when `ANTHROPIC_API_KEY` is set (the IDs the cost table prices). Reasoning defaults to `medium` (`provider:model@high` overrides). | |
 | `inventory` | Classifies every file in `--assets` (below), probes durations and dimensions, transcribes speech with local Whisper, and links the files into `assets/`. Entries are reused while a file's size and mtime match. | `ASSETS.json`, `.launchclip/make/transcripts/` |
 | `route` | Picks the lane deterministically (below). | `MAKE.json` `routing` |
-| `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. When the edit's QA asks for a semantic review (ambiguous joins, no detected defect), make uses the rendered candidate and reports a pending `base_edit_qa` gate with the issues; a QA failure falls back to the unedited recording. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the script pass (narration sized to the duration at about 150 words a minute), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take misses the target by more than 15%. | `SCRIPT.json`, `NARRATION.json` |
+| `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. When the edit's QA asks for a semantic review (ambiguous joins, no detected defect), make uses the rendered candidate and reports a pending `base_edit_qa` gate with the issues; a QA failure falls back to the unedited recording. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the script pass (narration sized to the duration at the pace's rate, `--pace` above), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take misses the target by more than 15%. | `SCRIPT.json`, `NARRATION.json` |
 | `storyboard` | `story plan`'s planner and repair loop (at most `--max-repairs`, default 4 here: a module reports its first param error, so each repair can surface the next one) with the brief, the narration, the word anchors, the style pack, and an asset manifest: the model may reference only the listed files, and any other `assets/` path is sent back as a repair error. Reused while its inputs hash the same; `--replan` forces a new one. | `storyboard.json`, `BRIEF.md`, `.launchclip/storyboard-plan.json` |
 | `finish` | `launchclip finish` (voice, captions, sound, render, master, evidence, gates). Music: `--music`, else a music file in the assets, else (finish's default) ElevenLabs when `ELEVENLABS_API_KEY` is set (paid, locked and cached), else the synth bed. | `renders/draft.mp4` or `renders/final.mp4`, `finish.json`, `qa/` |
-| `critic` | With a vision-capable model (OpenAI or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With the Anthropic adapter (text only) or `--no-critic`, the critic gate stays `pending` with the next step. | `qa/critic.json` |
+| `critic` | With a vision-capable model (OpenAI or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With a `repair` or `replan` verdict and `--critic-repairs` rounds left, it re-plans with the findings and renders again, keeping the better cut. With the Anthropic adapter (text only) or `--no-critic`, the critic gate stays `pending` with the next step. | `qa/critic.json` |
 
 **Lane routing** (STORYBOARD_ENGINE_RFC.md §3; the model never chooses):
 
