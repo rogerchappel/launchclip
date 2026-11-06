@@ -4,6 +4,16 @@
 
 ### Added
 
+- `make` repairs what its critic finds instead of only reporting it.
+  `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
+  critic's findings back to the planner as known problems. A repair verdict
+  fixes the scenes the findings point at, and only those scenes render again
+  when the timeline holds. A replan verdict, or a blocking or major narrative
+  finding on the opening scene, plans again with the findings in the brief.
+  The critic then reviews the new cut. A round that fails, changes nothing,
+  or doesn't lower the blocking and major findings is undone (the storyboard,
+  render and reports go back to the earlier cut), and the rounds stop. Each
+  round is recorded in `MAKE.json` `critic_repairs`.
 - Seven media layouts that show your footage inside the motion design, so a
   photo or clip is not always a full-frame cut or a small polaroid:
   `split-screen` (footage on the top or bottom half, the line's title, stat

@@ -12,7 +12,7 @@
 // (src/make/routing.js); the model writes only the script and the storyboard.
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, cp, link, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
@@ -48,6 +48,7 @@ import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchcl
 import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStructureErrors } from "@launchclip/core/skeleton-library.mjs";
 import { loadSkeletonLibrary } from "../skeletons.js";
 import { runHeadlessCritic } from "./critic.js";
+import { changedScenes, criticBriefSection, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
 import { fileProjectMatte, fileProjectTrack } from "../subject/project.js";
@@ -142,7 +143,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
     routing: null,
     stages: {},
@@ -857,7 +858,11 @@ async function stageStoryboard(ctx) {
   const brand = await loadBrand(ctx);
   const manifest = assetManifestLines(ctx);
   const brief = await composeBrief(ctx, manifest);
-  await writeFile(path.join(project, MAKE_PATHS.brief), brief);
+  // A critic repair round (criticRepairs): a replan carries the critic's
+  // findings in its brief; a repair starts from the current storyboard.
+  const round = ctx.criticRound ?? null;
+  const planBrief = round?.mode === "replan" ? `${brief.trimEnd()}\n${criticBriefSection(round.problems)}` : brief;
+  await writeFile(path.join(project, MAKE_PATHS.brief), planBrief);
   const lane = routing.lane;
   const fixedAudio = { ...ctx.audio };
   const subject = ctx.subject?.probe ?? null;
@@ -880,7 +885,7 @@ async function stageStoryboard(ctx) {
   // The history is left out of planHash: a rerun keeps its storyboard even
   // after other videos join the history (--replan plans against it afresh).
   const history = await loadHistory(ctx);
-  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
+  if (!round && !options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
     report.repairs = state.plan.repairs ?? null;
     if (state.plan.shot_counts) report.shot_counts = state.plan.shot_counts;
     if (history) await lintVariety(ctx, await readJson(storyFile), style, history, state.plan.variety ?? []);
@@ -909,7 +914,7 @@ async function stageStoryboard(ctx) {
   const assets = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   if (assets) ctx.say(`assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
   const plan = await planStoryboard({
-    brief,
+    brief: planBrief,
     words: ctx.words,
     lane,
     format: ctx.format,
@@ -921,7 +926,8 @@ async function stageStoryboard(ctx) {
     base: lane === "footage-led" ? ctx.base.src : null,
     ...(lane === "footage-led" && subject ? { subject } : {}),
     style: style?.pack ?? null,
-    direction: true,
+    direction: round?.mode === "repair" && round.direction ? round.direction : true,
+    ...(round?.mode === "repair" ? { seed: { storyboard: round.storyboard, errors: round.problems } } : {}),
     profile,
     maxRepairs,
     // Clip-led planning: the footage the plan may cut, and the density dial (--density, else the style's).
@@ -942,8 +948,9 @@ async function stageStoryboard(ctx) {
   for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ")) report.warnings.push(warning);
   // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
   if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };
-  for (const attempt of plan.direction_attempts ?? []) addCost(report, `${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
-  for (const attempt of plan.attempts) addCost(report, `storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
+  const costPrefix = round ? `critic-${round.round}-` : "";
+  for (const attempt of plan.direction_attempts ?? []) addCost(report, `${costPrefix}${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
+  for (const attempt of plan.attempts) addCost(report, `${costPrefix}storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
   if (plan.clip_led?.mode && plan.clip_led.mode !== "graphics") report.clip_led = { mode: plan.clip_led.mode, density: plan.clip_led.density, target: plan.clip_led.target, share: plan.clip_led.share };
   report.repairs = { tier, used: plan.repairs_used, max: plan.max_repairs, valid_first_attempt: plan.valid_first_attempt, attempts: plan.attempts.map((attempt) => ({ attempt: attempt.attempt, kind: attempt.kind, ok: attempt.ok, errors: attempt.errors.slice(0, 12) })) };
@@ -1094,7 +1101,7 @@ async function stageSubject(ctx) {
 async function stageFinish(ctx) {
   const { project, report, adapters, options } = ctx;
   // A run that cannot have its ElevenLabs track still finishes, on the synth bed (src/finish.js musicFallback).
-  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}) };
+  const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}), ...(ctx.finishScenes?.length ? { scenes: ctx.finishScenes } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
   ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}`);
   ctx.say(machineLine(options.concurrency));
@@ -1136,26 +1143,139 @@ function machineLine(concurrency) {
 }
 
 async function stageCritic(ctx) {
-  const { project, report, options } = ctx;
+  const { options } = ctx;
   const wanted = options.critic === true || (options.critic !== false && ctx.model.vision);
-  const pending = (reason) => {
-    report.critic = { status: "pending", reason };
-    if (report.gates?.critic) report.gates.critic = { status: "pending", reason };
-    report.next_steps.push(`Critic pending (${reason}): have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json, then run launchclip cinematic-check ${project} --renderer ${ctx.renderer} --video ${report.final ?? "renders/draft.mp4"} --expect-audio`);
-    return { status: "skipped", reason };
-  };
-  if (options.critic === false) return pending("--no-critic");
-  if (!wanted) return pending(`${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
-  if (!ctx.model.vision) return pending(`${ctx.model.spec} cannot take images`);
+  if (options.critic === false) return criticPending(ctx, "--no-critic");
+  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
+  if (!ctx.model.vision) return criticPending(ctx, `${ctx.model.spec} cannot take images`);
+  const result = await runCritic(ctx);
+  if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
+  await criticRepairs(ctx, result);
+  if (ctx.report.critic?.verdict !== "ship") ctx.report.next_steps.push(`The headless critic asked for ${ctx.report.critic.verdict} (${ctx.report.critic.findings} finding${ctx.report.critic.findings === 1 ? "" : "s"} in qa/critic.json): edit storyboard.json scenes, then run launchclip finish ${ctx.project} --scene <id>, or launchclip make again with --replan`);
+  return { status: "done" };
+}
+
+function criticPending(ctx, reason) {
+  const { project, report } = ctx;
+  report.critic = { status: "pending", reason };
+  if (report.gates?.critic) report.gates.critic = { status: "pending", reason };
+  report.next_steps.push(`Critic pending (${reason}): have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json, then run launchclip cinematic-check ${project} --renderer ${ctx.renderer} --video ${report.final ?? "renders/draft.mp4"} --expect-audio`);
+  return { status: "skipped", reason };
+}
+
+// One critic pass over the current render: report.critic and the critic gate.
+async function runCritic(ctx, label = "critic") {
+  const { project, report } = ctx;
   ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (headless critic over qa/critic-sheets/)`);
   const quality = ctx.finish?.gates?.coverage?.findings ?? [];
   const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, rules: rulesText(ctx) });
-  if (result.cost_usd !== undefined) addCost(report, "critic", ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
-  if (result.status !== "written") return pending(result.reason ?? "the critic did not run");
+  if (result.cost_usd !== undefined) addCost(report, label, ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
+  if (result.status !== "written") return result;
   report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
   if (report.gates) report.gates.critic = { status: result.verdict === "ship" ? "passed" : "failed", verdict: result.verdict, findings: result.findings, source: "qa/critic.json (headless)" };
-  if (result.verdict !== "ship") report.next_steps.push(`The headless critic asked for ${result.verdict} (${result.findings} finding${result.findings === 1 ? "" : "s"} in qa/critic.json): edit storyboard.json scenes, then run launchclip finish ${project} --scene <id>, or launchclip make again with --replan`);
-  return { status: "done" };
+  return result;
+}
+
+// What runCritic's result says, as a critique: the result's own, else qa/critic.json.
+async function critiqueOf(ctx, result) {
+  if (result?.critique) return result.critique;
+  return await readJson(path.join(ctx.project, "qa/critic.json")) ?? { verdict: result?.verdict ?? null, findings: [] };
+}
+
+// The files a critic round may overwrite, and the report fields it may change.
+const CRITIC_ROUND_FILES = ["storyboard.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
+const CRITIC_ROUND_FIELDS = ["critic", "gates", "final", "finish", "publish", "repairs", "shots", "shot_counts", "direction", "card_backdrops", "clip_led"];
+
+async function snapshotRound(ctx) {
+  const dir = path.join(ctx.project, ".launchclip", "critic-repair", "before");
+  await rm(dir, { recursive: true, force: true });
+  const files = [];
+  for (const rel of CRITIC_ROUND_FILES) {
+    const from = path.join(ctx.project, rel);
+    if (!existsSync(from)) continue;
+    await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+    await cp(from, path.join(dir, rel), { recursive: true });
+    files.push(rel);
+  }
+  const fields = Object.fromEntries(CRITIC_ROUND_FIELDS.map((field) => [field, structuredClone(ctx.report[field])]));
+  return { dir, files, fields, plan: structuredClone(ctx.state.plan ?? null), finish: ctx.finish };
+}
+
+async function restoreRound(ctx, snapshot) {
+  for (const rel of CRITIC_ROUND_FILES) {
+    const to = path.join(ctx.project, rel);
+    await rm(to, { recursive: true, force: true });
+    if (snapshot.files.includes(rel)) await cp(path.join(snapshot.dir, rel), to, { recursive: true });
+  }
+  Object.assign(ctx.report, snapshot.fields);
+  ctx.state.plan = snapshot.plan;
+  ctx.finish = snapshot.finish;
+}
+
+/**
+ * --critic-repairs rounds: while the critic does not say ship and rounds
+ * remain, its findings go back to the planner (a targeted repair, or one
+ * whole replan), the changed scenes render again and the critic looks again.
+ * A round that fails, changes nothing or does not lower the blocking and
+ * major findings is undone and the rounds stop. Each round lands in
+ * report.critic_repairs.
+ */
+async function criticRepairs(ctx, first) {
+  const { project, report, options } = ctx;
+  const budget = criticRepairBudget(options.criticRepairs);
+  if (!budget) return;
+  report.critic_repairs = [];
+  let critique = await critiqueOf(ctx, first);
+  for (let round = 1; round <= budget; round += 1) {
+    if (critique.verdict === "ship") break;
+    const before = criticScore(critique);
+    const loaded = await readProjectStory(project);
+    const manifest = await readJson(path.join(project, "qa/temporal-evidence/manifest.json"));
+    const findings = findingScenes(critique.findings, manifest?.entries ?? [], loaded.resolved?.scenes ?? []);
+    const opening = (loaded.resolved?.scenes ?? []).find((scene) => (scene.track ?? 0) === 0)?.id ?? null;
+    const mode = criticRepairRoute(critique, findings, opening);
+    const problems = criticProblems(findings);
+    const entry = { round, mode, verdict_before: before.verdict, findings_before: before, scenes: [...new Set(findings.flatMap((finding) => finding.scenes))], kept: false };
+    report.critic_repairs.push(entry);
+    ctx.say(`critic repair ${round} of ${budget}: ${mode} for ${before.blocking} blocking and ${before.major} major finding(s)${entry.scenes.length ? ` in ${entry.scenes.join(", ")}` : ""}`);
+    const t0 = performance.now();
+    const snapshot = await snapshotRound(ctx);
+    const repairs = report.repairs;
+    try {
+      ctx.criticRound = { round, mode, problems, storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
+      await stageStoryboard(ctx);
+      const after = await readProjectStory(project);
+      ctx.finishScenes = mode === "repair" ? changedScenes(loaded.resolved, after.resolved) : null;
+      if (ctx.finishScenes && !ctx.finishScenes.length) throw new Error("the repair changed no scene");
+      entry.rendered = ctx.finishScenes ?? "all";
+      await stageFinish(ctx);
+      const result = await runCritic(ctx, `critic-${round}`);
+      if (result.status !== "written") throw new Error(`the critic did not run again (${result.reason ?? result.status})`);
+      critique = await critiqueOf(ctx, result);
+      const after_ = criticScore(critique);
+      Object.assign(entry, { verdict_after: after_.verdict, findings_after: after_, kept: criticImproved(before, after_) });
+    } catch (error) {
+      entry.error = String(error?.message ?? error).split("\n")[0];
+    } finally {
+      ctx.criticRound = null;
+      ctx.finishScenes = null;
+      entry.seconds = round1((performance.now() - t0) / 1000);
+    }
+    // The planner's own repair record stays the first plan's; the round's is in the entry.
+    if (entry.kept) {
+      entry.repairs = report.repairs;
+      report.repairs = repairs;
+      ctx.say(`critic repair ${round}: kept (${entry.verdict_before} → ${entry.verdict_after}; blocking + major ${before.blocking + before.major} → ${entry.findings_after.blocking + entry.findings_after.major}) in ${entry.seconds}s`);
+      continue;
+    }
+    await restoreRound(ctx, snapshot);
+    critique = await critiqueOf(ctx, { verdict: report.critic?.verdict });
+    const why = entry.error ?? `no better (${entry.verdict_after}; blocking + major ${before.blocking + before.major} → ${entry.findings_after.blocking + entry.findings_after.major})`;
+    report.warnings.push(`critic repair ${round}: undone, the earlier cut is kept (${why})`);
+    ctx.say(`critic repair ${round}: undone, keeping the earlier cut (${why}) after ${entry.seconds}s`);
+    break;
+  }
+  await rm(path.join(project, ".launchclip", "critic-repair"), { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------
