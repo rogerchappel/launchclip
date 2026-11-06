@@ -6,7 +6,7 @@ import test from "node:test";
 import { chooseScriptPlan } from "@launchclip/core/script-formats.mjs";
 import { runCli } from "../src/cli.js";
 import { runMake } from "../src/make/index.js";
-import { SCRIPT_SCHEMA, scriptInstructions, writeScript } from "../src/make/script.js";
+import { SCRIPT_SCHEMA, cleanCaption, planVoiceSpeed, scriptInstructions, scriptSchema, writeScript } from "../src/make/script.js";
 
 const NARRATION = "Stripe payouts never match your books. Ledgerly matches every payout to its invoices. Try Ledgerly free today.";
 
@@ -35,7 +35,7 @@ test("the script pass prompt is driven by the plan: format, skeleton, goal, awar
   assert.match(request.instructions, /Never invent facts: every number, name, customer, quote/);
   assert.match(request.input, /about 75 words/);
   assert.equal(request.instructions, scriptInstructions(plan));
-  assert.deepEqual(script.plan, { format: "promo", goal: "convert", awareness: "problem", skeleton: "launch", wpm: 150, word_target: 75, word_ceiling: 82, reasons: plan.reasons });
+  assert.deepEqual(script.plan, { format: "promo", goal: "convert", awareness: "problem", skeleton: "launch", pace: "standard", voice_speed: 1, wpm: 150, word_target: 75, word_ceiling: 82, reasons: plan.reasons });
   assert.equal(script.word_target, 75);
   assert.deepEqual(script.title_options, ["Match every Stripe payout automatically", "B", "C"]);
   assert.deepEqual(script.beats.map((beat) => beat.beat), ["hook", "cta"]);
@@ -109,4 +109,27 @@ test("launchclip make passes --goal, --format and --awareness to the script pass
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+test("a short video's script pass writes a post caption (list kept one item a line) and carries the pace and CTA in its plan", async () => {
+  const caption = "Your new deck can rot out before its fifth summer.\n\n1. Joists on bare soil\n2. Boards laid tight\n3. Unsealed cut ends\n\nComment DECK and I'll send you our checklist.\nSave this before you pick a builder. #decks";
+  const { requests, client } = scriptClient({ title: "T", narration: NARRATION, post_caption: caption });
+  const plan = chooseScriptPlan({ prompt: "Three deck mistakes", duration: 45, aspect: "9:16", ctaKeyword: "deck", ctaOffer: "our checklist" });
+  const script = await writeScript({ client, prompt: "Three deck mistakes", duration: 45, plan });
+  assert.ok(scriptSchema(plan).required.includes("post_caption"));
+  assert.match(requests[0].instructions, /## Post caption/);
+  assert.match(requests[0].instructions, /Comment DECK and I'll send you our checklist/);
+  assert.equal(script.description, cleanCaption(caption));
+  assert.match(script.description, /\n1\. Joists on bare soil\n2\./);
+  assert.doesNotMatch(script.description, /#decks/);
+  assert.deepEqual([script.plan.pace, script.plan.voice_speed, script.plan.cta], ["fast", 1.2, { keyword: "DECK", offer: "our checklist" }]);
+  assert.ok(!scriptSchema(chooseScriptPlan({ prompt: "x", duration: 300 })).required.includes("post_caption"));
+});
+
+test("an ElevenLabs voice speaks at the plan's pace unless voice.json sets a speed", () => {
+  const fast = chooseScriptPlan({ prompt: "x", duration: 45, aspect: "9:16" });
+  assert.equal(planVoiceSpeed("elevenlabs", fast, undefined), 1.2);
+  assert.equal(planVoiceSpeed("elevenlabs", fast, 0.9), 0.9);
+  assert.equal(planVoiceSpeed("kokoro", fast, undefined), undefined);
+  assert.equal(planVoiceSpeed("elevenlabs", chooseScriptPlan({ prompt: "A fable", duration: 60, aspect: "9:16" }), undefined), 0.92);
 });

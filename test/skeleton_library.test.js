@@ -198,7 +198,7 @@ test("a short video's script pass finds the angle and scores the titles in the s
     }
   };
   const result = await writeScript({ client, prompt: "How big is a billion", duration: 30, plan: { aspect: "9:16" } });
-  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "angle", "title_scores"]);
+  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "angle", "title_scores", "post_caption"]);
   assert.match(request.instructions, /## Angle \(before you write\)/);
   assert.match(request.instructions, /title_scores: score every title option 0-10/);
   // The clear, concrete title wins; the tease (the model's own favourite on curiosity) loses 3 and falls to fourth; the best becomes the title.

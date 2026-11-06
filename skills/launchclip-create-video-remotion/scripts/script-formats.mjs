@@ -3,7 +3,7 @@
 //
 //   chooseScriptPlan({prompt, duration, aspect, assets, goal?, format?, awareness?})
 //     → {format, goal, awareness, skeleton, beats, word_target, word_ceiling, …}
-//   wordBudget(duration, format) → {wpm, target, ceiling}
+//   wordBudget(duration, format, pace?) → {wpm, target, ceiling}
 //   scriptPlanLines(plan)        → the plan as prompt lines (format, skeleton, budget)
 //   scriptRuleLines(plan)        → the cross-cutting writing rules for that plan
 //   scriptFormatsReference()     → the skills' references/script-formats.md
@@ -21,10 +21,26 @@ export const SCRIPT_PLAN_VERSION = 'launchclip.script-plan.v1';
 export const SCRIPT_FORMAT_IDS = Object.freeze(['short-form', 'long-form', 'explainer', 'data-explainer', 'story', 'promo']);
 export const SCRIPT_GOALS = Object.freeze(['reach', 'convert']);
 export const AWARENESS_LEVELS = Object.freeze(['unaware', 'problem', 'solution', 'product', 'most']);
-// Narration rates (words a minute): dense data, default narration, energetic short-form.
-export const WPM = Object.freeze({ dense: 135, default: 150, energetic: 165 });
+// Narration rates (words a minute): dense data, default narration, energetic
+// short-form (the old short-form rate), and fast short-form: top explainer
+// reels run 210-257 words a minute from the first frame.
+export const WPM = Object.freeze({ dense: 135, default: 150, energetic: 165, fast: 215 });
 // The physical ceiling: no script longer than this many words a second fits its duration.
 export const MAX_WORDS_PER_SECOND = 2.75;
+// The ceiling at the fast pace: 252 words a minute, the top of what a reel's
+// narrator is heard to manage. Arithmetic, like MAX_WORDS_PER_SECOND.
+export const FAST_MAX_WORDS_PER_SECOND = 4.2;
+
+// Narration paces: the words a minute the script is budgeted for, the
+// ElevenLabs speed (0.7-1.2) that brings a voice near it, the ceiling in
+// words a second, and the rule for the writer. --pace picks one; otherwise
+// the format's default (DEFAULT_PACE).
+export const PACES = Object.freeze({
+  calm: Object.freeze({ id: 'calm', wpm: WPM.dense, speed: 0.92, ceiling: MAX_WORDS_PER_SECOND, rule: 'Calm, about 135 words a minute: drama and story pacing. Let a line land, leave a short beat after a turn or a reveal, and give sound and picture room between lines.' }),
+  standard: Object.freeze({ id: 'standard', wpm: WPM.default, speed: 1, ceiling: MAX_WORDS_PER_SECOND, rule: 'Standard, about 150 words a minute: clear narration with a breath between ideas.' }),
+  fast: Object.freeze({ id: 'fast', wpm: WPM.fast, speed: 1.2, ceiling: FAST_MAX_WORDS_PER_SECOND, rule: 'Fast, about 215 words a minute (explainer reels run 210-257): speech starts on the first frame with no intro silence, sentences run on without pauses, and the only deliberate beat is the pattern interrupt.' })
+});
+export const PACE_IDS = Object.freeze(Object.keys(PACES));
 export const HARD_MAX_SENTENCE_WORDS = 25;
 export const HOOK_MAX_WORDS = 12;
 // A portrait video this short is short-form unless the brief says otherwise.
@@ -39,6 +55,21 @@ const beat = (id, label, share, rule) => Object.freeze({ id, label, share, rule 
 
 // Named skeletons: ordered beats with a rough share of the runtime (sums to 1).
 export const SCRIPT_SKELETONS = Object.freeze({
+  // The structure explainer reels that travel share: stakes, an open loop, a
+  // numbered list where every item lands a specific, a pattern interrupt, the
+  // payoff, and a call to action that follows from the last idea.
+  'stakes-list': Object.freeze({
+    id: 'stakes-list',
+    name: 'Stakes hook → open loop → numbered list → pattern interrupt → payoff → CTA',
+    beats: Object.freeze([
+      beat('hook', 'Stakes hook', 0.1, 'A cost, a consequence or a number the viewer feels, aimed at "you" ("your deck", "your app"): the stakes in one line.'),
+      beat('loop', 'Open loop', 0.07, 'Promise a payoff and say when it comes ("…and one fix I\'ll give you at the end", "number three is the one nobody checks"). Pay it off later.'),
+      beat('list', 'Numbered list', 0.5, 'A named, numbered list or framework of three to six items, each said with its number. Each item: its name, then one concrete specific from the brief (a number, a name, a rule), then an example or an analogy.'),
+      beat('rehook', 'Pattern interrupt', 0.08, 'One short line that reframes everything before it ("The word is per.", "But here\'s the part nobody checks."). It turns the list into one idea.'),
+      beat('payoff', 'Payoff', 0.13, 'Close the open loop and pay off the hook in concrete terms.'),
+      beat('cta', 'Call to action', 0.12, 'One action built into the story: the plan\'s comment keyword when it has one, else a reason to follow or save that follows from the last idea.')
+    ])
+  }),
   'call-out-pas': Object.freeze({
     id: 'call-out-pas',
     name: 'Call-out hook → problem-agitate-solve',
@@ -131,9 +162,9 @@ export const SCRIPT_FORMATS = Object.freeze({
   'short-form': Object.freeze({
     id: 'short-form',
     label: 'a short-form video of 15–90 s (Shorts, Reels, TikTok)',
-    wpm: WPM.energetic,
-    skeleton: 'call-out-pas',
-    skeletons: Object.freeze(['call-out-pas', 'before-after-bridge']),
+    wpm: WPM.fast,
+    skeleton: 'stakes-list',
+    skeletons: Object.freeze(['stakes-list', 'call-out-pas', 'before-after-bridge']),
     sentences: SENTENCES.short,
     hook: `A call-out in the first sentence (≤ ${HOOK_MAX_WORDS} words, ideally about 8): it names the topic or the viewer's problem and lands in the first 3 seconds. Above 30 s, add a contrast rehook ("but…") near the middle.`,
     cta: `${CTA_ONE} At 15 s or less, the last line may flow back into the first as a loop instead.`
@@ -172,7 +203,7 @@ export const SCRIPT_FORMATS = Object.freeze({
   story: Object.freeze({
     id: 'story',
     label: 'a story or parable (a fable, a verse, a quote, a brand story)',
-    wpm: WPM.default,
+    wpm: WPM.dense,
     skeleton: 'story-spine',
     skeletons: Object.freeze(['story-spine']),
     sentences: SENTENCES.default,
@@ -208,6 +239,7 @@ export const GOAL_RULES = Object.freeze({
 });
 
 // Defaults when the brief does not say.
+export const DEFAULT_PACE = Object.freeze({ 'short-form': 'fast', 'long-form': 'standard', explainer: 'standard', 'data-explainer': 'calm', story: 'calm', promo: 'standard' });
 const DEFAULT_AWARENESS = Object.freeze({ 'short-form': 'problem', 'long-form': 'problem', explainer: 'problem', 'data-explainer': 'unaware', story: 'unaware', promo: 'solution' });
 
 const STORY_WORDS = /\b(verse|poem|poetry|fable|parable|quote|quotation|proverb|once upon a time|fairy ?tale|folk ?tale)\b/i;
@@ -227,8 +259,40 @@ function pick(value, allowed, flag) {
 }
 
 /** Validate explicit plan options; throws with the flag's valid values. */
-export function scriptPlanOptions({ goal, format, awareness } = {}) {
-  return { goal: pick(goal, SCRIPT_GOALS, 'goal'), format: pick(format, SCRIPT_FORMAT_IDS, 'format'), awareness: pick(awareness, AWARENESS_LEVELS, 'awareness') };
+export function scriptPlanOptions({ goal, format, awareness, pace } = {}) {
+  return { goal: pick(goal, SCRIPT_GOALS, 'goal'), format: pick(format, SCRIPT_FORMAT_IDS, 'format'), awareness: pick(awareness, AWARENESS_LEVELS, 'awareness'), pace: pick(pace, PACE_IDS, 'pace') };
+}
+
+const KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}-]{0,23}$/u;
+
+/**
+ * The call to action a host sets: a comment keyword (one word, said and shown
+ * in capitals) and what the viewer gets for commenting. null when unset.
+ * Throws on a keyword that is not one word.
+ */
+export function ctaPlanOptions({ ctaKeyword, ctaOffer } = {}) {
+  const keyword = String(ctaKeyword ?? '').trim().replace(/^["“'#]+|["”']+$/g, '');
+  const offer = String(ctaOffer ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (!keyword) {
+    if (offer) throw new Error('--cta-offer needs --cta-keyword (the word viewers comment)');
+    return null;
+  }
+  if (!KEYWORD.test(keyword)) throw new Error(`--cta-keyword must be one word of letters or digits (up to 24); got ${ctaKeyword}`);
+  return { keyword: keyword.toUpperCase(), ...(offer ? { offer } : {}) };
+}
+
+/**
+ * A series episode with a viewer choice: {episode, choices} or null. choices
+ * (two to four one-word options, e.g. "ROSA,LOU,IKE") are what viewers comment;
+ * the most-picked one happens in the next episode.
+ */
+export function seriesPlanOptions({ episode, choices } = {}) {
+  const label = String(episode ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  const list = (Array.isArray(choices) ? choices : String(choices ?? '').split(',')).map((item) => String(item).trim().replace(/^["“'#]+|["”']+$/g, '')).filter(Boolean);
+  if (!label && !list.length) return null;
+  if (list.length && (list.length < 2 || list.length > 4)) throw new Error(`--choices must list two to four options, comma-separated; got ${list.length}`);
+  for (const item of list) if (!KEYWORD.test(item)) throw new Error(`--choices: each option must be one word of letters or digits; got ${item}`);
+  return { ...(label ? { episode: label } : {}), ...(list.length ? { choices: list.map((item) => item.toUpperCase()) } : {}) };
 }
 
 function isPortrait(aspect) {
@@ -261,20 +325,22 @@ function guessFormat({ prompt, duration, aspect, assets }) {
  * narration covers only part of the runtime) and the hard ceiling at
  * MAX_WORDS_PER_SECOND.
  */
-export function wordBudget(duration, format = 'explainer') {
+export function wordBudget(duration, format = 'explainer', pace = null) {
   const spec = SCRIPT_FORMATS[format] ?? SCRIPT_FORMATS.explainer;
+  const rate = PACES[pace ?? DEFAULT_PACE[spec.id]] ?? PACES.standard;
   const seconds = Math.max(1, Number(duration) || 0);
-  const ceiling = Math.max(8, Math.floor(seconds * MAX_WORDS_PER_SECOND));
-  const target = Math.min(ceiling, Math.max(8, Math.round(seconds * spec.wpm / 60 * (spec.coverage ?? 1))));
-  return { wpm: spec.wpm, target, ceiling };
+  const ceiling = Math.max(8, Math.floor(seconds * rate.ceiling));
+  const target = Math.min(ceiling, Math.max(8, Math.round(seconds * rate.wpm / 60 * (spec.coverage ?? 1))));
+  return { wpm: rate.wpm, target, ceiling };
 }
 
 /**
  * The script plan: format, goal, awareness, skeleton, beats with word and
  * second budgets. Deterministic; explicit goal/format/awareness win over the
  * heuristic. options: {prompt, duration (s), aspect ("9:16" or {width,
- * height}), assets ([{role}] or role strings), goal, format, awareness, words
- * (a word-target override, e.g. after a measured take)}.
+ * height}), assets ([{role}] or role strings), goal, format, awareness, pace,
+ * ctaKeyword, ctaOffer, episode, choices, words (a word-target override, e.g.
+ * after a measured take)}.
  */
 export function chooseScriptPlan(options = {}) {
   const explicit = scriptPlanOptions(options);
@@ -301,13 +367,17 @@ export function chooseScriptPlan(options = {}) {
     reasons.push(`awareness ${awareness}: ${awareness === 'most' && MOST_AWARE_WORDS.test(text) ? 'the brief targets people who already know the offer' : `the default for ${format}`}`);
   }
   const spec = SCRIPT_FORMATS[format];
+  const pace = explicit.pace ?? DEFAULT_PACE[format];
+  reasons.push(`pace ${pace}: ${explicit.pace ? '--pace' : `the default for ${format}`}`);
+  const cta = ctaPlanOptions(options);
+  const series = seriesPlanOptions(options);
   // An explicit skeleton (--skeleton call-out-pas) wins; short-form for a viewer
   // who already wants the result reads better as before-after-bridge.
   const pinned = options.skeleton && SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : null;
   const skeletonId = pinned ?? (format === 'short-form' && ['solution', 'product'].includes(awareness) ? 'before-after-bridge' : spec.skeleton);
   if (pinned) reasons.push(`skeleton ${pinned}: --skeleton`);
   const skeleton = SCRIPT_SKELETONS[skeletonId];
-  const budget = wordBudget(duration, format);
+  const budget = wordBudget(duration, format, pace);
   const target = options.words != null ? Math.min(budget.ceiling, Math.max(8, Math.round(Number(options.words)))) : budget.target;
   const beats = skeleton.beats.map((entry) => ({ id: entry.id, label: entry.label, share: entry.share, words: Math.max(3, Math.round(target * entry.share)), seconds: round1(duration * entry.share), rule: entry.rule }));
   const plan = {
@@ -317,12 +387,16 @@ export function chooseScriptPlan(options = {}) {
     awareness,
     skeleton: skeletonId,
     duration,
+    pace,
+    voice_speed: PACES[pace].speed,
     wpm: budget.wpm,
     word_target: target,
     word_ceiling: budget.ceiling,
     beats,
     reasons
   };
+  if (cta) plan.cta = cta;
+  if (series) plan.series = series;
   if (format === 'long-form') plan.reengage_at = reengageTimes(duration);
   return plan;
 }
@@ -347,8 +421,10 @@ export function scriptPlanLines(plan) {
     GOAL_RULES[plan.goal],
     `Awareness: ${AWARENESS_OPENINGS[plan.awareness]}`,
     `Word budget: about ${plan.word_target} words (${plan.wpm} words a minute over ${plan.duration} s${spec.coverage ? `, narration over about ${Math.round(spec.coverage * 100)}% of the runtime so wordless beats can land` : ''}); never more than ${plan.word_ceiling}.`,
+    ...(plan.pace && PACES[plan.pace] ? [`Pace: ${PACES[plan.pace].rule}`] : []),
     `Hook: ${spec.hook}`,
-    `Call to action: ${plan.structure ? 'as the skeleton\'s last beat says: a loop back into the hook, or one action with one destination.' : spec.cta}`,
+    `Call to action: ${ctaLine(plan) ?? (plan.structure ? 'as the skeleton\'s last beat says: a loop back into the hook, or one action with one destination.' : spec.cta)}`,
+    ...seriesLines(plan),
     ...(spec.note ? [spec.note] : []),
     '',
     `Skeleton: ${skeleton.name}. Write the beats in this order (about this many words each):`,
@@ -359,11 +435,30 @@ export function scriptPlanLines(plan) {
   return lines;
 }
 
+/** The plan's call to action as a prompt line, when the host set a keyword or a viewer choice; else null. */
+export function ctaLine(plan) {
+  const choices = plan?.series?.choices;
+  if (choices?.length) return `a viewer choice, built into the story's last line: "Comment ${joinOr(choices)}. One word." Say that the most-picked one happens in the next episode. Name every option once in the story before you ask, so the viewer knows who or what they are choosing. No other call to action.`;
+  const cta = plan?.cta;
+  if (!cta?.keyword) return null;
+  return `a comment keyword, as the story's last idea: "Comment ${cta.keyword} and I'll send you ${cta.offer ?? '<what the brief offers>'}." Say the keyword exactly as given (it is shown in capitals); offer only ${cta.offer ? 'that' : 'what the brief offers'}. No other call to action.`;
+}
+
+function seriesLines(plan) {
+  if (!plan?.series?.episode) return [];
+  return [`Series: this is ${plan.series.episode} of a series. Write it as one episode: pick up the story's stakes in the first line, end on an open question the next episode answers, and put the episode label in every title option. The label is shown on screen, not read out.`];
+}
+
+const joinOr = (items) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`);
+
 // The short-video rules for the script (every video of SHORT_VIDEO_SECONDS or less).
 export const SHORT_VIDEO_RULES = Object.freeze([
   'Share line: in the last 40% of the script, one spoken line that gives a viewer a reason to send the video or comment (a surprise they can repeat, a line they recognise themselves in, one small act, a claim the brief supports that people will argue with, or a takeaway worth saving). When the plan has a share beat, this is it.',
   'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.',
-  'Write to the footage: when the assets list what the footage shows, picture each sentence with something in that list. Do not promise a demonstration no asset shows (a product being applied, a close-up of a material, a before-and-after); say it over footage that exists, or leave it out.'
+  'Write to the footage: when the assets list what the footage shows, picture each sentence with something in that list. Do not promise a demonstration no asset shows (a product being applied, a close-up of a material, a before-and-after); say it over footage that exists, or leave it out.',
+  'Specific, never hedged: say the number, the name, the rule and the consequence the brief gives ("$53,000 per email", "oil it every 12 months"), in firm words. No "can help", "may need", "might", "possibly", "in some cases" or "it depends". When the brief has no figure, stay qualitative but firm ("untreated pine rots", not "it may start to deteriorate"); never invent the figure.',
+  'Over 30 s, keep them to the end: open a loop in the first quarter (a payoff promised for later: "the last one is the one nobody checks", "one fix I\'ll give you at the end") and close it before the call to action; put one pattern interrupt near the middle, a short line that reframes what came before.',
+  'A call to action built into the story, never bolted on: when the plan names a comment keyword, end on it; otherwise give a reason to follow or save that follows from the last idea ("save this before your next build"). Never promise to send something the brief does not offer.'
 ]);
 
 /** The writing rules every format shares, specialised for the plan's sentence lengths (and the short-video rules for a short plan). */
@@ -427,6 +522,17 @@ export function scriptFormatsReference() {
       ...skeleton.beats.map((entry) => `- **${entry.label}** (~${Math.round(entry.share * 100)}%): ${entry.rule}`),
       ''
     ]),
+    '## Pace',
+    '',
+    `\`--pace\` sets the narration rate (default by format: ${Object.entries(DEFAULT_PACE).map(([format, pace]) => `${format} ${pace}`).join(', ')}). The ElevenLabs voice speed follows it unless the voice settings give one.`,
+    '',
+    ...PACE_IDS.map((id) => `- \`${id}\` (${PACES[id].wpm} words a minute, voice speed ${PACES[id].speed}, ceiling ${PACES[id].ceiling} words a second): ${PACES[id].rule}`),
+    '',
+    '## Call to action and series',
+    '',
+    '- `--cta-keyword WORD --cta-offer "the checklist"`: the script ends on "Comment WORD and I\'ll send you the checklist", and the post caption carries the same call to action.',
+    '- `--episode "Episode 2" --choices "A,B,C"`: one episode of a series; it ends on a viewer choice ("Comment A, B or C. One word."), the most-picked one happening next.',
+    '',
     '## Goal',
     '',
     ...SCRIPT_GOALS.map((id) => `- \`${id}\`: ${GOAL_RULES[id]}`),

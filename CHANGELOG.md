@@ -41,6 +41,27 @@
   idea. Captions sit at chest height, one word at a time (the new `chest`
   caption position). Checks refuse inserts and layout sections and warn when
   a prop covers the face.
+- Short-form scripts are paced and built like explainer reels that travel.
+  A narration pace (`--pace calm|standard|fast`) sets the word budget, the
+  clock's ceiling and the ElevenLabs voice speed. Short-form defaults to
+  fast (about 215 words a minute, ceiling 4.2 words a second, voice speed
+  1.2); story and data explainers to calm (about 135); the rest to standard.
+  Short-form's default skeleton is now `stakes-list`: a stakes hook, an open
+  loop, a numbered list where each item lands a specific, a pattern
+  interrupt, the payoff and a call to action that follows from the last
+  idea. New short-video rules ask for specifics over hedging, an open loop
+  with a mid-way re-hook, and a call to action built into the story.
+- `--cta-keyword WORD` with `--cta-offer "..."` ends the script on "Comment
+  WORD and I'll send you ...", and `--episode "Job 1" --choices A,B,C` makes
+  one episode of a series ending on a viewer choice. A short video's script
+  pass also writes the post caption (the hook, the list one item a line, the
+  call to action, "Save this"), which publish.json uses as its description
+  with the line breaks kept.
+- Script checks: `hedging` (two or more hedges in a short video; one is a
+  `hedge` warning), `cta-keyword` and `cta-choice` (errors that feed the
+  repair pass), and the `open-loop` and `rehook-missing` warnings. The clock
+  and the rate band follow the pace; "Comment WORD" counts as a comment call
+  to action.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict

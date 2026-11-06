@@ -22,6 +22,9 @@ export async function runScriptCheck(file, flags = {}) {
     format: flags.format ?? input.plan?.format,
     goal: flags.goal ?? input.plan?.goal,
     awareness: flags.awareness ?? input.plan?.awareness,
+    pace: flags.pace ?? input.plan?.pace,
+    ctaKeyword: flags["cta-keyword"] ?? input.plan?.cta?.keyword,
+    choices: flags.choices ?? input.plan?.series?.choices,
     product: flags.product,
     cta: flags.cta,
     audience: flags.audience
@@ -40,7 +43,7 @@ export function parseScriptFile(file, text) {
     return { kind: "storyboard", narration: spoken, duration: positive(value.format?.duration) };
   }
   if (typeof value?.narration === "string") {
-    const plan = value.plan && typeof value.plan === "object" ? { format: value.plan.format, goal: value.plan.goal, awareness: value.plan.awareness } : null;
+    const plan = value.plan && typeof value.plan === "object" ? { format: value.plan.format, goal: value.plan.goal, awareness: value.plan.awareness, ...(value.plan.pace ? { pace: value.plan.pace } : {}), ...(value.plan.cta ? { cta: value.plan.cta } : {}), ...(value.plan.series ? { series: value.plan.series } : {}) } : null;
     return { kind: "script", narration: value.narration, duration: positive(value.take?.seconds ?? value.duration), ...(plan ? { plan } : {}) };
   }
   if (typeof value?.text === "string") return { kind: "narration", narration: value.text, duration: positive(value.duration_seconds ?? value.duration) };

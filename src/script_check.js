@@ -2,7 +2,7 @@
 // deterministic (no I/O, no model), so `launchclip script check`, the make
 // script pass and the tests all run the same rules.
 //
-//   checkScript({narration, duration?, brief?, format?, goal?, awareness?, cta?, product?, audience?, limits?})
+//   checkScript({narration, duration?, brief?, format?, goal?, awareness?, pace?, cta?, ctaKeyword?, choices?, product?, audience?, limits?})
 //   → {schema_version, ok, errors: [{id, message, fix, span?}], warnings: [...], stats}
 //
 // The split follows the research report (reports/"Video scriptwriting methods
@@ -14,7 +14,7 @@
 // figure.
 //
 // Errors (ok is false when any is present):
-//   fits-clock        words > duration × 2.75 (the script cannot physically fit)
+//   fits-clock        words > duration × 2.75 (4.2 at the fast pace): the script cannot physically fit
 //   fact-trace        a number, percentage, money amount or multiple not in the brief
 //   testimonial       a quote or customer attribution not in the brief
 //   placeholder       "Jane Doe", "lorem ipsum", "[name]", "TBD" and friends
@@ -26,6 +26,9 @@
 //                     ("Choosing deck boards for your home?"): no number, no
 //                     stakes, only the topic
 //   cta-missing / cta-multiple / cta-early / cta-mismatch
+//   cta-keyword       the host's comment keyword is not asked for at the end
+//   cta-choice        a series' viewer choice does not name every option at the end
+//   hedging           a short video hedges two or more times ("can help", "may need")
 //   sentence-length   a sentence over 25 words
 //   options-unexplained  a list of three or more options ("timber, composite
 //                     and aluminium") whose items no other sentence comes back
@@ -33,7 +36,9 @@
 // Warnings:
 //   mean-sentence, reading-grade, additive-transitions, brand-first,
 //   superlative, numbers-per-sentence, number-precision, hook-payoff,
-//   wpm-band, no-brief, no-duration
+//   wpm-band, no-brief, no-duration, hedge (one hedge in a short video),
+//   open-loop (a short video over 30 s promises no later payoff in its first
+//   30%), rehook-missing (nothing reframes or re-hooks between 30% and 85%)
 //
 // Fact-trace policy for small numbers: a bare count of ten or less with no
 // unit ("two steps", "3 ways", "one place") is phrasing, not a claim, and is
@@ -47,7 +52,7 @@
 // least as large; "4 in 10" is a ratio that a brief percentage within five
 // points supports.
 
-import { AWARENESS_LEVELS, MAX_WORDS_PER_SECOND, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS } from "@launchclip/core/script-formats.mjs";
+import { AWARENESS_LEVELS, DEFAULT_PACE, MAX_WORDS_PER_SECOND, PACES, PACE_IDS, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS, SHORT_VIDEO_SECONDS } from "@launchclip/core/script-formats.mjs";
 
 export const SCRIPT_CHECK_VERSION = "launchclip.script-check.v1";
 // The format, goal and awareness ids are the planning pass's own (kit/core/script-formats.mjs).
@@ -67,6 +72,9 @@ export const WPM_BANDS = Object.freeze({
   "short-form": Object.freeze([140, 165]),
   promo: Object.freeze([140, 165])
 });
+// Rate bands by pace where the pace, not the format, sets the rate (derived
+// from the reference reels: explainers at 210-257 wpm; drama at ~135).
+export const PACE_BANDS = Object.freeze({ fast: Object.freeze([190, 252]), calm: Object.freeze([115, 150]) });
 // Hook (first sentence) budget in words, and the mean sentence budget.
 export const HOOK_WORDS = Object.freeze({ "short-form": 12, promo: 12, explainer: 12, "data-explainer": 12, story: 15, "long-form": 15 });
 export const MEAN_SENTENCE_WORDS = Object.freeze({ "short-form": 10, promo: 15, explainer: 15, "data-explainer": 15, story: 15, "long-form": 15 });
@@ -84,6 +92,13 @@ const SUFFIX_SCALES = { k: 1e3, m: 1e6, mn: 1e6, b: 1e9, bn: 1e9, thousand: 1e3,
 const HEDGE_ABOUT = /\b(?:about|around|nearly|almost|roughly|approximately|close to|some|~)\s*$/i;
 const HEDGE_OVER = /\b(?:over|more than|above|upwards of|at least|north of)\s*$/i;
 const HEDGE_UNDER = /\b(?:under|less than|below|up to|at most|fewer than)\s*$/i;
+
+// Hedges a short video should not lean on: they soften a specific into nothing.
+const HEDGE = /\b(?:can help|may help|might help|could help|may need|might need|may want to|might want to|may be (?:worth|able)|might be worth|can sometimes|may sometimes|could potentially|potentially|possibly|arguably|in some cases|it depends|to some extent|somewhat|kind of|sort of|more or less)\b/gi;
+// A later payoff promised early ("the last one is…", "I'll give you at the end").
+const OPEN_LOOP = /\b(?:at the end|by the end|till the end|until the end|stick around|keep watching|the last (?:one|thing|step|mistake|tip|item)|number (?:three|four|five|six|seven|[3-9]) is|i'?ll (?:give|show|tell|send) you|here'?s (?:how|why|what)|you'?ll see why|wait (?:for|until))\b/i;
+// A line that reframes or re-hooks mid-script.
+const REHOOK = /\b(?:but here'?s|here'?s the (?:catch|thing|twist|part|kicker)|the (?:word|catch|twist|trick|secret|kicker|real (?:problem|cost|reason|risk)) is|plot twist|which means|that'?s (?:why|how|the part)|so the real|and that'?s not even|it gets worse|nobody (?:checks|tells you|talks about))\b/i;
 
 const OPENER_FILLER = /^(?:hi|hello|hey|hiya|howdy|yo|what'?s up|welcome(?: back)?|good (?:morning|afternoon|evening)|greetings|ladies and gentlemen|in (?:this|today'?s) (?:video|episode|clip|tutorial)|today,? (?:we|i)(?:'re| are|'m| am|'ll| will) (?:going to|gonna|talk|look|show|cover)|so,|okay,|ok,|alright,|all right,|um+\b|uh+\b|let'?s (?:get started|dive in|jump in|talk about)|before we (?:start|begin|get started)|my name is|don'?t forget to)(?![a-z])/i;
 
@@ -116,7 +131,7 @@ const CTA_CLASSES = [
   ["follow", /(?:follow (?:us|me|for more)|subscribe|hit (?:the )?(?:subscribe|like|bell|follow)|turn on notifications)\b/i, false],
   ["book", /(?:book (?:a|an|your) (?:free )?(?:demo|call|meeting|consultation|session|seat|spot)|request (?:a demo|access|an invite|early access)|schedule (?:a|your) (?:demo|call))\b/i, false],
   ["buy", /(?:buy|order|shop|pre-?order|grab (?:yours|one|it)|claim (?:yours|your|it)|get (?:yours|it|access|early access|\d+%? off))\b/i, true],
-  ["comment", /(?:drop a comment|comment below|let me know in the comments|tell me in the comments)\b/i, false]
+  ["comment", /(?:drop a comment|comment below|let me know in the comments|tell me in the comments|comment (?:the word |one word[,:]? )?["“']?[a-z0-9][a-z0-9-]*(?=["”']?(?:[\s.,!?]|$)))/i, false]
 ];
 const CTA_PHRASES = [
   ["visit", /\blinks? in (?:the |my |our )?(?:bio|description)\b|\blinks? below\b|\bin the description\b/i],
@@ -162,6 +177,8 @@ export function checkScript(input = {}) {
   const awareness = oneOf(input.awareness, AWARENESS_LEVELS, "awareness");
   const explicitFormat = oneOf(input.format, SCRIPT_FORMATS, "format");
   const format = explicitFormat ?? defaultFormat(duration);
+  const pace = oneOf(input.pace, PACE_IDS, "pace") ?? DEFAULT_PACE[format];
+  const short = format === "short-form" || (duration != null && duration <= SHORT_VIDEO_SECONDS && format !== "story");
   const limits = input.limits ?? {};
   const briefText = input.brief == null ? null : briefToText(input.brief);
   const audienceIn = oneOf(input.audience, ["consumer", "b2b"], "audience");
@@ -175,13 +192,15 @@ export function checkScript(input = {}) {
   const spanOf = (sentence) => ({ start: sentence.start, end: sentence.end, sentence: sentence.index, text: sentence.text });
 
   // --- The clock (hard) and the rate band (soft).
-  const ceiling = duration ? Math.floor(duration * (limits.wordsPerSecond ?? WORDS_PER_SECOND_CEILING)) : null;
+  const perSecond = limits.wordsPerSecond ?? PACES[pace]?.ceiling ?? WORDS_PER_SECOND_CEILING;
+  const ceiling = duration ? Math.floor(duration * perSecond) : null;
   const wpm = duration ? Math.round(words / duration * 60) : null;
-  const band = WPM_BANDS[format];
+  // A story or a data explainer keeps its own band at the calm pace (its narration covers only part of the runtime).
+  const band = pace === "fast" || (pace === "calm" && !["story", "data-explainer"].includes(format)) ? PACE_BANDS[pace] : WPM_BANDS[format];
   if (duration == null) {
     add(warnings, "no-duration", "No duration given, so the clock and the narration rate were not checked.", "Pass --duration <seconds> (the target length).");
   } else {
-    if (words > ceiling) add(errors, "fits-clock", `${words} words cannot be read in ${duration}s: the ceiling is ${ceiling} (${WORDS_PER_SECOND_CEILING} words a second).`, `Cut to about ${Math.round(duration * (band[0] + band[1]) / 2 / 60)} words (${format} reads at ${band[0]}–${band[1]} wpm).`);
+    if (words > ceiling) add(errors, "fits-clock", `${words} words cannot be read in ${duration}s: the ceiling is ${ceiling} (${perSecond} words a second).`, `Cut to about ${Math.round(duration * (band[0] + band[1]) / 2 / 60)} words (${format} at the ${pace} pace reads at ${band[0]}–${band[1]} wpm).`);
     else if (wpm < band[0] || wpm > band[1]) add(warnings, "wpm-band", `${wpm} wpm is outside the ${format} band (${band[0]}–${band[1]} wpm, derived).`, wpm < band[0] ? `Add about ${Math.round(duration * band[0] / 60) - words} words, or shorten the video.` : `Cut about ${words - Math.round(duration * band[1] / 60)} words.`);
   }
 
@@ -282,6 +301,32 @@ export function checkScript(input = {}) {
     }
   }
 
+  // --- The host's comment keyword and a series' viewer choice (hard): asked for at the end.
+  // The ending: every sentence that reaches into the final quarter.
+  const endText = sentences.filter((sentence) => (sentence.wordStart + countWords(sentence.text)) / Math.max(1, words) > 1 - CTA_FINAL_SHARE || sentence.index === sentences.length - 1).map((sentence) => sentence.text).join(" ");
+  const keyword = String(input.ctaKeyword ?? "").trim().replace(/^["“'#]+|["”']+$/g, "");
+  if (keyword && !new RegExp(`\\bcomment\\s+(?:the word\\s+)?["“']?${escapeRegExp(keyword)}\\b`, "i").test(endText)) {
+    add(errors, "cta-keyword", `The script never asks viewers to comment "${keyword.toUpperCase()}" at the end.`, `End on "Comment ${keyword.toUpperCase()} and I'll send you …", with the offer the brief gives, as the story's last idea.`, spanOf(sentences[sentences.length - 1]));
+  }
+  const choices = (Array.isArray(input.choices) ? input.choices : String(input.choices ?? "").split(",")).map((item) => String(item).trim()).filter(Boolean);
+  if (choices.length) {
+    const missing = choices.filter((choice) => !new RegExp(`\\b${escapeRegExp(choice)}\\b`, "i").test(endText));
+    if (!/\bcomment\b/i.test(endText) || missing.length) add(errors, "cta-choice", `The ending does not ask viewers to comment one of ${choices.join(", ")}${missing.length ? ` (missing ${missing.join(", ")})` : ""}.`, `End on "Comment ${choices.join(", ")}. One word." and say the most-picked one happens next.`, spanOf(sentences[sentences.length - 1]));
+  }
+
+  // --- Short videos: specifics over hedging (hard at two, soft at one), an open loop and a re-hook (soft).
+  if (short) {
+    const hedges = [...narration.matchAll(HEDGE)];
+    if (hedges.length >= 2) add(errors, "hedging", `${hedges.length} hedges (${[...new Set(hedges.map((match) => `"${match[0].toLowerCase()}"`))].join(", ")}) soften the specifics.`, "Say it firmly: the number, the name, the rule and the consequence the brief gives. Where the brief has no figure, stay qualitative but firm; never invent one.", spanOf(sentenceAt(sentences, hedges[1].index)));
+    else if (hedges.length === 1) add(warnings, "hedge", `"${hedges[0][0]}" hedges.`, "Say it firmly, with the specific the brief gives.", spanOf(sentenceAt(sentences, hedges[0].index)));
+    if (duration != null && duration >= 30 && sentences.length >= 6) {
+      const share = (sentence) => sentence.wordStart / Math.max(1, words);
+      if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the one nobody checks\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
+      const middle = sentences.filter((sentence) => share(sentence) >= 0.3 && share(sentence) <= 0.85);
+      if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"But here's the part nobody checks.\").", spanOf(middle[0]));
+    }
+  }
+
   // --- Reading grade (soft): Flesch-Kincaid with a local syllable heuristic.
   const syllables = narration.split(/\s+/).filter(isWord).reduce((sum, word) => sum + syllableCount(word), 0);
   const grade = round1(0.39 * (words / sentences.length) + 11.8 * (syllables / Math.max(1, words)) - 15.59);
@@ -334,6 +379,7 @@ export function checkScript(input = {}) {
     word_ceiling: ceiling,
     word_target: duration ? Math.round(duration * (band[0] + band[1]) / 2 / 60) : null,
     wpm_band: [...band],
+    pace,
     hook_words: hookWords,
     hook_max: hookMax,
     mean_sentence_words: meanWords,
