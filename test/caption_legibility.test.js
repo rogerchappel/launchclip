@@ -107,3 +107,67 @@ test("a plated line is judged against its plate, even when the night behind it m
   assert.equal(result.onPlate, true);
   assert.equal(result.legible, true, JSON.stringify(result));
 });
+
+// The caption's own backing, not the floor around it (the gate used to read
+// white text on its dark plate against the tan floor beside the plate).
+const TAN = [200, 185, 160];
+const blend = (top, bottom, alpha) => top.map((v, i) => Math.round(v * alpha + bottom[i] * (1 - alpha)));
+
+test("a line on its preset plate (85% opaque) is measured against the plate, not the tan floor beside it", () => {
+  const s = story({ preset: "typewriter" });
+  const { lines, options } = captionLines(s, chunks);
+  assert.deepEqual(lines[0].backing, { color: options.colors.plate, alpha: 0xd9 / 255 });
+  const rect = captionBandRect(options, s.format);
+  const text = rgb(options.colors.idle);
+  const line = { x: 360, y: rect.y + 80, width: 360, height: 70 };
+  // The plate as rendered: its colour at 85% over the floor.
+  const plate = { x: 330, y: rect.y + 64, width: 420, height: 102, color: blend(rgb(options.colors.plate), TAN, 0xd9 / 255) };
+  const frame = image({ bg: TAN, text, rect: line, under: plate });
+  const backed = lineLegibility(frame, rect, lines[0].colors, { size: options.size, chars: 10, plate: lines[0].backing.color, plateAlpha: lines[0].backing.alpha });
+  assert.equal(backed.onPlate, true, JSON.stringify(backed));
+  assert.equal(backed.legible, true, JSON.stringify(backed));
+  assert.ok(backed.contrast >= 7, JSON.stringify(backed));
+});
+
+test("chip captions are measured against each word's chip, not the pale floor between and around the chips", () => {
+  // A dark style: white ink on near-black chips (the bubble preset), over a pale grey floor.
+  const FLOOR = [170, 180, 190];
+  const dark = { ...brand, colors: { ...brand.colors, ink: "#ffffff", paper: "#121212", bg: "#121212" } };
+  const s = { ...story({ preset: "bubble" }), brand: dark };
+  const { lines, options } = captionLines(s, chunks);
+  assert.deepEqual(lines[0].backing, { color: options.colors.chip, alpha: 1 });
+  const rect = captionBandRect(options, s.format);
+  const ink = rgb(options.colors.idle), chip = rgb(options.colors.chip);
+  const width = 1080, height = 1920;
+  const draw = (withChips) => {
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    const put = (x, y, [r, g, b]) => { const o = (y * width + x) * 4; pixels[o] = r; pixels[o + 1] = g; pixels[o + 2] = b; pixels[o + 3] = 255; };
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) put(x, y, FLOOR);
+    // Four word chips with the floor between them (gap 0.2 em), hugging the glyphs (3 px above, 5 px below).
+    const top = rect.y + 70;
+    for (const word of [{ x: 240, w: 130 }, { x: 382, w: 150 }, { x: 544, w: 120 }, { x: 676, w: 150 }]) {
+      if (withChips) for (let y = top; y < top + 50; y++) for (let x = word.x; x < word.x + word.w; x++) put(x, y, chip);
+      for (let y = top + 3; y < top + 45; y++) for (let x = word.x + 8; x < word.x + word.w - 8; x++) if ((x >> 3) % 2 === 0) put(x, y, ink);
+    }
+    return { width, height, pixels };
+  };
+  const backed = lineLegibility(draw(true), rect, lines[0].colors, { size: options.size, chars: 12, plate: lines[0].backing.color });
+  assert.equal(backed.onPlate, true, JSON.stringify(backed));
+  assert.equal(backed.legible, true, JSON.stringify(backed));
+  // Judged against everything around the line (the old reading), the floor between the chips fails it.
+  const generic = lineLegibility(draw(true), rect, lines[0].colors, { size: options.size, chars: 12 });
+  assert.equal(generic.legible, false, JSON.stringify(generic));
+  // With no chips drawn, white on the pale floor does not read, backing or not.
+  assert.equal(lineLegibility(draw(false), rect, lines[0].colors, { size: options.size, chars: 12, plate: lines[0].backing.color }).legible, false);
+});
+
+test("a plate the same colour as its text still fails: the backing is measured, not assumed", () => {
+  const { lines, options } = captionLines(story({ plates: "all" }), chunks);
+  const rect = captionBandRect(options, { width: 1080, height: 1920 });
+  const text = rgb(lines[0].colors[0]);
+  const line = { x: 360, y: rect.y + 80, width: 360, height: 70 };
+  // A plate drawn a few levels off the text colour (a light plate under light text).
+  const close = text.map((v) => Math.max(0, v - 12));
+  const result = lineLegibility(image({ bg: TAN, text, rect: line, under: { x: 330, y: rect.y + 64, width: 420, height: 102, color: close } }), rect, lines[0].colors, { size: options.size, chars: 10, plate: lines[0].backing.color, plateAlpha: lines[0].backing.alpha });
+  assert.notEqual(result.legible, true, JSON.stringify(result));
+});

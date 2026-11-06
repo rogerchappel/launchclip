@@ -117,6 +117,11 @@ character's shirt or a card. No style can switch off the fix.
     its midpoint from the video frames. It measures the text colour against
     the pixels around and between the glyphs: contrast at the worst quarter,
     and how much of the background shares the text's colour (camouflage).
+  - A line with a backing (its plate, a legibility plate, or the chips or
+    band the preset draws behind its words) is measured against that
+    backing: the pixels just around each glyph inside it, allowing for the
+    plate's own transparency. The floor beside the plate does not count.
+    Where the backing is not drawn, the line is judged on what is behind it.
   - Lines below 3:1, or more than 35% camouflaged, are written to
     `qa/finish/caption-legibility.json`.
   - Finish re-renders once with a backing plate on exactly those lines
