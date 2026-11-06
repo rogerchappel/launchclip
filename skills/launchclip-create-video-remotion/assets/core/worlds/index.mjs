@@ -164,6 +164,23 @@ export function drawProp({id, time = 'day', colors = {}, style = null, detail = 
 }
 
 /**
+ * One prop drawn as a world of `kind` at `time` draws it, standing at x on
+ * the base line y (its centre on a wall) at s px per metre, mirrored when
+ * flip: a set prop (kit/core/catalog-d-set-prop.mjs). → {nodes, defs}
+ * (canvas coordinates).
+ */
+export function drawPropAt({id, kind = 'park', time = 'day', colors = {}, style = null, detail = null, x, y, s, anchor = null, flip = false, canvas = {width: 1920, height: 1080}, key = 'prop'} = {}) {
+  propEntry(id);
+  const spec = detailSpec(detail ?? detailForStyle(style), style);
+  const k = worldKit({id: key, kind: WORLDS[kind] ? kind : 'park', time, colors, canvas, detail: spec, seed: `${id}|${time}|${kind}`});
+  k.p.at('mid');
+  const def = PROPS[id];
+  let nodes = def.draw(k, x, y, s, anchor ?? def.on[0]).flat(Infinity).filter(Boolean);
+  if (flip) nodes = [k.p.g(nodes, {transform: `translate(${Math.round(2 * x * 10) / 10} 0) scale(-1 1)`})];
+  return {nodes, defs: k.p.defsOf('mid')};
+}
+
+/**
  * Errors in a video-wide world ({kind, time?, props?, detail?}: story.world,
  * or a style pack's world). → string[].
  */

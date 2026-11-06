@@ -9,7 +9,7 @@
 // it annotates. On a world plate both stay in the plate, in that order, and
 // ride the camera (story-compiler.mjs soleVideo).
 
-import {MEDIA_LAYOUTS, clipTimeline, clipView, evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, mediaLayoutTimeline, mediaLayoutView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
+import {MEDIA_LAYOUTS, clipTimeline, clipView, setPropTimeline, setPropView, evidenceClipTimeline, evidenceClipView, photoSceneTimeline, photoSceneView, mediaLayoutTimeline, mediaLayoutView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 /** {html: the <video>, overlay: the annotation layer, css, motion, events, layout}. */
@@ -69,6 +69,21 @@ export function emitClip(model) {
 }
 
 /**
+ * set-prop: a drawn prop or an image stays in the scene layer with its
+ * contact shadow (so it also follows a world camera); a video is the html
+ * alone, hoisted to the root like clip's (on a world plate it stays in the
+ * plate). The per-frame ops move the element itself, so either way it
+ * follows the plate's camera.
+ */
+export function emitSetProp(model) {
+  const {view, ops} = gsapOwnedTransforms(setPropView(model), setPropTimeline(model), model.start);
+  const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
+  const out = {css: '', motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+  if (view.media) return {...out, html: renderNode(view.media, `${timed(model.track)} data-media-start="${model.content.media.sourceStart}" data-module="set-prop"`)};
+  return {...out, html: renderNode(view.front, `${timed(model.track)} data-module="set-prop"`)};
+}
+
+/**
  * The media layouts: html is the base (fill, panel) with every window in it;
  * the story compiler hoists each <video> to the root (each on its own track,
  * timed to the scene and trimmed to its sourceStart), so the overlay
@@ -96,6 +111,7 @@ export function emitMediaLayout(model) {
 export const EMITTERS = {
   'product-demo': emitProductDemo,
   'photo-scene': emitPhotoScene,
+  'set-prop': emitSetProp,
   'evidence-clip': emitEvidenceClip,
   clip: emitClip,
   ...Object.fromEntries(MEDIA_LAYOUTS.map(def => [def.id, emitMediaLayout])),

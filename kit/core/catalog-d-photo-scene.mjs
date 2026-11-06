@@ -10,6 +10,12 @@
 // overlay is hoisted one z-index above it, as product-demo's is. An image
 // stays in the scene layer with its overlay.
 //
+// Entrance and exit (kit/core/media-passage.mjs): params.enter / exit
+// (cut | fade); by default the scene is whole on its first frame when it
+// opens the video, has a typed `in` or cuts from the previous plate, and
+// leaves with the change when a plate follows straight away, so a cut never
+// dips to the background. Otherwise it fades over PHOTO_SCENE_TIMING.fade.
+//
 // The move is linear over the whole scene (constant speed, so the frame never
 // settles still) and always keeps the canvas covered: a push or pull scales
 // about the focus point between 1 and 1 + zoom, and a pan travels at scale
@@ -23,6 +29,7 @@ import {fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarEase, grammarStagger} from './grammar.mjs';
+import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
 
 export const PHOTO_SCENE_TIMING = Object.freeze({minDuration: 2, fade: 0.4, lineLead: 0.35, lineStagger: 0.45, lineLand: 0.7, leadOut: 0.5});
 const T = PHOTO_SCENE_TIMING;
@@ -60,7 +67,7 @@ export function kenBurnsAt(move, p, {zoom, focus, canvas}) {
 }
 
 function resolvePhotoScene(params, ctx) {
-  const b = createFootageBase('photo-scene', params, ctx, {allowed: ['media', 'move', 'zoom', 'focus', 'scrim', 'lines', 'align', 'title'], required: ['media'], minDuration: T.minDuration});
+  const b = createFootageBase('photo-scene', params, ctx, {allowed: ['media', 'move', 'zoom', 'focus', 'scrim', 'lines', 'align', 'title', 'enter', 'exit'], required: ['media'], minDuration: T.minDuration});
   const {check, canvas, safe, fps, start, end, duration, u, colors, theme} = b;
   const p = b.params;
   const media = localMedia(check, p.media, 'params.media');
@@ -116,17 +123,19 @@ function resolvePhotoScene(params, ctx) {
     const state = kenBurnsAt(move, Math.min(1, Math.max(0, (t - start) / duration)), {zoom, focus, canvas});
     samples.push({t: rt(t), scale: Math.round(state.scale * 1e5) / 1e5, x: r2(state.x) || 0, y: r2(state.y) || 0});
   }
-  const fadeIn = grammarDuration(ctx.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}), fadeOut = grammarDuration(ctx.grammar, 'exit', T.fade, {min: 0.2, max: 0.8});
+  const passage = mediaPassage(ctx, passageParams(check, p));
+  const fadeIn = passage.enter === 'fade' ? Math.min(duration / 3, grammarDuration(ctx.grammar, 'enter', T.fade, {min: 0.2, max: 0.8})) : 0;
+  const fadeOut = passage.exit === 'fade' ? Math.min(duration / 3, grammarDuration(ctx.grammar, 'exit', T.fade, {min: 0.2, max: 0.8})) : 0;
   b.events.push({id: `${b.id}-enter`, name: 'enter', time: rt(start + fadeIn), role: 'enter'});
 
   const block = lines.length ? {x: r2(x), y: r2(top), width: r2(width), height: r2(blockH)} : {x: 0, y: 0, width: canvas.width, height: canvas.height};
   // The photo and scrim bleed past the canvas, so a world camera's drift and breathing never show their edge.
-  const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed: u(64),
+  const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed: u(64), enter: passage.enter, exit: passage.exit,
     origin: {x: r2(focus.x * canvas.width), y: r2(focus.y * canvas.height)},
     scrimColor: colors.bg, rise: u(36), lineLand: T.lineLand,
     lineEase: grammarEase(ctx.grammar, 'power3.out', {props: ['y']}), fadeEase: grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']})};
   const model = b.finish(content, {rect: block, role: lines.length ? 'text' : 'decor', minTextPx: lines.length ? Math.min(...lines.map(line => line.size)) : null,
-    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
+    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: passage.enter === 'fade' ? 0 : 1}, exitTo: {opacity: passage.exit === 'fade' ? 0 : 1}, enterEase: 'power2.out', exitEase: 'power2.in'}});
   // Its own Ken Burns move is the rest motion: hold drift would expose the photo's edges.
   model.layout.drift = false;
   return model;
@@ -160,17 +169,12 @@ export function photoSceneView(model) {
   return {media, overlay};
 }
 
-/** Renderer-neutral ops: fades on both roots, the per-frame move on the photo, the text lines rising in. */
+/** Renderer-neutral ops: the entrance and exit on both roots, the per-frame move on the photo, the text lines rising in. */
 export function photoSceneTimeline(model) {
   const {id, start, end} = model;
   const c = model.content, m = model.motion;
   const ops = [];
-  for (const target of [`${id}-media`, `${id}-overlay`]) {
-    set(ops, target, start, {opacity: 0});
-    tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: 0}, {opacity: 1});
-    tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: 0});
-    set(ops, target, end, {opacity: 0});
-  }
+  mediaRootOps(ops, [`${id}-media`, `${id}-overlay`], model);
   for (const sample of c.samples) ops.push({type: 'set', target: `${id}-media`, time: Math.max(0, Math.round((sample.t - 0.0005) * 1e6) / 1e6), props: {x: sample.x, y: sample.y, scaleX: sample.scale, scaleY: sample.scale}});
   for (const line of c.lines) {
     const target = `${id}-line-${line.index}`;
@@ -179,6 +183,25 @@ export function photoSceneTimeline(model) {
     tw(ops, target, line.at, c.lineLand, c.lineEase, {y: c.rise}, {y: 0});
   }
   return ops;
+}
+
+/**
+ * Opacity ops for a media scene's roots: whole from its first frame on a cut
+ * (an opening or carried scene rests its opacity too, kit/core/modules.mjs),
+ * else a fade in; a fade out unless it leaves with a cut. Read from
+ * model.motion, so the opening and carry rules apply.
+ */
+export function mediaRootOps(ops, targets, model) {
+  const {start, end} = model;
+  const m = model.motion;
+  const from = Number.isFinite(m.enterFrom?.opacity) ? m.enterFrom.opacity : 0;
+  const to = Number.isFinite(m.exitTo?.opacity) ? m.exitTo.opacity : 0;
+  for (const target of targets) {
+    set(ops, target, start, {opacity: from});
+    if (from < 1 && m.enterDuration > 0) tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: from}, {opacity: 1});
+    if (to < 1 && m.exitDuration > 0) tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: to});
+    set(ops, target, end, {opacity: 0});
+  }
 }
 
 export const photoScene = {
@@ -192,7 +215,8 @@ export const photoScene = {
     scrim: 'none|bottom|left|full (default bottom with lines, full when centred, none without lines)',
     lines: '[{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each',
     align: 'left|center (default left)',
-    title: 'string ≤ 60, the photo\'s alt text (optional)'
+    title: 'string ≤ 60, the photo\'s alt text (optional)',
+    ...PASSAGE_PARAMS
   },
   events: ['enter', 'line-<i>'],
   timing: {minDuration: T.minDuration, leadIn: 0, leadOut: T.leadOut + 0.3, gaps: [],

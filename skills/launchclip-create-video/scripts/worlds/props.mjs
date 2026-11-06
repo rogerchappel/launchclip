@@ -568,6 +568,88 @@ const DEFS = {
     return [shadowUnder(k, x, y, 0.8, s), p.rect(x - 0.4 * s, y - 0.11 * s, 0.8 * s, 0.035 * s, pal.accent, {rx: 0.02 * s}), p.circle(x - 0.26 * s, y - 0.035 * s, 0.035 * s, pal.white, {}), p.circle(x + 0.26 * s, y - 0.035 * s, 0.035 * s, pal.white, {})];
   }),
 
+  // -- Household appliances and furniture (stand on the floor or a counter) --
+  fridge: P('fridge', FLOOR, 1.8, 0.75, (k, x, y, s) => {
+    const {p, pal} = k;
+    const w = 0.75 * s, h = 1.76 * s, x0 = x - w / 2, top = y - 0.04 * s - h;
+    const seam = mixColor('#000000', pal.white, 0.16);
+    const split = top + h * 0.34;
+    const out = [shadowUnder(k, x, y, 0.9, s),
+      p.rect(x0 + w * 0.08, y - 0.05 * s, w * 0.84, 0.05 * s, pal.metalShade, {stroke: false}),
+      p.rect(x0, top, w, h, pal.white, {rx: 0.05 * s}),
+      p.line(x0 + w * 0.02, split, x0 + w * 0.98, split, seam, Math.max(2, 0.01 * s / k.u)),
+      p.rect(x0 + w * 0.09, top + h * 0.1, 0.03 * s, h * 0.17, pal.metal, {rx: 0.015 * s}),
+      p.rect(x0 + w * 0.09, split + h * 0.05, 0.03 * s, h * 0.3, pal.metal, {rx: 0.015 * s}),
+      p.shade(x0, top, w, h, 'right', 0.2, {rx: 0.05 * s}),
+      p.sheen(x0, top, w, h * 0.06, 0.3)];
+    if (k.d.n >= 1) {
+      // A note and two magnets on the door.
+      out.push(p.rect(x0 + w * 0.42, split + h * 0.1, w * 0.36, h * 0.2, pal.cream, {stroke: false}),
+        p.line(x0 + w * 0.47, split + h * 0.15, x0 + w * 0.72, split + h * 0.15, pal.metalShade, 2),
+        p.line(x0 + w * 0.47, split + h * 0.2, x0 + w * 0.66, split + h * 0.2, pal.metalShade, 2),
+        p.circle(x0 + w * 0.6, split + h * 0.1, 0.025 * s, pal.accent, {stroke: false}),
+        p.circle(x0 + w * 0.7, top + h * 0.16, 0.03 * s, pal.primary, {stroke: false}));
+    }
+    return out;
+  }),
+  'washing-machine': P('washing machine', FLOOR, 0.85, 0.6, (k, x, y, s) => {
+    const {p, pal} = k;
+    const w = 0.6 * s, h = 0.85 * s, x0 = x - w / 2, top = y - h;
+    const r = 0.2 * s, cy = top + h * 0.58;
+    return [shadowUnder(k, x, y, 0.65, s),
+      p.rect(x0, top, w, h, pal.white, {rx: 0.03 * s}),
+      p.rect(x0, top, w, h * 0.16, pal.metalLight, {rx: 0.03 * s}),
+      p.rect(x0 + w * 0.08, top + h * 0.05, w * 0.3, h * 0.06, pal.metalShade, {rx: 0.01 * s, stroke: false}),
+      p.circle(x0 + w * 0.78, top + h * 0.08, 0.025 * s, pal.accent, {stroke: false}),
+      p.circle(x, cy, r, pal.metal, {}),
+      p.circle(x, cy, r * 0.78, lit(k) ? '#3a5b9a' : pal.glass ?? '#bfd9ea', {}),
+      p.path(`M${f(x - r * 0.62)} ${f(cy + r * 0.1)}Q${f(x)} ${f(cy + r * 0.45)} ${f(x + r * 0.62)} ${f(cy + r * 0.1)}L${f(x + r * 0.5)} ${f(cy + r * 0.45)}Q${f(x)} ${f(cy + r * 0.75)} ${f(x - r * 0.5)} ${f(cy + r * 0.45)}Z`, pal.primary, {stroke: false, opacity: 0.7}),
+      p.shade(x0, top, w, h, 'right', 0.18)];
+  }),
+  bookshelf: P('bookshelf', FLOOR, 1.8, 0.9, (k, x, y, s) => {
+    const {p, pal} = k;
+    const w = 0.9 * s, h = 1.8 * s, x0 = x - w / 2, top = y - h, t = 0.04 * s;
+    const out = [shadowUnder(k, x, y, 0.95, s), p.rect(x0, top, w, h, pal.woodShade, {}), p.rect(x0 + t, top + t, w - 2 * t, h - 2 * t, mixColor('#000000', pal.wood, 0.3), {stroke: false})];
+    const shelves = 4, gap = (h - t) / shelves;
+    const cols = [pal.primary, pal.accent, pal.cream, pal.primaryShade, pal.white];
+    for (let i = 0; i < shelves; i++) {
+      const base = top + t + gap * (i + 1) - t;
+      let bx = x0 + t * 1.5 + (i % 2 ? 0.05 * s : 0);
+      const filled = i === 2 ? 0.55 : 0.85;
+      let n = 0;
+      while (bx < x0 + w * filled) {
+        const bw = (0.035 + ((i * 7 + n * 3) % 4) * 0.008) * s, bh = gap * (0.62 + ((i + n * 5) % 3) * 0.1);
+        out.push(p.rect(bx, base - bh, bw, bh, cols[(i + n) % cols.length], {rx: 2 * k.u}));
+        bx += bw + 2 * k.u;
+        n++;
+      }
+      if (i === 2) out.push(...pottedPlant(k, x0 + w * 0.78, base, 0.22 * s, {kind: 'trail'}));
+      out.push(p.rect(x0, base, w, t, pal.wood, {stroke: false}));
+    }
+    out.push(p.shade(x0, top, w, h, 'right', 0.2));
+    return out;
+  }),
+  microwave: P('microwave', SURFACE, 0.3, 0.5, (k, x, y, s) => {
+    const {p, pal} = k;
+    const w = 0.5 * s, h = 0.3 * s, x0 = x - w / 2, top = y - h;
+    return [shadowUnder(k, x, y, 0.5, s),
+      p.rect(x0, top, w, h, pal.metalLight, {rx: 0.02 * s}),
+      p.rect(x0 + w * 0.05, top + h * 0.12, w * 0.66, h * 0.76, lit(k) ? '#3a3328' : pal.black, {rx: 0.01 * s}),
+      p.rect(x0 + w * 0.76, top + h * 0.14, w * 0.19, h * 0.16, '#9fd8a8', {stroke: false, glow: lit(k)}),
+      ...[0, 1, 2].map(i => p.circle(x0 + w * 0.855, top + h * (0.48 + i * 0.15), 0.012 * s, pal.metalShade, {stroke: false})),
+      p.shade(x0, top, w, h, 'right', 0.18)];
+  }),
+  toaster: P('toaster', SURFACE, 0.2, 0.28, (k, x, y, s) => {
+    const {p, pal} = k;
+    const w = 0.28 * s, h = 0.18 * s, x0 = x - w / 2, top = y - h;
+    return [shadowUnder(k, x, y, 0.3, s),
+      p.rect(x0, top, w, h, pal.metal, {rx: 0.04 * s}),
+      p.rect(x0 + w * 0.2, top - 0.012 * s, w * 0.22, 0.02 * s, pal.metalShade, {stroke: false}),
+      p.rect(x0 + w * 0.58, top - 0.012 * s, w * 0.22, 0.02 * s, pal.metalShade, {stroke: false}),
+      p.rect(x0 + w * 0.88, top + h * 0.3, w * 0.08, h * 0.16, pal.ink, {rx: 0.006 * s, stroke: false}),
+      p.sheen(x0, top, w, h * 0.3, 0.35)];
+  }),
+
   // -- Wall ----------------------------------------------------------------
   clock: P('wall clock', WALL, 0.35, 0.35, (k, x, y, s, anchor) => {
     const {p, pal} = k;

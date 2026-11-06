@@ -31,6 +31,7 @@ import { cardFillStyles, fieldStyle, panelFillPlan } from './backgrounds.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
+import { scenePassage } from './media-passage.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -553,7 +554,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: ridesPlate(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
