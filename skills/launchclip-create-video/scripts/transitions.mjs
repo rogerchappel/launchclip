@@ -105,6 +105,8 @@ const ADJACENT = 0.1;
 // World mode: the share of a fade the outgoing plate takes to clear (and the
 // incoming one to arrive), so the two overlap only near zero opacity.
 const WORLD_HANDOVER = 0.55;
+/** Plate modules that fill the whole frame with a picture (a camera push fades them in over the outgoing plate). */
+export const FULL_FRAME_PLATES = Object.freeze(['world', 'photo-scene']);
 /** Empty spans shorter than this (seconds) are covered by holding the previous plate. */
 export const HOLD_GAP = 0.5;
 
@@ -164,7 +166,7 @@ export function irisRadius(width, height) {
  * Tween = {prop: "opacity"|"x"|"y"|"scale"|"blur"|"iris", from, to, start, duration, ease}
  * where start is seconds relative to the transition start.
  */
-export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts', fromRect = null, toRect = null }) {
+export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts', fromRect = null, toRect = null, opaque = false }) {
   const type = transition?.type ?? 'cut';
   const d = Number(transition?.dur ?? 0);
   const direction = transition?.direction ?? 'left';
@@ -182,6 +184,10 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     // frame, so its magnified content never sits on top of the new scene.
     // The plates are transparent, so the two hand over in turn (out, then
     // in, meeting near zero) and two cards' text never shows at once.
+    // An incoming plate that fills the frame (a world, a photo plate) covers
+    // the outgoing one by itself: it fades in over it from early in the move
+    // and the outgoing plate stays until it is in, so the frame is never empty.
+    if (type === 'push' && opaque) return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.08, d * 0.42)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.5, d * 0.3)] };
     if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.1, d * 0.35)] };
     if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', 0, d * 0.45)] };
     return { type, duration: d, camera: true, in: [], out: [] };
@@ -337,7 +343,8 @@ export function sceneWindows(story) {
     if (!transition || typeof transition !== 'object') continue;
     // card-to-card maps the outgoing card's rect onto the incoming one's.
     const before = entry.plate ? adjacentPlate(entry) : null;
-    const tweens = transitionTweens(transition, transition.type === 'card-to-card' ? { ...options, fromRect: before ? sceneCardRect(before.scene, width, height) : null, toRect: sceneCardRect(entry.scene, width, height) } : options);
+    const own = { ...options, opaque: entry.plate && FULL_FRAME_PLATES.includes(entry.scene.module) };
+    const tweens = transitionTweens(transition, transition.type === 'card-to-card' ? { ...own, fromRect: before ? sceneCardRect(before.scene, width, height) : null, toRect: sceneCardRect(entry.scene, width, height) } : own);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
     if (tweens.camera) entry.transitionIn.camera = true;
     if (tweens.camera && transition.type === 'overview' && entry.plate) {

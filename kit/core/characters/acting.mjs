@@ -17,7 +17,9 @@
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
 
-export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09});
+export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09,
+  // Idle arms (styles whose geometry sets idleArms): a slow swing at the shoulder and a give at the elbow, and a slight sway of the body.
+  armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9});
 
 const rt = value => Math.round(value * 10000) / 10000;
 
@@ -93,6 +95,8 @@ export function sceneJoints(pose, {facing, seated, geometry, holds = null, param
 export function stateJoints(state, actor) {
   const seated = actor.seated && !state.standing;
   const j = sceneJoints(state.pose, {...actor, facing: state.facing ?? actor.facing, seated});
+  // An aimed point (characters/aim.mjs): the pointing arm's own angles.
+  if (state.aim) { j[`arm${state.aim.side}`] = state.aim.arm; j[`fore${state.aim.side}`] = state.aim.fore; }
   if (actor.gaze) { j.gazeX = state.gaze?.x ?? 0; j.gazeY = state.gaze?.y ?? 0; j.gazeScale = state.gaze?.scale ?? 1; }
   return j;
 }
@@ -209,6 +213,27 @@ export function actingOps(ops, actor) {
     const from = {rotation: k % 2 ? A.swayDeg : 0}, to = {rotation: k % 2 ? 0 : A.swayDeg};
     tw(ops, `${cid}-headidle`, rt(t), A.sway, 'sine.inOut', from, to);
     tw(ops, `${cid}-hbidle`, rt(t), A.sway, 'sine.inOut', from, to);
+  }
+  // Idle arms and body (geometry.idleArms): each arm swings on its own
+  // rhythm, so a figure drawn in lines never holds dead still. These move
+  // wrappers inside the posed joints (armidle, foreidle), so a pose change
+  // never fights them; they are absolute tweens, so any frame seeks alike.
+  if (actor.geometry?.idleArms) {
+    const loop = (target, period, amount, offset) => {
+      for (let t = start + offset, k = 0; t + period <= end; t += period, k++) {
+        tw(ops, target, rt(t), period, 'sine.inOut', {rotation: k % 2 ? amount : 0}, {rotation: k % 2 ? 0 : amount});
+      }
+    };
+    loop(`${cid}-armidle-l`, A.armSway, A.armDeg, p * 0.7);
+    loop(`${cid}-armidle-r`, A.armSway * 1.13, A.armDeg, 0.35 + p * 0.5);
+    loop(`${cid}-foreidle-l`, A.foreSway, A.foreDeg, 0.2 + p * 0.9);
+    loop(`${cid}-foreidle-r`, A.foreSway * 1.09, A.foreDeg, 0.6 + p * 0.4);
+    // The body leans out from upright, then sways side to side about it.
+    const half = A.bodySway / 2;
+    if (start + p + half <= end) tw(ops, `${cid}-breath`, rt(start + p), half, 'sine.out', {rotation: 0}, {rotation: A.bodyDeg});
+    for (let t = start + p + half, k = 0; t + A.bodySway <= end; t += A.bodySway, k++) {
+      tw(ops, `${cid}-breath`, rt(t), A.bodySway, 'sine.inOut', {rotation: k % 2 ? -A.bodyDeg : A.bodyDeg}, {rotation: k % 2 ? A.bodyDeg : -A.bodyDeg});
+    }
   }
   // Blinks
   for (let t = start + 0.9 + p * 1.6; t + 0.2 < end; t += A.blinkEvery + (p - 0.5) * 0.6) {

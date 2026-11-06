@@ -3165,8 +3165,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
-| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `character-cameo` | `character`, `shot?` wide/medium/close, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. At medium or close its head sits at the top of its area and its body runs off the frame's bottom edge (no floor needed). `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 | `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
 ### The kit (`kit/core/characters/`)
@@ -3183,7 +3183,10 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   white cane, forearm crutch, prosthetic leg or arm). A wheelchair seats the
   character in any set; a cane or crutch keeps its arm at rest
   (`acting.mjs sceneJoints`). body measurements (`rigGeometry`), the named poses
-  (`stand point wave slump type think cheer shrug walk sit`) as joint angles,
+  (`stand point wave slump type think cheer shrug walk sit look stretch`, and
+  the acting poses `arms-crossed hands-on-hips facepalm lean-in point-self`)
+  as joint angles (a style's geometry may seat the legs and arms its own way:
+  `sitLegs`, `sitArms`),
   and the named expressions (`neutral happy delighted frustrated confused
   surprised focused`) as face parts. Positive arm and leg angles swing a limb
   away from the body on its own side.
@@ -3216,7 +3219,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `outlined` | `style-outlined.mjs` | comic ink: a heavy outline and a hard cel shadow away from the key light |
   | `paper` | `style-paper.mjs` | cut paper: hand-cut edges, offset shadows, a fine grain, no outlines |
   | `soft-shade` | `style-soft-shade.mjs` | gradients from the lit side to the shade, no hard outline |
-  | `stick` | `style-stick.mjs` | a stick figure: coloured lines, a round head with the character's own hair and face |
+  | `stick` | `style-stick.mjs` | a stick figure: coloured lines, a round head with the character's own hair and face (hair framed around the face, locks showing under any headwear, facial hair in the hair's colour; seated legs apart with the shins down; idle arms) |
   | `stick-classic` | `style-stick.mjs` | the classic black-and-white stick figure: one ink line per limb, a white head, hair and face in line art |
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
@@ -3277,13 +3280,46 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   plate that is already there. `params.enter` / `params.exit` (fade | cut)
   override it; anything else keeps the default fade. The model carries
   `content.entry` / `content.exit` ({type, dur?} or null).
-- **Riding a world plate (world-camera mode).** A cast-scene or
-  character-cameo on a higher track whose window is a track-0 `world`
-  scene's window rides it (`ridesPlate`, `rideWorldPlates` in
-  camera-world.mjs). Both compilers draw it inside the camera at that plate's
-  placement, just above it, with the plate's window (held through the next
-  move) and transition tweens, and no overlay parallax. Its entry and exit
-  are cuts, so the camera carries the cast between plates.
+- **Riding a plate.** A cast-scene or character-cameo on a higher track
+  whose window lies inside a track-0 scene's window (any module: a world, a
+  photo plate, a card) rides it (`rideOf`, `ridesPlate`, `rideWorldPlates`
+  in camera-world.mjs). With a camera (world mode, or a cuts story with a
+  camera move) both compilers draw it inside the camera at that plate's
+  placement, just above it, with no overlay parallax, so pans, orbits,
+  whip-pans and pushes carry it with its world. Where it shares the plate's
+  start (world mode, or a camera move in) it takes the plate's start and
+  transition-in tweens; where it shares the plate's end (world mode, or a
+  camera move out) it takes the plate's render end (held through the next
+  move) and transition-out tweens; those sides are cuts (`rideOf().start` /
+  `.end`, passed as `ctx.ride`). A rider inside the window keeps its own
+  entrance. In cuts mode a rider also takes its plate's zooms (the same
+  wrappers, the same keys).
+- **Shot framing** (`framing.mjs`). `params.shot` wide | medium | close
+  (cast-scene and character-cameo): wide is the set's layout; medium (knees
+  up) and close (chest up) are the wide layout seen closer with no camera
+  move. `frameCast` scales the cast (capped so each head fits its share of
+  the safe width), re-spaces it inside the safe zone, keeps the head tops
+  inside the safe zone and every face above the caption band, and carries
+  the set's furniture by the same zoom (`content.shot.set`, a transform with
+  origin 0 0; a world the scene draws itself comes closer by a third of
+  that). `fitShot` then moves a character in, or shrinks the shot, until
+  every pose's reach is inside the safe zone. A framed actor's reach is cut
+  at the frame's bottom edge (`actor.cut`). A 9:16 cast-scene in standing,
+  phone, kitchen-counter, sofa or park-bench defaults to medium
+  (`defaultShot`), or wide when someone walks; everything else defaults to wide. A cue's `shot` on a
+  cast-scene character is a punch-in: a hard cut (`set` op on
+  `<scene>-punch`) to that character at that shot, head centred; a cue at
+  the scene's own shot cuts back (`content.shot.punches`). Refused on a set
+  playing a video screen.
+- **Pointing** (`aim.mjs`). A `point` state aims the arm from the shoulder
+  at its target (another character's chest, a point, a named place) and, by
+  bending the elbow, stops the fingertip before 46 % of the gap to another
+  character (two people pointing at each other never cross arms) and inside
+  the safe zone; the state carries `aim: {side, arm, fore, tip}`.
+- **Idle life.** A style whose geometry sets `idleArms` (stick) also swings
+  each arm at the shoulder and the elbow (`armidle-*`, `foreidle-*`
+  wrappers inside the posed joints) and sways the body a little, on
+  absolute tweens, so a figure drawn in lines never holds still.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;

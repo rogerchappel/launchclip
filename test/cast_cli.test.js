@@ -191,12 +191,16 @@ test("the cast gate fails a limb off the canvas or out of the safe zone, and a c
   const { castPlacement } = await import("@launchclip/core/characters/placement.mjs");
   const brand = example().brand;
   const short = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand, cast: { characters: [{ id: "maya" }, { id: "theo" }] }, scenes });
-  const phone = (id, start, cast) => ({ id, module: "cast-scene", start, end: start + 4, params: { set: "phone", cast } });
-  // Facing outward, a point on the right-hand character runs off a 9:16 canvas.
-  const outward = short([phone("a", 0, [{ id: "theo" }, { id: "maya", facing: "right", cues: [{ at: 1, pose: "point" }] }])]);
+  // The wide shot: the whole figure on the set's floor (a framed shot fits itself to the safe zone).
+  const phone = (id, start, cast) => ({ id, module: "cast-scene", start, end: start + 4, params: { set: "phone", shot: "wide", cast } });
+  // Facing outward, a lean on the right-hand character runs off a 9:16 canvas.
+  const outward = short([phone("a", 0, [{ id: "theo" }, { id: "maya", facing: "right", cues: [{ at: 1, pose: "lean-in" }] }])]);
   const off = castGate(resolveStory(outward, { words: [] }));
   assert.equal(off.status, "failed");
-  assert.match(off.findings.map((f) => f.detail).join("\n"), /maya in a reaches off the canvas \(x \d+; canvas 1080x1920\) in stand, point facing right/);
+  assert.match(off.findings.map((f) => f.detail).join("\n"), /maya in a reaches off the canvas \(x \d+; canvas 1080x1920\) in stand, lean-in facing right/);
+  // A point aims its arm (characters/aim.mjs): pointing outward, the elbow bends to keep the hand inside the safe zone.
+  const pointing = short([phone("a", 0, [{ id: "theo" }, { id: "maya", facing: "right", cues: [{ at: 1, pose: "point" }] }])]);
+  assert.deepEqual(castGate(resolveStory(pointing, { words: [] })).findings, []);
   // Inward (the default) it stays on the canvas.
   const inward = short([phone("a", 0, [{ id: "theo" }, { id: "maya", cues: [{ at: 1, pose: "point" }] }])]);
   assert.deepEqual(castGate(resolveStory(inward, { words: [] })).findings, []);

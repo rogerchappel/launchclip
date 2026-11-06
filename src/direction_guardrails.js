@@ -384,15 +384,15 @@ export function densityGate(story, { rects = [], profile } = {}) {
   return gateResult(findings);
 }
 
-/** A cast scene's shot: its set, cast and what each does (poses and actions; swapping places is not a new shot), and the world it stands in. */
+/** A cast scene's shot: its set, framing (wide, medium, close), cast and what each does (poses and actions; swapping places is not a new shot), and the world it stands in. */
 function shotOf(model) {
   const actors = [...model.content.actors].sort((a, b) => a.id.localeCompare(b.id));
-  return { set: model.content.set ?? "cameo", cast: actors.map((actor) => actor.id).join("+"), poses: actors.map((actor) => `${actor.id}:${[...new Set(actor.states.map((state) => state.action ?? state.pose))].join(">")}`).join(" "), world: model.content.world ? `${model.content.world.kind}/${model.content.world.time}` : null };
+  return { set: model.content.set ?? "cameo", framing: model.content.shot?.name ?? "wide", cast: actors.map((actor) => actor.id).join("+"), poses: actors.map((actor) => `${actor.id}:${[...new Set(actor.states.map((state) => state.action ?? state.pose))].join(">")}`).join(" "), world: model.content.world ? `${model.content.world.kind}/${model.content.world.time}` : null };
 }
 
 /**
  * Variety (docs/DIRECTION_GUARDRAILS.md §5): consecutive cast scenes with
- * the same set, cast, poses and actions are the same shot again (even over a
+ * the same set, framing, cast, poses and actions are the same shot again (even over a
  * different world) — an error; the same set and cast more than three times
  * in a video is a warning.
  */
@@ -402,7 +402,7 @@ export function varietyGate(story) {
   const findings = [];
   for (let i = 1; i < shots.length; i += 1) {
     const a = shots[i - 1], b = shots[i];
-    if (a.set === b.set && a.cast === b.cast && a.poses === b.poses) findings.push({ rule: "repeat-shot", severity: "error", at: b.start, ids: [a.id, b.id], detail: `${b.id} repeats ${a.id}'s shot (${b.set}, ${b.poses})${a.world !== b.world ? ` over a new world (${a.world} → ${b.world})` : ""}; change the set, who is in it, their poses or what they do` });
+    if (a.set === b.set && a.framing === b.framing && a.cast === b.cast && a.poses === b.poses) findings.push({ rule: "repeat-shot", severity: "error", at: b.start, ids: [a.id, b.id], detail: `${b.id} repeats ${a.id}'s shot (${b.set}, ${b.poses})${a.world !== b.world ? ` over a new world (${a.world} → ${b.world})` : ""}; change the set, who is in it, their poses or what they do` });
   }
   const counts = new Map();
   for (const shot of shots) counts.set(`${shot.set}|${shot.cast}`, [...(counts.get(`${shot.set}|${shot.cast}`) ?? []), shot.id]);

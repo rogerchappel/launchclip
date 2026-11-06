@@ -256,6 +256,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   };
 
   const models = [];
+  const modelById = new Map();
   const tailFrames = [];
   const sourceDurations = await videoDurations(story, sourceDir);
   for (const entry of layers) {
@@ -267,6 +268,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (tail) tailFrames.push(tail.frame);
     const out = tail ? { ...built, motion: tail.motion } : built;
     models.push(model);
+    modelById.set(entry.id, model);
     const depth = subjectNeeded ? sceneLayerOf(entry.scene, model) : { layer: 'front' };
     if (depth.reason) warnings.push(`${entry.scene.id}: ${depth.reason}`);
     sceneLayers.push(depth.layer);
@@ -312,7 +314,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // Zooms inside the shot (kit/core/zooms.mjs): in world mode they are
     // camera moves; in cuts mode a scale (about the centre) over a translate
     // wraps the layer, the same math.
-    const zoom = !isolate && entry.plate && !worldMode ? shotZooms(story, entry, model.zoomRects) : null;
+    // A cast riding a plate (camera-world.mjs rideOf) takes the plate's zooms.
+    const zoomEntry = entry.plate ? entry : entry.rides ? windows.scenes.find((item) => item.id === entry.rides) : null;
+    const zoomRects = entry.plate ? model.zoomRects : modelById.get(entry.rides)?.zoomRects;
+    const zoom = !isolate && zoomEntry && !worldMode ? shotZooms(story, zoomEntry, zoomRects) : null;
+    if (!entry.plate && zoom) zoom.warnings = [];
     if (zoom?.warnings.length) warnings.push(...zoom.warnings);
     const zooming = zoomOps(zoom?.keys, { width: W, height: H });
     if (zooming.length && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the shot's zooms`);

@@ -38,8 +38,17 @@ function inkedStick(color, ink, w, from, to) {
 export function stickGeometry(params) {
   const g = rigGeometry(params);
   const w = WEIGHT[params.build] ?? 11;
-  return {...g, w, headR: HEAD_R, headCy: -HEAD_R * 0.96, armX: w * 0.4, armY: -g.torso + 8, legX: w * 0.55, neckY: -g.torso - g.neck * 0.7};
+  return {...g, w, headR: HEAD_R, headCy: -HEAD_R * 0.96, armX: w * 0.4, armY: -g.torso + 8, legX: w * 0.55, neckY: -g.torso - g.neck * 0.7,
+    // Seated: the hips are one point, so the thighs come forward and apart
+    // (foreshortened) and the shins drop straight to the floor, hands on the
+    // knees, rather than the toon's knees-in (which crosses a stick's shins).
+    sitLegs: SIT_LEGS, sitArms: SIT_ARMS,
+    // Idle arm sway (acting.mjs): the arms are lines, so they must never hold dead still.
+    idleArms: true};
 }
+
+const SIT_LEGS = Object.freeze({legL: 24, shinL: -11, legR: 24, shinR: -11});
+const SIT_ARMS = Object.freeze({armL: 16, foreL: -12, armR: 16, foreR: -12});
 
 /** Paper for the classic stick figure's head and skirts (the line style's paper). */
 const PAPER = '#fbf9f4';
@@ -51,7 +60,8 @@ const PAPER = '#fbf9f4';
  */
 export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}, {mono = false} = {}) {
   const g = stickGeometry(params);
-  const c = toonColors(colors);
+  // Facial hair reads in the hair's colour on a small round head.
+  const c = {...toonColors(colors), stubble: mixColor(colors.hair, colors.skinShade ?? colors.skin, 0.72)};
   const P = mono ? linePen(c, {id}) : flatPen(c);
   const ink = c.outline;
   // Classic: every stick is one ink line; coloured: an ink edge round the colour of what covers it.
@@ -76,15 +86,15 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
     const finger = joint(ctx, `finger-${side}`, 0, handY + g.hand * 0.4, {}, [line(`M0 0L0 ${r1(g.hand * 1.2)}`, ink, w * 0.6)]);
     const fingerWrap = isStatic ? (j[`finger${s}`] ? finger : null) : el('g', `${id}-fingerwrap-${side}`, {opacity: j[`finger${s}`]}, [finger]);
     const aid = aidSide(params, facing) === side ? caneLength(toonG) : 0;
-    const fore = joint(ctx, `fore-${side}`, 0, g.upperArm, {rotation: j[`fore${s}`]}, [
+    const fore = joint(ctx, `fore-${side}`, 0, g.upperArm, {rotation: j[`fore${s}`]}, [joint(ctx, `foreidle-${side}`, 0, 0, {}, [
       ...stick(long ? top : skin, ink, w, 0, g.foreArm),
       ...(fingerWrap ? [fingerWrap] : []),
       ...(mono ? [] : [el('ellipse', null, null, [], {cx: 0, cy: r1(handY), rx: r1(w * 1.15), ry: r1(w * 1.2), fill: skin, stroke: ink, strokeWidth: EDGE})]),
       ...(aid ? [group([group(heldAid(ctx, aid / 0.8, -g.foreArm * 0.5), {transform: 'scale(0.8 0.8)'})], {transform: `translate(0 ${r1(handY)})`})] : []),
       ...(props?.[side] ? [group(props[side], {transform: `translate(0 ${r1(handY)})`})] : [])
-    ]);
+    ])]);
     const upper = long || params.outfit.top === 'tank' ? stick(params.outfit.top === 'tank' ? skin : top, ink, w, 0, g.upperArm) : [...stick(skin, ink, w, 0, g.upperArm), ...stick(top, ink, w + 2, 0, g.upperArm * 0.42)];
-    return joint(ctx, `arm-${side}`, side === 'l' ? -g.armX : g.armX, g.armY, {rotation: j[`arm${s}`], y: j.shoulderY}, [...upper, fore], {mirror});
+    return joint(ctx, `arm-${side}`, side === 'l' ? -g.armX : g.armX, g.armY, {rotation: j[`arm${s}`], y: j.shoulderY}, [joint(ctx, `armidle-${side}`, 0, 0, {}, [...upper, fore])], {mirror});
   };
 
   // Legs: hip at the base of the spine.
@@ -114,11 +124,11 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   // The circle turns as the toon head would: the gaze is measured on the toon egg.
   const headKids = turnJoint(ctx, j, gaze, [
     asHead(el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: mono ? PAPER : skin, stroke: ink, strokeWidth: 6})),
-    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...(covers(params) ? [] : hairFront(ctx)), ...backView(ctx, turns, () => backOfHead(ctx)), ...headwear(ctx)])
+    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...(covers(params) ? [] : hairFront(ctx)), ...backView(ctx, turns, () => backOfHead(ctx)), ...hairPeek(ctx), ...headwear(ctx)])
   ], sx);
   const tilt = {rotation: j.head, y: j.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : [onHead(hairBack(ctx))]);
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : [onHead(stickHairBack(ctx))]);
   const spine = stick(top, ink, w + 6, -g.torso + 2, -6);
   const torsoKids = [
     joint(ctx, 'hb', 0, g.neckY, tilt, [backIdle]),
@@ -134,6 +144,45 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
   const ground = mono ? line('M-90 4L90 4', ink, 4, {opacity: 0.35}) : el('ellipse', null, null, [], {cx: 0, cy: 4, rx: 110, ry: 14, fill: mixColor('#000000', c.skin, 1), opacity: 0.12});
   return group([...asShadow([ground]), ...chair, body]);
+}
+
+// Headwear that leaves the hair showing on its own (a band or a skullcap).
+const OPEN_HEADWEAR = new Set(['headband', 'headphones', 'kippah']);
+// Hair that has nothing to show under a hat.
+const NO_PEEK = new Set(['bald', 'headscarf']);
+
+/**
+ * Hair showing under headwear: locks at the temples, in front of the ears and
+ * below the brim, so a cap never hides the hair's colour (on a small round
+ * head the colour is what tells two people apart). Head frame (toon egg).
+ */
+export function hairPeek(ctx) {
+  const {g, p, P} = ctx;
+  if (!p.headwear || OPEN_HEADWEAR.has(p.headwear) || NO_PEEK.has(p.hair.style) || p.headwear === 'turban') return [];
+  const {rx, cy} = g.head;
+  const long = ['long', 'wavy', 'shoulder', 'bob', 'braids', 'locs', 'pigtails', 'ponytail'].includes(p.hair.style);
+  const drop = long ? 64 : 26;
+  return [-1, 1].map(sx => P.shape(`M${r1(sx * (rx - 30))} ${cy - 40}C${r1(sx * (rx + 4))} ${cy - 46} ${r1(sx * (rx + 16))} ${cy - 20} ${r1(sx * (rx + 12))} ${cy + drop}C${r1(sx * (rx + 2))} ${cy + drop - 14} ${r1(sx * (rx - 8))} ${cy - 4} ${r1(sx * (rx - 22))} ${cy - 22}Z`, 'hair'));
+}
+
+/**
+ * Hair behind the head. Braids and locs hang from the temples down past the
+ * shoulders on each side, framing the face, rather than as one block behind
+ * the whole head (which reads as hair over the face on a stick figure).
+ */
+export function stickHairBack(ctx) {
+  const {g, p, P} = ctx;
+  if (!['braids', 'locs'].includes(p.hair.style)) return hairBack(ctx);
+  const {rx, ry, cy} = g.head;
+  const top = cy - ry;
+  const locs = p.hair.style === 'locs';
+  const fat = locs ? 20 : 15, len = locs ? 150 : 190, per = locs ? 3 : 4;
+  const strands = [];
+  for (const sx of [-1, 1]) for (let i = 0; i < per; i++) {
+    const x = sx * (rx * 0.6 + (i * (rx * 0.4 + 12)) / (per - 1));
+    strands.push(...P.strand(`M${r1(x)} ${cy - 30}L${r1(x + sx * (10 + i * 6))} ${cy + len - i * 12}`, 'hair', fat));
+  }
+  return [P.shape(`M${-rx - 14} ${cy}C${-rx - 20} ${top - 34} ${rx + 20} ${top - 34} ${rx + 14} ${cy}Z`, 'hair'), ...strands];
 }
 
 export function stickHeight(params) {

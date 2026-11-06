@@ -508,8 +508,20 @@ The finish gates fail these, so plan for them from the first draft (design:
     it, pointing up or reacting.
   - No shot repeats back to back. Moving the same pair to a new background is
     not a new shot.
-  - In 9:16: card in the top band, cast in the lower half on the world's
-    ground, captions between them, and at most two seated characters.
+  - In 9:16: card in the top band, cast framed at medium (knees up, the
+    default for people sets) below it with captions over their bodies, never
+    their faces, and at most two seated characters.
+- **Frame like an animated short.** `params.shot` wide | medium | close on a
+  cast-scene or character-cameo frames the cast with no camera move, faces
+  readable on a phone, inside the safe zone and above the caption band. Open
+  wide to set the place, play the exchange at medium, cut close on the
+  reaction: a cue `{at, shot: "close"}` cuts in on that character and
+  `{at, shot: "medium"}` cuts back. Use shot for closeness, not zooms.
+  - Act the argument with poses: arms-crossed, hands-on-hips, facepalm,
+    lean-in, point-self, shrug. `point-at` aims at the other character's chest
+    and stops short, so two people pointing at each other never cross arms.
+  - Characters ride their plate through every camera move (pan, orbit,
+    whip-pan, push), a cameo over a photo plate too.
 
 Author `storyboard.json` from
 [references/storyboard-modules.md](storyboard-modules.md). It is

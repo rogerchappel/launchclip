@@ -229,7 +229,7 @@ test('in world mode a world plate draws a bleed past its frame, and a cast in it
   const {worldAnchors} = await import('@launchclip/core/worlds/index.mjs');
   const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}};
   const plate = {id: 'street', module: 'world', start: 0, end: 4, params: {kind: 'city-street', time: 'day'}};
-  const cast = {id: 'pair', module: 'cast-scene', track: 1, start: 0, end: 4, params: {set: 'phone', cast: [{id: 'maya'}]}};
+  const cast = {id: 'pair', module: 'cast-scene', track: 1, start: 0, end: 4, params: {set: 'phone', shot: 'wide', cast: [{id: 'maya'}]}};
   const story = camera => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 4}, brand, camera, cast: {characters: [{id: 'maya'}]}, scenes: [plate, cast]});
   const world = story({mode: 'world'}), cuts = story({mode: 'cuts'});
   assert.deepEqual(plateBleed(world), {x: 65, y: 115});
