@@ -26,8 +26,8 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card"];
-const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card"];
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto", "seam"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
@@ -1602,8 +1602,11 @@ export const LAYOUT_SIDES = Object.freeze({ framed: ["left", "right", "top", "bo
 export const LAYOUT_SHIFT = 0.5;
 // Room treatments for a section's `room`.
 export const SECTION_ROOMS = Object.freeze({ dim: Object.freeze({ dim: 0.55 }), replace: Object.freeze({ hide: true }) });
+// A stacked section's presenter window as a share of the canvas height
+// (`share`): half by default; a stacked talking head gives the panel more.
+export const STACKED_SHARE = Object.freeze({ default: 0.5, min: 0.35, max: 0.6 });
 
-const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "transition"]);
+const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "share", "transition"]);
 const SECTION_HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 /**
@@ -1636,6 +1639,10 @@ export function validateSections(story, { err, warn = () => {} } = {}) {
     if (section.ring !== undefined && !(typeof section.ring === "number" && section.ring >= 0 && section.ring <= 24)) err(`${path}.ring must be 0–24 px`);
     if (section.room !== undefined && !ROOM_MODES.includes(section.room)) err(`${path}.room must be one of ${ROOM_MODES.join(", ")}`);
     if (section.zoom !== undefined && !(typeof section.zoom === "number" && section.zoom >= 1 && section.zoom <= 1.6)) err(`${path}.zoom must be 1–1.6`);
+    if (section.share !== undefined) {
+      if (section.layout !== "stacked") err(`${path}.share applies only to stacked`);
+      else if (!(typeof section.share === "number" && section.share >= STACKED_SHARE.min && section.share <= STACKED_SHARE.max)) err(`${path}.share must be ${STACKED_SHARE.min}–${STACKED_SHARE.max} (the presenter's share of the height)`);
+    }
     if (section.transition !== undefined) {
       const transition = section.transition;
       if (!isObject(transition) || !SECTION_TRANSITIONS.includes(transition.type)) err(`${path}.transition must be {type: ${SECTION_TRANSITIONS.map((type) => `"${type}"`).join(" | ")}, dur?}`);
@@ -1702,6 +1709,7 @@ export function storySections(story) {
       ringColor: colors.primary ?? "#ffffff",
       room: section.room ?? "keep",
       zoom: typeof section.zoom === "number" ? section.zoom : 1,
+      share: section.layout === "stacked" && typeof section.share === "number" ? section.share : STACKED_SHARE.default,
       transition: { type: section.transition?.type ?? "layout-shift", dur: Number(section.transition?.dur ?? LAYOUT_SHIFT) }
     }))
     .filter((section) => section.end > section.start + EPS)
@@ -1728,7 +1736,7 @@ export function layoutSpans(story) {
   if (!sections.length) return null;
   const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
-  const full = { id: null, layout: "full", side: null, panel: null, ring: 0, zoom: 1, room: "keep", transition: { type: "layout-shift", dur: LAYOUT_SHIFT } };
+  const full = { id: null, layout: "full", side: null, panel: null, ring: 0, zoom: 1, share: STACKED_SHARE.default, room: "keep", transition: { type: "layout-shift", dur: LAYOUT_SHIFT } };
   const spans = [];
   let clock = 0;
   for (const section of sections) {
@@ -1737,7 +1745,8 @@ export function layoutSpans(story) {
     clock = section.end;
   }
   if (clock < duration - EPS) spans.push({ ...full, start: clock, end: duration });
-  const key = (span) => (span.layout === "full" ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom]));
+  // A full span with a close-up (zoom) is a layout of its own.
+  const key = (span) => (span.layout === "full" && !(span.zoom > 1) ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom, span.share]));
   const boundaries = [];
   spans.forEach((span, index) => {
     span.shift = null;

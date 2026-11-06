@@ -7,8 +7,12 @@
 //   split-left    reframed onto the left side         a brand panel on the right
 //   split-right   reframed onto the right side        a brand panel on the left
 //   framed        inset in a rounded frame            the rest of the canvas
-//   stacked       bottom (or top) half, 9:16 only     the other half
+//   stacked       bottom (or top) `share` of the      the rest (above or below)
+//                 height (half by default), 9:16 only
 //   insert        hidden; the voice continues         the full canvas
+//
+// A full section with a `zoom` above 1 is a close-up: the head is framed in
+// the middle of the canvas at that scale (a punch-in held for the section).
 //
 // The presenter is reframed by the base camera (the same transform punch-in
 // uses, kit/core/catalog-c.mjs cameraOps): the head, measured from the matte
@@ -37,9 +41,9 @@
 import { captionsOverlayOf } from "./captions.mjs";
 import { captionBandAt, profileGeometry } from "./layout-check.mjs";
 import { sourceTimeAt, subjectContext } from "./subject-layer.mjs";
-import { SECTION_ROOMS, layoutSpans, sceneSection, storyBase, storySections } from "./story.mjs";
+import { SECTION_ROOMS, STACKED_SHARE, layoutSpans, sceneSection, storyBase, storySections } from "./story.mjs";
 
-export { FOOTAGE_LAYOUTS, LAYOUT_SHIFT, LAYOUT_SIDES, PANEL_ROLES, ROOM_MODES, SECTION_ROOMS, SECTION_TRANSITIONS, layoutSpans, sceneSection, storySections, validateSections } from "./story.mjs";
+export { FOOTAGE_LAYOUTS, LAYOUT_SHIFT, LAYOUT_SIDES, PANEL_ROLES, ROOM_MODES, SECTION_ROOMS, SECTION_TRANSITIONS, STACKED_SHARE, layoutSpans, sceneSection, storySections, validateSections } from "./story.mjs";
 
 export const LAYOUT_FRAME = "lc-layout-frame";
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
@@ -47,21 +51,22 @@ const EPS = 1e-6;
 
 /**
  * The presenter's window and the panel for a layout on a canvas.
+ * options: {share} (stacked: the presenter's share of the height).
  * → {window: rect, radius, panel: rect | null} (px)
  */
-export function layoutGeometry(layout, side, canvas) {
+export function layoutGeometry(layout, side, canvas, { share = STACKED_SHARE.default } = {}) {
   const W = canvas.width, H = canvas.height;
   const portrait = H > W;
   const gutter = Math.round(0.04 * Math.min(W, H));
   const radius = Math.round(0.03 * Math.min(W, H));
   const rect = (x, y, width, height) => ({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
   // The presenter's share of the width in a split.
-  const share = portrait ? 0.5 : 0.46;
+  const splitShare = portrait ? 0.5 : 0.46;
   switch (layout) {
-    case "split-left": { const w = Math.round(W * share); return { window: rect(0, 0, w, H), radius: 0, panel: rect(w, 0, W - w, H) }; }
-    case "split-right": { const w = Math.round(W * share); return { window: rect(W - w, 0, w, H), radius: 0, panel: rect(0, 0, W - w, H) }; }
+    case "split-left": { const w = Math.round(W * splitShare); return { window: rect(0, 0, w, H), radius: 0, panel: rect(w, 0, W - w, H) }; }
+    case "split-right": { const w = Math.round(W * splitShare); return { window: rect(W - w, 0, w, H), radius: 0, panel: rect(0, 0, W - w, H) }; }
     case "stacked": {
-      const h = Math.round(H / 2);
+      const h = Math.round(H * Math.min(STACKED_SHARE.max, Math.max(STACKED_SHARE.min, Number(share) || STACKED_SHARE.default)));
       return side === "top" ? { window: rect(0, 0, W, h), radius: 0, panel: rect(0, h, W, H - h) } : { window: rect(0, H - h, W, h), radius: 0, panel: rect(0, 0, W, H - h) };
     }
     case "framed": {
@@ -126,9 +131,9 @@ export function sceneLayoutAt(story, start, end = start) {
 function sectionLayout(story, section) {
   if (!section) return null;
   const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
-  const geometry = layoutGeometry(section.layout, section.side, canvas);
+  const geometry = layoutGeometry(section.layout, section.side, canvas, { share: section.share });
   const captions = (story.overlays ?? []).some((overlay) => overlay?.type === "captions");
-  const captionBand = captionZone(section.layout, section.side, canvas, storyCaptionBand(story, canvas)) ?? undefined;
+  const captionBand = captionZone(section.layout, section.side, canvas, storyCaptionBand(story, canvas), { share: section.share, position: captionsOverlayOf(story)?.position }) ?? undefined;
   return { section: section.id, layout: section.layout, side: section.side, presenter: geometry.window, panel: geometry.panel, safe: panelSafeArea(geometry.panel, canvas, { captions, captionBand }), color: section.panel };
 }
 
@@ -136,12 +141,19 @@ function sectionLayout(story, section) {
  * Where the captions sit in a layout: on the presenter's side. The caption
  * band (px) narrows to the presenter's window, a gutter in from its edges,
  * and moves up or down into the window when it would fall outside it; the
- * captions wrap within it. → rect, or null where the band is unchanged
- * (full, insert, or a window the band already sits inside).
+ * captions wrap within it. With the captions at the "seam" (options.position)
+ * a stacked section centres the band on the line between the panel and the
+ * presenter instead, across the full band width. options: {share, position}.
+ * → rect, or null where the band is unchanged (full, insert, or a window the
+ * band already sits inside).
  */
-export function captionZone(layout, side, canvas, band) {
+export function captionZone(layout, side, canvas, band, { share, position } = {}) {
   if (!band || layout === "full" || layout === "insert" || !layout) return null;
-  const { window: win } = layoutGeometry(layout, side, canvas);
+  const { window: win } = layoutGeometry(layout, side, canvas, { share });
+  if (position === "seam" && layout === "stacked") {
+    const seam = side === "top" ? win.y + win.height : win.y;
+    return { x: round6(band.x), y: round6(seam - band.height / 2), width: round6(band.width), height: round6(band.height) };
+  }
   const gutter = Math.round(0.04 * Math.min(canvas.width, canvas.height));
   const x0 = Math.max(win.x + gutter, band.x), x1 = Math.min(win.x + win.width - gutter, band.x + band.width);
   const top = win.y + gutter, bottom = win.y + win.height - gutter - band.height;
@@ -161,8 +173,9 @@ export function captionZones(story) {
   const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
   if (!(canvas.width > 0 && canvas.height > 0)) return [];
   const band = storyCaptionBand(story, canvas);
+  const position = captionsOverlayOf(story)?.position;
   return storySections(story)
-    .map((section) => ({ section: section.id, start: section.start, end: section.end, rect: captionZone(section.layout, section.side, canvas, band) }))
+    .map((section) => ({ section: section.id, start: section.start, end: section.end, rect: captionZone(section.layout, section.side, canvas, band, { share: section.share, position }) }))
     .filter((zone) => zone.rect);
 }
 
@@ -277,8 +290,10 @@ export function withLayoutCameras(models, plan, { fps = 30, duration = Infinity 
 // ---------------------------------------------------------------------------
 
 function spanState(story, span, canvas) {
-  const geometry = layoutGeometry(span.layout, span.side, canvas);
+  const geometry = layoutGeometry(span.layout, span.side, canvas, { share: span.share });
   const state = { window: geometry.window, radius: geometry.radius, panel: span.panel ?? story.brand?.colors?.bg ?? "#000000", ring: span.ring ?? 0, ringColor: span.ringColor ?? "#ffffff", camera: { scale: 1, x: 0, y: 0 }, hidden: span.layout === "insert" };
+  // A full section with a zoom is a close-up on the head.
+  if (span.layout === "full" && span.zoom > 1) { state.camera = reframe(story, span, geometry.window, canvas); return state; }
   if (span.layout === "full" || span.layout === "insert") return state;
   state.camera = reframe(story, span, geometry.window, canvas);
   return state;
