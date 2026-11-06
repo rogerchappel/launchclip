@@ -6,15 +6,16 @@
 //             (kit/core/footage-layout.mjs), overlays ride the full-frame take
 //   stacked   the presenter stays on screen in the lower part, a graphics panel
 //             above changes every sentence (src/stacked_layout.js)
-//   overlay   planned, not built: one continuous full-frame take, graphics
-//             composited in the space around the presenter (some behind them,
-//             through the subject matte); make refuses it for now
+//   overlay   one continuous full-frame take, graphics in the free space
+//             around the presenter (some behind them, through the subject
+//             matte), captions at the chest (src/overlay_layout.js)
 //
 // Each layout says where its captions go (captions), adds planner guidance
 // (prompt), rebuilds the plan's sections (apply) and checks the result
 // (check). presenterHead is the face and subject box every layout measures
 // the presenter by.
 
+import { OVERLAY_CAPTIONS, applyOverlayLayout, overlayLayoutErrors, overlayPrompt } from "./overlay_layout.js";
 import { STACKED_CAPTIONS, applyStackedLayout, stackedFaceWarnings, stackedLayoutErrors, stackedPrompt } from "./stacked_layout.js";
 
 export { cameraPoint, presenterHead } from "./presenter_box.js";
@@ -22,7 +23,7 @@ export { cameraPoint, presenterHead } from "./presenter_box.js";
 export const TALKING_HEAD_LAYOUTS = Object.freeze(["full", "stacked", "overlay"]);
 export const DEFAULT_TALKING_HEAD_LAYOUT = "full";
 // Layouts make can render today.
-export const BUILT_TALKING_HEAD_LAYOUTS = Object.freeze(["full", "stacked"]);
+export const BUILT_TALKING_HEAD_LAYOUTS = Object.freeze(["full", "stacked", "overlay"]);
 
 const LAYOUTS = Object.freeze({
   full: null,
@@ -32,6 +33,14 @@ const LAYOUTS = Object.freeze({
     apply: applyStackedLayout,
     check: (storyboard, options) => stackedLayoutErrors(storyboard, options),
     faces: stackedFaceWarnings
+  }),
+  overlay: Object.freeze({
+    captions: OVERLAY_CAPTIONS,
+    prompt: overlayPrompt,
+    apply: applyOverlayLayout,
+    // The face check is part of overlayLayoutErrors (it reads each overlay's rect).
+    check: (storyboard) => overlayLayoutErrors(storyboard),
+    faces: () => []
   })
 });
 

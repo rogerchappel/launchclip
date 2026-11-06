@@ -339,8 +339,8 @@ export async function planStoryboard(options = {}) {
         const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
         if (laidOut) {
-          const laid = layout.check(checked.storyboard, { seconds });
           const resolved = resolvedOrNull(checked.storyboard, wordList, beats);
+          const laid = layout.check(resolved ?? checked.storyboard, { seconds });
           checked.warnings = [...checked.warnings, ...laid.warnings, ...(resolved ? layout.faces(resolved) : [])];
           if (laid.errors.length) { checked.errors = [...checked.errors, ...laid.errors]; checked.ok = false; }
         }

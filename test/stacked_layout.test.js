@@ -113,12 +113,12 @@ test("a stacked story's layout plan reframes the presenter into the lower window
   assert.ok(y > 1056 && y < 1920, `head at ${y}`);
 });
 
-test("the layout enum: full and stacked are built, overlay is named but refused", () => {
+test("the layout enum: full, stacked and overlay", () => {
   assert.deepEqual(TALKING_HEAD_LAYOUTS, ["full", "stacked", "overlay"]);
   assert.equal(talkingHeadLayout(undefined), "full");
   assert.equal(talkingHeadLayout("Stacked"), "stacked");
   assert.equal(talkingHeadLayoutError("stacked"), null);
-  assert.match(talkingHeadLayoutError("overlay"), /planned but not built/);
+  assert.equal(talkingHeadLayoutError("overlay"), null);
   assert.match(talkingHeadLayoutError("sideways"), /must be one of full, stacked, overlay/);
   assert.equal(layoutCaptions("full"), null);
 });
@@ -128,7 +128,8 @@ test("make: --layout is a setting flag a host can detect, validated and passed o
   const options = makeOptionsFromFlags({ layout: "stacked" });
   assert.equal(options.layout, "stacked");
   assert.doesNotThrow(() => validateMakeOptions(options));
-  assert.throws(() => validateMakeOptions({ layout: "overlay" }), /planned but not built/);
+  assert.doesNotThrow(() => validateMakeOptions({ layout: "overlay" }));
+  assert.throws(() => validateMakeOptions({ layout: "sideways" }), /must be one of/);
 });
 
 test("the planner lays a stacked talking head out after the model's plan and asks for it in the prompt", async () => {
