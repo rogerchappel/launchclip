@@ -49,12 +49,16 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // ({opacity:1,y:18} on #s1 and #s1-loop); nothing else in them changed.
 // footage re-pinned when its hook was dressed: an emphasis caption (#hook)
 // pops at 0.2 s; nothing else in it changed.
+// cooling, promo-16x9, explainer-9x16 and data-story-9x16 re-pinned when the
+// compiler closed float seams between back-to-back tweens (seamTweens): a
+// few durations end 1 µs earlier (0.14 → 0.139999, 0.175 → 0.174999,
+// 8.518 → 8.517999 …) so they no longer overlap the next tween; nothing else.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "8bc7859b16b4274f74e7f476289344e6f6dc7d5eefdc2b51b0664ffc480b551f",
+  cooling: "37b43aac4ca34a6995d6086fe341ef4bf3350842548f0d46c600b1f22c4a717b",
   minimal: "507b5a5424d4bd568b4955c60b300bcd284f710d52ba1774517fe16c34e501ec",
-  "promo-16x9": "d78e0141506a6e6fc6411562ebaee893264ad2f104780ead7691519a38db044e",
-  "explainer-9x16": "4f3e0efaa1828eeb7731b15e355acee1385dd26038cef0b6d0c5f7962052e936",
-  "data-story-9x16": "958bb6fff06958778d93c4b428e09520b920c3d560aa484deec0796b31e4851f",
+  "promo-16x9": "a58586c4610a7f6c962a42e2f76252712c6fccb479bf1dc478c51a4c0c352131",
+  "explainer-9x16": "b5c34336c704406f727f6453cbde9b7dae5e97cf7a612e8594096aa578b5e8ed",
+  "data-story-9x16": "28dbea6f156bb037cee1cae9aa3bc572c3016b3e5bebaeb9dab2885b3c03c352",
   footage: "017f6bb23cdcd55385fa6e85c5e823f4d9fdd14a587fdf507f83320f30c8beae"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned

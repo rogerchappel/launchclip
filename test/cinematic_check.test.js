@@ -106,7 +106,7 @@ test("verifies a HyperFrames project through the renderer adapter", async () => 
   assert.equal(result.status, "ready");
   assert.deepEqual(calls, [
     ["lint", "--json", project],
-    ["check", "--json", "--strict", "--snapshots", "--at-transitions", project]
+    ["check", "--json", "--strict", "--snapshots", "--at-transitions", "--max-issues", "100000", project]
   ]);
   const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
   assert.equal(verification.renderer, "hyperframes");
@@ -140,7 +140,7 @@ test("checks a HyperFrames storyboard project through the composition finish com
   const result = await checkCinematicProject(project, options, adapters);
   assert.deepEqual(calls, [
     ["lint", "--json", compiled],
-    ["check", "--json", "--strict", "--snapshots", "--at-transitions", compiled]
+    ["check", "--json", "--strict", "--snapshots", "--at-transitions", "--max-issues", "100000", compiled]
   ]);
   const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
   assert.equal(verification.status, "passed");

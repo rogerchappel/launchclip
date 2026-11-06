@@ -93,7 +93,7 @@ test("hyperframes adapter builds render, snapshot, check and preview invocations
   assert.deepEqual(snapshot.slice(6), ["--describe", "false", project]);
   assert.equal(await readFile(path.join(project, "still.png"), "utf8"), "png");
   assert.deepEqual(calls[2].args.slice(1), ["lint", "--json", project]);
-  assert.deepEqual(calls[3].args.slice(1), ["check", "--json", "--strict", "--snapshots", "--at-transitions", project]);
+  assert.deepEqual(calls[3].args.slice(1), ["check", "--json", "--strict", "--snapshots", "--at-transitions", "--max-issues", "100000", project]);
   assert.equal(check.status, "passed");
   assert.deepEqual(check.findings, []);
   assert.deepEqual(Object.keys(check.raw.checks), ["lint", "check"]);

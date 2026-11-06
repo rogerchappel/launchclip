@@ -576,7 +576,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
+${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}
       ${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
@@ -755,6 +755,54 @@ function opsGsap(ops, selectors) {
     else lines.push(`tl.fromTo(${js(selector)}, ${js({ ...op.from, force3D: false })}, ${js({ ...op.to, duration: round(op.duration, 6), ease: op.ease, immediateRender: false, force3D: false })}, ${num(op.start)});`);
   }
   return lines;
+}
+
+// Back-to-back tweens on one target (a blink's close and open, a drift's
+// legs, an idle's swing back) are written with their start rounded to 4
+// decimals and their duration to 6, so in floating point the first can end a
+// hair after the second starts. GSAP plays them as the seam they are, but
+// `hyperframes check` reports every such pair as overlapping tweens. A seam
+// overlap (the first ends at most SEAM_OVERLAP s into the second, on a
+// property they share) is closed by trimming the first tween to end where
+// the second starts: under a millisecond, far below a frame. A longer
+// overlap is a real conflict and is left for the check to report. Lines that
+// are not a plain `tl.fromTo("<selector>", {…}, {…, duration}, <at>);` are
+// left as they are.
+export const SEAM_OVERLAP = 1e-3;
+const TWEEN_LINE = /^(\s*)tl\.fromTo\(("(?:[^"\\]|\\.)*"), (\{[^{}]*\}), (\{[^{}]*\}), (-?\d+(?:\.\d+)?(?:e-?\d+)?)\);$/;
+const TWEEN_CONTROL = new Set(['duration', 'ease', 'immediateRender', 'force3D', 'overwrite', 'delay', 'repeat', 'yoyo', 'repeatDelay']);
+
+export function seamTweens(lines) {
+  const out = [...lines];
+  const bySelector = new Map();
+  lines.forEach((line, index) => {
+    const match = TWEEN_LINE.exec(line);
+    if (!match) return;
+    let to;
+    try { to = JSON.parse(match[4]); } catch { return; }
+    const at = Number(match[5]), duration = Number(to.duration);
+    if (!Number.isFinite(at) || !(duration > 0)) return;
+    const props = Object.keys(to).filter((key) => !TWEEN_CONTROL.has(key));
+    const list = bySelector.get(match[2]) ?? [];
+    list.push({ index, indent: match[1], selector: match[2], from: match[3], to, at, raw: match[5], duration, props });
+    bySelector.set(match[2], list);
+  });
+  for (const list of bySelector.values()) {
+    list.sort((a, b) => a.at - b.at || a.index - b.index);
+    for (let i = 0; i < list.length; i += 1) {
+      const tween = list[i];
+      const next = list.slice(i + 1).find((other) => other.at > tween.at && other.props.some((prop) => tween.props.includes(prop)));
+      if (!next) continue;
+      const over = tween.at + tween.duration - next.at;
+      if (!(over > 0) || over > SEAM_OVERLAP) continue;
+      let duration = Math.floor((next.at - tween.at) * 1e6) / 1e6;
+      while (duration > 0 && tween.at + duration > next.at) duration = Math.round((duration - 1e-6) * 1e6) / 1e6;
+      if (!(duration > 0)) continue;
+      tween.duration = duration;
+      out[tween.index] = `${tween.indent}tl.fromTo(${tween.selector}, ${tween.from}, ${js({ ...tween.to, duration })}, ${tween.raw});`;
+    }
+  }
+  return out;
 }
 
 function sceneSelector(filter) {
