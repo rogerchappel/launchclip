@@ -62,6 +62,18 @@
   repair pass), and the `open-loop` and `rehook-missing` warnings. The clock
   and the rate band follow the pace; "Comment WORD" counts as a comment call
   to action.
+- Illustrated character stories. `sprite-scene` stages one to three
+  illustrated characters in a painted plate: each is a generated sprite cast
+  (a picture per pose, plus mouth-open and eyes-closed versions), so poses
+  swap on cues, mouths lip-sync their own dialogue lines by swapping
+  sprites, characters blink and breathe, and they move with parallax as the
+  plate pushes or pans. Props slide in, and a name card (NAME and ROLE) can
+  introduce a character. `launchclip cast sprites <project>` draws the cast
+  from `cast.sprites.json` with an image model and cuts it out (an anchor
+  picture, then edits of it, so the character stays the same person).
+  Story-cast entries with `art` are illustrated characters, and a
+  character's own non-Kokoro voice id is now used under ElevenLabs, so every
+  character in a dialogue speaks in its own voice.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict

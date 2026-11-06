@@ -16,4 +16,5 @@ export function emitCharacters(model) {
 export const EMITTERS = {
   'cast-scene': emitCharacters,
   'character-cameo': emitCharacters,
+  'sprite-scene': emitCharacters,
 };

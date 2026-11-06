@@ -23,7 +23,7 @@ const resolve = (scene, extra) => { const s = story([scene], extra); return reso
 test('character modules are registered in the module registry, HyperFrames and Remotion', () => {
   const ids = ['cast-scene', 'character-cameo'];
   for (const id of ids) assert.ok(knownModules().includes(id), id);
-  assert.deepEqual(Object.keys(EMITTERS).sort(), ids);
+  assert.deepEqual(Object.keys(EMITTERS).sort(), [...ids, 'sprite-scene'].sort());
   const registry = readFileSync(fileURLToPath(new URL('../kit/remotion/catalog/registry-characters.ts', import.meta.url)), 'utf8');
   for (const id of ids) assert.match(registry, new RegExp(`'${id}': \\w+`));
   assert.match(readFileSync(fileURLToPath(new URL('../kit/remotion/modules/index.ts', import.meta.url)), 'utf8'), /registry-characters/);
