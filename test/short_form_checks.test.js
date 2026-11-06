@@ -64,7 +64,8 @@ test("tooling drops the callouts and grid labels a shot's notes do not support",
   ];
   const { storyboard, dropped } = fitShotCallouts(story, shots);
   assert.deepEqual(dropped, ['clean: "Composite: regular cleaning"', 'grid: "Composite"']);
-  assert.deepEqual(storyboard.scenes[0].params.callouts, []);
+  // The last label gone takes the list with it: an empty one fails the module's schema.
+  assert.equal("callouts" in storyboard.scenes[0].params, false);
   assert.equal(storyboard.scenes[1].params.items[0].label, "Hardwood");
   assert.equal("label" in storyboard.scenes[1].params.items[1], false);
   assert.equal(storyboard.scenes[2].params.callouts.length, 1);

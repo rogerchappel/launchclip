@@ -160,7 +160,11 @@ export function fitShotCallouts(storyboard, shots = []) {
         dropped.push(`${scene.id}: "${text}"`);
         return false;
       });
-      if (kept.length !== params.callouts.length) next = { ...next, callouts: kept };
+      if (kept.length !== params.callouts.length) {
+        // No label left: no list either (an empty one fails the module's minItems on every attempt).
+        const { callouts, ...rest } = next;
+        next = kept.length ? { ...next, callouts: kept } : rest;
+      }
     }
     if (Array.isArray(params.items)) {
       let changed = false;
