@@ -31,12 +31,18 @@ test("a clean script passes with stats", () => {
 
 test("fits-clock: more words than duration × 2.75 is an error; a slow read is a wpm-band warning", () => {
   const long = `${GOOD} ${"Every payout matches its invoice. ".repeat(3)}`.trim();
-  assert.ok(ids(check(long)).includes("fits-clock"));
-  const fix = check(long).errors.find((item) => item.id === "fits-clock");
+  const standard = { pace: "standard" };
+  assert.ok(ids(check(long, standard)).includes("fits-clock"));
+  const fix = check(long, standard).errors.find((item) => item.id === "fits-clock");
   assert.match(fix.message, /ceiling is 82/);
   assert.match(fix.fix, /Cut to about/);
-  assert.ok(!ids(check(GOOD)).includes("fits-clock"));
-  const slow = check(GOOD, { duration: 45 });
+  assert.ok(!ids(check(GOOD, standard)).includes("fits-clock"));
+  // Short-form's default pace is fast: 4.2 words a second fit, and a 148 wpm read is slow for it.
+  assert.ok(!ids(check(long)).includes("fits-clock"));
+  assert.equal(check(GOOD).stats.pace, "fast");
+  assert.ok(ids(check(GOOD), "warnings").includes("wpm-band"));
+  assert.ok(ids(check(`${GOOD} ${"Every payout matches its invoice. ".repeat(12)}`.trim())).includes("fits-clock"));
+  const slow = check(GOOD, { duration: 45, ...standard });
   assert.ok(ids(slow, "warnings").includes("wpm-band"));
   assert.equal(slow.ok, true);
   assert.ok(ids(check(GOOD, { duration: null }), "warnings").includes("no-duration"));
@@ -263,4 +269,44 @@ test("options-unexplained: a named list of options nothing else explains is an e
 test("options-unexplained: a verb list is not a list of options", () => {
   const report = checkScript({ narration: "Aluminium won't rot, warp or crack. Plan it, build it and enjoy it. Visit our site today.", duration: 12 });
   assert.equal(report.errors.some((entry) => entry.id === "options-unexplained"), false);
+});
+
+// 45 s of fast short-form: stakes, an open loop, a numbered list, a re-hook, the payoff and a comment keyword.
+const STAKES = "Your new deck can rot out before its fifth summer. Three mistakes cause it, and the last one is the one nobody checks. One: the joists sit on bare soil, so water wicks straight into the timber. Two: the boards go down tight, so they cup in the first wet season. Three: the cut ends are never sealed. Every cut end drinks water like a straw. Here's the catch. All three are invisible once the deck is finished. So ask your builder about each one before the first board goes down. Comment DECK and I'll send you our checklist.";
+const DECK_BRIEF = { prompt: "Three mistakes that rot a new deck. Offer: our checklist." };
+
+test("hedging: two hedges in a short video are an error, one a warning; a long video is not checked", () => {
+  const hedged = STAKES.replace("so water wicks straight into the timber", "which can help water reach the timber").replace("so they cup", "so they may need replacing and cup");
+  const report = checkScript({ narration: hedged, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" });
+  assert.ok(ids(report).includes("hedging"));
+  assert.match(report.errors.find((item) => item.id === "hedging").message, /"can help", "may need"/);
+  const once = checkScript({ narration: STAKES.replace("so they cup", "so they may need replacing and cup"), duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" });
+  assert.ok(!ids(once).includes("hedging"));
+  assert.ok(ids(once, "warnings").includes("hedge"));
+  assert.ok(!ids(checkScript({ narration: hedged, duration: 300, brief: DECK_BRIEF, format: "long-form" }), "warnings").includes("hedge"));
+});
+
+test("a short video over 30 s should open a loop and re-hook mid-way (warnings)", () => {
+  const clean = checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" });
+  assert.deepEqual(ids(clean), [], formatScriptCheck(clean));
+  assert.ok(!ids(clean, "warnings").includes("open-loop"));
+  assert.ok(!ids(clean, "warnings").includes("rehook-missing"));
+  const flat = STAKES.replace(", and the last one is the one nobody checks", "").replace("Here's the catch. ", "").replace("Every cut end drinks water like a straw.", "Every cut end drinks water through the grain all year long.");
+  const report = checkScript({ narration: flat, duration: 45, brief: DECK_BRIEF });
+  assert.ok(ids(report, "warnings").includes("open-loop"));
+  assert.ok(ids(report, "warnings").includes("rehook-missing"));
+});
+
+test("cta-keyword and cta-choice: the host's keyword or the series' options are asked for at the end", () => {
+  assert.ok(!ids(checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "DECK" })).includes("cta-keyword"));
+  const other = checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "boards" });
+  assert.ok(ids(other).includes("cta-keyword"));
+  assert.match(other.errors.find((item) => item.id === "cta-keyword").fix, /Comment BOARDS/);
+  // "Comment WORD" is a comment call to action, not a missing one.
+  assert.deepEqual(checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF }).stats.ctas.map((cta) => cta.class), ["comment"]);
+  const choice = "Rosa deals blackjack. Lou lifts wallets. Ike wired the cameras. Who joins the crew? Comment Rosa, Lou or Ike. One word.";
+  assert.ok(!ids(checkScript({ narration: choice, duration: 20, choices: ["ROSA", "LOU", "IKE"] })).includes("cta-choice"));
+  const short = checkScript({ narration: choice.replace(" or Ike", ""), duration: 20, choices: "ROSA,LOU,IKE" });
+  assert.ok(ids(short).includes("cta-choice"));
+  assert.match(short.errors.find((item) => item.id === "cta-choice").message, /missing IKE/);
 });
