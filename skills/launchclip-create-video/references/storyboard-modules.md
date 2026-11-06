@@ -766,6 +766,8 @@ params:
 - frame: window|full (full needs the canvas aspect; default window)
 - zoom: false, or {max: 1–2.5 (default 1.8)}
 - title: string ≤ 48 (optional, for logs)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: click-<i>, key-<i>-<k>, zoom-<k>, callout-<i>
 
 ### photo-scene (keeps captions)
@@ -779,6 +781,8 @@ params:
 - lines: [{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each
 - align: left|center (default left)
 - title: string ≤ 60, the photo's alt text (optional)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: enter, line-<i>
 
 ### evidence-clip (keeps captions)
@@ -792,6 +796,8 @@ params:
 - focus: [{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture's own beats
 - cursor: [{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time
 - title: string ≤ 60 (optional, for logs)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: enter, source, focus-<i>, click-<i>
 
 ### clip (keeps captions)

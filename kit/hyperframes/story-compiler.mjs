@@ -867,7 +867,10 @@ function videoTail(out, durations, fps) {
   const length = durations.get(src);
   if (!id || !Number.isFinite(length) || !(duration > 0)) return null;
   const ends = start + Math.max(0, length - mediaStart);
-  if (ends >= start + duration - 1 / fps) return null;
+  // Any shortfall, even under a frame: HyperFrames draws nothing for the last
+  // frame or so of a source, so a clip that runs to within a frame of its end
+  // (a full-frame shot cut on the next plate) would blank before the cut.
+  if (ends >= start + duration - 1e-6) return null;
   const tailId = `${id}-tail`;
   const style = (read('style') ?? '').replace(/;?\s*$/, '');
   return {

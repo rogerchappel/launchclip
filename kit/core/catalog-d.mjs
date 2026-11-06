@@ -38,7 +38,8 @@ import {contrastRatio, fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarTweens} from './grammar.mjs';
-import {photoScene} from './catalog-d-photo-scene.mjs';
+import {mediaRootOps, photoScene} from './catalog-d-photo-scene.mjs';
+import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
 import {evidenceClip} from './catalog-d-evidence-clip.mjs';
 import {clip} from './catalog-d-clip.mjs';
 import {MEDIA_LAYOUTS} from './catalog-d-media-layouts.mjs';
@@ -46,6 +47,7 @@ import {MEDIA_LAYOUTS} from './catalog-d-media-layouts.mjs';
 export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
 export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from './catalog-d-evidence-clip.mjs';
 export {CLIP_ENTERS, CLIP_MOVES, CLIP_TIMING, clipTimeline, clipView} from './catalog-d-clip.mjs';
+export {MEDIA_PASSAGES, mediaPassage, scenePassage} from './media-passage.mjs';
 export {MEDIA_LAYOUTS, MEDIA_LAYOUT_ENTRANCES, MEDIA_LAYOUT_TIMING, MEDIA_LAYOUT_VARIANTS, countUp, frameShape, layoutMedia, mediaLayoutTimeline, mediaLayoutView} from './catalog-d-media-layouts.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
@@ -354,7 +356,7 @@ function resolveProductDemo(params, ctx) {
   const colors = {...(ctx?.brand?.colors ?? {})};
   colors.accent = colors.accent ?? colors.primary;
   colors.ink = colors.ink ?? '#0b0d12';
-  const b = createFootageBase('product-demo', params, {...ctx, brand: {...(ctx?.brand ?? {}), colors}}, {allowed: ['media', 'viewport', 'actions', 'callouts', 'frame', 'zoom', 'title'], required: ['media', 'actions'], minDuration: T.minDuration});
+  const b = createFootageBase('product-demo', params, {...ctx, brand: {...(ctx?.brand ?? {}), colors}}, {allowed: ['media', 'viewport', 'actions', 'callouts', 'frame', 'zoom', 'title', 'enter', 'exit'], required: ['media', 'actions'], minDuration: T.minDuration});
   const {check, canvas, safe, fps, start, end, duration, u, unit} = b;
   const p = b.params;
   check.obj(p.media, 'params.media', ['src', 'sourceStart'], ['src']);
@@ -465,10 +467,13 @@ function resolveProductDemo(params, ctx) {
     accent: colors.accent, stroke: r2(Math.max(3, 4 * unit)), pad: u(10),
     actions: actions.map(({index, type, at, until, label, navigates, box: canvasBox, s}) => ({index, type, at, until, label, navigates, box: canvasBox, s})),
     keys, samples, callouts, ...(push ? {push} : {})};
-  // The clip fades in and out over T.fade, scaled by the grammar (cinematic: 0.75 s, on its ease-in-out).
-  const fadeIn = grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}), fadeOut = grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8});
-  return b.finish(content, {rect, role: 'media', minTextPx: callouts.length ? Math.min(...callouts.map(c => c.size)) : null,
-    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
+  // The clip fades in and out over T.fade, scaled by the grammar (cinematic: 0.75 s, on its ease-in-out),
+  // unless it arrives or leaves with a cut (kit/core/media-passage.mjs).
+  const passage = mediaPassage(ctx, passageParams(b.check, b.params));
+  const fadeIn = passage.enter === 'fade' ? grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}) : 0;
+  const fadeOut = passage.exit === 'fade' ? grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8}) : 0;
+  return b.finish({...content, enter: passage.enter, exit: passage.exit}, {rect, role: 'media', minTextPx: callouts.length ? Math.min(...callouts.map(c => c.size)) : null,
+    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: passage.enter === 'fade' ? 0 : 1}, exitTo: {opacity: passage.exit === 'fade' ? 0 : 1}, enterEase: 'power2.out', exitEase: 'power2.in'}});
 }
 
 // ---------------------------------------------------------------------------
@@ -494,17 +499,12 @@ export function productDemoView(model) {
   return {media, overlay};
 }
 
-/** Renderer-neutral ops: fades on both roots, per-frame camera on the video and the camera layer, highlights, callouts. */
+/** Renderer-neutral ops: the entrance and exit on both roots, per-frame camera on the video and the camera layer, highlights, callouts. */
 export function productDemoTimeline(model) {
   const {id, start, end} = model;
-  const c = model.content, m = model.motion;
+  const c = model.content;
   const ops = [];
-  for (const target of [`${id}-media`, `${id}-overlay`]) {
-    set(ops, target, start, {opacity: 0});
-    tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: 0}, {opacity: 1});
-    tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: 0});
-    set(ops, target, end, {opacity: 0});
-  }
+  mediaRootOps(ops, [`${id}-media`, `${id}-overlay`], model);
   let previous = null;
   for (const sample of c.samples) {
     const props = {x: sample.x, y: sample.y, scaleX: sample.scale, scaleY: sample.scale};
@@ -545,7 +545,8 @@ const DEFINITIONS = [
       callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping; one on an action\'s box ends when that action navigates or the camera leaves it',
       frame: 'window|full (full needs the canvas aspect; default window)',
       zoom: 'false, or {max: 1–2.5 (default 1.8)}',
-      title: 'string ≤ 48 (optional, for logs)'
+      title: 'string ≤ 48 (optional, for logs)',
+      ...PASSAGE_PARAMS
     },
     events: ['click-<i>', 'key-<i>-<k>', 'zoom-<k>', 'callout-<i>']}
 ];
