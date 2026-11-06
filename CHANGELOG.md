@@ -20,6 +20,90 @@
   and `--sfx off` keep the kit or silence the effects. The SFX manifest
   records each sound's prompt and the generated cost; `MAKE.json` costs list
   them under `sfx`.
+- `make --layout stacked` lays a 9:16 talking head out as one stacked video:
+  the presenter stays on screen in the lower 45% of the frame, under a
+  graphics panel that the planner fills with a visual per sentence. The
+  planner writes only the moments that leave it: close-ups (a `full` section,
+  now framed on the head with its `zoom`, 1.5–4 s) on personal lines, and
+  inserts (at most 5 s) for a visual that needs the frame. Tooling builds the
+  stacked sections between them, cuts in and out, and puts the captions on
+  the seam one word at a time (the new `seam` caption position and
+  `seam-word` preset). A stacked section takes a `share` (0.35–0.6) of the
+  height. Checks hold close-ups and inserts to their limits, warn when 20 s
+  pass without a close-up, and warn when the face falls outside the
+  presenter's window. `--layout` is an enum (`full`, `stacked`, `overlay`).
+- `make --layout overlay` keeps a talking head as one continuous full-frame
+  take: inserts become overlays, and every overlay without a rect is placed
+  in the free space around the presenter (the headroom above them, in front
+  of their hands, beside their body), measured from their head. The planner
+  is asked for one structure that builds over the video (behind the presenter
+  with `layer: "behind"`), a title in the headroom and small props for each
+  idea. Captions sit at chest height, one word at a time (the new `chest`
+  caption position). Checks refuse inserts and layout sections and warn when
+  a prop covers the face.
+- Short-form scripts are paced and built like explainer reels that travel.
+  A narration pace (`--pace calm|standard|fast`) sets the word budget, the
+  clock's ceiling and the ElevenLabs voice speed. Short-form defaults to
+  fast (about 215 words a minute, ceiling 4.2 words a second, voice speed
+  1.2); story and data explainers to calm (about 135); the rest to standard.
+  Short-form's default skeleton is now `stakes-list`: a stakes hook, an open
+  loop, a numbered list where each item lands a specific, a pattern
+  interrupt, the payoff and a call to action that follows from the last
+  idea. New short-video rules ask for specifics over hedging, an open loop
+  with a mid-way re-hook, and a call to action built into the story.
+- `--cta-keyword WORD` with `--cta-offer "..."` ends the script on "Comment
+  WORD and I'll send you ...", and `--episode "Job 1" --choices A,B,C` makes
+  one episode of a series ending on a viewer choice. A short video's script
+  pass also writes the post caption (the hook, the list one item a line, the
+  call to action, "Save this"), which publish.json uses as its description
+  with the line breaks kept.
+- Script checks: `hedging` (two or more hedges in a short video; one is a
+  `hedge` warning), `cta-keyword` and `cta-choice` (errors that feed the
+  repair pass), and the `open-loop` and `rehook-missing` warnings. The clock
+  and the rate band follow the pace; "Comment WORD" counts as a comment call
+  to action.
+- Illustrated character stories. `sprite-scene` stages one to three
+  illustrated characters in a painted plate: each is a generated sprite cast
+  (a picture per pose, plus mouth-open and eyes-closed versions), so poses
+  swap on cues, mouths lip-sync their own dialogue lines by swapping
+  sprites, characters blink and breathe, and they move with parallax as the
+  plate pushes or pans. Props slide in, and a name card (NAME and ROLE) can
+  introduce a character. `launchclip cast sprites <project>` draws the cast
+  from `cast.sprites.json` with an image model and cuts it out (an anchor
+  picture, then edits of it, so the character stays the same person).
+  Story-cast entries with `art` are illustrated characters, and a
+  character's own non-Kokoro voice id is now used under ElevenLabs, so every
+  character in a dialogue speaks in its own voice.
+- A satisfying-motion kit: things that pile up as they are said, numbers
+  that never stop climbing, and objects with weight.
+  - `drop-grid`: 1–40 cards, coins or tiles drop into a grid one by one,
+    each on its own word (`params.times`), with a gravity fall, a squash on
+    contact, an overshoot settle, a contact shadow and a puff of dust over
+    faint empty slots. An optional counter climbs with every landing, and
+    confetti bursts when the grid fills.
+  - `live-counter`: a big figure that ticks up for the whole scene (steady,
+    accelerating or easing) on a plain, panel or ticket face. Milestones
+    stamp the figure and burst as the count passes them, and a delta chip
+    ("+2,312 today") stamps in under it.
+  - `live-bars`: raised bars whose values tick up live, each number riding
+    the end of its bar.
+  - The brand frame's running counter, `frame.counter` (`label`, `format`
+    {prefix, suffix, pad, decimals, separator}, `steps` [{scene | start,
+    value | text}]): "DAY 03", "STEP 2/4" or "LIABILITY $53,000" in a top
+    corner, rolling up through in-between values and pulsing as each step
+    lands, without re-entering between scenes. `frame.progress.style:
+    "scrubber"` puts a knob on the progress line that travels with it.
+  - Caption presets `tag-chips` (the sentence builds word by word; key
+    phrases land in solid chips, ink on a light brand and paper on a dark
+    one) and `serif-accent` (one key word per line turns serif italic in the
+    brand colour).
+  - The physics are shared in `kit/core/tactile.mjs` (drops, contact
+    shadows, a stamp press, pulses and seeded particle bursts), so both
+    renderers and every seek draw the same frame. Every landing, tick, stamp
+    and burst is a model event with a kit cue and an `sfx` name (`land`,
+    `tick`, `stamp`, `burst`); `frameCues()` lists the counter's landings.
+  - The planner gets a "Satisfying motion" rule group and phrase rows for
+    each module and the frame counter.
 - `make` repairs what its critic finds instead of only reporting it.
   `--critic-repairs <n>` (default 1, 0 to 3; 0 turns it off) gives the
   critic's findings back to the planner as known problems. A repair verdict

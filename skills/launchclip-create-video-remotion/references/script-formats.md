@@ -20,11 +20,11 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 
 | Format | Words a minute | Default skeleton | Sentences | Default awareness |
 | --- | --- | --- | --- | --- |
-| `short-form` | 165 | Call-out hook → problem-agitate-solve | One idea per sentence, 4–10 words each. | `problem` |
+| `short-form` | 215 | Stakes hook → open loop → numbered list → pattern interrupt → payoff → CTA | One idea per sentence, 4–10 words each. | `problem` |
 | `long-form` | 150 | Long form: pay the title promise by ~30 s, re-engage every ~3 min, soft mid CTA, main CTA at the end | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `problem` |
 | `explainer` | 150 | Question → common belief → why it fails → the better model | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `problem` |
 | `data-explainer` | 135 | Everyone believes X → a fair test → the result | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `unaware` |
-| `story` | 150 (narration over ~75% of the runtime) | Story spine (once upon a time → every day → one day → because of that → until finally) | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `unaware` |
+| `story` | 135 (narration over ~75% of the runtime) | Story spine (once upon a time → every day → one day → because of that → until finally) | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `unaware` |
 | `promo` | 150 | Launch: news hook + specific claim → features as outcomes → real proof → offer → CTA | One idea per sentence; keep the mean at about 15 words or fewer and never pass 25. | `solution` |
 
 - **`short-form`**: A call-out in the first sentence (≤ 12 words, ideally about 8): it names the topic or the viewer's problem and lands in the first 3 seconds. Above 30 s, add a contrast rehook ("but…") near the middle. Exactly one call to action: one verb, one destination, spoken in the same words the end card shows. It comes after the hook's promise is paid. At 15 s or less, the last line may flow back into the first as a loop instead.
@@ -35,6 +35,15 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 - **`promo`**: Open on the problem or the outcome (≤ 12 words), not the logo; say the product name by about 5 s unless the awareness rule says otherwise. Exactly one call to action: one verb, one destination, spoken in the same words the end card shows. It comes after the hook's promise is paid. For Product Hunt, invite people to try it and give feedback; never ask for upvotes.
 
 ## Skeletons
+
+### `stakes-list`: Stakes hook → open loop → numbered list → pattern interrupt → payoff → CTA
+
+- **Stakes hook** (~10%): A cost, a consequence or a number the viewer feels, aimed at "you" ("your deck", "your app"): the stakes in one line.
+- **Open loop** (~7%): Promise a payoff and say when it comes ("…and one fix I'll give you at the end", "number three is the one nobody checks"). Pay it off later.
+- **Numbered list** (~50%): A named, numbered list or framework of three to six items, each said with its number. Each item: its name, then one concrete specific from the brief (a number, a name, a rule), then an example or an analogy.
+- **Pattern interrupt** (~8%): One short line that reframes everything before it ("The word is per.", "But here's the part nobody checks."). It turns the list into one idea.
+- **Payoff** (~13%): Close the open loop and pay off the hook in concrete terms.
+- **Call to action** (~12%): One action built into the story: the plan's comment keyword when it has one, else a reason to follow or save that follows from the last idea.
 
 ### `call-out-pas`: Call-out hook → problem-agitate-solve
 
@@ -93,6 +102,19 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 - **Soft mid CTA** (~3%): One soft mention right after a payoff, never in the first 15%.
 - **Payoff** (~22%): The final payoff of the title promise; no "in conclusion" before it lands.
 - **Main CTA** (~8%): The main call to action at the end, tied to the end screen.
+
+## Pace
+
+`--pace` sets the narration rate (default by format: short-form fast, long-form standard, explainer standard, data-explainer calm, story calm, promo standard). The ElevenLabs voice speed follows it unless the voice settings give one.
+
+- `calm` (135 words a minute, voice speed 0.92, ceiling 2.75 words a second): Calm, about 135 words a minute: drama and story pacing. Let a line land, leave a short beat after a turn or a reveal, and give sound and picture room between lines.
+- `standard` (150 words a minute, voice speed 1, ceiling 2.75 words a second): Standard, about 150 words a minute: clear narration with a breath between ideas.
+- `fast` (215 words a minute, voice speed 1.2, ceiling 4.2 words a second): Fast, about 215 words a minute (explainer reels run 210-257): speech starts on the first frame with no intro silence, sentences run on without pauses, and the only deliberate beat is the pattern interrupt.
+
+## Call to action and series
+
+- `--cta-keyword WORD --cta-offer "the checklist"`: the script ends on "Comment WORD and I'll send you the checklist", and the post caption carries the same call to action.
+- `--episode "Episode 2" --choices "A,B,C"`: one episode of a series; it ends on a viewer choice ("Comment A, B or C. One word."), the most-picked one happening next.
 
 ## Goal
 

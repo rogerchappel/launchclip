@@ -470,8 +470,8 @@ async function runStyleCommand(action, name, flags, names = []) {
 }
 
 function parseCastInvocation(action, rest) {
-  if (!action) throw new Error("Missing cast action; use list, show or sheet");
-  if (!new Set(["list", "show", "sheet"]).has(action)) throw new Error(`Unknown cast action: ${action}; use list, show or sheet`);
+  if (!action) throw new Error("Missing cast action; use list, show, sheet or sprites");
+  if (!new Set(["list", "show", "sheet", "sprites"]).has(action)) throw new Error(`Unknown cast action: ${action}; use list, show, sheet or sprites`);
   const hasName = rest[0] && !rest[0].startsWith("--");
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
 }

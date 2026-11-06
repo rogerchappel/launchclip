@@ -3,12 +3,13 @@
 // block (docs/COLLECTIONS_RFC.md §3.3) is the subset marked `setting`: the
 // choices a recipe saves. The rest (the prompt's own assets, --out, --repo
 // and the demo flags, --replan) belong to one video.
-import { scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
+import { ctaPlanOptions, scriptPlanOptions, seriesPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
+import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
@@ -25,6 +26,14 @@ export const MAKE_FLAGS = Object.freeze([
   ["goal", { setting: true }],
   ["awareness", { setting: true }],
   ["skeleton", { setting: true }],
+  // The narration's rate: calm (~135 wpm), standard (~150) or fast (~215; short-form's default).
+  ["pace", { setting: true }],
+  // A comment-keyword call to action ("Comment WORD and I'll send you <offer>"), said at the end and in the post caption.
+  ["cta-keyword", { setting: true }],
+  ["cta-offer", { setting: true }],
+  // One episode of a series, ending on a viewer choice ("Comment A, B or C"): the label, and two to four one-word options.
+  ["episode", {}],
+  ["choices", {}],
   ["style", { setting: true }],
   ["seed", { setting: true }],
   // The density dial (0–1): low lets supplied footage carry the video (clip-led planning).
@@ -64,6 +73,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
   ["card-backdrops", {}],
+  // A talking head's layout for the whole video (src/talking_head_layout.js): full (default) or stacked.
+  ["layout", { setting: true }],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
   ["capture-cmd", {}],
   ["capture-concurrency", {}],
@@ -104,6 +115,7 @@ export function makeOptionsFromFlags(flags = {}) {
     assetProviderCmd: flags["asset-provider-cmd"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
+    layout: flags.layout,
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
@@ -117,6 +129,11 @@ export function makeOptionsFromFlags(flags = {}) {
     format: flags.format,
     awareness: flags.awareness,
     skeleton: flags.skeleton,
+    pace: flags.pace,
+    ctaKeyword: flags["cta-keyword"],
+    ctaOffer: flags["cta-offer"],
+    episode: flags.episode,
+    choices: flags.choices,
     out: flags.out,
     replan: Boolean(flags.replan),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
@@ -161,11 +178,14 @@ export function validateMakeOptions(options = {}) {
   if (options.density != null && !(options.density !== true && options.density !== "" && Number(options.density) >= 0 && Number(options.density) <= 1)) throw new Error(`--density must be a number from 0 to 1; got ${options.density}`);
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
+  if (options.layout != null && talkingHeadLayoutError(options.layout)) throw new Error(talkingHeadLayoutError(options.layout));
   if (options.cardBackdrops != null && !CARD_BACKDROPS.includes(String(options.cardBackdrops).toLowerCase())) throw new Error(`--card-backdrops must be ${CARD_BACKDROPS.join(" or ")}; got ${options.cardBackdrops}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
+  ctaPlanOptions(options);
+  seriesPlanOptions(options);
   return { voice, renderer, quality, script: scriptPlanOptions(options) };
 }
 
@@ -187,6 +207,9 @@ export function settingsFromMakeReport(report) {
   set("format", plan.format ?? options.format);
   set("goal", plan.goal ?? options.goal);
   set("awareness", plan.awareness ?? options.awareness);
+  set("pace", options.pace);
+  set("cta-keyword", options.cta_keyword);
+  set("cta-offer", options.cta_offer);
   // The skeleton the video was built on, so a recipe makes more of the same series.
   set("skeleton", report?.skeleton?.library ? report.skeleton.id : options.skeleton && options.skeleton !== "auto" ? options.skeleton : undefined);
   set("voice", options.voice);
@@ -195,6 +218,7 @@ export function settingsFromMakeReport(report) {
   set("music-volume", options.music_volume);
   set("music-duck", options.music_duck);
   set("music-prompt", options.music_prompt);
+  if (options.layout && options.layout !== "full") set("layout", options.layout);
   set("renderer", options.renderer);
   set("quality", options.quality);
   if (report?.model?.source === "--model") set("model", report.model.spec);

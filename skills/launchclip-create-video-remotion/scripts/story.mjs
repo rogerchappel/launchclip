@@ -26,8 +26,8 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card"];
-const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
@@ -798,7 +798,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
       if (zoom.at !== undefined) zoom.at = resolve(zoom.at, `${path}.zooms[${z}].at`);
       if (zoom.until !== undefined) zoom.until = resolve(zoom.until, `${path}.zooms[${z}].until`);
     });
-    if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
+    if (SPEAKING_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
   });
   if (Array.isArray(copy.overlays)) copy.overlays.forEach((overlay, index) => {
     if (!isObject(overlay)) return;
@@ -838,6 +838,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
 // start, and a spoken range gains the timing of each narration word in it
 // (`words: [[start, end], ...]`), so a mouth opens on the voice's words.
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
+// Scenes whose cues and spoken ranges resolve here: the rig's cast modules and
+// the illustrated sprite-scene (kit/core/catalog-sprites.mjs).
+export const SPEAKING_MODULES = Object.freeze([...CAST_MODULES, "sprite-scene"]);
 
 // Cast references: a character scene may name a character by its place in
 // the story cast ("@1" is the first, "@2" the second), so a storyboard
@@ -1013,7 +1016,9 @@ function validateMotion(motion, err) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
+const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
 const DATA_MODULES = ["unit-grid", "number-line", "cell-grid", "grid-race"];
 const FRAME_COLOR_ROLES = ["bg", "paper", "ink", "primary", "accent"];
@@ -1036,6 +1041,8 @@ function validateFrame(frame, { err, warn, scenes }) {
       for (const key of ["scene", "until"]) if (entry[key] !== undefined && (typeof entry[key] !== "string" || !ids.has(entry[key]))) warn(`${at}.${key} ${JSON.stringify(entry[key])} is not a scene id; the note ${key === "scene" ? "is skipped" : "runs to the next note"}`);
     });
   }
+  if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
+  if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {
@@ -1043,6 +1050,39 @@ function validateFrame(frame, { err, warn, scenes }) {
     else if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`frame.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
     else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`frame.labels[${i}].scene "${entry.scene}" is not a scene id; the label is skipped`);
     if (isObject(entry) && entry.color !== undefined && !(typeof entry.color === "string" && (HEX.test(entry.color) || FRAME_COLOR_ROLES.includes(entry.color)))) err(`frame.labels[${i}].color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour: the frame's text colour while this label shows`);
+  });
+}
+
+// frame.counter: a running counter in a top corner ("DAY 03", "LIABILITY
+// $53,000"), climbing step by step across the video (kit/core/brand-frame.mjs).
+function validateFrameCounter(counter, { err, warn, ids }) {
+  if (!isObject(counter)) { err("frame.counter must be {label?, steps, format?, position?, color?}"); return; }
+  for (const key of Object.keys(counter)) if (!FRAME_COUNTER_KEYS.includes(key)) err(`frame.counter.${key} is not supported (${FRAME_COUNTER_KEYS.join(", ")})`);
+  if (counter.label !== undefined && !(nonEmpty(counter.label) && counter.label.length <= 24)) err("frame.counter.label must be 1-24 characters (\"DAY\", \"LIABILITY\")");
+  if (counter.position !== undefined && !["top-left", "top-right"].includes(counter.position)) err("frame.counter.position must be top-left or top-right (default: the corner the kicker is not in)");
+  if (counter.color !== undefined && !(typeof counter.color === "string" && (HEX.test(counter.color) || FRAME_COLOR_ROLES.includes(counter.color)))) err(`frame.counter.color must be a brand role (${FRAME_COLOR_ROLES.join(", ")}) or a hex colour`);
+  if (counter.format !== undefined) {
+    if (!isObject(counter.format)) err("frame.counter.format must be {prefix?, suffix?, pad?, decimals?, separator?}");
+    else {
+      const f = counter.format;
+      for (const key of Object.keys(f)) if (!FRAME_COUNTER_FORMAT_KEYS.includes(key)) err(`frame.counter.format.${key} is not supported (${FRAME_COUNTER_FORMAT_KEYS.join(", ")})`);
+      for (const key of ["prefix", "suffix"]) if (f[key] !== undefined && !(typeof f[key] === "string" && f[key].length <= 8)) err(`frame.counter.format.${key} must be a string of up to 8 characters`);
+      if (f.pad !== undefined && !(Number.isInteger(f.pad) && f.pad >= 0 && f.pad <= 6)) err("frame.counter.format.pad must be an integer 0-6 (zero-pads the number: DAY 03)");
+      if (f.decimals !== undefined && !(Number.isInteger(f.decimals) && f.decimals >= 0 && f.decimals <= 2)) err("frame.counter.format.decimals must be 0, 1 or 2");
+      if (f.separator !== undefined && typeof f.separator !== "boolean") err("frame.counter.format.separator must be true or false");
+    }
+  }
+  if (!Array.isArray(counter.steps) || counter.steps.length < 1 || counter.steps.length > 40) { err("frame.counter.steps must be a list of 1-40 {start | scene, value | text}"); return; }
+  counter.steps.forEach((entry, i) => {
+    const at = `frame.counter.steps[${i}]`;
+    if (!isObject(entry)) { err(`${at} must be {start | scene, value | text}`); return; }
+    for (const key of Object.keys(entry)) if (!["start", "scene", "value", "text"].includes(key)) err(`${at}.${key} is not supported (start, scene, value, text)`);
+    if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`${at} needs exactly one of start (seconds) or scene (a scene id)`);
+    else if (typeof entry.start === "number" && !(entry.start >= 0)) err(`${at}.start must be seconds ≥ 0`);
+    else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`${at}.scene "${entry.scene}" is not a scene id; the step is skipped`);
+    const hasValue = typeof entry.value === "number" && Number.isFinite(entry.value);
+    if (hasValue === nonEmpty(entry.text)) err(`${at} needs exactly one of value (a number that rolls up) or text (shown as is)`);
+    else if (nonEmpty(entry.text) && entry.text.length > 14) err(`${at}.text must be up to 14 characters`);
   });
 }
 
@@ -1602,8 +1642,11 @@ export const LAYOUT_SIDES = Object.freeze({ framed: ["left", "right", "top", "bo
 export const LAYOUT_SHIFT = 0.5;
 // Room treatments for a section's `room`.
 export const SECTION_ROOMS = Object.freeze({ dim: Object.freeze({ dim: 0.55 }), replace: Object.freeze({ hide: true }) });
+// A stacked section's presenter window as a share of the canvas height
+// (`share`): half by default; a stacked talking head gives the panel more.
+export const STACKED_SHARE = Object.freeze({ default: 0.5, min: 0.35, max: 0.6 });
 
-const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "transition"]);
+const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "share", "transition"]);
 const SECTION_HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 /**
@@ -1636,6 +1679,10 @@ export function validateSections(story, { err, warn = () => {} } = {}) {
     if (section.ring !== undefined && !(typeof section.ring === "number" && section.ring >= 0 && section.ring <= 24)) err(`${path}.ring must be 0–24 px`);
     if (section.room !== undefined && !ROOM_MODES.includes(section.room)) err(`${path}.room must be one of ${ROOM_MODES.join(", ")}`);
     if (section.zoom !== undefined && !(typeof section.zoom === "number" && section.zoom >= 1 && section.zoom <= 1.6)) err(`${path}.zoom must be 1–1.6`);
+    if (section.share !== undefined) {
+      if (section.layout !== "stacked") err(`${path}.share applies only to stacked`);
+      else if (!(typeof section.share === "number" && section.share >= STACKED_SHARE.min && section.share <= STACKED_SHARE.max)) err(`${path}.share must be ${STACKED_SHARE.min}–${STACKED_SHARE.max} (the presenter's share of the height)`);
+    }
     if (section.transition !== undefined) {
       const transition = section.transition;
       if (!isObject(transition) || !SECTION_TRANSITIONS.includes(transition.type)) err(`${path}.transition must be {type: ${SECTION_TRANSITIONS.map((type) => `"${type}"`).join(" | ")}, dur?}`);
@@ -1702,6 +1749,7 @@ export function storySections(story) {
       ringColor: colors.primary ?? "#ffffff",
       room: section.room ?? "keep",
       zoom: typeof section.zoom === "number" ? section.zoom : 1,
+      share: section.layout === "stacked" && typeof section.share === "number" ? section.share : STACKED_SHARE.default,
       transition: { type: section.transition?.type ?? "layout-shift", dur: Number(section.transition?.dur ?? LAYOUT_SHIFT) }
     }))
     .filter((section) => section.end > section.start + EPS)
@@ -1728,7 +1776,7 @@ export function layoutSpans(story) {
   if (!sections.length) return null;
   const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
-  const full = { id: null, layout: "full", side: null, panel: null, ring: 0, zoom: 1, room: "keep", transition: { type: "layout-shift", dur: LAYOUT_SHIFT } };
+  const full = { id: null, layout: "full", side: null, panel: null, ring: 0, zoom: 1, share: STACKED_SHARE.default, room: "keep", transition: { type: "layout-shift", dur: LAYOUT_SHIFT } };
   const spans = [];
   let clock = 0;
   for (const section of sections) {
@@ -1737,7 +1785,8 @@ export function layoutSpans(story) {
     clock = section.end;
   }
   if (clock < duration - EPS) spans.push({ ...full, start: clock, end: duration });
-  const key = (span) => (span.layout === "full" ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom]));
+  // A full span with a close-up (zoom) is a layout of its own.
+  const key = (span) => (span.layout === "full" && !(span.zoom > 1) ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom, span.share]));
   const boundaries = [];
   spans.forEach((span, index) => {
     span.shift = null;

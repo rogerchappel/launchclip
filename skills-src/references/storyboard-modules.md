@@ -93,7 +93,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 ## Captions
 
 - Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice, except in the footage-led lane. In the footage-led lane write {"type": "captions"} with no style or preset: the default is the quiet sentence-case quiet-accent preset with one accent word per line; name word-highlight only when the brief asks for loud captions.
-- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble, quiet-accent, kinetic-hierarchy, soft-card. With a style pack, write {"type": "captions"} and let the pack choose the preset.
+- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, seam-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble, quiet-accent, kinetic-hierarchy, soft-card, tag-chips, serif-accent. With a style pack, write {"type": "captions"} and let the pack choose the preset.
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 
@@ -133,6 +133,13 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.
 - Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).
 - Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.
+
+## Satisfying motion (weight, piles and live numbers)
+
+- Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.
+- Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.
+- A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.
+- Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.
 
 ## Footage layouts (sections)
 
@@ -243,6 +250,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
 | tells a story with people ("meet Maya, a…", "imagine you're…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture [motion, voiceover-motion] | cast-scene |
 | puts the story in a place and no photo or clip of it is supplied (an office, a kitchen, a city street at night, a park at dusk, a beach, space): a drawn environment at day, dusk or night as the plate, with characters, cards or captions on higher tracks over it; story.world sets the video-wide place [motion, voiceover-motion] | world |
+| an illustrated story with a recurring cast and dialogue (a series, a heist, a customer story told in episodes) when story.cast lists characters with art: each line plays as a painted scene, the speaker's mouth on its words, a new pose per line, a name card when someone is introduced; only for characters with art in story.cast [motion, voiceover-motion] | sprite-scene |
 | gives the viewer's situation a face for one beat ("if you're a…", "your customer", "someone like you"): one animated character beside a card or on a panel | character-cameo |
 | a short note, tip or warning card [motion, voiceover-motion] | callout |
 | compares a few real values side by side ("by platform", "per region", "each month"): bars grow to their values, one can stay lit | bar-chart |
@@ -279,6 +287,10 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | says one thing is N times faster or finishes first ("3× faster", "in half the time"): rows fill like progress bars at their own speeds and the winner gets its badge | race-bars |
 | walks through several benchmarks or tests at once ("across four benchmarks", "wins 18 of 20"): a dashboard of mini bar charts with one legend, each lighting its winner | small-multiples |
 | goes back or forward to a date ("rewind to October 5th", "three weeks earlier", "on launch day"): day cards rewind under a REWIND sign and land on the day with its event | date-carousel |
+| counts things piling up ("10 times a day", "five posts a week", "every day for a week", "3 new clients"): cards, coins or tiles drop into a grid one per word with weight, dust and a climbing counter; time each drop with params.times | drop-grid |
+| describes a number still climbing ("and it keeps going up", "every minute", "right now", "views today"): a big figure that ticks up for the whole scene, milestones stamping as it passes them | live-counter |
+| compares several things growing at once ("views per reel", "which hook is winning", "sales by product"): raised bars whose values tick up live, each number riding its bar | live-bars |
+| tracks progress across the whole video ("day 1… day 14", "step 2 of 4", a running total like "the liability so far"): a counter in a top corner that climbs step by step and never re-enters (story.frame.counter, not a scene) | frame.counter (story overlay, not a scene module) |
 | counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter | month-grid |
 | introduces a real person by name and role in an explainer ("Professor X at Y", "the paper's author", "her advisor"): their photo with a glowing name pill and role | person-id |
 | traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
@@ -2229,6 +2241,56 @@ params:
 events: build, line-<i>
 variants: glow (default), ink
 
+### drop-grid (keeps captions)
+Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
+params:
+- count: 1–40 items (or items)
+- items: [label ≤ 16 | {label?, image? (assets/… photo)}] 1–40 (or count)
+- columns: columns 1–10 (optional; default the layout with the biggest items)
+- times: seconds from scene start, one per item, rising: each drop on its word (optional)
+- cadence: seconds between drops 0.05–1.5 (optional, when times is not set; default fits the scene)
+- counter: true | {prefix? ≤ 4, suffix? ≤ 8 ("×"), label? ≤ 30, from?} a big count above the grid that climbs with each landing (optional)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- tone: item colour (primary | accent | paper | #rrggbb; default primary for coins, accent otherwise)
+- slots: faint empty slots that the items fill (default true)
+- at: first drop when times is not set: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, land-N, filled
+variants: cards (default), coins, tiles
+
+### live-counter (keeps captions)
+A big figure that never stops climbing: it ticks up from `from` to `to` for the whole scene (steady, accelerating or easing), on a plain, panel or ticket face; milestones stamp the figure and burst confetti as the count passes them, and an optional delta chip ("+2,312 today") stamps in beside it.
+params:
+- to: number ≥ from, required
+- from: start value (default 0)
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- label: string ≤ 40 above the figure, shown in caps (optional)
+- pace: steady | accelerate | ease (default steady)
+- milestones: [values between from and to] 1–4, at least 0.45 s apart as the count passes them (optional)
+- delta: string ≤ 16 or {text ≤ 16, at?} a chip that stamps in under the figure (optional)
+- tone: figure colour (primary | accent | paper | #rrggbb; default primary)
+- at: count start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: count, milestone-N, delta
+variants: plain (default), panel, ticket
+
+### live-bars (keeps captions)
+Raised bars whose values tick up live for the whole scene: 2–6 rows, each bar growing from its start value to its end value while the number riding its end counts with it; thick tactile slabs or flat bars. For views, sales or totals climbing in real time.
+params:
+- rows: [{label ≤ 24, to ≥ 0, from? (default 0), tone? (primary | accent | paper | #rrggbb)}] 2–6
+- format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}
+- max: the value of a full bar (optional; default the largest to)
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: climb start: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build
+variants: slabs (default), flat
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -2261,6 +2323,19 @@ params:
 - enter: fade | cut (as cast-scene)
 - exit: fade | cut (as cast-scene)
 events: <character>-cue-<i>
+
+### sprite-scene (keeps captions)
+An illustrated story scene: a painted background plate on a slow push or pan, with one to three illustrated characters (a generated sprite cast: a picture per pose, plus mouth-open and eyes-closed versions) standing in it, swapping poses on cues, lip-syncing their own dialogue lines by sprite swap, blinking and breathing, with parallax against the plate; props slide in; an optional name card (NAME and ROLE). For animated stories with a recurring cast and dialogue.
+params:
+- plate: "assets/…" the background image (.png|.webp|.jpg)
+- move: push-in|pull-out|pan-left|pan-right|none (default push-in), over the whole scene
+- zoom: 0.02–0.15 (default 0.07)
+- cast: [{id, art?: "assets/cast/<id>" (the folder of <pose>.png, <pose>-talk.png, <pose>-blink.png; default the story cast entry's art), pose? (default idle), cues?: [{at, pose}], says?: [{from, to}] | "auto" (its own dialogue lines), talk?: true when <pose>-talk.png exists (else a jaw bounce), blink?: true when <pose>-blink.png exists, position?: left|centre|right, x?: 0.12–0.88, height?: 0.25–0.9 of the frame (default 0.62 alone, 0.55 in a group), aspect?: sprite width/height (default 0.75), facing?: left|right (left mirrors the sprite), depth?: 0–1 parallax (default 0.4)}] 1–3
+- props: [{src: "assets/…", box: {x, y, width, height} fractions of the frame, at?, from?: left|right|top|bottom|none}] 0–4
+- card: {name ≤ 24, role? ≤ 32, at?, for?: a cast id (default the first)}: a name card in the upper corner on that character's side
+- enter: fade|cut (default fade; cut when the scene opens the video)
+- exit: fade|cut (default fade)
+events: cast, <character>-cue-<i>, prop-<i>, card
 
 ### world (keeps captions)
 A layered environment drawn in code (inside rooms, streets and outdoor places) at day, dusk or night, recoloured from the brand, with props; the plate behind characters, cards or captions on higher tracks. A slow camera move gives parallax depth.
@@ -2414,8 +2489,12 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | equation | 2 s | 0.5 s | scene − 0.65 s | the equation wipes in over 0.7 s from at; terms, the diff and the boxes follow 0.75–0.9 s apart (squeezed to fit) |
 | title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at (squeezed to fit); vertices pop as the first line reaches them |
+| drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
+| live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
+| live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
+| sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |
 
 ## Example

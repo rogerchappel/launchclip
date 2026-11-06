@@ -40,8 +40,11 @@ export function dialogueRequests(story, overrides = {}) {
     if (speaker !== "narrator" && !voices.has(speaker)) throw new Error(`audio.narration.lines[${i}].speaker "${speaker}" is not in the story cast (or "narrator")`);
     const base = narrationRequest({ ...narration, text: line?.text }, overrides);
     const own = speaker === "narrator" ? null : voices.get(speaker);
-    // A character's own voice is a Kokoro voice id; other providers keep the narration voice.
-    const voice = own && base.provider === "kokoro" ? own : base.voice ?? NARRATION_DEFAULTS[base.provider]?.voice ?? null;
+    // A character's own voice: a Kokoro voice id (af_…, bm_…) under Kokoro, any
+    // other voice id (an ElevenLabs voice) under another provider; else the
+    // narration voice.
+    const kokoroId = typeof own === "string" && /^[ab][fm]_/.test(own);
+    const voice = own && (base.provider === "kokoro" ? kokoroId : !kokoroId) ? own : base.voice ?? NARRATION_DEFAULTS[base.provider]?.voice ?? null;
     return { speaker, request: { ...base, voice } };
   });
 }

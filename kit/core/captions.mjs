@@ -244,7 +244,10 @@ function round(value) { return Math.round(value * 1000) / 1000; }
 
 /** Legacy overlay `style` values; `line` maps to the minimal-line preset. */
 export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-highlight', line: 'minimal-line', none: null });
-export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto']);
+// 'seam': on the line between a stacked section's panel and presenter
+// (kit/core/footage-layout.mjs captionZone); 'chest': at the presenter's chest
+// height, from the measured head (captionZones). Elsewhere both sit as 'auto' does.
+export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto', 'seam', 'chest']);
 export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
@@ -284,6 +287,7 @@ export const CAPTION_PRESETS = Object.freeze({
   'word-highlight': preset({ description: 'Bold uppercase chunks; the spoken word turns the brand primary and pops.' }),
   'karaoke-fill': preset({ description: 'A primary fill sweeps through each word as it is spoken.', word: 'fill' }),
   'pop-word': preset({ description: 'One big word at a time with a scale pop; keywords in the accent colour.', layout: 'single', word: 'pop', size: 104, emphasis: true, entrance: 'none', exit: 'fade' }),
+  'seam-word': preset({ description: 'One bold white word at a time, as spoken: the stacked talking head\'s caption on the seam between panel and presenter.', layout: 'single', word: 'none', font: 'body', weight: 800, size: 64, case: 'as-is', letterSpacing: '-0.01em', stroke: 4, strokeColor: 'rgba(0,0,0,.6)', shadow: SHADOW_LIFT, maxWords: 1, maxChars: 24, entrance: 'none', exit: 'none', colors: { idle: '#ffffff', active: '#ffffff' } }),
   bounce: preset({ description: 'Each word hops and lands with a bounce as it is spoken.', word: 'bounce', size: 72, emphasis: true, entrance: 'slide-up' }),
   typewriter: preset({ description: 'Monospace letters type on over a dark plate.', font: 'meta', weight: 600, size: 50, case: 'as-is', letterSpacing: '0em', gap: 0.5, stroke: 0, shadow: 'none', word: 'type', maxWords: 5, maxChars: 26, entrance: 'fade', exit: 'fade', plate: true }),
   'box-highlight': preset({ description: 'A rounded primary box sits behind the active word.', word: 'box', size: 70, stroke: 0, shadow: SHADOW_SOFT, gap: 0.34 }),
@@ -303,7 +307,12 @@ export const CAPTION_PRESETS = Object.freeze({
   // in the active colour (captionHierarchy). No box: a line that needs help
   // to read gets a soft scrim, not a plate.
   'kinetic-hierarchy': preset({ description: 'The line builds up word by word; small connecting words, one large hero word per line glowing in the active colour.', weight: 900, size: 60, lineHeight: 1.05, case: 'as-is', letterSpacing: '-0.022em', gap: 0.24, stroke: 1, strokeColor: 'rgba(0,0,0,.38)', shadow: SHADOW_LIFT, word: 'hierarchy', maxWords: 3, maxChars: 24, entrance: 'none', exit: 'fade', plateStyle: 'scrim' }),
-  'soft-card': preset({ description: 'The whole line sits on a rounded card in the plate colour (the brand primary), in bold ink type.', colors: { idle: 'ink', plate: 'primary' }, font: 'body', weight: 900, size: 60, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 4, maxChars: 24, entrance: 'pop', exit: 'fade', plate: 'card' })
+  'soft-card': preset({ description: 'The whole line sits on a rounded card in the plate colour (the brand primary), in bold ink type.', colors: { idle: 'ink', plate: 'primary' }, font: 'body', weight: 900, size: 60, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 4, maxChars: 24, entrance: 'pop', exit: 'fade', plate: 'card' }),
+  // The satisfying-motion captions: the sentence builds word by word and
+  // stays, plain and quiet, and the key phrase lands in a solid ink chip
+  // (tag-chips) or turns serif italic in the brand colour (serif-accent).
+  'tag-chips': preset({ description: 'The sentence builds word by word; key phrases land in solid chips (ink on a light brand, paper on a dark one) that wipe in as they are said.', colors: { box: 'ink', boxText: 'paper' }, font: 'body', weight: 800, size: 58, lineHeight: 1.14, case: 'as-is', letterSpacing: '-0.01em', gap: 0.24, stroke: 0, shadow: SHADOW_SOFT, word: 'tag', emphasis: true, accents: 2, maxWords: 6, maxChars: 32, entrance: 'none', exit: 'fade' }),
+  'serif-accent': preset({ description: 'The sentence builds word by word; one key word per line turns serif italic in the brand colour.', colors: { accent: 'primary' }, font: 'body', weight: 750, size: 58, lineHeight: 1.14, case: 'as-is', letterSpacing: '-0.01em', gap: 0.24, stroke: 0, shadow: SHADOW_SOFT, word: 'serif', emphasis: true, accents: 1, maxWords: 6, maxChars: 32, entrance: 'none', exit: 'fade' })
 });
 
 export const CAPTION_PRESET_NAMES = Object.freeze(Object.keys(CAPTION_PRESETS));
@@ -416,6 +425,16 @@ export function captionHierarchy(words, emphasis = new Set()) {
   return roles;
 }
 
+// A tag chip is a solid block behind the key phrase: ink on a light brand
+// background, paper on a dark one, so it stands out from what is behind the
+// line; its text takes the other. An overlay's own box colour wins.
+function tagChipColors(p, own, role, brandColors) {
+  if (p.word !== 'tag' || own.box !== undefined) return { box: role('box'), boxText: role('boxText') };
+  const ink = captionColor('ink', brandColors, '#0b0b0f'), paper = captionColor('paper', brandColors, '#ffffff'), bg = captionColor('bg', brandColors, '#000000');
+  const box = captionContrast(ink, bg) >= captionContrast(paper, bg) ? ink : paper;
+  return { box, boxText: own.boxText !== undefined ? role('boxText') : box === ink ? paper : ink };
+}
+
 /** Resolved options of a captions overlay: preset defaults overridden by the overlay's options. */
 export function captionOptions(overlay = {}, { brand, format, fonts, story } = {}) {
   const name = captionPresetName(overlay, story) ?? 'word-highlight';
@@ -450,6 +469,7 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     maxChars: Number.isInteger(overlay?.max_chars) && overlay.max_chars > 0 ? overlay.max_chars : p.maxChars,
     case: CAPTION_CASES.includes(overlay?.case) ? overlay.case : p.case,
     font: stacks[fontRole] ?? stacks.display,
+    serif: stacks.serif,
     fontRole,
     weight: Number.isInteger(overlay?.weight) && overlay.weight >= 100 && overlay.weight <= 950 ? overlay.weight : p.weight,
     size: Math.round(p.size * scale * 100) / 100,
@@ -475,8 +495,7 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
       active: highlight('active', role('active')),
       spoken: spoken === idle ? idle : highlight('spoken', spoken),
       accent: highlight('accent', role('accent')),
-      box: role('box'),
-      boxText: role('boxText'),
+      ...tagChipColors(p, own, role, brandColors),
       plate: role('plate'),
       band: role('band'),
       bandEdge: role('bandEdge'),
@@ -819,6 +838,22 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
           }
           break;
         }
+        case 'tag': {
+          // Each word arrives as it is spoken and stays; a key phrase's chip wipes in under it.
+          kids.push(...(em ? [{ tag: 'span', id: `${id}-b`, cls: 'lc-cap-tag-b' }] : []), { tag: 'span', id: `${id}-t`, cls: 'lc-cap-t', text: word.text });
+          tw(id, start, 0.12, 'power2.out', { opacity: 1, y: 0 }, { opacity: 0, y: r4(0.18 * o.size) }, false);
+          if (em) {
+            tw(`${id}-b`, onAt, 0.16, 'power3.out', { scaleX: 1 }, { scaleX: 0 }, false);
+            tw(`${id}-t`, onAt, 0.1, 'power2.out', { color: C.boxText }, { color: C.idle }, false);
+          }
+          break;
+        }
+        case 'serif': {
+          span.text = word.text;
+          if (em) span.cls += ' lc-cap-serif';
+          tw(id, start, 0.12, 'power2.out', { opacity: 1, y: 0, scale: 1 }, { opacity: 0, y: r4(0.18 * o.size), scale: em ? 0.86 : 1 }, false);
+          break;
+        }
         case 'chip': {
           span.text = word.text;
           tw(id, onAt, 0.16, 'back.out(2.2)', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.6 }, false);
@@ -913,6 +948,10 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
     case 'stack': lines.push('.lc-cap { flex-direction: column; flex-wrap: nowrap; align-items: center; }', '.lc-cap-w { opacity: 0; transform-origin: 50% 50%; }', '.lc-cap-em { font-size: 1.42em; }'); break;
     case 'glow': lines.push(`.lc-cap-glow { position: absolute; left: 0; top: 0; color: ${C.active}; filter: blur(14px); opacity: 0; }`, '.lc-cap-t { position: relative; }'); break;
     case 'chip': lines.push(`.lc-cap-w { background-color: ${C.chip}; padding: 0.06em 0.34em 0.1em; border-radius: 0.5em; box-shadow: 0 6px 18px rgba(0,0,0,.35); opacity: 0; transform-origin: 50% 50%; }`); break;
+    case 'tag': lines.push('.lc-cap-w { opacity: 0; }', `.lc-cap-em { color: ${C.idle}; }`, '.lc-cap-t { position: relative; }',
+      `.lc-cap-tag-b { position: absolute; left: -0.16em; right: -0.16em; top: 0.02em; bottom: -0.04em; background: ${C.box}; border-radius: 0.14em; box-shadow: 0 0.08em 0.3em rgba(0,0,0,.35); transform-origin: 0% 50%; transform: scaleX(0); }`); break;
+    case 'serif': lines.push('.lc-cap { align-items: baseline; }', '.lc-cap-w { opacity: 0; transform-origin: 50% 80%; }',
+      `.lc-cap-serif { font-family: ${o.serif ?? "'Instrument Serif', serif"}; font-style: italic; font-weight: 400; letter-spacing: 0; font-size: 1.14em; color: ${C.accent}; }`); break;
     default: break;
   }
   if (o.layout === 'band') lines.push(`.lc-cap-band { position: absolute; left: -2%; right: -2%; top: 4%; bottom: 4%; background: ${C.band}; border-left: ${round(o.size * 0.22)}px solid ${C.bandEdge}; border-radius: ${round(o.size * 0.12)}px; transform-origin: 0% 50%; transform: scaleX(0); }`);

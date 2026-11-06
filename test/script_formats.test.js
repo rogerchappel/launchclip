@@ -3,16 +3,22 @@ import test from "node:test";
 import { planningPrompt } from "@launchclip/core/planning-prompt.mjs";
 import {
   AWARENESS_LEVELS,
+  FAST_MAX_WORDS_PER_SECOND,
   MAX_WORDS_PER_SECOND,
+  PACES,
+  PACE_IDS,
   SCRIPT_FORMAT_IDS,
   SCRIPT_FORMATS,
   SCRIPT_GOALS,
   SCRIPT_SKELETONS,
   chooseScriptPlan,
+  ctaLine,
+  ctaPlanOptions,
   reengageTimes,
   scriptFormatsReference,
   scriptPlanLines,
   scriptRuleLines,
+  seriesPlanOptions,
   wordBudget
 } from "@launchclip/core/script-formats.mjs";
 
@@ -57,7 +63,7 @@ test("chooseScriptPlan defaults goal and awareness, and explicit options overrid
   assert.equal(promo.awareness, "solution");
   assert.equal(promo.skeleton, "launch");
   const short = chooseScriptPlan({ prompt: "Why your sourdough is flat", duration: 30, aspect: "9:16" });
-  assert.deepEqual([short.format, short.goal, short.awareness, short.skeleton], ["short-form", "reach", "problem", "call-out-pas"]);
+  assert.deepEqual([short.format, short.goal, short.awareness, short.skeleton], ["short-form", "reach", "problem", "stakes-list"]);
   assert.equal(chooseScriptPlan({ prompt: "A 20s ad that drives sign-ups", duration: 20, aspect: "9:16" }).goal, "convert");
   assert.equal(chooseScriptPlan({ prompt: "Retargeting video for existing customers", duration: 20, aspect: "9:16" }).awareness, "most");
 
@@ -79,7 +85,8 @@ test("chooseScriptPlan sizes the beats to the word budget", () => {
   const words = plan.beats.reduce((sum, beat) => sum + beat.words, 0);
   assert.ok(Math.abs(words - plan.word_target) <= plan.beats.length, `beats add up to about the target (${words})`);
   // A word override (a measured take) never passes the ceiling.
-  assert.equal(chooseScriptPlan({ prompt: "x", duration: 30, aspect: "9:16", words: 400 }).word_target, Math.floor(30 * MAX_WORDS_PER_SECOND));
+  assert.equal(chooseScriptPlan({ prompt: "x", duration: 30, aspect: "9:16", words: 400 }).word_target, Math.floor(30 * FAST_MAX_WORDS_PER_SECOND), "short-form is fast: its ceiling is 4.2 words a second");
+  assert.equal(chooseScriptPlan({ prompt: "x", duration: 30, aspect: "9:16", pace: "standard", words: 400 }).word_target, Math.floor(30 * MAX_WORDS_PER_SECOND));
   const long = chooseScriptPlan({ prompt: "x", duration: 600 });
   assert.equal(long.format, "long-form");
   assert.deepEqual(long.reengage_at, [180, 360]);
@@ -89,9 +96,10 @@ test("chooseScriptPlan sizes the beats to the word budget", () => {
 test("wordBudget uses the format's rate under the hard ceiling of duration × 2.75 words", () => {
   assert.deepEqual(wordBudget(60, "explainer"), { wpm: 150, target: 150, ceiling: 165 });
   assert.deepEqual(wordBudget(60, "data-explainer"), { wpm: 135, target: 135, ceiling: 165 });
-  assert.deepEqual(wordBudget(60, "short-form"), { wpm: 165, target: 165, ceiling: 165 });
-  assert.deepEqual(wordBudget(30, "short-form"), { wpm: 165, target: 82, ceiling: 82 });
-  assert.equal(wordBudget(60, "story").target, 113, "story narration covers about 75% of the runtime");
+  assert.deepEqual(wordBudget(60, "short-form"), { wpm: 215, target: 215, ceiling: 252 }, "short-form defaults to the fast pace");
+  assert.deepEqual(wordBudget(30, "short-form"), { wpm: 215, target: 108, ceiling: 126 });
+  assert.deepEqual(wordBudget(30, "short-form", "standard"), { wpm: 150, target: 75, ceiling: 82 });
+  assert.equal(wordBudget(60, "story").target, 101, "story is calm (135 wpm) and its narration covers about 75% of the runtime");
   assert.equal(wordBudget(600, "long-form").ceiling, 1650);
   assert.equal(wordBudget(1, "promo").target, 8, "never below 8 words");
   for (const id of SCRIPT_FORMAT_IDS) for (const seconds of [3, 15, 45, 90, 180]) {
@@ -106,8 +114,11 @@ test("the plan and rule lines carry the format, goal, awareness, budget and the 
   assert.match(text, /Format: short-form/);
   assert.match(text, /Goal: reach/);
   assert.match(text, /Problem-aware: .*No product name/);
-  assert.match(text, /about 82 words .*never more than 82/);
-  assert.match(text, /1\. hook — Call-out hook/);
+  assert.match(text, /about 108 words .*never more than 126/);
+  assert.match(text, /Pace: Fast, about 215 words a minute/);
+  assert.match(text, /1\. hook — Stakes hook/);
+  assert.match(text, /2\. loop — Open loop/);
+  assert.match(text, /4\. rehook — Pattern interrupt/);
   const rules = scriptRuleLines(plan).join("\n");
   assert.match(rules, /4–10 words/);
   assert.match(rules, /"but", "so" or "therefore", never "and then"/);
@@ -129,4 +140,55 @@ test("the skills reference lists every format, skeleton and awareness level", ()
   assert.match(reference, /^# Script formats/);
   for (const id of [...SCRIPT_FORMAT_IDS, ...Object.keys(SCRIPT_SKELETONS), ...AWARENESS_LEVELS]) assert.ok(reference.includes(`\`${id}\``), id);
   assert.doesNotMatch(reference, /Hormozi|Schwartz|MrBeast|Pixar|Kallaway/, "the frameworks ship as LaunchClip's own vocabulary");
+});
+
+test("pace: short-form is fast, story and data are calm, the rest standard; --pace overrides and sets the voice speed", () => {
+  assert.deepEqual([...PACE_IDS], ["calm", "standard", "fast"]);
+  const short = chooseScriptPlan({ prompt: "Three deck mistakes", duration: 45, aspect: "9:16" });
+  assert.deepEqual([short.pace, short.wpm, short.voice_speed], ["fast", 215, 1.2]);
+  assert.ok(short.reasons.includes("pace fast: the default for short-form"));
+  const story = chooseScriptPlan({ prompt: "A fable about a fox", duration: 60, aspect: "9:16" });
+  assert.deepEqual([story.format, story.pace, story.wpm], ["story", "calm", 135]);
+  const forced = chooseScriptPlan({ prompt: "x", duration: 45, aspect: "9:16", pace: "Calm" });
+  assert.deepEqual([forced.pace, forced.wpm, forced.voice_speed, forced.word_ceiling], ["calm", 135, PACES.calm.speed, Math.floor(45 * MAX_WORDS_PER_SECOND)]);
+  assert.throws(() => chooseScriptPlan({ prompt: "x", duration: 30, pace: "ludicrous" }), /--pace must be one of calm, standard, fast/);
+});
+
+test("the stakes-list skeleton carries the open loop, the numbered list and the pattern interrupt, and sums to 1", () => {
+  const skeleton = SCRIPT_SKELETONS["stakes-list"];
+  assert.deepEqual(skeleton.beats.map((beat) => beat.id), ["hook", "loop", "list", "rehook", "payoff", "cta"]);
+  assert.ok(Math.abs(skeleton.beats.reduce((sum, beat) => sum + beat.share, 0) - 1) < 1e-9);
+  assert.equal(SCRIPT_FORMATS["short-form"].skeleton, "stakes-list");
+});
+
+test("a host's comment keyword and a series' viewer choice reach the plan and its call-to-action line", () => {
+  assert.equal(ctaPlanOptions({}), null);
+  assert.deepEqual(ctaPlanOptions({ ctaKeyword: "deck", ctaOffer: "our board care guide" }), { keyword: "DECK", offer: "our board care guide" });
+  assert.throws(() => ctaPlanOptions({ ctaKeyword: "two words" }), /--cta-keyword must be one word/);
+  assert.throws(() => ctaPlanOptions({ ctaOffer: "a guide" }), /--cta-offer needs --cta-keyword/);
+  const plan = chooseScriptPlan({ prompt: "Three deck mistakes", duration: 45, aspect: "9:16", ctaKeyword: "deck", ctaOffer: "our board care guide" });
+  assert.deepEqual(plan.cta, { keyword: "DECK", offer: "our board care guide" });
+  assert.match(scriptPlanLines(plan).join("\n"), /Call to action: a comment keyword, as the story's last idea: "Comment DECK and I'll send you our board care guide\."/);
+
+  assert.deepEqual(seriesPlanOptions({ episode: "Job 1", choices: "rosa, lou,ike" }), { episode: "Job 1", choices: ["ROSA", "LOU", "IKE"] });
+  assert.throws(() => seriesPlanOptions({ choices: "only" }), /two to four options/);
+  const episode = chooseScriptPlan({ prompt: "A heist story", duration: 90, aspect: "9:16", format: "short-form", episode: "Job 1", choices: ["ROSA", "LOU", "IKE"] });
+  assert.match(ctaLine(episode), /"Comment ROSA, LOU or IKE\. One word\."/);
+  const lines = scriptPlanLines(episode).join("\n");
+  assert.match(lines, /Series: this is Job 1 of a series/);
+  assert.match(lines, /most-picked one happens in the next episode/);
+});
+
+test("the short-video rules ask for specifics, an open loop with a re-hook, and a CTA built into the story", () => {
+  const rules = scriptRuleLines(chooseScriptPlan({ prompt: "x", duration: 45, aspect: "9:16" })).join("\n");
+  assert.match(rules, /Specific, never hedged/);
+  assert.match(rules, /never invent the figure/);
+  assert.match(rules, /open a loop in the first quarter/);
+  assert.match(rules, /pattern interrupt near the middle/);
+  assert.match(rules, /Never promise to send something the brief does not offer/);
+  const reference = scriptFormatsReference();
+  assert.match(reference, /## Pace/);
+  assert.match(reference, /`fast` \(215 words a minute, voice speed 1\.2/);
+  assert.match(reference, /--cta-keyword WORD/);
+  assert.equal(FAST_MAX_WORDS_PER_SECOND, 4.2);
 });

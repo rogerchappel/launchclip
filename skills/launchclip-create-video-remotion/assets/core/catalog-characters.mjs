@@ -36,12 +36,17 @@ import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGr
 import {worldLayerNodes} from './worlds/view.mjs';
 import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
 import {OVERSCAN} from './worlds/index.mjs';
+import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
-  'character-cameo': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween}
+  'character-cameo': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
+  'sprite-scene': {minDuration: SPRITE_TIMING.minDuration, leadIn: 0, leadOut: SPRITE_TIMING.leadOut}
 });
-const timingOf = id => ({...CHARACTER_TIMING[id], gaps: [], rules: [
+const timingOf = id => id === 'sprite-scene' ? {...CHARACTER_TIMING[id], gaps: [], rules: [
+  `cue, prop and card times sit at least ${SPRITE_TIMING.leadOut} s before the scene ends`,
+  'a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word'
+]} : ({...CHARACTER_TIMING[id], gaps: [], rules: [
   `a pose change tweens over ${ACTING.poseTween} s; cues may sit anywhere from the scene start to ${ACTING.poseTween} s before its end`,
   'an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it',
   'gestures (wave, type, walk, cheer, think) loop while the pose holds'
@@ -640,7 +645,9 @@ const DEFINITIONS = {
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
     params: {character: 'a cast or starter character id, or "@1", "@2"… by place in the story cast', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', target: 'what the character attends to (as cast-scene)', cues: `[{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?}]`, says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)', world: '{kind, time?} the world the character stands in (as cast-scene)', enter: 'fade | cut (as cast-scene)', exit: 'fade | cut (as cast-scene)'},
-    events: ['<character>-cue-<i>']}
+    events: ['<character>-cue-<i>']},
+  // Illustrated (sprite) characters: kit/core/catalog-sprites.mjs.
+  'sprite-scene': SPRITE_SCENE
 };
 
 export const MODULES = Object.fromEntries(Object.entries(DEFINITIONS).map(([id, def]) => [id, {describe: def.describe, params: def.params, events: def.events, timing: timingOf(id), resolve: def.resolve}]));

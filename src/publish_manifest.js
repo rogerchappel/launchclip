@@ -228,7 +228,9 @@ export function parseScriptMarkdown(text) {
 }
 
 function description(story, script, cta, link) {
-  if (cleanText(script?.description)) return cleanText(script.description);
+  // A script's own post caption keeps its line breaks (one list item a line).
+  const own = typeof script?.description === "string" ? script.description.split(/\r?\n/).map((line) => line.replace(/[ \t]+/g, " ").trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim() : "";
+  if (own) return own;
   const sentences = narrationSentences(story, script);
   const lead = sentences.slice(0, 2).join(" ");
   const close = cta.text && !lead.includes(cta.text) ? cta.text : "";

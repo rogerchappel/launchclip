@@ -73,10 +73,12 @@ const TITLE_SCORES_SCHEMA = Object.freeze({
   items: { type: "object", additionalProperties: false, required: ["title", "curiosity", "clarity", "match"], properties: { title: { type: "string" }, curiosity: { type: "number" }, clarity: { type: "number" }, match: { type: "number" } } }
 });
 
-/** The script schema for a plan: a short video's adds the angle and the title scores. */
+const POST_CAPTION_SCHEMA = Object.freeze({ type: "string", description: "The post text under the video: the hook line, then the list written out in full (one line per item, numbered), then the call to action, then \"Save this\" with a reason. Plain text, line breaks allowed, no hashtags." });
+
+/** The script schema for a plan: a short video's adds the angle, the title scores and the post caption. */
 export function scriptSchema(plan) {
   if (!isShort(plan)) return SCRIPT_SCHEMA;
-  return { ...SCRIPT_SCHEMA, required: [...SCRIPT_SCHEMA.required, "angle", "title_scores"], properties: { ...SCRIPT_SCHEMA.properties, angle: ANGLE_SCHEMA, title_scores: TITLE_SCORES_SCHEMA } };
+  return { ...SCRIPT_SCHEMA, required: [...SCRIPT_SCHEMA.required, "angle", "title_scores", "post_caption"], properties: { ...SCRIPT_SCHEMA.properties, angle: ANGLE_SCHEMA, title_scores: TITLE_SCORES_SCHEMA, post_caption: POST_CAPTION_SCHEMA } };
 }
 
 const isShort = (plan) => Number(plan?.duration) <= SHORT_VIDEO_SECONDS;
@@ -93,6 +95,12 @@ const TITLE_LINES = [
   "## Titles",
   "",
   "- title_scores: score every title option 0-10 on curiosity (a gap that carries self-interest, never confusion or a tease), clarity (what the video is, at a glance) and match (it fits the opening image and the hook). Be strict; the order is computed from these."
+];
+
+const POST_LINES = (plan) => [
+  "## Post caption",
+  "",
+  `- post_caption: the text posted under the video, so a viewer can save it: line 1 the hook; then every list item or step, numbered, one per line, each with its specific; then the call to action${plan?.cta?.keyword ? ` ("Comment ${plan.cta.keyword} and I'll send you ${plan.cta.offer ?? "…"}")` : plan?.series?.choices?.length ? ` ("Comment ${plan.series.choices.join(", ")}. One word.")` : ""} worded as in the narration; last, "Save this" and why (before your next build, before you pick a builder). Only facts the narration states.`
 ];
 
 const ROLE = `You write voiceover scripts for short product, explainer and story videos. A planning pass has already chosen the format, goal, awareness and beat skeleton below; write against it.
@@ -112,7 +120,7 @@ export const titleCount = (plan) => (Number(plan?.duration) <= SHORT_VIDEO_SECON
 
 /** The script pass instructions for a plan (chooseScriptPlan() or skeletonScriptPlan()). */
 export function scriptInstructions(plan) {
-  const short = isShort(plan) ? ["", ...ANGLE_LINES, "", ...TITLE_LINES] : [];
+  const short = isShort(plan) ? ["", ...ANGLE_LINES, "", ...TITLE_LINES, "", ...POST_LINES(plan)] : [];
   return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), ...short, "", output(titleCount(plan) === 5 ? "five, the best first," : "three")].join("\n");
 }
 
@@ -163,7 +171,7 @@ export async function writeScript(options = {}) {
   const { client, model = null, provider = null, prompt, notes = [], rules = null, assets = [], transcripts = [], duration, resize = null, repair = null } = options;
   if (!client) throw new Error("writeScript needs a model client");
   const given = options.plan ?? {};
-  const planOptions = { prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, words: options.words };
+  const planOptions = { prompt, duration, aspect: given.aspect, assets: given.assets, format: given.format, goal: given.goal, awareness: given.awareness, pace: given.pace, ctaKeyword: given.cta?.keyword ?? given.ctaKeyword, ctaOffer: given.cta?.offer ?? given.ctaOffer, episode: given.series?.episode ?? given.episode, choices: given.series?.choices ?? given.choices, words: options.words };
   const plan = options.skeleton ? skeletonScriptPlan(planOptions, options.skeleton) : chooseScriptPlan({ ...planOptions, skeleton: given.skeleton });
   const words = plan.word_target;
   const lines = [
@@ -209,15 +217,17 @@ export async function writeScript(options = {}) {
     title = titleOptions[0];
   }
   const angle = parseAngle(value?.angle);
+  const postCaption = cleanCaption(value?.post_caption);
   return {
     schema_version: SCRIPT_VERSION,
     title,
     title_options: titleOptions.length ? titleOptions : [title],
     ...(titleScores ? { title_scores: titleScores } : {}),
     ...(angle ? { angle } : {}),
+    ...(postCaption ? { description: postCaption } : {}),
     narration,
     beats,
-    plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
+    plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, pace: plan.pace, voice_speed: plan.voice_speed, ...(plan.cta ? { cta: plan.cta } : {}), ...(plan.series ? { series: plan.series } : {}), wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
     word_target: words,
     word_count: narration.split(/\s+/).filter(Boolean).length,
     usage,
@@ -244,6 +254,29 @@ export function cleanNarration(text) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 3900);
+}
+
+/** A post caption: markdown and hashtags out, line breaks kept (one list item a line), at most 2,000 characters. */
+export function cleanCaption(text) {
+  return String(text ?? "")
+    .replace(/[*_`>]+/g, "")
+    .replace(/(^|\s)#[\p{L}\p{N}_]+/gu, "$1")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 2000);
+}
+
+/**
+ * The narration speed for a take: the voice settings' own speed wins; else an
+ * ElevenLabs voice speaks at the plan's pace (plan.voice_speed). Kokoro and
+ * the other providers keep their own defaults.
+ */
+export function planVoiceSpeed(provider, plan, given) {
+  if (given !== undefined && given !== null) return given;
+  return provider === "elevenlabs" && plan?.voice_speed != null ? plan.voice_speed : undefined;
 }
 
 /** Whether a measured take needs one resize pass. */

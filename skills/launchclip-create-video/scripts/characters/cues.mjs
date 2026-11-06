@@ -33,7 +33,10 @@ export const KOKORO_VOICES = Object.freeze([
   'bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily', 'bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis'
 ]);
 const ID = /^[a-z][a-z0-9-]{0,23}$/;
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position'];
+// An illustrated (sprite) character: art names its sprite folder (kit/core/catalog-sprites.mjs); it
+// takes no rig params and acts only in sprite-scene.
+const SPRITE_KEYS = ['id', 'name', 'voice', 'art', 'position'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -73,6 +76,11 @@ export function storyCastErrors(cast) {
     if (entry.voice !== undefined && (typeof entry.voice !== 'string' || !entry.voice.trim())) errors.push(`${path}.voice must be a voice id (Kokoro: ${KOKORO_VOICES.slice(0, 4).join(', ')}, …)`);
     if (entry.position !== undefined && !['left', 'centre', 'center', 'right'].includes(entry.position)) errors.push(`${path}.position must be left, centre or right (the side this character takes in every cast scene it shares)`);
     if (entry.name !== undefined && (typeof entry.name !== 'string' || !entry.name.trim() || entry.name.length > 40)) errors.push(`${path}.name must be a string of 1–40 characters`);
+    if (entry.art !== undefined) {
+      if (typeof entry.art !== 'string' || !/^assets\/[a-zA-Z0-9_./ -]+$/.test(entry.art) || entry.art.split('/').includes('..')) errors.push(`${path}.art must be the character's sprite folder, e.g. assets/cast/${entry.id}`);
+      for (const key of Object.keys(entry)) if (ENTRY_KEYS.includes(key) && !SPRITE_KEYS.includes(key)) errors.push(`${path}.${key} is not used by an illustrated character (art); it keeps ${SPRITE_KEYS.join(', ')}`);
+      return;
+    }
     try { castParams(entry, path); } catch (error) { errors.push(error.message); }
   });
   return errors;
@@ -114,6 +122,7 @@ export function resolveStoryCast(story) {
   const mapping = isObj(cast) && isObj(cast.colors) ? cast.colors : null;
   const out = new Map();
   castEntries(cast).forEach((entry, i) => {
+    if (entry.art !== undefined) { out.set(entry.id, {id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, starter: false, sprite: true, art: entry.art}); return; }
     const params = castParams(entry, `cast.characters[${i}]`);
     const starter = starterCharacter(entry.from ?? entry.id);
     out.set(entry.id, {id: entry.id, name: entry.name ?? starter?.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, starter: false, ...characterLook(params, {style, brand: story?.brand, mapping})});
@@ -127,7 +136,11 @@ export function resolveStoryCast(story) {
  */
 export function castMember(resolved, id, path = 'id') {
   if (typeof id !== 'string' || !id) throw new Error(`${path} must name a character`);
-  if (resolved.members.has(id)) return resolved.members.get(id);
+  if (resolved.members.has(id)) {
+    const member = resolved.members.get(id);
+    if (member.sprite) throw new Error(`${path} "${id}" is an illustrated character (art: ${member.art}); it acts in sprite-scene, not in a drawn-rig scene`);
+    return member;
+  }
   if (/^@\d+$/.test(id)) throw new Error(`${path} "${id}" refers to character ${id.slice(1)} of the story cast, which has ${resolved.members.size || 'no'} character${resolved.members.size === 1 ? '' : 's'}${resolved.members.size ? ` (${[...resolved.members.keys()].join(', ')})` : ''}`);
   if (resolved.listed) throw new Error(`${path} "${id}" is not in the story cast (${[...resolved.members.keys()].join(', ')}); add it to cast.characters`);
   const starter = starterCharacter(id);
