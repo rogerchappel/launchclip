@@ -486,16 +486,17 @@ export const COMPILED_AUTHORING_LINT = Object.freeze(["composition_file_too_larg
 // ambient drift (#lc-drift-<scene>) and a module's camera
 // (#<scene>-cam, #<scene>-overlay-cam). Moving or scaling one carries its
 // box past its clipping parent by design, so `hyperframes check` reports a
-// container_overflow on the wrapper itself on every sampled frame of a move.
+// container_overflow on the wrapper itself on every sampled frame of a move
+// (and escaped_container when a pan carries it a whole frame away).
 // Only that exact pair is waived: the wrapper as the overflowing child, its
 // own engine parent as the container, and <scene> a scene of the compiled
 // composition. Anything inside a wrapper (a card, a caption, a character)
 // that overflows is reported under its own selector and still fails.
-export const ENGINE_WRAPPER_OVERFLOW = Object.freeze({ code: "container_overflow", severity: "warning" });
+export const ENGINE_WRAPPER_OVERFLOW = Object.freeze({ codes: Object.freeze(["container_overflow", "escaped_container"]), severity: "warning" });
 
 /** Is this layout finding a camera wrapper overflowing its own engine parent? scenes: scene ids of the compiled composition. */
 export function engineWrapperOverflow(finding, scenes = new Set()) {
-  if (finding?.code !== ENGINE_WRAPPER_OVERFLOW.code || finding?.severity !== ENGINE_WRAPPER_OVERFLOW.severity) return false;
+  if (!ENGINE_WRAPPER_OVERFLOW.codes.includes(finding?.code) || finding?.severity !== ENGINE_WRAPPER_OVERFLOW.severity) return false;
   const child = String(finding.selector ?? ""), parent = String(finding.containerSelector ?? "");
   if (/^#lc-cam-(drift|zoom|pan)$/.test(child)) return /^#lc-(camera|cam-(drift|zoom|pan))$/.test(parent);
   const wrapped = /^#lc-(par|zs|zp|drift)-(.+)$/.exec(child);

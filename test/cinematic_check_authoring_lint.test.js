@@ -42,7 +42,9 @@ test("engine camera wrappers overflowing their own parent are waived, by exact s
     ["#my-cam", "#my", "an author id that only looks like a camera"]
   ]) assert.equal(engineWrapperOverflow(overflow(child, parent), new Set(scenes)), false, why);
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), severity: "error" }), false, "an error is never waived");
-  assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), code: "text_overflow" }), false, "only container_overflow");
+  assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-pan", "#lc-cam-zoom"), code: "escaped_container" }), true, "a pan carrying its wrapper a frame away");
+  assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), code: "text_overflow" }), false, "only container_overflow and escaped_container");
+  assert.equal(engineWrapperOverflow({ ...overflow("#lc-drift-s1", "#launchclip-root"), code: "canvas_overflow" }), false, "text leaving the canvas is never waived");
 });
 
 test("a strict check that fails only on engine-made warnings passes verification; anything else still fails", () => {
