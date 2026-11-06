@@ -17,6 +17,7 @@ import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
 import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
 import { MEDIA_LAYOUTS, mediaLayoutTimeline, productDemoTimeline } from "@launchclip/core/catalog-d.mjs";
 import { photoSceneTimeline } from "@launchclip/core/catalog-d-photo-scene.mjs";
+import { setPropTimeline } from "@launchclip/core/catalog-d-set-prop.mjs";
 import { clipTimeline } from "@launchclip/core/catalog-d-clip.mjs";
 import { MODULES as B } from "@launchclip/core/catalog-b.mjs";
 import { MODULES as C } from "@launchclip/core/catalog-c.mjs";
@@ -42,7 +43,7 @@ const TIMELINES = new Map([
   ...Object.keys(E ?? {}).map((id) => [id, catalogETimeline]), ...Object.keys(F ?? {}).map((id) => [id, catalogFTimeline]),
   ...Object.keys(G ?? {}).map((id) => [id, catalogGTimeline]), ...Object.keys(H ?? {}).map((id) => [id, catalogHTimeline]),
   ...Object.keys(CHARACTERS ?? {}).map((id) => [id, charactersTimeline]), ...Object.keys(WORLD ?? {}).map((id) => [id, worldTimeline]),
-  ["product-demo", productDemoTimeline], ["photo-scene", photoSceneTimeline], ["clip", clipTimeline],
+  ["product-demo", productDemoTimeline], ["photo-scene", photoSceneTimeline], ["clip", clipTimeline], ["set-prop", setPropTimeline],
   ...MEDIA_LAYOUTS.map((def) => [def.id, mediaLayoutTimeline])
 ]);
 

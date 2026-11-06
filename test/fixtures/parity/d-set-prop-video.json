@@ -1,0 +1,64 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Set prop parity: a video on the kitchen wall, dropping in (portrait)",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "platform": "youtube-shorts",
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#14122b",
+        "primary": "#6d5dfc",
+        "accent": "#ffb547",
+        "ink": "#14122b",
+        "paper": "#f6f3ee"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "world": {
+      "kind": "kitchen",
+      "time": "day"
+    },
+    "cast": {
+      "style": "outlined",
+      "characters": [
+        {
+          "id": "maya"
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "id": "tv",
+        "module": "set-prop",
+        "start": 0.5,
+        "end": 3.5,
+        "params": {
+          "media": {
+            "src": "assets/testsrc.mp4",
+            "sourceStart": 0.5
+          },
+          "on": "wall",
+          "at": 0.5,
+          "height": 0.7,
+          "width": 1.1,
+          "enter": "drop"
+        }
+      }
+    ]
+  },
+  "sceneId": "tv",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

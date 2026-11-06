@@ -79,7 +79,7 @@ const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round
 const rad = (deg) => (deg * Math.PI) / 180;
 
 // Riders: in world mode a cast standing in a world plate travels with it.
-const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo']);
+const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo', 'set-prop']);
 const sameTime = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-3;
 
 /**

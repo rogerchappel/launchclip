@@ -42,11 +42,13 @@ import {mediaRootOps, photoScene} from './catalog-d-photo-scene.mjs';
 import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
 import {evidenceClip} from './catalog-d-evidence-clip.mjs';
 import {clip} from './catalog-d-clip.mjs';
+import {setProp} from './catalog-d-set-prop.mjs';
 import {MEDIA_LAYOUTS} from './catalog-d-media-layouts.mjs';
 
 export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
 export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidenceClipView} from './catalog-d-evidence-clip.mjs';
 export {CLIP_ENTERS, CLIP_MOVES, CLIP_TIMING, clipTimeline, clipView} from './catalog-d-clip.mjs';
+export {SET_PROP_ENTERS, SET_PROP_EXITS, SET_PROP_PLACES, SET_PROP_TIMING, setPropTimeline, setPropView} from './catalog-d-set-prop.mjs';
 export {MEDIA_PASSAGES, mediaPassage, scenePassage} from './media-passage.mjs';
 export {MEDIA_LAYOUTS, MEDIA_LAYOUT_ENTRANCES, MEDIA_LAYOUT_TIMING, MEDIA_LAYOUT_VARIANTS, countUp, frameShape, layoutMedia, mediaLayoutTimeline, mediaLayoutView} from './catalog-d-media-layouts.mjs';
 
@@ -561,5 +563,6 @@ export const MODULES = {
   [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve},
   [evidenceClip.id]: {describe: evidenceClip.describe, params: evidenceClip.params, events: evidenceClip.events, timing: evidenceClip.timing, resolve: evidenceClip.resolve},
   [clip.id]: {describe: clip.describe, params: clip.params, events: clip.events, timing: clip.timing, resolve: clip.resolve},
+  [setProp.id]: {describe: setProp.describe, params: setProp.params, events: setProp.events, timing: setProp.timing, resolve: setProp.resolve},
   ...Object.fromEntries(MEDIA_LAYOUTS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve}]))
 };

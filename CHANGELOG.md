@@ -4,6 +4,17 @@
 
 ### Added
 
+- `set-prop` (catalogue D) puts one story object in the world a cast stands
+  in: a drawn prop from the world kit, or a project image or video from
+  `assets/`. It stands on the floor, against the back wall, on the counter or
+  on the wall, at a share of the frame width and a size in metres that
+  matches the cast. Its track sets whether it is behind or in front of the
+  characters. It moves with the world camera (and rides its plate in world
+  mode), and it can cut, fade, pop, slide or drop in. Both renderers draw it,
+  with parity fixtures.
+- The world kit draws a `fridge`, `washing-machine`, `bookshelf`,
+  `microwave` and `toaster`.
+
 - Sound effects that fit the moment. `--sfx generated` (`make`'s default
   when `ELEVENLABS_API_KEY` is set; `finish` and keyless runs stay on `kit`)
   gives the accent cues a sound described from the event, the words on
@@ -263,6 +274,13 @@
   pick the narration by hand, several stretches at once.
 
 ### Fixed
+
+- `photo-scene`, `evidence-clip` and `product-demo` honour their typed
+  transitions instead of always fading over 0.4 s. A cut into or out of one
+  no longer dips to the background under a character on a higher track, and
+  one can open a video at full opacity on frame 0. They still fade where
+  nothing carries them, and take `params.enter` / `params.exit` (`cut` |
+  `fade`).
 
 - An animated character story made from a prompt alone no longer fails
   `finish` with "cast check failed". The direction map's prompt now lists

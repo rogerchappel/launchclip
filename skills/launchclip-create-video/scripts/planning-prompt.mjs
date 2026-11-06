@@ -552,7 +552,9 @@ function contractLines() {
 function worldLines() {
   return [
     `world? (optional): {kind: ${WORLD_KINDS.join(' | ')}, time?: ${WORLD_TIMES.join(' | ')}, props?: [prop ids]}. The default for every world scene; a style may set it. Pick the place that fits the topic (cooking → kitchen or cafe, fitness → gym or park, developer tools → home-desk or server-room) and the time the story is set at.`,
-    'A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.'
+    'A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.',
+    'A set-prop puts one story object in that world: a drawn prop (fridge, bookshelf, washing-machine, microwave, toaster, or any world prop) or an assets/ cut-out image or video, on its floor, back wall, counter or wall, sized in metres to match the cast. On a lower track than the cast-scene it stands behind the characters, on a higher one in front of them; it moves with the world camera. Give it the plate\'s window to have it there all shot, or start it on the word to pop it in.',
+    'A photo-scene, evidence-clip or product-demo plate cuts as its transitions say: whole on its first frame after a cut or a typed in, whole on frame 0 when it opens the video, and gone with the cut into the next plate; it fades only on its own (or with params.enter / exit: fade).'
   ];
 }
 
