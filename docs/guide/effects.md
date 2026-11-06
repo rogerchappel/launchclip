@@ -48,7 +48,7 @@ Then the art director matches effects to what you say. "Meet Ledgerly" suggests 
 
 See [Make it look like you](styles.md) for the full list.
 
-Only the stretches of your recording that an effect covers get cut out, so a long recording doesn't take long. A missing model or a failed cut-out never fails the video: those scenes play without you in front of them, and the report says so. Add `--no-subject` to turn the effects off.
+Only the stretches of your recording that an effect covers get cut out, so a long recording doesn't take long. A missing model or a failed cut-out never fails the video: those scenes play without you in front of them, and the report says so. Add `--no-subject` to turn the effects off; add `--face-track` as well to keep the quick head track (no cut-outs) so cards still stay off your face.
 
 The first run downloads two small cut-out models, about 26 MB in total. `launchclip subject setup` fetches them up front, and `launchclip doctor` shows whether they're ready.
 

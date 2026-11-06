@@ -2521,6 +2521,15 @@ without constraints), where `story validate` and `finish` read it.
   `id:<id>` for id entries), and a shot whose `src`, `file` (under `--assets`,
   or ending in the path) or `asset_id` / `source.id` matches is dropped (no
   shot). A path in both lists is an error.
+- `faces`: where the presenter's head is in the base recording, for an app
+  that measured it: `[{t, box: {x, y, width, height} | null}]`, `t` in the
+  recording's own seconds, `box` in fractions of its frame from the top-left
+  (`null` where no face shows). With `--no-subject` (and no `--face-track`
+  track), make files them as the whole-video head track
+  (`assets/subject/track.json`, model `app-faces`) when the base is the
+  recording as supplied (`--base-edited`, or no base edit), so the planner's
+  face fit (`src/face_clear_fit.js`) keeps cards off the face and the face
+  gate checks it. A face box is fine; the fit keeps a margin around it.
 
 Checks (`checkConstraints(resolved, constraints, {map, words, story})`):
 errors prefixed `constraints:` for a hidden range the base shows through (with

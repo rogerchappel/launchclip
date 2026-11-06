@@ -15,6 +15,12 @@
 // - never_use: the file never appears; make leaves it out of the inventory
 //   and refuses it from the asset provider. An {id} entry matches the
 //   provider's asset id.
+// - faces: where the presenter's head is in the base recording, for an app
+//   that measured it ([{t, box: {x, y, width, height} | null}]: t in the
+//   recording's own seconds, box in fractions of its frame from the top-left;
+//   null where no face shows). make files them as the whole-video head track
+//   when it tracked none itself (--no-subject), so tooling keeps cards off the
+//   face and the face gate checks it. A face box is fine: tooling keeps a margin.
 // Media paths are relative to the assets folder ("assets/" is optional).
 //
 // parseConstraints → checkConstraints (story validate, finish's gate, the
@@ -61,9 +67,9 @@ export function parseConstraints(raw, { source = CONSTRAINTS_FILE } = {}) {
   const errors = [];
   const warnings = [];
   const err = (message) => errors.push(`${source}: ${message}`);
-  const constraints = { version: CONSTRAINTS_VERSION, ranges: [], must_use: [], never_use: [] };
+  const constraints = { version: CONSTRAINTS_VERSION, ranges: [], must_use: [], never_use: [], faces: [] };
   if (!isObject(raw)) return { ok: false, errors: [`${source} must be a JSON object`], warnings, constraints };
-  for (const key of Object.keys(raw)) if (!["version", "ranges", "media", "notes"].includes(key)) err(`unknown field "${key}" (version, ranges, media)`);
+  for (const key of Object.keys(raw)) if (!["version", "ranges", "media", "notes", "faces"].includes(key)) err(`unknown field "${key}" (version, ranges, media, faces)`);
   if (raw.version !== CONSTRAINTS_VERSION) err(`version must be ${CONSTRAINTS_VERSION}`);
   if (raw.ranges !== undefined && !Array.isArray(raw.ranges)) err("ranges must be a list of {start, end, picture, reason?}");
   for (const [index, range] of (Array.isArray(raw.ranges) ? raw.ranges : []).entries()) {
@@ -109,7 +115,32 @@ export function parseConstraints(raw, { source = CONSTRAINTS_FILE } = {}) {
     }
     for (const entry of constraints.must_use) if (constraints.never_use.some((other) => other.src === entry.src)) err(`${entry.src} is in both media.must_use and media.never_use`);
   }
+  constraints.faces = parseFaces(raw.faces, err);
   return { ok: errors.length === 0, errors, warnings, constraints };
+}
+
+// faces: [{t, box: {x, y, width, height} | null}], sorted by t.
+function parseFaces(faces, err) {
+  if (faces === undefined) return [];
+  if (!Array.isArray(faces)) { err("faces must be a list of {t, box}"); return []; }
+  const fraction = (value) => finite(value) && value >= 0 && value <= 1;
+  const out = [];
+  faces.forEach((face, index) => {
+    const where = `faces[${index}]`;
+    if (!isObject(face)) { err(`${where} must be {t, box}`); return; }
+    for (const key of Object.keys(face)) if (!["t", "box"].includes(key)) err(`${where} has unknown field "${key}"`);
+    if (!finite(face.t) || face.t < 0) { err(`${where}.t must be seconds of the recording (0 or more)`); return; }
+    const box = face.box ?? null;
+    if (box !== null) {
+      if (!isObject(box) || !["x", "y", "width", "height"].every((key) => fraction(box[key])) || !(box.width > 0 && box.height > 0) || box.x + box.width > 1 + 1e-6 || box.y + box.height > 1 + 1e-6) {
+        err(`${where}.box must be null or {x, y, width, height}: fractions of the frame from its top-left`);
+        return;
+      }
+    }
+    out.push({ t: r3(face.t), box: box && { x: box.x, y: box.y, width: box.width, height: box.height } });
+  });
+  out.sort((a, b) => a.t - b.t);
+  return out.filter((face, index) => index === 0 || face.t > out[index - 1].t);
 }
 
 /** Read and parse a constraints file; throws with every error when it is invalid. */
@@ -128,7 +159,8 @@ export function constraintsDocument(constraints) {
   return {
     version: CONSTRAINTS_VERSION,
     ranges: constraints.ranges,
-    media: { must_use: constraints.must_use, never_use: constraints.never_use }
+    media: { must_use: constraints.must_use, never_use: constraints.never_use },
+    ...(constraints.faces?.length ? { faces: constraints.faces } : {})
   };
 }
 
