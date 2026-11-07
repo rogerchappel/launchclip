@@ -212,3 +212,26 @@ test("caption lines over a dark world switch to a colour that reads; over a ligh
   const plain = captionPlan(chunks, { type: "captions", preset: "quiet-accent" }, { brand, format: story.format, story: { ...story, scenes: [] } });
   assert.doesNotMatch(plain.css, /lc-cap-on-/);
 });
+
+test("one-word presets show one word at a time on a real GSAP timeline, short words and blur sub-frames included", () => {
+  // Words shorter than the pop entrance, seeked at 90 fps (three blur sub-frames a frame).
+  const chunks = [["a", 1.1, 1.16], ["slick", 1.17, 1.5], ["it", 1.52, 1.58], ["works", 1.6, 2.1]].map(([text, start, end], i) => ({ id: `cap-00${i + 1}`, start, end, words: [{ text, start, end }] }));
+  for (const preset of ["word-chip", "seam-word", "pop-word"]) {
+    const plan = captionPlan(chunks, { type: "captions", preset }, { brand: BRAND, format: FORMAT });
+    const targets = new Map();
+    const target = (id) => { if (!targets.has(id)) targets.set(id, { opacity: 0, x: 0, y: 0, scale: 1, scaleX: 1 }); return targets.get(id); };
+    const tl = gsap.timeline({ paused: true });
+    for (const tween of plan.tweens) {
+      const vars = { ...tween.to, duration: tween.dur, ease: tween.ease };
+      if (tween.from) { if (!tween.ir) vars.immediateRender = false; tl.fromTo(target(tween.id), { ...tween.from }, vars, tween.at); }
+      else tl.to(target(tween.id), vars, tween.at);
+    }
+    const lines = plan.nodes.map((node) => node.id).filter((id) => targets.has(id));
+    for (let k = 90; k <= 200; k += 1) {
+      tl.seek(k / 90, false);
+      const shown = lines.filter((id) => targets.get(id).opacity > 0.02);
+      assert.ok(shown.length <= 1, `${preset}: ${shown.join(", ")} on screen together at ${(k / 90).toFixed(3)} s`);
+    }
+    tl.kill();
+  }
+});
