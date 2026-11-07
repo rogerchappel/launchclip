@@ -128,7 +128,9 @@ test("every starter is v3 and footage-led stories get its quiet caption default"
     const merged = applyStyle(story({ style: entry.name }), starter).story;
     assert.equal(merged.overlays[0].preset, starter.captions.preset);
     assert.equal(merged.overlays[0].lanes, undefined);
-    assert.deepEqual(Object.keys(merged.frame).sort(), ["enabled", "kicker", "progress", "sections", "show"]);
+    // A starter may leave the brand frame off (signal-ui: the interface is the frame).
+    if (starter.brand_frame.enabled === false) assert.equal(merged.frame, undefined, entry.name);
+    else assert.deepEqual(Object.keys(merged.frame).sort(), ["enabled", "kicker", "progress", "sections", "show"]);
   }
 });
 

@@ -59,6 +59,18 @@ Story with characters: characters, 20–180 s, 16:9 or 9:16.
 - References: 0
 - Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.
 
+## ui-explainer-reel
+
+UI explainer reel: motion, 30–75 s, 9:16.
+
+- Provenance: measured (measured 2026-11-07T19:47:32.843Z)
+- References: 1
+- Note: Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic.
+
+| Source | Rights | Duration | SHA-256 |
+| --- | --- | --- | --- |
+| reel-c.mp4 | public-statistics | 45.833 s | `22142d685096` |
+
 ## youtube-long-form
 
 YouTube long form: footage-led, 300–1800 s, 16:9 or 1:1.
