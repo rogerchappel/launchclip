@@ -773,7 +773,16 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     nodes.push(line);
     const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
-    tw(chunk.id, chunk.start, entrance.dur, entrance.ease, inTo, { ...entrance.from }, true);
+    // One word at a time: the line leaves when the next arrives, and its
+    // entrance ends before that exit starts. On a seeked GSAP timeline an
+    // entrance still running would draw the word back over its own exit.
+    const nextStart = o.layout === 'single' ? list[list.indexOf(chunk) + 1]?.start : undefined;
+    const room = Number.isFinite(nextStart) ? Math.max(0.01, nextStart - chunk.start) : Infinity;
+    const exitDur = Math.min(exit.dur, room / 2);
+    const exitAt = Math.max(chunk.start + 0.12, chunk.end - exitDur);
+    const leaveAt = Number.isFinite(nextStart) ? Math.max(chunk.start, Math.min(exitAt, nextStart - exitDur)) : exitAt;
+    const enterDur = Number.isFinite(nextStart) ? Math.max(0.005, Math.min(entrance.dur, leaveAt - chunk.start - 0.002)) : entrance.dur;
+    tw(chunk.id, chunk.start, enterDur, entrance.ease, inTo, { ...entrance.from }, true);
     shownWords(chunk.words, o).forEach((word, i) => {
       const id = `${chunk.id}-w${i}`;
       const em = o.emphasis && (accented ? accented.has(i) : isEmphasis(emphasis, word.text));
@@ -895,10 +904,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
       }
       if (kids.length) span.children = kids;
     });
-    // One word at a time: a line is gone when the next one arrives, however short its word, so two never show at once.
-    const nextStart = o.layout === 'single' ? list[list.indexOf(chunk) + 1]?.start : undefined;
-    const exitAt = Math.max(chunk.start + 0.12, chunk.end - exit.dur);
-    tw(chunk.id, Number.isFinite(nextStart) ? Math.max(chunk.start, Math.min(exitAt, nextStart - exit.dur)) : exitAt, exit.dur, exit.ease, { ...exit.to });
+    tw(chunk.id, leaveAt, exitDur, exit.ease, { ...exit.to });
   }
   o.heroScales = [...heroScales].sort((a, b) => a - b);
   const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect }));
