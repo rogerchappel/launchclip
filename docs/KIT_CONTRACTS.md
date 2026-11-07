@@ -179,15 +179,16 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   the scene and the format.
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
-  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card", dur, from_object?, direction?}`
-  (the last three: see "Shot states and the focus device").
+  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card"|"dot-wipe", dur, from_object?, direction?}`
+  (rack-focus, glow-wipe, card-to-card and dot-wipe: see "Shot states and
+  the focus device").
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
   else is `ordinary`. `pan`, `pull`, `orbit`, `whip-pan` (and `push` in
   `camera.mode` "world") move the world camera; see "World camera".
 - `states` on a scene (1–5 entries, each `{at, set}`) advances one module
   instance through timed states; see "Shot states and the focus device".
-- `motion.grammar` (a grammar name or `{base, ...overrides}`) and `camera`
-  (`{mode, layout?, spacing?, parallax?, blur?}`): see "Motion grammar" and
+- `motion.grammar` (a grammar name or `{base, ...overrides}`), `motion.feel` (see "Story feel") and `camera`
+  (`{mode, layout?, spacing?, parallax?, blur?, kicks?}`): see "Motion grammar" and
   "World camera".
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
@@ -644,6 +645,18 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - `glow-wipe` (direction left|right|up|down): a straight inset wipe in the
   travel direction; both plates flare (`glow` = extra brightness, peak 0.85)
   at the edge. For chapter breaks only.
+- `dot-wipe` (`kit/core/dot-wipe.mjs`, track-0 scenes only, about 0.5 s): a
+  halftone grid of round dots (24 across the short side, radius 0.74 × the
+  pitch at full cover, opacity 0.96) grows in from the corners and edges
+  (`power1.in`, 45 % of the duration) until the frame is closed, holds for
+  10 %, and shrinks away centre first (`power1.out`). The plates swap at the
+  midpoint under the full cover (the layer side is two zero-length opacity
+  tweens). Colour: the brand's `ink` when it has 4:1 contrast on `bg`, else
+  `paper` (dark dots on a light paper look, light dots on a dark one). Both
+  renderers draw the same SVG (dots grouped by lateness `--lc-dl`) and CSS
+  rule (`r: calc(R * clamp(0, --lc-dw * 2.4 − --lc-dl * 1.4, 1))`) above every
+  scene and under the medium, the brand frame and the captions; HyperFrames
+  tweens `--lc-dw`, Remotion sets it per frame (`dotWipeCover`).
 - `card-to-card`: FLIP continuity. The incoming layer starts with the
   outgoing card's centre and area (`params.rect` of each scene, else the
   canvas; `cardMap(a, b, width, height)`) and settles on its own, while the
@@ -2154,6 +2167,64 @@ camera puts on screen during its frames (container states and blur per frame,
 its plates' placements, its overlays' parallax, the lattice glows or field
 tiles that cross the canvas). Changing one scene's pan direction re-renders the segments from
 that move on, including later scenes whose own fields did not change.
+
+## Story feel (`kit/core/feel.mjs`, `kit/core/kinetic.mjs`)
+
+One setting turns on the habits of a top faceless animated reel together:
+
+```json
+"motion": {"feel": "kinetic"},
+"camera": {"mode": "cuts", "kicks": [{"at": "word:twelve"}, {"at": 6.1, "scale": 1.2, "origin": {"x": 0.5, "y": 0.4}}]}
+```
+
+- `motion.feel`: `"kinetic"`, or `{preset: "kinetic", ambient?: false |
+  {scale?: [lo, hi] (1–1.08), shift?: 0–0.02, period?: [lo, hi] s (2–20)},
+  kicks?: false | "auto" | {auto?, scale?: 1.03–1.4, gap?: 1.1–10 s},
+  spring?: overshoot 0–0.6}`.
+- `camera.kicks`: `[{at: seconds | anchor, scale?: 1.03–1.4 (1.15),
+  origin?: {x, y} (shares of the frame, the centre by default)}]`. Explicit
+  kicks work with or without a feel (with no feel: kicks only). Anchors
+  resolve in `resolveStory` like hits.
+- Grammar (`feelGrammar`, merged by `resolveGrammar` as preset < feel <
+  `motion.grammar`): base `snappy` unless the story names another, `enter`
+  and `emphasis` eases become `springEase(0.27)` (`elastic.out(1, 0.406)`, a
+  GSAP-native spring whose first overshoot is 27 % of the travel and whose
+  later swings decay like a damped spring; `motion.mjs springEase(o)` solves
+  the period for any overshoot), entrances get 0.42 s to settle, the
+  whip-pan ease is `expo.inOut` with 0.8 move blur, `defaultTransition` is a
+  0.26 s whip-pan, and the hold level is `lively` (ambient field and hold
+  drift, `ambient.mjs`).
+- Ambient camera: one wrapper (`#lc-feel` in HyperFrames, `FeelLayer` in
+  Remotion) around every scene, the world camera and the overlays, under the
+  dot wipes, the medium, the brand frame and the captions. Its transform is
+  `translate(x, y) scale(s)` about the canvas centre: x and y waves within
+  ±`shift` of the frame (0.6 %), s a wave between `scale[0]` and `scale[1]`
+  (1.015–1.035; 1.015 is the overscan the drift needs), periods in
+  `period` (5–9 s) that divide the story duration, so loop seams match. In
+  world mode the camera's own drift stays and the feel adds kicks only.
+- Kicks: a punch from 1 to `scale` over 0.12 s (`power2.out`), a spring
+  settle over 0.35 s with the feel's overshoot towards a rest
+  `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
+  a 0.6 s relax to 1. The scale is about `origin`. Automatic kicks
+  (`kicks.auto`, on by default with the feel) take emphasised caption words
+  and numbers (`captionEmphasis`: digits, overlay keywords, words named by
+  impact hits) and strong scene hits; explicit kicks go first. At most one
+  per `gap` (1.5 s), never in a busy span (`feelBusy`: track-0 transitions,
+  the loop ending, the camera plan's moves and zooms inside a shot, padded
+  0.06 s). A dropped explicit kick is a compile warning.
+- Safety: `feelStateAt` clamps every frame so the wrapper covers the canvas
+  (scale ≥ 1, |x| ≤ (s − 1)·W/2, |y| likewise): no edge ever shows. Captions,
+  the brand frame and the medium sit outside the wrapper, so caption zones
+  and the face-safe logic are unchanged. Footage-led stories (a base
+  recording) get no ambient camera or kicks; their base camera owns the frame.
+- Renderers: `feelSamples(plan)` gives one state per frame; HyperFrames sets
+  each changed one on `#lc-feel` (`feelGsap`, `tl.set` at f/fps − 0.0005),
+  Remotion evaluates `feelStateAt(plan, frame / fps)`, the same values.
+  Without a feel or kicks nothing is emitted. `hyperframes check` reports
+  `#lc-feel` overflowing `#launchclip-root` (it is scaled past the canvas by
+  design), like the world camera's wrappers.
+- Golden: `examples/story/kinetic-feel-9x16` (paper background, three cards,
+  two kicks, a 0.26 s whip-pan and a dot-wipe).
 
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
