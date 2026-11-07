@@ -216,10 +216,10 @@ test('dot-wipe options: color, cover and hold validate, resolve and default to a
   const fade = raw({}); fade.scenes[1].in = {type: 'fade', dur: 0.4, cover: 0.5};
   assert.match(validateStory(fade).errors.join('\n'), /in\.cover is a dot-wipe option; "fade" does not take it/);
 
-  // Defaults: accent dots, peak at 0.8 of the closing size, no hold.
-  assert.deepEqual(DOT_WIPE.defaults, {color: 'accent', cover: 0.8, hold: 0});
+  // Defaults: accent dots, peak at 0.65 of the closing size, no hold.
+  assert.deepEqual(DOT_WIPE.defaults, {color: 'accent', cover: 0.65, hold: 0});
   const wipe = wipeOf({});
-  assert.deepEqual({color: wipe.color, cover: wipe.cover, hold: wipe.hold}, {color: '#1f6feb', cover: 0.8, hold: 0});
+  assert.deepEqual({color: wipe.color, cover: wipe.cover, hold: wipe.hold}, {color: '#1f6feb', cover: 0.65, hold: 0});
   // Colours: ink is the contrasting text colour, paper the page (bg), a hex
   // is itself; an accent lost on the page falls back to ink.
   assert.equal(resolveDotWipeColor(paper, 'ink'), '#151515');
@@ -239,7 +239,7 @@ test('dot-wipe options: color, cover and hold validate, resolve and default to a
   for (let f = peak + 1; f < frames.length; f += 1) assert.ok(progress[f] <= progress[f - 1], `shrinks after the peak (frame ${f})`);
   assert.equal(progress.filter((c) => c >= 1 - 1e-9).length, 0, 'no frame holds the peak');
   const coverage = progress.map((c) => dotCoverage(c, wipe.cover));
-  assert.ok(Math.max(...coverage) < 0.95, `the default peak never closes the frame (max ${Math.max(...coverage).toFixed(3)})`);
+  assert.ok(Math.max(...coverage) < 0.8, `the default peak leaves the cut showing through (max ${Math.max(...coverage).toFixed(3)})`);
   assert.ok(Math.max(...coverage) > 0.6, 'but it still reads as a wipe');
   // cover 1 with a hold is the closed look: solid frames held at the peak,
   // the hold centred on the swap.
@@ -271,7 +271,7 @@ test('HyperFrames: the feel wraps every scene under the dot wipes and captions; 
   for (const id of ['s1', 's2', 's3']) { const at = html.indexOf(`data-launchclip-scene="${id}"`); assert.ok(at > feel && at < wipe, id); }
   assert.match(html, /tl\.set\("#lc-feel", \{ x: F\[i\]\[1\]/);
   assert.match(html, /tl\.fromTo\("#lc-dw-s3", \{ "--lc-dw": 0 \}/);
-  assert.match(html, /<div id="lc-dw-s3" class="lc-dot-wipe"[^>]*--lc-dc:0\.8;/);
+  assert.match(html, /<div id="lc-dw-s3" class="lc-dot-wipe"[^>]*--lc-dc:0\.65;/);
   // The GSAP table is the frame-pure samples.
   const plan = planOf(s);
   const table = JSON.parse(/var F = (\[\[.*?\]\]);/.exec(html)[1]);

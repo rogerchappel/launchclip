@@ -658,10 +658,11 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
     light dots on a dark one), `"paper"` (the page, `bg`: a soft wipe) or a
     `#rrggbb` hex.
   - `cover`: the peak dot size, 0.3–1, as a share of the closing size (0.74 ×
-    the pitch, where neighbours overlap and close the frame). Default 0.8: the
-    dots overlap but the diagonal gaps stay open (about 94 % of the frame at
-    the peak), so the swap shows through the halftone instead of as a solid
-    blink. Below about 0.95 the frame never closes.
+    the pitch, where neighbours overlap and close the frame). Default 0.65:
+    neighbouring dots just touch (about 72 % of the frame at the peak), so
+    the swap shows through the halftone instead of as a solid blink. Below
+    about 0.95 the frame never closes; 0.8 covers about 90 % and reads as two
+    near-solid frames at 30 fps.
   - `hold`: whole frames held at the peak, centred on the swap (default 0;
     at most half the wipe).
   Both renderers draw the same SVG (dots grouped by lateness `--lc-dl`) and

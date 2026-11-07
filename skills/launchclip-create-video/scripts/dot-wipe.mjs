@@ -12,8 +12,9 @@
 //
 //   color  "accent" (default) | "ink" | "paper" | "#rrggbb"
 //   cover  the peak dot size, 0.3–1, as a share of the size that closes the
-//          frame (default 0.8: the dots overlap but the diagonal gaps stay
-//          open, so the peak never reads as a solid frame); at 1 the dots close
+//          frame (default 0.65: neighbours just touch, about 72 % of the frame
+//          at the peak, so the cut shows through the halftone instead of a
+//          solid frame); at 1 the dots close
 //   hold   frames held at the peak (default 0: the dots turn straight round)
 //
 // The layer side (kit/core/transitions.mjs): the incoming plate stays hidden
@@ -31,9 +32,10 @@ export const DOT_WIPE = Object.freeze({
   columns: 24, fill: 0.74, spread: 1.4, opacity: 0.96,
   coverEase: 'power1.in', revealEase: 'power1.out',
   // The defaults for scene.in's options (see the header): accent dots that
-  // peak at 0.8 of the closing size with no hold, so the wipe reads as
-  // halftone passing over the cut rather than a 2–4 frame blink of solid colour.
-  defaults: Object.freeze({ color: 'accent', cover: 0.8, hold: 0 }),
+  // peak at 0.65 of the closing size with no hold, so the wipe reads as
+  // halftone passing over the cut rather than a 2–4 frame blink of solid
+  // colour (0.8 still read as two near-solid frames, 89 % covered, at 30 fps).
+  defaults: Object.freeze({ color: 'accent', cover: 0.65, hold: 0 }),
   // The named colours and the cover's range (kit/core/story.mjs validates
   // scene.in's options and repeats these, import-free).
   colors: Object.freeze(['accent', 'ink', 'paper']),
