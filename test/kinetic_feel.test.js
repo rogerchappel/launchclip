@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {STORY_FEELS, STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {FEEL_NAMES, feelErrors, kickErrors, resolveFeel} from '@launchclip/core/feel.mjs';
 import {KICK, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
-import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipes} from '@launchclip/core/dot-wipe.mjs';
+import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipePhases, dotWipes, resolveDotWipeColor} from '@launchclip/core/dot-wipe.mjs';
 import {TRANSITION_TYPES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {cameraPlan} from '@launchclip/core/camera-world.mjs';
 import {easeOvershoot, resolveGrammar} from '@launchclip/core/grammar.mjs';
@@ -135,7 +135,7 @@ test('dot-wipe: the incoming plate swaps in under the full cover, and the cover 
   assert.equal(at(tw.out, 0.26).opacity, 0);
   const wipe = {start: 8, dur: 0.5};
   assert.equal(dotWipeCover(wipe, 7.99), 0);
-  assert.equal(dotWipeCover(wipe, 8.25), 1, 'full cover at the swap');
+  assert.equal(dotWipeCover(wipe, 8.25), 1, 'the peak at the swap');
   assert.equal(dotWipeCover(wipe, 8.5), 0);
   assert.ok(dotWipeCover(wipe, 8.1) > 0 && dotWipeCover(wipe, 8.1) < 1);
   const grid = dotWipeGrid(1080, 1920);
@@ -145,12 +145,73 @@ test('dot-wipe: the incoming plate swaps in under the full cover, and the cover 
   // Half-way in, the corners are full and the centre is still clear.
   assert.equal(dotRadius(0.5, 0, grid.radius), grid.radius);
   assert.equal(dotRadius(0.5, 1, grid.radius), 0);
-  // At full cover the dots overlap: the frame is closed.
-  assert.ok(dotRadius(1, 1, grid.radius) >= grid.pitch * Math.SQRT1_2);
-  assert.match(dotWipeCss(1080, 1920), /r: calc\(\d+(\.\d+)?px \* clamp\(0, var\(--lc-dw\) \* 2\.4 - var\(--lc-dl\) \* 1\.4, 1\)\)/);
+  // With cover 1 the dots overlap at the peak: the frame is closed.
+  assert.ok(dotRadius(1, 1, grid.radius, 1) >= grid.pitch * Math.SQRT1_2);
+  assert.match(dotWipeCss(1080, 1920), /r: calc\(\d+(\.\d+)?px \* var\(--lc-dc, 1\) \* clamp\(0, var\(--lc-dw\) \* 2\.4 - var\(--lc-dl\) \* 1\.4, 1\)\)/);
   // HyperFrames tweens the same cover with the same eases.
   const lines = dotWipeGsap({id: 'lc-dw-c', start: 8, dur: 0.5});
   assert.ok(lines.some((line) => line.includes(`ease: "${DOT_WIPE.coverEase}"`)) && lines.some((line) => line.includes(`ease: "${DOT_WIPE.revealEase}"`)));
+});
+
+// The share of a frame the dots cover (sampled on a 6 px lattice) at progress c.
+function dotCoverage(c, cover, {width = 1080, height = 1920} = {}) {
+  const grid = dotWipeGrid(width, height);
+  const dots = grid.groups.flatMap((group) => group.dots.map((dot) => ({...dot, r: dotRadius(c, group.late, grid.radius, cover)})));
+  let hit = 0, n = 0;
+  for (let y = 0; y < height; y += 6) for (let x = 0; x < width; x += 6) {
+    n += 1;
+    if (dots.some((dot) => (dot.x - x) ** 2 + (dot.y - y) ** 2 <= dot.r * dot.r)) hit += 1;
+  }
+  return hit / n;
+}
+
+test('dot-wipe options: color, cover and hold validate, resolve and default to a wipe that does not blink', () => {
+  const raw = (inOpts) => ({schema: 'launchclip.story.v1', lane: 'motion', brand: paper, format: {width: 1080, height: 1920, fps: 30, duration: 8}, scenes: [card('a', 0, 4), card('b', 4, 8, {in: {type: 'dot-wipe', dur: 0.5, ...inOpts}})]});
+  const wipeOf = (inOpts) => { const s = resolveStory(raw(inOpts)); return dotWipes(s, sceneWindows(s))[0]; };
+  assert.deepEqual(validateStory(raw({color: 'accent', cover: 0.7, hold: 2})).errors, []);
+  assert.deepEqual(validateStory(raw({color: '#12ab34', cover: 1, hold: 0})).errors, []);
+  assert.match(validateStory(raw({color: 'teal'})).errors.join('\n'), /scenes\[1\]\.in\.color must be one of accent, ink, paper or a #rrggbb hex/);
+  assert.match(validateStory(raw({cover: 1.2})).errors.join('\n'), /scenes\[1\]\.in\.cover must be the peak dot size between 0\.3 and 1/);
+  assert.match(validateStory(raw({hold: 1.5})).errors.join('\n'), /in\.hold must be a whole number of frames/);
+  assert.match(validateStory(raw({hold: 8})).errors.join('\n'), /in\.hold \(8 frames\) must be at most half the wipe \(7 frames at 30 fps\)/);
+  const fade = raw({}); fade.scenes[1].in = {type: 'fade', dur: 0.4, cover: 0.5};
+  assert.match(validateStory(fade).errors.join('\n'), /in\.cover is a dot-wipe option; "fade" does not take it/);
+
+  // Defaults: accent dots, peak at 0.8 of the closing size, no hold.
+  assert.deepEqual(DOT_WIPE.defaults, {color: 'accent', cover: 0.8, hold: 0});
+  const wipe = wipeOf({});
+  assert.deepEqual({color: wipe.color, cover: wipe.cover, hold: wipe.hold}, {color: '#1f6feb', cover: 0.8, hold: 0});
+  // Colours: ink is the contrasting text colour, paper the page (bg), a hex
+  // is itself; an accent lost on the page falls back to ink.
+  assert.equal(resolveDotWipeColor(paper, 'ink'), '#151515');
+  assert.equal(resolveDotWipeColor(paper, 'paper'), '#f2eee6');
+  assert.equal(resolveDotWipeColor(paper, '#AABBCC'), '#aabbcc');
+  assert.equal(resolveDotWipeColor({colors: {...paper.colors, accent: '#efebe3'}}, 'accent'), '#151515');
+  assert.equal(resolveDotWipeColor(dark, 'accent'), '#46d4ff');
+
+  // The reference look at 30 fps: the dots grow, the scene swaps at the
+  // peak, the dots shrink, and with the defaults no frame is closed (solid)
+  // and no frame holds the peak.
+  const frames = Array.from({length: 16}, (_, f) => 4 + f / 30);
+  const progress = frames.map((t) => dotWipeCover(wipe, t));
+  const peak = progress.indexOf(Math.max(...progress));
+  assert.ok(Math.abs(frames[peak] - 4.25) <= 1 / 30 + 1e-9, 'the peak is at the swap (the midpoint)');
+  for (let f = 1; f <= peak; f += 1) assert.ok(progress[f] >= progress[f - 1], `grows to the peak (frame ${f})`);
+  for (let f = peak + 1; f < frames.length; f += 1) assert.ok(progress[f] <= progress[f - 1], `shrinks after the peak (frame ${f})`);
+  assert.equal(progress.filter((c) => c >= 1 - 1e-9).length, 0, 'no frame holds the peak');
+  const coverage = progress.map((c) => dotCoverage(c, wipe.cover));
+  assert.ok(Math.max(...coverage) < 0.95, `the default peak never closes the frame (max ${Math.max(...coverage).toFixed(3)})`);
+  assert.ok(Math.max(...coverage) > 0.6, 'but it still reads as a wipe');
+  // cover 1 with a hold is the closed look: solid frames held at the peak,
+  // the hold centred on the swap.
+  const closed = wipeOf({cover: 1, hold: 3});
+  assert.equal(closed.hold, 0.1);
+  // (3 frames held; a frame that lands exactly on either edge of the hold is at the peak too.)
+  const atPeak = frames.map((t) => dotWipeCover(closed, t)).filter((c) => c >= 1 - 1e-9).length;
+  assert.ok(atPeak >= 3 && atPeak <= 4, `${atPeak} frames at the peak`);
+  assert.ok(dotCoverage(1, 1) > 0.999);
+  const p = dotWipePhases(closed);
+  assert.ok(Math.abs((p.coverEnd + p.revealStart) / 2 - 4.25) < 1e-6);
 });
 
 test('dot-wipe ink: dark dots on a light paper look, light dots on a dark look', () => {
@@ -171,6 +232,7 @@ test('HyperFrames: the feel wraps every scene under the dot wipes and captions; 
   for (const id of ['s1', 's2', 's3']) { const at = html.indexOf(`data-launchclip-scene="${id}"`); assert.ok(at > feel && at < wipe, id); }
   assert.match(html, /tl\.set\("#lc-feel", \{ x: F\[i\]\[1\]/);
   assert.match(html, /tl\.fromTo\("#lc-dw-s3", \{ "--lc-dw": 0 \}/);
+  assert.match(html, /<div id="lc-dw-s3" class="lc-dot-wipe"[^>]*--lc-dc:0\.8;/);
   // The GSAP table is the frame-pure samples.
   const plan = planOf(s);
   const table = JSON.parse(/var F = (\[\[.*?\]\]);/.exec(html)[1]);
@@ -189,6 +251,7 @@ test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per 
   assert.match(tsx, /dotWipeSvg\(width, height, wipe\.color\)/);
   assert.match(tsx, /dotWipeCss\(width, height\)/);
   assert.match(tsx, /dotWipeCover\(wipe, t\)/);
+  assert.match(tsx, /\["--lc-dc" as any\]: dotWipePeak\(wipe\)/);
   // feelStateAt at f / fps is exactly the HyperFrames sample for frame f.
   const plan = planOf(story({camera: {mode: 'cuts', kicks: [{at: 1}]}}));
   const samples = feelSamples(plan);

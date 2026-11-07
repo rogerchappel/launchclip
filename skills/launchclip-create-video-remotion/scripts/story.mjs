@@ -250,6 +250,36 @@ function pointerPath(pointer) {
   return String(pointer ?? "").split("/").slice(1).map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~")).map((token) => (/^\d+$/.test(token) ? `[${token}]` : `.${token}`)).join("");
 }
 
+// dot-wipe options (kit/core/dot-wipe.mjs DOT_WIPE.colors and coverRange,
+// repeated here import-free).
+const DOT_WIPE_COLORS = ["accent", "ink", "paper"];
+const DOT_WIPE_COVER = [0.3, 1];
+
+function storyFps(story) {
+  const fps = Number(story?.format?.fps ?? 30);
+  return Number.isFinite(fps) && fps > 0 ? fps : 30;
+}
+
+/** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
+function dotWipeOptionErrors(transition, path, fps) {
+  const errors = [];
+  // hold is also the overview's (seconds); color and cover are the wipe's alone.
+  if (transition.type !== "dot-wipe") {
+    for (const key of ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    return errors;
+  }
+  const { color, cover, hold, dur } = transition;
+  if (color !== undefined && !(DOT_WIPE_COLORS.includes(color) || (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(color)}`);
+  const [lo, hi] = DOT_WIPE_COVER;
+  if (cover !== undefined && !(typeof cover === "number" && cover >= lo && cover <= hi)) errors.push(`${path}.cover must be the peak dot size between ${lo} and ${hi} (1 closes the frame); got ${JSON.stringify(cover)}`);
+  if (hold !== undefined) {
+    const most = typeof dur === "number" && dur > 0 ? Math.floor((dur * fps) / 2) : Infinity;
+    if (!(Number.isInteger(hold) && hold >= 0)) errors.push(`${path}.hold must be a whole number of frames, 0 or more; got ${JSON.stringify(hold)}`);
+    else if (hold > most) errors.push(`${path}.hold (${hold} frames) must be at most half the wipe (${most} frames at ${fps} fps) so the dots have time to grow and shrink`);
+  }
+  return errors;
+}
+
 export function validateStory(story, { modules, moduleParams } = {}) {
   const errors = [];
   const warnings = [];
@@ -528,6 +558,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
         if (transition.type === "dot-wipe" && track !== 0) err(`${path}.in.type "dot-wipe" covers the whole frame; only a track-0 scene can arrive with it`);
+        for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -675,6 +706,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           else if (duration !== null && transition.dur >= duration) err("ending.in.dur must be shorter than format.duration");
           if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`ending.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
           cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
+          for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);

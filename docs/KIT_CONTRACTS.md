@@ -180,6 +180,7 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
   `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card"|"dot-wipe", dur, from_object?, direction?}`
+  (a dot-wipe also takes `color?`, `cover?` and `hold?`)
   (rack-focus, glow-wipe, card-to-card and dot-wipe: see "Shot states and
   the focus device").
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
@@ -645,18 +646,29 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - `glow-wipe` (direction left|right|up|down): a straight inset wipe in the
   travel direction; both plates flare (`glow` = extra brightness, peak 0.85)
   at the edge. For chapter breaks only.
-- `dot-wipe` (`kit/core/dot-wipe.mjs`, track-0 scenes only, about 0.5 s): a
-  halftone grid of round dots (24 across the short side, radius 0.74 × the
-  pitch at full cover, opacity 0.96) grows in from the corners and edges
-  (`power1.in`, 45 % of the duration) until the frame is closed, holds for
-  10 %, and shrinks away centre first (`power1.out`). The plates swap at the
-  midpoint under the full cover (the layer side is two zero-length opacity
-  tweens). Colour: the brand's `ink` when it has 4:1 contrast on `bg`, else
-  `paper` (dark dots on a light paper look, light dots on a dark one). Both
-  renderers draw the same SVG (dots grouped by lateness `--lc-dl`) and CSS
-  rule (`r: calc(R * clamp(0, --lc-dw * 2.4 − --lc-dl * 1.4, 1))`) above every
-  scene and under the medium, the brand frame and the captions; HyperFrames
-  tweens `--lc-dw`, Remotion sets it per frame (`dotWipeCover`).
+- `dot-wipe` (`kit/core/dot-wipe.mjs`, track-0 scenes only, about 0.5 s;
+  `{type: "dot-wipe", dur, color?, cover?, hold?}`): a halftone grid of round
+  dots (24 across the short side, opacity 0.96) grows in from the corners and
+  edges (`power1.in`), peaks, and shrinks away centre first (`power1.out`),
+  symmetric about the midpoint, where the plates swap (the layer side is two
+  zero-length opacity tweens).
+  - `color`: `"accent"` (default: the brand accent, or `ink` when the accent
+    has under 1.5:1 contrast on `bg`), `"ink"` (the brand's `ink` when it has
+    4:1 contrast on `bg`, else `paper`: dark dots on a light paper look,
+    light dots on a dark one), `"paper"` (the page, `bg`: a soft wipe) or a
+    `#rrggbb` hex.
+  - `cover`: the peak dot size, 0.3–1, as a share of the closing size (0.74 ×
+    the pitch, where neighbours overlap and close the frame). Default 0.8: the
+    dots overlap but the diagonal gaps stay open (about 94 % of the frame at
+    the peak), so the swap shows through the halftone instead of as a solid
+    blink. Below about 0.95 the frame never closes.
+  - `hold`: whole frames held at the peak, centred on the swap (default 0;
+    at most half the wipe).
+  Both renderers draw the same SVG (dots grouped by lateness `--lc-dl`) and
+  CSS rule (`r: calc(R * --lc-dc * clamp(0, --lc-dw * 2.4 − --lc-dl * 1.4,
+  1))`, `--lc-dc` the cover on the wipe's element) above every scene and
+  under the medium, the brand frame and the captions; HyperFrames tweens
+  `--lc-dw`, Remotion sets it per frame (`dotWipeCover`).
 - `card-to-card`: FLIP continuity. The incoming layer starts with the
   outgoing card's centre and area (`params.rect` of each scene, else the
   canvas; `cardMap(a, b, width, height)`) and settles on its own, while the

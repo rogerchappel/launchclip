@@ -74,7 +74,7 @@ import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } f
 // @ts-ignore plain ESM from kit/core
 import { feelPlan, feelStateAt, feelTransform } from "../core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
-import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipeSvg, dotWipes } from "../core/dot-wipe.mjs";
+import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "../core/dot-wipe.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -418,7 +418,8 @@ const FeelLayer: React.FC<{ plan: any; children: React.ReactNode }> = ({ plan, c
 };
 
 // One dot wipe (kit/core/dot-wipe.mjs) over its window: the HyperFrames
-// markup and CSS rule, its cover set per frame on --lc-dw.
+// markup and CSS rule, its progress set per frame on --lc-dw and its peak
+// size (the cover option) on --lc-dc.
 const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -426,7 +427,7 @@ const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
   const svg = React.useMemo(() => dotWipeSvg(width, height, wipe.color), [width, height, wipe.color]);
   const css = React.useMemo(() => dotWipeCss(width, height), [width, height]);
   return (
-    <div className="lc-dot-wipe" aria-hidden style={{ zIndex: DOT_WIPE.z.remotion, ["--lc-dw" as any]: dotWipeCover(wipe, t) }}>
+    <div className="lc-dot-wipe" aria-hidden style={{ zIndex: DOT_WIPE.z.remotion, ["--lc-dc" as any]: dotWipePeak(wipe), ["--lc-dw" as any]: dotWipeCover(wipe, t) }}>
       <style>{css}</style>
       <div style={{ position: "absolute", left: 0, top: 0 }} dangerouslySetInnerHTML={{ __html: svg }} />
     </div>

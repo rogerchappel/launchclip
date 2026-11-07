@@ -32,7 +32,7 @@ import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
 import { feelGsap, feelPlan } from './kinetic.mjs';
-import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipeSvg, dotWipes } from './dot-wipe.mjs';
+import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from './dot-wipe.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
@@ -540,7 +540,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const feelLines = feelGsap(feel);
   // Dot wipes (kit/core/dot-wipe.mjs): a halftone grid over every scene.
   const wipes = isolate ? [] : dotWipes(story, windows);
-  const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
+  const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;--lc-dc:${dotWipePeak(wipe)};z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
 
   // Brand frame (kit/core/brand-frame.mjs): kicker, section labels and the
   // progress line over every scene, under the captions.
