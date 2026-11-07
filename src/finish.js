@@ -1052,7 +1052,7 @@ const STAGES = [
         layout = await checkLayoutProject(ctx.project, layoutOptions());
         ctx.warnings.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
       }
-      ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
+      ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], media: layout.media ?? {}, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
@@ -1669,7 +1669,7 @@ async function runGates(ctx) {
     gates.density ??= { status: "failed", error: error.message };
   }
   try {
-    gates.holds = holdGate(ctx.resolved);
+    gates.holds = holdGate(ctx.resolved, { media: ctx.layout?.media ?? {} });
     gates.states = stateGate(ctx.resolved);
   } catch (error) {
     gates.holds ??= { status: "failed", error: error.message };
@@ -2078,7 +2078,7 @@ async function beatSync(ctx, plan, track, { duration }) {
         ctx.copy = result.story;
         ctx.resolved = resolved;
         ctx.boundaries = deriveBoundaries(resolved);
-        ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], warnings: layout.warnings, findings: layout.findings };
+        ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], media: layout.media ?? {}, warnings: layout.warnings, findings: layout.findings };
         changed = true;
         await writeResolvedCopy(ctx);
       }

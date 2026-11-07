@@ -2,7 +2,7 @@
 // movement grammar, measured like the density and variety gates on the
 // resolved story and the op lists both renderers play.
 //
-//   holdGate(story)    nothing holds still: no span over 3 s without motion
+//   holdGate(story, {media})  nothing holds still: no span over 3 s without motion
 //   stateGate(story)   builds, not holds: no shot over 10 s without a change
 //
 // Each gate → {status, findings: [{rule, severity, at, ids, detail}]}.
@@ -89,11 +89,13 @@ function gateResult(findings, extra = {}) {
  * Nothing static (§7.1), sampled every 0.25 s:
  * - static-hold (error): over 3 s in which nothing moves: no hold drift or
  *   world camera, no transition, no module tween, loop, count or state, and
- *   no module that moves on its own (layout.live: a playing clip);
+ *   no module that moves on its own (layout.live: a playing clip; a
+ *   full-frame photo-scene video while its pixels move, from options.media:
+ *   src/media_presence.js facts by scene id, checkLayoutProject().media);
  * - drift-only (warning): over 3 s in which only the hold drift moves; give
  *   the hold a live mover (a state, a counter, a sweep, a cursor).
  */
-export function holdGate(story) {
+export function holdGate(story, { media = {} } = {}) {
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
   const { windows, entries } = renderedModels(story);
   const live = [], drift = [];
@@ -104,6 +106,8 @@ export function holdGate(story) {
     // A module whose content moves on its own the whole time (layout.live: clip's playing footage or still move).
     if (model.camera || entry.transitionIn?.camera || model.layout?.live === true) live.push([entry.start, entry.renderEnd]);
     else if (driftEligible(story, entry.scene, model)) drift.push([entry.start, entry.renderEnd]);
+    // Measured motion in a full-frame asset (marks drawn on, a camera truck in the video).
+    for (const [from, to] of media[entry.id]?.moving_spans ?? []) live.push([Math.max(entry.start, from), Math.min(entry.renderEnd, to)]);
     live.push(...opSpans(model));
   }
   const inside = (list, t) => list.some(([a, b]) => a <= t + 1e-6 && t < b - 1e-6);

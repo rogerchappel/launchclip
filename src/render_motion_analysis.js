@@ -37,14 +37,15 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     ?? (duration > 0 && fps > 0 ? Math.round(duration * fps) : series.frame_count + 1);
   const cuts = cutFrames.map((frame) => frame / fps).filter((time) => time > 0.05 && time < duration - 0.05);
   const flowFps = Number(options.flowFps ?? 10);
-  const flowWidth = Number(options.flowWidth ?? 64);
-  const flowHeight = Number(options.flowHeight ?? 36);
+  // The flow grid keeps the video's aspect (a portrait render is sampled
+  // portrait) and is fine enough to see a drawn figure's limbs move.
+  const grid = flowGrid(Number(video.width), Number(video.height), options);
   const rawFlow = await runRaw("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-i", resolved,
-    "-vf", `fps=${flowFps},scale=${flowWidth}:${flowHeight},format=gray`,
+    "-vf", `fps=${flowFps},scale=${grid.width}:${grid.height}:flags=area,format=gray`,
     "-an", "-f", "rawvideo", "pipe:1"
   ]);
-  const opticalFlow = analyzeBlockMotion(Buffer.isBuffer(rawFlow.stdout) ? rawFlow.stdout : Buffer.from(rawFlow.stdout ?? "", "binary"), flowWidth, flowHeight, flowFps, { ...options, cutTimes: cuts });
+  const opticalFlow = analyzeBlockMotion(Buffer.isBuffer(rawFlow.stdout) ? rawFlow.stdout : Buffer.from(rawFlow.stdout ?? "", "binary"), grid.width, grid.height, flowFps, { ...options, cutTimes: cuts, velocityScale: grid.velocityScale });
   const shotDurations = boundariesToDurations([0, ...cuts, duration]);
   return {
     schema_version: "launchclip.render-motion.v1",
@@ -94,11 +95,46 @@ export function analyzeMotionSeries(values, fps, options = {}) {
   };
 }
 
+// Optical flow samples a grid with the video's aspect: its short side is
+// FLOW_GRID.shortSide px (a 1080×1920 render is read at 180×320), fine enough
+// that a drawn figure's limbs (a stroke of a few px at 1080) still show. The
+// velocities are reported on the legacy scale, px/s on a grid whose short side
+// is FLOW_GRID.referenceShortSide (the 64×36 grid the profile floors were set
+// on), so a profile's flow_velocity_p90 floor keeps its meaning at any
+// resolution: 2 px/s is one grid pixel per sample at 10 fps.
+export const FLOW_GRID = Object.freeze({ shortSide: 180, referenceShortSide: 36, blockSize: 6, searchRadius: 4 });
+
+// A frame pair moves when enough textured blocks find a clearly better match
+// away from where they were (FLOW_MATCH): at least minMovingBlocks of them
+// and minMovingShare of the tracked blocks, so one blinking eye or encoder
+// noise is not motion, but a gesturing arm is. The pair's velocity is the
+// median speed of the blocks that moved; a held frame measures 0.
+export const FLOW_MATCH = Object.freeze({ gain: 0.25, noisePerPixel: 1.5, residualPerPixel: 16, minMovingBlocks: 3, minMovingShare: 0.004 });
+
+/** The flow grid for a width × height video: {width, height, velocityScale}. options.flowWidth/flowHeight force a grid. */
+export function flowGrid(width, height, options = {}) {
+  if (options.flowWidth != null && options.flowHeight != null) {
+    const w = Number(options.flowWidth), h = Number(options.flowHeight);
+    return { width: w, height: h, velocityScale: FLOW_GRID.referenceShortSide / Math.min(w, h) };
+  }
+  const shortSide = Number(options.flowShortSide ?? FLOW_GRID.shortSide);
+  const w = Number(width) > 0 ? Number(width) : 16, h = Number(height) > 0 ? Number(height) : 9;
+  const even = (value) => Math.max(2, 2 * Math.round(value / 2));
+  const grid = w >= h ? { width: even(shortSide * w / h), height: even(shortSide) } : { width: even(shortSide), height: even(shortSide * h / w) };
+  return { ...grid, velocityScale: FLOW_GRID.referenceShortSide / Math.min(grid.width, grid.height) };
+}
+
 export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) {
   const frameSize = width * height;
   const count = Math.floor(rawFrames.length / frameSize);
-  const block = Number(options.flowBlockSize ?? 6);
-  const radius = Number(options.flowSearchRadius ?? 2);
+  const block = Number(options.flowBlockSize ?? FLOW_GRID.blockSize);
+  const radius = Number(options.flowSearchRadius ?? FLOW_GRID.searchRadius);
+  const scale = Number(options.velocityScale ?? 1);
+  const gain = Number(options.flowMatchGain ?? FLOW_MATCH.gain);
+  const noise = Number(options.flowNoisePerPixel ?? FLOW_MATCH.noisePerPixel) * block * block;
+  const residual = Number(options.flowResidualPerPixel ?? FLOW_MATCH.residualPerPixel) * block * block;
+  const minBlocks = Number(options.flowMinMovingBlocks ?? FLOW_MATCH.minMovingBlocks);
+  const minShare = Number(options.flowMinMovingShare ?? FLOW_MATCH.minMovingShare);
   const cutTimes = options.cutTimes ?? [];
   const magnitudes = [];
   const samples = [];
@@ -107,24 +143,30 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
     if (cutTimes.some((time) => Math.abs(time - at) <= 1 / fps)) continue;
     const previousOffset = (frame - 1) * frameSize;
     const currentOffset = frame * frameSize;
-    const vectors = [];
-    for (let y = radius; y + block + radius < height; y += block) {
-      for (let x = radius; x + block + radius < width; x += block) {
+    let tracked = 0;
+    const moving = [];
+    for (let y = radius; y + block + radius <= height; y += block) {
+      for (let x = radius; x + block + radius <= width; x += block) {
         if (blockTexture(rawFrames, previousOffset, width, x, y, block) < Number(options.flowTextureThreshold ?? 5)) continue;
-        let bestSad = Infinity;
+        tracked += 1;
+        // Staying put is the default: a shift wins only by a clear margin.
+        const still = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, 0, 0, block);
+        let bestSad = still;
         let bestMagnitude = 0;
         for (let dy = -radius; dy <= radius; dy += 1) {
           for (let dx = -radius; dx <= radius; dx += 1) {
+            if (!dx && !dy) continue;
             const sad = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, dx, dy, block);
-            if (sad < bestSad) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); }
+            if (sad < bestSad || (sad === bestSad && bestMagnitude && Math.hypot(dx, dy) < bestMagnitude)) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); }
           }
         }
-        vectors.push(bestMagnitude * fps);
+        if (bestMagnitude && bestSad <= still * (1 - gain) && still - bestSad >= noise && bestSad <= residual) moving.push(bestMagnitude);
       }
     }
-    const magnitude = vectors.length ? quantile(vectors.sort((a, b) => a - b), .75) : 0;
+    const enough = moving.length >= Math.max(minBlocks, Math.ceil(tracked * minShare));
+    const magnitude = enough ? median(moving) * fps * scale : 0;
     magnitudes.push(magnitude);
-    samples.push({ frame, at_seconds: round(at, 4), pixels_per_second: round(magnitude, 4), tracked_blocks: vectors.length });
+    samples.push({ frame, at_seconds: round(at, 4), pixels_per_second: round(magnitude, 4), tracked_blocks: tracked, moving_blocks: moving.length });
   }
   const acceleration = differences(magnitudes).map((value) => value * fps);
   const deceleration = acceleration.filter((value) => value < 0).map(Math.abs);
@@ -132,6 +174,8 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
   return {
     method: "block-matching",
     sample_fps: fps,
+    grid: { width, height },
+    velocity_units: `px/s at a ${FLOW_GRID.referenceShortSide}-px short side`,
     block_size: block,
     search_radius: radius,
     tracked_frame_pairs: magnitudes.length,
@@ -284,10 +328,35 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   return { ok: !findings.some((entry) => entry.severity === "blocking" || entry.severity === "major"), findings };
 }
 
+// Optical-flow motion events: the start of a run of at least
+// FLOW_EVENT.minimumSamples flow samples moving at FLOW_EVENT.velocity px/s
+// or more (a gesture, a mark being drawn, a camera move). They count with the
+// frame-difference bursts, which miss motion that covers little of the frame.
+export const FLOW_EVENT = Object.freeze({ velocity: 2, minimumSamples: 2 });
+
+/** Seconds where a run of optical-flow motion starts (metrics.optical_flow.samples). */
+export function flowOnsetSeconds(metrics) {
+  const samples = (metrics?.optical_flow?.samples ?? []).filter((entry) => Number.isFinite(Number(entry?.at_seconds)));
+  const step = 1 / Number(metrics?.optical_flow?.sample_fps || 10);
+  const onsets = [];
+  let run = [];
+  const close = () => { if (run.length >= FLOW_EVENT.minimumSamples) onsets.push(Math.max(0, run[0] - step)); run = []; };
+  for (const sample of samples) {
+    const at = Number(sample.at_seconds);
+    // A cut skips its pair, so a run does not continue across a gap.
+    if (run.length && at - run.at(-1) > step * 1.5) close();
+    if (Number(sample.pixels_per_second) >= FLOW_EVENT.velocity) run.push(at);
+    else close();
+  }
+  close();
+  return onsets.map((time) => round(time, 4));
+}
+
 export function hookEventSeconds(metrics, windowSeconds = 4, minimumGapSeconds = .2) {
   const events = [
     ...(metrics.cuts ?? []),
-    ...(metrics.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds))
+    ...(metrics.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds)),
+    ...flowOnsetSeconds(metrics)
   ].map(Number).filter((time) => Number.isFinite(time) && time >= 0 && time <= windowSeconds).sort((a, b) => a - b);
   return events.reduce((distinct, time) => {
     if (!distinct.length || time - distinct.at(-1) >= minimumGapSeconds) distinct.push(time);
@@ -296,8 +365,10 @@ export function hookEventSeconds(metrics, windowSeconds = 4, minimumGapSeconds =
 }
 
 function firstMeaningfulMotionSeconds(metrics) {
+  const flow = flowOnsetSeconds(metrics)[0];
   const burst = (metrics.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds)).filter(Number.isFinite).sort((a, b) => a - b)[0];
-  if (Number.isFinite(burst)) return burst;
+  const candidates = [burst, flow].filter(Number.isFinite);
+  if (candidates.length) return Math.min(...candidates);
   const threshold = Number(metrics.motion?.hold_threshold ?? metrics.motion?.burst_threshold);
   if (!Number.isFinite(threshold)) return null;
   const sample = (metrics.motion?.frame_difference ?? []).find((entry) => Number(entry.energy) > threshold);

@@ -62,7 +62,9 @@ export function createHyperframesRenderer(defaults = {}) {
     },
 
     // lint --json plus check --json --strict --snapshots --at-transitions,
-    // exactly the pair cinematic-check ran before the adapter existed.
+    // the pair cinematic-check ran before the adapter existed, with every
+    // layout issue listed (--max-issues): a waiver (src/cinematic_check.js)
+    // only clears warnings it has seen.
     async check(projectDir, opts = {}) {
       const project = path.resolve(projectDir);
       const strict = opts.strict ?? true;
@@ -70,7 +72,7 @@ export function createHyperframesRenderer(defaults = {}) {
       const checks = {};
       for (const [name, args] of [
         ["lint", ["lint", "--json", project]],
-        ["check", ["check", "--json", ...(strict ? ["--strict"] : []), "--snapshots", "--at-transitions", project]]
+        ["check", ["check", "--json", ...(strict ? ["--strict"] : []), "--snapshots", "--at-transitions", "--max-issues", String(CHECK_MAX_ISSUES), project]]
       ]) {
         const result = await hf(run, args, { cwd: project });
         checks[name] = { ...result, ok: result.ok && structuredOk(result.stdout) };
@@ -93,6 +95,9 @@ export function createHyperframesRenderer(defaults = {}) {
 }
 
 export const hyperframesRenderer = createHyperframesRenderer();
+
+// Layout issues `hyperframes check` lists before it truncates (its default is 80).
+export const CHECK_MAX_ISSUES = 100000;
 
 // `hyperframes snapshot --at` floors seconds × fps, so 9.0 can land on frame
 // 269 through float error. A nudge far below one frame keeps the intended frame.
