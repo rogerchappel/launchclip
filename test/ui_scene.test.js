@@ -10,7 +10,7 @@ import { createHyperframesRenderer } from "../src/renderers/hyperframes.js";
 
 const BRAND = { colors: { bg: "#0a0b08", primary: "#c8ff3a", accent: "#c8ff3a", ink: "#0a0b08", paper: "#f4f6ee" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
 const PANEL = { kind: "timeline", rect: { x: 50, y: 400, width: 980, height: 760 }, at: 0, enter: "zoom", props: { title: "sequence_01", clipAt: 1.5, tracks: [{ label: "A1", kind: "audio" }, { label: "A2", kind: "sfx", clips: [{ label: "BOING!", x: 0.02, width: 0.3, tone: "alert", at: 0.6, flipAt: 3, flipLabel: "whoosh.wav" }] }] } };
-const HEADLINE = { kind: "headline", rect: { x: 60, y: 250, width: 960, height: 130 }, at: 0.1, enter: "slam", props: { text: "SOUNDS CHEAP", tone: "alert", size: 118 }, beats: [{ at: 3, set: { text: "REAL SOUND", tone: "accent" }, cue: "success" }] };
+const HEADLINE = { kind: "headline", rect: { x: 60, y: 290, width: 960, height: 130 }, at: 0.1, enter: "slam", props: { text: "SOUNDS CHEAP", tone: "alert", size: 110 }, beats: [{ at: 3, set: { text: "REAL SOUND", tone: "accent" }, cue: "success" }] };
 
 function resolve(elements, { width = 1080, height = 1920, captions = null } = {}) {
   const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 }, ...(captions ? { overlays: [{ type: "captions", position: captions }] } : {}) };
@@ -34,26 +34,36 @@ test("ui-scene: resolves to a painted host spec with the brand's theme, and cues
   assert.deepEqual(cues, [["enter", 1, "whoosh-soft"], ["enter", 1.1, "impact"], ["beat", 4, "success"]]);
 });
 
-test("ui-scene: elements stay on the stage and out of the caption band unless they bleed", () => {
-  assert.throws(() => resolve([{ ...PANEL, rect: { x: 50, y: 400, width: 980, height: 900 } }]), /caption band/);
+test("ui-scene: text stays in the safe zone clear of the captions; panels use the stage and may run under them", () => {
+  // Panels: the whole stage, under the bottom caption band included.
+  assert.doesNotThrow(() => resolve([{ ...PANEL, rect: { x: 40, y: 400, width: 1000, height: 1050 } }]));
   assert.throws(() => resolve([{ ...PANEL, rect: { x: 0, y: 400, width: 980, height: 700 } }]), /must sit on the stage/);
   assert.doesNotThrow(() => resolve([{ ...PANEL, rect: { x: 0, y: 400, width: 1080, height: 900 }, bleed: true }]));
-  // Mid-frame captions: the band moves to the middle, so the lower stage opens up.
-  const low = { ...PANEL, rect: { x: 50, y: 1100, width: 980, height: 340 } };
-  assert.throws(() => resolve([low]), /caption band \(y 1190/);
-  assert.doesNotThrow(() => resolve([low], { captions: "middle" }));
-  assert.throws(() => resolve([{ ...PANEL, rect: { x: 50, y: 700, width: 980, height: 300 } }], { captions: "middle" }), /caption band \(y 845/);
-  // The layout checks see each element: the biggest as the module's rect, the rest as parts.
+  // A tilted panel is checked at its footprint.
+  const plane = { kind: "scan-plane", rect: { x: 60, y: 900, width: 960, height: 520 }, at: 0, props: {} };
+  assert.doesNotThrow(() => resolve([plane]));
+  assert.throws(() => resolve([{ ...plane, tilt: { x: 38, z: -14, y: -12 } }]), /turned by its tilt/);
+  // Text: the box it sets in, inside the safe zone and clear of the band.
+  assert.throws(() => resolve([{ ...HEADLINE, rect: { x: 60, y: 240, width: 960, height: 130 } }]), /platform safe zone/);
+  assert.throws(() => resolve([{ kind: "chip", rect: { x: 300, y: 1250, width: 400, height: 80 }, at: 0, props: { text: "CLIPPING" } }]), /caption band \(y 1190/);
+  assert.doesNotThrow(() => resolve([{ kind: "chip", rect: { x: 300, y: 1250, width: 400, height: 80 }, at: 0, props: { text: "CLIPPING" } }], { captions: "middle" }));
+  assert.throws(() => resolve([{ kind: "chip", rect: { x: 300, y: 900, width: 400, height: 80 }, at: 0, props: { text: "CLIPPING" } }], { captions: "middle" }), /caption band \(y 845/);
+  // Panels too small to draw legibly.
+  assert.throws(() => resolve([{ kind: "meter", rect: { x: 60, y: 400, width: 900, height: 225 }, at: 0, props: {} }]), /a meter needs at least 560×320/);
+  assert.throws(() => resolve([{ kind: "lock-cards", rect: { x: 60, y: 400, width: 900, height: 380 }, at: 0, props: { cards: [{ name: "A" }, { name: "B" }, { name: "C" }] } }]), /a card needs at least 110 px/);
+  // The layout checks: text boxes as text, panels as media; no hold drift.
   const layout = resolve([HEADLINE, PANEL]).layout;
-  assert.deepEqual(layout.rect, { x: 50, y: 400, width: 980, height: 760 });
-  assert.deepEqual(layout.parts, [{ id: "el-0", rect: { x: 60, y: 250, width: 960, height: 130 }, role: "text", start: 1.1, end: 6 }]);
+  assert.equal(layout.drift, false);
+  assert.deepEqual(layout.rect, { x: 144, y: 297.25, width: 792, height: 115.5 });
+  assert.deepEqual(layout.parts, [{ id: "el-1", rect: { x: 50, y: 400, width: 980, height: 760 }, role: "media", start: 1, end: 6 }]);
+  assert.equal(resolve([PANEL]).layout.role, "media");
   // A scene that opens the video is built at frame 0 with enter: "cut".
   const opened = host();
   paintUi(opened, resolve([{ ...PANEL, enter: "cut" }]).content.ui["s1-ui"], 1);
   assert.doesNotMatch(opened.innerHTML, /^.{0,400}visibility:hidden/s);
   assert.match(opened.innerHTML, /sequence_01/);
   // 16:9: the landscape stage and band.
-  assert.doesNotThrow(() => resolve([{ ...HEADLINE, rect: { x: 100, y: 60, width: 1200, height: 140 } }], { width: 1920, height: 1080 }));
+  assert.doesNotThrow(() => resolve([{ ...HEADLINE, rect: { x: 100, y: 80, width: 1200, height: 140 } }], { width: 1920, height: 1080 }));
 });
 
 test("ui-scene: refuses unknown kinds, late openings, headlines too wide and children before their parent", () => {
@@ -153,4 +163,20 @@ test("text hold: a ui-scene is read by its headlines; panel labels are glanced a
   const params = { elements: [HEADLINE, PANEL, { kind: "window", rect: PANEL.rect, at: 0, props: { title: "toolkit" }, children: [{ kind: "headline", rect: { x: 0, y: 0, width: 900, height: 100 }, at: 0.2, props: { text: "TOOL ONE" } }] }] };
   // SOUNDS CHEAP / REAL SOUND (2) + TOOL ONE (2); track, clip and window labels do not count.
   assert.equal(uiReadingWords(params), 4);
+});
+
+test("motion blur: caption changes land between two frames' sub-frames, so no frame blends two words", async () => {
+  const { snapCaptionChunks } = await import("@launchclip/core/captions.mjs");
+  const fps = 30, samples = 3;
+  const chunks = snapCaptionChunks([{ start: 0.41, end: 1.234, words: [{ text: "when", start: 0.41, end: 0.7 }, { text: "the", start: 0.71, end: 1.234 }] }], fps);
+  const changes = [chunks[0].start, chunks[0].end, ...chunks[0].words.flatMap((word) => [word.start, word.end])];
+  for (const t of changes) {
+    // Sub-frames of output frame f sit at f/fps + {-1, 0, 1}/(fps·samples).
+    const f = Math.round(t * fps);
+    for (let frame = f - 1; frame <= f + 1; frame += 1) {
+      const own = [-1, 0, 1].map((k) => frame / fps + k / (fps * samples));
+      assert.ok(own.every((s) => s < t) || own.every((s) => s > t), `t=${t}: frame ${frame} blends across the change`);
+    }
+  }
+  assert.deepEqual(chunks[0].words.map((word) => word.start), [0.417, 0.717]);
 });

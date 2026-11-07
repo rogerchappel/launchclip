@@ -7,10 +7,14 @@
 // carry it; they paint every host in model.content.ui (docs/KIT_CONTRACTS.md,
 // "UI scenes").
 //
-// Element rects are design px (1080 wide in 9:16) on the stage: the full width
-// less a 40 px margin, from the safe zone's top to its bottom, clear of the
-// caption band, so nothing moves under the captions. An element marked bleed
-// (a decorative waveform or card wall) may run to the canvas edge.
+// Element rects are design px (1080 wide in 9:16). Text (headlines and
+// chips) is checked at the size it sets: inside the platform safe zone and
+// clear of the caption band. Panels may use the whole stage (the full width
+// less a 40 px margin, from just above the safe zone to its foot) and run
+// under the captions, whose word chips are opaque, as the reference reels
+// do. An element marked bleed (a decorative waveform or card wall) may run
+// to the canvas edge. Settled elements hold still: the module opts out of
+// the hold drift (layout.drift false); the camera carries the life.
 
 import {createHBase, r2, rt} from './catalog-h-base.mjs';
 import {timingRules} from './catalog-b-base.mjs';
@@ -26,6 +30,40 @@ const MAX_ELEMENTS = 120;
 const HEADLINE_ADVANCE = 0.6;
 // The sound an entrance asks for when the element names none.
 const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud'});
+// Kinds whose text the safe zone and caption band rules apply to.
+const TEXT_KINDS = new Set(['headline', 'chip']);
+// The smallest rect a panel draws legibly in (design px); lock-cards also
+// needs LOCK_CARD_MIN px a card.
+const MIN_SIZE = Object.freeze({meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
+const LOCK_CARD_MIN = 110;
+
+/** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
+export function uiTextBox(kind, props, rect, beats = []) {
+  const states = [props, ...(props.swap ? [{...props, ...props.swap}] : []), ...beats.map((beat) => ({...props, ...beat.set}))];
+  let width = 0, height = 0;
+  for (const state of states) {
+    const text = String(state.text ?? '');
+    const size = Number(state.size) || (kind === 'headline' ? 112 : 30);
+    width = Math.max(width, kind === 'headline' ? text.length * size * HEADLINE_ADVANCE : text.length * size * 0.62 + size * 1.2);
+    height = Math.max(height, kind === 'headline' ? size * 1.05 : size * 1.45);
+  }
+  width = Math.min(rect.width, width);
+  height = Math.min(rect.height, height);
+  const align = props.align ?? 'center';
+  const x = align === 'left' ? rect.x : align === 'right' ? rect.x + rect.width - width : rect.x + (rect.width - width) / 2;
+  return {x: r2(x), y: r2(rect.y + (rect.height - height) / 2), width: r2(width), height: r2(height)};
+}
+
+/** A tilted element's footprint: the rect turned by tilt.z, grown for the perspective of tilt.x and tilt.y. */
+export function uiTiltBox(rect, tilt) {
+  if (!tilt) return rect;
+  const rad = (deg) => Math.abs(deg ?? 0) * Math.PI / 180;
+  const z = rad(tilt.z), grow = 1 + 0.5 * Math.sin(Math.max(rad(tilt.x), rad(tilt.y)));
+  const width = (rect.width * Math.cos(z) + rect.height * Math.sin(z)) * grow;
+  const height = (rect.width * Math.sin(z) + rect.height * Math.cos(z)) * grow;
+  const cx = rect.x + rect.width / 2, cy = rect.y + rect.height / 2;
+  return {x: r2(cx - width / 2), y: r2(cy - height / 2), width: r2(width), height: r2(height)};
+}
 
 /**
  * The painter's theme from the brand: dark surfaces from bg, text from paper,
@@ -52,6 +90,7 @@ function uiResolve(params, ctx) {
   const geometry = profileGeometry(b.canvas, b.portrait ? 'shorts' : 'landscape');
   const zone = geometry.safeZone, cap = geometry.captionBand;
   const margin = 40;
+  const safe = {x: r2(zone.x / unit), y: r2(zone.y / unit), width: r2(zone.width / unit), height: r2(zone.height / unit)};
   const stage = {x: margin, y: r2(zone.y / unit - margin), width: r2(W - 2 * margin), height: r2((zone.y + zone.height) / unit - zone.y / unit + margin)};
   // The caption band where the story puts its captions (bottom by default,
   // mid-frame with position "middle", near the top with "top"), placed as
@@ -72,11 +111,15 @@ function uiResolve(params, ctx) {
     const rect = {x: check.num(raw.rect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(raw.rect.y, `${path}.rect.y`, -H, 2 * H),
       width: check.num(raw.rect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(raw.rect.height, `${path}.rect.height`, 4, 2 * H)};
     const bleed = raw.bleed === undefined ? false : check.bool(raw.bleed, `${path}.bleed`);
-    if (!parent && !bleed) {
-      const eps = 0.5, r = rect;
-      const outside = r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps;
-      const inBand = r.y < band.y + band.height && r.y + r.height > band.y && r.x < band.x + band.width && r.x + r.width > band.x;
-      if (outside || inBand) check.fail(`${path}.rect`, `must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px), clear of the caption band (y ${band.y}–${r2(band.y + band.height)}); mark a decorative element bleed: true to let it run to the edge`);
+    const min = MIN_SIZE[kind];
+    if (min && (rect.width + 0.5 < min.width || rect.height + 0.5 < min.height)) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; a ${kind} needs at least ${min.width}×${min.height} to draw legibly`);
+    const tilt = raw.tilt === undefined ? undefined : tiltOf(check, raw.tilt, `${path}.tilt`);
+    const footprint = uiTiltBox(rect, tilt);
+    if (!parent && !bleed && !TEXT_KINDS.has(kind)) {
+      const r = footprint, eps = 0.5;
+      if (r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps) {
+        check.fail(`${path}.rect`, `${tilt ? `turned by its tilt, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
+      }
     }
     const at = time(raw.at, `${path}.at`);
     if (parent && at + 1e-9 < parent.at) check.fail(`${path}.at`, `is before its parent enters (${parent.at} s)`);
@@ -102,7 +145,17 @@ function uiResolve(params, ctx) {
       if (cue) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', cue});
       return {at: beatAt, set: beat.set};
     }).sort((x, y) => x.at - y.at);
-    const tilt = raw.tilt === undefined ? undefined : tiltOf(check, raw.tilt, `${path}.tilt`);
+    if (!parent && !bleed && TEXT_KINDS.has(kind)) {
+      const box = uiTextBox(kind, props, rect, beats), eps = 0.5;
+      const outside = box.x < safe.x - eps || box.y < safe.y - eps || box.x + box.width > safe.x + safe.width + eps || box.y + box.height > safe.y + safe.height + eps;
+      const inBand = box.y < band.y + band.height && box.y + box.height > band.y && box.x < band.x + band.width && box.x + box.width > band.x;
+      if (outside || inBand) check.fail(`${path}.rect`, `sets its text in {x: ${box.x}, y: ${box.y}, width: ${box.width}, height: ${box.height}}, which must sit inside the platform safe zone {x: ${safe.x}, y: ${safe.y}, width: ${safe.width}, height: ${safe.height}} (design px) and clear of the caption band (y ${band.y}–${r2(band.y + band.height)}): headlines and chips are the text people read`);
+    }
+    if (kind === 'lock-cards') {
+      const n = Array.isArray(props.cards) ? props.cards.length : 0;
+      const room = (rect.height - (props.title ? 64 : 0) - (props.counter === false ? 0 : 120) - 26 - 20 * Math.max(0, n - 1)) / Math.max(1, n);
+      if (n && room + 0.5 < LOCK_CARD_MIN) check.fail(`${path}.rect`, `gives each of its ${n} cards ${Math.round(room)} px; a card needs at least ${LOCK_CARD_MIN} px (height ${Math.ceil(rect.height + (LOCK_CARD_MIN - room) * n)} or more)`);
+    }
     const cue = raw.cue === undefined ? ENTER_CUES[enter] ?? null : raw.cue === null ? null : check.str(raw.cue, `${path}.cue`, 32);
     if (cue && !parent) b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', cue});
     const node = {kind, rect, at, enter, props, beats,
@@ -126,17 +179,23 @@ function uiResolve(params, ctx) {
   const spec = {start: b.start, width: W, height: H, unit: r2(unit), theme: uiTheme(b.colors, alert), fonts: {display: b.fonts.display, body: b.fonts.body, mono: b.fonts.meta}, elements};
   const content = {ui: {[`${b.id}-ui`]: spec}, elementCount: count, captionBand: band};
   const model = b.finish(content);
-  // The layout checks see each element: the largest top-level, non-bleed
-  // element is the module's rect (the hero panel) and the others are parts
-  // with their own windows, in canvas px.
+  // The layout checks see each element: text as text at the box it sets in,
+  // panels as media at their (tilted) footprint, which may run under the
+  // captions. The largest text box is the module's rect (the hero), else the
+  // largest panel. No hold drift: settled elements hold still.
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
-  const placed = elements.map((element, k) => ({element, k})).filter(({k}) => !p.elements[k].bleed);
-  if (placed.length) {
+  const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
+    rect: TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt)}))
+    .filter(({k}) => !p.elements[k].bleed);
+  model.layout.drift = false;
+  if (parts.length) {
     const area = (r) => r.width * r.height;
-    const hero = placed.reduce((best, item) => (area(item.element.rect) > area(best.element.rect) ? item : best));
-    model.layout.rect = scale(hero.element.rect);
-    model.layout.parts = placed.filter((item) => item !== hero).map(({element, k}) => ({
-      id: `el-${k}`, rect: scale(element.rect), role: 'text', start: rt(b.start + element.at), end: element.out === undefined ? b.end : rt(b.start + element.out + 0.3)
+    const pool = parts.some((part) => part.text) ? parts.filter((part) => part.text) : parts;
+    const hero = pool.reduce((best, part) => (area(part.rect) > area(best.rect) ? part : best));
+    model.layout.rect = scale(hero.rect);
+    if (!hero.text) model.layout.role = 'media';
+    model.layout.parts = parts.filter((part) => part !== hero).map((part) => ({
+      id: `el-${part.k}`, rect: scale(part.rect), role: part.text ? 'text' : 'media', start: rt(b.start + part.at), end: part.out === undefined ? b.end : rt(b.start + part.out + 0.3)
     }));
   }
   return model;

@@ -34,7 +34,7 @@ import { shotZooms, zoomOps } from './zooms.mjs';
 import { feelGsap, feelPlan } from './kinetic.mjs';
 import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from './dot-wipe.mjs';
 import { profileGeometry } from './layout-check.mjs';
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords, snapCaptionChunks } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from './medium.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
@@ -519,7 +519,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   let captionWords = [];
   const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
-    const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
+    const loaded = await loadCaptionChunks(story, overlay, sourceDir, warnings);
+    // Motion blur blends sub-frames: caption changes go on half frames so no frame shows two words.
+    const blurred = story.motion?.blur === true || (story.motion?.blur && typeof story.motion.blur === 'object');
+    const chunks = loaded && blurred ? snapCaptionChunks(loaded, format.fps) : loaded;
     if (chunks?.length) {
       captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);

@@ -355,6 +355,19 @@ export function captionPresetName(overlay, story) {
   return Object.hasOwn(CAPTION_PRESETS, value) ? value : fallback;
 }
 
+/**
+ * Caption times snapped to half-frame boundaries ((k + 0.5) / fps). With
+ * motion blur (src/motion_blur.js) each output frame blends the sub-frames
+ * within a third of a frame of it, so a word that changes half-way between
+ * two frames lands in neither blend: the picture smears, the captions stay
+ * sharp and never show two words at once.
+ */
+export function snapCaptionChunks(chunks, fps) {
+  const rate = Number(fps) || 30;
+  const snap = (t) => (Number.isFinite(Number(t)) ? round((Math.round(Number(t) * rate - 0.5) + 0.5) / rate) : t);
+  return chunks.map((chunk) => ({ ...chunk, start: snap(chunk.start), end: snap(chunk.end), ...(Array.isArray(chunk.words) ? { words: chunk.words.map((word) => ({ ...word, start: snap(word.start), end: snap(word.end) })) } : {}) }));
+}
+
 /** Band top (fraction of the canvas height) for a caption position. */
 export function captionBandTop(format, position = 'auto') {
   const band = captionBandFor(format);
