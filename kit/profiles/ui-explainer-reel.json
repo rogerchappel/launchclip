@@ -12,7 +12,7 @@
     "kind": "measured",
     "tool": "launchclip profile measure",
     "measured_at": "2026-11-07T19:47:32.843Z",
-    "note": "Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic.",
+    "note": "Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds, shot_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic. shot_seconds is left out because the reference changes scene with whip-pans and wipes, which the cut detector does not see, so it measured one 46 s shot.",
     "sources": [
       {
         "id": "ref-01",
@@ -27,11 +27,6 @@
     ]
   },
   "measures": {
-    "shot_seconds": {
-      "p10": 38.9581,
-      "p50": 45.833,
-      "p90": 52.7079
-    },
     "visual_changes_per_min": {
       "p10": 18.9125,
       "p50": 22.25,

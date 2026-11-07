@@ -65,7 +65,7 @@ UI explainer reel: motion, 30–75 s, 9:16.
 
 - Provenance: measured (measured 2026-11-07T19:47:32.843Z)
 - References: 1
-- Note: Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic.
+- Note: Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds, shot_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic. shot_seconds is left out because the reference changes scene with whip-pans and wipes, which the cut detector does not see, so it measured one 46 s shot.
 
 | Source | Rights | Duration | SHA-256 |
 | --- | --- | --- | --- |
