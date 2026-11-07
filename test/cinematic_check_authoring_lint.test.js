@@ -30,7 +30,7 @@ const overflow = (selector, containerSelector, extra = {}) => ({ code: "containe
 const scenes = ["s1", "s1-cast", "s1-say"];
 
 test("engine camera wrappers overflowing their own parent are waived, by exact selector pair", () => {
-  for (const [child, parent] of [["#lc-cam-drift", "#lc-camera"], ["#lc-cam-zoom", "#lc-cam-drift"], ["#lc-par-s1-say", "#lc-scene-s1-say"], ["#lc-zs-s1", "#lc-layer-s1"], ["#lc-drift-s1", "#lc-layer-s1"], ["#s1-cast-cam", "#s1-cast"], ["#s1-cast-overlay-cam", "#s1-cast-overlay"]]) {
+  for (const [child, parent] of [["#lc-cam-drift", "#lc-camera"], ["#lc-cam-zoom", "#lc-cam-drift"], ["#lc-par-s1-say", "#lc-scene-s1-say"], ["#lc-zs-s1", "#lc-layer-s1"], ["#lc-drift-s1", "#lc-layer-s1"], ["#s1-cast-cam", "#s1-cast"], ["#s1-cast-overlay-cam", "#s1-cast-overlay"], ["#lc-feel", "#launchclip-root"], ["#lc-scene-s1", "#lc-feel"], ["#lc-layer-s1-say", "#lc-feel"], ["#lc-camera", "#lc-feel"]]) {
     assert.equal(engineWrapperOverflow(overflow(child, parent), new Set(scenes)), true, `${child} in ${parent}`);
   }
   for (const [child, parent, why] of [
@@ -39,7 +39,9 @@ test("engine camera wrappers overflowing their own parent are waived, by exact s
     ["#lc-par-s1-say", "#lc-scene-s1", "another scene's container"],
     ["#s1-cast-cam", "#s1-say", "a camera in a foreign parent"],
     ["#lc-cam-drift", "#lc-scene-s1", "the world camera outside its stack"],
-    ["#my-cam", "#my", "an author id that only looks like a camera"]
+    ["#my-cam", "#my", "an author id that only looks like a camera"],
+    ["#lc-feel", "#lc-scene-s1", "the feel wrapper outside the root"],
+    ["#lc-scene-s9", "#lc-feel", "a scene the composition does not have, in the feel"]
   ]) assert.equal(engineWrapperOverflow(overflow(child, parent), new Set(scenes)), false, why);
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), severity: "error" }), false, "an error is never waived");
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-pan", "#lc-cam-zoom"), code: "escaped_container" }), true, "a pan carrying its wrapper a frame away");

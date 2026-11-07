@@ -521,6 +521,9 @@ export const ENGINE_WRAPPER_OVERFLOW = Object.freeze({ codes: Object.freeze(["co
 export function engineWrapperOverflow(finding, scenes = new Set()) {
   if (!ENGINE_WRAPPER_OVERFLOW.codes.includes(finding?.code) || finding?.severity !== ENGINE_WRAPPER_OVERFLOW.severity) return false;
   const child = String(finding.selector ?? ""), parent = String(finding.containerSelector ?? "");
+  // The story feel's ambient camera (#lc-feel) is scaled past the frame on purpose, around the root's scenes and world camera.
+  if (child === "#lc-feel") return parent === "#launchclip-root";
+  if (parent === "#lc-feel") return child === "#lc-camera" || (/^#lc-(scene|layer)-(.+)$/.test(child) && scenes.has(/^#lc-(?:scene|layer)-(.+)$/.exec(child)[1]));
   if (/^#lc-cam-(drift|zoom|pan)$/.test(child)) return /^#lc-(camera|cam-(drift|zoom|pan))$/.test(parent);
   const wrapped = /^#lc-(par|zs|zp|drift)-(.+)$/.exec(child);
   if (wrapped) {
