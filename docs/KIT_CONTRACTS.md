@@ -2247,7 +2247,11 @@ One setting turns on the habits of a top faceless animated reel together:
   Remotion evaluates `feelStateAt(plan, frame / fps)`, the same values.
   Without a feel or kicks nothing is emitted. `hyperframes check` reports
   `#lc-feel` overflowing `#launchclip-root` (it is scaled past the canvas by
-  design), like the world camera's wrappers.
+  design), like the world camera's wrappers. The cinematic check
+  (`src/cinematic_check.js engineWrapperOverflow`) waives exactly these
+  engine pairs, plus the ambient field's blobs (`#lc-amb-<scene>-b0..b3` in
+  `#lc-amb-field-<scene>`) and a dot wipe's dot group (`#lc-dw-<scene> > svg
+  > g`, in the wipe's own `<svg>`), for scenes of the compiled composition.
 - Golden: `examples/story/kinetic-feel-9x16` (paper background, three cards,
   two kicks, a 0.26 s whip-pan and a dot-wipe).
 

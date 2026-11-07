@@ -511,6 +511,12 @@ export const COMPILED_AUTHORING_LINT = Object.freeze(["composition_file_too_larg
 // box past its clipping parent by design, so `hyperframes check` reports a
 // container_overflow on the wrapper itself on every sampled frame of a move
 // (and escaped_container when a pan carries it a whole frame away).
+// Two engine-drawn layers overflow their clipping parent the same way: the
+// ambient background field's blobs (#lc-amb-<scene>-b0..b3, soft discs that
+// drift across and past #lc-amb-field-<scene>, which clips them) and a dot
+// wipe's dot grid (#lc-dw-<scene> > svg > g: the edge dots are centred on
+// the frame's edge, so their group reaches past the <svg>; <scene> may be a
+// loop clone, "<scene>-loop").
 // Only that exact pair is waived: the wrapper as the overflowing child, its
 // own engine parent as the container, and <scene> a scene of the compiled
 // composition. Anything inside a wrapper (a card, a caption, a character)
@@ -525,6 +531,12 @@ export function engineWrapperOverflow(finding, scenes = new Set()) {
   if (child === "#lc-feel") return parent === "#launchclip-root";
   if (parent === "#lc-feel") return child === "#lc-camera" || (/^#lc-(scene|layer)-(.+)$/.test(child) && scenes.has(/^#lc-(?:scene|layer)-(.+)$/.exec(child)[1]));
   if (/^#lc-cam-(drift|zoom|pan)$/.test(child)) return /^#lc-(camera|cam-(drift|zoom|pan))$/.test(parent);
+  // The ambient field's blobs inside their own scene's field.
+  const blob = /^#lc-amb-(.+)-b[0-3]$/.exec(child);
+  if (blob) return scenes.has(blob[1]) && parent === `#lc-amb-field-${blob[1]}`;
+  // A dot wipe's dot group (or one of its lateness groups) inside the wipe's own <svg>.
+  const dots = /^#lc-dw-(.+?) > svg:nth-of-type\(1\) > g:nth-of-type\(1\)(?: > g:nth-of-type\(\d+\))?$/.exec(child);
+  if (dots) return scenes.has(dots[1]) && parent === `#lc-dw-${dots[1]} > svg:nth-of-type(1)`;
   const wrapped = /^#lc-(par|zs|zp|drift)-(.+)$/.exec(child);
   if (wrapped) {
     const id = wrapped[2];
