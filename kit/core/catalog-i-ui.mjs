@@ -184,18 +184,24 @@ function uiResolve(params, ctx) {
   // captions. The largest text box is the module's rect (the hero), else the
   // largest panel. No hold drift: settled elements hold still.
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
+  // Bleed panels count too (they fill the frame); bleed text is decoration.
   const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
     rect: TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt)}))
-    .filter(({k}) => !p.elements[k].bleed);
+    .filter(({k, text}) => !(text && p.elements[k].bleed));
   model.layout.drift = false;
   if (parts.length) {
     const area = (r) => r.width * r.height;
     const pool = parts.some((part) => part.text) ? parts.filter((part) => part.text) : parts;
     const hero = pool.reduce((best, part) => (area(part.rect) > area(best.rect) ? part : best));
+    const others = parts.filter((part) => part !== hero);
     model.layout.rect = scale(hero.rect);
     if (!hero.text) model.layout.role = 'media';
-    model.layout.parts = parts.filter((part) => part !== hero).map((part) => ({
-      id: `el-${part.k}`, rect: scale(part.rect), role: part.text ? 'text' : 'media', start: rt(b.start + part.at), end: part.out === undefined ? b.end : rt(b.start + part.out + 0.3)
+    // The director composes the scene: chips sit on panels and panels stack,
+    // so its elements may overlap each other (never another scene's).
+    model.layout.allowOcclusion = others.map((part) => `${b.id}-el-${part.k}`);
+    model.layout.parts = others.map((part) => ({
+      id: `el-${part.k}`, rect: scale(part.rect), role: part.text ? 'text' : 'media', start: rt(b.start + part.at), end: part.out === undefined ? b.end : rt(b.start + part.out + 0.3),
+      over: ['self', ...others.filter((other) => other !== part).map((other) => `el-${other.k}`)]
     }));
   }
   return model;
@@ -264,7 +270,7 @@ export const uiScene = {
   params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}), out (s, optional), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
     alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)'},
   events: ['enter', 'beat'],
-  timing: timingRules({rules: ['the first element enters by 0.6 s', 'every time is seconds from the scene start, inside the scene', 'a child enters no earlier than its parent']}),
+  timing: {...timingRules({rules: ['the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands', 'every time is seconds from the scene start, inside the scene', 'a child enters no earlier than its parent']}), leadIn: 0},
   variants: ['default'],
   resolve: uiResolve, view: uiView, timeline: uiTimeline
 };

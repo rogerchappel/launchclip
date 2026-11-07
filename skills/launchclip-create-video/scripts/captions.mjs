@@ -267,7 +267,8 @@ export const CAPTION_EXITS = Object.freeze({
   fade: Object.freeze({ to: Object.freeze({ opacity: 0 }), dur: 0.14, ease: 'power1.in' }),
   'slide-down': Object.freeze({ to: Object.freeze({ opacity: 0, y: 24 }), dur: 0.14, ease: 'power2.in' }),
   shrink: Object.freeze({ to: Object.freeze({ opacity: 0, scale: 0.82 }), dur: 0.12, ease: 'power2.in' }),
-  none: Object.freeze({ to: Object.freeze({ opacity: 0 }), dur: 0.02, ease: 'none' })
+  // none: gone within a blur sub-frame (src/motion_blur.js samples a third of a frame apart).
+  none: Object.freeze({ to: Object.freeze({ opacity: 0 }), dur: 0.005, ease: 'none' })
 });
 
 const SHADOW_HARD = '0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45)';
@@ -304,7 +305,7 @@ export const CAPTION_PRESETS = Object.freeze({
   // The interface-explainer caption: a single word, uppercase and bare, on a
   // small translucent chip that reads over busy panels without competing
   // with the headline.
-  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small translucent dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231cc7' }, plate: 'card' }),
+  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small, nearly opaque dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231ce6' }, plate: 'card' }),
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
@@ -894,7 +895,10 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
       }
       if (kids.length) span.children = kids;
     });
-    tw(chunk.id, Math.max(chunk.start + 0.12, chunk.end - exit.dur), exit.dur, exit.ease, { ...exit.to });
+    // One word at a time: a line is gone when the next one arrives, however short its word, so two never show at once.
+    const nextStart = o.layout === 'single' ? list[list.indexOf(chunk) + 1]?.start : undefined;
+    const exitAt = Math.max(chunk.start + 0.12, chunk.end - exit.dur);
+    tw(chunk.id, Number.isFinite(nextStart) ? Math.max(chunk.start, Math.min(exitAt, nextStart - exit.dur)) : exitAt, exit.dur, exit.ease, { ...exit.to });
   }
   o.heroScales = [...heroScales].sort((a, b) => a - b);
   const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect }));

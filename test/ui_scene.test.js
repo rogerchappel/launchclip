@@ -55,7 +55,9 @@ test("ui-scene: text stays in the safe zone clear of the captions; panels use th
   const layout = resolve([HEADLINE, PANEL]).layout;
   assert.equal(layout.drift, false);
   assert.deepEqual(layout.rect, { x: 144, y: 297.25, width: 792, height: 115.5 });
-  assert.deepEqual(layout.parts, [{ id: "el-1", rect: { x: 50, y: 400, width: 980, height: 760 }, role: "media", start: 1, end: 6 }]);
+  assert.deepEqual(layout.parts, [{ id: "el-1", rect: { x: 50, y: 400, width: 980, height: 760 }, role: "media", start: 1, end: 6, over: ["self"] }]);
+  // A scene's own elements may overlap (a chip on a panel); other scenes still collide.
+  assert.deepEqual(layout.allowOcclusion, ["s1-el-1"]);
   assert.equal(resolve([PANEL]).layout.role, "media");
   // A scene that opens the video is built at frame 0 with enter: "cut".
   const opened = host();
@@ -198,4 +200,17 @@ test("word-chip captions: one bare uppercase word, low-centre, where the layout 
   plan.nodes.forEach(walk);
   assert.deepEqual(texts, ["now"]);
   assert.match(plan.css, /text-transform: uppercase/);
+});
+
+test("word-chip captions: one word at a time even when a word is shorter than the entrance", async () => {
+  const { captionPlan, indexCaptionTweens, captionElementStateAt, snapCaptionChunks } = await import("@launchclip/core/captions.mjs");
+  // "a" lasts 0.06 s, under the line's 0.12 s minimum before its exit.
+  const chunks = snapCaptionChunks([{ start: 1.1, end: 1.16, words: [{ text: "a", start: 1.1, end: 1.16 }] }, { start: 1.17, end: 1.6, words: [{ text: "slick", start: 1.17, end: 1.6 }] }], 30);
+  const plan = captionPlan(chunks, { type: "captions", preset: "word-chip", position: "low" }, { brand: BRAND, format: { width: 1080, height: 1920 } });
+  const index = indexCaptionTweens(plan.tweens);
+  for (let k = 90; k < 160; k += 1) {
+    const t = k / 90;
+    const shown = plan.nodes.filter((line) => (captionElementStateAt(index, line.id, t).opacity ?? 0) > 0.02);
+    assert.ok(shown.length <= 1, `two words at ${t.toFixed(3)} s`);
+  }
 });
