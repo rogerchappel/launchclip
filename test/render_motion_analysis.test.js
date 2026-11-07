@@ -455,3 +455,29 @@ test("still-span findings become timed repair findings the critique contract acc
   const check = validateCritique({ schema_version: "launchclip.production-critique.v1", verdict: "repair", summary: "readiness", findings: readiness.repair_findings }, ["shot-1"]);
   assert.deepEqual(check.errors.filter((error) => !/schema_version/.test(error)), []);
 });
+
+// A textured 144×256 grey frame of a smooth pattern, scaled by `scale` about
+// the centre and shifted by (tx, ty) px.
+function zoomFrame({ scale = 1, tx = 0, ty = 0 }, width = 144, height = 256) {
+  const out = new Uint8Array(width * height);
+  const pattern = (x, y) => 128 + 40 * Math.sin(x * 0.21 + Math.sin(y * 0.05) * 2) + 35 * Math.sin(y * 0.17 + x * 0.03) + 25 * Math.sin((x + y) * 0.11);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    const sx = width / 2 + (x - width / 2 - tx) / scale, sy = height / 2 + (y - height / 2 - ty) / scale;
+    out[y * width + x] = Math.max(0, Math.min(255, Math.round(pattern(sx, sy))));
+  }
+  return out;
+}
+
+test("block matching is sub-pixel, so the flow velocity is continuous rather than quantised", () => {
+  // The same texture panning 1.0, 1.3, 1.6 and 2.2 px a frame (on the 36-px
+  // reference scale, at 10 fps): the measured velocity follows the shift,
+  // not the whole-pixel steps.
+  const measure = (step) => {
+    const frames = Array.from({ length: 8 }, (_, f) => zoomFrame({ tx: f * step }));
+    return analyzeBlockMotion(series(frames), 144, 256, 10, { velocityScale: 1 }).velocity_pixels_per_second.p50;
+  };
+  const speeds = [1, 1.3, 1.6, 2.2].map(measure);
+  for (const [i, step] of [1, 1.3, 1.6, 2.2].entries()) assert.ok(Math.abs(speeds[i] - step * 10) < 1.5, `${step} px/frame read ${speeds[i]} px/s`);
+  assert.ok(speeds[0] < speeds[1] && speeds[1] < speeds[2] && speeds[2] < speeds[3], `monotonic ${speeds.join(", ")}`);
+  assert.ok(new Set(speeds.map((value) => Math.round(value))).size === 4, "no two steps collapse onto one whole-pixel value");
+});

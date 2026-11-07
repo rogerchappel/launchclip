@@ -65,7 +65,7 @@ A faceless animated explainer for Reels, Shorts and TikTok, 30–75 s in 9:16: i
 | coverage | 100% | 100% | 100% |
 | longest_undressed_seconds | 0 | 0 | 0 |
 | first_visual_seconds | 0 | 0 | 0 |
-| flow_velocity_p90 | 7.2111 | 7.6056 | 8 |
+| flow_velocity_p90 | 7.5893 | 7.808 | 8.0267 |
 | hold_ratio | 65% | 68% | 70% |
 | motion_bursts_per_min | 51.282 | 54.885 | 58.488 |
 | change_energy_p50 | 1.619 | 2.9401 | 4.2612 |

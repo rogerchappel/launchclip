@@ -159,6 +159,7 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
   const cutTimes = options.cutTimes ?? [];
   const magnitudes = [];
   const samples = [];
+  const sads = new Float64Array((2 * radius + 1) ** 2);
   for (let frame = 1; frame < count; frame += 1) {
     const at = frame / fps;
     if (cutTimes.some((time) => Math.abs(time - at) <= 1 / fps)) continue;
@@ -171,18 +172,14 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
         if (blockTexture(rawFrames, previousOffset, width, x, y, block) < Number(options.flowTextureThreshold ?? 5)) continue;
         tracked += 1;
         // Staying put is the default: a shift wins only by a clear margin.
-        const still = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, 0, 0, block);
-        let bestSad = still;
-        let bestMagnitude = 0;
-        let bestDx = 0, bestDy = 0;
-        for (let dy = -radius; dy <= radius; dy += 1) {
-          for (let dx = -radius; dx <= radius; dx += 1) {
-            if (!dx && !dy) continue;
-            const sad = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, dx, dy, block);
-            if (sad < bestSad || (sad === bestSad && bestMagnitude && Math.hypot(dx, dy) < bestMagnitude)) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); bestDx = dx; bestDy = dy; }
-          }
+        const match = searchBlock(rawFrames, previousOffset, currentOffset, width, x, y, block, radius, sads);
+        const { still, bestSad, bestDx, bestDy } = match;
+        if ((bestDx || bestDy) && bestSad <= still * (1 - gain) && still - bestSad >= noise && bestSad <= residual) {
+          // Sub-pixel: the integer match refined on the SAD surface, so the
+          // velocity is continuous rather than a multiple of the grid step.
+          const dx = bestDx + match.ox, dy = bestDy + match.oy;
+          moving.push({ magnitude: Math.hypot(dx, dy), x: x + block / 2, y: y + block / 2, dx, dy });
         }
-        if (bestMagnitude && bestSad <= still * (1 - gain) && still - bestSad >= noise && bestSad <= residual) moving.push({ magnitude: bestMagnitude, x: x + block / 2, y: y + block / 2, dx: bestDx, dy: bestDy });
       }
     }
     const enough = moving.length >= Math.max(minBlocks, Math.ceil(tracked * minShare));
@@ -196,6 +193,7 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
   const jerk = differences(acceleration).map((value) => value * fps);
   return {
     method: "block-matching",
+    subpixel: "equiangular",
     sample_fps: fps,
     grid: { width, height },
     velocity_units: `px/s at a ${FLOW_GRID.referenceShortSide}-px short side`,
@@ -208,6 +206,39 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
     jerk_pixels_per_second_cubed: signedDistribution(jerk),
     samples
   };
+}
+
+/**
+ * Full search of one block within ±radius: the best integer shift (staying
+ * put wins ties, a shorter shift wins equal SADs) and its sub-pixel offset
+ * (ox, oy in −0.5…0.5) from an equiangular (V-shaped) fit of the SAD along
+ * each axis, which suits SAD's linear walls. sads: scratch, (2r+1)² long.
+ * → {still, bestSad, bestDx, bestDy, ox, oy}
+ */
+function searchBlock(buffer, previousOffset, currentOffset, width, x, y, block, radius, sads) {
+  const side = 2 * radius + 1;
+  const still = blockSad(buffer, previousOffset, currentOffset, width, x, y, 0, 0, block);
+  let bestSad = still, bestMagnitude = 0, bestDx = 0, bestDy = 0;
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      const sad = !dx && !dy ? still : blockSad(buffer, previousOffset, currentOffset, width, x, y, dx, dy, block);
+      sads[(dy + radius) * side + dx + radius] = sad;
+      if (!dx && !dy) continue;
+      if (sad < bestSad || (sad === bestSad && bestMagnitude && Math.hypot(dx, dy) < bestMagnitude)) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); bestDx = dx; bestDy = dy; }
+    }
+  }
+  const at = (dx, dy) => sads[(dy + radius) * side + dx + radius];
+  const ox = Math.abs(bestDx) < radius ? equiangular(at(bestDx - 1, bestDy), bestSad, at(bestDx + 1, bestDy)) : 0;
+  const oy = Math.abs(bestDy) < radius ? equiangular(at(bestDx, bestDy - 1), bestSad, at(bestDx, bestDy + 1)) : 0;
+  return { still, bestSad, bestDx, bestDy, ox, oy };
+}
+
+// The minimum of a V through (−1, a), (0, b), (1, c) with b the smallest:
+// the offset in −0.5…0.5 (0 when the samples are flat).
+function equiangular(a, b, c) {
+  const wall = Math.max(a, c) - b;
+  if (!(wall > 0)) return 0;
+  return Math.max(-0.5, Math.min(0.5, (a - c) / (2 * wall)));
 }
 
 function blockTexture(buffer, offset, width, x, y, block) {
