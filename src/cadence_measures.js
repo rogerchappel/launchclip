@@ -21,7 +21,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { distribution, storyboardMeasures } from "@launchclip/core/cadence.mjs";
 import { CADENCE_PROFILE_SCHEMA, PROFILE_MEASURES, REFERENCE_RIGHTS, percentiles, validateProfile } from "@launchclip/core/profiles.mjs";
-import { analyzeRenderMotion, hookEventSeconds } from "./render_motion_analysis.js";
+import { analyzeRenderMotion, flowOnsetSeconds, hookEventSeconds } from "./render_motion_analysis.js";
 
 const execFileAsync = promisify(execFile);
 export const REFERENCE_VIDEO = /\.(mp4|mov|m4v|webm|mkv)$/i;
@@ -31,7 +31,8 @@ const HOOK_WINDOW_SECONDS = 4;
 /** Motion measures from a render-motion report (src/render_motion_analysis.js). */
 export function motionMeasures(motion) {
   if (!motion) return {};
-  const bursts = (motion.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds)).filter(Number.isFinite).sort((a, b) => a - b);
+  // The first frame-difference burst or optical-flow onset, whichever is earlier.
+  const bursts = [...(motion.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds)), ...flowOnsetSeconds(motion)].filter(Number.isFinite).sort((a, b) => a - b);
   return {
     flow_velocity_p90: numberOrNull(motion.optical_flow?.velocity_pixels_per_second?.p90),
     hold_ratio: numberOrNull(motion.motion?.hold_ratio),

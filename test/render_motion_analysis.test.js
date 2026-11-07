@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { mediaSkip } from "./helpers/media.js";
 import {
   analyzeMotionSeries,
   analyzeBlockMotion,
@@ -7,6 +12,8 @@ import {
   classifyMotionFamily,
   compareMotionProfiles,
   evaluateMotionQuality,
+  flowGrid,
+  flowOnsetSeconds,
   hookEventSeconds,
   parseMetadataSeries
 } from "../src/render_motion_analysis.js";
@@ -137,4 +144,143 @@ test("quality uses a family-specific motion floor for developing cards", () => {
 
 function metadata(key, values) {
   return values.map((value, frame) => `frame:${frame} pts:${frame}\n${key}=${value}`).join("\n");
+}
+
+// A synthetic portrait stick figure, drawn at 1080×1920 with 8 px strokes and
+// box-filtered down to a flow grid (as ffmpeg's area scale does).
+function stickFrame(armDegrees, { width = 1080, height = 1920 } = {}) {
+  const canvas = new Uint8Array(width * height).fill(232);
+  const line = (x0, y0, x1, y1, thickness = 8) => {
+    const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0));
+    for (let i = 0; i <= steps; i += 1) {
+      const cx = x0 + (x1 - x0) * i / steps, cy = y0 + (y1 - y0) * i / steps;
+      for (let y = Math.floor(cy - thickness / 2); y <= cy + thickness / 2; y += 1) for (let x = Math.floor(cx - thickness / 2); x <= cx + thickness / 2; x += 1) {
+        if (x >= 0 && y >= 0 && x < width && y < height) canvas[y * width + x] = 30;
+      }
+    }
+  };
+  for (let a = 0; a < 360; a += 2) { const r = (a * Math.PI) / 180; line(540 + 60 * Math.cos(r), 700 + 60 * Math.sin(r), 540 + 60 * Math.cos(r + 0.04), 700 + 60 * Math.sin(r + 0.04)); }
+  line(540, 760, 540, 1100);
+  line(540, 1100, 460, 1400); line(540, 1100, 620, 1400);
+  line(540, 850, 400, 1000);
+  const r = (armDegrees * Math.PI) / 180;
+  line(540, 850, 540 + 300 * Math.cos(r), 850 - 300 * Math.sin(r));
+  return canvas;
+}
+
+function areaScale(canvas, width, height, gridWidth, gridHeight) {
+  const out = Buffer.alloc(gridWidth * gridHeight);
+  const fx = width / gridWidth, fy = height / gridHeight;
+  for (let gy = 0; gy < gridHeight; gy += 1) for (let gx = 0; gx < gridWidth; gx += 1) {
+    let sum = 0, count = 0;
+    for (let y = Math.floor(gy * fy); y < Math.floor((gy + 1) * fy); y += 1) for (let x = Math.floor(gx * fx); x < Math.floor((gx + 1) * fx); x += 1) { sum += canvas[y * width + x]; count += 1; }
+    out[gy * gridWidth + gx] = Math.round(sum / count);
+  }
+  return out;
+}
+
+function portraitClip(angles, grid) {
+  return Buffer.concat(angles.map((angle) => areaScale(stickFrame(angle), 1080, 1920, grid.width, grid.height)));
+}
+
+test("the flow grid keeps the video's aspect: portrait renders are sampled portrait", () => {
+  assert.deepEqual(flowGrid(1080, 1920), { width: 180, height: 320, velocityScale: 0.2 });
+  assert.deepEqual(flowGrid(1920, 1080), { width: 320, height: 180, velocityScale: 0.2 });
+  assert.deepEqual(flowGrid(1080, 1080), { width: 180, height: 180, velocityScale: 0.2 });
+  // The legacy 64×36 grid reads at its own scale (velocityScale 1).
+  assert.equal(flowGrid(1080, 1920, { flowWidth: 64, flowHeight: 36 }).velocityScale, 1);
+});
+
+test("a portrait stick figure waving its arm passes the flow floor; the same figure held still fails it", () => {
+  const grid = flowGrid(1080, 1920);
+  const waving = [0, 6, 12, 18, 24, 30, 24, 18, 12, 6, 0, -6, -12, -6, 0, 6];
+  const acting = analyzeBlockMotion(portraitClip(waving, grid), grid.width, grid.height, 10, { velocityScale: grid.velocityScale });
+  assert.ok(acting.velocity_pixels_per_second.p90 >= 2, `acting p90 ${acting.velocity_pixels_per_second.p90}`);
+  // Every frame pair of the gesture registers.
+  assert.equal(acting.samples.filter((sample) => sample.pixels_per_second > 0).length, waving.length - 1);
+  const held = analyzeBlockMotion(portraitClip(Array(16).fill(12), grid), grid.width, grid.height, 10, { velocityScale: grid.velocityScale });
+  assert.equal(held.velocity_pixels_per_second.p90, 0);
+  assert.equal(held.velocity_pixels_per_second.max, 0);
+  const floor = { minimum_flow_velocity_p90: 2 };
+  const quality = (flow) => evaluateMotionQuality({ duration_seconds: 1.6, width: 1080, height: 1920, frame_count: 48, motion_bursts_per_minute: 60, motion: { hold_ratio: 0.2, bursts: [] }, optical_flow: flow }, floor);
+  assert.equal(quality(acting).ok, true);
+  assert.equal(quality(held).ok, false);
+  assert.match(quality(held).findings[0].message, /90th-percentile motion velocity is 0\.0 px\/s/);
+});
+
+test("the old landscape 64×36 grid could not see the same portrait acting", () => {
+  const legacy = { width: 64, height: 36 };
+  const waving = [0, 6, 12, 18, 24, 30, 24, 18, 12, 6, 0];
+  // A portrait frame squeezed into a landscape grid, as the gate sampled it.
+  const metrics = analyzeBlockMotion(Buffer.concat(waving.map((angle) => areaScale(stickFrame(angle), 1080, 1920, legacy.width, legacy.height))), legacy.width, legacy.height, 10, { flowBlockSize: 6, flowSearchRadius: 2 });
+  assert.equal(metrics.velocity_pixels_per_second.p90, 0);
+});
+
+test("a blink-sized change or encoder noise on a held frame is not motion", () => {
+  const grid = flowGrid(1080, 1920);
+  const base = areaScale(stickFrame(12), 1080, 1920, grid.width, grid.height);
+  const frames = [];
+  for (let i = 0; i < 12; i += 1) {
+    const frame = Buffer.from(base);
+    // ±2 levels of noise everywhere, and a 6×3 px "eye" that blinks.
+    for (let p = 0; p < frame.length; p += 1) frame[p] = Math.max(0, Math.min(255, frame[p] + ((p * 7 + i * 13) % 5) - 2));
+    for (let y = 114; y < 117; y += 1) for (let x = 88; x < 94; x += 1) frame[y * grid.width + x] = i % 2 ? 30 : 232;
+    frames.push(frame);
+  }
+  const metrics = analyzeBlockMotion(Buffer.concat(frames), grid.width, grid.height, 10, { velocityScale: grid.velocityScale });
+  assert.equal(metrics.velocity_pixels_per_second.max, 0);
+});
+
+test("optical-flow onsets count as motion events in the hook and as first motion", () => {
+  const samples = [0, 0, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 0].map((pixels_per_second, index) => ({ at_seconds: (index + 1) / 10, pixels_per_second }));
+  const metrics = { cuts: [], motion: { bursts: [] }, optical_flow: { sample_fps: 10, samples } };
+  assert.deepEqual(flowOnsetSeconds(metrics), [0.2, 1.9]);
+  assert.deepEqual(hookEventSeconds(metrics, 4), [0.2, 1.9]);
+  // A single moving sample is flicker, not an event.
+  assert.deepEqual(flowOnsetSeconds({ optical_flow: { sample_fps: 10, samples: [{ at_seconds: 0.1, pixels_per_second: 4 }, { at_seconds: 0.2, pixels_per_second: 0 }] } }), []);
+  const result = evaluateMotionQuality({ ...metrics, duration_seconds: 3, frame_count: 90, motion_bursts_per_minute: 30, motion: { hold_ratio: .5, bursts: [], frame_difference: [] } }, { maximum_first_motion_seconds: 0.35 });
+  assert.equal(result.ok, true);
+});
+
+test("analyzeRenderMotion samples a portrait render on a portrait flow grid", async () => {
+  const commands = [];
+  const outputs = [
+    { stdout: JSON.stringify({ format: { duration: "1" }, streams: [{ codec_type: "video", width: 1080, height: 1920, avg_frame_rate: "30/1", nb_read_frames: "30" }] }) },
+    { stdout: metadata("lavfi.signalstats.YAVG", [0.1, 0.1]) },
+    { stdout: metadata("lavfi.scene_score", [0, 0]) }
+  ];
+  const metrics = await analyzeRenderMotion("/tmp/portrait.mp4", {}, {
+    run: async (command, args) => { commands.push(args); return outputs.shift(); },
+    runRaw: async (command, args) => { commands.push(args); return { stdout: Buffer.alloc(180 * 320 * 2) }; }
+  });
+  assert.match(commands.at(-1).join(" "), /scale=180:320:flags=area/);
+  assert.deepEqual(metrics.optical_flow.grid, { width: 180, height: 320 });
+  assert.match(metrics.optical_flow.velocity_units, /36-px short side/);
+});
+
+test("encoded portrait clips: acting registers on the flow grid, a held frame does not", { skip: mediaSkip(ffmpegMissing()) }, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "launchclip-flow-"));
+  try {
+    const encode = (file, angles) => {
+      const result = spawnSync("ffmpeg", ["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", "1080x1920", "-r", "10", "-i", "pipe:0", "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p", file], { input: Buffer.concat(angles.map((angle) => Buffer.from(stickFrame(angle)))) });
+      assert.equal(result.status, 0, String(result.stderr));
+    };
+    const acting = path.join(dir, "acting.mp4"), held = path.join(dir, "held.mp4");
+    encode(acting, [0, 6, 12, 18, 24, 30, 24, 18, 12, 6, 0, -6, -12, -6, 0, 6, 12, 18, 24, 30]);
+    encode(held, Array(20).fill(12));
+    const moving = await analyzeRenderMotion(acting);
+    const still = await analyzeRenderMotion(held);
+    assert.deepEqual(moving.optical_flow.grid, { width: 180, height: 320 });
+    assert.ok(moving.optical_flow.velocity_pixels_per_second.p90 >= 2, `acting p90 ${moving.optical_flow.velocity_pixels_per_second.p90}`);
+    assert.equal(still.optical_flow.velocity_pixels_per_second.max, 0);
+    const floor = { minimum_flow_velocity_p90: 2 };
+    assert.equal(evaluateMotionQuality(moving, floor).findings.some((entry) => /velocity/.test(entry.message)), false);
+    assert.equal(evaluateMotionQuality(still, floor).findings.some((entry) => /velocity/.test(entry.message)), true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+function ffmpegMissing() {
+  return spawnSync("ffmpeg", ["-version"]).status === 0 ? false : "ffmpeg is not installed";
 }

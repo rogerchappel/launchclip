@@ -28,6 +28,8 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module's own motion should stand alone, or a level.
 - world? (optional): {kind: office | home-desk | kitchen | living-room | classroom | cafe | workshop | server-room | studio | gym | city-street | shopfronts | crossing | alley | rooftop | skyline | park | beach | mountains | forest | space | abstract-stage, time?: day | dusk | night, props?: [prop ids]}. The default for every world scene; a style may set it. Pick the place that fits the topic (cooking → kitchen or cafe, fitness → gym or park, developer tools → home-desk or server-room) and the time the story is set at.
 - A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.
+- A set-prop puts one story object in that world: a drawn prop (fridge, bookshelf, washing-machine, microwave, toaster, or any world prop) or an assets/ cut-out image or video, on its floor, back wall, counter or wall, sized in metres to match the cast. On a lower track than the cast-scene it stands behind the characters, on a higher one in front of them; it moves with the world camera. Give it the plate's window to have it there all shot, or start it on the word to pop it in.
+- A photo-scene, evidence-clip or product-demo plate cuts as its transitions say: whole on its first frame after a cut or a typed in, whole on frame 0 when it opens the video, and gone with the cut into the next plate; it fades only on its own (or with params.enter / exit: fade).
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
 - Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.
@@ -770,6 +772,8 @@ params:
 - frame: window|full (full needs the canvas aspect; default window)
 - zoom: false, or {max: 1–2.5 (default 1.8)}
 - title: string ≤ 48 (optional, for logs)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: click-<i>, key-<i>-<k>, zoom-<k>, callout-<i>
 
 ### photo-scene (keeps captions)
@@ -783,6 +787,8 @@ params:
 - lines: [{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each
 - align: left|center (default left)
 - title: string ≤ 60, the photo's alt text (optional)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: enter, line-<i>
 
 ### evidence-clip (keeps captions)
@@ -796,6 +802,8 @@ params:
 - focus: [{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture's own beats
 - cursor: [{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time
 - title: string ≤ 60 (optional, for logs)
+- enter: cut | fade: how the scene arrives (default: whole on its first frame when it opens the video, has a typed `in` transition or cuts straight from the previous plate; else a fade)
+- exit: cut | fade: how the scene leaves (default: with the change when the next plate starts where it ends; else a fade)
 events: enter, source, focus-<i>, click-<i>
 
 ### clip (keeps captions)
@@ -811,6 +819,22 @@ params:
 - position: bottom|top (default bottom): the callout slot, inside the safe zone and above the caption band
 - title: string ≤ 60, what the shot shows (alt text, optional)
 events: enter, callout-<i>
+
+### set-prop (keeps captions)
+One story object placed in the world a cast stands in: a drawn prop (fridge, bookshelf, washing machine…) or a project image or video from assets/, on the floor, against the back wall, on the counter or on the wall, sized in metres to match the cast. Its track sets its depth (below the cast-scene: behind the characters; above: in front). Moves with the world camera; pops, slides or drops in. Keeps captions.
+params:
+- prop: a drawn prop id from the world kit (the world module's props list), such as fridge, washing-machine, bookshelf, microwave, toaster, plant, boxes or whiteboard
+- media: "assets/…" image (.png|.webp|.svg|.jpg; a transparent cut-out reads best) or video (.mp4|.webm|.mov|.m4v), or {src, kind?, sourceStart? (video)}; exactly one of prop or media
+- on: floor | back | counter | wall (default: floor, or the drawn prop's own place): floor = the line the cast stands on; back = against the back wall; counter = the world's counter or worktop; wall = hung on the wall, centred on its line
+- at: left | centre | right | 0–1, the share of the frame width its centre stands at (default centre; left 0.2, right 0.8)
+- height: metres, 0.05–6 (default: a drawn prop's own height, media 1.7), scaled by the world's px per metre so it matches the cast
+- width: metres, 0.05–8, media only (default: the height): the box the media fits in, standing on its base
+- y: 0–1 share of the frame height: the line it stands on (its centre on a wall); overrides the world; required without a world
+- flip: boolean: mirror it
+- enter: cut | fade | pop | from-left | from-right | drop (default: with the plate beneath when it starts with it, cut on the first frame, else pop)
+- exit: cut | fade | pop (default: with the plate beneath when it ends with it, else fade)
+- title: string ≤ 60, what it is (alt text, optional)
+events: enter
 
 ### split-screen (keeps captions)
 Footage fills the top or bottom half of the frame (left or right on a wide frame) and the other half carries the line: a title, a stat or a short list, across an accent line or a soft blend. Keeps captions.
@@ -2365,7 +2389,7 @@ A layered environment drawn in code (inside rooms, streets and outdoor places) a
 params:
 - kind: office | home-desk | kitchen | living-room | classroom | cafe | workshop | server-room | studio | gym | city-street | shopfronts | crossing | alley | rooftop | skyline | park | beach | mountains | forest | space | abstract-stage (default: story.world.kind)
 - time: day | dusk | night (default: story.world.time, else day)
-- props: [id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: laptop, phone, tablet, mug, coffee-cup, books, notebook, pen-cup, lightbulb, trophy, coins, piggy-bank, calculator, headphones, camera, microphone, keyboard, monitor, succulent, globe, hourglass, alarm-clock, gift, jar, cake, pizza, bowl, pan, pot, cutting-board, bread, fruit-bowl, teapot, kettle, water-bottle, apple, candle, game-controller, flowers, clipboard, envelope, desk-lamp, plant, leafy-plant, tree, pine-tree, palm-tree, bush, lamp-post, bench, bike, car, scooter, rocket, chart-easel, whiteboard, box, boxes, trash-can, fire-hydrant, traffic-cone, mailbox, suitcase, backpack, briefcase, stool, office-chair, floor-lamp, guitar, ladder, telescope, tent, campfire, signpost, flag, umbrella, server-rack, robot, dumbbell, kettlebell, ball, skateboard, clock, framed-art, poster, wall-shelf, neon-sign, calendar, tv, wall-chart, map, dartboard, balloons, kite, drone, hot-air-balloon
+- props: [id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: laptop, phone, tablet, mug, coffee-cup, books, notebook, pen-cup, lightbulb, trophy, coins, piggy-bank, calculator, headphones, camera, microphone, keyboard, monitor, succulent, globe, hourglass, alarm-clock, gift, jar, cake, pizza, bowl, pan, pot, cutting-board, bread, fruit-bowl, teapot, kettle, water-bottle, apple, candle, game-controller, flowers, clipboard, envelope, desk-lamp, plant, leafy-plant, tree, pine-tree, palm-tree, bush, lamp-post, bench, bike, car, scooter, rocket, chart-easel, whiteboard, box, boxes, trash-can, fire-hydrant, traffic-cone, mailbox, suitcase, backpack, briefcase, stool, office-chair, floor-lamp, guitar, ladder, telescope, tent, campfire, signpost, flag, umbrella, server-rack, robot, dumbbell, kettlebell, ball, skateboard, fridge, washing-machine, bookshelf, microwave, toaster, clock, framed-art, poster, wall-shelf, neon-sign, calendar, tv, wall-chart, map, dartboard, balloons, kite, drone, hot-air-balloon
 - camera: still | drift | pan-left | pan-right | push | pull or {move, amount 0..1} (default drift)
 - detail: simple | standard | rich (default: from story.cast.style)
 - scrim: auto | top | bottom | left | right | centre | none | true (darken the quiet area for text on top; default none)
@@ -2414,6 +2438,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 | evidence-clip | 2 s | 0 s | scene − 0.3 s | focus[].at in order; each zooms in over 0.8 s, holds to until (default 2 s after landing) and eases out over 0.7 s unless the next starts first; cursor[].at at least 0.2 s apart; each glide takes up to 0.7 s and lands on the point's time |
 | clip | 1 s | 0 s | scene − 1.55 s | callouts[].at in order, each at least 0.15 s after the previous one leaves; every callout ends at least 0.35 s before the scene ends and stays 0.22 s a word (at least 1.2 s); a video scene fits its source window: media.sourceEnd − media.sourceStart ≥ the scene length |
+| set-prop | 0.5 s | 0 s | scene − 0 s | put it on a lower track than the cast-scene to stand behind the characters, a higher track to stand in front of them; give it the plate's window to have it there all shot (in world mode it then rides the plate); start it later to pop it in on a beat |
 | split-screen | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
 | landscape-card | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
 | picture-in-picture | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |

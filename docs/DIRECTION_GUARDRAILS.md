@@ -117,6 +117,11 @@ character's shirt or a card. No style can switch off the fix.
     its midpoint from the video frames. It measures the text colour against
     the pixels around and between the glyphs: contrast at the worst quarter,
     and how much of the background shares the text's colour (camouflage).
+  - A line with a backing (its plate, a legibility plate, or the chips or
+    band the preset draws behind its words) is measured against that
+    backing: the pixels just around each glyph inside it, allowing for the
+    plate's own transparency. The floor beside the plate does not count.
+    Where the backing is not drawn, the line is judged on what is behind it.
   - Lines below 3:1, or more than 35% camouflaged, are written to
     `qa/finish/caption-legibility.json`.
   - Finish re-renders once with a backing plate on exactly those lines
@@ -175,6 +180,11 @@ entrances and variants. The clamps only cap their timing.
   the layout check's element rects:
   - a region (top, middle or bottom third in 9:16; left, centre or right in
     16:9) with only the plate in it for longer than 4 s;
+  - a full-frame `photo-scene` counts as content, not plate, when its asset
+    is detailed or moving. `src/media_presence.js` measures the asset's
+    pixels: edges for detail, changed pixels between samples for motion. A
+    flat or blank asset is still the plate. The layout check adds it as a
+    full-frame media element, so the lower-third check reads it the same way.
   - a text card over a world plate with no cast and no other visual for
     longer than 3 s.
 - **Finish gate `variety`.** Each cast scene has a shot signature: set, cast
@@ -214,7 +224,9 @@ something live moves in it.
 - **Finish gate `holds`.**
   - `static-hold` (error): longer than 3 s in which nothing moves at all:
     no hold drift or world camera, no transition, and no module tween,
-    loop, count or state change.
+    loop, count or state change. A `photo-scene` video counts as moving
+    over the spans where its pixels measurably change (marks drawn on, a
+    camera move inside the clip); a held stretch of it is still a hold.
   - `drift-only` (warning): longer than 3 s in which only the hold drift
     moves. Add a live mover: a state, a counter, a sweeping highlight, a
     cursor.

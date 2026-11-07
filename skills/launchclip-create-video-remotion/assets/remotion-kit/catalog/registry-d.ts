@@ -6,6 +6,7 @@ import {ProductDemo} from './ProductDemo';
 import {PhotoScene} from './PhotoScene';
 import {EvidenceClip} from './EvidenceClip';
 import {Clip} from './Clip';
+import {SetProp} from './SetProp';
 import {MEDIA_LAYOUT_COMPONENTS} from './MediaLayout';
 
 export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
@@ -13,5 +14,6 @@ export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
   'photo-scene': PhotoScene,
   'evidence-clip': EvidenceClip,
   clip: Clip,
+  'set-prop': SetProp,
   ...MEDIA_LAYOUT_COMPONENTS,
 };

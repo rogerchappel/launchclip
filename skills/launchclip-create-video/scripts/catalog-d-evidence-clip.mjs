@@ -23,6 +23,8 @@ import {fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration} from './grammar.mjs';
+import {mediaRootOps} from './catalog-d-photo-scene.mjs';
+import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
 
 export const EVIDENCE_CLIP_TIMING = Object.freeze({minDuration: 2, fade: 0.4, zoomIn: 0.8, zoomOut: 0.7, hold: 2, glide: 0.7, tagLead: 0.35, leadOut: 0.3});
 const T = EVIDENCE_CLIP_TIMING;
@@ -100,7 +102,7 @@ function resolveEvidenceClip(params, ctx) {
   const colors = {...(ctx?.brand?.colors ?? {})};
   colors.accent = colors.accent ?? colors.primary;
   colors.ink = colors.ink ?? '#0b0d12';
-  const b = createFootageBase('evidence-clip', params, {...ctx, brand: {...(ctx?.brand ?? {}), colors}}, {allowed: ['media', 'viewport', 'source', 'frame', 'push', 'focus', 'cursor', 'title'], required: ['media', 'viewport'], minDuration: T.minDuration});
+  const b = createFootageBase('evidence-clip', params, {...ctx, brand: {...(ctx?.brand ?? {}), colors}}, {allowed: ['media', 'viewport', 'source', 'frame', 'push', 'focus', 'cursor', 'title', 'enter', 'exit'], required: ['media', 'viewport'], minDuration: T.minDuration});
   const {check, canvas, fps, start, end, duration, u, theme} = b;
   const p = b.params;
   check.obj(p.media, 'params.media', ['src', 'sourceStart'], ['src']);
@@ -183,16 +185,19 @@ function resolveEvidenceClip(params, ctx) {
     return {index: i, at, x: pt.x, y: pt.y, click};
   });
 
-  const fadeIn = grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}), fadeOut = grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8});
+  // A fade in and out, unless it arrives or leaves with a cut (kit/core/media-passage.mjs).
+  const passage = mediaPassage(ctx, passageParams(check, p));
+  const fadeIn = passage.enter === 'fade' ? grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}) : 0;
+  const fadeOut = passage.exit === 'fade' ? grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8}) : 0;
   b.events.push({id: `${b.id}-enter`, name: 'enter', time: rt(start + fadeIn), role: 'enter'});
   if (source) {
     source.at = rt(Math.min(end - T.leadOut - 0.4, start + fadeIn + T.tagLead));
     b.events.push({id: `${b.id}-source`, name: 'source', time: source.at, endTime: rt(source.at + 0.4), role: 'emphasis'});
   }
-  const content = {media, viewport, frame, title, rect, bezel, radius: u(16), accent: colors.accent, surface: theme.bg, paper: theme.paper, muted: theme.muted, source, focus, cursor, keys, samples, push: pushBy, cursorSize: u(34)};
+  const content = {enter: passage.enter, exit: passage.exit, media, viewport, frame, title, rect, bezel, radius: u(16), accent: colors.accent, surface: theme.bg, paper: theme.paper, muted: theme.muted, source, focus, cursor, keys, samples, push: pushBy, cursorSize: u(34)};
   const outer = {x: r2(rect.x - bezel), y: r2(top), width: r2(rect.width + bezel * 2), height: r2(blockH)};
   const model = b.finish(content, {rect: outer, role: 'media', minTextPx: source ? source.size : null,
-    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
+    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: passage.enter === 'fade' ? 0 : 1}, exitTo: {opacity: passage.exit === 'fade' ? 0 : 1}, enterEase: 'power2.out', exitEase: 'power2.in'}});
   // Its own push is the rest motion.
   model.layout.drift = false;
   return model;
@@ -244,14 +249,9 @@ export function evidenceClipView(model) {
 /** Renderer-neutral ops: fades, the per-frame camera on the video and camera layer, the cursor's glides, the source tag. */
 export function evidenceClipTimeline(model) {
   const {id, start, end} = model;
-  const c = model.content, m = model.motion;
+  const c = model.content;
   const ops = [];
-  for (const target of [`${id}-media`, `${id}-overlay`]) {
-    set(ops, target, start, {opacity: 0});
-    tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: 0}, {opacity: 1});
-    tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: 0});
-    set(ops, target, end, {opacity: 0});
-  }
+  mediaRootOps(ops, [`${id}-media`, `${id}-overlay`], model);
   let previous = null;
   for (const sample of c.samples) {
     const key = `${sample.x},${sample.y},${sample.scale}`;
@@ -293,7 +293,8 @@ export const evidenceClip = {
     push: '0–0.12, the slow push-in over the scene (default 0.04)',
     focus: '[{at, box: {x, y, width, height} capture px, scale? 1.05–2.5, until?}] ≤ 4, in order: post zooms on top of the capture\'s own beats',
     cursor: '[{at, x, y (capture px), click?}] ≤ 12, ≥ 0.2 s apart: a post cursor that glides to each point by its time',
-    title: 'string ≤ 60 (optional, for logs)'
+    title: 'string ≤ 60 (optional, for logs)',
+    ...PASSAGE_PARAMS
   },
   events: ['enter', 'source', 'focus-<i>', 'click-<i>'],
   timing: {minDuration: T.minDuration, leadIn: 0, leadOut: T.leadOut, gaps: [],

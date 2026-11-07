@@ -78,11 +78,11 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f; };
 const rad = (deg) => (deg * Math.PI) / 180;
 
-// Riders: a cast standing in a track-0 plate travels with it. In world mode
-// (and in a cuts story whose camera moves) it is drawn inside the camera at
-// its plate's placement; in cuts mode it also takes the plate's zooms, so a
-// character never stands still while its world slides or zooms under it.
-const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo']);
+// Riders: a cast (or a set prop) standing in a track-0 plate travels with it.
+// In world mode (and in a cuts story whose camera moves) it is drawn inside
+// the camera at its plate's placement; in cuts mode it also takes the plate's
+// zooms, so a character never stands still while its world slides or zooms under it.
+const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo', 'set-prop']);
 const sameTime = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-3;
 const within = (scene, plate) => Number(scene.start) >= Number(plate.start) - 1e-3 && Number(scene.end) <= Number(plate.end) + 1e-3;
 

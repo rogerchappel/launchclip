@@ -1,0 +1,63 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Set prop parity: an image on the back wall line sliding in from the left, mirrored, with its contact shadow (portrait)",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "platform": "youtube-shorts",
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#14122b",
+        "primary": "#6d5dfc",
+        "accent": "#ffb547",
+        "ink": "#14122b",
+        "paper": "#f6f3ee"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "world": {
+      "kind": "kitchen",
+      "time": "day"
+    },
+    "cast": {
+      "style": "outlined",
+      "characters": [
+        {
+          "id": "maya"
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "id": "crate",
+        "module": "set-prop",
+        "start": 0.5,
+        "end": 3.5,
+        "params": {
+          "media": "assets/testsrc.png",
+          "on": "back",
+          "at": 0.3,
+          "height": 0.6,
+          "width": 0.8,
+          "flip": true,
+          "enter": "from-left",
+          "exit": "pop"
+        }
+      }
+    ]
+  },
+  "sceneId": "crate",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

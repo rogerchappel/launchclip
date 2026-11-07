@@ -479,19 +479,69 @@ function missingCompiledVerification(project, rendererName) {
 // are waived; every other warning still fails the strict check.
 export const COMPILED_AUTHORING_LINT = Object.freeze(["composition_file_too_large", "timeline_track_too_dense"]);
 
+// Layout warnings on the engine's own camera wrappers. The compiler wraps a
+// shot in elements that exist only to move it: the world camera
+// (#lc-cam-drift, #lc-cam-zoom, #lc-cam-pan inside #lc-camera), a scene's
+// overlay parallax (#lc-par-<scene>), shot zooms (#lc-zs-/#lc-zp-<scene>),
+// ambient drift (#lc-drift-<scene>) and a module's camera
+// (#<scene>-cam, #<scene>-overlay-cam). Moving or scaling one carries its
+// box past its clipping parent by design, so `hyperframes check` reports a
+// container_overflow on the wrapper itself on every sampled frame of a move
+// (and escaped_container when a pan carries it a whole frame away).
+// Only that exact pair is waived: the wrapper as the overflowing child, its
+// own engine parent as the container, and <scene> a scene of the compiled
+// composition. Anything inside a wrapper (a card, a caption, a character)
+// that overflows is reported under its own selector and still fails.
+export const ENGINE_WRAPPER_OVERFLOW = Object.freeze({ codes: Object.freeze(["container_overflow", "escaped_container"]), severity: "warning" });
+
+/** Is this layout finding a camera wrapper overflowing its own engine parent? scenes: scene ids of the compiled composition. */
+export function engineWrapperOverflow(finding, scenes = new Set()) {
+  if (!ENGINE_WRAPPER_OVERFLOW.codes.includes(finding?.code) || finding?.severity !== ENGINE_WRAPPER_OVERFLOW.severity) return false;
+  const child = String(finding.selector ?? ""), parent = String(finding.containerSelector ?? "");
+  if (/^#lc-cam-(drift|zoom|pan)$/.test(child)) return /^#lc-(camera|cam-(drift|zoom|pan))$/.test(parent);
+  const wrapped = /^#lc-(par|zs|zp|drift)-(.+)$/.exec(child);
+  if (wrapped) {
+    const id = wrapped[2];
+    return scenes.has(id) && [`#lc-scene-${id}`, `#lc-layer-${id}`, `#lc-par-${id}`, `#lc-zs-${id}`, `#lc-zp-${id}`].includes(parent);
+  }
+  const camera = /^#(.+?)(-overlay)?-cam$/.exec(child);
+  if (camera) return scenes.has(camera[1]) && parent === `#${camera[1]}${camera[2] ?? ""}`;
+  return false;
+}
+
 /**
- * A strict HyperFrames check report whose only failures are the authoring
- * lint warnings → {ok: true, waived: [codes]}; anything else → null.
+ * A strict HyperFrames check report whose only failures are engine-made
+ * warnings (COMPILED_AUTHORING_LINT, and engineWrapperOverflow layout
+ * warnings on scenes of the composition) → {ok: true, waived: [codes],
+ * counts: {code: n}}; anything else → null. A section whose findings were
+ * truncated, or whose warning count does not match its findings, is never
+ * waived: an unseen warning may be a real one.
  */
-export function waiveAuthoringLint(report) {
+export function waiveEngineWarnings(report, { scenes = [] } = {}) {
   if (!report || typeof report !== "object" || report.ok === true) return null;
-  const sections = ["lint", "runtime", "layout", "motion", "contrast"].map((name) => report[name]).filter((section) => section && typeof section === "object");
-  if (!report.lint || sections.some((section) => Number(section.errorCount ?? 0) > 0)) return null;
-  if (sections.some((section) => section !== report.lint && Number(section.warningCount ?? 0) > 0)) return null;
-  const warnings = (report.lint.findings ?? []).filter((finding) => finding?.severity === "warning");
-  if (warnings.length !== Number(report.lint.warningCount ?? warnings.length)) return null;
-  if (warnings.some((finding) => !COMPILED_AUTHORING_LINT.includes(finding.code))) return null;
-  return { ok: true, waived: [...new Set(warnings.map((finding) => finding.code))] };
+  const sceneIds = new Set(scenes);
+  const sections = ["lint", "runtime", "layout", "motion", "contrast"].map((name) => [name, report[name]]).filter(([, section]) => section && typeof section === "object");
+  if (!report.lint || sections.some(([, section]) => Number(section.errorCount ?? 0) > 0)) return null;
+  const allowed = {
+    lint: (finding) => COMPILED_AUTHORING_LINT.includes(finding.code),
+    layout: (finding) => engineWrapperOverflow(finding, sceneIds)
+  };
+  const counts = {};
+  for (const [name, section] of sections) {
+    const declared = Number(section.warningCount ?? 0);
+    if (!declared) continue;
+    const warnings = (section.findings ?? []).filter((finding) => finding?.severity === "warning");
+    if (section.truncated === true || warnings.length !== declared) return null;
+    if (!allowed[name] || warnings.some((finding) => !allowed[name](finding))) return null;
+    for (const finding of warnings) counts[finding.code] = (counts[finding.code] ?? 0) + 1;
+  }
+  return { ok: true, waived: Object.keys(counts), counts };
+}
+
+/** The authoring lint waiver alone (no layout warnings waived). */
+export function waiveAuthoringLint(report) {
+  const waiver = waiveEngineWarnings(report);
+  return waiver ? { ok: true, waived: waiver.waived } : null;
 }
 
 // Runs the renderer adapter's check and records each sub-check as
@@ -508,8 +558,8 @@ async function verifyProject(project, qaDir, renderer, { compiled = false } = {}
   const checks = result?.raw?.checks && typeof result.raw.checks === "object" ? result.raw.checks : {};
   const waived = {};
   if (compiled && renderer.name === "hyperframes" && checks.check?.ok === false) {
-    const waiver = waiveAuthoringLint(checks.check.stdout);
-    if (waiver) { checks.check = { ...checks.check, ok: true, waived: waiver.waived }; waived.check = waiver.waived; }
+    const waiver = waiveEngineWarnings(checks.check.stdout, { scenes: await compiledSceneIds(project) });
+    if (waiver) { checks.check = { ...checks.check, ok: true, waived: waiver.waived, waived_counts: waiver.counts }; waived.check = waiver.waived; }
   }
   for (const [name, value] of Object.entries(checks)) await writeJson(path.join(qaDir, `${name}.json`), value);
   const failed = Object.entries(checks).filter(([, value]) => value?.ok !== true).map(([name]) => name);
@@ -523,6 +573,16 @@ async function verifyProject(project, qaDir, renderer, { compiled = false } = {}
     findings: (Array.isArray(result?.findings) ? result.findings : []).filter((finding) => !(waived.check && finding?.source === "hyperframes-check")),
     failed
   };
+}
+
+// The scene ids of a compiled composition (data-launchclip-scene).
+async function compiledSceneIds(project) {
+  try {
+    const html = await readFile(path.join(project, "index.html"), "utf8");
+    return [...html.matchAll(/data-launchclip-scene="([^"]+)"/g)].map((match) => match[1]);
+  } catch {
+    return [];
+  }
 }
 
 function htmlAttribute(html, name) {

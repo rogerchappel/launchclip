@@ -3801,6 +3801,11 @@ caption band.
   lines; an error with lines).
 - **Ambient:** the module moves on its own, so its `layout.drift` is false and
   the ambient hold drift (`driftEligible`) leaves it alone.
+- **Entrance and exit (`enter`, `exit`: `cut` | `fade`):** see "Media scene
+  passages" below. By default the scene is whole on its first frame when it
+  opens the video, has a typed `in`, or cuts straight from the previous plate,
+  and it leaves with the change when a plate starts where it ends. Only a
+  scene with nothing to carry it fades (over 0.4 s, scaled by the grammar).
 - **Layout:** `role: "text"` with the text block's rect, or `decor` without
   lines.
 - **Events:** `enter`, `line-<i>`.
@@ -3814,6 +3819,100 @@ caption band.
   - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
     `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
     same tree and ops.
+
+## Media scene passages (`kit/core/media-passage.mjs`)
+
+A media scene that fades itself under a cut dips to the background for a few
+frames while anything on a higher track (a character, a card) stays solid and
+seems to float. One that opens the video at opacity 0 leaves frame 0 nearly
+empty. So `photo-scene`, `evidence-clip` and `product-demo` (and `set-prop`'s
+defaults) read their passage from the story:
+
+- **`ctx.passage`** (`scenePassage(story, scene)`, set by `resolveModule`):
+  `{in, out, after, opening, track}`. `in` is the scene's own typed transition,
+  `out` the transition of the plate that starts where this one ends (a cut when
+  it has none), `after` whether a plate ends where it starts, and `opening`
+  whether it starts on the first frame.
+- **`mediaPassage(ctx, {enter, exit})`:**
+  - `params.enter` / `params.exit` (`cut` | `fade`) win.
+  - Otherwise the entrance is a cut when the scene opens the video, has a typed
+    `in` (a cut is a cut, and any other transition dresses the scene's layer
+    itself), or follows a plate straight away.
+  - Otherwise the exit is a cut when a plate follows straight away.
+  - Anything else fades as before.
+- **Timelines:** `mediaRootOps` reads the opacity from `model.motion`, so the
+  opening and carry rules in `modules.mjs` (`openingSettled`,
+  `carriedByTransition`) apply to these modules too.
+- **`clip`** already cuts by default (its `enter` is `cut`, `fade` or
+  `settle`), so it is unchanged.
+
+## Set prop (catalogue D, `kit/core/catalog-d-set-prop.mjs`)
+
+`set-prop` places one story object in the world a cast stands in. It is
+either a drawn prop from the world kit (`kit/core/worlds/props.mjs`, which
+now includes `fridge`, `washing-machine`, `bookshelf`, `microwave` and
+`toaster`) or a project image or video from `assets/`.
+
+```json
+{ "id": "s2-fridge", "module": "set-prop", "track": 1, "start": 6.9, "end": 9.4,
+  "params": { "prop": "fridge", "at": 0.8 } }
+{ "id": "s2-tally", "module": "set-prop", "track": 3, "start": "word:tally", "end": 9.4,
+  "params": { "media": "assets/props/tally.png", "on": "back", "at": "left", "height": 1.1, "width": 0.8, "enter": "pop" } }
+```
+
+- **Depth is the track.** A set-prop on a lower track than the cast-scene
+  stands behind the characters, and one on a higher track stands in front of
+  them. The world plate (track 0) is always behind it.
+- **Where it stands (`on`):** the world's anchors (`worldAnchors`), measured
+  on the plate's bleed canvas in world mode, as a cast set's floor is.
+  - `floor` is the ground line the cast stands on (the default, or a drawn
+    prop's own place).
+  - `back` stands against the back wall.
+  - `counter` stands on the counter or worktop.
+  - `wall` hangs it, centred on the wall line.
+  - `y` (a share of the frame height) overrides the world, and is required
+    when there is no world (no world scene beneath and no `story.world`).
+- **Placement and size:**
+  - `at` is `left` (0.2), `centre`, `right` (0.8) or a 0–1 share of the frame
+    width for its centre.
+  - `height` is in metres (default: a drawn prop's own height, media 1.7) and
+    is scaled by the anchor's px per metre, so it matches the cast and the
+    world's props.
+  - A media prop fits (`object-fit: contain`) a box `width` metres wide
+    (default: the height), standing on its base (centred on a wall). A
+    transparent cut-out reads best.
+  - `flip` mirrors it.
+- **Camera:** it follows the plate's front layer frame for frame (the world
+  module's `sine.inOut` move, as `plateFollow` does for a cast set). In world
+  mode a set-prop with its plate's window rides the plate
+  (`camera-world.mjs` `RIDER_MODULES`).
+- **Entrance (`enter`):** `cut`, `fade`, `pop` (a scale from 0.6 about its
+  base on `back.out(1.7)`, `pop` cue), `from-left` / `from-right` (a slide in
+  from outside the frame on `power3.out`, `whoosh-soft` cue) or `drop` (a fall
+  from above on `bounce.out`, `pop` cue). By default it arrives with the plate
+  beneath when it starts with it (a cut, or a fade over the plate's
+  transition when it does not ride it), is whole on the first frame of the
+  video, and pops in otherwise.
+- **Exit (`exit`):** `cut`, `fade` or `pop`. By default it leaves with the
+  plate when it ends with it, and fades otherwise.
+- **Ops:** one set per frame on the prop (and an image's contact shadow)
+  composes the follow (scale `s` and offset `t` about the canvas centre) and
+  the entrance (scale `e` about the pivot `a`, offset `d`):
+  `scale = s·e`, `x = (a − c)·s·(1 − e) + d·s + t`. Every element's
+  `transform-origin` is the canvas centre, so a hoisted `<video>` moves
+  exactly as a drawn prop does.
+- **Layout:** `role: "media"` over the visible part of its rect, with
+  `allowOcclusion: ["*"]` (characters may stand in front of or behind it),
+  `drift: false`, and `live` while a video plays.
+- **Events:** `enter` (with a cue for pop, drop and slides).
+- **Compilers:**
+  - HyperFrames (`emitSetProp`): a drawn prop or an image is one clip in the
+    scene layer. A video is the `<video>` alone, so the story compiler
+    hoists it in cuts mode and keeps it in the plate in world mode.
+  - Remotion (`kit/remotion/catalog/SetProp.tsx`) draws the same tree (an
+    `<Img>`, or an `<OffthreadVideo>` trimmed to `sourceStart`) from the same
+    ops.
+  - Parity fixtures: `test/fixtures/parity/d-set-prop-{drawn,image,video}.json`.
 
 ## Evidence clip (catalogue D, `kit/core/catalog-d-evidence-clip.mjs`)
 

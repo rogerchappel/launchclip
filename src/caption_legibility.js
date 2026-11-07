@@ -59,9 +59,24 @@ export function captionLines(story, chunks) {
     const plated = /lc-cap-(plate|legible)/.test(node.cls);
     // A scrim fades into what is behind it, so the line is judged on the pixels, as an unplated one.
     const plate = /lc-cap-legible/.test(node.cls) ? (o.plateStyle === 'scrim' ? null : o.legiblePlate) : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
-    lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated, plate });
+    const backing = captionBacking(o, node.cls);
+    lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated, plate, backing });
   }
   return { plan, lines, options: o };
+}
+
+/**
+ * What the preset draws right behind a line's words, as captionPlanCss draws
+ * it: each word's chip (word "chip"), the band (layout "band"), else the
+ * line's plate (the preset's own at 85%, or a card, opaque) or its legibility
+ * plate (92%; a scrim fades out, so it is no backing). → {color, alpha} | null
+ */
+export function captionBacking(o, cls = "") {
+  if (o.word === "chip" && o.colors.chip) return { color: o.colors.chip, alpha: 1 };
+  if (o.layout === "band" && o.colors.band) return { color: o.colors.band, alpha: 1 };
+  if (/lc-cap-legible/.test(cls) && o.plateStyle !== "scrim") return { color: o.legiblePlate, alpha: 0xeb / 255 };
+  if (/lc-cap-plate/.test(cls)) return { color: o.colors.plate, alpha: o.plate === "card" ? 1 : 0xd9 / 255 };
+  return null;
 }
 
 /** The caption band in canvas px, a little taller than the plan's band so a line that wraps stays inside. */
@@ -76,7 +91,7 @@ export function captionBandRect(options, format) {
  * Legibility of one line in a decoded frame (canvas-sized RGBA image).
  * → {found, contrast, camouflage, legible}
  */
-export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plate = null } = {}) {
+export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plate = null, plateAlpha = 1 } = {}) {
   const L = CAPTION_LEGIBILITY;
   // On a plate, a preset colour close to the plate's own (a light active
   // colour on a light plate) is the plate, not the text.
@@ -86,7 +101,7 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plat
   const at = (x, y) => { const o = (y * image.width + x) * 4; return [image.pixels[o], image.pixels[o + 1], image.pixels[o + 2]]; };
   const near = (p) => Math.min(...text.map((c) => distance(p, c)));
   if (plateRgb) {
-    const onPlate = plateLegibility(image, { x0, y0, x1, y1 }, plateRgb, text, { at, near, size, chars });
+    const onPlate = plateLegibility(image, { x0, y0, x1, y1 }, plateRgb, text, { at, near, size, chars, alpha: plateAlpha });
     if (onPlate) return onPlate;
   }
   const xs = [], ys = [];
@@ -120,30 +135,60 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plat
 }
 
 /**
- * A plated line: the text against its own plate. The plate is found by its
- * colour inside the band; inside it, the glyphs must be there and reach the
- * contrast floor against the plate. → result | null (no plate in the band:
- * judge it like any other line).
+ * A line on a backing (its plate, a legibility plate, the chips or band the
+ * preset draws behind its words): the text against that backing, not the
+ * floor around it. The backing is found by its colour inside the band, with
+ * room for its own transparency (a plate at 85% shows a little of what is
+ * behind it); inside the backing's box, the glyphs must be there, and the
+ * pixels just around each glyph (a ring from 2 px to ~0.1 em out, what the
+ * eye reads the letter against) must reach the contrast floor at their worst
+ * quarter. → result | null (no backing in the band: judge it like any other
+ * line, against what is behind it).
  */
-function plateLegibility(image, band, plateRgb, text, { at, near, size, chars }) {
+function plateLegibility(image, band, plateRgb, text, { at, near, size, chars, alpha = 1 }) {
   const L = CAPTION_LEGIBILITY;
+  const tolerance = 40 + (1 - Math.max(0, Math.min(1, alpha))) * 255 * Math.sqrt(3);
   const xs = [], ys = [];
-  for (let y = band.y0; y < band.y1; y += 2) for (let x = band.x0; x < band.x1; x += 2) if (distance(at(x, y), plateRgb) < 40) { xs.push(x); ys.push(y); }
+  for (let y = band.y0; y < band.y1; y += 2) for (let x = band.x0; x < band.x1; x += 2) if (distance(at(x, y), plateRgb) < tolerance) { xs.push(x); ys.push(y); }
   const expectedArea = chars * 0.55 * size * size * 0.6 / 4;
   if (xs.length < expectedArea / 3) return null;
   const pct = (list, q) => { const sorted = [...list].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]; };
   const box = { x0: pct(xs, 0.03), x1: pct(xs, 0.97), y0: pct(ys, 0.03), y1: pct(ys, 0.97) };
-  const main = text[0];
+  const w = box.x1 - box.x0 + 1, h = box.y1 - box.y0 + 1;
+  if (w < 2 || h < 2) return null;
+  const glyph = new Uint8Array(w * h);
   let glyphs = 0;
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) if (near(at(box.x0 + x, box.y0 + y)) < L.textDistance) { glyph[y * w + x] = 1; glyphs += 1; }
+  if (glyphs < chars * 0.55 * size * size * 0.1 / 3) return { found: false, contrast: null, camouflage: null, legible: null };
+  const inner = dilate(glyph, w, h, 1), outer = dilate(glyph, w, h, Math.max(4, Math.round(size * 0.1)));
+  const main = text[0];
   const contrasts = [];
-  for (let y = box.y0; y <= box.y1; y += 2) for (let x = box.x0; x <= box.x1; x += 2) {
-    const p = at(x, y);
-    if (near(p) < L.textDistance) glyphs += 1;
-    else if (near(p) > L.backgroundDistance) contrasts.push(contrast(main, p));
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+    const i = y * w + x;
+    if (!outer[i] || inner[i]) continue;
+    const p = at(box.x0 + x, box.y0 + y);
+    if (near(p) > L.backgroundDistance) contrasts.push(contrast(main, p));
   }
-  if (glyphs < chars * 0.55 * size * size * 0.1 / 4 / 3) return { found: false, contrast: null, camouflage: null, legible: null };
   const worst = contrasts.length ? pct(contrasts, 0.25) : 1;
-  return { found: true, contrast: round(worst), camouflage: 0, legible: worst >= L.contrast, onPlate: true, box: { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 } };
+  return { found: true, contrast: round(worst), camouflage: 0, legible: worst >= L.contrast, onPlate: true, box: { x: box.x0, y: box.y0, width: w - 1, height: h - 1 } };
+}
+
+// A square dilation of a w × h mask by r px (separable running max).
+function dilate(mask, w, h, r) {
+  const rows = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y += 1) {
+    let last = -Infinity;
+    for (let x = 0; x < w; x += 1) { if (mask[y * w + x]) last = x; if (x - last <= r) rows[y * w + x] = 1; }
+    last = Infinity;
+    for (let x = w - 1; x >= 0; x -= 1) { if (mask[y * w + x]) last = x; if (last - x <= r) rows[y * w + x] = 1; }
+  }
+  for (let x = 0; x < w; x += 1) {
+    let last = -Infinity;
+    for (let y = 0; y < h; y += 1) { if (rows[y * w + x]) last = y; if (y - last <= r) out[y * w + x] = 1; }
+    last = Infinity;
+    for (let y = h - 1; y >= 0; y -= 1) { if (rows[y * w + x]) last = y; if (last - y <= r) out[y * w + x] = 1; }
+  }
+  return out;
 }
 
 /** One frame of a video at t (s), decoded, scaled to the canvas. */
@@ -174,7 +219,7 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   const out = [];
   for (const line of lines) {
     const image = await frame(video, line.time, format);
-    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.plate }) });
+    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1 }) });
   }
   return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
 }
@@ -191,7 +236,8 @@ export function predictCaptionPlates(story, chunks, elements = []) {
   if (!lines.length) return [];
   const band = captionBandRect(options, story.format);
   // Characters and media under the band (a card in the band is already a layout collision).
-  const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base");
+  // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.
+  const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base" && !element.fullFrame);
   return lines.filter((line) => busy.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band))).map((line) => line.id);
 }
 

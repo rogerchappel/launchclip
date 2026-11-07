@@ -40,7 +40,9 @@ The finish gates fail these, so plan for them from the first draft (design:
   - Text fades within 0.5 s and stays fully shown for its reading time (about
     0.22 s a word).
 - **Density and variety.**
-  - No third of the frame holds only the plate for more than 4 s.
+  - No third of the frame holds only the plate for more than 4 s. A full-frame
+    `photo-scene` whose picture is detailed or moving (a story object, marks
+    being drawn on it) fills the frame; do not cover it with cards to pass.
   - No card sits alone over an empty set for more than 3 s. Keep the cast under
     it, pointing up or reacting.
   - No shot repeats back to back. Moving the same pair to a new background is
