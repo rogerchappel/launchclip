@@ -1,0 +1,240 @@
+// The feel camera: a story-level camera that wraps the whole composition
+// (every scene, in every camera mode, clip scenes included) under the
+// medium, the brand frame and the captions, and gives it the kinetic feel's
+// ambient drift and breathing plus its zoom kicks (kit/core/feel.mjs).
+// Shared by the HyperFrames compiler (one per-frame tl.set on #lc-feel) and
+// the Remotion StoryComposition (the same samples, read per frame), so both
+// draw the same frames. Plain ESM; imports only kit/core siblings.
+// Canonical copy: kit/core/kinetic.mjs. Contract: docs/KIT_CONTRACTS.md,
+// "Story feel".
+//
+// Model
+// - The wrapper's transform is translate(x, y) scale(s) about the canvas
+//   centre. Ambient: x and y waves within ±shift of the frame, s a wave
+//   between scale[0] and scale[1]; each period lies in period[] seconds and
+//   divides the story's duration, so a loop seam matches. scale[0] is the
+//   overscan the drift needs, so the edge never shows.
+// - A kick multiplies the scale about its origin: a punch from 1 to its
+//   scale over KICK.punch (power2.out), a spring settle (motion.mjs
+//   springEase, 27 % overshoot) towards a rest just above 1, chosen so the
+//   overshoot bottoms out at exactly 1 (the edge never shows), then a slow
+//   relax to 1. Kicks come from story.camera.kicks and, with kicks.auto,
+//   from emphasised narration words and numbers (captions.mjs
+//   captionEmphasis: digits, overlay keywords, words named by impact hits)
+//   and strong scene hits; at most one per kicks.gap seconds, never while a
+//   transition, a camera move or a zoom inside a shot runs.
+// - Every frame is sampled once (feelSamples); the wrapper is clamped so its
+//   scaled box always covers the canvas.
+
+import { getEase, springEase } from './motion.mjs';
+import { resolveFeel } from './feel.mjs';
+import { captionEmphasis } from './captions.mjs';
+import { ZOOM } from './zooms.mjs';
+
+export const KICK = Object.freeze({ punch: 0.12, settle: 0.35, relax: 0.6, punchEase: 'power2.out', relaxEase: 'sine.inOut', margin: 0.06, edge: 0.25 });
+// A tl.set at t − LEAD lands on frame t whichever way the timeline is sought.
+export const FEEL_LEAD = 0.0005;
+export const FEEL_SELECTOR = '#lc-feel';
+
+const EPS = 1e-9;
+const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f + 0; };
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const num = (value) => typeof value === 'number' && Number.isFinite(value);
+const STRONG_HIT = /emphasis|lockup|hit|reveal|stamp|headline|number|count|land|impact/;
+const STRONG_CUE = /impact|subdrop|riser|whoosh|hit|pop/;
+
+/** A period in [lo, hi] that divides the duration (as close to `target` as it can). */
+export function dividingPeriod(duration, target, [lo, hi]) {
+  if (!(duration > 0)) return target;
+  let n = Math.max(1, Math.round(duration / target));
+  const fewest = Math.max(1, Math.ceil(duration / hi - EPS)), most = Math.floor(duration / lo + EPS);
+  if (fewest <= most) n = Math.min(most, Math.max(fewest, n));
+  return round(duration / n, 6);
+}
+
+/** The ambient waves for a frame and duration. → {x, y, s: {amp, period, phase, mid?}} */
+export function ambientWaves(ambient, { width, height, duration }) {
+  const [lo, hi] = ambient.period;
+  return {
+    x: { amp: round(ambient.shift * width, 4), period: dividingPeriod(duration, (lo + hi) / 2, ambient.period), phase: 0 },
+    y: { amp: round(ambient.shift * height, 4), period: dividingPeriod(duration, lo + (hi - lo) * 0.25, ambient.period), phase: round(Math.PI / 2, 6) },
+    s: { mid: round((ambient.scale[0] + ambient.scale[1]) / 2, 6), amp: round((ambient.scale[1] - ambient.scale[0]) / 2, 6), period: dividingPeriod(duration, hi, ambient.period), phase: round(Math.PI / 4, 6) }
+  };
+}
+
+const wave = (axis, t) => axis.amp * Math.sin((2 * Math.PI * t) / axis.period + axis.phase);
+
+/**
+ * Spans no kick may overlap (absolute seconds, padded by KICK.margin):
+ * every track-0 transition in, the loop ending, the camera plan's moves and
+ * every zoom inside a shot. → [{start, end, why}]
+ */
+export function feelBusy(story, windows, camera = null) {
+  const out = [];
+  const add = (start, end, why) => { if (num(start) && num(end) && end > start) out.push({ start: round(start - KICK.margin, 6), end: round(end + KICK.margin, 6), why }); };
+  for (const entry of windows?.scenes ?? []) {
+    if (entry.plate && entry.transitionIn && entry.transitionIn.type !== 'cut' && entry.transitionIn.dur > 0) add(entry.start, entry.start + entry.transitionIn.dur, `${entry.id} ${entry.transitionIn.type}`);
+    if (!entry.plate || !Array.isArray(entry.scene?.zooms)) continue;
+    const zooms = entry.scene.zooms.filter((zoom) => num(zoom?.at));
+    zooms.forEach((zoom, i) => {
+      add(zoom.at, zoom.at + ZOOM.move.max, `${entry.id} zoom`);
+      if (num(zoom.until)) add(zoom.until, zoom.until + ZOOM.move.max, `${entry.id} zoom out`);
+      else if (i === zooms.length - 1) add(entry.end - ZOOM.move.max, entry.end, `${entry.id} zoom out`);
+    });
+  }
+  if (windows?.loop?.transitionIn && windows.loop.transitionIn.type !== 'cut') add(windows.loop.start, windows.loop.end, 'loop ending');
+  for (const move of camera?.moves ?? []) add(move.start, move.start + move.duration, `camera ${move.type}`);
+  return out.sort((a, b) => a.start - b.start);
+}
+
+const flatWords = (words) => (Array.isArray(words) ? words : []).flatMap((item) => (Array.isArray(item?.words) ? item.words : [item]))
+  .map((word) => ({ text: String(word?.text ?? word?.word ?? ''), start: Number(word?.start) }))
+  .filter((word) => word.text && num(word.start));
+const normToken = (text) => String(text ?? '').toLowerCase().replace(/#\d+$/, '').replace(/[^\p{L}\p{N}-]+/gu, '');
+
+/**
+ * The kicks of a story. feel: resolveFeel(story); busy: feelBusy; words:
+ * narration words or caption chunks (both renderers pass the same caption
+ * chunks). Explicit kicks first (dropped with a warning when they fall in a
+ * busy span or too close to another), then automatic ones.
+ * → {kicks: [{at, scale, origin: {x, y} (px), source}], warnings}
+ */
+export function feelKicks(story, feel, { busy = [], words = [] } = {}) {
+  const width = Number(story.format.width), height = Number(story.format.height);
+  const duration = Number(story?.resolved?.duration ?? story.format.duration);
+  const span = KICK.punch + KICK.settle;
+  const warnings = [], kicks = [];
+  const blocked = (at) => busy.find((window) => at < window.end - EPS && at + span > window.start + EPS);
+  const crowded = (at) => kicks.some((kick) => Math.abs(kick.at - at) < feel.kicks.gap - EPS);
+  const inside = (at) => at >= KICK.edge - EPS && at + span <= duration - 0.05 + EPS;
+  const origin = (value) => ({ x: round((isObject(value) && num(value.x) ? value.x : 0.5) * width, 3), y: round((isObject(value) && num(value.y) ? value.y : 0.5) * height, 3) });
+  const explicit = feel.explicit.map((kick, index) => ({ kick, index })).filter(({ kick }) => num(Number(kick?.at)) && typeof kick.at !== 'string').sort((a, b) => a.kick.at - b.kick.at || a.index - b.index);
+  for (const { kick, index } of feel.explicit.map((k, i) => ({ kick: k, index: i }))) if (typeof kick?.at === 'string') warnings.push(`camera.kicks[${index}] skipped: its at "${kick.at}" was not resolved (run resolveStory with the narration)`);
+  for (const { kick, index } of explicit) {
+    const at = round(Number(kick.at), 6);
+    const busyWith = blocked(at);
+    if (!inside(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s leaves no room for the kick inside the story`); continue; }
+    if (busyWith) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it would run during ${busyWith.why}`); continue; }
+    if (crowded(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it is within ${feel.kicks.gap}s of another kick`); continue; }
+    kicks.push({ at, scale: num(kick.scale) ? kick.scale : feel.kicks.scale, origin: origin(kick.origin), source: `camera.kicks[${index}]` });
+  }
+  if (feel.kicks.auto) {
+    const candidates = [];
+    const emphasis = captionEmphasis(story);
+    for (const word of flatWords(words)) if (emphasis.has(normToken(word.text)) || /\d/.test(word.text)) candidates.push({ at: word.start, source: `word "${word.text}"` });
+    for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+      for (const hit of Array.isArray(scene?.hits) ? scene.hits : []) {
+        if (!num(hit?.at)) continue;
+        if (STRONG_HIT.test(String(hit.event ?? '')) || STRONG_CUE.test(String(hit.cue ?? ''))) candidates.push({ at: hit.at, source: `${scene.id} hit ${hit.event}` });
+      }
+    }
+    candidates.sort((a, b) => a.at - b.at || a.source.localeCompare(b.source));
+    for (const candidate of candidates) {
+      const at = round(candidate.at, 6);
+      if (!inside(at) || blocked(at) || crowded(at)) continue;
+      kicks.push({ at, scale: feel.kicks.scale, origin: origin(null), source: candidate.source });
+    }
+  }
+  kicks.sort((a, b) => a.at - b.at);
+  return { kicks, warnings };
+}
+
+/** The rest a kick settles to, so the spring's overshoot bottoms out at exactly 1. */
+export function kickRest(scale, overshoot) {
+  return round((1 + overshoot * scale) / (1 + overshoot), 6);
+}
+
+/** One kick's scale multiplier at absolute t (1 outside it). */
+export function kickValue(kick, t, overshoot) {
+  const u = t - kick.at;
+  if (u < 0) return 1;
+  const S = kick.scale, R = kickRest(S, overshoot);
+  if (u < KICK.punch) return 1 + (S - 1) * getEase(KICK.punchEase)(u / KICK.punch);
+  if (u < KICK.punch + KICK.settle) return S + (R - S) * getEase(springEase(overshoot))((u - KICK.punch) / KICK.settle);
+  const relax = u - KICK.punch - KICK.settle;
+  if (relax < KICK.relax) return R + (1 - R) * getEase(KICK.relaxEase)(relax / KICK.relax);
+  return 1;
+}
+
+/**
+ * The feel camera plan for a resolved story, or null when it has nothing to
+ * do (no feel, a base recording owns the camera, or no ambient and no kick).
+ * windows: transitions.mjs sceneWindows (riders joined or not); camera:
+ * camera-world.mjs cameraPlan (null without a world camera); words: caption
+ * chunks or narration words for automatic kicks.
+ * → {width, height, fps, duration, frames, feel: id, ambient: waves | null,
+ *    spring, kicks, busy, warnings}
+ */
+export function feelPlan(story, { windows, camera = null, words = [] } = {}) {
+  const feel = resolveFeel(story);
+  if (!feel || !feel.camera) return null;
+  const width = Number(story.format.width), height = Number(story.format.height);
+  const fps = Number(story?.resolved?.fps ?? story.format.fps ?? 30);
+  const duration = Number(story?.resolved?.duration ?? story.format.duration);
+  const frames = Number(story?.resolved?.frames ?? Math.round(duration * fps));
+  // World mode keeps its own drift (camera-world.mjs); kicks still apply.
+  const ambient = feel.ambient && !camera?.drift ? ambientWaves(feel.ambient, { width, height, duration }) : null;
+  const busy = feelBusy(story, windows, camera);
+  const { kicks, warnings } = feelKicks(story, feel, { busy, words });
+  if (!ambient && !kicks.length) return warnings.length ? { width, height, fps, duration, frames, feel: feel.id, ambient: null, spring: feel.spring, kicks: [], busy, warnings, idle: true } : null;
+  return { width, height, fps, duration, frames, feel: feel.id, ambient, spring: feel.spring, kicks, busy, warnings };
+}
+
+/**
+ * The wrapper's transform at absolute t: {x, y, scale} (translate in px,
+ * then scale about the canvas centre). Clamped so the scaled box covers the
+ * canvas: scale ≥ 1 and |x| ≤ (scale − 1)·W/2 (y likewise).
+ */
+export function feelStateAt(plan, t) {
+  if (!plan || plan.idle) return { x: 0, y: 0, scale: 1 };
+  const W = plan.width, H = plan.height;
+  let dx = 0, dy = 0, a = 1;
+  if (plan.ambient) { dx = wave(plan.ambient.x, t); dy = wave(plan.ambient.y, t); a = plan.ambient.s.mid + wave(plan.ambient.s, t); }
+  let scale = a, x = dx, y = dy;
+  const kick = [...plan.kicks].reverse().find((entry) => t >= entry.at - EPS);
+  if (kick) {
+    const k = kickValue(kick, t, plan.spring);
+    scale = a * k;
+    x = dx + a * (1 - k) * (kick.origin.x - W / 2);
+    y = dy + a * (1 - k) * (kick.origin.y - H / 2);
+  }
+  scale = Math.max(1, scale);
+  const mx = ((scale - 1) * W) / 2, my = ((scale - 1) * H) / 2;
+  return { x: round(Math.min(mx, Math.max(-mx, x)), 3), y: round(Math.min(my, Math.max(-my, y)), 3), scale: round(scale, 6) };
+}
+
+/** Every frame's wrapper state, frame 0 to frames − 1 → [{x, y, scale}]. */
+export function feelSamples(plan) {
+  if (!plan) return [];
+  return Array.from({ length: Math.max(1, plan.frames) }, (_, f) => feelStateAt(plan, f / plan.fps));
+}
+
+/** Whether the wrapper's box covers the canvas for a state (the edge never shows). */
+export function feelCovers(state, { width, height }) {
+  const tol = 1e-6;
+  return state.scale >= 1 - tol && Math.abs(state.x) <= ((state.scale - 1) * width) / 2 + tol && Math.abs(state.y) <= ((state.scale - 1) * height) / 2 + tol;
+}
+
+/** A state → the CSS transform both renderers use (transform-origin 50% 50%). */
+export function feelTransform(state) {
+  return `translate(${round(state.x, 3)}px, ${round(state.y, 3)}px) scale(${round(state.scale, 6)})`;
+}
+
+/**
+ * HyperFrames: the GSAP code that plays the samples on #lc-feel: one tl.set
+ * per frame whose state changed, from a compact table. → [line]
+ */
+export function feelGsap(plan, samples = feelSamples(plan)) {
+  if (!plan || plan.idle || !samples.length) return [];
+  const rows = [];
+  let last = null;
+  samples.forEach((state, f) => {
+    if (last && last.x === state.x && last.y === state.y && last.scale === state.scale) return;
+    rows.push([f, state.x, state.y, state.scale]);
+    last = state;
+  });
+  return [
+    `// story feel (${plan.feel}): ${plan.ambient ? 'ambient drift and breathing' : 'no ambient'}, ${plan.kicks.length} kick(s) at ${plan.kicks.map((kick) => kick.at).join(', ') || '-'}`,
+    `(function () { var F = ${JSON.stringify(rows)}; for (var i = 0; i < F.length; i++) { var f = F[i][0]; tl.set(${JSON.stringify(FEEL_SELECTOR)}, { x: F[i][1], y: F[i][2], scale: F[i][3], force3D: false }, f === 0 ? 0 : Math.max(0, f / ${plan.fps} - ${FEEL_LEAD})); } })();`
+  ];
+}

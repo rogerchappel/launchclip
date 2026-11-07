@@ -1,7 +1,7 @@
 // Motion grammar: one named set of eases, durations, overshoot and stagger that
 // every module, transition and camera move draws from, so a story moves with
 // one consistent feel ("snappy", "smooth", …) instead of a per-module mix.
-// Plain ESM; imports only ./motion.mjs. Canonical copy: kit/core/grammar.mjs.
+// Plain ESM; imports only ./motion.mjs and ./feel.mjs. Canonical copy: kit/core/grammar.mjs.
 // Contract: docs/KIT_CONTRACTS.md, "Motion grammar".
 //
 //   story.motion = {grammar: "snappy"}                       a preset name
@@ -27,6 +27,7 @@
 // never exceeds 1 and blur never goes negative.
 
 import { getEase } from './motion.mjs';
+import { feelGrammar } from './feel.mjs';
 
 export const GRAMMAR_NAMES = Object.freeze(['editorial', 'snappy', 'smooth', 'playful', 'documentary', 'cinematic']);
 export const DEFAULT_GRAMMAR = 'editorial';
@@ -174,21 +175,24 @@ export function resolveGrammar(story) {
   const value = story?.motion?.grammar;
   const errors = grammarErrors(value);
   if (errors.length) throw new Error(errors.join('; '));
-  const name = typeof value === 'string' ? value : value?.base ?? DEFAULT_GRAMMAR;
+  // A named feel (feel.mjs, story.motion.feel) lays its overrides between
+  // the preset and the story's own: preset < feel < motion.grammar.
+  const feel = feelGrammar(story) ?? {};
+  const name = typeof value === 'string' ? value : value?.base ?? feel.base ?? DEFAULT_GRAMMAR;
   const preset = GRAMMARS[name];
   const own = isObject(value) ? value : {};
-  const custom = Object.keys(own).some((key) => key !== 'base');
+  const custom = Object.keys(own).some((key) => key !== 'base') || Object.keys(feel).length > 0;
   return {
     id: name, base: name, custom, describe: preset.describe,
-    ease: { ...preset.ease, ...(own.ease ?? {}) },
-    duration: { ...preset.duration, ...(own.duration ?? {}) },
-    overshoot: own.overshoot ?? preset.overshoot,
+    ease: { ...preset.ease, ...(feel.ease ?? {}), ...(own.ease ?? {}) },
+    duration: { ...preset.duration, ...(feel.duration ?? {}), ...(own.duration ?? {}) },
+    overshoot: own.overshoot ?? feel.overshoot ?? preset.overshoot,
     stagger: own.stagger ?? preset.stagger,
-    defaultTransition: { cuts: { ...preset.defaultTransition.cuts }, world: { ...preset.defaultTransition.world }, ...(own.defaultTransition ?? {}) },
-    camera: { ...preset.camera, ...(own.camera ?? {}) },
-    ambient: own.ambient ?? preset.ambient,
+    defaultTransition: { cuts: { ...preset.defaultTransition.cuts }, world: { ...preset.defaultTransition.world }, ...(feel.defaultTransition ?? {}), ...(own.defaultTransition ?? {}) },
+    camera: { ...preset.camera, ...(feel.camera ?? {}), ...(own.camera ?? {}) },
+    ambient: own.ambient ?? feel.ambient ?? preset.ambient,
     panelEnter: preset.panelEnter ?? PANEL_ENTER,
-    hold: preset.hold ? { ...preset.hold } : null
+    hold: feel.hold ? { ...feel.hold } : preset.hold ? { ...preset.hold } : null
   };
 }
 
