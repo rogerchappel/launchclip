@@ -11,7 +11,7 @@
 import { captionZones } from './footage-layout.mjs';
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from './layout-check.mjs';
 import { validateModuleParams } from './module-schemas.mjs';
-import { knownModules, resolveModule } from './modules.mjs';
+import { knownModules, resolveModule, sceneRenderEnd } from './modules.mjs';
 import { hashSegments, planSegments, sceneModels } from './render-segments.mjs';
 import { migrateStory } from './story-migrations.mjs';
 import { resolveStory, validateStory } from './story.mjs';
@@ -215,7 +215,7 @@ export function applyStoryPatch(story, patch, { words = [], beats = null, layout
   const models = new Map();
   resolved.scenes.forEach((scene, index) => {
     if (!isObject(scene) || scene.module === 'custom' || !modules.includes(scene.module)) return;
-    try { models.set(scene.id, resolveModule(scene, resolved)); }
+    try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); }
     catch (error) {
       // resolveModule prefixes "scenes[i] (id): " with the resolved order; point at the patched story's scene.
       const at = next.scenes.findIndex((entry) => entry?.id === scene.id);

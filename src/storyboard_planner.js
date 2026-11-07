@@ -19,7 +19,7 @@
 
 import { STORY_LANES, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
-import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
+import { isEditorialKind, knownModules, formatAspect, resolveModule, sceneRenderEnd, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
@@ -629,7 +629,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const models = new Map();
   for (const scene of resolved.scenes) {
     if (scene.module === "custom") { warnings.push(`${scene.id} is a custom module; its params and layout are not checked here`); continue; }
-    try { models.set(scene.id, resolveModule(scene, resolved)); }
+    try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); }
     catch (error) { errors.push(`params: ${message(error)}`); }
   }
   if (errors.length) return { ok: false, errors, warnings, storyboard, layout, clip_share: clipShareValue };
