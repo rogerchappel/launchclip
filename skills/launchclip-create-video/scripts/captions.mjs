@@ -305,7 +305,7 @@ export const CAPTION_PRESETS = Object.freeze({
   // The interface-explainer caption: a single word, uppercase and bare, on a
   // small translucent chip that reads over busy panels without competing
   // with the headline.
-  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small, nearly opaque dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231ce6' }, plate: 'card' }),
+  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small, nearly opaque dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'none', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231ce6' }, plate: 'card' }),
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
