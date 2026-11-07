@@ -78,39 +78,64 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f; };
 const rad = (deg) => (deg * Math.PI) / 180;
 
-// Riders: in world mode a cast standing in a world plate travels with it.
+// Riders: a cast (or a set prop) standing in a track-0 plate travels with it.
+// In world mode (and in a cuts story whose camera moves) it is drawn inside
+// the camera at its plate's placement; in cuts mode it also takes the plate's
+// zooms, so a character never stands still while its world slides or zooms under it.
 const RIDER_MODULES = Object.freeze(['cast-scene', 'character-cameo', 'set-prop']);
 const sameTime = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-3;
+const within = (scene, plate) => Number(scene.start) >= Number(plate.start) - 1e-3 && Number(scene.end) <= Number(plate.end) + 1e-3;
 
 /**
- * The world plate a scene rides in world mode: a cast-scene or
- * character-cameo on a higher track whose window is a track-0 `world`
- * scene's window. It is drawn inside the camera at that plate's placement,
- * so the camera carries it with the plate between plates instead of it
- * fading over them. → the plate's scene id | null.
+ * The plate a cast rides: a cast-scene or character-cameo on a higher track
+ * whose window lies inside a track-0 scene's window (any module: a world, a
+ * photo plate, a card). `start` / `end`: whether it arrives with the plate's
+ * transition in, or leaves with the next plate's transition: it shares that
+ * boundary and the camera carries it (world mode, or a camera move in a cuts
+ * story). Elsewhere it keeps its own window and passage and only takes the
+ * plate's zooms (cuts mode).
+ * → {plate: scene id, start: boolean, end: boolean} | null.
  */
+export function rideOf(story, scene) {
+  if (!RIDER_MODULES.includes(scene?.module) || (scene.track ?? 0) === 0 || story?.lane === 'footage-led') return null;
+  if (!Number.isFinite(Number(scene.start)) || !Number.isFinite(Number(scene.end))) return null;
+  const plates = (Array.isArray(story?.scenes) ? story.scenes : []).filter((other) => other && (other.track ?? 0) === 0 && Number.isFinite(Number(other.start)) && Number.isFinite(Number(other.end)));
+  // The exact window first (as before), then the plate that contains it.
+  const plate = plates.find((other) => sameTime(other.start, scene.start) && sameTime(other.end, scene.end)) ?? plates.find((other) => within(scene, other));
+  if (!plate?.id) return null;
+  const mode = resolveCamera(story).mode;
+  const carried = (transition) => mode === 'world' || (isObject(transition) && isCameraTransition(transition, mode));
+  const next = plates.find((other) => other !== plate && sameTime(other.start, plate.end));
+  return { plate: plate.id, start: sameTime(plate.start, scene.start) && carried(plate.in), end: sameTime(plate.end, scene.end) && (mode === 'world' || Boolean(next && carried(next.in))) };
+}
+
+/** The plate id a scene rides (rideOf), or null. */
 export function ridesPlate(story, scene) {
-  if (resolveCamera(story).mode !== 'world' || !RIDER_MODULES.includes(scene?.module) || (scene.track ?? 0) === 0) return null;
-  const plate = (Array.isArray(story?.scenes) ? story.scenes : []).find((other) => other?.module === 'world' && (other.track ?? 0) === 0 && sameTime(other.start, scene.start) && sameTime(other.end, scene.end));
-  return plate?.id ?? null;
+  return rideOf(story, scene)?.plate ?? null;
 }
 
 /**
- * sceneWindows(story) with riders joined to their plates: a rider takes its
- * plate's window (renderEnd, held through the next move) and transition
- * tweens and carries `rides: <plate id>`. Both compilers place riders inside
- * the camera at plan.placements[rides], with no overlay parallax.
+ * sceneWindows(story) with riders joined to their plates (rideOf): a rider
+ * that starts with its plate takes the plate's start and its transition-in
+ * tweens; one that ends with it takes the plate's renderEnd (held through
+ * the next move) and its transition-out tweens; it carries `rides: <plate
+ * id>`. Both compilers place riders inside the camera at
+ * plan.placements[rides], with no overlay parallax, and in cuts mode give
+ * them the plate's zooms.
  */
 export function rideWorldPlates(story, windows) {
   const byId = new Map(windows.scenes.map((entry) => [entry.id, entry]));
   for (const entry of windows.scenes) {
-    const plateId = ridesPlate(story, entry.scene);
-    const plate = plateId ? byId.get(plateId) : null;
+    const ride = rideOf(story, entry.scene);
+    const plate = ride ? byId.get(ride.plate) : null;
     if (!plate) continue;
     entry.rides = plate.id;
-    entry.start = plate.start;
-    entry.renderEnd = plate.renderEnd;
-    entry.tweens = plate.tweens.map((tween) => ({ ...tween }));
+    entry.ride = { start: ride.start, end: ride.end };
+    const own = entry.tweens.filter((tween) => (ride.start ? tween.role !== 'in' && tween.role !== 'hold' : true) && (ride.end ? tween.role !== 'out' : true));
+    const taken = plate.tweens.filter((tween) => (ride.start && (tween.role === 'in' || tween.role === 'hold')) || (ride.end && tween.role === 'out'));
+    if (ride.start) entry.start = plate.start;
+    if (ride.end) entry.renderEnd = plate.renderEnd;
+    entry.tweens = [...own, ...taken.map((tween) => ({ ...tween }))].sort((a, b) => a.at - b.at);
   }
   return windows;
 }

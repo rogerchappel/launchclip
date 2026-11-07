@@ -24,6 +24,7 @@ import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
 import { WORLD_KINDS, WORLD_TIMES } from './worlds/index.mjs';
 import { physicsPromptLines } from './physics.mjs';
 import { ACTIONS, actingPromptLines } from './characters/actions.mjs';
+import { framingPromptLines } from './characters/framing.mjs';
 import { EXPRESSIONS, POSES } from './characters/rig.mjs';
 import { SETS } from './characters/sets.mjs';
 import { compositionPromptLines } from './composition.mjs';
@@ -578,6 +579,7 @@ export function guardrailLines() {
   return [
     ...physicsPromptLines(),
     ...actingPromptLines(),
+    ...framingPromptLines(),
     'No ghosting: one copy of a person on screen at a time. Never put a character in two scenes that overlap; the next shot\'s copy of a character appears by itself when the transition ends. Never fade a character in or out over a world that is already there.',
     'Text reads or is gone: cards fade in and out fast (0.5 s at most, whatever the grammar) and stay fully shown for their reading time (about 0.22 s a word, at least 1.2 s).',
     'Let shots breathe: in a video under 90 s every shot after the opening hook holds at least 2.5 s. A quick list ("hardwood, treated pine, composite") is one shot whose items build in on their words, not a 1.5 s card per item; tooling lengthens shorter shots from their neighbours.',

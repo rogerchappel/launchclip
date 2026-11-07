@@ -113,7 +113,11 @@ test('in world mode a set-prop with its plate\'s window rides the plate', () => 
   const scenes = [kitchen(), prop({prop: 'fridge'})];
   const s = story(scenes, {camera: {mode: 'world'}});
   assert.equal(ridesPlate(s, scenes[1]), 'w');
-  assert.equal(ridesPlate(s, {...scenes[1], start: 2}), null);
+  // A prop inside its plate's window rides it too (rideOf: a cast or prop never
+  // stands still while its world moves), keeping its own entrance; one that
+  // outlasts every plate rides nothing.
+  assert.equal(ridesPlate(s, {...scenes[1], start: 2}), 'w');
+  assert.equal(ridesPlate(s, {...scenes[1], start: 2, end: 8}), null);
 });
 
 test('set-prop is registered in both renderers and documented for the skills', () => {

@@ -37,7 +37,8 @@ export const MOBILITY = Object.freeze(['wheelchair', 'cane', 'white-cane', 'fore
 /** Mobility aids held in one hand (the hand away from the facing side). */
 export const HELD_AIDS = Object.freeze(['cane', 'white-cane', 'forearm-crutch']);
 
-export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit', 'look', 'stretch']);
+export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit', 'look', 'stretch',
+  'arms-crossed', 'hands-on-hips', 'facepalm', 'lean-in', 'point-self']);
 export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused']);
 
 const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
@@ -198,7 +199,18 @@ export const POSE_TABLE = Object.freeze({
   // Looking into the distance: the facing hand shades the brow, the head lifts.
   look: {lower: 'stand', side: true, upper: {armA: 158, foreA: 94, armO: 6, foreO: 4}, head: -4, headY: -4, lean: 2},
   // A stretch: both arms straight up, the body lifted.
-  stretch: {lower: 'stand', upper: {armL: 168, foreL: 6, armR: 168, foreR: 6}, head: -3, bodyY: -8, squash: 1.02}
+  stretch: {lower: 'stand', upper: {armL: 168, foreL: 6, armR: 168, foreR: 6}, head: -3, bodyY: -8, squash: 1.02},
+  // Acting poses for arguments and reactions.
+  // Arms folded across the chest, chin up: unconvinced.
+  'arms-crossed': {lower: 'stand', upper: {armL: 16, foreL: -128, armR: 16, foreR: -122}, head: -3, lean: 0, shoulderY: -2},
+  // Elbows out, hands on the hips: indignant.
+  'hands-on-hips': {lower: 'stand', upper: {armL: 42, foreL: -84, armR: 42, foreR: -84}, head: 3, bodyY: -2},
+  // The facing hand over the eyes, the head dropped: exasperated.
+  'facepalm': {lower: 'stand', side: true, upper: {armA: 128, foreA: 146, armO: 4, foreO: 2}, head: 12, headY: 12, shoulderY: 6, squash: 0.97, bodyY: 4},
+  // Leaning toward the facing side, one open hand making the point: arguing.
+  'lean-in': {lower: 'stand', side: true, upper: {armA: 48, foreA: 52, armO: 10, foreO: -24}, head: 6, lean: 9, gesture: {joint: 'foreA', amount: 14, period: 0.5}},
+  // The facing hand points back at the chest: "me?" / "I do".
+  'point-self': {lower: 'stand', side: true, upper: {armA: 46, foreA: -160, armO: 6, foreO: 4}, head: -4, lean: -2, finger: 'a'}
 });
 
 const LOWER = {
@@ -222,7 +234,10 @@ export function poseJoints(name, {facing = 'right', seated = false, geometry} = 
   const upper = {};
   for (const [key, value] of Object.entries(pose.upper)) upper[key.replace(/A$/, a).replace(/O$/, o)] = value;
   const lowerName = seated ? 'sit' : pose.lower;
-  const lower = LOWER[lowerName];
+  // A style may seat its legs its own way (a stick figure's hips are one
+  // point, so the toon's knees-in would cross its shins).
+  const lower = lowerName === 'sit' && geometry?.sitLegs ? {...LOWER.sit, ...geometry.sitLegs} : LOWER[lowerName];
+  if (name === 'sit' && geometry?.sitArms) Object.assign(upper, geometry.sitArms);
   const drop = lower.drop && geometry ? geometry.sitDrop : 0;
   const joints = {
     armL: upper.armL, foreL: upper.foreL, armR: upper.armR, foreR: upper.foreR,
