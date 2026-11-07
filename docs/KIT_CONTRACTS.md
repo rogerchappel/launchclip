@@ -2295,6 +2295,18 @@ a pure function of time, in both renderers.
   double quotes swapped for single ones.
 - **Root**: the module drops catalogue H's root entrance (each element enters
   on its own) and keeps the exit.
+- **Entrances**: `cut` puts an element on screen at `at` as it settles, so a
+  scene that opens the video shows a built frame at frame 0.
+- **Captions**: modules get `ctx.captions`, the story's captions position
+  (`storyCaptionPosition`: auto, middle, top); the band elements avoid is
+  placed by the same `captionBandAt` the layout check uses.
+- **Layout**: `model.layout.rect` is the largest top-level, non-bleed
+  element (the hero panel) and `model.layout.parts` the others, each with its
+  own window, so the layout checks see every element.
+- **Gates**: the text-hold gate reads a ui-scene by its headlines only
+  (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%
+  of the canvas entering after 0.3 s as a visual change, as the pixel
+  measure does.
 
 ## Motion blur (`src/motion_blur.js`)
 

@@ -185,7 +185,6 @@ A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that 
 
 | Measure | p10 | p50 | p90 |
 | --- | --- | --- | --- |
-| shot_seconds | 38.9581 | 45.833 | 52.7079 |
 | visual_changes_per_min | 18.9125 | 22.25 | 25.5875 |
 | coverage | 81% | 96% | 100% |
 | longest_undressed_seconds | 0 | 1 | 1.15 |

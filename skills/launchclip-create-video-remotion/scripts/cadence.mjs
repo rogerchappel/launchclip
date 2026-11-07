@@ -92,7 +92,7 @@ export function storyboardMeasures(story, { sections = null, face = null } = {})
     const shown = gapsOf(inserts, duration);
     faceIntervals = face ? intersect(shown, faceVisible(face, duration)) : shown;
   }
-  const changes = visualChanges(scenes, duration);
+  const changes = visualChanges(scenes, duration, story?.format);
   const edges = [0, ...changes, duration];
   const shots = [];
   for (let i = 1; i < edges.length; i += 1) if (edges[i] - edges[i - 1] > 1e-6) shots.push(edges[i] - edges[i - 1]);
@@ -126,9 +126,28 @@ export function storyboardMeasures(story, { sections = null, face = null } = {})
 
 // Times where what is on screen changes: every scene start and end strictly
 // inside the runtime, merged within MERGE_SECONDS.
-function visualChanges(scenes, duration) {
+// A ui-scene panel entrance this big (share of the design canvas) changes the
+// picture the way a cut does: the pixel measure counts it, so the storyboard
+// measure does too.
+const UI_PANEL_SHARE = 0.2;
+
+/** Times a ui-scene's big panels enter after its opening (absolute s). */
+function uiPanelEntrances(scene, format) {
+  if (scene.module !== 'ui-scene' || !Array.isArray(scene.params?.elements)) return [];
+  const width = Number(format?.width) || 1080, height = Number(format?.height) || 1920;
+  const unit = Math.min(width, height) / 1080, canvas = (width / unit) * (height / unit);
+  const out = [];
+  for (const element of scene.params.elements) {
+    const at = Number(element?.at), rect = element?.rect;
+    if (!finite(at) || at < 0.3 || !rect) continue;
+    if ((Number(rect.width) * Number(rect.height)) / canvas >= UI_PANEL_SHARE) out.push(scene.start + at);
+  }
+  return out;
+}
+
+function visualChanges(scenes, duration, format = null) {
   const times = [];
-  for (const scene of scenes) for (const t of [scene.start, scene.end]) if (t > MERGE_SECONDS && t < duration - MERGE_SECONDS) times.push(t);
+  for (const scene of scenes) for (const t of [scene.start, scene.end, ...uiPanelEntrances(scene, format).filter((at) => at < scene.end)]) if (t > MERGE_SECONDS && t < duration - MERGE_SECONDS) times.push(t);
   times.sort((a, b) => a - b);
   const out = [];
   for (const t of times) if (!out.length || t - out.at(-1) > MERGE_SECONDS) out.push(t);

@@ -876,7 +876,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
 // at, and any prop named `at` or ending in `At` (clipAt, unlockAt, doneAt
 // [...], markers[].at) may be a time anchor; anchors resolve to seconds from
 // the scene start, numbers are already scene times and stay as written.
-const UI_TIME_KEY = /^(at|out|[a-z]+At)$/;
+const UI_TIME_KEY = /^(at|out|[a-z][a-z0-9]*At)$/;
 
 export function resolveUiAnchors(params, sceneStart, resolve) {
   const walk = (value, path, timed) => {

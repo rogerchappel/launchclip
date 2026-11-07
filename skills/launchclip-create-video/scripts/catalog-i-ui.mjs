@@ -17,15 +17,15 @@ import {timingRules} from './catalog-b-base.mjs';
 import {mixColor} from './catalog-b-base.mjs';
 import {abs, el} from './catalog-h-view.mjs';
 import {UI_KINDS} from './ui-runtime.mjs';
-import {profileGeometry} from './layout-check.mjs';
+import {captionBandAt, profileGeometry} from './layout-check.mjs';
 
-const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade']);
+const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'cut']);
 const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'props', 'beats', 'children', 'tilt', 'z', 'bleed', 'cue'];
 const MAX_ELEMENTS = 120;
 // Text props checked for length and escaped by the painter; headline text must fit its rect.
 const HEADLINE_ADVANCE = 0.6;
 // The sound an entrance asks for when the element names none.
-const ENTER_CUES = Object.freeze({slam: 'hit-soft', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'hit-soft'});
+const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud'});
 
 /**
  * The painter's theme from the brand: dark surfaces from bg, text from paper,
@@ -53,7 +53,11 @@ function uiResolve(params, ctx) {
   const zone = geometry.safeZone, cap = geometry.captionBand;
   const margin = 40;
   const stage = {x: margin, y: r2(zone.y / unit - margin), width: r2(W - 2 * margin), height: r2((zone.y + zone.height) / unit - zone.y / unit + margin)};
-  const band = {x: r2(cap.x / unit), y: r2(cap.y / unit), width: r2(cap.width / unit), height: r2(cap.height / unit)};
+  // The caption band where the story puts its captions (bottom by default,
+  // mid-frame with position "middle", near the top with "top"), placed as
+  // the layout check places it (captionBandAt).
+  const placedBand = captionBandAt(cap, b.canvas, ctx.captions ?? 'auto');
+  const band = {x: r2(placedBand.x / unit), y: r2(placedBand.y / unit), width: r2(placedBand.width / unit), height: r2(placedBand.height / unit)};
   const alert = p.alert === undefined ? '#ff4b3e' : b.resolveColor(p.alert, 'params.alert', '#ff4b3e');
   let count = 0;
   const ids = new Set();
@@ -116,11 +120,26 @@ function uiResolve(params, ctx) {
 
   if (!Array.isArray(p.elements) || !p.elements.length) check.fail('params.elements', 'must be a non-empty array of elements');
   const elements = p.elements.map((raw, k) => element(raw, `params.elements[${k}]`, null));
+  // A scene that opens the video should show something at frame 0: enter: "cut" at 0.
   if (firstAt > 0.6) check.fail('params.elements', `leave the scene empty until ${r2(firstAt)} s; put something on screen by 0.6 s`);
 
   const spec = {start: b.start, width: W, height: H, unit: r2(unit), theme: uiTheme(b.colors, alert), fonts: {display: b.fonts.display, body: b.fonts.body, mono: b.fonts.meta}, elements};
-  const content = {ui: {[`${b.id}-ui`]: spec}, elementCount: count};
-  return b.finish(content);
+  const content = {ui: {[`${b.id}-ui`]: spec}, elementCount: count, captionBand: band};
+  const model = b.finish(content);
+  // The layout checks see each element: the largest top-level, non-bleed
+  // element is the module's rect (the hero panel) and the others are parts
+  // with their own windows, in canvas px.
+  const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
+  const placed = elements.map((element, k) => ({element, k})).filter(({k}) => !p.elements[k].bleed);
+  if (placed.length) {
+    const area = (r) => r.width * r.height;
+    const hero = placed.reduce((best, item) => (area(item.element.rect) > area(best.element.rect) ? item : best));
+    model.layout.rect = scale(hero.element.rect);
+    model.layout.parts = placed.filter((item) => item !== hero).map(({element, k}) => ({
+      id: `el-${k}`, rect: scale(element.rect), role: 'text', start: rt(b.start + element.at), end: element.out === undefined ? b.end : rt(b.start + element.out + 0.3)
+    }));
+  }
+  return model;
 }
 
 function tiltOf(check, tilt, path) {
@@ -156,6 +175,28 @@ function uiTimeline(model, ops) {
     if ((op.type === 'set' && op.time === model.start) || (op.type === 'tween' && op.start === model.motion.enterStart)) ops.splice(i, 1);
   }
   ops.push({type: 'set', target: root, time: model.start, props: {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1}});
+}
+
+/**
+ * The words a viewer has to read in a ui-scene: its headlines (each at its
+ * longest state). Panel labels, chips and clip names are glanced at, like a
+ * real interface, so the text-hold gate does not count them.
+ */
+export function uiReadingWords(params) {
+  let words = 0;
+  const count = (text) => (typeof text === 'string' ? text.split(/\s+/).filter(Boolean).length : 0);
+  const walk = (elements) => {
+    for (const element of Array.isArray(elements) ? elements : []) {
+      if (!element || typeof element !== 'object') continue;
+      if (element.kind === 'headline') {
+        const states = [element.props?.text, element.props?.swap?.text, ...(element.beats ?? []).map((beat) => beat?.set?.text)];
+        words += Math.max(0, ...states.map(count));
+      }
+      walk(element.children);
+    }
+  };
+  walk(params?.elements);
+  return words;
 }
 
 export const uiScene = {

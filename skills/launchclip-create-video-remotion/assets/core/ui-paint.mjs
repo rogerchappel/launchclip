@@ -39,13 +39,15 @@ function uiN(v) { return Math.round(v * 100) / 100; }
 
 /**
  * An entrance at t0 as inline style: kinds up, down, left, right, zoom, slam,
- * pop, drop, fade. Spring kinds (slam, pop, or any with o.ov) overshoot; the
+ * pop, drop, fade, cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
  * move blurs while it is fast. o: {d, dist, ov, base (a transform kept under
  * the move)}. Before t0 the element is hidden.
  */
 function uiEnter(t, t0, kind, o) {
   const opt = o || {}, base = opt.base || '';
   if (t < t0) return 'opacity:0;visibility:hidden;' + (base ? 'transform:' + base + ';' : '');
+  // cut: on screen from t0 exactly as it settles (a scene that opens on a built frame).
+  if (kind === 'cut') return base ? 'transform:' + base + ';' : '';
   const k = kind || 'up', d = opt.d || 0.36, p = uiClamp((t - t0) / d);
   const spring = k === 'slam' || k === 'pop' || opt.ov;
   const e = spring ? uiOutBack(p, opt.ov || 1.4) : uiOutExpo(p), v = 1 - uiOutExpo(p);
