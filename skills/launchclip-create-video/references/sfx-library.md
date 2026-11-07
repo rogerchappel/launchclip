@@ -89,6 +89,34 @@ and `ui` (click, tick, pop). Cue names in a storyboard keep their modifiers:
    `$LAUNCHCLIP_SFX_HOME`), shared by all your projects
 4. the procedural kit (`scripts/synth-audio-kit.mjs`), always available
 
+## Earshot sounds (optional)
+
+`finish --sfx earshot` (or `make --sfx earshot`) replaces the cue sounds
+with takes rendered from the [Earshot](https://github.com/Leonxlnx/earshot)
+sound bank (MIT; install it with
+`uv tool install "earshot @ git+https://github.com/Leonxlnx/earshot"`). Only
+the bank is used: its sounds render from code recipes, offline and free; no
+Earshot model or LLM feature is called. finish finds `earshot` on `PATH` (or
+`$LAUNCHCLIP_EARSHOT`); without it the kit plays and one warning says so.
+
+- Each mapped family takes the bank's members in turn
+  (`src/sfx/earshot.js`, `EARSHOT_FAMILIES`): whoosh, swipe, slide,
+  page-turn, impact, thud, subdrop, riser, shimmer, sparkle, tick, click,
+  snap, pop, camera-shutter, chime, ding, ping, notification, success,
+  glitch and tape-stop. Tally, typing, cash, door, footstep, error-buzz,
+  boing and pen-scribble keep their kit or library sound.
+- A take's sync point lands on its event: a hit's onset on the frame, a
+  whoosh's loudest moment 37 ms after it, a thump 30 ms after (Earshot's
+  launch-preset medians), a riser's peak on its landing. Bells are tuned to
+  the music bed's key.
+- Its level matches the loudest 10 ms of the file it replaces (±6 dB), and
+  it passes the same timbre guard (no hiss, no noise wash) or the next
+  member plays.
+- Takes are cached in `~/.cache/launchclip/earshot` and copied into
+  `.launchclip/sfx-earshot/`; `qa/sfx.json` lists each take's id, event and
+  sync time. Fitted bank sounds (recipes measured from CC0 recordings) are
+  credited in `AUDIO-MANIFEST.json` `sfx_credits`.
+
 ## Sonic palettes
 
 A style's `sound.palette` (or a storyboard's `audio.sound.palette`) draws
