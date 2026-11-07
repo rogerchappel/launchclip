@@ -247,7 +247,10 @@ export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-hig
 // 'seam': on the line between a stacked section's panel and presenter
 // (kit/core/footage-layout.mjs captionZone); 'chest': at the presenter's chest
 // height, from the measured head (captionZones). Elsewhere both sit as 'auto' does.
-export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'top', 'auto', 'seam', 'chest']);
+export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'low', 'top', 'auto', 'seam', 'chest']);
+// 'low': centred 58% down the frame, below the middle: a word tag that sits
+// on the panels' lower half (the interface-explainer look).
+export const CAPTION_LOW_CENTRE = 0.58;
 export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
@@ -298,9 +301,10 @@ export const CAPTION_PRESETS = Object.freeze({
   'outline-heavy': preset({ description: 'Creator style: thick black outline, hard shadow, snap-in lines.', size: 84, stroke: 18, strokeColor: '#000000', shadow: '0 8px 0 #000000', word: 'highlight-big', emphasis: true, entrance: 'scale', exit: 'shrink', gap: 0.3 }),
   'split-color': preset({ description: 'Keywords in the accent colour; they pop when spoken.', word: 'emphasis', weight: 800, size: 70, case: 'title', stroke: 8, emphasis: true, entrance: 'slide-up', exit: 'fade', maxWords: 4, maxChars: 22, gap: 0.3 }),
   'lower-band': preset({ description: 'A broadcast band slides in; sentence-case text sits on it.', layout: 'band', font: 'body', weight: 700, size: 50, lineHeight: 1.1, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 6, maxChars: 30, entrance: 'slide-left', exit: 'fade', colors: { idle: 'ink' } }),
-  // The interface-explainer caption: a single word mid-sentence, small and
-  // opaque so it reads over busy panels without competing with the headline.
-  'word-chip': preset({ description: 'One word at a time, as spoken, on a small opaque dark chip: the interface-explainer caption that reads over busy panels.', layout: 'single', word: 'none', font: 'body', weight: 600, size: 52, case: 'as-is', letterSpacing: '0.02em', stroke: 0, shadow: SHADOW_SOFT, maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#23261e' }, plate: 'card' }),
+  // The interface-explainer caption: a single word, uppercase and bare, on a
+  // small translucent chip that reads over busy panels without competing
+  // with the headline.
+  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small translucent dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231cc7' }, plate: 'card' }),
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
@@ -368,12 +372,19 @@ export function snapCaptionChunks(chunks, fps) {
   return chunks.map((chunk) => ({ ...chunk, start: snap(chunk.start), end: snap(chunk.end), ...(Array.isArray(chunk.words) ? { words: chunk.words.map((word) => ({ ...word, start: snap(word.start), end: snap(word.end) })) } : {}) }));
 }
 
+/** The words as a preset shows them: punctuation: false drops leading and trailing marks ("now," → "now"). */
+export function shownWords(words, preset) {
+  if (preset?.punctuation !== false) return words;
+  return words.map((word) => ({ ...word, text: String(word.text).replace(/^[\s"“‘(\[¡¿]+|[\s.,!?;:…"”’)\]]+$/gu, '') || String(word.text) }));
+}
+
 /** Band top (fraction of the canvas height) for a caption position. */
 export function captionBandTop(format, position = 'auto') {
   const band = captionBandFor(format);
   const landscape = Number(format?.width) > Number(format?.height);
   if (position === 'top') return landscape ? 0.08 : 0.13;
   if (position === 'middle') return round(0.5 - band.height / 2);
+  if (position === 'low') return round(CAPTION_LOW_CENTRE - band.height / 2);
   return band.top;
 }
 
@@ -498,6 +509,7 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     layout: p.layout,
     word: p.word,
     plate: p.plate,
+    punctuation: p.punctuation ?? true,
     // How a line that does not read on what is behind it is helped: a solid
     // box (the default) or a soft scrim that keeps a box-less look.
     plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? 'box',
@@ -761,7 +773,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
     tw(chunk.id, chunk.start, entrance.dur, entrance.ease, inTo, { ...entrance.from }, true);
-    chunk.words.forEach((word, i) => {
+    shownWords(chunk.words, o).forEach((word, i) => {
       const id = `${chunk.id}-w${i}`;
       const em = o.emphasis && (accented ? accented.has(i) : isEmphasis(emphasis, word.text));
       const start = word.start + o.offset, end = word.end + o.offset;
