@@ -9,7 +9,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {STORY_FEELS, STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {FEEL_NAMES, feelErrors, kickErrors, resolveFeel} from '@launchclip/core/feel.mjs';
-import {KICK, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
+import {KICK, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
 import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipePhases, dotWipes, resolveDotWipeColor} from '@launchclip/core/dot-wipe.mjs';
 import {TRANSITION_TYPES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {cameraPlan} from '@launchclip/core/camera-world.mjs';
@@ -71,11 +71,11 @@ test('the ambient camera is deterministic, never still, and never reveals an edg
   assert.deepEqual(a, b, 'the same story gives the same frames');
   assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
   const plan = planOf(s);
-  // Within the spec: scale 1.015–1.035 at rest, x/y within ±0.6 % of the frame, periods 5–9 s dividing 12 s.
-  for (const axis of ['x', 'y', 's']) assert.ok(plan.ambient[axis].period >= 5 && plan.ambient[axis].period <= 9 && Math.abs(12 / plan.ambient[axis].period - Math.round(12 / plan.ambient[axis].period)) < 1e-6, axis);
+  // Within the spec: scale 1.02–1.045 at rest, x/y within ±0.9 % of the frame, periods 4–7 s dividing 12 s.
+  for (const axis of ['x', 'y', 's']) assert.ok(plan.ambient[axis].period >= 4 && plan.ambient[axis].period <= 7 && Math.abs(12 / plan.ambient[axis].period - Math.round(12 / plan.ambient[axis].period)) < 1e-6, axis);
   const rest = a.filter((_, f) => !plan.kicks.some((kick) => f / 30 >= kick.at && f / 30 < kick.at + KICK.punch + KICK.settle + KICK.relax));
-  assert.ok(rest.every((state) => state.scale >= 1.015 - 1e-6 && state.scale <= 1.035 + 1e-6));
-  assert.ok(rest.every((state) => Math.abs(state.x) <= 0.006 * 1080 + 1e-3 && Math.abs(state.y) <= 0.006 * 1920 + 1e-3));
+  assert.ok(rest.every((state) => state.scale >= 1.02 - 1e-6 && state.scale <= 1.045 + 1e-6));
+  assert.ok(rest.every((state) => Math.abs(state.x) <= 0.009 * 1080 + 1e-3 && Math.abs(state.y) <= 0.009 * 1920 + 1e-3));
   // Never still: every frame moves the wrapper.
   for (let f = 1; f < a.length; f += 1) assert.ok(a[f].x !== a[f - 1].x || a[f].y !== a[f - 1].y || a[f].scale !== a[f - 1].scale, `frame ${f} repeats ${f - 1}`);
   // The loop seam matches: the frame after the last is frame 0.
@@ -100,9 +100,48 @@ test('a kick punches to its scale, springs back with 27 % overshoot and never di
   assert.equal(kickValue(kick, 2 + KICK.punch + KICK.settle + KICK.relax + 0.01, 0.27), 1);
   // An off-centre origin still covers the canvas on every frame.
   const s = story({camera: {mode: 'cuts', kicks: [{at: 1.5, scale: 1.4, origin: {x: 0, y: 1}}, {at: 6.5, origin: {x: 1, y: 0}}]}});
-  const samples = feelSamples(planOf(s));
+  const plan = planOf(s);
+  const samples = feelSamples(plan);
   assert.ok(samples.every((state) => feelCovers(state, size)));
-  assert.ok(Math.max(...samples.map((state) => state.scale)) > 1.4, 'the 1.4 kick lands');
+  // The 1.4 kick lands, reduced to what keeps the content in frame.
+  assert.ok(Math.max(...samples.map((state) => state.scale)) > plan.safe.maxScale - 0.01, 'the reduced kick lands');
+  assert.match(plan.warnings.join('\n'), /camera\.kicks\[0\] at 1\.5s reduced from 1\.4 to 1\.0\d+/);
+});
+
+// Where a canvas point lands through a wrapper state (scale about the centre, then translate).
+const through = (state, px, py) => ({x: 540 + (px - 540) * state.scale + state.x, y: 960 + (py - 960) * state.scale + state.y});
+
+test('kicks are content-safe: the content area (safe zone, headline and top-bar margin) stays in frame on every frame', () => {
+  const area = feelSafeArea(size);
+  // 9:16: the Shorts safe zone widened to a 60 px content margin left, right and top, plus 12 px of room.
+  assert.deepEqual(area, {left: 48, top: 48, right: 1032, bottom: 1462, maxScale: 1.09756});
+  assert.ok(feelSafeArea({width: 1920, height: 1080}).maxScale < area.maxScale);
+  const inFrame = (state) => [[area.left, area.top], [area.right, area.top], [area.left, area.bottom], [area.right, area.bottom]]
+    .every(([px, py]) => { const p = through(state, px, py); return p.x >= -1e-3 && p.x <= 1080 + 1e-3 && p.y >= -1e-3 && p.y <= 1920 + 1e-3; });
+  // Big explicit kicks about off-centre origins on top of the ambient: reduced, and the area never leaves the frame.
+  const big = story({camera: {mode: 'cuts', kicks: [{at: 1.5, scale: 1.3, origin: {x: 0.1, y: 0.1}}, {at: 6.5, scale: 1.15, origin: {x: 0.9, y: 0.6}}]}});
+  const plan = planOf(big);
+  for (const kick of plan.kicks) assert.ok(kick.scale < kick.requested, `${kick.source} reduced`);
+  assert.equal(plan.warnings.filter((w) => /reduced from/.test(w)).length, 2);
+  const samples = feelSamples(plan);
+  samples.forEach((state, f) => { assert.ok(inFrame(state), `frame ${f}`); assert.ok(feelCovers(state, size), `edge ${f}`); });
+  // A naive (unclamped) 1.15 kick on the ambient would crop a 66 px-margin headline.
+  const naive = 1.045 * 1.15;
+  assert.ok(540 + (66 - 540) * naive < 0);
+  // The defaults (ambient up to 1.045, kicks 1.05) fit 9:16 untouched: no reduction, no warning.
+  assert.ok(1.045 * 1.05 <= area.maxScale);
+  const words = [{start: 1, end: 2, words: [{text: '12', start: 1.3, end: 1.6}]}, {start: 9, end: 10, words: [{text: '99', start: 9.2, end: 9.5}]}];
+  const auto = planOf(story(), words);
+  assert.deepEqual(auto.kicks.map((kick) => kick.scale), [1.05, 1.05]);
+  assert.deepEqual(auto.warnings, []);
+  feelSamples(auto).forEach((state, f) => assert.ok(inFrame(state), `default frame ${f}`));
+  // A story that sets a bigger automatic kick is told it was reduced.
+  const loud = planOf(story({motion: {feel: {preset: 'kinetic', kicks: {scale: 1.2}}}}), words);
+  assert.match(loud.warnings.join('\n'), /motion\.feel\.kicks\.scale 1\.2 reduced to as low as 1\.0\d+ on 2 automatic kick/);
+  // Kicks still read as a zoom: the scale rises by the kick on its frames.
+  const all = feelSamples(auto), at = Math.round(auto.kicks[0].at * 30);
+  const rise = Math.max(...all.slice(at, at + 6).map((state) => state.scale)) / all[at].scale;
+  assert.ok(rise > 1.04, `the kick still punches (×${rise.toFixed(3)})`);
 });
 
 test('kicks never overlap each other or another camera move, and automatic kicks follow emphasis', () => {

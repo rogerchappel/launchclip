@@ -23,15 +23,28 @@
 //   captionEmphasis: digits, overlay keywords, words named by impact hits)
 //   and strong scene hits; at most one per kicks.gap seconds, never while a
 //   transition, a camera move or a zoom inside a shot runs.
+// - Content-safe (feelSafeArea): the kicks and the ambient compose about
+//   different origins, so on their own they can push content out of frame.
+//   The plan keeps the story's content area inside the frame: the profile
+//   safe zone (layout-check.mjs), widened in a portrait frame to the content
+//   margin headlines and top bars use (KICK.contentMargin of the short side,
+//   left, right and top), plus KICK.pad of breathing room. A kick is reduced
+//   to the largest scale that keeps that area in frame at the ambient's peak
+//   during the kick (a warning names an explicit one), and every frame's
+//   translate is clamped so the area stays inside, which moves the zoom's
+//   origin towards the area rather than cropping it.
 // - Every frame is sampled once (feelSamples); the wrapper is clamped so its
-//   scaled box always covers the canvas.
+//   scaled box always covers the canvas and the content area stays in frame.
 
 import { getEase, springEase } from './motion.mjs';
 import { resolveFeel } from './feel.mjs';
 import { captionEmphasis } from './captions.mjs';
 import { ZOOM } from './zooms.mjs';
+import { profileGeometry } from './layout-check.mjs';
 
-export const KICK = Object.freeze({ punch: 0.12, settle: 0.35, relax: 0.6, punchEase: 'power2.out', relaxEase: 'sine.inOut', margin: 0.06, edge: 0.25 });
+// contentMargin and pad are shares of the frame's short side (60 px and 12 px
+// at 1080).
+export const KICK = Object.freeze({ punch: 0.12, settle: 0.35, relax: 0.6, punchEase: 'power2.out', relaxEase: 'sine.inOut', margin: 0.06, edge: 0.25, contentMargin: 60 / 1080, pad: 12 / 1080 });
 // A tl.set at t − LEAD lands on frame t whichever way the timeline is sought.
 export const FEEL_LEAD = 0.0005;
 export const FEEL_SELECTOR = '#lc-feel';
@@ -139,6 +152,55 @@ export function feelKicks(story, feel, { busy = [], words = [] } = {}) {
   return { kicks, warnings };
 }
 
+/**
+ * The content area the feel camera keeps in frame, padded by KICK.pad:
+ * {left, top, right, bottom} in canvas px, and maxScale, the largest wrapper
+ * scale that can keep it inside the canvas (with the translate free).
+ * Portrait: the Shorts safe zone widened to KICK.contentMargin on the left,
+ * right and top (where headlines and top bars sit; the bottom stays the safe
+ * zone's, the caption band is drawn outside the wrapper). Landscape: the
+ * title-safe zone.
+ */
+export function feelSafeArea({ width, height }) {
+  const geometry = profileGeometry({ width, height });
+  const zone = geometry.safeZone, short = Math.min(width, height);
+  const m = KICK.contentMargin * short, pad = KICK.pad * short;
+  const portrait = height > width;
+  let left = zone.x, top = zone.y, right = zone.x + zone.width, bottom = zone.y + zone.height;
+  if (portrait) { left = Math.min(left, m); right = Math.max(right, width - m); top = Math.min(top, m); }
+  left = Math.max(0, left - pad); top = Math.max(0, top - pad); right = Math.min(width, right + pad); bottom = Math.min(height, bottom + pad);
+  const maxScale = Math.min(width / (right - left), height / (bottom - top));
+  return { left: round(left, 3), top: round(top, 3), right: round(right, 3), bottom: round(bottom, 3), maxScale: round(Math.floor(maxScale * 1e6) / 1e6, 6) };
+}
+
+// The ambient scale at t (1 without one).
+const ambientScale = (ambient, t) => (ambient ? ambient.s.mid + wave(ambient.s, t) : 1);
+
+/**
+ * Kicks reduced so the content area stays in frame: each kick's peak times
+ * the ambient's largest scale over the kick stays at or under
+ * area.maxScale. → {kicks, warnings} (a warning per explicit kick reduced,
+ * and one for the feel's kicks.scale when the story set it)
+ */
+export function contentSafeKicks(kicks, { ambient, area, fps = 30, story = null } = {}) {
+  const warnings = [];
+  let autoReduced = null;
+  const out = kicks.map((kick) => {
+    let peak = 1;
+    const span = KICK.punch + KICK.settle;
+    for (let i = 0; i <= Math.ceil(span * fps); i += 1) peak = Math.max(peak, ambientScale(ambient, kick.at + i / fps));
+    const most = Math.floor((area.maxScale / peak) * 1e4) / 1e4;
+    if (kick.scale <= most + EPS) return kick;
+    const scale = Math.max(1, most);
+    if (kick.source.startsWith('camera.kicks[')) warnings.push(`${kick.source} at ${kick.at}s reduced from ${kick.scale} to ${scale}: a bigger kick (with the ambient camera at ×${round(peak, 3)}) would push the content area out of frame`);
+    else autoReduced = autoReduced ? { ...autoReduced, count: autoReduced.count + 1, to: Math.min(autoReduced.to, scale) } : { from: kick.scale, to: scale, count: 1 };
+    return { ...kick, scale, requested: kick.scale };
+  });
+  const own = story?.motion?.feel?.kicks;
+  if (autoReduced && isObject(own) && num(own.scale)) warnings.push(`motion.feel.kicks.scale ${autoReduced.from} reduced to as low as ${autoReduced.to} on ${autoReduced.count} automatic kick(s): a bigger kick would push the content area out of frame`);
+  return { kicks: out.filter((kick) => kick.scale > 1 + EPS), warnings };
+}
+
 /** The rest a kick settles to, so the spring's overshoot bottoms out at exactly 1. */
 export function kickRest(scale, overshoot) {
   return round((1 + overshoot * scale) / (1 + overshoot), 6);
@@ -175,15 +237,30 @@ export function feelPlan(story, { windows, camera = null, words = [] } = {}) {
   // World mode keeps its own drift (camera-world.mjs); kicks still apply.
   const ambient = feel.ambient && !camera?.drift ? ambientWaves(feel.ambient, { width, height, duration }) : null;
   const busy = feelBusy(story, windows, camera);
-  const { kicks, warnings } = feelKicks(story, feel, { busy, words });
-  if (!ambient && !kicks.length) return warnings.length ? { width, height, fps, duration, frames, feel: feel.id, ambient: null, spring: feel.spring, kicks: [], busy, warnings, idle: true } : null;
-  return { width, height, fps, duration, frames, feel: feel.id, ambient, spring: feel.spring, kicks, busy, warnings };
+  const found = feelKicks(story, feel, { busy, words });
+  const safe = feelSafeArea({ width, height });
+  const reduced = contentSafeKicks(found.kicks, { ambient, area: safe, fps, story });
+  const kicks = reduced.kicks, warnings = [...found.warnings, ...reduced.warnings];
+  if (!ambient && !kicks.length) return warnings.length ? { width, height, fps, duration, frames, feel: feel.id, ambient: null, spring: feel.spring, kicks: [], busy, safe, warnings, idle: true } : null;
+  return { width, height, fps, duration, frames, feel: feel.id, ambient, spring: feel.spring, kicks, busy, safe, warnings };
+}
+
+// The translate range on one axis that keeps the canvas covered (|v| ≤
+// (s − 1)·size/2) and, with a content area [lo, hi], keeps the area inside
+// [0, size]: lo maps to c + (lo − c)·s + v ≥ 0, hi to c + (hi − c)·s + v ≤ size.
+function axisRange(s, size, lo, hi) {
+  const c = size / 2, edge = (s - 1) * c;
+  if (!(Number.isFinite(lo) && Number.isFinite(hi))) return [-edge, edge];
+  const a = Math.max(-edge, (c - lo) * s - c), b = Math.min(edge, size - c - (hi - c) * s);
+  return a <= b ? [a, b] : [(a + b) / 2, (a + b) / 2];
 }
 
 /**
  * The wrapper's transform at absolute t: {x, y, scale} (translate in px,
  * then scale about the canvas centre). Clamped so the scaled box covers the
- * canvas: scale ≥ 1 and |x| ≤ (scale − 1)·W/2 (y likewise).
+ * canvas (scale ≥ 1 and |x| ≤ (scale − 1)·W/2, y likewise) and, with
+ * plan.safe, so the content area stays in frame (scale ≤ safe.maxScale and
+ * the translate inside axisRange).
  */
 export function feelStateAt(plan, t) {
   if (!plan || plan.idle) return { x: 0, y: 0, scale: 1 };
@@ -199,8 +276,10 @@ export function feelStateAt(plan, t) {
     y = dy + a * (1 - k) * (kick.origin.y - H / 2);
   }
   scale = Math.max(1, scale);
-  const mx = ((scale - 1) * W) / 2, my = ((scale - 1) * H) / 2;
-  return { x: round(Math.min(mx, Math.max(-mx, x)), 3), y: round(Math.min(my, Math.max(-my, y)), 3), scale: round(scale, 6) };
+  const safe = plan.safe;
+  if (safe) scale = Math.min(scale, Math.max(1, safe.maxScale));
+  const [x0, x1] = axisRange(scale, W, safe?.left, safe?.right), [y0, y1] = axisRange(scale, H, safe?.top, safe?.bottom);
+  return { x: round(Math.min(x1, Math.max(x0, x)), 3), y: round(Math.min(y1, Math.max(y0, y)), 3), scale: round(scale, 6) };
 }
 
 /** Every frame's wrapper state, frame 0 to frames − 1 → [{x, y, scale}]. */

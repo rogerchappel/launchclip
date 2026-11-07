@@ -2193,7 +2193,7 @@ One setting turns on the habits of a top faceless animated reel together:
   {scale?: [lo, hi] (1–1.08), shift?: 0–0.02, period?: [lo, hi] s (2–20)},
   kicks?: false | "auto" | {auto?, scale?: 1.03–1.4, gap?: 1.1–10 s},
   spring?: overshoot 0–0.6}`.
-- `camera.kicks`: `[{at: seconds | anchor, scale?: 1.03–1.4 (1.15),
+- `camera.kicks`: `[{at: seconds | anchor, scale?: 1.03–1.4 (1.05),
   origin?: {x, y} (shares of the frame, the centre by default)}]`. Explicit
   kicks work with or without a feel (with no feel: kicks only). Anchors
   resolve in `resolveStory` like hits.
@@ -2210,11 +2210,11 @@ One setting turns on the habits of a top faceless animated reel together:
   Remotion) around every scene, the world camera and the overlays, under the
   dot wipes, the medium, the brand frame and the captions. Its transform is
   `translate(x, y) scale(s)` about the canvas centre: x and y waves within
-  ±`shift` of the frame (0.6 %), s a wave between `scale[0]` and `scale[1]`
-  (1.015–1.035; 1.015 is the overscan the drift needs), periods in
-  `period` (5–9 s) that divide the story duration, so loop seams match. In
+  ±`shift` of the frame (0.9 %), s a wave between `scale[0]` and `scale[1]`
+  (1.02–1.045; 1.02 is the overscan the drift needs), periods in
+  `period` (4–7 s) that divide the story duration, so loop seams match. In
   world mode the camera's own drift stays and the feel adds kicks only.
-- Kicks: a punch from 1 to `scale` over 0.12 s (`power2.out`), a spring
+- Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
   settle over 0.35 s with the feel's overshoot towards a rest
   `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
   a 0.6 s relax to 1. The scale is about `origin`. Automatic kicks
@@ -2224,8 +2224,21 @@ One setting turns on the habits of a top faceless animated reel together:
   per `gap` (1.5 s), never in a busy span (`feelBusy`: track-0 transitions,
   the loop ending, the camera plan's moves and zooms inside a shot, padded
   0.06 s). A dropped explicit kick is a compile warning.
+- Content-safe kicks (`feelSafeArea`, `contentSafeKicks`): the content area
+  is the profile safe zone, widened in a portrait frame to a 60 px content
+  margin (of 1080) on the left, right and top, where headlines and top bars
+  sit, plus 12 px of breathing room (9:16: x 48–1032, y 48–1462, so the
+  wrapper scale may reach ×1.0976; 16:9: the title-safe zone, ×1.0843). A
+  kick is reduced so its peak times the ambient's largest scale over the
+  kick stays within that limit; a reduced explicit kick (or the feel's
+  `kicks.scale` when the story sets it) is a compile warning. The defaults
+  (×1.05 on an ambient peak of ×1.045) fit 9:16 exactly; in 16:9 automatic
+  kicks shrink to about ×1.037.
 - Safety: `feelStateAt` clamps every frame so the wrapper covers the canvas
-  (scale ≥ 1, |x| ≤ (s − 1)·W/2, |y| likewise): no edge ever shows. Captions,
+  (scale ≥ 1, |x| ≤ (s − 1)·W/2, |y| likewise): no edge ever shows. It also
+  caps the scale at the content area's limit and clamps the translate so the
+  area stays inside the frame (the zoom's effective origin moves towards the
+  area instead of cropping it). Captions,
   the brand frame and the medium sit outside the wrapper, so caption zones
   and the face-safe logic are unchanged. Footage-led stories (a base
   recording) get no ambient camera or kicks; their base camera owns the frame.

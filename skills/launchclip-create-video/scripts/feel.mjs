@@ -15,10 +15,11 @@
 //     breathing scale between scale[0] and scale[1], periods in period[]
 //     seconds, never revealing an edge (scale[0] is the overscan the drift
 //     needs). World mode keeps its own drift instead;
-//   - zoom kicks: a punch-in to ×1.15 over 0.12 s on an emphasised word or
+//   - zoom kicks: a punch-in to ×1.05 over 0.12 s on an emphasised word or
 //     number, then a spring settle over 0.35 s with 27 % overshoot; explicit
 //     ones from camera.kicks, plus automatic ones (kicks: "auto") at most one
-//     per `gap` seconds and never during another camera move;
+//     per `gap` seconds and never during another camera move; a kick is
+//     reduced when a bigger one would push the content area out of frame;
 //   - springs: the grammar's entrance and emphasis eases become a spring with
 //     `spring` overshoot (motion.mjs springEase), over the base grammar
 //     (snappy unless motion.grammar names another), with longer entrances so
@@ -38,8 +39,11 @@ export const FEELS = Object.freeze({
     id: 'kinetic',
     describe: 'Never still: an ambient camera drifts and breathes under every shot, zoom kicks punch the emphasised words, entrances spring with 27% overshoot, cuts whip in 0.26 s and chapters turn with a halftone dot wipe.',
     base: 'snappy',
-    ambient: Object.freeze({ scale: Object.freeze([1.015, 1.035]), shift: 0.006, period: Object.freeze([5, 9]) }),
-    kicks: Object.freeze({ auto: true, scale: 1.15, gap: 1.5 }),
+    // Tuned on a 52 s narrated reel: a livelier breathing than before and
+    // kicks small enough that the content area stays in frame at the
+    // ambient's peak (kinetic.mjs feelSafeArea: ×1.05 on ×1.045 in 9:16).
+    ambient: Object.freeze({ scale: Object.freeze([1.02, 1.045]), shift: 0.009, period: Object.freeze([4, 7]) }),
+    kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
     spring: SPRING_OVERSHOOT,
     whip: 0.26,
     dotWipe: 0.5
