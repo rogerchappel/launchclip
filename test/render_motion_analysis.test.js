@@ -26,6 +26,8 @@ import {
   worstStillSpans
 } from "../src/render_motion_analysis.js";
 import { cinematicMotionExpectations } from "../src/cinematic_check.js";
+import { assessCinematicReadiness } from "../src/production_readiness.js";
+import { validateCritique } from "../src/production_contracts.js";
 
 test("parses frame metadata and labels luma derivatives as pixel-change metrics", () => {
   const parsed = parseMetadataSeries("frame:0 pts:0\nlavfi.signalstats.YAVG=0.1\nframe:1 pts:1\nlavfi.signalstats.YAVG=8.5", "lavfi.signalstats.YAVG");
@@ -434,4 +436,22 @@ test("stillness ceilings come from the profile, else from defaults by format; ta
   assert.equal(evaluateMotionQuality(locked, talking).findings.filter((entry) => entry.category === "stillness").length, 0);
   const demo = cinematicMotionExpectations({ duration: 30, width: 1920, height: 1080, profile: { ...head, format: "demo-led" } }).expected;
   assert.deepEqual([demo.maximum_still_share, demo.maximum_longest_still_seconds], [0.25, 1.5]);
+});
+
+test("still-span findings become timed repair findings the critique contract accepts", () => {
+  const { expected } = cinematicMotionExpectations({ duration: 60, width: 1080, height: 1920 });
+  const quality = evaluateMotionQuality(stillMetrics({ still_share: 0.46, longest_still_seconds: 0.9, spans: [{ start: 7.667, end: 8.567, seconds: 0.9 }] }), expected);
+  const readiness = assessCinematicReadiness({
+    concepts: { selected_id: "c" }, story: { concept_id: "c" }, narration: { words: [] }, plan: { shots: [{ id: "shot-1" }] },
+    verification: { status: "passed", failed: [] }, motion: { quality }, audio: { quality: { ok: true, findings: [] } },
+    critique: { verdict: "ship", findings: [] }, assembly: { fallback_count: 0, fallbacks: [] }
+  });
+  assert.equal(readiness.gates.motion.ok, false);
+  const timed = readiness.repair_findings.filter((entry) => entry.start_seconds != null);
+  assert.equal(timed.length, 1);
+  assert.deepEqual([timed[0].start_seconds, timed[0].end_seconds, timed[0].category, timed[0].repair_scope], [7.667, 8.567, "motion", "plan"]);
+  assert.match(timed[0].instruction, /7\.67s and 8\.57s.*drift/);
+  assert.ok(readiness.repair_findings.some((entry) => /zoom-kick, drift/.test(entry.instruction)), "the summary finding names the fixes");
+  const check = validateCritique({ schema_version: "launchclip.production-critique.v1", verdict: "repair", summary: "readiness", findings: readiness.repair_findings }, ["shot-1"]);
+  assert.deepEqual(check.errors.filter((error) => !/schema_version/.test(error)), []);
 });
