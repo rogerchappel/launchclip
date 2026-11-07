@@ -28,6 +28,12 @@
 //   over everything but the brand frame and the captions, that paints the
 //   frame in oil, watercolour, pastel, ink or gouache, its drawing picked from
 //   the absolute frame as the HyperFrames compiler steps it on its timeline;
+// - the story feel (kit/core/kinetic.mjs): with motion.feel or camera.kicks,
+//   one wrapper around every scene and the world camera that drifts,
+//   breathes and kicks, from the same per-frame samples the HyperFrames
+//   compiler sets on #lc-feel;
+// - dot wipes (kit/core/dot-wipe.mjs): the same halftone SVG and CSS rule as
+//   HyperFrames over every scene, its cover (--lc-dw) evaluated per frame;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
@@ -65,6 +71,10 @@ import { propsToStyle } from "../core/catalog-b-view.mjs";
 import { layoutPlan, layoutStateAt, withLayoutCameras } from "../core/footage-layout.mjs";
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "../core/medium.mjs";
+// @ts-ignore plain ESM from kit/core
+import { feelPlan, feelStateAt, feelTransform } from "../core/kinetic.mjs";
+// @ts-ignore plain ESM from kit/core
+import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipeSvg, dotWipes } from "../core/dot-wipe.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -399,6 +409,30 @@ function subjectPlan(story: any, base: any, layers: any[], layout: any = null) {
 
 // The medium layer: the filters once, and a layer whose backdrop-filter
 // takes the drawing for the absolute frame (on threes, when it boils).
+// The story feel's wrapper (kit/core/kinetic.mjs), as #lc-feel in HyperFrames.
+// feelStateAt(plan, f / fps) is exactly the sample HyperFrames sets for frame f.
+const FeelLayer: React.FC<{ plan: any; children: React.ReactNode }> = ({ plan, children }) => {
+  const frame = useCurrentFrame();
+  const state = feelStateAt(plan, frame / plan.fps);
+  return <AbsoluteFill style={{ transformOrigin: "50% 50%", transform: feelTransform(state) }}>{children}</AbsoluteFill>;
+};
+
+// One dot wipe (kit/core/dot-wipe.mjs) over its window: the HyperFrames
+// markup and CSS rule, its cover set per frame on --lc-dw.
+const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const t = wipe.start + frame / fps;
+  const svg = React.useMemo(() => dotWipeSvg(width, height, wipe.color), [width, height, wipe.color]);
+  const css = React.useMemo(() => dotWipeCss(width, height), [width, height]);
+  return (
+    <div className="lc-dot-wipe" aria-hidden style={{ zIndex: DOT_WIPE.z.remotion, ["--lc-dw" as any]: dotWipeCover(wipe, t) }}>
+      <style>{css}</style>
+      <div style={{ position: "absolute", left: 0, top: 0 }} dangerouslySetInnerHTML={{ __html: svg }} />
+    </div>
+  );
+};
+
 const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   const frame = useCurrentFrame();
   const defs = React.useMemo(() => ({ __html: mediumDefs(plan) }), [plan]);
@@ -466,6 +500,16 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
+  // The story feel (kit/core/kinetic.mjs) and dot wipes (kit/core/dot-wipe.mjs), as the HyperFrames compiler.
+  const feel = React.useMemo(() => feelPlan(story, { windows, camera: plan, words: Array.isArray(__captions) ? __captions : [] }), [story, windows, plan, __captions]);
+  const wipes = React.useMemo(() => dotWipes(story, windows), [story, windows]);
+  const wipeLayers = wipes.map((wipe: any) => (
+    <Sequence key={wipe.id} name={`dot-wipe → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
+      <DotWipeLayer wipe={wipe} />
+    </Sequence>
+  ));
+  const feelOn = Boolean(feel && !feel.idle);
+  const feelWrap = (children: React.ReactNode) => (feelOn ? <FeelLayer plan={feel}>{children}</FeelLayer> : children);
   // Cuts mode: a shot's zooms move its own container (world mode: the camera).
   // A cast riding a plate (camera-world.mjs rideOf) takes the plate's zooms.
   const zoomFor = (entry: any, model: any) => {
@@ -491,6 +535,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     return (
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
         {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
+        {feelWrap(<>
         <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && (backdrop || covered))} backdrops={backdrops} background={background}>
           {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
           {/* Overview holds: a shot the overview frames, frozen on its settled last frame (holdTime), as the HyperFrames held clones. */}
@@ -512,9 +557,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
             </Sequence>
           )) : null}
         </CameraWorld>
-        {/* Overlays, the frame and captions stack above the camera (CAMERA_STACK), as in HyperFrames. */}
+        {/* Overlays stack above the camera (CAMERA_STACK), as in HyperFrames, and ride the story feel's wrapper with it. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
+        </AbsoluteFill>
+        </>)}
+        {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
+        <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
+          {wipeLayers}
           {medium ? <MediumLayer plan={medium} /> : null}
           <BrandFrame story={story} />
           {overlay && Array.isArray(__captions) && __captions.length ? (
@@ -536,6 +586,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   );
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
+      {feelWrap(<>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} styles={subject.styles} /> : null}
@@ -547,6 +598,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
+      </>)}
+      {wipeLayers}
       {medium ? <MediumLayer plan={medium} /> : null}
       <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
