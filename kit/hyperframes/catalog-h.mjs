@@ -7,6 +7,7 @@
 import {MODULES, catalogHTimeline, catalogHView, cssProps} from '../core/catalog-h.mjs';
 import {gsapOwnedTransforms, opsToGsap, renderNode} from './catalog-b.mjs';
 import {PARTICLE_RUNTIME} from '../core/particles.mjs';
+import {UI_RUNTIME} from '../core/ui-runtime.mjs';
 
 const num = value => Math.round(value * 1e4) / 1e4;
 
@@ -30,13 +31,32 @@ export function paintMotion(model) {
   return lines.join('\n');
 }
 
+/**
+ * UI scenes (kit/core/ui-runtime.mjs): the painter, once per page, and per
+ * host a proxy tween over the scene whose onUpdate paints the host's HTML at
+ * the timeline's time, the same pure function Remotion calls.
+ */
+export function uiMotion(model) {
+  const ui = model.content?.ui;
+  if (!ui || !Object.keys(ui).length) return '';
+  const lines = [UI_RUNTIME];
+  for (const [hostId, spec] of Object.entries(ui)) {
+    lines.push(`(function () {
+  var host = document.getElementById(${JSON.stringify(hostId)}), spec = ${JSON.stringify(spec).replace(/</g, '\\u003c')}, clock = {t: ${num(model.start)}};
+  window.lcPaintUi(host, spec, clock.t);
+  tl.fromTo(clock, {t: ${num(model.start)}}, {t: ${num(model.end)}, duration: ${num(model.end - model.start)}, ease: 'none', immediateRender: false, onUpdate: function () { window.lcPaintUi(host, spec, clock.t); }}, ${num(model.start)});
+})();`);
+  }
+  return lines.join('\n');
+}
+
 export function emitCatalogH(model) {
   const {view, ops} = gsapOwnedTransforms(catalogHView(model), catalogHTimeline(model), model.start);
   const css = op => (op.type === 'set' ? {...op, props: cssProps(op.props)} : op.type === 'tween' ? {...op, from: cssProps(op.from), to: cssProps(op.to)} : op);
   const timed = `class="clip lc-catalog-h" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${model.track}" data-module="${model.module}"`;
   const html = renderNode(view, timed);
   const style = `#${model.id}{pointer-events:none}#${model.id} svg{display:block}`;
-  const motion = [opsToGsap(ops.map(css)).join('\n'), paintMotion(model)].filter(Boolean).join('\n');
+  const motion = [opsToGsap(ops.map(css)).join('\n'), paintMotion(model), uiMotion(model)].filter(Boolean).join('\n');
   return {html, css: style, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 

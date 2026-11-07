@@ -453,6 +453,7 @@ export const AVOID_LOOKS = Object.freeze([
   Object.freeze({ name: 'glass-explainer', colors: { bg: '#04070d', paper: '#f3f8ff', ink: '#04070d', primary: '#3fd8ff', accent: '#ff9b54' }, fonts: { display: 'plus-jakarta-sans', body: 'plus-jakarta-sans' }, panel: 'rim-glass', grammar: 'smooth', caption: 'box-highlight' }),
   Object.freeze({ name: 'minimal-tech', colors: { bg: '#f4f5f7', paper: '#0f1720', ink: '#ffffff', primary: '#2257e8', accent: '#00866a' }, fonts: { display: 'space-grotesk', body: 'inter' }, panel: 'glass', grammar: 'smooth', caption: 'underline-sweep' }),
   Object.freeze({ name: 'neon-explainer', colors: { bg: '#07051a', paper: '#f4f1ff', ink: '#07051a', primary: '#19f0ff', accent: '#ff4fd8' }, fonts: { display: 'bricolage-grotesque', body: 'space-grotesk' }, panel: 'glass', grammar: 'playful', caption: 'glow' }),
+  Object.freeze({ name: 'signal-ui', colors: { bg: '#0a0b08', paper: '#f4f6ee', ink: '#0a0b08', primary: '#c8ff3a', accent: '#c8ff3a' }, fonts: { display: 'inter', body: 'inter' }, panel: 'solid', grammar: 'snappy', caption: 'word-chip' }),
   Object.freeze({ name: 'warm-documentary', colors: { bg: '#1c1612', paper: '#f3e6d0', ink: '#1c1612', primary: '#e08a34', accent: '#9cbf86' }, fonts: { display: 'instrument-serif', body: 'stix-two-text' }, panel: 'paper', grammar: 'documentary', caption: 'lower-band' }),
   FALLBACK_LOOK
 ]);

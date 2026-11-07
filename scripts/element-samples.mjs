@@ -76,6 +76,12 @@ export const SAMPLES = Object.freeze({
       {status: 'PASS', time: '9.7 ms', text: 'a real PR maps to repo-pr-card params that resolve'}, {status: 'PASS', time: '4.0 ms', text: 'a real commit maps to commit-card and diff-view params'}]},
     {cmd: 'npm test', output: [{text: 'ℹ tests 2515', tone: 'muted'}, {text: 'ℹ pass 2053', tone: 'add'}, {text: 'ℹ fail 4', tone: 'del'}, {text: 'ℹ duration_ms 219907.9', tone: 'muted'}]}],
     timer: {to: 220}, highlight: 'c3ec4a11'},
+  // On both stages: portrait (y from 240) and landscape (clear of the band from y 864).
+  'ui-scene': {elements: [
+    {kind: 'headline', rect: {x: 60, y: 260, width: 900, height: 120}, at: 0.1, enter: 'slam', props: {text: 'SOUNDS CHEAP', tone: 'alert', size: 110}, beats: [{at: 2.4, set: {text: 'REAL SOUND', tone: 'accent', glow: true}}]},
+    {kind: 'timeline', rect: {x: 60, y: 420, width: 900, height: 400}, at: 0, enter: 'zoom', props: {title: 'sequence_01', sub: 'sfx pass', clipAt: 1.2, tracks: [{label: 'A1', kind: 'audio', name: 'voice.wav'}, {label: 'A2', kind: 'sfx', clips: [{label: 'BOING!', x: 0.02, width: 0.3, tone: 'alert', rotate: -6, at: 0.5, flipAt: 2.4, flipLabel: 'whoosh.wav'}]}], meter: {level: 7, alertAt: 1.2, level2: 9, level2At: 2.4}, playhead: {from: 0.05, to: 0.8, dur: 3.5}}},
+    {kind: 'chip', rect: {x: 560, y: 600, width: 360, height: 80}, at: 1.2, enter: 'slam', out: 2.3, props: {text: 'CLIPPING', tone: 'alert', glow: true, size: 36}}
+  ]},
   'dot-field': {count: 1050000, label: 'tokens in context', legend: '1 dot = 1 token'},
   'particle-text': {text: '60%', kicker: 'Hard-set score', sub: 'up from 41% a month ago'},
   'particle-logo': {logos: [{icon: 'rocket', label: 'Northwind', sub: 'challenger'}, {icon: 'sparkle', label: 'Helio Labs', sub: 'incumbent'}]},

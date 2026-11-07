@@ -11,6 +11,7 @@
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
 
+import { uiReadingWords } from "@launchclip/core/catalog-i-ui.mjs";
 import { frameState } from "@launchclip/core/catalog-b-view.mjs";
 import { charactersTimeline } from "@launchclip/core/catalog-characters.mjs";
 import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
@@ -317,7 +318,8 @@ export function ghostingGate(story) {
     if (slow > TEXT_FADE.max + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} fades over ${round(slow, 2)} s; text fades take at most ${TEXT_FADE.max} s` });
     const transition = entry.transitionIn;
     if (transition && ["fade", "dissolve", "crossfade"].includes(transition.type) && transition.dur > GHOSTING.textHalf + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} dissolves in over ${transition.dur} s; a text scene's fade takes at most ${GHOSTING.textHalf} s` });
-    const words = paramWords(entry.scene.params);
+    // A ui-scene's reading text is its headlines (uiReadingWords); panel labels are glanced at.
+    const words = entry.scene.module === "ui-scene" ? uiReadingWords(entry.scene.params) : paramWords(entry.scene.params);
     const enterEnd = Number.isFinite(m.enterEnd) ? m.enterEnd : entry.start + (fadeIn || 0);
     const exitStart = Number.isFinite(m.exitStart) ? m.exitStart : model.end;
     const hold = round(exitStart - enterEnd, 2);

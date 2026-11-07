@@ -49,6 +49,17 @@ export function catalogModules() {
   return merged;
 }
 
+/**
+ * Where the story's captions sit: the captions overlay's position (auto,
+ * middle, top); auto when the story names none (finish may still caption
+ * it). Modules that place their own elements keep clear of that band
+ * (catalog-i-ui.mjs).
+ */
+export function storyCaptionPosition(story) {
+  const overlay = (Array.isArray(story?.overlays) ? story.overlays : []).find((entry) => entry?.type === 'captions');
+  return typeof overlay?.position === 'string' ? overlay.position : 'auto';
+}
+
 /** Editorial kinds plus catalogue ids. */
 export function knownModules() {
   return [...EDITORIAL_KINDS, ...Object.keys(catalogModules())];
@@ -554,7 +565,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

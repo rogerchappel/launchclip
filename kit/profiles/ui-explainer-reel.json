@@ -1,0 +1,111 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "ui-explainer-reel",
+  "title": "UI explainer reel",
+  "format": "motion",
+  "duration_seconds": [
+    30,
+    75
+  ],
+  "references": 1,
+  "provenance": {
+    "kind": "measured",
+    "tool": "launchclip profile measure",
+    "measured_at": "2026-11-07T19:47:32.843Z",
+    "note": "Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds, shot_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic. shot_seconds is left out because the reference changes scene with whip-pans and wipes, which the cut detector does not see, so it measured one 46 s shot.",
+    "sources": [
+      {
+        "id": "ref-01",
+        "title": "reel-c.mp4",
+        "rights": "public-statistics",
+        "sha256": "22142d685096af5623ebb47a3b9015fba650cf151eedbca7be5ad09d85ba4b77",
+        "duration_seconds": 45.833,
+        "width": 720,
+        "height": 1280,
+        "measured_at": "2026-11-07T19:47:32.843Z"
+      }
+    ]
+  },
+  "measures": {
+    "visual_changes_per_min": {
+      "p10": 18.9125,
+      "p50": 22.25,
+      "p90": 25.5875
+    },
+    "coverage": {
+      "p10": 0.813,
+      "p50": 0.9565,
+      "p90": 1
+    },
+    "longest_undressed_seconds": {
+      "p10": 0,
+      "p50": 1,
+      "p90": 1.15
+    },
+    "first_visual_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0.0
+    },
+    "flow_velocity_p90": {
+      "p10": 6.9909,
+      "p50": 8.2246,
+      "p90": 9.4583
+    },
+    "hold_ratio": {
+      "p10": 0.5642,
+      "p50": 0.6638,
+      "p90": 0.7634
+    },
+    "motion_bursts_per_min": {
+      "p10": 22.2547,
+      "p50": 26.182,
+      "p90": 30.1093
+    },
+    "change_energy_p50": {
+      "p10": 1.9978,
+      "p50": 2.3503,
+      "p90": 2.7028
+    },
+    "first_motion_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0.0
+    },
+    "hook_events": {
+      "p10": 1,
+      "p50": 2,
+      "p90": 3
+    },
+    "still_share": {
+      "p10": 0.0921,
+      "p50": 0.1084,
+      "p90": 0.1247
+    },
+    "longest_still_seconds": {
+      "p10": 0.9919,
+      "p50": 1.167,
+      "p90": 1.342
+    },
+    "camera_moves_per_min": {
+      "p10": 11.1273,
+      "p50": 13.091,
+      "p90": 15.0546
+    }
+  },
+  "description": "A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that shows software tools and workflows on dark animated interface panels: timelines, meters, terminals and cards that build and change on the words.",
+  "match": {
+    "lanes": [
+      "motion",
+      "voiceover-motion"
+    ],
+    "aspects": [
+      "9:16"
+    ],
+    "platforms": [
+      "youtube-shorts",
+      "instagram-reels",
+      "tiktok"
+    ]
+  }
+}

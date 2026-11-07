@@ -11,8 +11,9 @@ import {MODULES, catalogHStyle, catalogHTimeline, catalogHView} from '../../core
 import {frameState} from '../../core/catalog-b-view.mjs';
 import type {FrameProps, ViewNode} from './CatalogB';
 import {PaintCanvas} from './PaintCanvas';
+import {UiHost} from './UiHost';
 
-type Paint = {plans: Record<string, unknown>; t: number} | null;
+type Paint = {plans: Record<string, unknown>; ui: Record<string, unknown>; t: number} | null;
 
 function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key: string | number, paint: Paint = null): React.ReactNode {
   if (typeof node === 'string') return node;
@@ -21,6 +22,8 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   const attrs: Record<string, unknown> = {...(node.attrs ?? {})};
   // A canvas with a paint plan (kit/core/particles.mjs) is drawn by the painter.
   if (node.tag === 'canvas' && node.id && paint?.plans[node.id]) return <PaintCanvas key={key} id={node.id} plan={paint.plans[node.id]} t={paint.t} style={style as React.CSSProperties} attrs={attrs} />;
+  // A ui-scene host (kit/core/ui-runtime.mjs) is drawn by the UI painter.
+  if (node.tag === 'div' && node.id && paint?.ui[node.id]) return <UiHost key={key} id={node.id} spec={paint.ui[node.id]} t={paint.t} style={style as React.CSSProperties} attrs={attrs} />;
   if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style, ...attrs},
@@ -32,7 +35,7 @@ const CatalogHModule: React.FC<{model: any}> = ({model}) => {
   const view = useMemo(() => catalogHView(model) as ViewNode, [model]);
   const ops = useMemo(() => catalogHTimeline(model), [model]);
   const state = frameState(ops, t) as Map<string, FrameProps>;
-  const paint: Paint = model.content?.paint ? {plans: model.content.paint, t} : null;
+  const paint: Paint = model.content?.paint || model.content?.ui ? {plans: model.content.paint ?? {}, ui: model.content.ui ?? {}, t} : null;
   return <AbsoluteFill style={{pointerEvents: 'none'}}>{renderNode(view, state, model.id, paint)}</AbsoluteFill>;
 };
 

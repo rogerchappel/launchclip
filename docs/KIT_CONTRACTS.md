@@ -2256,6 +2256,68 @@ One setting turns on the habits of a top faceless animated reel together:
 - Golden: `examples/story/kinetic-feel-9x16` (paper background, three cards,
   two kicks, a 0.26 s whip-pan and a dot-wipe).
 
+## UI scenes (`kit/core/catalog-i-ui.mjs`, `kit/core/ui-runtime.mjs`)
+
+`ui-scene` is a catalogue H module for interface explainers: the director lays
+out tuned UI components as `params.elements`, and a painter draws them as DOM,
+a pure function of time, in both renderers.
+
+- **Elements**: `{kind, rect {x, y, width, height}, at, enter, out?, props,
+  beats? [{at, set, cue?}], children?, tilt? {x, y, z}, z?, bleed?, cue?,
+  enterDuration?, dist?, overshoot?, id?}`. Rects are design px: the canvas
+  divided by `unit` (1080 × 1920 in 9:16, 1920 × 1080 in 16:9). Times are
+  seconds from the scene start. A beat merges `set` into the props from `at`
+  on. `window` and `stack` place `children` relative to themselves.
+- **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
+  lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
+  card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
+  scan-plane (`kit/core/ui-components.mjs`). Props are listed in the planning
+  prompt's "Interface scenes" section.
+- **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
+  the safe zone's top to its foot, clear of the caption band; `bleed: true`
+  lifts that for decorative elements. The first element enters by 0.6 s. A
+  headline's text must fit its rect at its size.
+- **Anchors**: `resolveStory` resolves word anchors in an element's `at` and
+  `out`, a beat's `at` and any prop named `at` or ending in `At` to seconds
+  from the scene start (`resolveUiAnchors`).
+- **Theme**: `uiTheme(colors, alert)` derives surfaces, lines, muted text and
+  the accent tint from `bg`, `paper` and `accent`; `params.alert` is the
+  broken-state colour (default `#ff4b3e`).
+- **Events**: a top-level element's entrance asks for a sound by its kind
+  (slam `hit-soft`, pop `pop-soft`, zoom `whoosh-soft`, drop `hit-soft`) or
+  its `cue` (null for none); a beat's `cue` adds one at the beat.
+- **Painter**: `paintUi(host, spec, t)` writes the host's HTML for the
+  absolute time `t`. The functions in `ui-paint.mjs`, `ui-components.mjs` and
+  `ui-runtime.mjs` call only each other, so `UI_RUNTIME` (their source) runs
+  in the page. HyperFrames paints from a proxy tween's onUpdate over the
+  scene; Remotion's `UiHost` calls the same function in a layout effect. No
+  wall clock, randomness or timers; text is escaped; font stacks have their
+  double quotes swapped for single ones.
+- **Root**: the module drops catalogue H's root entrance (each element enters
+  on its own) and keeps the exit.
+- **Entrances**: `cut` puts an element on screen at `at` as it settles, so a
+  scene that opens the video shows a built frame at frame 0.
+- **Captions**: modules get `ctx.captions`, the story's captions position
+  (`storyCaptionPosition`: auto, middle, top); the band elements avoid is
+  placed by the same `captionBandAt` the layout check uses.
+- **Layout**: `model.layout.rect` is the largest top-level, non-bleed
+  element (the hero panel) and `model.layout.parts` the others, each with its
+  own window, so the layout checks see every element.
+- **Gates**: the text-hold gate reads a ui-scene by its headlines only
+  (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%
+  of the canvas entering after 0.3 s as a visual change, as the pixel
+  measure does.
+
+## Motion blur (`src/motion_blur.js`)
+
+`story.motion.blur`: `true` (3 samples) or `{samples: 2 | 3 | 4}`. The
+HyperFrames adapter renders at `fps × samples` and blends each output frame
+from the sub-frames centred on it (`tmix`, then `select`), a 240° shutter at
+3 samples: fast moves smear along their path and settled panels stay sharp.
+Render time grows with the samples. `story.motion` is part of the segment
+hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
+pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
+
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
 The camera dives into one bar, row, number or box of a track-0 shot as the

@@ -26,7 +26,7 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "word-chip", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
 const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
@@ -837,6 +837,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
       if (zoom.until !== undefined) zoom.until = resolve(zoom.until, `${path}.zooms[${z}].until`);
     });
     if (SPEAKING_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words, storyCastIds(copy));
+    if (scene.module === "ui-scene" && isObject(scene.params)) scene.params = resolveUiAnchors(scene.params, Number(scene.start), (value, at) => resolve(value, `${path}.${at}`));
   });
   if (Array.isArray(copy.overlays)) copy.overlays.forEach((overlay, index) => {
     if (!isObject(overlay)) return;
@@ -869,6 +870,24 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   // A crop in pixels needs the recording's size: the track measured it.
   if (isObject(copy.base) && isObject(copy.base.crop) && copy.base.size === undefined && isObject(track?.source) && Number.isInteger(track.source.width) && Number.isInteger(track.source.height)) copy.base.size = { width: track.source.width, height: track.source.height };
   return copy;
+}
+
+// UI scenes (kit/core/catalog-i-ui.mjs): an element's at and out, a beat's
+// at, and any prop named `at` or ending in `At` (clipAt, unlockAt, doneAt
+// [...], markers[].at) may be a time anchor; anchors resolve to seconds from
+// the scene start, numbers are already scene times and stay as written.
+const UI_TIME_KEY = /^(at|out|[a-z][a-z0-9]*At)$/;
+
+export function resolveUiAnchors(params, sceneStart, resolve) {
+  const walk = (value, path, timed) => {
+    if (timed && typeof value === "string") return Math.round((resolve(value, path) - sceneStart) * 1000) / 1000;
+    if (Array.isArray(value)) return value.map((item, k) => walk(item, `${path}[${k}]`, timed));
+    if (!isObject(value)) return value;
+    const out = {};
+    for (const [key, item] of Object.entries(value)) out[key] = walk(item, `${path}.${key}`, UI_TIME_KEY.test(key));
+    return out;
+  };
+  return walk(params, "params", false);
 }
 
 // Character scenes (kit/core/catalog-characters.mjs): cue `at` and spoken
@@ -1019,8 +1038,9 @@ const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|
 function validateMotion(motion, err) {
   if (motion === undefined || motion === null) return;
   if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
-  for (const key of Object.keys(motion)) if (key !== "grammar" && key !== "feel") err(`motion.${key} is not supported (allowed: grammar, feel)`);
+  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur)`);
   validateFeel(motion.feel, err);
+  validateBlur(motion.blur, err);
   const grammar = motion.grammar;
   if (grammar === undefined || grammar === null) return;
   if (typeof grammar === "string") {
@@ -1054,6 +1074,14 @@ function validateMotion(motion, err) {
 export const STORY_FEELS = ["kinetic"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
+
+// motion.blur: real motion blur from sub-frames (src/motion_blur.js).
+function validateBlur(blur, err) {
+  if (blur === undefined || blur === null || typeof blur === "boolean") return;
+  if (!isObject(blur)) { err("motion.blur must be true, false or {samples}"); return; }
+  for (const key of Object.keys(blur)) if (key !== "samples") err(`motion.blur.${key} is not supported (allowed: samples)`);
+  if (blur.samples !== undefined && ![2, 3, 4].includes(blur.samples)) err("motion.blur.samples must be 2, 3 or 4");
+}
 
 function validateFeel(feel, err) {
   if (feel === undefined || feel === null || feel === false) return;

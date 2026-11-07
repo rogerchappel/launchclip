@@ -18,6 +18,7 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | short-motion | motion | motion, voiceover-motion | 9:16 | 5–60 s | seed |
 | short-talking-head | footage-led | footage-led | 9:16 | 5–60 s | seed |
 | story-characters | characters | motion, voiceover-motion | 16:9, 9:16 | 20–180 s | seed |
+| ui-explainer-reel | motion | motion, voiceover-motion | 9:16 | 30–75 s | measured |
 | youtube-long-form | footage-led | footage-led | 16:9, 1:1 | 300–1800 s | seed |
 | youtube-talking-head-launch | footage-led | footage-led | 16:9, 1:1 | 60–300 s | seed |
 
@@ -177,6 +178,26 @@ A fully animated story told by a cast (setup, problem, attempt, turn, resolution
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+
+## ui-explainer-reel
+
+A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that shows software tools and workflows on dark animated interface panels: timelines, meters, terminals and cards that build and change on the words.
+
+| Measure | p10 | p50 | p90 |
+| --- | --- | --- | --- |
+| visual_changes_per_min | 18.9125 | 22.25 | 25.5875 |
+| coverage | 81% | 96% | 100% |
+| longest_undressed_seconds | 0 | 1 | 1.15 |
+| first_visual_seconds | 0 | 0 | 0 |
+| flow_velocity_p90 | 6.9909 | 8.2246 | 9.4583 |
+| hold_ratio | 56% | 66% | 76% |
+| motion_bursts_per_min | 22.2547 | 26.182 | 30.1093 |
+| change_energy_p50 | 1.9978 | 2.3503 | 2.7028 |
+| first_motion_seconds | 0 | 0 | 0 |
+| hook_events | 1 | 2 | 3 |
+| still_share | 9% | 11% | 12% |
+| longest_still_seconds | 0.9919 | 1.167 | 1.342 |
+| camera_moves_per_min | 11.1273 | 13.091 | 15.0546 |
 
 ## youtube-long-form
 

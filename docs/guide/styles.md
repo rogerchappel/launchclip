@@ -47,6 +47,7 @@ Every style also carries a **motion feel**: world camera or cuts, an ease family
 | `minimal-tech` | Light, clean, blue accents, smooth camera glides | The same as `editorial-dark` |
 | `warm-documentary` | Warm tones, a serif voice, slow and restrained | Only gentle punch-ins and a growth line |
 | `neon-explainer` | Violet and cyan, playful motion, glowing captions | No preference |
+| `signal-ui` | Tool and workflow explainers on dark animated interface panels, one lime accent, one-word chip captions, real motion blur | No preference (built for `ui-scene`) |
 
 Tell your agent: *"Use the bold-creator style."* Or set `"style": "bold-creator"` in a storyboard.
 

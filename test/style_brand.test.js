@@ -185,7 +185,7 @@ test("1,000 seeds give no near-duplicates", () => {
 
 test("styles made with no seed and no inputs never look like a starter", async () => {
   const starters = await Promise.all((await readdir(STYLES)).filter((file) => file.endsWith(".json")).map(async (file) => JSON.parse(await readFile(path.join(STYLES, file), "utf8"))));
-  assert.equal(starters.length, 6);
+  assert.equal(starters.length, 7);
   const starterTraits = starters.map(styleTraits);
   for (let i = 0; i < 300; i += 1) {
     const pack = generateStyle();

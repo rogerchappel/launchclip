@@ -1,0 +1,104 @@
+{
+  "schema": "launchclip.style.v3",
+  "name": "signal-ui",
+  "description": "Tool and workflow explainers on dark animated interface panels: near-black, one signal-lime accent and a warm red for the broken state, a tight grotesque with a mono for interface text, a coarse dot grid, small one-word captions, kinetic camera and real motion blur.",
+  "brand": {
+    "colors": {
+      "bg": "#0a0b08",
+      "paper": "#f4f6ee",
+      "ink": "#0a0b08",
+      "primary": "#c8ff3a",
+      "accent": "#c8ff3a"
+    },
+    "fonts": {
+      "display": "inter",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "snappy",
+    "feel": "kinetic",
+    "blur": true
+  },
+  "captions": {
+    "preset": "word-chip",
+    "position": "middle",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
+  },
+  "sound": {
+    "sfx_density": "high"
+  },
+  "modules": {
+    "prefer": [
+      "ui-scene"
+    ],
+    "avoid": []
+  },
+  "layouts": {
+    "by_intent": {
+      "product": "full",
+      "process": "full"
+    },
+    "by_section": {
+      "hook": "full"
+    },
+    "panel": {
+      "treatment": "solid",
+      "radius": 26
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "primary",
+    "illustration": false,
+    "prefer": {
+      "product": [
+        "ui-scene"
+      ],
+      "process": [
+        "ui-scene"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "flat",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
+  "brand_frame": {
+    "enabled": false,
+    "kicker": {
+      "underline": false,
+      "position": "top-left",
+      "logo": false
+    },
+    "sections": false,
+    "progress": false,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.85,
+    "density": 0.75,
+    "playfulness": 0.5,
+    "polish": 0.8
+  },
+  "profile": "ui-explainer-reel",
+  "background": {
+    "kind": "dot-grid",
+    "params": {
+      "color": "primary",
+      "scale": 0.75,
+      "density": 0.3,
+      "intensity": 0.15,
+      "speed": 0
+    }
+  },
+  "notes": "Measured from one public interface-explainer reel (kit/profiles/ui-explainer-reel.json): about 11% still frames, a 20 px dot period at 720 wide, one-word captions about 52 px tall, three or more type sizes with a hero headline. Settled panels hold still; life comes from entrances, timed state changes inside the panels and the shared camera."
+}

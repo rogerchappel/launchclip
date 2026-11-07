@@ -104,7 +104,8 @@ polish; 0-1, moving targets inside the profile band only).
 - Select it in `storyboard.json` with `"style": "<name>"` (or a path to a
   `style.json`). Names resolve in the project's `.launchclip/styles`, then
   `~/.launchclip/styles`, then the built-in starters: `editorial-dark`,
-  `bold-creator`, `minimal-tech`, `warm-documentary`, `neon-explainer`.
+  `bold-creator`, `minimal-tech`, `warm-documentary`, `neon-explainer`,
+  `signal-ui`.
 - Leave `brand` out of the storyboard and write captions as
   `{"type": "captions"}`, so the pack decides them. Anything you do write
   explicitly wins over the pack, so only write a value when this video needs an

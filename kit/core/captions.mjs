@@ -298,6 +298,9 @@ export const CAPTION_PRESETS = Object.freeze({
   'outline-heavy': preset({ description: 'Creator style: thick black outline, hard shadow, snap-in lines.', size: 84, stroke: 18, strokeColor: '#000000', shadow: '0 8px 0 #000000', word: 'highlight-big', emphasis: true, entrance: 'scale', exit: 'shrink', gap: 0.3 }),
   'split-color': preset({ description: 'Keywords in the accent colour; they pop when spoken.', word: 'emphasis', weight: 800, size: 70, case: 'title', stroke: 8, emphasis: true, entrance: 'slide-up', exit: 'fade', maxWords: 4, maxChars: 22, gap: 0.3 }),
   'lower-band': preset({ description: 'A broadcast band slides in; sentence-case text sits on it.', layout: 'band', font: 'body', weight: 700, size: 50, lineHeight: 1.1, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 6, maxChars: 30, entrance: 'slide-left', exit: 'fade', colors: { idle: 'ink' } }),
+  // The interface-explainer caption: a single word mid-sentence, small and
+  // opaque so it reads over busy panels without competing with the headline.
+  'word-chip': preset({ description: 'One word at a time, as spoken, on a small opaque dark chip: the interface-explainer caption that reads over busy panels.', layout: 'single', word: 'none', font: 'body', weight: 600, size: 52, case: 'as-is', letterSpacing: '0.02em', stroke: 0, shadow: SHADOW_SOFT, maxWords: 1, maxChars: 24, entrance: 'pop', exit: 'none', colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#23261e' }, plate: 'card' }),
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
