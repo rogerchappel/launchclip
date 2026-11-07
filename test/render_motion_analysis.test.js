@@ -18,12 +18,14 @@ import {
   parseMetadataSeries,
   STILLNESS,
   analyzeStillness,
+  analyzeZoom,
   cameraMoves,
   globalMotion,
   stillnessFromEnergy,
   stillnessGrid,
   suggestStillFix,
-  worstStillSpans
+  worstStillSpans,
+  zoomDetectGrid
 } from "../src/render_motion_analysis.js";
 import { cinematicMotionExpectations } from "../src/cinematic_check.js";
 import { assessCinematicReadiness } from "../src/production_readiness.js";
@@ -77,7 +79,9 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
   assert.equal(metrics.cut_rate_per_minute, 12);
   assert.ok(metrics.motion.frame_difference.length > 0);
   assert.equal(metrics.optical_flow.method, "block-matching");
-  assert.equal(rawCalls, 2, "one raw pass for stillness, one for optical flow");
+  assert.equal(rawCalls, 3, "one raw pass for stillness, one for optical flow, one for zoom detection");
+  assert.deepEqual(metrics.motion.zoom_events, []);
+  assert.equal(metrics.motion.zoom.method, "scale-fit");
   assert.match(commands[1][1].join(" "), /tblend=all_mode=difference/);
   assert.match(commands[2][1].join(" "), /scene_score/);
   assert.match(commands[0][1].join(" "), /-count_frames/);
@@ -264,7 +268,8 @@ test("analyzeRenderMotion samples a portrait render on a portrait flow grid", as
     run: async (command, args) => { commands.push(args); return outputs.shift(); },
     runRaw: async (command, args) => { commands.push(args); return { stdout: Buffer.alloc(180 * 320 * 2) }; }
   });
-  assert.match(commands.at(-1).join(" "), /scale=180:320:flags=area/);
+  assert.ok(commands.some((args) => /scale=180:320:flags=area/.test(args.join(" "))), "the flow pass reads 180×320");
+  assert.ok(commands.some((args) => /fps=30,scale=144:256:flags=area/.test(args.join(" "))), "the zoom pass reads every frame at 144×256");
   assert.deepEqual(metrics.optical_flow.grid, { width: 180, height: 320 });
   assert.match(metrics.optical_flow.velocity_units, /36-px short side/);
 });
@@ -467,6 +472,50 @@ function zoomFrame({ scale = 1, tx = 0, ty = 0 }, width = 144, height = 256) {
   }
   return out;
 }
+const zoomClip = (at, frames = 30) => series(Array.from({ length: frames }, (_, f) => zoomFrame(at(f / 30))));
+const punch = (u) => 1 - (1 - u) ** 2;
+// A kinetic-feel kick: from 1 to S over 0.12 s (power2.out) at 0.3 s, then held.
+const kickAt = (S, from = 1) => (t) => ({ scale: t < 0.3 ? from : t < 0.42 ? from + (S - from) * punch((t - 0.3) / 0.12) : S });
+
+test("analyzeZoom detects a quick centred zoom kick that the flow and phase correlation miss", () => {
+  const kick = analyzeZoom(zoomClip(kickAt(1.05)), 144, 256, 30);
+  assert.equal(kick.events.length, 1);
+  assert.ok(Math.abs(kick.events[0].at - 0.333) < 0.04, `at ${kick.events[0].at}`);
+  assert.ok(Math.abs(kick.events[0].scale - 1.05) < 0.006, `scale ${kick.events[0].scale}`);
+  assert.deepEqual(kick.zoom_times, [kick.events[0].at]);
+  // A content-safe kick reduced to ×1.037 still counts; a zoom out counts too.
+  assert.equal(analyzeZoom(zoomClip(kickAt(1.037)), 144, 256, 30).events.length, 1);
+  const out = analyzeZoom(zoomClip(kickAt(1, 1.05)), 144, 256, 30).events;
+  assert.equal(out.length, 1);
+  assert.ok(out[0].scale < 0.96);
+  // A kick with the ambient drift moving the frame at the same time.
+  assert.equal(analyzeZoom(zoomClip((t) => ({ ...kickAt(1.05)(t), tx: t * 9, ty: -t * 15 })), 144, 256, 30).events.length, 1);
+  // Not zooms: a held frame, a pan and the ambient breathing (×1.02–1.045 over 4 s).
+  assert.deepEqual(analyzeZoom(zoomClip(() => ({ scale: 1 })), 144, 256, 30).events, []);
+  assert.deepEqual(analyzeZoom(zoomClip((t) => ({ tx: t * 60 })), 144, 256, 30).events, []);
+  assert.deepEqual(analyzeZoom(zoomClip((t) => ({ scale: 1.0325 + 0.0125 * Math.sin((2 * Math.PI * t) / 4) }), 60), 144, 256, 30).events, []);
+  // A figure growing in the lower half under a title that holds still is not
+  // a whole-frame zoom, though the per-pair fit alone can mistake it for one.
+  const figure = (t) => {
+    const grow = kickAt(1.12)(t).scale, moving = zoomFrame({ scale: grow, ty: 40 * (grow - 1) }), held = zoomFrame({ scale: 1 });
+    const out = new Uint8Array(144 * 256);
+    out.set(held.subarray(0, 144 * 100));
+    out.set(moving.subarray(144 * 100), 144 * 100);
+    return out;
+  };
+  assert.deepEqual(analyzeZoom(series(Array.from({ length: 30 }, (_, f) => figure(f / 30))), 144, 256, 30).events, []);
+  // A cut between two unrelated frames is skipped when it is a known cut.
+  const cut = series([...Array.from({ length: 10 }, () => zoomFrame({ scale: 1 })), ...Array.from({ length: 10 }, () => zoomFrame({ scale: 1.3, tx: 20 }))]);
+  assert.deepEqual(analyzeZoom(cut, 144, 256, 30, { cutTimes: [10 / 30] }).events, []);
+  assert.equal(analyzeZoom(Buffer.alloc(10), 144, 256, 30).events.length, 0, "too few frames");
+  assert.deepEqual(zoomDetectGrid(1080, 1920), { width: 144, height: 256 });
+  assert.deepEqual(zoomDetectGrid(1920, 1080), { width: 256, height: 144 });
+});
+
+test("cameraMoves counts the 30 fps zoom events alongside shifts and flow moves", () => {
+  const camera = cameraMoves({ still_share: 0.1, shift_times: [1], zoom_times: [2.3, 6] }, { samples: [{ at_seconds: 6.1, camera: { kind: "pan" } }] });
+  assert.deepEqual(camera, { count: 3, events: [{ at: 1, kind: "shift" }, { at: 2.3, kind: "zoom" }, { at: 6, kind: "zoom" }] });
+});
 
 test("block matching is sub-pixel, so the flow velocity is continuous rather than quantised", () => {
   // The same texture panning 1.0, 1.3, 1.6 and 2.2 px a frame (on the 36-px

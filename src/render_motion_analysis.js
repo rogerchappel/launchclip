@@ -53,9 +53,20 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     "-vf", `fps=${flowFps},scale=${grid.width}:${grid.height}:flags=area,format=gray`,
     "-an", "-f", "rawvideo", "pipe:1"
   ]);
+  // Zoom kicks are too quick for the 10 fps flow (a 0.12 s punch carries
+  // edge blocks past its search radius) and a centred one has no shift for
+  // phase correlation: a third pass reads every frame at 30 fps and fits a
+  // scale about the centre (analyzeZoom).
+  const zoomGrid = zoomDetectGrid(Number(video.width), Number(video.height));
+  const rawZoom = await runRaw("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-i", resolved,
+    "-vf", `fps=${ZOOM_DETECT.fps},scale=${zoomGrid.width}:${zoomGrid.height}:flags=area,format=gray`,
+    "-an", "-f", "rawvideo", "pipe:1"
+  ]);
   const opticalFlow = analyzeBlockMotion(Buffer.isBuffer(rawFlow.stdout) ? rawFlow.stdout : Buffer.from(rawFlow.stdout ?? "", "binary"), grid.width, grid.height, flowFps, { ...options, cutTimes: cuts, velocityScale: grid.velocityScale });
   const stillness = analyzeStillness(Buffer.isBuffer(rawStill.stdout) ? rawStill.stdout : Buffer.from(rawStill.stdout ?? "", "binary"), stillGrid.width, stillGrid.height, STILLNESS.fps, options);
-  const camera = cameraMoves(stillness, opticalFlow);
+  const zoom = analyzeZoom(Buffer.isBuffer(rawZoom.stdout) ? rawZoom.stdout : Buffer.from(rawZoom.stdout ?? "", "binary"), zoomGrid.width, zoomGrid.height, ZOOM_DETECT.fps, { cutTimes: cuts });
+  const camera = cameraMoves({ ...stillness, zoom_times: zoom.zoom_times }, opticalFlow);
   const shotDurations = boundariesToDurations([0, ...cuts, duration]);
   return {
     schema_version: "launchclip.render-motion.v1",
@@ -81,8 +92,10 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
       camera_moves: camera.count,
       camera_moves_per_minute: camera.count == null ? null : rate(camera.count, duration),
       camera_move_events: camera.events,
+      zoom_events: zoom.events,
       energy_per_second: stillness.energy_per_second,
-      stillness: stillness.method
+      stillness: stillness.method,
+      zoom: zoom.method
     },
     optical_flow: opticalFlow,
     family: classifyMotionFamily({ cut_rate_per_minute: rate(cuts.length, duration), hold_ratio: series.hold_ratio, motion_bursts_per_minute: rate(series.bursts.length, duration) })
@@ -395,15 +408,187 @@ export function globalMotion(moving, tracked, width, height) {
   return null;
 }
 
+// Zoom detection (analyzeZoom): every frame pair at 30 fps on a grid with a
+// 144 px short side, blocks of 8 px every 12 px, matched within ±4 px to a
+// sub-pixel shift. One shift plus one scale about the centre is fitted to
+// the matched textured blocks (robustScaleShift: outliers dropped in passes
+// down to `outlier` px); a pair counts when at least minBlocks and minShare
+// of them fit within `residual` px RMS and the fit spans minQuadrants
+// quadrants of the frame. A candidate is a window of `window` seconds whose
+// scale changes by at least minScale (log): a ×1.05 kick in 0.12 s changes
+// ln 0.049, the kinetic feel's ambient breathing at most about 0.004 in
+// 0.2 s.
+// Each candidate window is then verified end to end (verifyZoom): the
+// frames either side of it matched within ±verifyRadius px, one fit holding
+// for verifyShare of the textured blocks (outliers beyond verifyOutlier px)
+// within verifyResidual px RMS, and blocks at least farShare of the short
+// side from the centre fitting in minQuadrants quadrants. verifyShare is
+// under a half so a zoom of the picture under a held title, caption or
+// presenter layer still counts (the references zoom their illustration under
+// a fixed headline); a figure moving under a held title does not fit one
+// scale that well.
+export const ZOOM_DETECT = Object.freeze({ fps: 30, shortSide: 144, block: 8, stride: 12, searchRadius: 4, texture: 6, residualPerPixel: 24, outlier: 1, residual: 0.6, minBlocks: 16, minShare: 0.5, minQuadrants: 3, window: 0.2, minScale: 0.025,
+  verifyRadius: 10, verifyOutlier: 1.5, verifyResidual: 0.8, verifyShare: 0.45, farShare: 0.3 });
+
+/** The zoom grid for a width × height video (144 px short side, the video's aspect). */
+export function zoomDetectGrid(width, height) {
+  const w = Number(width) > 0 ? Number(width) : 9, h = Number(height) > 0 ? Number(height) : 16;
+  const even = (value) => Math.max(2, 2 * Math.round(value / 2));
+  const short = ZOOM_DETECT.shortSide;
+  return w >= h ? { width: even(short * w / h), height: short } : { width: short, height: even(short * h / w) };
+}
+
+// Least squares d = t + s·(p − c) over the matches → {tx, ty, s, rms}.
+function fitScaleShift(matches, cx, cy) {
+  const n = matches.length;
+  let rx = 0, ry = 0, vx = 0, vy = 0;
+  for (const m of matches) { rx += m.x - cx; ry += m.y - cy; vx += m.dx; vy += m.dy; }
+  rx /= n; ry /= n; vx /= n; vy /= n;
+  let num = 0, den = 0;
+  for (const m of matches) {
+    const ax = m.x - cx - rx, ay = m.y - cy - ry;
+    num += ax * (m.dx - vx) + ay * (m.dy - vy);
+    den += ax * ax + ay * ay;
+  }
+  const s = den > 0 ? num / den : 0;
+  const tx = vx - s * rx, ty = vy - s * ry;
+  let error = 0;
+  for (const m of matches) error += (m.dx - tx - s * (m.x - cx)) ** 2 + (m.dy - ty - s * (m.y - cy)) ** 2;
+  return { tx, ty, s, rms: Math.sqrt(error / n) };
+}
+
+// fitScaleShift with outliers dropped in passes (4 px, 2 px, then `outlier`
+// px from the previous fit), so a fast zoom whose first fit is pulled about
+// by a few bad matches still settles on the frame's scale. → {fit, inliers}
+function robustScaleShift(matches, cx, cy, outlier) {
+  let inliers = matches, fit = fitScaleShift(matches, cx, cy);
+  for (const limit of [4, 2, outlier]) {
+    const kept = matches.filter((m) => Math.hypot(m.dx - fit.tx - fit.s * (m.x - cx), m.dy - fit.ty - fit.s * (m.y - cy)) <= limit);
+    if (kept.length < 3) return { fit, inliers: kept };
+    inliers = kept;
+    fit = fitScaleShift(inliers, cx, cy);
+  }
+  return { fit, inliers };
+}
+
+/**
+ * Whole-frame scale changes in raw grey frames (width × height bytes each,
+ * sampled at fps): the per-pair scale about the centre and the zoom events.
+ * → {zoom_times, events: [{at, scale}], samples: [{at_seconds, scale}], method}
+ * (scale: the event's change over its window, e.g. 1.05; samples only for
+ * pairs whose fit held)
+ */
+export function analyzeZoom(rawFrames, width, height, fps = ZOOM_DETECT.fps, options = {}) {
+  const Z = { ...ZOOM_DETECT, ...(options.zoom ?? {}) };
+  const frameSize = width * height;
+  const count = frameSize > 0 ? Math.floor((rawFrames?.length ?? 0) / frameSize) : 0;
+  const method = { method: "scale-fit", sample_fps: fps, grid: { width, height }, block_size: Z.block, stride: Z.stride, search_radius: Z.searchRadius, window_seconds: Z.window, min_scale: Z.minScale };
+  if (count < 2) return { zoom_times: [], events: [], samples: [], method };
+  const cutTimes = options.cutTimes ?? [];
+  const radius = Z.searchRadius, block = Z.block;
+  const sads = new Float64Array((2 * radius + 1) ** 2);
+  const cx = width / 2, cy = height / 2;
+  const logs = new Float64Array(count - 1);
+  const samples = [];
+  for (let pair = 0; pair < count - 1; pair += 1) {
+    const at = (pair + 1) / fps;
+    if (cutTimes.some((time) => Math.abs(time - at) <= 1 / fps)) continue;
+    const a = pair * frameSize, b = a + frameSize;
+    let tracked = 0;
+    const matches = [];
+    for (let y = radius; y + block + radius <= height; y += Z.stride) {
+      for (let x = radius; x + block + radius <= width; x += Z.stride) {
+        if (blockTexture(rawFrames, a, width, x, y, block) < Z.texture) continue;
+        tracked += 1;
+        const match = searchBlock(rawFrames, a, b, width, x, y, block, radius, sads);
+        if (match.bestSad > Z.residualPerPixel * block * block) continue;
+        matches.push({ x: x + block / 2, y: y + block / 2, dx: match.bestDx + match.ox, dy: match.bestDy + match.oy });
+      }
+    }
+    if (matches.length < Z.minBlocks) continue;
+    const { fit, inliers } = robustScaleShift(matches, cx, cy, Z.outlier);
+    if (inliers.length < Z.minBlocks || inliers.length < tracked * Z.minShare || fit.rms > Z.residual) continue;
+    const quadrants = new Set(inliers.map((m) => (m.x >= cx ? 1 : 0) + (m.y >= cy ? 2 : 0)));
+    if (quadrants.size < Z.minQuadrants) continue;
+    // d = t + s·(p − c) maps the earlier frame to the later one: the later
+    // frame is the earlier scaled by 1 + s.
+    logs[pair] = Math.log(1 + fit.s);
+    samples.push({ at_seconds: round(at, 4), scale: round(1 + fit.s, 5) });
+  }
+  const span = Math.max(1, Math.round(Z.window * fps));
+  const candidates = [];
+  let open = null;
+  for (let start = 0; start < logs.length; start += 1) {
+    let sum = 0;
+    for (let i = start; i < Math.min(logs.length, start + span); i += 1) sum += logs[i];
+    if (Math.abs(sum) >= Z.minScale) {
+      if (!open) {
+        // The event starts at the window's first pair that carries the move.
+        let first = start;
+        while (first < start + span - 1 && Math.abs(logs[first]) < Z.minScale / span) first += 1;
+        open = { first, sum };
+        candidates.push(open);
+      }
+    } else open = null;
+  }
+  // Each candidate is checked end to end: the frame before its first move
+  // against the frame where its scale peaks within the window (a kick's
+  // spring may turn back inside it), where a real zoom has moved the frame's
+  // far blocks by several px, so content that holds still (a title over a
+  // moving figure) cannot pass for a zoom.
+  const events = [];
+  for (const candidate of candidates) {
+    let sum = 0, peak = 0, at = candidate.first;
+    for (let i = candidate.first; i < Math.min(logs.length, candidate.first + span); i += 1) {
+      sum += logs[i];
+      if (Math.abs(sum) > Math.abs(peak)) { peak = sum; at = i; }
+    }
+    const from = candidate.first, to = Math.min(count - 1, at + 1);
+    const scale = verifyZoom(rawFrames, width, height, from * frameSize, to * frameSize, Z);
+    if (scale != null && Math.abs(Math.log(scale)) >= Z.minScale) events.push({ at: round((candidate.first + 1) / fps, 4), scale: round(scale, 4) });
+  }
+  return { zoom_times: events.map((event) => event.at), events, samples, method };
+}
+
+/**
+ * The scale about the centre between two frames (offsets a, b), or null when
+ * no single shift-plus-scale explains at least verifyShare of the textured
+ * blocks within verifyResidual px RMS, with blocks far from the centre (at
+ * least farShare of the short side) fitting in minQuadrants quadrants.
+ */
+function verifyZoom(buffer, width, height, a, b, Z) {
+  const radius = Z.verifyRadius, block = Z.block;
+  const sads = new Float64Array((2 * radius + 1) ** 2);
+  const cx = width / 2, cy = height / 2, far = Z.farShare * Math.min(width, height);
+  const matches = [];
+  let tracked = 0;
+  for (let y = radius; y + block + radius <= height; y += Z.stride) {
+    for (let x = radius; x + block + radius <= width; x += Z.stride) {
+      if (blockTexture(buffer, a, width, x, y, block) < Z.texture) continue;
+      tracked += 1;
+      const match = searchBlock(buffer, a, b, width, x, y, block, radius, sads);
+      if (match.bestSad > Z.residualPerPixel * block * block) continue;
+      matches.push({ x: x + block / 2, y: y + block / 2, dx: match.bestDx + match.ox, dy: match.bestDy + match.oy });
+    }
+  }
+  if (matches.length < Z.minBlocks) return null;
+  const { fit, inliers } = robustScaleShift(matches, cx, cy, Z.verifyOutlier);
+  if (inliers.length < Z.minBlocks || inliers.length < tracked * Z.verifyShare || fit.rms > Z.verifyResidual) return null;
+  const quadrants = new Set(inliers.filter((m) => Math.hypot(m.x - cx, m.y - cy) >= far).map((m) => (m.x >= cx ? 1 : 0) + (m.y >= cy ? 2 : 0)));
+  return quadrants.size >= Z.minQuadrants ? 1 + fit.s : null;
+}
+
 /**
  * Camera moves: whole-frame shifts from phase correlation on the stillness
- * grid and pans or zooms from the optical flow, merged into events that are
- * at least 0.25 s apart. → {count, events: [{at, kind}]}
+ * grid, pans or zooms from the optical flow and zooms from the 30 fps scale
+ * fit (stillness.zoom_times, analyzeZoom), merged into events that are at
+ * least 0.25 s apart. → {count, events: [{at, kind}]}
  */
 export function cameraMoves(stillness, flow, mergeSeconds = 0.25) {
-  if (stillness?.still_share == null && !(flow?.samples ?? []).length) return { count: null, events: [] };
+  if (stillness?.still_share == null && !(flow?.samples ?? []).length && !(stillness?.zoom_times ?? []).length) return { count: null, events: [] };
   const raw = [
     ...(stillness?.shift_times ?? []).map((at) => ({ at: Number(at), kind: "shift" })),
+    ...(stillness?.zoom_times ?? []).map((at) => ({ at: Number(at), kind: "zoom" })),
     ...(flow?.samples ?? []).filter((sample) => sample.camera).map((sample) => ({ at: Number(sample.at_seconds), kind: sample.camera.kind }))
   ].filter((entry) => Number.isFinite(entry.at)).sort((a, b) => a.at - b.at);
   const events = [];

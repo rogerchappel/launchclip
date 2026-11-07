@@ -10,7 +10,7 @@ A seed profile has no references yet: its ranges were set by hand, conservativel
 
 Animated explainer reel: motion, 30–75 s, 9:16.
 
-- Provenance: measured (measured 2026-11-07T07:30:59.827Z)
+- Provenance: measured (measured 2026-11-07T09:59:19.607Z)
 - References: 2
 - Note: Measured from 2 reference videos (public-statistics). Only statistics are stored; coverage is estimated from pixels. With fewer than 10 references, p10 and p90 are the smallest and largest reference values. Left out: face_time, text_hold_seconds. Two public faceless animated explainer reels (9:16, 62–70 s). face_time is left out because the face probe reads the drawn host as a presenter; text_hold_seconds because the designed-region estimate sees the whole illustrated frame as one graphic.
 

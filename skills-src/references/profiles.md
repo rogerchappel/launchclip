@@ -71,7 +71,7 @@ A faceless animated explainer for Reels, Shorts and TikTok, 30–75 s in 9:16: i
 | change_energy_p50 | 1.619 | 2.9401 | 4.2612 |
 | first_motion_seconds | 0 | 0 | 0 |
 | hook_events | 4 | 4 | 4 |
-| camera_moves_per_min | 8.629 | 9.4425 | 10.256 |
+| camera_moves_per_min | 10.256 | 13.7575 | 17.259 |
 
 ## explainer-motion
 
