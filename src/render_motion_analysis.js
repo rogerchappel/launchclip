@@ -788,10 +788,11 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   const familyEnergyFloor = expected.minimum_change_energy_p50_by_family?.[motionFamily];
   const minimumChangeEnergy = familyEnergyFloor ?? expected.minimum_change_energy_p50;
   if (minimumChangeEnergy != null && below(metrics.motion?.change_energy?.p50 ?? 0, minimumChangeEnergy)) {
-    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(3)}; expected at least ${Number(minimumChangeEnergy).toFixed(3)} for ${motionFamily}.`));
+    const source = familyEnergyFloor != null ? `the ${motionFamily} floor` : "the profile's floor";
+    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(3)}; expected at least ${Number(minimumChangeEnergy).toFixed(3)} (${source}). Raise it with a livelier ambient camera (motion.feel ambient scale and period), camera.kicks on stressed words, and more scene changes or big panel entrances.`));
   }
   if (expected.minimum_flow_velocity_p90 != null && below(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0, expected.minimum_flow_velocity_p90)) {
-    findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s.`));
+    findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s. Fast moves are too short or too few: lengthen whip-pans toward 0.4 s, add sideways sweeps or drifts with travel.`));
   }
   if (expected.minimum_cut_rate_per_minute != null && Number(metrics.cut_rate_per_minute ?? 0) < Number(expected.minimum_cut_rate_per_minute)) {
     findings.push(finding("editing", "major", `Only ${Number(metrics.cut_rate_per_minute ?? 0).toFixed(1)} cuts per minute were detected; expected at least ${Number(expected.minimum_cut_rate_per_minute).toFixed(1)}.`));
