@@ -4,6 +4,7 @@ import path from "node:path";
 import { hyperframesInvocation } from "../toolchain.js";
 import { adapterError, captureCommand, runCommand, structuredOk } from "./command.js";
 import { HYPERFRAMES_FFMPEG_TIMEOUT_MS, hyperframesEnv } from "./hyperframes_env.js";
+import { blendSubframes } from "../motion_blur.js";
 
 // HyperFrames renderer adapter (docs/KIT_CONTRACTS.md "Renderer adapter").
 // It wraps the same CLI invocations used by production_render.js,
@@ -34,12 +35,18 @@ export function createHyperframesRenderer(defaults = {}) {
       return args;
     },
 
+    // opts.motionBlur {samples, fps}: render samples × fps, then blend each
+    // output frame from the sub-frames centred on it (src/motion_blur.js).
     async render(projectDir, outFile, opts = {}) {
       const project = path.resolve(projectDir);
-      await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
-      const result = await hf(runner(opts), this.renderArgs(project, outFile, opts), { cwd: project, env: hyperframesRenderEnv() });
+      const output = path.resolve(outFile);
+      await mkdir(path.dirname(output), { recursive: true });
+      const blur = opts.motionBlur?.samples > 1 ? opts.motionBlur : null;
+      const target = blur ? `${output}.subframes.mp4` : output;
+      const result = await hf(runner(opts), this.renderArgs(project, target, blur ? { ...opts, fps: blur.fps * blur.samples } : opts), { cwd: project, env: hyperframesRenderEnv() });
       if (!result.ok) throw adapterError("HyperFrames render", result);
-      return { renderer: "hyperframes", output: path.resolve(outFile), raw: result };
+      if (blur) await (opts.blend ?? blendSubframes)(target, output, { samples: blur.samples, fps: blur.fps });
+      return { renderer: "hyperframes", output, raw: result, ...(blur ? { motionBlur: { samples: blur.samples } } : {}) };
     },
 
     async still(projectDir, seconds, outFile, opts = {}) {

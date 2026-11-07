@@ -16,6 +16,7 @@
 // rewritten: synthesised voice, words, captions and the mix are set on a copy
 // written to .launchclip/finish/storyboard.json (resolved:
 // .launchclip/finish/story.resolved.json), which is what gets rendered.
+import { motionBlurSamples } from "./motion_blur.js";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -1588,7 +1589,8 @@ async function renderStory(ctx, adapter, { output, scenes = [], previewScene = n
       const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project, ...extra });
       ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
       ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-      await adapter.render(hfDir, file, { quality: ctx.quality, workers: ctx.concurrency });
+      const samples = motionBlurSamples(ctx.resolved);
+      await adapter.render(hfDir, file, { quality: ctx.quality, workers: ctx.concurrency, ...(samples ? { motionBlur: { samples, fps: ctx.resolved?.format?.fps ?? 30 } } : {}) });
     };
     return renderWithSegments({
       ...common,
