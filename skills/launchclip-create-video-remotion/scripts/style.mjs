@@ -63,6 +63,20 @@ export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 
 const SEED_HEX = /^[0-9a-f]{8}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export const STYLE_DIALS = Object.freeze(['energy', 'density', 'playfulness', 'polish']);
+/**
+ * The story motion keys a pack's motion sets, or null: the grammar, a story
+ * feel named by a string ("kinetic"; a seeded pack's feel object is the
+ * planners' summary, kit/core/style-feel.mjs, and stays in the pack) and
+ * motion blur.
+ */
+function storyMotionOf(motion) {
+  const out = {};
+  if (motion.grammar !== undefined) out.grammar = motion.grammar;
+  if (typeof motion.feel === 'string') out.feel = motion.feel;
+  if (motion.blur !== undefined) out.blur = motion.blur;
+  return Object.keys(out).length ? out : null;
+}
+
 export const STYLE_CAPTION_LANES = Object.freeze(['motion', 'voiceover-motion', 'footage-led']);
 export const STYLE_FRAME_POSITIONS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
 export { CADENCE_PROFILE_SCHEMA };
@@ -651,12 +665,13 @@ export function applyStyle(story, pack, options = {}) {
   }
 
   // Motion grammar, camera, ambient, layout: pass-through data filled per key.
-  // A story's motion holds only the grammar (story.mjs validateMotion), so
-  // other motion keys a pack carries (a reference draft's
-  // transition_preference) stay in the pack for the planner.
+  // A story's motion holds the grammar, a named feel and motion blur
+  // (storyMotionOf), so other motion keys a pack carries (a reference
+  // draft's transition_preference, a seeded feel summary) stay in the pack
+  // for the planner.
   for (const key of ['motion', 'camera', 'ambient', 'layout']) {
     if (!isObject(pack[key])) continue;
-    const source = key === 'motion' ? (pack.motion.grammar === undefined ? null : { grammar: pack.motion.grammar }) : pack[key];
+    const source = key === 'motion' ? storyMotionOf(pack.motion) : pack[key];
     if (!source) continue;
     if (out[key] === undefined) { out[key] = clone(source); applied.push(key); }
     else if (isObject(out[key])) fill(out[key], source, key);

@@ -212,7 +212,8 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'title-decompose', intents: ['claim', 'proof'], when: 'unpacks a paper or report title word by word ("the paper\'s title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss', patterns: ['\\b(the )?(paper|study|report)(\'s)? (title|is called|is titled)\\b', '\\bin plain (english|words)\\b', '\\bword by word\\b'] },
   { module: 'feynman-diagram', intents: ['process', 'claim'], when: 'describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line; particle physics only (any other line sketch is a line-diagram)', patterns: ['\\b(one|two)[- ]loop\\b', '\\bfeynman\\b', '\\b(self[- ]energy|self[- ]mass|graviton|photon|gluon|quantum correction)s?\\b'] },
   { module: 'line-diagram', intents: ['process', 'claim'], when: 'explains how something is laid out, built or fits together ("square it up with string lines", "the beam sits on the post", "the planned roof line", "a floor plan"): a labelled line sketch on a drafting plate that fills the frame and draws itself stroke by stroke; few, short labels', patterns: ['\\b(string lines?|floor ?plan|cross[- ]section|blueprint|wiring diagram|site plan)\\b', '\\b(beams?|joists?|bearers?|footings?|stumps?|rafters?|stirrups?)\\b', '\\bsquar(e|ing) (it|them|the \\w+)( up)?\\b'] },
-  { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] }
+  { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] },
+  { module: 'ui-scene', when: 'shows a software tool doing its job on screen (an editor timeline, a terminal, a search, a download, a locked or unlocked feature): built as interface panels that change on the words', patterns: ['\\b(on|in) (your|the|my) (timeline|terminal|editor|dashboard)\\b', '\\bscans? (your|the) (timeline|repo|codebase|project)\\b', '\\bsearch(es)? and download', '\\bunlocks?\\b', '\\bfrom (the )?(terminal|command line)\\b'] }
 ].map((row) => Object.freeze({ ...row, patterns: Object.freeze(row.patterns) })));
 
 /** The registry module a phrase-table row maps to (its fallback when the module is planned). */
@@ -495,6 +496,19 @@ export function satisfyingLines() {
     'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
     'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
     'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
+  ];
+}
+
+// Interface scenes (kit/core/catalog-i-ui.mjs): the director lays out tuned
+// UI components that change on the words.
+export function interfaceLines() {
+  return [
+    'Show the tool working, not a picture of it: a ui-scene places interface components (params.elements) on a 1080-wide design canvas (1920 wide in 16:9) and each one enters, changes and resolves on the words. Every time (an element\'s at and out, a beat\'s at, any prop ending in At) is seconds from the scene start or a word anchor ("word:exact", "word:it#2-0.1").',
+    'One hero panel per scene (a window, timeline, terminal, lock-cards, results, card-wall, downloads, meter, frame-ruler, scan-plane, comment), a headline above it (two or three type sizes: a 100–170 px hero, a 60–96 px kicker) and one or two chips that slam in on the key word. Put something on screen by 0.6 s; open on a built panel, not an empty one, and let parts arrive in the first second.',
+    'Elements sit on the stage: x 40–1040, y 240 to the safe zone\'s foot, clear of the caption band (y 1190–1420 in 9:16); a decorative waveform or card wall may set bleed: true. Settled elements hold still: life comes from entrances (enter: slam for the key word, zoom for a panel, left/right/up/drop/pop for parts), beats ({at, set: {...props}}: a chip flips its text, a headline its tone) and the shared camera. Use the alert tone for the broken "before" state and the accent for the fix.',
+    'Components and props: headline {text ≤ 40, size, tone ink|muted|accent|alert, glow, align, swap {at, text, size}}; chip {text, tone, fill solid|outline|quiet, size, glow, font display|mono}; waveform {bars, seed, tone, clipAt, draw, shape even|rise|decay|pulse}; window {title, sub, right, ring} + children (rects relative to the window); stack + children; timeline {title, sub, tracks [{label, kind video|audio|sfx, name, clips [{label, x, width (0–1), tone, rotate, at, flipAt, flipLabel, flipTone}]}], clipAt, meter {level, alertAt, level2, level2At}, playhead {from, to, at, dur}}; lock-cards {title, sub, cards [{no, name, sub, icon, tag, at, unlockAt, shakeAt}], counter, counterLabel, focus}; meter {title, unit, from, to, settleAt, rangeLabel, history}; marker-snap {title, marker, clip, from, to, snapAt, badge}; terminal {title, sub, prompt, typeAt, cps, lines [{at, key, text}], output {at, label, shape, badge}}; results {query, typeAt, layout fan|row, cards [{label, sub, badge, tone, at}]}; card-wall {cards [{label, tag, sub}], count, cols, highlightAt, tagTone, ring}; downloads {title, prompt, typeAt, items [{label, sub, pick}], selectAt, doneAt [...], counterLabel}; comment {placeholder, text, typeAt, sendAt, sent, reply, replyAt, links [...]}; frame-ruler {target, start, snapAt, pin, lane, slot {label, dropAt}, counterLabel}; pad-grid {pads [...], cols, runAt, rate}; scan-plane {thumbs, markers [{at, label, x}], scanAt, scanDur} (tilt it with the element\'s tilt {x, y, z}).',
+    'Text is what the script says: tool names, labels and counts come from the brief. Headlines must fit their rect at their size (the module fails a line too wide); shorten the copy rather than shrinking it below about 90 px.',
+    'The signal-ui style fits this look: dark panels, one accent, a coarse dot grid, word-chip captions, the kinetic feel and real motion blur (motion.blur: true renders three sub-frames per frame and blends them, so fast moves smear and settled panels stay sharp), gated against the ui-explainer-reel profile.'
   ];
 }
 
@@ -938,6 +952,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
+    ...section('Interface scenes (ui-scene)', interfaceLines().map((line) => `- ${line}`)),
     ...(isShortFormat(format) ? section('Cover (Shorts)', coverLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
@@ -1039,6 +1054,7 @@ export function storyboardModulesReference() {
     ...section('Long-form look (plates and glass)', glassLookLines().map((line) => `- ${line}`)),
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
+    ...section('Interface scenes (ui-scene)', interfaceLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

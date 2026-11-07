@@ -102,7 +102,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 ## Captions
 
 - Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice, except in the footage-led lane. In the footage-led lane write {"type": "captions"} with no style or preset: the default is the quiet sentence-case quiet-accent preset with one accent word per line; name word-highlight only when the brief asks for loud captions.
-- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, seam-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble, quiet-accent, kinetic-hierarchy, soft-card, tag-chips, serif-accent. With a style pack, write {"type": "captions"} and let the pack choose the preset.
+- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, seam-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, word-chip, bubble, quiet-accent, kinetic-hierarchy, soft-card, tag-chips, serif-accent. With a style pack, write {"type": "captions"} and let the pack choose the preset.
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 
@@ -149,6 +149,15 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.
 - A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.
 - Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.
+
+## Interface scenes (ui-scene)
+
+- Show the tool working, not a picture of it: a ui-scene places interface components (params.elements) on a 1080-wide design canvas (1920 wide in 16:9) and each one enters, changes and resolves on the words. Every time (an element's at and out, a beat's at, any prop ending in At) is seconds from the scene start or a word anchor ("word:exact", "word:it#2-0.1").
+- One hero panel per scene (a window, timeline, terminal, lock-cards, results, card-wall, downloads, meter, frame-ruler, scan-plane, comment), a headline above it (two or three type sizes: a 100–170 px hero, a 60–96 px kicker) and one or two chips that slam in on the key word. Put something on screen by 0.6 s; open on a built panel, not an empty one, and let parts arrive in the first second.
+- Elements sit on the stage: x 40–1040, y 240 to the safe zone's foot, clear of the caption band (y 1190–1420 in 9:16); a decorative waveform or card wall may set bleed: true. Settled elements hold still: life comes from entrances (enter: slam for the key word, zoom for a panel, left/right/up/drop/pop for parts), beats ({at, set: {...props}}: a chip flips its text, a headline its tone) and the shared camera. Use the alert tone for the broken "before" state and the accent for the fix.
+- Components and props: headline {text ≤ 40, size, tone ink|muted|accent|alert, glow, align, swap {at, text, size}}; chip {text, tone, fill solid|outline|quiet, size, glow, font display|mono}; waveform {bars, seed, tone, clipAt, draw, shape even|rise|decay|pulse}; window {title, sub, right, ring} + children (rects relative to the window); stack + children; timeline {title, sub, tracks [{label, kind video|audio|sfx, name, clips [{label, x, width (0–1), tone, rotate, at, flipAt, flipLabel, flipTone}]}], clipAt, meter {level, alertAt, level2, level2At}, playhead {from, to, at, dur}}; lock-cards {title, sub, cards [{no, name, sub, icon, tag, at, unlockAt, shakeAt}], counter, counterLabel, focus}; meter {title, unit, from, to, settleAt, rangeLabel, history}; marker-snap {title, marker, clip, from, to, snapAt, badge}; terminal {title, sub, prompt, typeAt, cps, lines [{at, key, text}], output {at, label, shape, badge}}; results {query, typeAt, layout fan|row, cards [{label, sub, badge, tone, at}]}; card-wall {cards [{label, tag, sub}], count, cols, highlightAt, tagTone, ring}; downloads {title, prompt, typeAt, items [{label, sub, pick}], selectAt, doneAt [...], counterLabel}; comment {placeholder, text, typeAt, sendAt, sent, reply, replyAt, links [...]}; frame-ruler {target, start, snapAt, pin, lane, slot {label, dropAt}, counterLabel}; pad-grid {pads [...], cols, runAt, rate}; scan-plane {thumbs, markers [{at, label, x}], scanAt, scanDur} (tilt it with the element's tilt {x, y, z}).
+- Text is what the script says: tool names, labels and counts come from the brief. Headlines must fit their rect at their size (the module fails a line too wide); shorten the copy rather than shrinking it below about 90 px.
+- The signal-ui style fits this look: dark panels, one accent, a coarse dot grid, word-chip captions, the kinetic feel and real motion blur (motion.blur: true renders three sub-frames per frame and blends them, so fast moves smear and settled panels stay sharp), gated against the ui-explainer-reel profile.
 
 ## Footage layouts (sections)
 
@@ -308,6 +317,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line; particle physics only (any other line sketch is a line-diagram) | feynman-diagram |
 | explains how something is laid out, built or fits together ("square it up with string lines", "the beam sits on the post", "the planned roof line", "a floor plan"): a labelled line sketch on a drafting plate that fills the frame and draws itself stroke by stroke; few, short labels | line-diagram |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
+| shows a software tool doing its job on screen (an editor timeline, a terminal, a search, a download, a locked or unlocked feature): built as interface panels that change on the words | ui-scene |
 
 ## Modules
 
@@ -2339,6 +2349,13 @@ params:
 events: build
 variants: slabs (default), flat
 
+### ui-scene (keeps captions)
+An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips), each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.
+params:
+- elements: [{kind (headline, chip, waveform, window, timeline, lock-cards, stack, meter, terminal, results, card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid, scan-plane), rect {x, y, width, height} design px inside the safe zone, at (s), enter (up, down, left, right, zoom, slam, pop, drop, fade), out (s, optional), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, bleed, cue}] (at most 120 in all)
+- alert: the "before" / broken-state colour, #rrggbb (default #ff4b3e)
+events: enter, beat
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.
 params:
@@ -2544,6 +2561,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
+| ui-scene | 2 s | 0.5 s | scene − 0.65 s | the first element enters by 0.6 s; every time is seconds from the scene start, inside the scene; a child enters no earlier than its parent |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
