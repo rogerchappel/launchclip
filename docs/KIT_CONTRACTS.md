@@ -2297,12 +2297,19 @@ a pure function of time, in both renderers.
   on its own) and keeps the exit.
 - **Entrances**: `cut` puts an element on screen at `at` as it settles, so a
   scene that opens the video shows a built frame at frame 0.
+- **Text and panels**: headlines and chips are checked at the box their text
+  sets in (`uiTextBox`): inside the platform safe zone and clear of the
+  caption band. Panels may use the whole stage and run under the captions;
+  a tilted panel is checked at its footprint (`uiTiltBox`). Panels below
+  their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail.
 - **Captions**: modules get `ctx.captions`, the story's captions position
   (`storyCaptionPosition`: auto, middle, top); the band elements avoid is
   placed by the same `captionBandAt` the layout check uses.
-- **Layout**: `model.layout.rect` is the largest top-level, non-bleed
-  element (the hero panel) and `model.layout.parts` the others, each with its
-  own window, so the layout checks see every element.
+- **Layout**: text boxes are layout `text`, panels layout `media` (no
+  safe-zone or caption-band check); `model.layout.rect` is the largest text
+  box (else the largest panel, role media) and `model.layout.parts` the
+  others, each with its own window. `model.layout.drift` is false: settled
+  elements hold still.
 - **Gates**: the text-hold gate reads a ui-scene by its headlines only
   (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%
   of the canvas entering after 0.3 s as a visual change, as the pixel
@@ -2314,7 +2321,9 @@ a pure function of time, in both renderers.
 HyperFrames adapter renders at `fps × samples` and blends each output frame
 from the sub-frames centred on it (`tmix`, then `select`), a 240° shutter at
 3 samples: fast moves smear along their path and settled panels stay sharp.
-Render time grows with the samples. `story.motion` is part of the segment
+Render time grows with the samples. With blur on, the HyperFrames compiler
+snaps caption times to half frames (`snapCaptionChunks`), so a word change
+falls between two frames' sub-frames and no frame blends two words. `story.motion` is part of the segment
 hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
 pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
 

@@ -34,7 +34,7 @@ import { shotZooms, zoomOps } from '../core/zooms.mjs';
 import { feelGsap, feelPlan } from '../core/kinetic.mjs';
 import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from '../core/dot-wipe.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords, snapCaptionChunks } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from '../core/medium.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
@@ -519,7 +519,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   let captionWords = [];
   const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
-    const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
+    const loaded = await loadCaptionChunks(story, overlay, sourceDir, warnings);
+    // Motion blur blends sub-frames: caption changes go on half frames so no frame shows two words.
+    const blurred = story.motion?.blur === true || (story.motion?.blur && typeof story.motion.blur === 'object');
+    const chunks = loaded && blurred ? snapCaptionChunks(loaded, format.fps) : loaded;
     if (chunks?.length) {
       captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);

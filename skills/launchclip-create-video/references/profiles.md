@@ -193,7 +193,7 @@ A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that 
 | hold_ratio | 56% | 66% | 76% |
 | motion_bursts_per_min | 22.2547 | 26.182 | 30.1093 |
 | change_energy_p50 | 1.9978 | 2.3503 | 2.7028 |
-| first_motion_seconds | 0 | 0 | 0 |
+| first_motion_seconds | 0 | 0 | 0.35 |
 | hook_events | 1 | 2 | 3 |
 | still_share | 9% | 11% | 12% |
 | longest_still_seconds | 0.9919 | 1.167 | 1.342 |
