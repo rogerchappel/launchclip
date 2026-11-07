@@ -1,0 +1,93 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Why caches feel instant (golden, 9:16 kinetic feel)",
+  "notes": "Golden story for the kinetic feel (kit/core/feel.mjs, kit/core/kinetic.mjs): an ambient camera that drifts and breathes under every shot in cuts mode, two explicit zoom kicks, springy entrances, a tuned 0.26 s whip-pan and a dot-wipe on a paper background. No narration and no paid calls. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 12,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f2eee6",
+      "primary": "#e2412b",
+      "accent": "#1f6feb",
+      "ink": "#f2eee6",
+      "paper": "#151515"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": "kinetic"
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 1.9
+      },
+      {
+        "at": 6.1,
+        "scale": 1.15,
+        "origin": {
+          "x": 0.5,
+          "y": 0.45
+        }
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "params": {
+        "headline": "Why does the second visit feel instant?",
+        "emphasis": "instant",
+        "kicker": "Cache"
+      }
+    },
+    {
+      "id": "s2",
+      "module": "stat-card",
+      "start": 4,
+      "end": 8,
+      "energy": 2,
+      "in": {
+        "type": "whip-pan",
+        "dur": 0.26,
+        "direction": "left"
+      },
+      "params": {
+        "value": "2.4 s",
+        "label": "first load, every file over the network",
+        "source": "Illustrative timing"
+      }
+    },
+    {
+      "id": "s3",
+      "module": "concept-card",
+      "start": 8,
+      "end": 12,
+      "energy": 2,
+      "in": {
+        "type": "dot-wipe",
+        "dur": 0.5
+      },
+      "params": {
+        "text": "Served from disk",
+        "icon": "rocket",
+        "sub": "The second visit skips the network"
+      }
+    }
+  ]
+}

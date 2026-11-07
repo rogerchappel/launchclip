@@ -45,6 +45,10 @@ export const CAMERA_PARITY = Object.freeze([
   // left full-size on the root: 0.31 in the zoom). 0.9 as the d-evidence-clip
   // fixture: Chrome scales the testsrc <video> differently in each renderer
   // (0.948 settled, 0.910 at 1.5×); the frame, tag and cursor match.
+  // The kinetic feel (kit/core/kinetic.mjs, kit/core/dot-wipe.mjs): ambient
+  // drift at rest, inside both kicks, mid whip-pan and through the dot wipe
+  // (cover, full cover before the swap, reveal). Measured 0.980–0.996.
+  {id: 'kinetic-feel-9x16', threshold: 0.97, times: [1.0, 2.0, 2.1, 4.1, 6.2, 8.1, 8.2, 8.4, 11.0]},
   {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
     files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);
