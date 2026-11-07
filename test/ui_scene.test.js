@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveModule } from "@launchclip/core/modules.mjs";
+import { uiReadingWords } from "@launchclip/core/catalog-i-ui.mjs";
 import { resolveAnchor, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
 import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
 import { emitCatalogH } from "../kit/hyperframes/catalog-h.mjs";
@@ -11,8 +12,8 @@ const BRAND = { colors: { bg: "#0a0b08", primary: "#c8ff3a", accent: "#c8ff3a", 
 const PANEL = { kind: "timeline", rect: { x: 50, y: 400, width: 980, height: 760 }, at: 0, enter: "zoom", props: { title: "sequence_01", clipAt: 1.5, tracks: [{ label: "A1", kind: "audio" }, { label: "A2", kind: "sfx", clips: [{ label: "BOING!", x: 0.02, width: 0.3, tone: "alert", at: 0.6, flipAt: 3, flipLabel: "whoosh.wav" }] }] } };
 const HEADLINE = { kind: "headline", rect: { x: 60, y: 250, width: 960, height: 130 }, at: 0.1, enter: "slam", props: { text: "SOUNDS CHEAP", tone: "alert", size: 118 }, beats: [{ at: 3, set: { text: "REAL SOUND", tone: "accent" }, cue: "success" }] };
 
-function resolve(elements, { width = 1080, height = 1920 } = {}) {
-  const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 } };
+function resolve(elements, { width = 1080, height = 1920, captions = null } = {}) {
+  const story = { schema: "launchclip.story.v1", lane: "motion", format: { width, height, fps: 30, duration: 10 }, brand: BRAND, scenes: [], resolved: { duration: 10, fps: 30 }, ...(captions ? { overlays: [{ type: "captions", position: captions }] } : {}) };
   const scene = { id: "s1", module: "ui-scene", start: 1, end: 6, params: { elements } };
   return resolveModule(scene, { ...story, scenes: [scene] });
 }
@@ -30,13 +31,27 @@ test("ui-scene: resolves to a painted host spec with the brand's theme, and cues
   assert.equal(spec.theme.alert, "#ff4b3e");
   assert.equal(spec.elements.length, 2);
   const cues = model.events.filter((event) => event.cue).map((event) => [event.name, event.time, event.cue]);
-  assert.deepEqual(cues, [["enter", 1, "whoosh-soft"], ["enter", 1.1, "hit-soft"], ["beat", 4, "success"]]);
+  assert.deepEqual(cues, [["enter", 1, "whoosh-soft"], ["enter", 1.1, "impact"], ["beat", 4, "success"]]);
 });
 
 test("ui-scene: elements stay on the stage and out of the caption band unless they bleed", () => {
   assert.throws(() => resolve([{ ...PANEL, rect: { x: 50, y: 400, width: 980, height: 900 } }]), /caption band/);
   assert.throws(() => resolve([{ ...PANEL, rect: { x: 0, y: 400, width: 980, height: 700 } }]), /must sit on the stage/);
   assert.doesNotThrow(() => resolve([{ ...PANEL, rect: { x: 0, y: 400, width: 1080, height: 900 }, bleed: true }]));
+  // Mid-frame captions: the band moves to the middle, so the lower stage opens up.
+  const low = { ...PANEL, rect: { x: 50, y: 1100, width: 980, height: 340 } };
+  assert.throws(() => resolve([low]), /caption band \(y 1190/);
+  assert.doesNotThrow(() => resolve([low], { captions: "middle" }));
+  assert.throws(() => resolve([{ ...PANEL, rect: { x: 50, y: 700, width: 980, height: 300 } }], { captions: "middle" }), /caption band \(y 845/);
+  // The layout checks see each element: the biggest as the module's rect, the rest as parts.
+  const layout = resolve([HEADLINE, PANEL]).layout;
+  assert.deepEqual(layout.rect, { x: 50, y: 400, width: 980, height: 760 });
+  assert.deepEqual(layout.parts, [{ id: "el-0", rect: { x: 60, y: 250, width: 960, height: 130 }, role: "text", start: 1.1, end: 6 }]);
+  // A scene that opens the video is built at frame 0 with enter: "cut".
+  const opened = host();
+  paintUi(opened, resolve([{ ...PANEL, enter: "cut" }]).content.ui["s1-ui"], 1);
+  assert.doesNotMatch(opened.innerHTML, /^.{0,400}visibility:hidden/s);
+  assert.match(opened.innerHTML, /sequence_01/);
   // 16:9: the landscape stage and band.
   assert.doesNotThrow(() => resolve([{ ...HEADLINE, rect: { x: 100, y: 60, width: 1200, height: 140 } }], { width: 1920, height: 1080 }));
 });
@@ -99,6 +114,7 @@ test("HyperFrames: the host is painted from a proxy tween over the scene", () =>
 test("story: ui-scene times may be word anchors, resolved to seconds from the scene start", () => {
   const words = [{ text: "exact", start: 12.5, end: 12.9 }, { text: "frame", start: 13, end: 13.3 }];
   const params = resolveUiAnchors({ elements: [{ at: "word:exact-0.2", out: 3, props: { unlockAt: "word:frame", text: "word:exact", cards: [{ unlockAt: "word:exact" }], doneAt: ["word:exact", 2] }, beats: [{ at: "word:frame", set: { clipAt: "word:exact" } }] }] }, 10, (value) => resolveAnchor(value, { words }));
+  assert.deepEqual(resolveUiAnchors({ elements: [{ at: 0, props: { meter: { level2At: "word:frame" } } }] }, 10, (value) => resolveAnchor(value, { words })).elements[0].props.meter.level2At, 3, "keys with digits (level2At) resolve too");
   assert.deepEqual(params.elements[0], { at: 2.3, out: 3, props: { unlockAt: 3, text: "word:exact", cards: [{ unlockAt: 2.5 }], doneAt: [2.5, 2] }, beats: [{ at: 3, set: { clipAt: 2.5 } }] });
 });
 
@@ -131,4 +147,10 @@ test("motion blur: samples per frame, a centred blend and a renderer pass at sam
   calls.length = 0;
   await renderer.render("/tmp/hf", "/tmp/out/plain.mp4", {});
   assert.equal(calls[0].includes("--fps"), false, "no blur: the composition's own fps");
+});
+
+test("text hold: a ui-scene is read by its headlines; panel labels are glanced at", () => {
+  const params = { elements: [HEADLINE, PANEL, { kind: "window", rect: PANEL.rect, at: 0, props: { title: "toolkit" }, children: [{ kind: "headline", rect: { x: 0, y: 0, width: 900, height: 100 }, at: 0.2, props: { text: "TOOL ONE" } }] }] };
+  // SOUNDS CHEAP / REAL SOUND (2) + TOOL ONE (2); track, clip and window labels do not count.
+  assert.equal(uiReadingWords(params), 4);
 });
