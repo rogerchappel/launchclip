@@ -27,6 +27,9 @@ const execFileAsync = promisify(execFile);
 export const REFERENCE_VIDEO = /\.(mp4|mov|m4v|webm|mkv)$/i;
 // Hook window for hook_events, as the cinematic profiles use.
 const HOOK_WINDOW_SECONDS = 4;
+// Below this many references a band's p10 and p90 are the smallest and
+// largest reference values (aggregateMeasures).
+export const EXTREME_BAND_REFERENCES = 10;
 
 /** Motion measures from a render-motion report (src/render_motion_analysis.js). */
 export function motionMeasures(motion) {
@@ -39,7 +42,10 @@ export function motionMeasures(motion) {
     motion_bursts_per_min: numberOrNull(motion.motion_bursts_per_minute),
     change_energy_p50: numberOrNull(motion.motion?.change_energy?.p50),
     first_motion_seconds: bursts.length ? round(bursts[0]) : null,
-    hook_events: hookEventSeconds(motion, HOOK_WINDOW_SECONDS).length
+    hook_events: hookEventSeconds(motion, HOOK_WINDOW_SECONDS).length,
+    still_share: numberOrNull(motion.motion?.still_share),
+    longest_still_seconds: numberOrNull(motion.motion?.longest_still_seconds),
+    camera_moves_per_min: numberOrNull(motion.motion?.camera_moves_per_minute)
   };
 }
 
@@ -115,6 +121,13 @@ export function aggregateMeasures(references) {
   for (const name of Object.keys(PROFILE_MEASURES)) {
     if (!values[name]?.length) continue;
     const band = percentiles(values[name]);
+    // Interpolated p10 and p90 of a handful of references sit inside the
+    // extremes, so a reference would fail its own profile: under
+    // EXTREME_BAND_REFERENCES references the band's edges are the extremes.
+    if (values[name].length < EXTREME_BAND_REFERENCES) {
+      band.p10 = round(Math.min(...values[name]), 4);
+      band.p90 = round(Math.max(...values[name]), 4);
+    }
     // A share stays a share once rounded.
     if (PROFILE_MEASURES[name].unit === "share") for (const key of Object.keys(band)) band[key] = Math.min(1, band[key]);
     out[name] = band;
@@ -126,7 +139,8 @@ export function aggregateMeasures(references) {
  * Measure a folder of references into a profile. options: {id, rights (own |
  * licensed | public-statistics: required, it is the right we have to analyse
  * every reference in the folder), base (a profile whose id, format, match and
- * duration range the measured one keeps), title, format, now}. adapters as
+ * duration range the measured one keeps), title, format, drop (measures to
+ * leave out, a list or "a,b"), note (appended to provenance.note), now}. adapters as
  * measureReference.
  * → {profile, references: [{name, duration_seconds, measures, notes}], warnings}
  */
@@ -147,9 +161,14 @@ export async function measureProfile(folder, options = {}, adapters = {}) {
     warnings.push(...reference.notes.filter((note) => note.startsWith("face time")).map((note) => `${name}: ${note}`));
   }
   const measured = aggregateMeasures(references);
+  // --drop: measures the estimate gets wrong for this format (an illustrated
+  // host read as a presenter's face, say) are left out of the profile.
+  const drop = new Set((Array.isArray(options.drop) ? options.drop : String(options.drop ?? "").split(",")).map((name) => String(name).trim()).filter(Boolean));
+  for (const name of drop) if (!PROFILE_MEASURES[name]) throw new Error(`--drop ${name}: not a profile measure (${Object.keys(PROFILE_MEASURES).join(", ")})`);
   // Measures the references could not estimate keep the base profile's band.
   const measures = { ...(base?.measures ?? {}), ...measured };
-  const kept = Object.keys(base?.measures ?? {}).filter((name) => !(name in measured));
+  for (const name of drop) delete measures[name];
+  const kept = Object.keys(base?.measures ?? {}).filter((name) => !(name in measured) && !drop.has(name));
   if (kept.length) warnings.push(`kept the base profile's band for ${kept.join(", ")} (not measurable from pixels)`);
   const durations = references.map((reference) => reference.duration_seconds).filter(Number.isFinite);
   const measuredAt = (options.now ?? (() => new Date().toISOString()))();
@@ -166,7 +185,12 @@ export async function measureProfile(folder, options = {}, adapters = {}) {
       kind: "measured",
       tool: "launchclip profile measure",
       measured_at: measuredAt,
-      note: `Measured from ${references.length} reference video${references.length === 1 ? "" : "s"} (${options.rights}). Only statistics are stored; coverage is estimated from pixels.`,
+      note: [
+        `Measured from ${references.length} reference video${references.length === 1 ? "" : "s"} (${options.rights}). Only statistics are stored; coverage is estimated from pixels.`,
+        references.length < EXTREME_BAND_REFERENCES ? `With fewer than ${EXTREME_BAND_REFERENCES} references, p10 and p90 are the smallest and largest reference values.` : null,
+        drop.size ? `Left out: ${[...drop].join(", ")}.` : null,
+        options.note ? String(options.note).trim() : null
+      ].filter(Boolean).join(" "),
       sources: references.map((reference, index) => ({ id: `ref-${String(index + 1).padStart(2, "0")}`, title: reference.name, rights: options.rights, sha256: reference.sha256, duration_seconds: reference.duration_seconds, ...(reference.width ? { width: reference.width, height: reference.height } : {}), measured_at: measuredAt }))
     },
     measures

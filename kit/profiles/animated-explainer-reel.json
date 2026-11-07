@@ -1,0 +1,126 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "animated-explainer-reel",
+  "title": "Animated explainer reel",
+  "description": "A faceless animated explainer for Reels, Shorts and TikTok, 30–75 s in 9:16: illustrated scenes and a drawn host, voiced over, where the picture never stops moving.",
+  "format": "motion",
+  "match": {
+    "lanes": [
+      "motion",
+      "voiceover-motion"
+    ],
+    "aspects": [
+      "9:16"
+    ],
+    "platforms": [
+      "youtube-shorts",
+      "instagram-reels",
+      "tiktok"
+    ]
+  },
+  "duration_seconds": [
+    30,
+    75
+  ],
+  "references": 2,
+  "provenance": {
+    "kind": "measured",
+    "tool": "launchclip profile measure",
+    "measured_at": "2026-11-07T07:30:59.827Z",
+    "note": "Measured from 2 reference videos (public-statistics). Only statistics are stored; coverage is estimated from pixels. With fewer than 10 references, p10 and p90 are the smallest and largest reference values. Left out: face_time, text_hold_seconds. Two public faceless animated explainer reels (9:16, 62–70 s). face_time is left out because the face probe reads the drawn host as a presenter; text_hold_seconds because the designed-region estimate sees the whole illustrated frame as one graphic.",
+    "sources": [
+      {
+        "id": "ref-01",
+        "title": "reel-a.mp4",
+        "rights": "public-statistics",
+        "sha256": "94c5be881cb7d1c31312f7b0e05d67dbb26ef53efed1193102416ad81015c9a3",
+        "duration_seconds": 70.2,
+        "width": 720,
+        "height": 1280,
+        "measured_at": "2026-11-07T07:30:59.827Z"
+      },
+      {
+        "id": "ref-02",
+        "title": "reel-b.mp4",
+        "rights": "public-statistics",
+        "sha256": "6e1f91562e9c61775258a592afacd719df13dcff31d5e992079c42854ae08b68",
+        "duration_seconds": 62.577,
+        "width": 720,
+        "height": 1280,
+        "measured_at": "2026-11-07T07:30:59.827Z"
+      }
+    ]
+  },
+  "measures": {
+    "still_share": {
+      "p10": 0.0176,
+      "p50": 0.1031,
+      "p90": 0.1886
+    },
+    "longest_still_seconds": {
+      "p10": 0.1,
+      "p50": 0.2665,
+      "p90": 0.433
+    },
+    "shot_seconds": {
+      "p10": 7.133,
+      "p50": 10.9775,
+      "p90": 14.822
+    },
+    "visual_changes_per_min": {
+      "p10": 46.15,
+      "p50": 49.92,
+      "p90": 53.69
+    },
+    "coverage": {
+      "p10": 1,
+      "p50": 1,
+      "p90": 1
+    },
+    "longest_undressed_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0
+    },
+    "first_visual_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0
+    },
+    "flow_velocity_p90": {
+      "p10": 7.2111,
+      "p50": 7.6056,
+      "p90": 8
+    },
+    "hold_ratio": {
+      "p10": 0.6499,
+      "p50": 0.6765,
+      "p90": 0.7031
+    },
+    "motion_bursts_per_min": {
+      "p10": 51.282,
+      "p50": 54.885,
+      "p90": 58.488
+    },
+    "change_energy_p50": {
+      "p10": 1.619,
+      "p50": 2.9401,
+      "p90": 4.2612
+    },
+    "first_motion_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0
+    },
+    "hook_events": {
+      "p10": 4,
+      "p50": 4,
+      "p90": 4
+    },
+    "camera_moves_per_min": {
+      "p10": 8.629,
+      "p50": 9.4425,
+      "p90": 10.256
+    }
+  }
+}

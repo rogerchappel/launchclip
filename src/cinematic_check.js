@@ -325,9 +325,12 @@ function mixResult(volume, source, manifest) {
  * story's cadence profile (kit/core/profiles.mjs) when one is given: its
  * flow_velocity_p90 and motion_bursts_per_min floors (p10), hold_ratio and
  * first_motion_seconds ceilings (p90), change_energy_p50 floor and
- * hook_events floor. A locked-off talking head barely moves, so the
- * footage-led profiles hold far lower floors than the motion ones. Without a
- * profile the fixed cinematic floors apply (they equal the motion profiles').
+ * hook_events floor, still_share and longest_still_seconds ceilings (p90)
+ * and camera_moves_per_min floor (p10; no default).
+ * A locked-off talking head barely moves, so the footage-led profiles hold
+ * far lower floors than the motion ones and no still-share ceiling. Without a
+ * profile, or for a stillness measure the profile does not carry, the fixed
+ * defaults for its format apply (STILLNESS_DEFAULTS).
  */
 export function cinematicMotionExpectations({ duration, width, height, profile: cadence = null }) {
   const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
@@ -336,6 +339,7 @@ export function cinematicMotionExpectations({ duration, width, height, profile: 
     const value = cadence?.measures?.[name]?.[key];
     return Number.isFinite(value) ? value : fallback;
   };
+  const stillDefaults = STILLNESS_DEFAULTS[cadence?.format] ?? STILLNESS_DEFAULTS.motion;
   return {
     profile,
     cadence: cadence ? { id: cadence.id, provenance: cadence.provenance?.kind ?? null } : null,
@@ -350,12 +354,31 @@ export function cinematicMotionExpectations({ duration, width, height, profile: 
       // The developing-card family's lower floor applies only under the fixed floors.
       minimum_change_energy_p50_by_family: cadence?.measures?.change_energy_p50 ? {} : { "developing-card": .15 },
       minimum_flow_velocity_p90: band("flow_velocity_p90", "p10", 2),
-      maximum_first_motion_seconds: band("first_motion_seconds", "p90", .35),
+      // Motion onsets are read from 10 fps flow samples, so a band under one
+      // sample (a measured "moves from the first frame") means within 0.1 s.
+      maximum_first_motion_seconds: Math.max(band("first_motion_seconds", "p90", .35), FIRST_MOTION_RESOLUTION_SECONDS),
       hook_window_seconds: profile.craft.hook_window_seconds,
-      minimum_hook_events: Math.min(profile.craft.minimum_hook_material_changes, band("hook_events", "p10", profile.craft.minimum_hook_material_changes))
+      minimum_hook_events: Math.min(profile.craft.minimum_hook_material_changes, band("hook_events", "p10", profile.craft.minimum_hook_material_changes)),
+      maximum_still_share: band("still_share", "p90", stillDefaults.still_share),
+      maximum_longest_still_seconds: band("longest_still_seconds", "p90", stillDefaults.longest_still_seconds),
+      // Only a profile measured with camera moves holds a floor on them.
+      minimum_camera_moves_per_minute: band("camera_moves_per_min", "p10", null)
     }
   };
 }
+
+const FIRST_MOTION_RESOLUTION_SECONDS = 0.1;
+
+// Absolute stillness ceilings when the profile carries none, by profile
+// format (no profile: motion). A motion or story render keeps moving; a
+// product demo may hold on a screen while it loads; a locked-off talking
+// head barely changes, so only a frozen picture fails it.
+export const STILLNESS_DEFAULTS = Object.freeze({
+  motion: Object.freeze({ still_share: 0.1, longest_still_seconds: 0.6 }),
+  characters: Object.freeze({ still_share: 0.1, longest_still_seconds: 0.6 }),
+  "demo-led": Object.freeze({ still_share: 0.25, longest_still_seconds: 1.5 }),
+  "footage-led": Object.freeze({ still_share: null, longest_still_seconds: 4 })
+});
 
 async function verifyPhase2Evidence(project, duration, video, critique, marker, options) {
   const boundaryValidation = await declaredBoundariesForProject(project, { duration, storyModule: options.storyModule });

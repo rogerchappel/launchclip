@@ -6,6 +6,19 @@ Each shipped cadence profile is a set of ranges over measurements of reference v
 
 A seed profile has no references yet: its ranges were set by hand, conservatively, and `launchclip profile measure <folder> --replace <id> --rights …` replaces it with a measured one.
 
+## animated-explainer-reel
+
+Animated explainer reel: motion, 30–75 s, 9:16.
+
+- Provenance: measured (measured 2026-11-07T07:30:59.827Z)
+- References: 2
+- Note: Measured from 2 reference videos (public-statistics). Only statistics are stored; coverage is estimated from pixels. With fewer than 10 references, p10 and p90 are the smallest and largest reference values. Left out: face_time, text_hold_seconds. Two public faceless animated explainer reels (9:16, 62–70 s). face_time is left out because the face probe reads the drawn host as a presenter; text_hold_seconds because the designed-region estimate sees the whole illustrated frame as one graphic.
+
+| Source | Rights | Duration | SHA-256 |
+| --- | --- | --- | --- |
+| reel-a.mp4 | public-statistics | 70.2 s | `94c5be881cb7` |
+| reel-b.mp4 | public-statistics | 62.577 s | `6e1f91562e9c` |
+
 ## explainer-motion
 
 Explainer motion: motion, 20–180 s.

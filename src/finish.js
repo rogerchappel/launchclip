@@ -34,7 +34,7 @@ import { holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
-import { writeMotionReport } from "./render_motion_analysis.js";
+import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
 import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
 import { renderShare } from "./capacity.js";
 import { withSlot } from "./queue.js";
@@ -1687,7 +1687,15 @@ async function runGates(ctx) {
     // head barely moves; a motion explainer must).
     const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
     const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height, profile }).expected });
-    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
+    // The absolute stillness measures, and the worst still spans with a
+    // suggested fix each, so a director can act without opening the report.
+    const stillness = motion?.motion?.still_share == null ? null : {
+      still_share: motion.motion.still_share,
+      longest_still_seconds: motion.motion.longest_still_seconds,
+      camera_moves: motion.motion.camera_moves,
+      worst_spans: worstStillSpans(motion, { limit: 6 })
+    };
+    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), ...(stillness ? { stillness } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
     gates.motion = { status: "failed", error: error.message };
   }

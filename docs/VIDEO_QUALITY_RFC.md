@@ -149,6 +149,13 @@ Most of these already exist in some form:
 
 - **Pacing:** cuts and shot lengths, hold ratio and change energy
   (`src/render_motion_analysis.js`, `src/style_reference.js`).
+- **Stillness:** the absolute measures beside the relative hold ratio: the
+  share of frame pairs whose mean change is under 0.4 grey levels on a 72×128
+  grey grid at 30 fps (`still_share`), the longest such run inside the video
+  (`longest_still_seconds`; a closing hold does not count), every still span
+  of 0.3 s or more, per-second energy, and whole-frame camera moves per minute
+  (phase-correlation shifts that undoing explains, plus optical-flow pans and
+  zooms).
 - **Captions:** band position and density (`style_reference.js`
   `detectCaptions`).
 - **Sound:** loudness, silence ratio, transients (`style_reference.js`).
@@ -178,9 +185,13 @@ One per format and platform pair, starting with:
 | `explainer-motion` | motion and voiceover-motion, 30–180 s | any |
 | `product-demo` | demo-led, 30–120 s | any |
 | `story-characters` | motion with a cast, 30–180 s, 16:9 or 9:16 | any |
+| `animated-explainer-reel` | motion and voiceover-motion, 30–75 s, 9:16 (measured) | Shorts, Reels, TikTok |
 
 The profile is chosen from the routed lane, aspect, duration and platform,
-which `make` and the skills already know.
+which `make` and the skills already know; a measured profile beats a seed
+that fits as well, and `make --profile <id>` names one. With fewer than 10
+references a measured band's p10 and p90 are the extremes, so every reference
+passes its own profile.
 
 ### 5.4 Reference provenance
 
@@ -540,7 +551,14 @@ mandatory and shared.
 ### 11.2 Gates against profiles
 
 The existing gates stay. The motion gate's fixed floors become profile bands,
-which fixes the false failure on locked-off talking heads. New gates:
+which fixes the false failure on locked-off talking heads. The motion gate
+also holds `still_share` and `longest_still_seconds` to the profile's p90
+(defaults by format: 10% and 0.6 s for motion and character stories, 25% and
+1.5 s for product demos, only a 4 s frozen picture for footage-led) and a
+measured profile's camera-move floor. Its stillness findings list the worst
+still spans with timestamps and a fix each (zoom-kick, drift, whip, dot-wipe
+or new visual), and readiness turns each into a timed repair finding. New
+gates:
 
 - **Coverage:** coverage, face time and the longest undressed run against the
   profile band.

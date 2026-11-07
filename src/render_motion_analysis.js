@@ -40,12 +40,22 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   // The flow grid keeps the video's aspect (a portrait render is sampled
   // portrait) and is fine enough to see a drawn figure's limbs move.
   const grid = flowGrid(Number(video.width), Number(video.height), options);
+  // Absolute stillness reads a fixed small grey grid at a fixed rate, so its
+  // threshold means the same at any resolution and frame rate.
+  const stillGrid = stillnessGrid(Number(video.width), Number(video.height));
+  const rawStill = await runRaw("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-i", resolved,
+    "-vf", `fps=${STILLNESS.fps},scale=${stillGrid.width}:${stillGrid.height},format=gray`,
+    "-an", "-f", "rawvideo", "pipe:1"
+  ]);
   const rawFlow = await runRaw("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-i", resolved,
     "-vf", `fps=${flowFps},scale=${grid.width}:${grid.height}:flags=area,format=gray`,
     "-an", "-f", "rawvideo", "pipe:1"
   ]);
   const opticalFlow = analyzeBlockMotion(Buffer.isBuffer(rawFlow.stdout) ? rawFlow.stdout : Buffer.from(rawFlow.stdout ?? "", "binary"), grid.width, grid.height, flowFps, { ...options, cutTimes: cuts, velocityScale: grid.velocityScale });
+  const stillness = analyzeStillness(Buffer.isBuffer(rawStill.stdout) ? rawStill.stdout : Buffer.from(rawStill.stdout ?? "", "binary"), stillGrid.width, stillGrid.height, STILLNESS.fps, options);
+  const camera = cameraMoves(stillness, opticalFlow);
   const shotDurations = boundariesToDurations([0, ...cuts, duration]);
   return {
     schema_version: "launchclip.render-motion.v1",
@@ -62,7 +72,18 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     cut_rate_per_minute: rate(cuts.length, duration),
     shot_duration_seconds: distribution(shotDurations),
     motion_bursts_per_minute: rate(series.bursts.length, duration),
-    motion: series,
+    motion: {
+      ...series,
+      still_share: stillness.still_share,
+      longest_still_seconds: stillness.longest_still_seconds,
+      closing_hold_seconds: stillness.closing_hold_seconds,
+      still_spans: stillness.still_spans,
+      camera_moves: camera.count,
+      camera_moves_per_minute: camera.count == null ? null : rate(camera.count, duration),
+      camera_move_events: camera.events,
+      energy_per_second: stillness.energy_per_second,
+      stillness: stillness.method
+    },
     optical_flow: opticalFlow,
     family: classifyMotionFamily({ cut_rate_per_minute: rate(cuts.length, duration), hold_ratio: series.hold_ratio, motion_bursts_per_minute: rate(series.bursts.length, duration) })
   };
@@ -153,20 +174,22 @@ export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) 
         const still = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, 0, 0, block);
         let bestSad = still;
         let bestMagnitude = 0;
+        let bestDx = 0, bestDy = 0;
         for (let dy = -radius; dy <= radius; dy += 1) {
           for (let dx = -radius; dx <= radius; dx += 1) {
             if (!dx && !dy) continue;
             const sad = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, dx, dy, block);
-            if (sad < bestSad || (sad === bestSad && bestMagnitude && Math.hypot(dx, dy) < bestMagnitude)) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); }
+            if (sad < bestSad || (sad === bestSad && bestMagnitude && Math.hypot(dx, dy) < bestMagnitude)) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); bestDx = dx; bestDy = dy; }
           }
         }
-        if (bestMagnitude && bestSad <= still * (1 - gain) && still - bestSad >= noise && bestSad <= residual) moving.push(bestMagnitude);
+        if (bestMagnitude && bestSad <= still * (1 - gain) && still - bestSad >= noise && bestSad <= residual) moving.push({ magnitude: bestMagnitude, x: x + block / 2, y: y + block / 2, dx: bestDx, dy: bestDy });
       }
     }
     const enough = moving.length >= Math.max(minBlocks, Math.ceil(tracked * minShare));
-    const magnitude = enough ? median(moving) * fps * scale : 0;
+    const magnitude = enough ? median(moving.map((entry) => entry.magnitude)) * fps * scale : 0;
     magnitudes.push(magnitude);
-    samples.push({ frame, at_seconds: round(at, 4), pixels_per_second: round(magnitude, 4), tracked_blocks: tracked, moving_blocks: moving.length });
+    const camera = enough ? globalMotion(moving, tracked, width, height) : null;
+    samples.push({ frame, at_seconds: round(at, 4), pixels_per_second: round(magnitude, 4), tracked_blocks: tracked, moving_blocks: moving.length, ...(camera ? { camera } : {}) });
   }
   const acceleration = differences(magnitudes).map((value) => value * fps);
   const deceleration = acceleration.filter((value) => value < 0).map(Math.abs);
@@ -206,6 +229,251 @@ function blockSad(buffer, previousOffset, currentOffset, width, x, y, dx, dy, bl
     sad += Math.abs(buffer[previousOffset + (y + row) * width + x + column] - buffer[currentOffset + (y + row + dy) * width + x + column + dx]);
   }
   return sad;
+}
+
+// Absolute stillness (alongside the relative hold_ratio, which compares a
+// frame with the render's own median). Every frame pair is read on a small
+// grey grid (72 px short side, 128 px long side for 9:16 and 16:9) at a fixed
+// 30 fps; a pair is still when its mean absolute difference is under
+// `threshold` grey levels. Calibrated on two public faceless animated
+// explainer reels (9:16, 62–70 s): 1.8% and 19% still pairs (the second is
+// animated on twos), longest mid-video still 0.1 s and 0.43 s; a render that
+// bursts and then holds measures 46% and 1 s.
+//
+//   still_spans: every still run of at least minSpanSeconds, {start, end, seconds}
+//   longest_still_seconds: the longest run, not counting the closing hold
+//   closing_hold_seconds: the longest run ending within closingTailSeconds of
+//     the last frame (an end card may hold)
+export const STILLNESS = Object.freeze({ fps: 30, shortSide: 72, longSide: 128, threshold: 0.4, minSpanSeconds: 0.3, closingTailSeconds: 0.5, shiftEnergy: 3, shiftPixels: 2, shiftResidual: 1 });
+
+/** The stillness grid for a width × height video: 72×128 portrait, 128×72 landscape, 72×72 square. */
+export function stillnessGrid(width, height) {
+  const w = Number(width) > 0 ? Number(width) : 9, h = Number(height) > 0 ? Number(height) : 16;
+  const ratio = Math.max(w, h) / Math.min(w, h);
+  const long = Math.abs(ratio - 16 / 9) < 0.05 ? STILLNESS.longSide : Math.max(2, 2 * Math.round(STILLNESS.shortSide * ratio / 2));
+  return w >= h ? { width: long, height: STILLNESS.shortSide } : { width: STILLNESS.shortSide, height: long };
+}
+
+/**
+ * Absolute stillness of raw grey frames (width × height bytes each) sampled
+ * at fps. → {still_share, longest_still_seconds, closing_hold_seconds,
+ * still_spans, energy_per_second, shift_times, method}; the shares are null
+ * when there are fewer than two frames.
+ */
+export function analyzeStillness(rawFrames, width, height, fps = STILLNESS.fps, options = {}) {
+  const threshold = Number(options.stillThreshold ?? STILLNESS.threshold);
+  const minSpan = Number(options.stillMinSpanSeconds ?? STILLNESS.minSpanSeconds);
+  const frameSize = width * height;
+  const count = frameSize > 0 ? Math.floor((rawFrames?.length ?? 0) / frameSize) : 0;
+  const method = { method: "mean-abs-diff", sample_fps: fps, grid: { width, height }, threshold, min_span_seconds: minSpan, camera: "phase-correlation" };
+  if (count < 2) return { still_share: null, longest_still_seconds: null, closing_hold_seconds: null, still_spans: [], energy_per_second: [], shift_times: [], method };
+  const energy = new Float64Array(count - 1);
+  for (let pair = 0; pair < count - 1; pair += 1) {
+    const a = pair * frameSize, b = a + frameSize;
+    let sum = 0;
+    for (let i = 0; i < frameSize; i += 1) sum += Math.abs(rawFrames[b + i] - rawFrames[a + i]);
+    energy[pair] = sum / frameSize;
+  }
+  const result = stillnessFromEnergy(energy, fps, { threshold, minSpan });
+  const shifts = [];
+  const pc = phaseCorrelator(width, height);
+  for (let pair = 0; pair < energy.length; pair += 1) {
+    if (energy[pair] <= Number(options.shiftEnergy ?? STILLNESS.shiftEnergy)) continue;
+    const shift = pc(rawFrames, pair * frameSize, (pair + 1) * frameSize);
+    if (Math.abs(shift.dx) < STILLNESS.shiftPixels && Math.abs(shift.dy) < STILLNESS.shiftPixels) continue;
+    // A camera move: undoing the shift leaves less change than there was (a
+    // whip's motion blur still leaves some). Undoing an object's jump across
+    // a held background misaligns the background and leaves more.
+    const residual = shiftedDifference(rawFrames, pair * frameSize, (pair + 1) * frameSize, width, height, shift);
+    if (residual <= energy[pair] * Number(options.shiftResidual ?? STILLNESS.shiftResidual)) shifts.push(round((pair + 1) / fps, 4));
+  }
+  return { ...result, shift_times: shifts, method };
+}
+
+/**
+ * Stillness from a per-pair energy series (mean |Δ| grey levels per pixel)
+ * sampled at fps. Pair i spans frames i and i + 1.
+ */
+export function stillnessFromEnergy(values, fps, { threshold = STILLNESS.threshold, minSpan = STILLNESS.minSpanSeconds, closingTail = STILLNESS.closingTailSeconds } = {}) {
+  const energy = Array.from(values, Number);
+  const n = energy.length;
+  if (!n) return { still_share: null, longest_still_seconds: null, closing_hold_seconds: null, still_spans: [], energy_per_second: [] };
+  const runs = [];
+  let start = -1;
+  for (let i = 0; i <= n; i += 1) {
+    const still = i < n && energy[i] < threshold;
+    if (still && start < 0) start = i;
+    if (!still && start >= 0) { runs.push({ first: start, length: i - start }); start = -1; }
+  }
+  // The closing hold: the longest run that ends within closingTail of the
+  // last frame (an end card may hold; a fade's last frames may still move).
+  const tail = n - Math.round(Number(closingTail) * fps);
+  const closing = runs.filter((run) => run.first + run.length >= tail).reduce((best, run) => (!best || run.length > best.length ? run : best), null);
+  const spans = runs.filter((run) => run.length / fps >= minSpan - 1e-9).map((run) => ({
+    start: round(run.first / fps, 3),
+    end: round((run.first + run.length) / fps, 3),
+    seconds: round(run.length / fps, 3),
+    ...(run === closing ? { closing: true } : {})
+  }));
+  const longest = runs.filter((run) => run !== closing).reduce((max, run) => Math.max(max, run.length), 0);
+  const perSecond = [];
+  for (let second = 0; second * fps < n; second += 1) {
+    const slice = energy.slice(Math.round(second * fps), Math.round((second + 1) * fps));
+    if (slice.length >= fps / 2) perSecond.push(round(slice.reduce((sum, value) => sum + value, 0) / slice.length, 2));
+  }
+  return {
+    still_share: round(energy.filter((value) => value < threshold).length / n, 4),
+    longest_still_seconds: round(longest / fps, 3),
+    closing_hold_seconds: closing ? round(closing.length / fps, 3) : 0,
+    still_spans: spans,
+    energy_per_second: perSecond
+  };
+}
+
+// A whole-frame camera move in the optical flow: most moving blocks fit one
+// shift plus one scale about the centre within GLOBAL_MOTION.residual px.
+export const GLOBAL_MOTION = Object.freeze({ minShare: 0.4, minBlocks: 12, residual: 0.75, minShift: 1, minZoom: 1 });
+
+/** {kind: "pan" | "zoom", shift, zoom} when the moving blocks move as one frame, else null. */
+export function globalMotion(moving, tracked, width, height) {
+  if (moving.length < GLOBAL_MOTION.minBlocks || moving.length < tracked * GLOBAL_MOTION.minShare) return null;
+  const cx = width / 2, cy = height / 2;
+  const n = moving.length;
+  let rx = 0, ry = 0, vx = 0, vy = 0;
+  for (const entry of moving) { rx += entry.x - cx; ry += entry.y - cy; vx += entry.dx; vy += entry.dy; }
+  rx /= n; ry /= n; vx /= n; vy /= n;
+  let num = 0, den = 0;
+  for (const entry of moving) {
+    const ax = entry.x - cx - rx, ay = entry.y - cy - ry;
+    num += ax * (entry.dx - vx) + ay * (entry.dy - vy);
+    den += ax * ax + ay * ay;
+  }
+  const scale = den > 0 ? num / den : 0;
+  const tx = vx - scale * rx, ty = vy - scale * ry;
+  let error = 0;
+  for (const entry of moving) {
+    const px = tx + scale * (entry.x - cx), py = ty + scale * (entry.y - cy);
+    error += (entry.dx - px) ** 2 + (entry.dy - py) ** 2;
+  }
+  const residual = Math.sqrt(error / n);
+  if (residual > GLOBAL_MOTION.residual) return null;
+  const shift = Math.hypot(tx, ty);
+  const zoom = Math.abs(scale) * Math.min(width, height) / 2;
+  if (zoom >= GLOBAL_MOTION.minZoom) return { kind: "zoom", shift: round(shift, 3), zoom: round(scale, 5) };
+  if (shift >= GLOBAL_MOTION.minShift) return { kind: "pan", shift: round(shift, 3), zoom: round(scale, 5) };
+  return null;
+}
+
+/**
+ * Camera moves: whole-frame shifts from phase correlation on the stillness
+ * grid and pans or zooms from the optical flow, merged into events that are
+ * at least 0.25 s apart. → {count, events: [{at, kind}]}
+ */
+export function cameraMoves(stillness, flow, mergeSeconds = 0.25) {
+  if (stillness?.still_share == null && !(flow?.samples ?? []).length) return { count: null, events: [] };
+  const raw = [
+    ...(stillness?.shift_times ?? []).map((at) => ({ at: Number(at), kind: "shift" })),
+    ...(flow?.samples ?? []).filter((sample) => sample.camera).map((sample) => ({ at: Number(sample.at_seconds), kind: sample.camera.kind }))
+  ].filter((entry) => Number.isFinite(entry.at)).sort((a, b) => a.at - b.at);
+  const events = [];
+  for (const entry of raw) {
+    const last = events.at(-1);
+    if (last && entry.at - last.until <= mergeSeconds) { last.until = entry.at; if (entry.kind === "zoom") last.kind = "zoom"; continue; }
+    events.push({ at: entry.at, until: entry.at, kind: entry.kind });
+  }
+  return { count: events.length, events: events.map((entry) => ({ at: round(entry.at, 3), kind: entry.kind })) };
+}
+
+// Mean |a(x + dx, y + dy) − b(x, y)| over the overlap, with {dx, dy} the
+// phase-correlation peak (A·conj(B)): what is left of the change once a
+// whole-frame shift is undone.
+function shiftedDifference(buffer, first, second, width, height, { dx, dy }) {
+  let sum = 0, count = 0;
+  for (let y = Math.max(0, -dy); y < Math.min(height, height - dy); y += 1) {
+    for (let x = Math.max(0, -dx); x < Math.min(width, width - dx); x += 1) {
+      sum += Math.abs(buffer[first + (y + dy) * width + x + dx] - buffer[second + y * width + x]);
+      count += 1;
+    }
+  }
+  return count ? sum / count : Infinity;
+}
+
+// Phase correlation of two equal-size grey frames on the largest centred
+// power-of-two crop: → {dx, dy} in grid pixels (signed).
+function phaseCorrelator(width, height) {
+  const w = 2 ** Math.floor(Math.log2(width)), h = 2 ** Math.floor(Math.log2(height));
+  const x0 = Math.floor((width - w) / 2), y0 = Math.floor((height - h) / 2);
+  const size = w * h;
+  const aRe = new Float64Array(size), aIm = new Float64Array(size), bRe = new Float64Array(size), bIm = new Float64Array(size);
+  const load = (buffer, offset, re, im) => {
+    let mean = 0;
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) mean += buffer[offset + (y + y0) * width + x + x0];
+    mean /= size;
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { re[y * w + x] = buffer[offset + (y + y0) * width + x + x0] - mean; im[y * w + x] = 0; }
+  };
+  return (buffer, first, second) => {
+    load(buffer, first, aRe, aIm);
+    load(buffer, second, bRe, bIm);
+    fft2(aRe, aIm, w, h, false);
+    fft2(bRe, bIm, w, h, false);
+    for (let i = 0; i < size; i += 1) {
+      // A · conj(B), normalised to unit magnitude.
+      const re = aRe[i] * bRe[i] + aIm[i] * bIm[i];
+      const im = aIm[i] * bRe[i] - aRe[i] * bIm[i];
+      const magnitude = Math.hypot(re, im) + 1e-6;
+      aRe[i] = re / magnitude; aIm[i] = im / magnitude;
+    }
+    fft2(aRe, aIm, w, h, true);
+    let best = 0, at = 0;
+    for (let i = 0; i < size; i += 1) {
+      const value = Math.hypot(aRe[i], aIm[i]);
+      if (value > best) { best = value; at = i; }
+    }
+    const px = at % w, py = Math.floor(at / w);
+    return { dx: px > w / 2 ? px - w : px, dy: py > h / 2 ? py - h : py };
+  };
+}
+
+function fft2(re, im, w, h, inverse) {
+  const rowRe = new Float64Array(w), rowIm = new Float64Array(w);
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) { rowRe[x] = re[y * w + x]; rowIm[x] = im[y * w + x]; }
+    fft1(rowRe, rowIm, inverse);
+    for (let x = 0; x < w; x += 1) { re[y * w + x] = rowRe[x]; im[y * w + x] = rowIm[x]; }
+  }
+  const colRe = new Float64Array(h), colIm = new Float64Array(h);
+  for (let x = 0; x < w; x += 1) {
+    for (let y = 0; y < h; y += 1) { colRe[y] = re[y * w + x]; colIm[y] = im[y * w + x]; }
+    fft1(colRe, colIm, inverse);
+    for (let y = 0; y < h; y += 1) { re[y * w + x] = colRe[y]; im[y * w + x] = colIm[y]; }
+  }
+}
+
+// In-place iterative radix-2 FFT (unnormalised; the peak position is all
+// phase correlation needs).
+function fft1(re, im, inverse) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let length = 2; length <= n; length <<= 1) {
+    const angle = (inverse ? 2 : -2) * Math.PI / length;
+    const wRe = Math.cos(angle), wIm = Math.sin(angle);
+    for (let i = 0; i < n; i += length) {
+      let uRe = 1, uIm = 0;
+      for (let k = 0; k < length / 2; k += 1) {
+        const a = i + k, b = a + length / 2;
+        const tRe = re[b] * uRe - im[b] * uIm, tIm = re[b] * uIm + im[b] * uRe;
+        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+        re[a] += tRe; im[a] += tIm;
+        const next = uRe * wRe - uIm * wIm;
+        uIm = uRe * wIm + uIm * wRe; uRe = next;
+      }
+    }
+  }
 }
 
 export function compareMotionProfiles(candidate, references) {
@@ -298,19 +566,24 @@ export function evaluateMotionQuality(metrics, expected = {}) {
     findings.push(finding("dimensions", "blocking", `Rendered dimensions are ${metrics.width}×${metrics.height}; expected ${expected.width}×${expected.height}.`));
   }
   if (!metrics.frame_count) findings.push(finding("frames", "blocking", "No frame-difference samples were produced."));
-  if (metrics.motion.hold_ratio > Number(expected.maximum_hold_ratio ?? 0.985)) findings.push(finding("motion", "major", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames.`));
-  if (metrics.motion_bursts_per_minute < Number(expected.minimum_bursts_per_minute ?? 4)) findings.push(finding("motion", "major", `Only ${metrics.motion_bursts_per_minute.toFixed(1)} meaningful motion bursts per minute were detected.`));
+  if (above(metrics.motion.hold_ratio, expected.maximum_hold_ratio ?? 0.985)) findings.push(finding("motion", "major", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames.`));
+  if (below(metrics.motion_bursts_per_minute, expected.minimum_bursts_per_minute ?? 4)) findings.push(finding("motion", "major", `Only ${metrics.motion_bursts_per_minute.toFixed(1)} meaningful motion bursts per minute were detected.`));
   const motionFamily = metrics.family ?? classifyMotionFamily(metrics);
   const familyEnergyFloor = expected.minimum_change_energy_p50_by_family?.[motionFamily];
   const minimumChangeEnergy = familyEnergyFloor ?? expected.minimum_change_energy_p50;
-  if (minimumChangeEnergy != null && Number(metrics.motion?.change_energy?.p50 ?? 0) < Number(minimumChangeEnergy)) {
+  if (minimumChangeEnergy != null && below(metrics.motion?.change_energy?.p50 ?? 0, minimumChangeEnergy)) {
     findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(3)}; expected at least ${Number(minimumChangeEnergy).toFixed(3)} for ${motionFamily}.`));
   }
-  if (expected.minimum_flow_velocity_p90 != null && Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0) < Number(expected.minimum_flow_velocity_p90)) {
+  if (expected.minimum_flow_velocity_p90 != null && below(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0, expected.minimum_flow_velocity_p90)) {
     findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s.`));
   }
   if (expected.minimum_cut_rate_per_minute != null && Number(metrics.cut_rate_per_minute ?? 0) < Number(expected.minimum_cut_rate_per_minute)) {
     findings.push(finding("editing", "major", `Only ${Number(metrics.cut_rate_per_minute ?? 0).toFixed(1)} cuts per minute were detected; expected at least ${Number(expected.minimum_cut_rate_per_minute).toFixed(1)}.`));
+  }
+  findings.push(...stillnessFindings(metrics, expected));
+  const cameraRate = metrics.motion?.camera_moves_per_minute;
+  if (expected.minimum_camera_moves_per_minute != null && cameraRate != null && below(cameraRate, expected.minimum_camera_moves_per_minute)) {
+    findings.push({ ...finding("motion", "major", `Only ${Number(cameraRate).toFixed(1)} whole-frame camera moves per minute were detected; expected at least ${Number(expected.minimum_camera_moves_per_minute).toFixed(1)}. Move the camera between and inside scenes: zoom-kicks on stressed words, drifts through holds, whips or dot-wipes between scenes.`), measure: "camera_moves_per_min", value: Number(cameraRate), floor: Number(expected.minimum_camera_moves_per_minute) });
   }
   const firstMotion = firstMeaningfulMotionSeconds(metrics);
   if (expected.maximum_first_motion_seconds != null && (firstMotion == null || firstMotion > Number(expected.maximum_first_motion_seconds))) {
@@ -326,6 +599,81 @@ export function evaluateMotionQuality(metrics, expected = {}) {
     }
   }
   return { ok: !findings.some((entry) => entry.severity === "blocking" || entry.severity === "major"), findings };
+}
+
+// What a director does about a still span, worst first. A span that runs
+// into a cut carries the next scene in early (whip for a short one, dot-wipe
+// for a longer one); a long span needs a new visual; a medium one a slow
+// drift; a short one a zoom kick on the stressed word.
+export const STILL_FIXES = Object.freeze({
+  "zoom-kick": "punch the camera in 8–12% over 0.2–0.3 s on the stressed word, then ease back or keep drifting",
+  drift: "keep the camera moving through the hold: a slow push or pan of 3–6% across the span, eased in and out",
+  whip: "start a whip (fast pan with motion blur) into the next scene during the hold instead of a hard cut after it",
+  "dot-wipe": "open a dot or shape wipe into the next scene during the hold so the transition carries the motion",
+  "new visual": "add a new element in the span: an insert, a diagram or chart building, a callout or a character action"
+});
+const STILL_FIX_LIMITS = Object.freeze({ shortSeconds: 0.8, longSeconds: 1.5, cutBefore: 0.1, cutAfter: 0.25 });
+
+/** The suggested fix for one still span ({start, end, seconds}) given the render's cuts. → {fix, reason} */
+export function suggestStillFix(span, cuts = []) {
+  const seconds = Number(span.seconds ?? Number(span.end) - Number(span.start));
+  const end = Number(span.end);
+  const intoCut = cuts.map(Number).some((cut) => cut >= end - STILL_FIX_LIMITS.cutBefore && cut <= end + STILL_FIX_LIMITS.cutAfter);
+  if (seconds >= STILL_FIX_LIMITS.longSeconds) return { fix: "new visual", reason: `a ${seconds.toFixed(2)} s hold is too long for a camera move alone` };
+  if (intoCut) return seconds >= STILL_FIX_LIMITS.shortSeconds
+    ? { fix: "dot-wipe", reason: "the hold runs into a cut, so the transition can carry it" }
+    : { fix: "whip", reason: "a short hold before a cut" };
+  if (seconds >= STILL_FIX_LIMITS.shortSeconds) return { fix: "drift", reason: "a mid-length hold inside a scene" };
+  return { fix: "zoom-kick", reason: "a short hold inside a scene" };
+}
+
+/**
+ * The still spans worth fixing, worst (longest) first: every mid-video span
+ * of at least `minimum` seconds, each with its suggested fix.
+ */
+export function worstStillSpans(metrics, { limit = 6, minimum = STILLNESS.minSpanSeconds } = {}) {
+  const spans = (metrics?.motion?.still_spans ?? []).filter((span) => !span.closing && Number(span.seconds) >= minimum - 1e-9);
+  return [...spans].sort((a, b) => b.seconds - a.seconds || a.start - b.start).slice(0, limit).map((span) => {
+    const { fix, reason } = suggestStillFix(span, metrics?.cuts ?? []);
+    return { start: span.start, end: span.end, seconds: span.seconds, fix, reason, instruction: STILL_FIXES[fix] };
+  });
+}
+
+// The stillness findings: one summary finding per measure over its ceiling,
+// then one finding per worst span (category "stillness", with start_seconds,
+// end_seconds, fix and instruction) that a critic, the repair step or a
+// director can act on directly.
+function stillnessFindings(metrics, expected) {
+  const motion = metrics?.motion ?? {};
+  const share = Number(motion.still_share);
+  const longest = Number(motion.longest_still_seconds);
+  const shareCeiling = expected.maximum_still_share;
+  const longestCeiling = expected.maximum_longest_still_seconds;
+  const out = [];
+  const shareOver = shareCeiling != null && motion.still_share != null && Number.isFinite(share) && above(share, shareCeiling);
+  const longestOver = longestCeiling != null && motion.longest_still_seconds != null && Number.isFinite(longest) && above(longest, longestCeiling);
+  if (!shareOver && !longestOver) return out;
+  const spans = worstStillSpans(metrics, { limit: Number(expected.still_span_limit ?? 6), minimum: shareOver ? STILLNESS.minSpanSeconds : Math.max(Number(longestCeiling), STILLNESS.minSpanSeconds) });
+  const list = spans.map((span) => `${clock(span.start)}–${clock(span.end)} (${span.seconds.toFixed(2)} s, ${span.fix})`).join(", ");
+  if (shareOver) out.push({ ...finding("stillness", "major", `${(share * 100).toFixed(1)}% of frame pairs are near-still (mean change under ${motion.stillness?.threshold ?? STILLNESS.threshold} grey levels); expected at most ${(Number(shareCeiling) * 100).toFixed(1)}%.${list ? ` Worst still spans: ${list}.` : ""}`), measure: "still_share", value: share, ceiling: Number(shareCeiling), spans });
+  if (longestOver) out.push({ ...finding("stillness", "major", `The longest mid-video still lasts ${longest.toFixed(2)} s; expected at most ${Number(longestCeiling).toFixed(2)} s.${list ? ` Worst still spans: ${list}.` : ""}`), measure: "longest_still_seconds", value: longest, ceiling: Number(longestCeiling), spans });
+  for (const span of spans) {
+    out.push({
+      ...finding("stillness", "major", `Still from ${clock(span.start)} to ${clock(span.end)} (${span.seconds.toFixed(2)} s): ${span.fix}, ${span.instruction}.`),
+      start_seconds: span.start,
+      end_seconds: span.end,
+      fix: span.fix,
+      reason: span.reason,
+      instruction: span.instruction
+    });
+  }
+  return out;
+}
+
+function clock(seconds) {
+  const value = Number(seconds);
+  const minutes = Math.floor(value / 60);
+  return `${minutes}:${(value - minutes * 60).toFixed(2).padStart(5, "0")}`;
 }
 
 // Optical-flow motion events: the start of a run of at least
@@ -504,6 +852,16 @@ function aspectOf(width, height) {
 
 function rate(count, duration) {
   return duration > 0 ? round(count * 60 / duration, 3) : 0;
+}
+
+// Profile bands are stored to 4 decimals, so a render is compared at that
+// precision (a reference measured into a profile passes its own band).
+function below(value, floor) {
+  return round(Number(value), 4) < Number(floor);
+}
+
+function above(value, ceiling) {
+  return round(Number(value), 4) > Number(ceiling);
 }
 
 function finding(category, severity, message) {

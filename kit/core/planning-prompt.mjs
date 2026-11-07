@@ -867,10 +867,10 @@ export function profilesReference(profiles = []) {
     '',
     'A cadence profile (`launchclip.cadence-profile.v1`) is what a strong video of one format and platform measures like: ranges (p10, p50, p90) over measurements of a reference set. Plan to the p50 targets inside the p10–p90 band; `launchclip finish` measures the render against the band. `launchclip profile list` and `launchclip profile show <id>` print them; `launchclip profile measure <folder>` measures your own references into one. Design: `docs/VIDEO_QUALITY_RFC.md` §5.',
     '',
-    'Every shipped profile is a seed until it is measured: conservative ranges, not statistics. Treat the bands as guard rails.',
+    'A shipped profile is a seed until it is measured: conservative ranges, not statistics, so treat a seed\'s bands as guard rails. A measured profile\'s bands are statistics over its references (with fewer than 10 references, p10 and p90 are the smallest and largest reference values).',
     '',
     ...section('Choosing a profile', [
-      'The profile follows the story\'s lane, aspect, duration and platform (a direction map\'s `profile` or a style\'s `profile` names one explicitly):',
+      'The profile follows the story\'s lane, aspect, duration and platform (`launchclip make --profile <id>`, a direction map\'s `profile` or a style\'s `profile` names one explicitly). A measured profile beats a seed that fits as well:',
       '',
       '| Profile | Format | Lanes | Aspects | Duration | Provenance |',
       '| --- | --- | --- | --- | --- | --- |',
@@ -879,7 +879,9 @@ export function profilesReference(profiles = []) {
     ...section('Measures', [
       '| Measure | What it is | Gate holds |',
       '| --- | --- | --- |',
-      ...Object.entries(PROFILE_MEASURES).map(([name, spec]) => `| ${name} | ${spec.describe} | ${spec.check === 'band' ? 'p10 and p90' : spec.check === 'max' ? 'p90 (a ceiling)' : 'p10 (a floor)'} |`)
+      ...Object.entries(PROFILE_MEASURES).map(([name, spec]) => `| ${name} | ${spec.describe} | ${spec.check === 'band' ? 'p10 and p90' : spec.check === 'max' ? 'p90 (a ceiling)' : 'p10 (a floor)'} |`),
+      '',
+      'The motion gate holds still_share and longest_still_seconds to the profile\'s p90 when it has them, else to defaults by format: motion and character stories at most 10% still and 0.6 s, product demos 25% and 1.5 s, footage-led (a talking head) only a frozen picture of 4 s. A failing render lists its worst still spans with a fix for each: zoom-kick, drift, whip, dot-wipe or new visual.'
     ])
   ];
   for (const profile of profiles) {
