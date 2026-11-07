@@ -12,6 +12,7 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 
 | Profile | Format | Lanes | Aspects | Duration | Provenance |
 | --- | --- | --- | --- | --- | --- |
+| animated-explainer-reel | motion | motion, voiceover-motion | 9:16 | 30–75 s | measured |
 | explainer-motion | motion | motion, voiceover-motion | any | 20–180 s | seed |
 | product-demo | demo-led | motion, voiceover-motion | any | 20–120 s | seed |
 | short-motion | motion | motion, voiceover-motion | 9:16 | 5–60 s | seed |
@@ -50,6 +51,27 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | problem_lands_seconds | how soon the problem beat lands | p90 (a ceiling) |
 
 The motion gate holds still_share and longest_still_seconds to the profile's p90 when it has them, else to defaults by format: motion and character stories at most 10% still and 0.6 s, product demos 25% and 1.5 s, footage-led (a talking head) only a frozen picture of 4 s. A failing render lists its worst still spans with a fix for each: zoom-kick, drift, whip, dot-wipe or new visual.
+
+## animated-explainer-reel
+
+A faceless animated explainer for Reels, Shorts and TikTok, 30–75 s in 9:16: illustrated scenes and a drawn host, voiced over, where the picture never stops moving.
+
+| Measure | p10 | p50 | p90 |
+| --- | --- | --- | --- |
+| still_share | 2% | 10% | 19% |
+| longest_still_seconds | 0.1 | 0.2665 | 0.433 |
+| shot_seconds | 7.133 | 10.9775 | 14.822 |
+| visual_changes_per_min | 46.15 | 49.92 | 53.69 |
+| coverage | 100% | 100% | 100% |
+| longest_undressed_seconds | 0 | 0 | 0 |
+| first_visual_seconds | 0 | 0 | 0 |
+| flow_velocity_p90 | 7.2111 | 7.6056 | 8 |
+| hold_ratio | 65% | 68% | 70% |
+| motion_bursts_per_min | 51.282 | 54.885 | 58.488 |
+| change_energy_p50 | 1.619 | 2.9401 | 4.2612 |
+| first_motion_seconds | 0 | 0 | 0 |
+| hook_events | 4 | 4 | 4 |
+| camera_moves_per_min | 8.629 | 9.4425 | 10.256 |
 
 ## explainer-motion
 

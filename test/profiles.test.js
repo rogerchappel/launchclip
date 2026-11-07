@@ -16,7 +16,7 @@ import { runProfileCommand } from "../src/profile_cli.js";
 import { runStoryCommand } from "../src/story_cli.js";
 import { runCli } from "../src/cli.js";
 
-const SHIPPED = ["explainer-motion", "product-demo", "short-motion", "short-talking-head", "story-characters", "youtube-long-form", "youtube-talking-head-launch"];
+const SHIPPED = ["animated-explainer-reel", "explainer-motion", "product-demo", "short-motion", "short-talking-head", "story-characters", "youtube-long-form", "youtube-talking-head-launch"];
 const example = (name) => fileURLToPath(new URL(`../examples/story/${name}/storyboard.json`, import.meta.url));
 
 async function resolved(name) {
@@ -29,7 +29,7 @@ function seed(overrides = {}) {
 }
 
 // Profiles measured from references; the rest are seeds.
-const MEASURED = [];
+const MEASURED = ["animated-explainer-reel"];
 
 test("the six RFC profiles and story-characters ship as valid seed profiles", () => {
   const profiles = shippedProfiles();
@@ -44,7 +44,36 @@ test("the six RFC profiles and story-characters ship as valid seed profiles", ()
   }
 });
 
-test("a measured profile beats a seed that fits as well", () => {
+test("animated-explainer-reel is measured from two references and carries the stillness bands", () => {
+  const profile = shippedProfiles().find((entry) => entry.id === "animated-explainer-reel");
+  assert.equal(profile.format, "motion", "an animated reel with no footage is a motion profile");
+  assert.equal(profile.provenance.kind, "measured");
+  assert.equal(profile.references, 2);
+  assert.equal(profile.provenance.sources.length, 2);
+  for (const source of profile.provenance.sources) {
+    assert.equal(source.rights, "public-statistics");
+    assert.equal(source.url, undefined, "no reference URL is stored");
+    assert.match(source.sha256, /^[0-9a-f]{64}$/);
+  }
+  assert.deepEqual(profile.match.aspects, ["9:16"]);
+  assert.deepEqual(profile.duration_seconds, [30, 75]);
+  for (const name of ["still_share", "longest_still_seconds", "change_energy_p50", "camera_moves_per_min"]) assert.ok(profile.measures[name], `${name} band`);
+  assert.ok(profile.measures.still_share.p90 < 0.25 && profile.measures.longest_still_seconds.p90 < 0.6);
+  // The face probe reads the drawn host as a presenter; that band is left out.
+  assert.equal(profile.measures.face_time, undefined);
+  assert.equal(profile.measures.text_hold_seconds, undefined);
+});
+
+test("a measured profile beats a seed that fits as well, and --profile names one explicitly", () => {
+  const profiles = shippedProfiles();
+  const pick = (context) => selectProfile(profiles, context).profile?.id;
+  assert.equal(pick({ lane: "voiceover-motion", aspect: "9:16", duration: 52, platform: "instagram-reels" }), "animated-explainer-reel");
+  assert.equal(pick({ lane: "motion", aspect: "9:16", duration: 70 }), "animated-explainer-reel");
+  assert.equal(pick({ lane: "motion", aspect: "9:16", duration: 15 }), "short-motion", "under 30 s stays short-motion");
+  assert.equal(pick({ lane: "voiceover-motion", aspect: "16:9", duration: 52 }), "explainer-motion", "16:9 is not a reel");
+  assert.equal(pick({ lane: "motion", aspect: "9:16", duration: 52, cast: true }), "story-characters");
+  assert.equal(pick({ lane: "footage-led", aspect: "9:16", duration: 52 }), "short-talking-head");
+  assert.equal(profileForStory({ lane: "motion", format: { width: 1080, height: 1920, duration: 20 } }, { profile: "animated-explainer-reel" }).profile.id, "animated-explainer-reel");
   const seedA = seed({ id: "seed-a", format: "motion" });
   const measuredB = seed({ id: "measured-b", format: "motion", references: 1, provenance: { kind: "measured", sources: [{ id: "a", rights: "own" }] } });
   assert.equal(selectProfile([seedA, measuredB], { lane: "motion", duration: 30 }).profile.id, "measured-b");
