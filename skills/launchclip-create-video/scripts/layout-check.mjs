@@ -356,10 +356,12 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
 // top or the middle of the frame; kept in step with captionBandTop() in
 // kit/core/captions.mjs (test/caption_presets.test.js).
 export const CAPTION_POSITION_TOP = Object.freeze({ portrait: 0.13, landscape: 0.08 });
+// 'low' centres the band 58% down (captions.mjs CAPTION_LOW_CENTRE).
+const CAPTION_LOW_CENTRE = 0.58;
 export function captionBandAt(band, canvas, position) {
-  if (!band || (position !== "top" && position !== "middle")) return band;
+  if (!band || (position !== "top" && position !== "middle" && position !== "low")) return band;
   const landscape = canvas.width > canvas.height;
-  const y = position === "top" ? canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) : canvas.height / 2 - band.height / 2;
+  const y = position === "top" ? canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) : canvas.height * (position === "low" ? CAPTION_LOW_CENTRE : 0.5) - band.height / 2;
   return { ...band, y };
 }
 

@@ -180,3 +180,22 @@ test("motion blur: caption changes land between two frames' sub-frames, so no fr
   }
   assert.deepEqual(chunks[0].words.map((word) => word.start), [0.417, 0.717]);
 });
+
+test("word-chip captions: one bare uppercase word, low-centre, where the layout check puts the band", async () => {
+  const { captionBandFor, captionBandTop, captionPlan, shownWords } = await import("@launchclip/core/captions.mjs");
+  const { captionBandAt, profileGeometry } = await import("@launchclip/core/layout-check.mjs");
+  assert.deepEqual(shownWords([{ text: "now," }, { text: '"timeline."' }, { text: "don't" }, { text: "…" }], { punctuation: false }).map((word) => word.text), ["now", "timeline", "don't", "…"]);
+  const format = { width: 1080, height: 1920 };
+  const band = captionBandAt(profileGeometry(format, "shorts").captionBand, format, "low");
+  // The two band sources differ by under a pixel (230 px in the profile, 12% of 1920 in the captions).
+  assert.ok(Math.abs(band.y - captionBandTop(format, "low") * 1920) < 1);
+  assert.ok(Math.abs(band.y + band.height / 2 - 0.58 * 1920) < 1);
+  assert.ok(Math.abs(captionBandFor(format).height * 1920 - band.height) < 1);
+  const chunks = [{ id: "cap-001", start: 0.4, end: 1.2, words: [{ text: "now,", start: 0.4, end: 0.7 }] }];
+  const plan = captionPlan(chunks, { type: "captions", preset: "word-chip", position: "low" }, { brand: BRAND, format });
+  const texts = [];
+  const walk = (node) => { if (node.text) texts.push(node.text); (node.children ?? []).forEach(walk); };
+  plan.nodes.forEach(walk);
+  assert.deepEqual(texts, ["now"]);
+  assert.match(plan.css, /text-transform: uppercase/);
+});

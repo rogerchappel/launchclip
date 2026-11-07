@@ -1291,7 +1291,9 @@ each element with `captionElementStateAt` (GSAP forward-seek semantics) and
 timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
-`position: top|middle` (`captionBandAt`).
+`position: top|middle|low` (`captionBandAt`; `low` centres it 58% down).
+A preset with `punctuation: false` (word-chip) shows each word without its
+leading and trailing marks (`shownWords`).
 
 Captions during camera moves: `hide_during_moves` is `"auto"` (default),
 `true` or `false`. Auto dips the captions out for every world-camera move that
