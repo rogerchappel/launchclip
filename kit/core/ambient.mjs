@@ -101,7 +101,7 @@ export function sceneAmbient(story, scene) {
 // The motion grammar's hold level (null for grammars without one, or an
 // invalid grammar, which validateStory reports).
 function grammarHoldLevel(story) {
-  if (!story?.motion?.grammar) return null;
+  if (!story?.motion?.grammar && !story?.motion?.feel) return null;
   try { return resolveGrammar(story).hold?.level ?? null; } catch { return null; }
 }
 
@@ -113,6 +113,9 @@ function grammarHoldLevel(story) {
 export function fieldLevel(story) {
   const base = ambientObject(story?.ambient);
   if (base.level) return base.level;
+  // A named feel (feel.mjs) sets the field too: kinetic is never still.
+  const held = story?.motion?.feel ? grammarHoldLevel(story) : null;
+  if (held) return held;
   const counts = new Map();
   for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
     const level = levelForEnergy(scene?.energy);

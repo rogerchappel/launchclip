@@ -54,6 +54,9 @@ export const PROFILE_MEASURES = Object.freeze({
   change_energy_p50: { unit: 'energy', check: 'min', describe: 'median frame-change energy' },
   first_motion_seconds: { unit: 's', check: 'max', describe: 'when the first meaningful motion arrives' },
   hook_events: { unit: 'events', check: 'min', describe: 'distinct cuts or motion bursts inside the hook window' },
+  still_share: { unit: 'share', check: 'max', describe: 'share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps)' },
+  longest_still_seconds: { unit: 's', check: 'max', describe: 'longest near-still run inside the video (a closing hold does not count)' },
+  camera_moves_per_min: { unit: '/min', check: 'min', describe: 'whole-frame camera moves (shifts, pans, zooms) per minute' },
   scene_seconds: { unit: 's', check: 'band', stat: 'p50', describe: 'scene length (character stories)' },
   character_screen_time: { unit: 'share', check: 'band', describe: 'share of the runtime with a character on screen' },
   expression_changes_per_min: { unit: '/min', check: 'band', describe: 'pose or expression changes per minute' },
@@ -61,7 +64,7 @@ export const PROFILE_MEASURES = Object.freeze({
 });
 
 // The measures the motion gate reads (src/cinematic_check.js).
-export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events']);
+export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events', 'still_share', 'longest_still_seconds', 'camera_moves_per_min']);
 // The measures the coverage gate reads from the storyboard and direction map.
 export const COVERAGE_MEASURES = Object.freeze(['coverage', 'face_time', 'longest_undressed_seconds', 'first_visual_seconds', 'subject_effect_share', 'longest_without_reset_seconds']);
 
@@ -164,7 +167,8 @@ export function aspectOf(format) {
  * {width, height}, duration (seconds), platform, cast (a character story),
  * demo (led by product-demo scenes), id (an explicit choice: a style's or a
  * direction map's profile)}. An explicit id wins when it exists; otherwise
- * the best match by lane, then aspect, then duration, then platform.
+ * the best match by lane, then aspect, then duration, then platform; a
+ * measured profile beats a seed that fits as well.
  * → {profile, reason} or {profile: null, reason}.
  */
 export function selectProfile(profiles, context = {}) {
@@ -192,7 +196,9 @@ export function selectProfile(profiles, context = {}) {
       else score -= Math.min(2, Math.abs(duration < min ? min - duration : duration - max) / Math.max(30, max - min));
     }
     if (platform && match.platforms?.includes(platform)) score += 1;
-    if (!best || score > best.score) best = { profile, score };
+    // A measured profile beats a seed that fits as well.
+    const measured = profile.provenance?.kind === 'measured';
+    if (!best || score > best.score || (score === best.score && measured && !best.measured)) best = { profile, score, measured };
   }
   if (!best) return { profile: null, reason: `no shipped profile for the ${format} format` };
   const facts = [context.lane ?? format, aspect, Number.isFinite(duration) ? `${Math.round(duration)} s` : null, platform].filter(Boolean).join(', ');

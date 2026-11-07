@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -250,6 +250,36 @@ function pointerPath(pointer) {
   return String(pointer ?? "").split("/").slice(1).map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~")).map((token) => (/^\d+$/.test(token) ? `[${token}]` : `.${token}`)).join("");
 }
 
+// dot-wipe options (kit/core/dot-wipe.mjs DOT_WIPE.colors and coverRange,
+// repeated here import-free).
+const DOT_WIPE_COLORS = ["accent", "ink", "paper"];
+const DOT_WIPE_COVER = [0.3, 1];
+
+function storyFps(story) {
+  const fps = Number(story?.format?.fps ?? 30);
+  return Number.isFinite(fps) && fps > 0 ? fps : 30;
+}
+
+/** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
+function dotWipeOptionErrors(transition, path, fps) {
+  const errors = [];
+  // hold is also the overview's (seconds); color and cover are the wipe's alone.
+  if (transition.type !== "dot-wipe") {
+    for (const key of ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    return errors;
+  }
+  const { color, cover, hold, dur } = transition;
+  if (color !== undefined && !(DOT_WIPE_COLORS.includes(color) || (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(color)}`);
+  const [lo, hi] = DOT_WIPE_COVER;
+  if (cover !== undefined && !(typeof cover === "number" && cover >= lo && cover <= hi)) errors.push(`${path}.cover must be the peak dot size between ${lo} and ${hi} (1 closes the frame); got ${JSON.stringify(cover)}`);
+  if (hold !== undefined) {
+    const most = typeof dur === "number" && dur > 0 ? Math.floor((dur * fps) / 2) : Infinity;
+    if (!(Number.isInteger(hold) && hold >= 0)) errors.push(`${path}.hold must be a whole number of frames, 0 or more; got ${JSON.stringify(hold)}`);
+    else if (hold > most) errors.push(`${path}.hold (${hold} frames) must be at most half the wipe (${most} frames at ${fps} fps) so the dots have time to grow and shrink`);
+  }
+  return errors;
+}
+
 export function validateStory(story, { modules, moduleParams } = {}) {
   const errors = [];
   const warnings = [];
@@ -454,6 +484,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     }
     return null;
   };
+  // Zoom kicks (kit/core/kinetic.mjs): seconds or narration anchors.
+  if (isObject(story.camera)) validateKicks(story.camera.kicks, { err, lane: story.lane, anchorField });
   const timing = [];
   const fromObjects = [];
   const overviews = [];
@@ -525,6 +557,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
+        if (transition.type === "dot-wipe" && track !== 0) err(`${path}.in.type "dot-wipe" covers the whole frame; only a track-0 scene can arrive with it`);
+        for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -672,6 +706,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           else if (duration !== null && transition.dur >= duration) err("ending.in.dur must be shorter than format.duration");
           if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`ending.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
           cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
+          for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);
@@ -781,6 +816,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     try { return resolveAnchor(value, context); }
     catch (error) { throw new Error(`${path}: ${error.message}`); }
   };
+  if (isObject(copy.camera) && Array.isArray(copy.camera.kicks)) copy.camera.kicks.forEach((kick, k) => {
+    if (isObject(kick) && kick.at !== undefined) kick.at = resolve(kick.at, `camera.kicks[${k}].at`);
+  });
   const scenes = Array.isArray(copy.scenes) ? copy.scenes : [];
   scenes.forEach((scene, index) => {
     if (!isObject(scene)) return;
@@ -981,7 +1019,8 @@ const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|
 function validateMotion(motion, err) {
   if (motion === undefined || motion === null) return;
   if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
-  for (const key of Object.keys(motion)) if (key !== "grammar") err(`motion.${key} is not supported (allowed: grammar)`);
+  for (const key of Object.keys(motion)) if (key !== "grammar" && key !== "feel") err(`motion.${key} is not supported (allowed: grammar, feel)`);
+  validateFeel(motion.feel, err);
   const grammar = motion.grammar;
   if (grammar === undefined || grammar === null) return;
   if (typeof grammar === "string") {
@@ -1009,6 +1048,55 @@ function validateMotion(motion, err) {
   if (grammar.stagger !== undefined && !(typeof grammar.stagger === "number" && grammar.stagger >= 0.25 && grammar.stagger <= 3)) err("motion.grammar.stagger must be a multiplier between 0.25 and 3");
   if (grammar.ambient !== undefined && !["off", "subtle", "standard", "lively"].includes(grammar.ambient)) err("motion.grammar.ambient must be off, subtle, standard or lively");
   if (grammar.camera !== undefined && !isObject(grammar.camera)) err("motion.grammar.camera must be an object");
+}
+
+// Story feel (kit/core/feel.mjs feelErrors / kickErrors, repeated here).
+export const STORY_FEELS = ["kinetic"];
+const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
+const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
+
+function validateFeel(feel, err) {
+  if (feel === undefined || feel === null || feel === false) return;
+  if (typeof feel === "string") { if (!STORY_FEELS.includes(feel)) err(`motion.feel must be one of ${STORY_FEELS.join(", ")} or {preset, ...overrides}`); return; }
+  if (!isObject(feel)) { err("motion.feel must be a feel name or {preset, ...overrides}"); return; }
+  for (const key of Object.keys(feel)) if (!["preset", "ambient", "kicks", "spring"].includes(key)) err(`motion.feel.${key} is not supported (allowed: preset, ambient, kicks, spring)`);
+  if (feel.preset !== undefined && !STORY_FEELS.includes(feel.preset)) err(`motion.feel.preset must be one of ${STORY_FEELS.join(", ")}`);
+  const ambient = feel.ambient;
+  if (ambient !== undefined && ambient !== false) {
+    if (!isObject(ambient)) err("motion.feel.ambient must be false or {scale?, shift?, period?}");
+    else {
+      for (const key of Object.keys(ambient)) if (!["scale", "shift", "period"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: scale, shift, period)`);
+      if (ambient.scale !== undefined && !feelPair(ambient.scale, 1, 1.08)) err("motion.feel.ambient.scale must be [lo, hi] between 1 and 1.08");
+      if (ambient.shift !== undefined && !feelRange(ambient.shift, 0, 0.02)) err("motion.feel.ambient.shift must be a share of the frame between 0 and 0.02");
+      if (ambient.period !== undefined && !feelPair(ambient.period, 2, 20)) err("motion.feel.ambient.period must be [lo, hi] seconds between 2 and 20");
+    }
+  }
+  const kicks = feel.kicks;
+  if (kicks !== undefined && kicks !== false && kicks !== "auto") {
+    if (!isObject(kicks)) err('motion.feel.kicks must be false, "auto" or {auto?, scale?, gap?}');
+    else {
+      for (const key of Object.keys(kicks)) if (!["auto", "scale", "gap"].includes(key)) err(`motion.feel.kicks.${key} is not supported (allowed: auto, scale, gap)`);
+      if (kicks.auto !== undefined && typeof kicks.auto !== "boolean") err("motion.feel.kicks.auto must be true or false");
+      if (kicks.scale !== undefined && !feelRange(kicks.scale, 1.03, 1.4)) err("motion.feel.kicks.scale must be between 1.03 and 1.4");
+      if (kicks.gap !== undefined && !feelRange(kicks.gap, 1.1, 10)) err("motion.feel.kicks.gap must be between 1.1 and 10 seconds (a kick and its relax take about 1.07 s)");
+    }
+  }
+  if (feel.spring !== undefined && !feelRange(feel.spring, 0, 0.6)) err("motion.feel.spring must be an overshoot between 0 and 0.6");
+}
+
+function validateKicks(kicks, { err, lane, anchorField }) {
+  if (kicks === undefined || kicks === null) return;
+  if (!Array.isArray(kicks)) { err("camera.kicks must be an array of {at, scale?, origin?}"); return; }
+  if (lane === "footage-led" && kicks.length) err("camera.kicks: footage-led stories keep their base camera and punch-ins; zoom kicks are for motion lanes");
+  for (const [i, kick] of kicks.entries()) {
+    const path = `camera.kicks[${i}]`;
+    if (!isObject(kick)) { err(`${path} must be {at, scale?, origin?}`); continue; }
+    for (const key of Object.keys(kick)) if (!["at", "scale", "origin"].includes(key)) err(`${path}.${key} is not supported (allowed: at, scale, origin)`);
+    if (kick.at === undefined) err(`${path}.at is required`);
+    else anchorField(kick.at, `${path}.at`);
+    if (kick.scale !== undefined && !feelRange(kick.scale, 1.03, 1.4)) err(`${path}.scale must be between 1.03 and 1.4`);
+    if (kick.origin !== undefined && !(isObject(kick.origin) && feelRange(kick.origin.x, 0, 1) && feelRange(kick.origin.y, 0, 1))) err(`${path}.origin must be {x, y}, shares of the frame between 0 and 1`);
+  }
 }
 
 // → the effective camera mode ("cuts" | "world") for the transition rules.
@@ -1133,7 +1221,7 @@ function validateSocialSources(story, warn) {
 function validateCamera(camera, { err, warn, lane }) {
   if (camera === undefined || camera === null) return "cuts";
   if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }
-  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur)`);
+  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur", "kicks"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur, kicks)`);
   const mode = camera.mode ?? "cuts";
   if (!STORY_CAMERA_MODES.includes(mode)) err(`camera.mode must be one of ${STORY_CAMERA_MODES.join(", ")}`);
   if (camera.layout !== undefined && !STORY_CAMERA_LAYOUTS.includes(camera.layout)) err(`camera.layout must be one of ${STORY_CAMERA_LAYOUTS.join(", ")}`);

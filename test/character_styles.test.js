@@ -159,7 +159,8 @@ test('a floor shadow is not part of a character\'s reach, and the mark never rea
     assert.equal(JSON.stringify(drawing), JSON.stringify(JSON.parse(JSON.stringify(drawing))));
     // The body's own width bounds the reach: the soft-shade ground ellipse (±190) is wider than a standing body.
     const b = drawingBounds(drawing);
-    assert.ok(b.right - b.left < 400, `${style} reach ${Math.round(b.right - b.left)} wide`);
+    // (The avatar's head is 1.7 times the rig's, so its hair alone is wider.)
+    assert.ok(b.right - b.left < (style === 'avatar' ? 460 : 400), `${style} reach ${Math.round(b.right - b.left)} wide`);
   }
   // A soft-shade pair standing at rest in a 9:16 phone set stays inside the safe zone.
   const scene = {id: 's', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast: [{id: 'maya'}, {id: 'theo'}]}};

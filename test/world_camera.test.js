@@ -297,7 +297,7 @@ test("world mode stacks overlays above the camera: a cast on track 1 is never un
   assert.match(html, new RegExp(`\\.lc-camera \\{[^}]*z-index: ${CAMERA_STACK.camera};`));
   const z = Number(html.match(/data-launchclip-scene="pair"[^>]*style="z-index:(\d+)/)[1]);
   assert.ok(z >= CAMERA_STACK.scenes, `cast-scene z-index ${z}`);
-  // Remotion: overlays, the frame and the captions sit in one layer at CAMERA_STACK.scenes, after the camera.
+  // Remotion: overlays sit in a layer at CAMERA_STACK.scenes right after the camera (the frame and captions in the next one).
   const tsx = await readFile(path.join(ROOT, "kit/remotion/StoryComposition.tsx"), "utf8");
   const world = tsx.slice(tsx.indexOf("<CameraWorld plan={plan}"));
   assert.match(world, /<\/CameraWorld>\s*\{\/\*[^*]*\*\/\}\s*<AbsoluteFill style=\{\{ zIndex: CAMERA_STACK\.scenes \}\}>\s*\{layers\.filter\(\(layer: any\) => !layer\.entry\.plate && !layer\.entry\.rides\)/);

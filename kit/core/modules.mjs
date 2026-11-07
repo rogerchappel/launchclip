@@ -599,9 +599,7 @@ function castNeighbours(story, scene) {
 // long as the plate is drawn. Windows are cached per story, keyed by the
 // scene timing they depend on (callers may edit a story between calls).
 const WINDOW_ENDS = new WeakMap();
-function beneathWithWindow(story, scene) {
-  const beneath = worldBeneath(story, scene);
-  if (!beneath) return null;
+function windowEnds(story) {
   const key = story.scenes.map((s) => `${s?.id}|${s?.start}|${s?.end}|${s?.track ?? 0}|${s?.in?.type ?? ''}|${s?.in?.dur ?? ''}`).join(';') + `|${story?.camera?.mode ?? ''}|${story?.resolved?.duration ?? story?.format?.duration}`;
   let cached = WINDOW_ENDS.get(story);
   if (!cached || cached.key !== key) {
@@ -610,9 +608,29 @@ function beneathWithWindow(story, scene) {
     cached = { key, ends };
     WINDOW_ENDS.set(story, cached);
   }
+  return cached.ends;
+}
+
+/**
+ * The end the compilers resolve a scene's module with (render-segments.mjs
+ * sceneModels): the scene's end, extended through the next scene's
+ * transition overlap (a whip or dot-wipe keeps the outgoing scene drawn), or
+ * undefined when the story's windows do not resolve. Validation resolves
+ * with it so a check that depends on the length (a clip's source window)
+ * sees the window the render draws.
+ */
+export function sceneRenderEnd(story, scene) {
+  if (!story || !Array.isArray(story.scenes) || !scene) return undefined;
+  const end = windowEnds(story).get(scene.id);
+  return Number.isFinite(end) && end > Number(scene.end) + 1e-9 ? end : undefined;
+}
+
+function beneathWithWindow(story, scene) {
+  const beneath = worldBeneath(story, scene);
+  if (!beneath) return null;
   const plate = story.scenes.find((s) => s?.id === beneath.scene);
   // The plate's model end, as the compilers resolve it (a final hold extends the last scene).
-  const renderEnd = endingEnd(plate, story, cached.ends.get(beneath.scene) ?? beneath.end) ?? beneath.end;
+  const renderEnd = endingEnd(plate, story, windowEnds(story).get(beneath.scene) ?? beneath.end) ?? beneath.end;
   return { ...beneath, renderEnd };
 }
 

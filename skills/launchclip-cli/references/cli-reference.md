@@ -1302,10 +1302,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip profile show <id|profile.json>
   ```
 
-- `profile measure`: Measure a folder of reference videos into a cadence profile. Only statistics are kept, never frames, audio or text; --rights says what right you have to analyse them. --replace writes over a shipped profile and refreshes kit/profiles/PROVENANCE.md.
+- `profile measure`: Measure a folder of reference videos into a cadence profile. Only statistics are kept, never frames, audio or text; --rights says what right you have to analyse them. --replace writes over a shipped profile and refreshes kit/profiles/PROVENANCE.md. --drop leaves out measures the pixel estimate gets wrong for the format; --note adds to the provenance note.
 
   ```text
-  launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1]
+  launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1] [--drop measure,…] [--note "…"]
   ```
 
 - `cast list`: List the starter characters, and the story's cast when given a project.

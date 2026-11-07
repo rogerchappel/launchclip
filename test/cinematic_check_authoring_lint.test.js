@@ -30,7 +30,7 @@ const overflow = (selector, containerSelector, extra = {}) => ({ code: "containe
 const scenes = ["s1", "s1-cast", "s1-say"];
 
 test("engine camera wrappers overflowing their own parent are waived, by exact selector pair", () => {
-  for (const [child, parent] of [["#lc-cam-drift", "#lc-camera"], ["#lc-cam-zoom", "#lc-cam-drift"], ["#lc-par-s1-say", "#lc-scene-s1-say"], ["#lc-zs-s1", "#lc-layer-s1"], ["#lc-drift-s1", "#lc-layer-s1"], ["#s1-cast-cam", "#s1-cast"], ["#s1-cast-overlay-cam", "#s1-cast-overlay"]]) {
+  for (const [child, parent] of [["#lc-cam-drift", "#lc-camera"], ["#lc-cam-zoom", "#lc-cam-drift"], ["#lc-par-s1-say", "#lc-scene-s1-say"], ["#lc-zs-s1", "#lc-layer-s1"], ["#lc-drift-s1", "#lc-layer-s1"], ["#s1-cast-cam", "#s1-cast"], ["#s1-cast-overlay-cam", "#s1-cast-overlay"], ["#lc-feel", "#launchclip-root"], ["#lc-scene-s1", "#lc-feel"], ["#lc-layer-s1-say", "#lc-feel"], ["#lc-camera", "#lc-feel"]]) {
     assert.equal(engineWrapperOverflow(overflow(child, parent), new Set(scenes)), true, `${child} in ${parent}`);
   }
   for (const [child, parent, why] of [
@@ -39,12 +39,57 @@ test("engine camera wrappers overflowing their own parent are waived, by exact s
     ["#lc-par-s1-say", "#lc-scene-s1", "another scene's container"],
     ["#s1-cast-cam", "#s1-say", "a camera in a foreign parent"],
     ["#lc-cam-drift", "#lc-scene-s1", "the world camera outside its stack"],
-    ["#my-cam", "#my", "an author id that only looks like a camera"]
+    ["#my-cam", "#my", "an author id that only looks like a camera"],
+    ["#lc-feel", "#lc-scene-s1", "the feel wrapper outside the root"],
+    ["#lc-scene-s9", "#lc-feel", "a scene the composition does not have, in the feel"]
   ]) assert.equal(engineWrapperOverflow(overflow(child, parent), new Set(scenes)), false, why);
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), severity: "error" }), false, "an error is never waived");
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-pan", "#lc-cam-zoom"), code: "escaped_container" }), true, "a pan carrying its wrapper a frame away");
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-cam-drift", "#lc-camera"), code: "text_overflow" }), false, "only container_overflow and escaped_container");
   assert.equal(engineWrapperOverflow({ ...overflow("#lc-drift-s1", "#launchclip-root"), code: "canvas_overflow" }), false, "text leaving the canvas is never waived");
+});
+
+test("the ambient field's blobs and a dot wipe's dots overflowing their own engine parent are waived, by exact selector pair", () => {
+  const ids = new Set(["s1", "s2b", "s3-loop"]);
+  for (const [child, parent, code] of [
+    ["#lc-amb-s1-b0", "#lc-amb-field-s1", "container_overflow"],
+    ["#lc-amb-s2b-b3", "#lc-amb-field-s2b", "container_overflow"],
+    ["#lc-amb-s1-b2", "#lc-amb-field-s1", "escaped_container"],
+    ["#lc-dw-s2b > svg:nth-of-type(1) > g:nth-of-type(1)", "#lc-dw-s2b > svg:nth-of-type(1)", "container_overflow"],
+    ["#lc-dw-s3-loop > svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(7)", "#lc-dw-s3-loop > svg:nth-of-type(1)", "container_overflow"],
+    // The world camera's pan carried a frame away (a kinetic story with a whip-pan in world mode).
+    ["#lc-cam-pan", "#lc-cam-zoom", "escaped_container"]
+  ]) assert.equal(engineWrapperOverflow(overflow(child, parent, { code }), ids), true, `${child} in ${parent} (${code})`);
+  for (const [child, parent, why] of [
+    ["#lc-amb-s1-b0", "#lc-amb-field-s2b", "a blob in another scene's field"],
+    ["#lc-amb-s9-b0", "#lc-amb-field-s9", "a scene the composition does not have"],
+    ["#lc-amb-s1-b4", "#lc-amb-field-s1", "a fifth blob the engine never draws"],
+    ["#lc-amb-s1-b0", "#lc-scene-s1", "a blob outside its field"],
+    ["#lc-amb-field-s1", "#lc-layer-s1", "the field itself"],
+    ["#lc-dw-s2b > svg:nth-of-type(1)", "#lc-dw-s2b", "the wipe's svg"],
+    ["#lc-dw-s2b > svg:nth-of-type(1) > g:nth-of-type(1)", "#lc-dw-s1 > svg:nth-of-type(1)", "another wipe's svg"],
+    ["#lc-dw-s2b > svg:nth-of-type(1) > g:nth-of-type(2)", "#lc-dw-s2b > svg:nth-of-type(1)", "a second group the engine never draws"],
+    ["#lc-dw-s2b > svg:nth-of-type(1) > g:nth-of-type(1) > g:nth-of-type(1) > circle:nth-of-type(1)", "#lc-dw-s2b > svg:nth-of-type(1)", "a single dot"],
+    ["#lc-dw-s9 > svg:nth-of-type(1) > g:nth-of-type(1)", "#lc-dw-s9 > svg:nth-of-type(1)", "a wipe into a scene the composition does not have"],
+    ["#s1-headline", "#lc-amb-field-s1", "a module's element in the field"]
+  ]) assert.equal(engineWrapperOverflow(overflow(child, parent), ids), false, why);
+  assert.equal(engineWrapperOverflow(overflow("#lc-amb-s1-b0", "#lc-amb-field-s1", { code: "canvas_overflow" }), ids), false, "only container_overflow and escaped_container");
+  assert.equal(engineWrapperOverflow(overflow("#lc-amb-s1-b0", "#lc-amb-field-s1", { severity: "error" }), ids), false, "an error is never waived");
+});
+
+test("a kinetic story's strict check with ambient blobs, dot wipes and a world pan passes once the engine pairs are waived", () => {
+  const ids = ["s1", "s2", "s2-loop"];
+  const layout = [
+    ...["b0", "b1", "b2", "b3"].map((b) => overflow(`#lc-amb-s1-${b}`, "#lc-amb-field-s1")),
+    overflow("#lc-amb-s2-b1", "#lc-amb-field-s2", { code: "escaped_container" }),
+    overflow("#lc-dw-s2 > svg:nth-of-type(1) > g:nth-of-type(1)", "#lc-dw-s2 > svg:nth-of-type(1)"),
+    overflow("#lc-dw-s2-loop > svg:nth-of-type(1) > g:nth-of-type(1)", "#lc-dw-s2-loop > svg:nth-of-type(1)"),
+    overflow("#lc-cam-pan", "#lc-cam-zoom", { code: "escaped_container" }),
+    overflow("#lc-feel", "#launchclip-root")
+  ];
+  assert.deepEqual(waiveEngineWarnings(report(authoring, { layout: section(layout, { truncated: false }) }), { scenes: ids }), { ok: true, waived: [...COMPILED_AUTHORING_LINT, "container_overflow", "escaped_container"], counts: { composition_file_too_large: 1, timeline_track_too_dense: 1, container_overflow: 7, escaped_container: 2 } });
+  // A headline overflowing beside them still fails.
+  assert.equal(waiveEngineWarnings(report(authoring, { layout: section([...layout, overflow("#s1-headline", "#lc-layer-s1")]) }), { scenes: ids }), null);
 });
 
 test("a strict check that fails only on engine-made warnings passes verification; anything else still fails", () => {

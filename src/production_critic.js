@@ -20,6 +20,7 @@ Rules:
 - Technical validity is not creative quality. A clean DOM can still be dull, generic, illegible, or narratively weak.
 - Do not demand a fixed house style. Judge whether this video's chosen art direction is coherent, original, and appropriate to its subject.
 - Use motion metrics as temporal evidence. Do not treat raw RGB or pixel similarity to unrelated references as a quality target.
+- temporal_motion_analysis.motion.still_spans lists every near-still run of 0.3 s or more (start/end seconds); the motion gate's "stillness" findings name the worst ones with a suggested fix (zoom-kick, drift, whip, dot-wipe or new visual). Confirm a span in the frames, then turn it into a timed finding with that fix as the instruction.
 - temporal_motion_analysis.frame_count is the encoded video frame count. temporal_motion_analysis.motion.frame_count is the number of adjacent-frame difference samples and is normally one lower; do not confuse the two.
 - When production_expectations.audio is intentionally-silent, do not request voiceover, music, sound effects, or an audio stream. Judge only the requested silent evaluation render.
 - A finding must name observable evidence, affected shot IDs, the smallest repair scope, a concrete instruction, and what must be preserved.

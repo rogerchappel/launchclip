@@ -75,7 +75,9 @@ function clipMedia(check, value, path, duration) {
     sourceEnd = check.num(media.sourceEnd, `${path}.sourceEnd`, 0, 3600);
     if (sourceEnd <= sourceStart) check.fail(`${path}.sourceEnd`, `must be after sourceStart (${sourceStart} s); got ${sourceEnd} s`);
     // The scene plays the window from sourceStart; it may not run past sourceEnd.
-    if (sourceEnd - sourceStart + 1e-6 < duration) check.fail(`${path}.sourceEnd`, `leaves a ${r2(sourceEnd - sourceStart)} s source window (${sourceStart}–${sourceEnd} s) for a ${r2(duration)} s scene; shorten the scene or widen the window`);
+    // duration is the render window (ctx end: the compilers resolve with the
+    // scene's render end, which includes the next scene's transition overlap).
+    if (sourceEnd - sourceStart + 1e-6 < duration) check.fail(`${path}.sourceEnd`, `leaves a ${r2(sourceEnd - sourceStart)} s source window (${sourceStart}–${sourceEnd} s) for a ${r2(duration)} s render window (the scene plus any transition into the next scene, which keeps this shot drawn); shorten the scene or widen the window`);
   }
   return {kind, src, sourceStart, sourceEnd};
 }

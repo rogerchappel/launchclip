@@ -304,6 +304,42 @@ export function springValue(t, {start = 0, damping = 14, stiffness = 140, mass =
 }
 
 // ---------------------------------------------------------------------------
+// Spring ease (GSAP-native, parameterised by overshoot)
+
+/** The overshoot a kinetic feel springs with by default: 27 % of the travel. */
+export const SPRING_OVERSHOOT = .27;
+const springPeriods = new Map();
+
+function peakOvershoot(fn, steps = 2000) {
+  let peak = 0;
+  for (let i = 0; i <= steps; i++) peak = Math.max(peak, fn(i / steps) - 1);
+  return peak;
+}
+
+/**
+ * A spring as a GSAP ease name: "elastic.out(1, P)" with the period P solved
+ * so its first overshoot is `overshoot` of the travel (0.27 → 27 %). The
+ * elastic decay 2^(−10p) makes each following swing about the same fraction
+ * of the one before, as a damped spring does, and GSAP plays the name
+ * natively, so both renderers draw the same curve. Overshoot 0 → "power3.out".
+ */
+export function springEase(overshoot = SPRING_OVERSHOOT) {
+  const target = Number(overshoot);
+  if (!Number.isFinite(target) || target < 0 || target > .6) throw new Error('spring overshoot must be between 0 and 0.6');
+  if (target < .005) return 'power3.out';
+  const key = Math.round(target * 1000) / 1000;
+  if (!springPeriods.has(key)) {
+    let lo = .1, hi = 2;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (peakOvershoot(configElastic('out', 1, mid)) > key) lo = mid; else hi = mid;
+    }
+    springPeriods.set(key, Math.round(((lo + hi) / 2) * 1000) / 1000);
+  }
+  return `elastic.out(1, ${springPeriods.get(key)})`;
+}
+
+// ---------------------------------------------------------------------------
 // Text splitting
 
 /** Whitespace-separated words, in order. → [{text, index}] */

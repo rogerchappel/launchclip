@@ -179,15 +179,17 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   the scene and the format.
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
-  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card", dur, from_object?, direction?}`
-  (the last three: see "Shot states and the focus device").
+  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan"|"rack-focus"|"glow-wipe"|"card-to-card"|"dot-wipe", dur, from_object?, direction?}`
+  (a dot-wipe also takes `color?`, `cover?` and `hold?`)
+  (rack-focus, glow-wipe, card-to-card and dot-wipe: see "Shot states and
+  the focus device").
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
   else is `ordinary`. `pan`, `pull`, `orbit`, `whip-pan` (and `push` in
   `camera.mode` "world") move the world camera; see "World camera".
 - `states` on a scene (1–5 entries, each `{at, set}`) advances one module
   instance through timed states; see "Shot states and the focus device".
-- `motion.grammar` (a grammar name or `{base, ...overrides}`) and `camera`
-  (`{mode, layout?, spacing?, parallax?, blur?}`): see "Motion grammar" and
+- `motion.grammar` (a grammar name or `{base, ...overrides}`), `motion.feel` (see "Story feel") and `camera`
+  (`{mode, layout?, spacing?, parallax?, blur?, kicks?}`): see "Motion grammar" and
   "World camera".
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
@@ -644,6 +646,30 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - `glow-wipe` (direction left|right|up|down): a straight inset wipe in the
   travel direction; both plates flare (`glow` = extra brightness, peak 0.85)
   at the edge. For chapter breaks only.
+- `dot-wipe` (`kit/core/dot-wipe.mjs`, track-0 scenes only, about 0.5 s;
+  `{type: "dot-wipe", dur, color?, cover?, hold?}`): a halftone grid of round
+  dots (24 across the short side, opacity 0.96) grows in from the corners and
+  edges (`power1.in`), peaks, and shrinks away centre first (`power1.out`),
+  symmetric about the midpoint, where the plates swap (the layer side is two
+  zero-length opacity tweens).
+  - `color`: `"accent"` (default: the brand accent, or `ink` when the accent
+    has under 1.5:1 contrast on `bg`), `"ink"` (the brand's `ink` when it has
+    4:1 contrast on `bg`, else `paper`: dark dots on a light paper look,
+    light dots on a dark one), `"paper"` (the page, `bg`: a soft wipe) or a
+    `#rrggbb` hex.
+  - `cover`: the peak dot size, 0.3–1, as a share of the closing size (0.74 ×
+    the pitch, where neighbours overlap and close the frame). Default 0.65:
+    neighbouring dots just touch (about 72 % of the frame at the peak), so
+    the swap shows through the halftone instead of as a solid blink. Below
+    about 0.95 the frame never closes; 0.8 covers about 90 % and reads as two
+    near-solid frames at 30 fps.
+  - `hold`: whole frames held at the peak, centred on the swap (default 0;
+    at most half the wipe).
+  Both renderers draw the same SVG (dots grouped by lateness `--lc-dl`) and
+  CSS rule (`r: calc(R * --lc-dc * clamp(0, --lc-dw * 2.4 − --lc-dl * 1.4,
+  1))`, `--lc-dc` the cover on the wipe's element) above every scene and
+  under the medium, the brand frame and the captions; HyperFrames tweens
+  `--lc-dw`, Remotion sets it per frame (`dotWipeCover`).
 - `card-to-card`: FLIP continuity. The incoming layer starts with the
   outgoing card's centre and area (`params.rect` of each scene, else the
   canvas; `cardMap(a, b, width, height)`) and settles on its own, while the
@@ -2155,6 +2181,81 @@ its plates' placements, its overlays' parallax, the lattice glows or field
 tiles that cross the canvas). Changing one scene's pan direction re-renders the segments from
 that move on, including later scenes whose own fields did not change.
 
+## Story feel (`kit/core/feel.mjs`, `kit/core/kinetic.mjs`)
+
+One setting turns on the habits of a top faceless animated reel together:
+
+```json
+"motion": {"feel": "kinetic"},
+"camera": {"mode": "cuts", "kicks": [{"at": "word:twelve"}, {"at": 6.1, "scale": 1.2, "origin": {"x": 0.5, "y": 0.4}}]}
+```
+
+- `motion.feel`: `"kinetic"`, or `{preset: "kinetic", ambient?: false |
+  {scale?: [lo, hi] (1–1.08), shift?: 0–0.02, period?: [lo, hi] s (2–20)},
+  kicks?: false | "auto" | {auto?, scale?: 1.03–1.4, gap?: 1.1–10 s},
+  spring?: overshoot 0–0.6}`.
+- `camera.kicks`: `[{at: seconds | anchor, scale?: 1.03–1.4 (1.05),
+  origin?: {x, y} (shares of the frame, the centre by default)}]`. Explicit
+  kicks work with or without a feel (with no feel: kicks only). Anchors
+  resolve in `resolveStory` like hits.
+- Grammar (`feelGrammar`, merged by `resolveGrammar` as preset < feel <
+  `motion.grammar`): base `snappy` unless the story names another, `enter`
+  and `emphasis` eases become `springEase(0.27)` (`elastic.out(1, 0.406)`, a
+  GSAP-native spring whose first overshoot is 27 % of the travel and whose
+  later swings decay like a damped spring; `motion.mjs springEase(o)` solves
+  the period for any overshoot), entrances get 0.42 s to settle, the
+  whip-pan ease is `expo.inOut` with 0.8 move blur, `defaultTransition` is a
+  0.26 s whip-pan, and the hold level is `lively` (ambient field and hold
+  drift, `ambient.mjs`).
+- Ambient camera: one wrapper (`#lc-feel` in HyperFrames, `FeelLayer` in
+  Remotion) around every scene, the world camera and the overlays, under the
+  dot wipes, the medium, the brand frame and the captions. Its transform is
+  `translate(x, y) scale(s)` about the canvas centre: x and y waves within
+  ±`shift` of the frame (0.9 %), s a wave between `scale[0]` and `scale[1]`
+  (1.02–1.045; 1.02 is the overscan the drift needs), periods in
+  `period` (4–7 s) that divide the story duration, so loop seams match. In
+  world mode the camera's own drift stays and the feel adds kicks only.
+- Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
+  settle over 0.35 s with the feel's overshoot towards a rest
+  `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
+  a 0.6 s relax to 1. The scale is about `origin`. Automatic kicks
+  (`kicks.auto`, on by default with the feel) take emphasised caption words
+  and numbers (`captionEmphasis`: digits, overlay keywords, words named by
+  impact hits) and strong scene hits; explicit kicks go first. At most one
+  per `gap` (1.5 s), never in a busy span (`feelBusy`: track-0 transitions,
+  the loop ending, the camera plan's moves and zooms inside a shot, padded
+  0.06 s). A dropped explicit kick is a compile warning.
+- Content-safe kicks (`feelSafeArea`, `contentSafeKicks`): the content area
+  is the profile safe zone, widened in a portrait frame to a 60 px content
+  margin (of 1080) on the left, right and top, where headlines and top bars
+  sit, plus 12 px of breathing room (9:16: x 48–1032, y 48–1462, so the
+  wrapper scale may reach ×1.0976; 16:9: the title-safe zone, ×1.0843). A
+  kick is reduced so its peak times the ambient's largest scale over the
+  kick stays within that limit; a reduced explicit kick (or the feel's
+  `kicks.scale` when the story sets it) is a compile warning. The defaults
+  (×1.05 on an ambient peak of ×1.045) fit 9:16 exactly; in 16:9 automatic
+  kicks shrink to about ×1.037.
+- Safety: `feelStateAt` clamps every frame so the wrapper covers the canvas
+  (scale ≥ 1, |x| ≤ (s − 1)·W/2, |y| likewise): no edge ever shows. It also
+  caps the scale at the content area's limit and clamps the translate so the
+  area stays inside the frame (the zoom's effective origin moves towards the
+  area instead of cropping it). Captions,
+  the brand frame and the medium sit outside the wrapper, so caption zones
+  and the face-safe logic are unchanged. Footage-led stories (a base
+  recording) get no ambient camera or kicks; their base camera owns the frame.
+- Renderers: `feelSamples(plan)` gives one state per frame; HyperFrames sets
+  each changed one on `#lc-feel` (`feelGsap`, `tl.set` at f/fps − 0.0005),
+  Remotion evaluates `feelStateAt(plan, frame / fps)`, the same values.
+  Without a feel or kicks nothing is emitted. `hyperframes check` reports
+  `#lc-feel` overflowing `#launchclip-root` (it is scaled past the canvas by
+  design), like the world camera's wrappers. The cinematic check
+  (`src/cinematic_check.js engineWrapperOverflow`) waives exactly these
+  engine pairs, plus the ambient field's blobs (`#lc-amb-<scene>-b0..b3` in
+  `#lc-amb-field-<scene>`) and a dot wipe's dot group (`#lc-dw-<scene> > svg
+  > g`, in the wipe's own `<svg>`), for scenes of the compiled composition.
+- Golden: `examples/story/kinetic-feel-9x16` (paper background, three cards,
+  two kicks, a 0.26 s whip-pan and a dot-wipe).
+
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
 The camera dives into one bar, row, number or box of a track-0 shot as the
@@ -3223,6 +3324,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `stick-classic` | `style-stick.mjs` | the classic black-and-white stick figure: one ink line per limb, a white head, hair and face in line art |
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
+  | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they

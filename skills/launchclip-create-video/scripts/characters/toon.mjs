@@ -90,13 +90,14 @@ function arm(ctx, side) {
     P.ellipse(0, g.foreArm + hand * 0.35, hand, hand * 1.04, 'skin')
   ]).concat(
     aid ? [group(heldAid(ctx, aid, -g.foreArm * 0.5), {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : [],
-    ctx.props?.[side] ? [group(ctx.props[side], {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : []
+    ctx.props?.[side] ? [group(ctx.props[side], {transform: `translate(0 ${r1(g.foreArm + hand * 0.35)})`})] : [],
+    robot ? [] : pin(ctx, long ? 'top' : 'skin', g.armW)
   )));
   const upper = P.within({mirror}, () => (long
     ? P.limb(g.upperArm, g.armW, sleeve)
     : p.outfit.top === 'tank' ? P.limb(g.upperArm, g.armW * 0.92, 'skin')
       : [...P.limb(g.upperArm, g.armW * 0.92, 'skin'), ...P.limb(g.upperArm * 0.5, g.armW + 8, sleeve, -4)]));
-  return joint(ctx, `arm-${side}`, side === 'l' ? -g.armX : g.armX, g.armY, {rotation: j[`arm${s}`], y: j.shoulderY}, [...upper, fore], {mirror});
+  return joint(ctx, `arm-${side}`, side === 'l' ? -g.armX : g.armX, g.armY, {rotation: j[`arm${s}`], y: j.shoulderY}, [...upper, fore, ...pin(ctx, 'top', g.armW)], {mirror});
 }
 
 function leg(ctx, side) {
@@ -113,12 +114,28 @@ function leg(ctx, side) {
   const shin = joint(ctx, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [
     ...(prosthetic ? prostheticShin(ctx, legColor) : P.limb(g.shin - 10, g.legW * 0.9, shorts ? 'skin' : legColor)),
     ...(skirt ? [] : [P.line(`M${r1(-g.legW * 0.42)} ${r1(g.shin - 16)}L${r1(g.legW * 0.42)} ${r1(g.shin - 16)}`, 'bottomShade', 5)]),
-    group([shoe], {transform: 'scale(-1 1)'})
+    group([shoe], {transform: 'scale(-1 1)'}),
+    ...(prosthetic ? [] : pin(ctx, shorts || skirt ? 'skin' : legColor, g.legW))
   ]));
   const thigh = P.within({mirror}, () => (shorts
     ? [...P.limb(g.thigh, g.legW * 0.94, 'skin'), ...P.limb(g.thigh * 0.62, g.legW + 4, legColor, -6), P.line(`M${r1(-g.legW * 0.5)} ${r1(g.thigh * 0.62)}L${r1(g.legW * 0.5)} ${r1(g.thigh * 0.62)}`, 'bottomShade', 6)]
     : P.limb(g.thigh, bottom === 'leggings' ? g.legW * 0.94 : g.legW, legColor)));
   return joint(ctx, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY + 10, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, ...thigh], {mirror});
+}
+
+/**
+ * A pin joint (ctx.pins): a round brad at a joint's pivot, a shade of what it
+ * pins (a colour key) with a small highlight, like a paper puppet's fastener.
+ * Nothing without pins.
+ */
+function pin(ctx, colorKey, width) {
+  if (!ctx.pins) return [];
+  const base = ctx.c[colorKey] ?? colorKey;
+  const r = r1(Math.max(5, width * 0.15));
+  return [
+    ctx.P.ellipse(0, 0, r, r, mixColor('#1c1820', base, 0.4), {outline: false}),
+    ctx.P.ellipse(r1(-r * 0.3), r1(-r * 0.3), r1(r * 0.36), r1(r * 0.36), mixColor('#ffffff', base, 0.55), {outline: false, opacity: 0.85})
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +340,8 @@ export function face(ctx, name) {
   const {cy} = g.head;
   const parts = expressionParts(name);
   const browColor = p.hair.style === 'headscarf' ? 'browDark' : GREY_HAIR.includes(p.hair.color) ? 'hairShade' : 'mixBrow';
-  const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + 10, {}, eyes(parts.eyes, P));
+  const eyeParts = eyes(parts.eyes, P);
+  const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + 10, {}, ctx.eyeScale && ctx.eyeScale !== 1 ? [group(eyeParts, {transform: `scale(${k3(ctx.eyeScale)})`})] : eyeParts);
   const kids = [];
   if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
   kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy));
@@ -400,14 +418,20 @@ export function toonColors(colors) {
  *   options.static      true: transforms as SVG attributes, only the shown
  *                       face drawn (cast sheets); false: CSS transforms the
  *                       op list animates
+ *   options.geometry    the body's measurements (default rig.mjs rigGeometry)
+ *   options.headScale   the head drawn this many times its rig size, about
+ *                       the neck (hair, face and headwear with it)
+ *   options.pins        true: a pin at each shoulder, elbow and knee
+ *   options.eyeScale    the eyes drawn this many times their size (about each eye pair's centre)
  *   makePen     (colors, {id}) → pen
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false}, makePen) {
-  const g = rigGeometry(params);
+export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false, geometry = null, headScale = 1, pins = false, eyeScale = 1}, makePen) {
+  const g = geometry ?? rigGeometry(params);
   const c = toonColors(colors);
   const P = makePen(c, {id, light});
-  const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing};
+  const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing, pins, eyeScale};
+  const sized = parts => (headScale === 1 ? parts : [group(parts, {transform: `scale(${k3(headScale)})`})]);
   const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
   const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
   const headKids = [
@@ -421,8 +445,8 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
     ])
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
-  const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : hairBack(ctx));
+  const headIdle = joint(ctx, 'headidle', 0, 0, {}, sized(headKids));
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, sized(params.headwear === 'turban' ? [] : hairBack(ctx)));
   const neckTop = g.neckY;
   const torsoKids = [
     joint(ctx, 'hb', 0, neckTop, tilt, [backIdle]),

@@ -119,7 +119,7 @@ launchclip style upgrade my-channel
 - **Layouts for your footage (`layouts`):** which layout each kind of line or section prefers (for example lists beside you on the right with `"list": "split-right"`), and how panels look: `solid`, `glass` or `paper`, with a corner radius.
 - **Vocabulary (`vocabulary`):** the tint of icons, whether illustrated objects are allowed, and which modules each kind of line reaches for.
 - **Pacing profile (`profile`):** the cadence your videos aim for, either a built-in profile such as `short-talking-head` or one measured from your own videos.
-- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Nine drawing styles share one rig, so any cast works in any of them:
+- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Ten drawing styles share one rig, so any cast works in any of them:
   - `flat`: flat fills and a dark outline (the default).
   - `stick`: a stick figure, coloured by the character's clothes.
   - `stick-classic`: the classic black-and-white stick figure.
@@ -129,6 +129,7 @@ launchclip style upgrade my-channel
   - `soft-shade`: soft gradients, no outline.
   - `lifelike`: realistic proportions, detailed faces, hair and hands.
   - `cinematic`: lifelike, lit by the scene with a rim light and a cast shadow.
+  - `avatar`: cute avatar proportions: a big head on a short, chunky body, soft shading and pin joints.
 
   A generated style also generates its cast from a character set (office team, founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd), so every project gets different people.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.

@@ -15,6 +15,8 @@ import {sceneDrift} from '@launchclip/core/ambient.mjs';
 import {checkLayout, layoutExtras, profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
 import {checkStoryboard} from '../src/storyboard_planner.js';
+import {moduleParamErrors} from '../src/story_cli.js';
+import {sceneModels} from '@launchclip/core/render-segments.mjs';
 import {holdGate} from '../src/movement_guardrails.js';
 import {assertMatchesFrameState} from './helpers/frame_state.js';
 
@@ -133,7 +135,7 @@ test('clip: params validation names the param', () => {
   assert.throws(() => resolve({media: {src: 'assets/a.jpg', kind: 'video'}}), /params\.media\.kind is video but assets\/a\.jpg is a still/);
   assert.throws(() => resolve({media: {src: 'assets/a.jpg', sourceStart: 1}}), /params\.media\.sourceStart is for videos only/);
   assert.throws(() => resolve({media: {src: 'assets/a.mp4', sourceStart: 3, sourceEnd: 2}}), /params\.media\.sourceEnd must be after sourceStart/);
-  assert.throws(() => resolve({media: {src: 'assets/a.mp4', sourceStart: 1, sourceEnd: 3}}), /params\.media\.sourceEnd leaves a 2 s source window \(1–3 s\) for a 4 s scene; shorten the scene or widen the window/);
+  assert.throws(() => resolve({media: {src: 'assets/a.mp4', sourceStart: 1, sourceEnd: 3}}), /params\.media\.sourceEnd leaves a 2 s source window \(1–3 s\) for a 4 s render window \(the scene plus any transition into the next scene, which keeps this shot drawn\); shorten the scene or widen the window/);
   assert.throws(() => resolve({move: 'spin'}), /params\.move must be one of none, push-in/);
   assert.throws(() => resolve({move: 'push-in', zoom: 0.3}), /params\.zoom must be between 0\.02 and 0\.15/);
   assert.throws(() => resolve({zoom: 0.05}), /params\.zoom needs a move/);
@@ -152,6 +154,30 @@ test('clip: params validation names the param', () => {
   assert.ok(result.errors.some(entry => /scenes\[0\]\.params\.move must be one of "none", "push-in"/.test(entry)), result.errors.join('\n'));
   // The param schema is compiled from the module's params summary.
   assert.deepEqual(validateModuleParams('clip', {media: {src: 'assets/footage/ute.mp4', sourceStart: 1, sourceEnd: 6}, focus: {x: 0.2, y: 0.5}, move: 'pan-left', zoom: 0.05, enter: 'settle', exit: 'fade', callouts: [{text: 'One', at: 0.4}], position: 'top'}), []);
+});
+
+test('clip: the source window is checked against the render window, which includes the next transition', () => {
+  // s1's window covers its scene (0–4 s) but not the next scene's dot-wipe
+  // overlap, which keeps s1 drawn past 4 s; the compile resolves s1 with that
+  // render end, so validation must too (or the render draws a placeholder).
+  const two = (inType) => resolveStory(story([
+    {id: 's1', module: 'clip', start: 0, end: 4, params: {media: {src: 'assets/footage/ute.mp4', sourceStart: 1, sourceEnd: 5}}},
+    {id: 's2', module: 'clip', start: 4, end: 8, in: {type: inType, dur: 0.5}, params: {media: 'assets/footage/ute.mp4'}}
+  ]));
+  for (const type of ['dot-wipe', 'whip']) {
+    const resolved = two(type);
+    assert.equal(sceneModels(resolved).get('s1'), null, `${type}: the compile resolves s1 over its render window`);
+    const errors = moduleParamErrors(resolved);
+    assert.equal(errors.length, 1, `${type}: ${errors.join('; ')}`);
+    assert.match(errors[0], /s1.*params\.media\.sourceEnd leaves a 4 s source window \(1–5 s\) for a 4\.\d+ s render window/);
+  }
+  // A cut adds no overlap: the 4 s window fits.
+  assert.deepEqual(moduleParamErrors(two('cut')), []);
+  // Widening the window past the overlap passes and compiles.
+  const wide = two('dot-wipe');
+  wide.scenes[0].params.media.sourceEnd = 6;
+  assert.deepEqual(moduleParamErrors(wide), []);
+  assert.ok(sceneModels(wide).get('s1'));
 });
 
 test('clip: HyperFrames hoists a video with its callouts above it; a still stays in the layer; both match the evaluator', () => {

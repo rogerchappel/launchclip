@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
-import { knownModules, resolveModule, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
+import { knownModules, resolveModule, sceneRenderEnd, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { captionColorWarnings } from "@launchclip/core/captions.mjs";
 import { CAST_MODULES } from "@launchclip/core/story.mjs";
@@ -48,7 +48,7 @@ export function moduleParamErrors(resolved) {
   const errors = [];
   for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
     if (!scene || scene.module === "custom" || !known.has(scene.module)) continue;
-    try { resolveModule(scene, resolved); }
+    try { resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) }); }
     catch (error) { errors.push(`${error.message} (both renderers would draw a placeholder)`); }
   }
   return errors;

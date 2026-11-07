@@ -31,6 +31,8 @@ import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFill
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
+import { feelGsap, feelPlan } from './kinetic.mjs';
+import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from './dot-wipe.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
@@ -514,10 +516,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
 
   // Captions.
   let captions = null;
+  let captionWords = [];
   const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
     const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     if (chunks?.length) {
+      captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
       const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: layout?.captions });
       // Camera moves that sweep panels through the band dip the captions out
@@ -526,6 +530,17 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       if (captionsPlan.nodes.length) captions = { chunks, hide, plan: captionsPlan, dips };
     }
   }
+
+  // Story feel (kit/core/kinetic.mjs): with motion.feel or camera.kicks, one
+  // wrapper (#lc-feel) around every scene and the world camera, under the
+  // dot wipes, the medium, the brand frame and the captions, drifts,
+  // breathes and kicks, one tl.set per frame. Without, nothing changes.
+  const feel = isolate ? null : feelPlan(story, { windows, camera: plan, words: captionWords });
+  if (feel) warnings.push(...feel.warnings);
+  const feelLines = feelGsap(feel);
+  // Dot wipes (kit/core/dot-wipe.mjs): a halftone grid over every scene.
+  const wipes = isolate ? [] : dotWipes(story, windows);
+  const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;--lc-dc:${dotWipePeak(wipe)};z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
 
   // Brand frame (kit/core/brand-frame.mjs): kicker, section labels and the
   // progress line over every scene, under the captions.
@@ -562,7 +577,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-plate > .lc-layer { background: ${bg}; }${usesZoom ? `\n    .lc-zoom { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }\n    .lc-plate > .lc-zoom > .lc-zoom > .lc-layer { background: ${bg}; }` : ''}${plan ? `\n    ${cameraCss(plan, W, H)}` : ''}
     .lc-ambient-field { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; pointer-events: none; }
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
-    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
+    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }${feelLines.length ? `\n    .lc-feel { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }` : ''}${wipes.length ? `\n    ${dotWipeCss(W, H).split('\n').join('\n    ')}` : ''}
     ${placeholderCss()}
     ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
     ${css.filter(Boolean).join('\n    ')}
@@ -574,15 +589,15 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}</div>
     ${baseMarkup.join('\n    ')}
     ${audio}
-    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
+    ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}
+${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)])].map((line) => `      ${line}`).join('\n')}` : ''}
       ${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;

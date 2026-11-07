@@ -39,13 +39,19 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
       blockers.push(blocker(`motion-${category}-${index + 1}`, "motion", String(finding.message ?? `Structural motion gate failed: ${category}.`)));
       continue;
     }
+    // A still span carries its time range and a suggested fix (zoom-kick,
+    // drift, whip, dot-wipe or new visual; src/render_motion_analysis.js).
+    const span = category === "stillness" && Number.isFinite(Number(finding.start_seconds)) && Number(finding.end_seconds) > Number(finding.start_seconds);
     repairFindings.push(qualityFinding({
       id: `readiness-motion-${index + 1}`,
       severity: finding.severity,
       category: category === "editing" ? "timing" : "motion",
       repairScope: "plan",
       evidence: String(finding.message ?? `Motion gate failed: ${category}.`),
-      instruction: motionInstruction(category, finding.message)
+      instruction: span
+        ? `Between ${Number(finding.start_seconds).toFixed(2)}s and ${Number(finding.end_seconds).toFixed(2)}s the picture holds still: ${finding.fix ?? "add motion"}: ${finding.instruction ?? "keep something moving through the span"}.`
+        : motionInstruction(category, finding.message),
+      ...(span ? { startSeconds: Number(finding.start_seconds), endSeconds: Number(finding.end_seconds) } : {})
     }));
   }
   if (motion?.quality && !motionOk && !motionFindings.length) blockers.push(blocker("motion-unexplained", "motion", "Rendered motion analysis failed without actionable findings."));
@@ -112,14 +118,14 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
   };
 }
 
-function qualityFinding({ id, severity, category, repairScope, shotIds = [], evidence, instruction }) {
+function qualityFinding({ id, severity, category, repairScope, shotIds = [], evidence, instruction, startSeconds = null, endSeconds = null }) {
   return {
     id,
     severity: new Set(["blocking", "major", "minor"]).has(severity) ? severity : "major",
     category,
     shot_ids: shotIds,
-    start_seconds: null,
-    end_seconds: null,
+    start_seconds: startSeconds,
+    end_seconds: endSeconds,
     evidence,
     repair_scope: repairScope,
     instruction,
@@ -128,6 +134,7 @@ function qualityFinding({ id, severity, category, repairScope, shotIds = [], evi
 }
 
 function motionInstruction(category, message) {
+  if (category === "stillness") return `Keep the picture moving: give every hold a camera move (zoom-kick, drift), carry holds before cuts with a whip or dot-wipe, and add a new visual to long holds. ${message ?? ""}`.trim();
   if (category === "hook") return "Replan the opening so multiple meaningful visual changes land inside the hook window and directly express the spoken promise.";
   if (category === "editing") return "Replan sequence boundaries and internal developments to remove inactive gaps without turning the film into a slideshow.";
   return `Replan material object, camera, and transition developments to resolve this measured motion failure: ${message ?? category}.`;

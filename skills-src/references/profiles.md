@@ -4,14 +4,15 @@
 
 A cadence profile (`launchclip.cadence-profile.v1`) is what a strong video of one format and platform measures like: ranges (p10, p50, p90) over measurements of a reference set. Plan to the p50 targets inside the p10–p90 band; `launchclip finish` measures the render against the band. `launchclip profile list` and `launchclip profile show <id>` print them; `launchclip profile measure <folder>` measures your own references into one. Design: `docs/VIDEO_QUALITY_RFC.md` §5.
 
-Every shipped profile is a seed until it is measured: conservative ranges, not statistics. Treat the bands as guard rails.
+A shipped profile is a seed until it is measured: conservative ranges, not statistics, so treat a seed's bands as guard rails. A measured profile's bands are statistics over its references (with fewer than 10 references, p10 and p90 are the smallest and largest reference values).
 
 ## Choosing a profile
 
-The profile follows the story's lane, aspect, duration and platform (a direction map's `profile` or a style's `profile` names one explicitly):
+The profile follows the story's lane, aspect, duration and platform (`launchclip make --profile <id>`, a direction map's `profile` or a style's `profile` names one explicitly). A measured profile beats a seed that fits as well:
 
 | Profile | Format | Lanes | Aspects | Duration | Provenance |
 | --- | --- | --- | --- | --- | --- |
+| animated-explainer-reel | motion | motion, voiceover-motion | 9:16 | 30–75 s | measured |
 | explainer-motion | motion | motion, voiceover-motion | any | 20–180 s | seed |
 | product-demo | demo-led | motion, voiceover-motion | any | 20–120 s | seed |
 | short-motion | motion | motion, voiceover-motion | 9:16 | 5–60 s | seed |
@@ -41,10 +42,36 @@ The profile follows the story's lane, aspect, duration and platform (a direction
 | change_energy_p50 | median frame-change energy | p10 (a floor) |
 | first_motion_seconds | when the first meaningful motion arrives | p90 (a ceiling) |
 | hook_events | distinct cuts or motion bursts inside the hook window | p10 (a floor) |
+| still_share | share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps) | p90 (a ceiling) |
+| longest_still_seconds | longest near-still run inside the video (a closing hold does not count) | p90 (a ceiling) |
+| camera_moves_per_min | whole-frame camera moves (shifts, pans, zooms) per minute | p10 (a floor) |
 | scene_seconds | scene length (character stories) | p10 and p90 |
 | character_screen_time | share of the runtime with a character on screen | p10 and p90 |
 | expression_changes_per_min | pose or expression changes per minute | p10 and p90 |
 | problem_lands_seconds | how soon the problem beat lands | p90 (a ceiling) |
+
+The motion gate holds still_share and longest_still_seconds to the profile's p90 when it has them, else to defaults by format: motion and character stories at most 10% still and 0.6 s, product demos 25% and 1.5 s, footage-led (a talking head) only a frozen picture of 4 s. A failing render lists its worst still spans with a fix for each: zoom-kick, drift, whip, dot-wipe or new visual.
+
+## animated-explainer-reel
+
+A faceless animated explainer for Reels, Shorts and TikTok, 30–75 s in 9:16: illustrated scenes and a drawn host, voiced over, where the picture never stops moving.
+
+| Measure | p10 | p50 | p90 |
+| --- | --- | --- | --- |
+| still_share | 2% | 10% | 19% |
+| longest_still_seconds | 0.1 | 0.2665 | 0.433 |
+| shot_seconds | 7.133 | 10.9775 | 14.822 |
+| visual_changes_per_min | 46.15 | 49.92 | 53.69 |
+| coverage | 100% | 100% | 100% |
+| longest_undressed_seconds | 0 | 0 | 0 |
+| first_visual_seconds | 0 | 0 | 0 |
+| flow_velocity_p90 | 7.5893 | 7.808 | 8.0267 |
+| hold_ratio | 65% | 68% | 70% |
+| motion_bursts_per_min | 51.282 | 54.885 | 58.488 |
+| change_energy_p50 | 1.619 | 2.9401 | 4.2612 |
+| first_motion_seconds | 0 | 0 | 0 |
+| hook_events | 4 | 4 | 4 |
+| camera_moves_per_min | 10.256 | 13.7575 | 17.259 |
 
 ## explainer-motion
 

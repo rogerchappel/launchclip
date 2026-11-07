@@ -26,6 +26,10 @@
 // starts on the outgoing card's rect, params.rect or the canvas, and settles
 // on its own).
 //
+// dot-wipe (kit/core/dot-wipe.mjs): a halftone dot grid in the story's ink
+// grows in from the edges, the plates swap under the full cover at the
+// midpoint, and the dots shrink away; here only the hard swap.
+//
 // Empty plates: a short gap between two plates (a gap in scene timing, plus
 // any lead-in before the next scene draws anything, sceneLeadIn) would show a
 // dead frame. When that whole span is under HOLD_GAP seconds the previous
@@ -35,7 +39,7 @@
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
@@ -234,6 +238,15 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
       return { type, duration: d,
         in: [t(side, 100, 0, 'power2.inOut'), t('glow', GLOW_WIPE, 0, 'power2.out', d * 0.35, d * 0.65)],
         out: [t('glow', 0, GLOW_WIPE, 'power2.in', 0, d * 0.6), ...fadeOut] };
+    }
+    case 'dot-wipe': {
+      // A halftone grid covers the frame (kit/core/dot-wipe.mjs draws it over
+      // every scene); under the full cover, at the midpoint, the incoming
+      // plate appears and the outgoing one goes (world plates are transparent).
+      const half = d / 2;
+      return { type, duration: d,
+        in: [t('opacity', 0, 0, 'none', 0, half), t('opacity', 0, 1, 'none', half, 0)],
+        out: [t('opacity', 1, 0, 'none', half, 0)] };
     }
     case 'card-to-card': {
       // Morph continuity: the incoming card starts where the outgoing card
