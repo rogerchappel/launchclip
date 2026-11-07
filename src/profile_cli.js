@@ -5,6 +5,7 @@
 //   profile show <id|path>               one profile, validated
 //   profile measure <folder> --rights own|licensed|public-statistics
 //       (--id <new-id> | --replace <shipped-id>) [--out file] [--title "…"] [--fps 1]
+//       [--drop measure,…] [--note "…"]
 //       measure a folder of references into a profile. --replace keeps the
 //       shipped profile's id, format and match, writes over its JSON in
 //       kit/profiles/ and refreshes kit/profiles/PROVENANCE.md.
@@ -50,6 +51,8 @@ export async function runProfileCommand(action, target, flags = {}, adapters = {
     rights: flags.rights ? String(flags.rights) : undefined,
     title: flags.title ? String(flags.title) : undefined,
     format: flags.format ? String(flags.format) : undefined,
+    ...(flags.drop ? { drop: String(flags.drop) } : {}),
+    ...(flags.note ? { note: String(flags.note) } : {}),
     ...(flags.fps ? { fps: Number(flags.fps) } : {}),
     now: adapters.now
   }, adapters.measure ?? {});

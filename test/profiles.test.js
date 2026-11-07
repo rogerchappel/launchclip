@@ -28,16 +28,27 @@ function seed(overrides = {}) {
   return { schema: CADENCE_PROFILE_SCHEMA, id: "test-profile", format: "footage-led", duration_seconds: [10, 60], references: 0, provenance: { kind: "seed", note: "hand-set", sources: [] }, measures: { coverage: { p10: 0.3, p50: 0.6, p90: 0.9 } }, ...overrides };
 }
 
+// Profiles measured from references; the rest are seeds.
+const MEASURED = [];
+
 test("the six RFC profiles and story-characters ship as valid seed profiles", () => {
   const profiles = shippedProfiles();
   assert.deepEqual(profiles.map((profile) => profile.id), SHIPPED);
   for (const profile of profiles) {
     const check = validateProfile(profile);
     assert.ok(check.ok, `${profile.id}: ${check.errors.join("; ")}`);
+    assert.ok(profile.measures.coverage, `${profile.id} carries a coverage band`);
+    if (MEASURED.includes(profile.id)) continue;
     assert.equal(profile.provenance.kind, "seed", `${profile.id} is not measured yet`);
     assert.equal(profile.references, 0);
-    assert.ok(profile.measures.coverage, `${profile.id} carries a coverage band`);
   }
+});
+
+test("a measured profile beats a seed that fits as well", () => {
+  const seedA = seed({ id: "seed-a", format: "motion" });
+  const measuredB = seed({ id: "measured-b", format: "motion", references: 1, provenance: { kind: "measured", sources: [{ id: "a", rights: "own" }] } });
+  assert.equal(selectProfile([seedA, measuredB], { lane: "motion", duration: 30 }).profile.id, "measured-b");
+  assert.equal(selectProfile([measuredB, seedA], { lane: "motion", duration: 30 }).profile.id, "measured-b");
 });
 
 test("PROVENANCE.md is generated from the shipped profiles", async () => {
@@ -207,8 +218,35 @@ test("profile measure --replace writes over a shipped profile and refreshes PROV
 });
 
 test("aggregateMeasures takes p10, p50 and p90 across references", () => {
+  const many = Array.from({ length: 11 }, (_, index) => ({ measures: { coverage: index / 10 } }));
+  assert.deepEqual(aggregateMeasures(many).coverage, { p10: 0.1, p50: 0.5, p90: 0.9 });
+  // A handful of references: the band's edges are the extremes, so every
+  // reference passes its own profile.
   const bands = aggregateMeasures([{ measures: { coverage: 0.2 } }, { measures: { coverage: 0.6 } }, { measures: { coverage: 1 } }]);
-  assert.deepEqual(bands.coverage, { p10: 0.28, p50: 0.6, p90: 0.92 });
+  assert.deepEqual(bands.coverage, { p10: 0.2, p50: 0.6, p90: 1 });
+  const still = aggregateMeasures([{ measures: { still_share: 0.19, longest_still_seconds: 0.43, camera_moves_per_min: 12 } }, { measures: { still_share: 0.02, longest_still_seconds: 0.1, camera_moves_per_min: 12.5 } }]);
+  assert.deepEqual(still.still_share, { p10: 0.02, p50: 0.105, p90: 0.19 });
+  assert.deepEqual(still.longest_still_seconds, { p10: 0.1, p50: 0.265, p90: 0.43 });
+});
+
+test("renderMeasures and profile measure carry the stillness measures; --drop leaves measures out", async (t) => {
+  const motion = { motion: { hold_ratio: 0.6, still_share: 0.456, longest_still_seconds: 1, camera_moves_per_minute: 0, change_energy: { p50: 0.6 }, bursts: [] }, optical_flow: {} };
+  const measures = renderMeasures({ scenes: [], resolved: { duration: 10 } }, motion);
+  assert.equal(measures.still_share, 0.456);
+  assert.equal(measures.longest_still_seconds, 1);
+  assert.equal(measures.camera_moves_per_min, 0);
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-profile-drop-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, "a.mp4"), "reference a");
+  const stand = standIns({ frames: [flatFrame(), noisyFrame()] });
+  const reel = { ...stand, motion: async () => ({ ...(await stand.motion()), motion: { hold_ratio: 0.6, still_share: 0.02, longest_still_seconds: 0.1, camera_moves_per_minute: 12, change_energy: { p50: 3 }, bursts: [] } }) };
+  const { profile } = await measureProfile(dir, { id: "reel", rights: "public-statistics", format: "motion", drop: "face_time,text_hold_seconds", note: "A test reel.", now: () => "2026-11-07T00:00:00Z" }, reel);
+  assert.equal(profile.measures.still_share.p90, 0.02);
+  assert.equal(profile.measures.camera_moves_per_min.p10, 12);
+  assert.equal(profile.measures.face_time, undefined);
+  assert.equal(profile.measures.text_hold_seconds, undefined);
+  assert.match(profile.provenance.note, /Left out: face_time, text_hold_seconds\. A test reel\./);
+  await assert.rejects(measureProfile(dir, { id: "reel", rights: "own", drop: "sparkle" }, reel), /--drop sparkle: not a profile measure/);
 });
 
 test("launchclip profile list and show run from the CLI", async () => {
