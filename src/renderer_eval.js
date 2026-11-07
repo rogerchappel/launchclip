@@ -32,6 +32,13 @@ import { getRenderer, RENDERER_NAMES } from "./renderers/index.js";
 import { compileStoryCommand, runStoryCommand } from "./story_cli.js";
 import { readProjectStory } from "./story_loader.js";
 
+// The renderer eval checks that both renderers draw motion, not that a test
+// story is paced like a reel: the stillness ceilings (still share, longest
+// still) belong to a cadence profile, and the eval stories have none.
+export function rendererEvalMotion(format) {
+  return { ...cinematicMotionExpectations(format).expected, maximum_still_share: null, maximum_longest_still_seconds: null };
+}
+
 const execFileAsync = promisify(execFile);
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -511,7 +518,7 @@ function defaultAdapters(adapters = {}) {
     compile: adapters.compile ?? ((name, project) => compileStoryCommand(project, { renderer: name, ...(name === "hyperframes" ? { out: path.join(project, "hyperframes") } : {}) })),
     render: adapters.render ?? ((name, project, outFile, options) => getRenderer(name).render(name === "hyperframes" ? path.join(project, "hyperframes") : project, outFile, options)),
     probe: adapters.probe ?? ((file) => probeVideo(file)),
-    motion: adapters.motion ?? ((file, outFile, format) => writeMotionReport(file, outFile, { expected: cinematicMotionExpectations(format).expected })),
+    motion: adapters.motion ?? ((file, outFile, format) => writeMotionReport(file, outFile, { expected: rendererEvalMotion(format) })),
     audio: adapters.audio ?? ((file) => analyzeProductionAudio(file, null)),
     extractFrames: adapters.extractFrames ?? extractFrames,
     ssimPair: adapters.ssimPair ?? ssimPair,
