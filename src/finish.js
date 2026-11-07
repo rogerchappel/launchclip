@@ -58,6 +58,7 @@ import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { guardCueTimbre } from "./sfx/timbre.js";
 import { applyEventSounds, planEventSounds, resolveSfxMode } from "./sfx/event_sounds.js";
+import { applyEarshotSounds } from "./sfx/earshot.js";
 import { structureGate } from "./skeletons.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
@@ -432,7 +433,9 @@ function firstKeyPerShot(keystrokes) {
 export function sfxLicense(origins) {
   const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
   if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
-  const other = [...origins].filter((origin) => !["procedural", "elevenlabs"].includes(origin));
+  if (origins.has("earshot") || origins.has("earshot-fit")) parts.push("Some SFX were rendered from the Earshot sound bank (https://github.com/Leonxlnx/earshot, MIT) by its own code recipes.");
+  if (origins.has("earshot-fit")) parts.push("Some of those are Earshot fits: recipes measured from CC0 1.0 Freesound recordings, credited in sfx_credits.");
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "earshot", "earshot-fit"].includes(origin));
   if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
   return parts.join(" ");
 }
@@ -1093,7 +1096,7 @@ const STAGES = [
     async plan(ctx) {
       if (ctx.story.audio?.mix) return { skip: `audio.mix is supplied (${ctx.story.audio.mix})` };
       const audio = ctx.copy.audio ?? {};
-      // --sfx generated|kit|off (finish defaults to kit; make passes generated with a key).
+      // --sfx generated|kit|off|earshot (finish defaults to kit; make passes generated with a key).
       const sfxChoice = resolveSfxMode(ctx.options.sfx, ctx.adapters.env ?? process.env);
       if (sfxChoice.warning) ctx.warnings.push(sfxChoice.warning);
       const sfxMode = audio.sfx === "none" || audio.sfx === false ? "off" : sfxChoice.mode;
@@ -1182,11 +1185,11 @@ const STAGES = [
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         kit: kit ?? undefined,
-        sfx: { mode: sfxMode, density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
+        sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, sfxMode, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
+      return { inputHash, outputs, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -1246,6 +1249,15 @@ const STAGES = [
         cues = eventSounds.cues;
         ctx.warnings.push(...eventSounds.warnings);
       }
+      // --sfx earshot: the mapped cues get an Earshot bank take, its sync
+      // point on the event and its level matched to the file it replaces
+      // (src/sfx/earshot.js); unmapped families and failed renders keep theirs.
+      let earshot = { rendered: [], credits: [], warnings: [] };
+      if (plan.sfxMode === "earshot" && cues.length) {
+        earshot = await applyEarshotSounds(cues, { project: ctx.project, env: ctx.adapters.env ?? process.env, bin: ctx.adapters.earshotBin ?? plan.earshotBin, storyId: plan.storyId, key: plan.bed?.key ?? null, lead: CUE_DURATIONS.whoosh * 0.35, ...(ctx.adapters.earshotRender ? { render: ctx.adapters.earshotRender } : {}), ...(ctx.adapters.earshotLevel ? { level: ctx.adapters.earshotLevel } : {}), ...(ctx.adapters.earshotTimbre ? { timbre: ctx.adapters.earshotTimbre } : {}), ...(ctx.adapters.earshotCacheDir ? { cacheDir: ctx.adapters.earshotCacheDir } : {}) });
+        cues = earshot.cues;
+        ctx.warnings.push(...earshot.warnings);
+      }
       let typing = null;
       if (typingPlan.length) {
         const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
@@ -1261,8 +1273,9 @@ const STAGES = [
       const typingCues = typing ? firstKeyPerShot(typing.keystrokes).map((key) => ({ cue: "typing", shot: key.shot, at: key.at, volume: 1, intent: "typing track", file: typing.file })) : [];
       const listed = [...placed.filter((cue) => cue.source !== "typing"), ...typingCues].sort((a, b) => a.at - b.at);
       await writeJson(sfxManifest, {
-        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null, ...(cue.prompt ? { prompt: cue.prompt, replaced: cue.replaced, pre_roll: cue.pre_roll } : {}) })),
+        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null, ...(cue.prompt ? { prompt: cue.prompt, replaced: cue.replaced, pre_roll: cue.pre_roll } : {}), ...(cue.earshot ? { earshot: cue.earshot, replaced: cue.replaced, ...(cue.offset > 0 ? { offset: cue.offset } : {}) } : {}) })),
         mode: plan.sfxMode,
+        ...(plan.sfxMode === "earshot" ? { earshot: { rendered: earshot.rendered, refused: earshot.refused ?? [], credits: earshot.credits } } : {}),
         generated: eventSounds.generated,
         generated_cost_usd: eventSounds.cost_usd,
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
@@ -1301,6 +1314,7 @@ const STAGES = [
         sfx_manifest: sfxManifest,
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
         sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
+        ...(earshot.credits.length ? { sfx_credits: earshot.credits } : {}),
         license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
       });
       const details = {
