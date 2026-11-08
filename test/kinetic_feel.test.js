@@ -307,7 +307,7 @@ test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per 
   for (const f of [0, 31, 33, 40, 200, 359]) assert.deepEqual(feelStateAt(plan, f / 30), samples[f]);
 });
 
-test('snap: the ambient camera creeps through a hold, then snaps to the next framing, and never reveals an edge', () => {
+test('snap: the ambient camera holds still on a framing, then snaps to the next, and never reveals an edge', () => {
   const s = story({motion: {feel: 'snap'}});
   const plan = planOf(s);
   const a = feelSamples(plan);
@@ -315,29 +315,29 @@ test('snap: the ambient camera creeps through a hold, then snaps to the next fra
   assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
   assert.equal(plan.ambient.mode, 'step');
   const {poses, move, creep} = plan.ambient;
-  assert.deepEqual([move, creep], [0.22, 0.2]);
-  // Holds of 0.45–0.95 s between moves, alternating wide and tight framings far enough apart to blur.
+  assert.deepEqual([move, creep], [0.22, 0]);
+  // Holds of 0.35–0.8 s between moves, alternating wide and tight framings far enough apart to blur.
   for (let k = 1; k < poses.length; k += 1) {
     const hold = poses[k].at - poses[k - 1].at - move;
-    assert.ok(hold >= 0.45 - 1e-6 && hold <= 0.95 + 1e-6, `hold ${k} is ${hold}`);
+    assert.ok(hold >= 0.35 - 1e-6 && hold <= 0.8 + 1e-6, `hold ${k} is ${hold}`);
     assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.05 - 1.012) - 1e-6, `move ${k} changes the framing`);
   }
-  // A hold creeps a fifth of the way, slowly; the snap covers the rest at many times the speed.
+  // The camera is exactly still through a hold, and the snap lands on the next framing in `move` seconds.
   const still = {...plan, kicks: []};
   const [p0, p1] = poses;
   const holdEnd = p1.at - move;
   const scaleAt = (t) => feelStateAt(still, t).scale;
-  const holdSpeed = Math.abs(scaleAt(holdEnd - 0.01) - scaleAt(p0.at + 0.01)) / (holdEnd - p0.at - 0.02);
-  const snapSpeed = Math.abs(scaleAt(p1.at) - scaleAt(holdEnd)) / move;
-  assert.ok(Math.abs(scaleAt(holdEnd) - (p0.s + (p1.s - p0.s) * creep)) < 1e-4, 'the hold ends a fifth of the way there');
-  assert.ok(snapSpeed > 8 * holdSpeed, `snap ${snapSpeed} vs hold ${holdSpeed}`);
+  assert.equal(scaleAt(p0.at + 0.05), scaleAt(holdEnd - 0.001));
   assert.ok(Math.abs(scaleAt(p1.at) - p1.s) < 1e-4, 'the snap lands on the next framing');
+  // With creep, a hold covers that share of the way slowly and the snap the rest.
+  const creeping = {...still, ambient: {...still.ambient, creep: 0.3}};
+  assert.ok(Math.abs(feelStateAt(creeping, holdEnd).scale - (p0.s + (p1.s - p0.s) * 0.3)) < 1e-4);
   // Kicks return fast with the preset's own timing; the grammar holds still.
   assert.deepEqual(kickTiming(resolveFeel(s)), {...KICK, punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut'});
   assert.equal(resolveGrammar(s).hold.level, 'off');
   // A step mode on the kinetic preset takes the snap defaults for hold and move, with no creep.
   const custom = resolveFeel(story({motion: {feel: {preset: 'kinetic', ambient: {mode: 'step'}}}}));
-  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[0.45, 0.95], 0.22, 0]);
+  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[0.35, 0.8], 0.22, 0]);
   assert.equal(ambientSteps(custom.ambient, {width: 1080, height: 1920, duration: 12}).mode, 'step');
   for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}, {ambient: {creep: 0.8}}]) {
     assert.ok(feelErrors(bad).length > 0, JSON.stringify(bad));

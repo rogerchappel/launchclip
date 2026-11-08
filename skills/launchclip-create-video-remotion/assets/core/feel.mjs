@@ -26,7 +26,7 @@
 //     the spring can settle;
 //   - a tuned whip-pan (0.26 s, the expo whip with full directional blur) as
 //     the default cut, and the dot-wipe transition for chapter turns.
-// What "snap" turns on: the same, except the ambient camera holds (creeping) on a
+// What "snap" turns on: the same, except the ambient camera holds still on a
 // framing (ambient.mode "step": hold[] seconds) and snaps to the next in
 // `move` seconds, kicks punch and return fast, and held shots get no drift.
 // Explicit motion.grammar overrides always win over the feel's.
@@ -52,17 +52,17 @@ export const FEELS = Object.freeze({
     dotWipe: 0.5
   }),
   // Hold sharp, then snap: measured on an interface explainer reel, the
-  // camera holds (creeping a fifth of the way to its next framing, too slowly
-  // to blur, so a held frame is crisp but not frozen) for about half a second
-  // to a second, then jumps the rest of the way in 0.22 s on an expo ease, far
-  // enough that the motion blur smears it. A camera frozen for the whole hold
-  // left a quarter of a reel's frames dead still. About a tenth of the reel is truly
-  // still and the moves change the frame twice as hard as a steady drift.
+  // camera rests (no drift, so a held frame is crisp) for about a third of a
+  // second to under a second, then jumps to its next framing in 0.22 s on an
+  // expo ease, far enough that the motion blur smears it. A slow creep through
+  // the hold (ambient.creep) does not help: it registers as motion on detailed
+  // frames first, so the frames left still are the sparse, soft ones. What
+  // keeps the reel from reading still is its content (a host, live panels).
   snap: Object.freeze({
     id: 'snap',
-    describe: 'Holds sharp, then snaps: the camera creeps slowly on a framing for 0.45–0.95 s, then jumps to the next in 0.22 s (expo), kicks punch and return fast, entrances spring, cuts whip in 0.26 s',
+    describe: 'Holds sharp, then snaps: the camera rests on a framing for 0.35–0.8 s, then jumps to the next in 0.22 s (expo), kicks punch and return fast, entrances spring, cuts whip in 0.26 s',
     base: 'snappy',
-    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([0.45, 0.95]), move: 0.22, creep: 0.2 }),
+    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([0.35, 0.8]), move: 0.22, creep: 0 }),
     kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
     kick: Object.freeze({ punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut' }),
     spring: SPRING_OVERSHOOT,

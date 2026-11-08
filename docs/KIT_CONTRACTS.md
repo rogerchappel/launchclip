@@ -2294,22 +2294,24 @@ One setting turns on the habits of a top faceless animated reel together:
   `period` (4–7 s) that divide the story duration, so loop seams match. In
   world mode the camera's own drift stays and the feel adds kicks only.
 - `snap` (hold sharp, then snap): the kinetic feel with a stepped ambient
-  camera (`ambient.mode: "step"`, `kinetic.mjs ambientSteps`). Through each
-  hold (`hold`, 0.45–0.95 s) the wrapper creeps linearly the first `creep`
-  (0.2) of the way to its next framing, too slowly to blur, so a held frame
-  is crisp but never frozen; then it covers the rest in `move` (0.22 s,
-  `expo.inOut`), far enough that motion blur smears it. Framings alternate
-  between the wide and tight halves of `scale` (1.012–1.05) and between
-  sides of ±`shift` (1.6 %), each translate inside its own overscan; the
-  sequence comes from a fixed seed and the duration, so renders repeat.
-  Kicks punch in 0.1 s, settle in 0.22 s and return in 0.2 s (`expo.inOut`)
-  instead of the slow relax, and the grammar's hold level is `off` (no hold
-  drift, no media push). Measured on an interface explainer reference: about
-  a tenth of its frames are still, in holds up to about 1.2 s, and its moves
-  change the frame twice as hard as a steady drift; the drifting `kinetic`
-  camera is never still, and a camera frozen through every hold left a
-  quarter of a reel dead still. Any preset takes `ambient.mode: "step"` with
-  its own `hold`, `move` and `creep` (0 unless the preset steps).
+  camera (`ambient.mode: "step"`, `kinetic.mjs ambientSteps`). The wrapper
+  rests on a framing for `hold` (0.35–0.8 s) with no drift, so a held frame
+  is crisp, then moves to the next in `move` (0.22 s, `expo.inOut`), far
+  enough that motion blur smears it. Framings alternate between the wide
+  and tight halves of `scale` (1.012–1.05) and between sides of ±`shift`
+  (1.6 %), each translate inside its own overscan; the sequence comes from a
+  fixed seed and the duration, so renders repeat. `creep` (0–0.5, default 0)
+  makes a hold cover that share of the way slowly; measured, it does not
+  help: slow motion registers on detailed frames first, so the frames left
+  still are the sparse, soft ones. Kicks punch in 0.1 s, settle in 0.22 s
+  and return in 0.2 s (`expo.inOut`) instead of the slow relax, and the
+  grammar's hold level is `off` (no hold drift, no media push). Measured on
+  an interface explainer reference: about a tenth of its frames are still
+  and its moves change the frame twice as hard as a steady drift; the
+  drifting `kinetic` camera is never still and never blurs. With `snap` a
+  reel's look measures land on the reference's (moving frames 0.77× as
+  sharp as held ones, 15 % soft), and what keeps it from reading still is
+  its content: a host, counters, live panels.
 - Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
   settle over 0.35 s with the feel's overshoot towards a rest
   `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
