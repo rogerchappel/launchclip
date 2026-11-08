@@ -38,7 +38,7 @@ const PROPS = {
 // Light and groups: a bloom swells past its rect by design and is not a layout part; a stack draws only its children.
 const EXEMPT = new Set(["bloom", "stack"]);
 // Kinds without a smallest size, measured at a typical one.
-const TYPICAL = { headline: { width: 900, height: 120 }, chip: { width: 320, height: 64 }, waveform: { width: 900, height: 220 }, window: { width: 740, height: 440 }, "card-wall": { width: 900, height: 900 } };
+const TYPICAL = { "pad-grid": { width: 490, height: 430 }, headline: { width: 900, height: 120 }, chip: { width: 320, height: 64 }, waveform: { width: 900, height: 220 }, window: { width: 740, height: 440 }, "card-wall": { width: 900, height: 900 } };
 // Settled, mid-change (an unlock, the scan running) and late; no part is mid-entrance.
 const TIMES = [2.6, 3.5, 6];
 

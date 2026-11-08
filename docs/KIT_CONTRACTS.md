@@ -2430,7 +2430,8 @@ a pure function of time, in both renderers.
   a tilted panel is checked at its footprint (`uiTiltBox`). Panels below
   their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail: meter
   560×320, timeline 600×340, terminal 560×320, results 560×420, downloads
-  560×300, frame-ruler 800×440, marker-snap 560×240, pad-grid 600×480,
+  560×300, frame-ruler 800×440, marker-snap 560×240, pad-grid 150×130 a pad
+  plus 20 px gaps (9 pads in 3 columns: 490×430; set `cols` for fewer rows),
   scan-plane 600×360, comment 560×120 and at least 0.75 of the height its
   parts stack to (`uiCommentHeight`: the 120 px box, 260 with the sent
   bubble, 385 with a reply, 485 with reply links), bloom 200×200;

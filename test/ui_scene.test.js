@@ -51,7 +51,8 @@ test("ui-scene: text stays in the safe zone clear of the captions; panels use th
   // Panels too small to draw legibly.
   assert.throws(() => resolve([{ kind: "meter", rect: { x: 60, y: 400, width: 900, height: 225 }, at: 0, props: {} }]), /a meter needs at least 560×320/);
   assert.throws(() => resolve([{ kind: "lock-cards", rect: { x: 60, y: 400, width: 900, height: 380 }, at: 0, props: { cards: [{ name: "A" }, { name: "B" }, { name: "C" }] } }]), /a card needs at least 110 px/);
-  assert.throws(() => resolve([{ kind: "pad-grid", rect: { x: 60, y: 400, width: 900, height: 400 }, at: 0, props: {} }]), /a pad-grid needs at least 600×480/);
+  assert.throws(() => resolve([{ kind: "pad-grid", rect: { x: 60, y: 400, width: 740, height: 340 }, at: 0, props: {} }]), /9 pads in 3 columns \(3 rows\) need at least 490×430/);
+  assert.doesNotThrow(() => resolve([{ kind: "pad-grid", rect: { x: 60, y: 400, width: 900, height: 340 }, at: 0, props: { cols: 5 } }]));
   assert.throws(() => resolve([{ kind: "scan-plane", rect: { x: 60, y: 400, width: 500, height: 520 }, at: 0, props: {} }]), /a scan-plane needs at least 600×360/);
   // A comment scales its stacked parts to fit, to no less than 0.75: a reply with links stacks to 485 px.
   const comment = { kind: "comment", at: 0, props: { text: "SOUND", reply: "Here are the links", links: ["Open link"] } };

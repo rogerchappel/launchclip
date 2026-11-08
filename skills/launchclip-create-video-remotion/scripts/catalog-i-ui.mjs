@@ -55,8 +55,10 @@ const TEXT_KINDS = new Set(['headline', 'chip']);
 // The smallest rect a panel draws legibly in (design px), and paints within
 // (test/ui_painted_bounds.test.js); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-export const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}, 'pad-grid': {width: 600, height: 480}, 'scan-plane': {width: 600, height: 360}, comment: {width: 560, height: 120}});
+export const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}, 'scan-plane': {width: 600, height: 360}, comment: {width: 560, height: 120}});
 const LOCK_CARD_MIN = 110;
+// A pad-grid's pads need this much (design px) to keep their labels legible; pads sit 20 px apart.
+const PAD_MIN = Object.freeze({width: 150, height: 130});
 // A comment scales its stacked parts to fit its rect, to no less than this.
 const COMMENT_MIN_SCALE = 0.75;
 // The host mascot (kit/core/ui-host.mjs): its poses, its props, what a beat
@@ -313,6 +315,11 @@ function uiResolve(params, ctx) {
       const outside = box.x < safe.x - eps || box.y < safe.y - eps || box.x + box.width > safe.x + safe.width + eps || box.y + box.height > safe.y + safe.height + eps;
       const inBand = box.y < band.y + band.height && box.y + box.height > band.y && box.x < band.x + band.width && box.x + box.width > band.x;
       if (outside || inBand) check.fail(`${path}.rect`, `sets its text in {x: ${box.x}, y: ${box.y}, width: ${box.width}, height: ${box.height}}, which must sit inside the platform safe zone {x: ${safe.x}, y: ${safe.y}, width: ${safe.width}, height: ${safe.height}} (design px) and clear of the caption band (y ${band.y}–${r2(band.y + band.height)}): headlines and chips are the text people read`);
+    }
+    if (kind === 'pad-grid') {
+      const n = Array.isArray(props.pads) ? props.pads.length : 9, cols = Math.max(1, Math.min(n, Number(props.cols) || 3)), rows = Math.ceil(n / cols);
+      const need = {width: cols * (PAD_MIN.width + 20) - 20, height: rows * (PAD_MIN.height + 20) - 20};
+      if (rect.width + 0.5 < need.width || rect.height + 0.5 < need.height) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; ${n} pads in ${cols} columns (${rows} rows) need at least ${need.width}×${need.height} (${PAD_MIN.width}×${PAD_MIN.height} a pad); widen it, or set more cols for fewer rows`);
     }
     if (kind === 'comment') {
       const need = Math.ceil(uiCommentHeight(props) * COMMENT_MIN_SCALE);
