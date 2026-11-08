@@ -2365,6 +2365,69 @@ falls between two frames' sub-frames and no frame blends two words. `story.motio
 hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
 pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
 
+## Story lighting (`kit/core/lighting.mjs`)
+
+`story.light` (a style pack's `light`, filled whole by `applyStyle` when the
+story has none) lights a dark frame the way a stage is lit: a soft key glow
+from an edge, a pool on the floor, darker corners, faint haze for mid-tones
+and blooms on key beats. `{preset?, key?, pool?, vignette?, haze?, wrap?,
+pulses?}`; `lightErrors()` and `validateStory` check it (story.mjs keeps its
+own copy of the ranges, `STORY_LIGHT_*`, in step by test/lighting.test.js).
+
+- **Presets** (`LIGHT_PRESETS`): `none`, `studio` (soft top-centre key, floor
+  pool, gentle corners and haze), `spot` (narrower, brighter key, deep
+  corners), `soft` (wide, low key, more haze). A story's layer fields win
+  field by field; `false` turns a layer off; without a preset only the named
+  layers draw, at the kit's defaults. `preset: "none"` alone is no light, and
+  the compile is byte for byte today's.
+- **Layers** (`LIGHT_PARAMS`; x, y are shares of the canvas, intensity 0–1):
+  `key {x [0.5], y [0], size 0.3–2 [1], intensity [0.6], drift [0.5], color}`
+  a large soft radial glow hung from an edge (top centre by default), drifting
+  and breathing slowly (x, y, scale and opacity waves; `drift: 0` holds it);
+  `pool {x, size, intensity [0.4], color}` a wide glow on the floor;
+  `vignette {intensity [0.5]}` corners toward black; `haze {intensity [0.4],
+  speed 0–2 [1]}` three wide, faint bands of the key colour washed toward
+  paper drifting past each other (the frame's mid-tones); `wrap {intensity
+  [0.35]}` the key again, screen-blended over the scenes at a fraction, so
+  panels near the light lift a little. `color` is `accent` (default),
+  `primary`, `paper` or `#rrggbb`.
+- **Pulses**: `[{at, x [0.5], y [0.45], radius 0.05–1 [0.35] (of the short
+  side), intensity [0.7], duration 0.2–4 s [1.2], color}]`, at most 24. A
+  soft bloom swells (sine.out, 30% of the duration, at most 0.4 s), grows
+  from 0.72× to 1.12× (power2.out) and fades (sine.inOut). `at` is story
+  seconds or a time anchor (`word:<text>[#n][±s]`, `beat:<n>`,
+  `downbeat:<n>`), resolved by `resolveStory`.
+- **Where they draw.** `lightPlan(story)` → `{under, over}`. The under group
+  (haze, key, pool, pulses) sits inside every plate that draws a background,
+  over its background and under the content (HyperFrames
+  `#lc-light-under-<scene>`, Remotion `LightField` in `SceneLayer`); a pulse
+  is emitted only in the plates whose window it overlaps. The over group
+  (wrap and the pulses' halos, `mix-blend-mode: screen`, then the vignette)
+  is one full-canvas layer, `#lc-light-over`, above every scene and the
+  camera and outside the story feel's wrapper, under the dot wipes, the
+  medium, the brand frame and the captions (HyperFrames z-index 78000,
+  Remotion 47; in a world-camera story it is a root sibling after the
+  overlays). In world mode the under group sits once, fixed, in `#lc-bg`
+  under the camera. Footage-led stories and module reviews have no light.
+- **Pure time.** Layers have the background-layer shape (box, inline CSS,
+  wave axes) plus an opacity axis and, for a pulse, an envelope.
+  `lightTweens(layer, from, to)` are the GSAP fromTo tweens (axes as
+  half-period sine.inOut segments, pulses as swell, fade and growth);
+  `lightLayerStyle(layer, t)` is the Remotion style from the same functions,
+  so any seek gives the same pixels. Ambient level `off` stills the drift and
+  the haze; pulses still play.
+- **Text stays readable.** Every alpha laid over bg is clamped so paper text
+  keeps 4.5:1 on the lit tone (or bg's own ratio when that is lower), stacking
+  haze, key and pulse in order; the vignette is clamped the same way against
+  the darkened bg. The wrap and halos are screen blends at a fraction of the
+  key, so white text does not move.
+- **Lit dot grid.** `background: {kind: "dot-grid", params: {lit}}` (0–1,
+  default 0 = today's even grid) masks the dots by the key's falloff (and,
+  fainter, the pool's): full under the light, `1 − lit` elsewhere, and
+  brightens them by up to 1.6× under the light (still clamped). Without a
+  story light the mask uses the `studio` key. `litMask(story, lit)` is the
+  mask; it is in shares of the box, so a panel fill gets it too.
+
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
 The camera dives into one bar, row, number or box of a track-0 shot as the

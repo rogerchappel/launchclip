@@ -42,11 +42,11 @@ function paramSets(kind) {
   return sets;
 }
 
-test("background core is plain ESM that imports only ambient.mjs, panels.mjs and icons.mjs, and keeps no clock", async () => {
+test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs and lighting.mjs, and keeps no clock", async () => {
   for (const file of ["backgrounds.mjs", "panels.mjs"]) {
     const source = await readFile(path.join(ROOT, "kit/core", file), "utf8");
     const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"]/gm)].map((match) => match[1]);
-    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs"].includes(name)), `${file} imports ${imports}`);
+    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs"].includes(name)), `${file} imports ${imports}`);
     assert.doesNotMatch(source, /\brequire\(|Date\.now|performance\.now|Math\.random/);
   }
 });
