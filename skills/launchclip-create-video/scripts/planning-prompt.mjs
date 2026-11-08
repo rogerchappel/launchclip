@@ -305,7 +305,7 @@ export function suggestMotion({ artDirection = '', lane } = {}) {
   return { grammar, camera: { mode: 'cuts' }, reason: `${grammar} motion cuts between scenes` };
 }
 
-function motionLines({ lane, artDirection } = {}) {
+function motionLines({ lane, artDirection, style } = {}) {
   const lines = [
     `motion? {grammar, feel?}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of ${GRAMMAR_NAMES.join(', ')}, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.`,
     ...GRAMMAR_NAMES.map((name) => `${name}: ${GRAMMARS[name].describe} Camera ease ${GRAMMARS[name].ease.camera}, camera moves about ${GRAMMARS[name].duration.camera} s, transitions about ${GRAMMARS[name].duration.transition} s.`),
@@ -321,7 +321,9 @@ function motionLines({ lane, artDirection } = {}) {
     'With the kinetic feel, cut with whip-pan {dur: 0.26, direction} (the tuned whip: the next scene arrives on the same axis with directional motion blur) and turn chapters with dot-wipe {dur: 0.5} (a halftone dot grid grows in from the edges, the scene swaps at the peak, the dots shrink from the centre; track-0 scenes only). Options: color ("accent" default, "ink", "paper" or a #rrggbb hex), cover (the peak dot size 0.3–1, default 0.65 so the dots just touch and the cut shows through instead of a solid blink; 1 closes it) and hold (frames held at the peak, default 0).',
     'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy, smooth or cinematic.'
   ];
-  if (artDirection || lane === 'motion' || lane === 'voiceover-motion') {
+  // A pack that sets its motion and camera decides them; the wording of the brief does not.
+  if (style?.motion && style?.camera?.mode) lines.push(`For this request: the style pack sets the motion and camera (camera.mode "${style.camera.mode}"); keep them.`);
+  else if (artDirection || lane === 'motion' || lane === 'voiceover-motion') {
     const suggestion = suggestMotion({ artDirection, lane });
     lines.push(`For this request: motion.grammar "${suggestion.grammar}" and camera.mode "${suggestion.camera.mode}" (${suggestion.reason}).`);
     if (suggestion.camera.mode === 'world') lines.push('In world mode make it feel like one place the camera explores: an entry move on most track-0 scenes (push into the detail a line names, pull to reveal, pan along a sequence, whip-pan on a turn), 2–3 zooms a minute on the numbers, bars and rows the narration names, an overview on the recap line, and a backdrop that changes every 6–10 s (plate.cycle). Never a flat, empty frame.');
@@ -955,7 +957,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...(clipLedLines(clipLed).length ? section('Footage and graphics (density)', clipLedLines(clipLed).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
-    ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
+    ...section('Motion grammar and camera', motionLines({ lane, artDirection, style }).map((line) => `- ${line}`)),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),

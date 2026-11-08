@@ -207,3 +207,11 @@ test("interfaceLines: fill the frame in depth layers, vary the arrangement, neve
   assert.match(text, /more than twice in a row/);
   assert.match(text, /stage-fill/);
 });
+
+test("planning prompt: a pack that sets its camera decides it; otherwise the brief's wording does", () => {
+  const brief = { tier: "structured", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand: { colors: { bg: "#000000", paper: "#ffffff", ink: "#000000", primary: "#ffffff", accent: "#ffffff" }, fonts: { display: "inter", body: "inter", meta: "inter" } }, artDirection: "a calm tool explainer" };
+  assert.match(planningPrompt(brief), /For this request: motion\.grammar "smooth" and camera\.mode "world"/);
+  const packed = planningPrompt({ ...brief, style: { name: "pack", motion: { feel: "snap" }, camera: { mode: "cuts" } } });
+  assert.doesNotMatch(packed, /For this request: motion\.grammar/);
+  assert.match(packed, /the style pack sets the motion and camera \(camera\.mode "cuts"\)/);
+});
