@@ -160,6 +160,9 @@ export function densityValue(density) {
   return Number.isFinite(number) ? Math.min(1, Math.max(0, number)) : null;
 }
 
+/** What a scene hit's `moment` can ask the sound score to make the viewer feel (src/sfx/score.js). */
+export const SCORE_MOMENTS = Object.freeze(['letdown', 'promise', 'reveal', 'impact', 'crystallise', 'wonder', 'miss', 'resolve']);
+
 /** Problems with a `sound` block, as messages (empty when it is valid). */
 export function soundProblems(sound) {
   const problems = [];
@@ -168,6 +171,7 @@ export function soundProblems(sound) {
   if (sound.palette !== undefined && !SOUND_PALETTES.includes(sound.palette)) problems.push(`sound.palette must be one of ${SOUND_PALETTES.join(', ')}`);
   if (sound.ambience !== undefined && !['auto', 'none', ...AMBIENCE_BEDS].includes(sound.ambience)) problems.push(`sound.ambience must be auto, none or one of ${AMBIENCE_BEDS.join(', ')}`);
   if (sound.sfx_density !== undefined && densityValue(sound.sfx_density) === null) problems.push('sound.sfx_density must be a number from 0 to 1, or low, normal or high');
+  if (sound.score !== undefined && typeof sound.score !== 'boolean') problems.push('sound.score must be true or false');
   const music = sound.music;
   if (music !== undefined && music !== null) {
     if (typeof music !== 'object' || Array.isArray(music)) problems.push('sound.music must be an object');

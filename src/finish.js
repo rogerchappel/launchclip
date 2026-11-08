@@ -58,7 +58,9 @@ import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { guardCueTimbre } from "./sfx/timbre.js";
 import { applyEventSounds, planEventSounds, resolveSfxMode } from "./sfx/event_sounds.js";
-import { applyEarshotSounds } from "./sfx/earshot.js";
+import { applyEarshotSounds, findEarshot } from "./sfx/earshot.js";
+import { SCORE_FAMILIES, planScore } from "./sfx/score.js";
+import { applyScoreSounds } from "./sfx/score_sounds.js";
 import { structureGate } from "./skeletons.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
@@ -378,6 +380,12 @@ export function paceCues(cues, density = "normal", storyId = "") {
   return [...out, ...cues.filter((cue) => PACE_EXEMPT.has(cue.cue))].sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
 }
 
+/** Whether a sound score plays with no music: no --music, and no track named beyond a default synth bed. */
+export function scoreStandsAlone(music, flag) {
+  if (flag !== undefined && flag !== null) return false;
+  return music === undefined || music === null || music === "synth" || (typeof music === "object" && music.provider === "synth");
+}
+
 /**
  * The SFX density when neither --sfx-density, audio.sfx_density nor the
  * style's sound.sfx_density sets one: "low" for a footage-led story or one
@@ -529,6 +537,7 @@ export function soundSettings(pack, story) {
   if (sound.ambience === "auto") ambience = ambienceForWorld(world);
   else if (sound.ambience !== undefined && sound.ambience !== "none") ambience = known(sound.ambience, AMBIENCE_BEDS, "ambience");
   return {
+    ...(sound.score === true ? { score: true } : {}),
     active: Boolean(palette || genre || ambience),
     palette,
     seed: String(sound.seed ?? pack?.generated?.seed ?? pack?.name ?? story?.id ?? "launchclip"),
@@ -683,8 +692,8 @@ export function defaultAdapters() {
     renderTyping: (schedule, banks, options) => renderTypingTrack(schedule, banks, options),
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
-      const cues = normalizeCues(options.cues, options.sfxDir);
-      buildMix({ voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
+      const cues = normalizeCues(options.cues, options.sfxDir).map((cue, i) => (options.score ? { ...cue, pan: options.cues[i].pan, sweep: options.cues[i].sweep, ...(options.cues[i].take?.dur ? { sweep_seconds: options.cues[i].take.dur } : {}) } : cue));
+      buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
       return { cues };
     },
     async master(input, output, target) {
@@ -1103,7 +1112,11 @@ const STAGES = [
       const sfxOn = sfxMode !== "off";
       // The style's sound block: palette, music genre, ambience, density.
       const sound = soundSettings(await stylePack(ctx), ctx.copy);
-      const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env, fallback: Boolean(ctx.options.musicFallback) });
+      // A sound score is the soundtrack: no music under it unless --music or the story names a real
+      // track. A planner's default synth bed is not a request for music (--music synth still is).
+      const scored = sound.score && sfxMode !== "off";
+      const scoreAlone = scored && scoreStandsAlone(audio.music, ctx.options.music);
+      const choice = resolveMusicChoice(scoreAlone ? { ...audio, music: "none" } : audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env, fallback: Boolean(ctx.options.musicFallback) });
       const music = musicPlanSpec(choice);
       // --music-volume sets the bed's gain over audio.music.volume and the energy default.
       if (ctx.options.musicVolume != null) music.volume = parseMusicVolume(ctx.options.musicVolume);
@@ -1117,13 +1130,15 @@ const STAGES = [
       try { densityAmount(density); } catch { throw new Error(`--sfx-density must be low, normal, high or a number from 0 to 1; got ${ctx.options.sfxDensity ?? audio.sfx_density ?? sound.density}`); }
       const storyId = String(ctx.story.id ?? ctx.story.title ?? path.basename(ctx.project));
       const models = sceneModels(ctx.resolved);
-      const bound = sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
-      bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
+      const scoreFor = (story) => planScore({ ...story, words: ctx.words ?? [] }, { seed: storyId, key: sound.key ?? "A", density: densityAmount(density) });
+      const score = scored ? scoreFor(ctx.resolved) : null;
+      const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
+      if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
       // back to the procedural kit (it would sound unlike the library's set).
-      const used = [...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
+      const used = [...(score ? SCORE_FAMILIES : []), ...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
       const fallbacks = libraryFallbacks(used, libraries);
       if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
@@ -1184,12 +1199,13 @@ const STAGES = [
         duration: ctx.resolved.resolved.duration,
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
+      return { inputHash, outputs, score, scoreFor, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -1226,16 +1242,21 @@ const STAGES = [
       // to the moved times.
       let boundCues = plan.cues;
       let typingPlan = plan.typing;
+      let scorePlan = plan.score;
       if (synced?.changed && plan.sfxOn) {
         const models = sceneModels(ctx.resolved);
-        boundCues = paceCues(applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette) }).cues, plan.density, plan.storyId), plan.density, plan.storyId);
+        if (scorePlan) scorePlan = plan.scoreFor(ctx.resolved);
+        boundCues = scorePlan ? scorePlan.cues : paceCues(applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette) }).cues, plan.density, plan.storyId), plan.density, plan.storyId);
         typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
       }
       const mixFile = path.join(ctx.project, PATHS.mix);
       // SFX cue → file: library first (explicit, project, user), then the kit.
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
       // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
-      const guarded = await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
+      // A score's files are chosen for where they sit in its mix, so the guard for lone cues does not apply.
+      const guarded = scorePlan
+        ? { cues: resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), findings: [] }
+        : await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
       let cues = guarded.cues;
       // A refused library clip (one seeded before the guard) is refused on every render until its library replaces it.
       const fixHint = (file) => (path.resolve(file).startsWith(path.resolve(kitDir) + path.sep) ? "" : `; replace it with: launchclip sfx seed --missing --dir ${path.dirname(path.dirname(file))}`);
@@ -1243,7 +1264,7 @@ const STAGES = [
       // --sfx generated: the accent cues get a sound described from what is on
       // screen and said (src/sfx/event_sounds.js); a miss keeps the kit file.
       let eventSounds = { generated: [], cost_usd: 0, warnings: [] };
-      if (plan.sfxMode === "generated" && cues.length) {
+      if (plan.sfxMode === "generated" && cues.length && !scorePlan) {
         const planned = await planEventSounds(cues, { story: ctx.resolved, words: ctx.words ?? [], duration, describe: ctx.adapters.describeSounds ?? null });
         eventSounds = await applyEventSounds(cues, planned, { project: ctx.project, env: ctx.adapters.env ?? process.env, words: ctx.words ?? [], notice: ctx.adapters.notice, ...(ctx.adapters.generateSound ? { generate: ctx.adapters.generateSound } : {}), ...(ctx.adapters.eventSoundCacheDir ? { cacheDir: ctx.adapters.eventSoundCacheDir } : {}) });
         cues = eventSounds.cues;
@@ -1253,7 +1274,13 @@ const STAGES = [
       // point on the event and its level matched to the file it replaces
       // (src/sfx/earshot.js); unmapped families and failed renders keep theirs.
       let earshot = { rendered: [], credits: [], warnings: [] };
-      if (plan.sfxMode === "earshot" && cues.length) {
+      let scoreSounds = null;
+      if (scorePlan) {
+        scoreSounds = await applyScoreSounds(cues, { project: ctx.project, key: scorePlan.key, env: ctx.adapters.env ?? process.env, bin: ctx.adapters.earshotBin ?? findEarshot(ctx.adapters.env ?? process.env) });
+        cues = scoreSounds.cues;
+        ctx.warnings.push(...scoreSounds.warnings);
+        earshot.credits = scoreSounds.credits;
+      } else if (plan.sfxMode === "earshot" && cues.length) {
         earshot = await applyEarshotSounds(cues, { project: ctx.project, env: ctx.adapters.env ?? process.env, bin: ctx.adapters.earshotBin ?? plan.earshotBin, storyId: plan.storyId, key: plan.bed?.key ?? null, lead: CUE_DURATIONS.whoosh * 0.35, ...(ctx.adapters.earshotRender ? { render: ctx.adapters.earshotRender } : {}), ...(ctx.adapters.earshotLevel ? { level: ctx.adapters.earshotLevel } : {}), ...(ctx.adapters.earshotTimbre ? { timbre: ctx.adapters.earshotTimbre } : {}), ...(ctx.adapters.earshotCacheDir ? { cacheDir: ctx.adapters.earshotCacheDir } : {}) });
         cues = earshot.cues;
         ctx.warnings.push(...earshot.warnings);
@@ -1265,7 +1292,7 @@ const STAGES = [
         cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
       }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}) });
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
@@ -1280,6 +1307,7 @@ const STAGES = [
         generated_cost_usd: eventSounds.cost_usd,
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
+        ...(scorePlan ? { score: { key: scorePlan.key, source: scoreSounds.source, room: scorePlan.room, silences: scorePlan.silences } } : {}),
         timbre_refused: guarded.findings,
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
