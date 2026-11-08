@@ -47,7 +47,7 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   paper: { grain: BG_UNIT, intensity: BG_UNIT },
   geometric: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   blobs: {},
-  "dot-grid": { scale: BG_SCALE, density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "dot-grid": { scale: BG_SCALE, density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED, lit: BG_UNIT },
   mesh: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
   stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
@@ -76,6 +76,17 @@ export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "so
 // kept in step by test/medium.test.js).
 export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink", "gouache"];
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
+// story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
+// layer, kept in step by test/lighting.test.js.
+export const STORY_LIGHT_PRESETS = ["none", "studio", "spot", "soft"];
+export const STORY_LIGHT_PARAMS = Object.freeze({
+  key: { x: [0, 1], y: [0, 1], size: [0.3, 2], intensity: [0, 1], drift: [0, 1] },
+  pool: { x: [0, 1], size: [0.3, 2], intensity: [0, 1] },
+  vignette: { intensity: [0, 1] },
+  haze: { intensity: [0, 1], speed: [0, 2] },
+  wrap: { intensity: [0, 1] }
+});
+export const STORY_LIGHT_PULSE_PARAMS = Object.freeze({ x: [0, 1], y: [0, 1], radius: [0.05, 1], intensity: [0, 1], duration: [0.2, 4] });
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -97,7 +108,8 @@ const EPS = 1e-6;
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
-const TOP_LEVEL = new Set(["cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine"]);
+// light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
+const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -486,6 +498,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   };
   // Zoom kicks (kit/core/kinetic.mjs): seconds or narration anchors.
   if (isObject(story.camera)) validateKicks(story.camera.kicks, { err, lane: story.lane, anchorField });
+  // Light (kit/core/lighting.mjs): layers and pulses, whose at is seconds or an anchor.
+  validateLight(story.light, { err, anchorField });
   const timing = [];
   const fromObjects = [];
   const overviews = [];
@@ -818,6 +832,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   };
   if (isObject(copy.camera) && Array.isArray(copy.camera.kicks)) copy.camera.kicks.forEach((kick, k) => {
     if (isObject(kick) && kick.at !== undefined) kick.at = resolve(kick.at, `camera.kicks[${k}].at`);
+  });
+  if (isObject(copy.light) && Array.isArray(copy.light.pulses)) copy.light.pulses.forEach((pulse, p) => {
+    if (isObject(pulse) && pulse.at !== undefined) pulse.at = resolve(pulse.at, `light.pulses[${p}].at`);
   });
   const scenes = Array.isArray(copy.scenes) ? copy.scenes : [];
   scenes.forEach((scene, index) => {
@@ -1448,6 +1465,43 @@ function validatePlateCycle(cycle, err, path) {
   if (cycle.plates === undefined) return;
   if (!Array.isArray(cycle.plates) || !cycle.plates.length || cycle.plates.length > 12) { err(`${path}.plates must be a list of 1 to 12 plates`); return; }
   cycle.plates.forEach((plate, i) => validatePlate(plate, err, `${path}.plates[${i}]`));
+}
+
+// The same rules as kit/core/lighting.mjs lightErrors(), kept here so this
+// file stays import-free.
+function validateLight(value, { err, anchorField }) {
+  if (value === undefined || value === null) return;
+  if (!isObject(value)) { err("light must be an object {preset?, key?, pool?, vignette?, haze?, wrap?, pulses?}"); return; }
+  const keys = ["preset", ...Object.keys(STORY_LIGHT_PARAMS), "pulses"];
+  for (const key of Object.keys(value)) if (!keys.includes(key)) err(`light.${key} is not supported (allowed: ${keys.join(", ")})`);
+  if (value.preset !== undefined && !STORY_LIGHT_PRESETS.includes(value.preset)) err(`light.preset must be one of ${STORY_LIGHT_PRESETS.join(", ")}`);
+  const color = (given, path) => { if (!(["accent", "primary", "paper"].includes(given) || (typeof given === "string" && /^#[0-9a-fA-F]{6}$/.test(given)))) err(`${path} must be accent, primary, paper or #rrggbb`); };
+  const numbers = (given, spec, path, extra) => {
+    const allowed = [...Object.keys(spec), ...extra];
+    for (const [key, inner] of Object.entries(given)) {
+      if (!allowed.includes(key)) { err(`${path}.${key} is not supported (allowed: ${allowed.join(", ")})`); continue; }
+      if (key === "color") { color(inner, `${path}.color`); continue; }
+      if (!spec[key]) continue;
+      const [min, max] = spec[key];
+      if (!(typeof inner === "number" && Number.isFinite(inner) && inner >= min && inner <= max)) err(`${path}.${key} must be a number from ${min} to ${max}`);
+    }
+  };
+  for (const [layer, spec] of Object.entries(STORY_LIGHT_PARAMS)) {
+    const given = value[layer];
+    if (given === undefined || given === false) continue;
+    if (!isObject(given)) { err(`light.${layer} must be an object or false`); continue; }
+    numbers(given, spec, `light.${layer}`, layer === "key" || layer === "pool" ? ["color"] : []);
+  }
+  if (value.pulses === undefined) return;
+  if (!Array.isArray(value.pulses)) { err("light.pulses must be a list of {at, x?, y?, radius?, intensity?, duration?, color?}"); return; }
+  if (value.pulses.length > 24) err("light.pulses takes at most 24 pulses");
+  value.pulses.forEach((pulse, i) => {
+    const path = `light.pulses[${i}]`;
+    if (!isObject(pulse)) { err(`${path} must be {at, x?, y?, radius?, intensity?, duration?, color?}`); return; }
+    numbers(pulse, STORY_LIGHT_PULSE_PARAMS, path, ["at", "color"]);
+    if (pulse.at === undefined) err(`${path}.at is required`);
+    else anchorField(pulse.at, `${path}.at`);
+  });
 }
 
 // The same rules as kit/core/medium.mjs mediumErrors(), kept here so this

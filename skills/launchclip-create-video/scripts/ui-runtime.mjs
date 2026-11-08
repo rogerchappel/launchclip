@@ -6,7 +6,7 @@
 
 import * as core from './ui-paint.mjs';
 import * as more from './ui-components.mjs';
-import {uiChildren} from './ui-paint.mjs';
+import {uiStage, uiStageView} from './ui-paint.mjs';
 import {UI_COMPONENT_TABLE} from './ui-components.mjs';
 
 /**
@@ -17,8 +17,13 @@ function paintUi(host, spec, t) {
   if (!host) return;
   // Font stacks go inside style="…": double quotes would end the attribute.
   const fonts = {display: String(spec.fonts.display).replace(/"/g, "'"), body: String(spec.fonts.body).replace(/"/g, "'"), mono: String(spec.fonts.mono).replace(/"/g, "'")};
-  const ctx = {c: spec.theme, fonts: fonts, components: uiComponentTable()};
-  const inner = uiChildren(spec.elements, t - spec.start, ctx);
+  const ctx = {c: spec.theme, fonts: fonts, components: uiComponentTable(), stage: spec.stage || null, width: spec.width, height: spec.height};
+  let inner = uiStage(spec.elements, t - spec.start, ctx);
+  // The stage's look-down: the whole drawing turned about rotateX, top away.
+  if (spec.stage && spec.stage.tilt) {
+    const v = uiStageView(spec.width, spec.height);
+    inner = '<div style="position:absolute;left:0;top:0;width:' + spec.width + 'px;height:' + spec.height + 'px;transform-origin:' + v.cx + 'px ' + v.cy + 'px;transform:perspective(' + v.p + 'px) rotateX(' + spec.stage.tilt + 'deg)">' + inner + '</div>';
+  }
   host.innerHTML = '<div style="position:absolute;left:0;top:0;width:' + spec.width + 'px;height:' + spec.height + 'px;transform-origin:0 0;transform:scale(' + spec.unit + ');color:' + spec.theme.ink + ';font-family:' + fonts.body + '">' + inner + '</div>';
 }
 

@@ -46,6 +46,12 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | still_share | share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps) | p90 (a ceiling) |
 | longest_still_seconds | longest near-still run inside the video (a closing hold does not count) | p90 (a ceiling) |
 | camera_moves_per_min | whole-frame camera moves (shifts, pans, zooms) per minute | p10 (a floor) |
+| moving_sharpness_ratio | median sharpness (Laplacian variance) of moving frames (change over 3 grey levels) over that of held frames (under 0.4); under 1 means moves blur | p90 (a ceiling) |
+| soft_frame_share | share of frames softer than 35% of the held frames' median sharpness (defocused, blurred or hazed) | p10 (a floor) |
+| change_p99 | 99th-percentile single-frame change (mean absolute grey difference): how hard the hardest jumps are | p90 (a ceiling) |
+| top_light_ratio | median ratio of the top band's mean grey (top 17%) to the middle band's (39–61%): over 1 means light falls from above | p10 (a floor) |
+| midtone_share | mean share of pixels with grey 29–109 (neither near-black background nor bright ink: haze, glows, translucent layers) | p10 (a floor) |
+| burst_change_mean | mean single-frame change while something moves (change over 2.5 grey levels) | p10 (a floor) |
 | scene_seconds | scene length (character stories) | p10 and p90 |
 | character_screen_time | share of the runtime with a character on screen | p10 and p90 |
 | expression_changes_per_min | pose or expression changes per minute | p10 and p90 |
@@ -198,6 +204,12 @@ A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that 
 | still_share | 9% | 11% | 12% |
 | longest_still_seconds | 0.9919 | 1.167 | 1.342 |
 | camera_moves_per_min | 11.1273 | 13.091 | 15.0546 |
+| moving_sharpness_ratio | 0.6873 | 0.8086 | 0.9299 |
+| soft_frame_share | 12% | 14% | 17% |
+| change_p99 | 18.3575 | 21.597 | 24.8366 |
+| top_light_ratio | 1.0049 | 1.1822 | 1.3595 |
+| midtone_share | 15% | 18% | 21% |
+| burst_change_mean | 5.8523 | 6.885 | 7.9177 |
 
 ## youtube-long-form
 

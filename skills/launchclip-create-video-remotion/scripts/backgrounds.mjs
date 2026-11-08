@@ -7,7 +7,8 @@
 // plays the axes as half-period sine.inOut tweens (ambient.mjs axisSegments)
 // and Remotion evaluates the same cosines per frame, so both renderers draw
 // the same pixels at any seek. Plain ESM; imports only ./ambient.mjs,
-// ./panels.mjs and ./icons.mjs. Contract: docs/KIT_CONTRACTS.md, "Backgrounds and panels".
+// ./panels.mjs, ./icons.mjs and ./lighting.mjs (a lit dot grid's mask).
+// Contract: docs/KIT_CONTRACTS.md, "Backgrounds and panels".
 //
 // Kinds:
 //   flat            the brand background alone
@@ -17,7 +18,8 @@
 //   geometric       outlined rings, triangles, squares and crosses, drifting
 //   blobs           today's ambient field (kit/core/ambient.mjs ambientField);
 //                   the default when story.background is absent, unchanged
-//   dot-grid        an even grid of small dots
+//   dot-grid        an even grid of small dots; params.lit shows them mainly
+//                   where the story's key light falls (kit/core/lighting.mjs)
 //   mesh            large overlapping colour washes that move slowly
 //   stripes         diagonal bands
 //   topographic     contour lines around two summits
@@ -46,6 +48,7 @@
 import { AMBIENT_PRESETS, ambientSeed, axisSegments, axisValue, fieldLevel, sceneAmbient, seededRandom } from './ambient.mjs';
 import { contrast, mix, panelFill, storyPanel, withAlpha } from './panels.mjs';
 import { ICONS, ICON_BOX, isIcon } from './icons.mjs';
+import { litMask } from './lighting.mjs';
 
 export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture']);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
@@ -65,7 +68,7 @@ export const BACKGROUND_PARAMS = Object.freeze({
   paper: Object.freeze({ grain: range(0, 1, 0.5), intensity: range(0, 1, 0.4) }),
   geometric: Object.freeze({ density: DENSITY, scale: SCALE, intensity: INTENSITY, speed: SPEED }),
   blobs: Object.freeze({}),
-  'dot-grid': Object.freeze({ scale: SCALE, density: DENSITY, intensity: INTENSITY, speed: SPEED }),
+  'dot-grid': Object.freeze({ scale: SCALE, density: DENSITY, intensity: INTENSITY, speed: SPEED, lit: range(0, 1, 0) }),
   mesh: Object.freeze({ intensity: INTENSITY, scale: SCALE, speed: SPEED }),
   stripes: Object.freeze({ angle: range(0, 180, 45), scale: SCALE, density: range(0.15, 0.6, 0.35), intensity: range(0, 1, 0.35), speed: SPEED }),
   topographic: Object.freeze({ density: DENSITY, scale: SCALE, intensity: INTENSITY, speed: SPEED }),
@@ -352,9 +355,12 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'dot-grid': {
       const cell = round(40 * u * params.scale, 2);
       const radius = round(cell * (0.07 + 0.1 * params.density), 2);
-      const alpha = lay(tint, 0.3 + 0.45 * params.intensity);
+      // lit: the dots brighten under the key light and fade to 1 − lit away from it.
+      const lit = params.lit ?? 0;
+      const alpha = lay(tint, (0.3 + 0.45 * params.intensity) * (1 + 0.6 * lit));
+      const mask = litMask(story, lit, { width: W, height: H });
       layers.push({ id: 'dots', box: over(cell), svg: null,
-        style: { backgroundImage: `radial-gradient(circle at ${round(cell / 2, 2)}px ${round(cell / 2, 2)}px, ${rgba(tint, alpha)} ${radius}px, ${rgba(tint, 0)} ${round(radius + 1.2 * u, 2)}px)`, backgroundSize: `${cell}px ${cell}px` },
+        style: { backgroundImage: `radial-gradient(circle at ${round(cell / 2, 2)}px ${round(cell / 2, 2)}px, ${rgba(tint, alpha)} ${radius}px, ${rgba(tint, 0)} ${round(radius + 1.2 * u, 2)}px)`, backgroundSize: `${cell}px ${cell}px`, ...(mask ? { maskImage: mask, WebkitMaskImage: mask } : {}) },
         axes: { x: wave(cell * 0.5, period(18), 0), y: wave(cell * 0.5, period(23), 1) } });
       break;
     }

@@ -29,6 +29,7 @@ import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
+import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lightTweens } from './lighting.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
 import { feelGsap, feelPlan } from './kinetic.mjs';
@@ -181,6 +182,22 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const lines = field.blobs.flatMap((blob) => blobTweens(blob, from, to).map((tw) => `tl.fromTo(${js(`#lc-amb-${key}-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
     return { html: `<div id="lc-amb-field-${key}" class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
   };
+  // Story lighting (kit/core/lighting.mjs): the under group inside every
+  // plate that draws a background, over it and under the content; the over
+  // group in one layer above every scene (lightOver below). No light, nothing added.
+  const light = isolate ? null : lightPlan(story);
+  const lightLayers = (layers, key, from, to) => {
+    const shown = layers.filter((layer) => lightLayerActive(layer, from, to));
+    const html = shown.map((layer) => `<div id="lc-light-${key}-${layer.id}" class="lc-light-layer" style="${lightLayerCss(layer, from)}"></div>`).join('');
+    const lines = shown.flatMap((layer) => lightTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-light-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html, motion: lines };
+  };
+  const plateField = (key, from, to, scene) => {
+    const field = fieldLayer(key, from, to, scene);
+    if (!light?.under.length) return field;
+    const lit = lightLayers(light.under, key, from, to);
+    return { html: `${field.html}<div id="lc-light-under-${key}" class="lc-ambient-field" data-launchclip-light="under" aria-hidden="true">${lit.html}</div>`, motion: [...field.motion, ...lit.motion] };
+  };
   // World mode: the field as one continuous backdrop in the depth layer.
   // Every copy of a blob (camera-world.mjs backgroundFieldTiles) sits in a
   // static translate wrapper and shares the blob's class, so one set of
@@ -227,6 +244,9 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (stack) cameraMotion.push(...stack.motion);
   const worldBackdrop = plan?.mode === 'world' && backdrop && !covered ? backdropLayer('world', 0, D, backdrop) : null;
   if (worldBackdrop) cameraMotion.push(...worldBackdrop.motion);
+  // World mode: the light's under group sits fixed under the camera, in #lc-bg.
+  const worldLight = plan?.mode === 'world' && light?.under.length ? lightLayers(light.under, 'world', 0, D) : null;
+  if (worldLight) cameraMotion.push(...worldLight.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
   const build = (entry, { idSuffix = '', track, clone = false, held = false } = {}) => {
@@ -308,7 +328,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
     // Ambient field: inside every plate, except in world mode, where the one
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
-    const ambient = entry.plate && !worldMode && drawsBackground(entry.scene) ? fieldLayer(id, entry.start, entry.renderEnd, entry.scene) : { html: '', motion: [] };
+    const ambient = entry.plate && !worldMode && drawsBackground(entry.scene) ? plateField(id, entry.start, entry.renderEnd, entry.scene) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
@@ -402,7 +422,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       // The clone holds the scene's first state, where its drift is identity;
       // the field keeps moving with absolute time (in world mode it is the
       // camera's depth layer instead).
-      const ambient = plate && plan?.mode !== 'world' && drawsBackground(entry.scene) ? fieldLayer(id, loop.start, loop.end, entry.scene) : { html: '', motion: [] };
+      const ambient = plate && plan?.mode !== 'world' && drawsBackground(entry.scene) ? plateField(id, loop.start, loop.end, entry.scene) : { html: '', motion: [] };
       (plan ? world : markup).push(`<div id="${outer}" class="lc-scene${plate ? ' lc-plate' : ''} lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
       motion.push(...ambient.motion);
       if (media.elements.length) warnings.push(`${entry.id}: root media is not repeated in the loop ending`);
@@ -555,6 +575,9 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // tl.set calls on --lc-medium-filter. No medium, nothing added. A module
   // review has none, like ModuleReview.
   const medium = isolate ? null : mediumPlan(story);
+  // The light's over group (kit/core/lighting.mjs): wrap, pulse halos and the
+  // vignette, above every scene and the camera, under the dot wipes.
+  const lightOver = light?.over.length ? lightLayers(light.over, 'over', 0, D) : null;
 
   const fonts = brandFontStacks(story.brand);
   const fontCss = await projectFontFaces(story.brand, { sourceDir });
@@ -589,18 +612,18 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
 </head>
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
-    <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}</div>
+    <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}${worldLight ? `<div id="lc-light-under-world" class="lc-ambient-field" data-launchclip-light="under" aria-hidden="true">${worldLight.html}</div>` : ''}</div>
     ${baseMarkup.join('\n    ')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)])].map((line) => `      ${line}`).join('\n')}` : ''}
+${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)])].map((line) => `      ${line}`).join('\n')}` : ''}
       ${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
