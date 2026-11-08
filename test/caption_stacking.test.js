@@ -25,7 +25,7 @@ test("captions: Remotion draws WordCaptions after the sweep, light, wipe and med
   for (const body of source.split("return (").slice(1).filter((part) => part.includes("<WordCaptions"))) {
     const at = (needle) => body.indexOf(needle);
     const captions = at("<WordCaptions");
-    for (const layer of ["sweepLayers", "<LightOver", "wipeLayers", "<MediumLayer"]) assert.ok(at(layer) >= 0 && at(layer) < captions, `${layer} comes before the captions`);
+    for (const layer of ["sweepDips", "sweepLights", "<LightOver", "wipeLayers", "<MediumLayer"]) assert.ok(at(layer) >= 0 && at(layer) < captions, `${layer} comes before the captions`);
   }
   assert.equal(LIGHT_SWEEP.z.remotion < 100 && DOT_WIPE.z.remotion < 100, true);
 });
