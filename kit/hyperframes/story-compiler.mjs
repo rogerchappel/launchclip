@@ -16,7 +16,7 @@
 // Canonical copy: kit/hyperframes/story-compiler.mjs. Skills ship a copy whose
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
-import { copyFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -32,6 +32,7 @@ import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from '../core/plates.m
 import { worldBackdrops } from '../core/world-backdrops.mjs';
 import { shotZooms, zoomOps } from '../core/zooms.mjs';
 import { feelGsap, feelPlan } from '../core/kinetic.mjs';
+import { MOTION_BLUR_GUARD_FILE, captionSnapOffset, guardFrames, guardRect, resolveMotionBlur } from '../core/motion-blur.mjs';
 import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from '../core/dot-wipe.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords, snapCaptionChunks } from '../core/captions.mjs';
@@ -515,14 +516,16 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume)}" data-track-index="0"></audio>` : '';
 
   // Captions.
+  const blurPlan = resolveMotionBlur(story);
+  let blurGuard = null;
   let captions = null;
   let captionWords = [];
   const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
     const loaded = await loadCaptionChunks(story, overlay, sourceDir, warnings);
-    // Motion blur blends sub-frames: caption changes go on half frames so no frame shows two words.
-    const blurred = story.motion?.blur === true || (story.motion?.blur && typeof story.motion.blur === 'object');
-    const chunks = loaded && blurred ? snapCaptionChunks(loaded, format.fps) : loaded;
+    // Motion blur blends sub-frames: caption changes go between two frames'
+    // one-frame windows (half frames at 3 sub-frames) so no frame shows two words.
+    const chunks = loaded && blurPlan ? snapCaptionChunks(loaded, format.fps, captionSnapOffset(blurPlan)) : loaded;
     if (chunks?.length) {
       captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
@@ -531,6 +534,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       // (captions.hide_during_moves, camera-world.mjs captionDipWindows).
       const dips = captionDipTweens(captionDipWindows(plan, captionMoveHide(overlay)));
       if (captionsPlan.nodes.length) captions = { chunks, hide, plan: captionsPlan, dips };
+      // A shutter over one frame: the frames whose blend straddles a word
+      // change take the caption band from the one-frame blend
+      // (src/motion_blur.js reads this file).
+      if (captions && blurPlan?.overlap) {
+        const changes = chunks.flatMap((chunk) => [chunk.start, chunk.end, ...(chunk.words ?? []).flatMap((word) => [word.start, word.end])]).map(Number);
+        const frames = guardFrames(blurPlan, changes, format.fps);
+        if (frames.length) blurGuard = { frames, rect: guardRect(captionsPlan.options, format, /lc-cap-z\d/.test(captionsPlan.css)) };
+      }
     }
   }
 
@@ -631,6 +642,13 @@ ${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join(
     }
     await writeFile(path.join(projectDir, 'index.html'), html);
     files.push('index.html');
+    // The motion-blur guard (src/motion_blur.js), in the frames of this
+    // composition (a window starts at its own frame 0); none left, none written.
+    const guardFile = path.join(projectDir, MOTION_BLUR_GUARD_FILE);
+    const shift = span ? Math.round(Number(span[0]) * format.fps) : 0, last = span ? Math.round((Number(span[1]) - Number(span[0])) * format.fps) : Infinity;
+    const guarded = blurGuard ? blurGuard.frames.map((frame) => frame - shift).filter((frame) => frame >= 0 && frame <= last) : [];
+    if (guarded.length) { await writeFile(guardFile, `${JSON.stringify({ guard: { ...blurGuard, frames: guarded } })}\n`); files.push(MOTION_BLUR_GUARD_FILE); }
+    else await rm(guardFile, { force: true });
   }
   return { html, files, warnings, boundaries, compositionId: COMPOSITION_ID };
 }

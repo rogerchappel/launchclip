@@ -1075,12 +1075,14 @@ export const STORY_FEELS = ["kinetic"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
 
-// motion.blur: real motion blur from sub-frames (src/motion_blur.js).
+// motion.blur: real motion blur from sub-frames (kit/core/motion-blur.mjs
+// MOTION_BLUR, repeated here import-free; src/motion_blur.js).
 function validateBlur(blur, err) {
   if (blur === undefined || blur === null || typeof blur === "boolean") return;
-  if (!isObject(blur)) { err("motion.blur must be true, false or {samples}"); return; }
-  for (const key of Object.keys(blur)) if (key !== "samples") err(`motion.blur.${key} is not supported (allowed: samples)`);
-  if (blur.samples !== undefined && ![2, 3, 4].includes(blur.samples)) err("motion.blur.samples must be 2, 3 or 4");
+  if (!isObject(blur)) { err("motion.blur must be true, false or {samples, shutter}"); return; }
+  for (const key of Object.keys(blur)) if (!["samples", "shutter"].includes(key)) err(`motion.blur.${key} is not supported (allowed: samples, shutter)`);
+  if (blur.samples !== undefined && ![2, 3, 4, 5, 6].includes(blur.samples)) err("motion.blur.samples must be a whole number from 2 to 6");
+  if (blur.shutter !== undefined && !(typeof blur.shutter === "number" && blur.shutter >= 0.25 && blur.shutter <= 1.5)) err("motion.blur.shutter must be the share of a frame the blur spans, 0.25 to 1.5");
 }
 
 function validateFeel(feel, err) {

@@ -2320,17 +2320,46 @@ a pure function of time, in both renderers.
   of the canvas entering after 0.3 s as a visual change, as the pixel
   measure does.
 
-## Motion blur (`src/motion_blur.js`)
+## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
-`story.motion.blur`: `true` (3 samples) or `{samples: 2 | 3 | 4}`. The
-HyperFrames adapter renders at `fps × samples` and blends each output frame
-from the sub-frames centred on it (`tmix`, then `select`), a 240° shutter at
-3 samples: fast moves smear along their path and settled panels stay sharp.
-Render time grows with the samples. With blur on, the HyperFrames compiler
-snaps caption times to half frames (`snapCaptionChunks`), so a word change
-falls between two frames' sub-frames and no frame blends two words. `story.motion` is part of the segment
-hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
-pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
+`story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
+shutter?: 0.25–1.5}`. The HyperFrames adapter renders `rate` sub-frames per
+output frame (`fps × rate`) and blends each output frame from the `samples`
+consecutive sub-frames centred on it (`tmix`, then `select`): fast moves smear
+along their path and settled panels stay sharp. A sub-frame stands for
+1/rate of a frame, so the blend spans `samples / rate` frames (the shutter);
+`rate = round(samples / shutter)`, at least `samples / 1.5` and at most 8
+(`resolveMotionBlur` gives the effective shutter). Over one frame,
+neighbouring output frames share sub-frames (overlapping windows): a heavy,
+cinematic smear for no extra render cost.
+
+| setting | rate (render cost) | shutter | look |
+| --- | --- | --- | --- |
+| `true` / `{samples: 3}` | 3× | 1 | the original blend; light |
+| `{samples: 4, shutter: 1.33}` | 3× | 1.33 | stronger, same cost |
+| `{samples: 6, shutter: 1.5}` | 4× | 1.5 | heavy: fast moves read soft, as a film camera's |
+| `{samples: 6, shutter: 0.75}` | 8× | 0.75 | short, smooth trails; the most expensive |
+
+The browser render dominates (it scales with `rate`); the blend is one ffmpeg
+pass (`samples` frames mixed per output frame). On a 9:16 interface reel of
+8 s the heavy setting rendered in about 21 s against 5–10 s without blur.
+
+Captions never show two words. The HyperFrames compiler snaps caption times
+(`snapCaptionChunks(chunks, fps, captionSnapOffset(plan))`) into the gap
+between two output frames' one-frame windows (`rate` sub-frames each: half
+frames at rate 3, 0.625 of a frame at rate 4), so a blend of at most one
+frame never straddles a word change. With a shutter over one frame every
+instant lies in two windows, so the compiler also writes
+`launchclip-motion-blur.json` (`{guard: {frames, rect}}`; `guardFrames`,
+`guardRect`) into the project: the output frames whose heavy window
+straddles a change, and the caption band (`bandTop` and band height plus 4 %
+of the frame either side, full width; the whole frame when captions sit in
+footage-layout zones). On those frames the blend takes that rect from the
+one-frame blend, feathered over its top and bottom fifth so the swap never
+shows as a seam. A preview window rebases the frames to its own start.
+`story.motion` is part of the segment hash, so changing the blur
+re-renders. The Remotion adapter ignores it. A style pack's `motion.feel`
+and `motion.blur` pass into the story with its grammar.
 
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
