@@ -11,6 +11,7 @@ import {
   PLANNER_TIERS,
   TUNING_PARAMS,
   exampleStoryboard,
+  interfaceLines,
   moduleCatalogue,
   phraseRowModule,
   planningPrompt,
@@ -196,4 +197,13 @@ test("product moments around the presenter have phrase rows", () => {
   assert.ok(bare.includes("phone-stage"));
   assert.match(subjectEffectsReference(), /\| feed-frame \| split \| yes \|/);
   assert.match(subjectEffectsReference(), /\| phone-stage \| front \| no \|/);
+});
+
+test("interfaceLines: fill the frame in depth layers, vary the arrangement, never the same template three times running", () => {
+  const text = interfaceLines().join("\n");
+  assert.match(text, /arrange: "fan" \| "wall" \| "stack" \| "orbit"/);
+  assert.match(text, /2–3 depth layers/);
+  assert.match(text, /[Vv]ary the arrangement/);
+  assert.match(text, /more than twice in a row/);
+  assert.match(text, /stage-fill/);
 });
