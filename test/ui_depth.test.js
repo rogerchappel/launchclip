@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveModule } from "@launchclip/core/modules.mjs";
-import { uiStageBox } from "@launchclip/core/catalog-i-ui.mjs";
+import { uiStageBox, uiTextBox } from "@launchclip/core/catalog-i-ui.mjs";
 import { resolveAnchor, resolveUiAnchors } from "@launchclip/core/story.mjs";
 import { uiDepthAt, uiEnter, uiExit, uiFlash, uiStageProject } from "@launchclip/core/ui-paint.mjs";
 import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
@@ -104,6 +104,21 @@ test("stage: validated, and the stage and text checks see where depth and the st
   assert.ok(box.width > 400 * 0.92 + 80 * 0.675 - 1);
   const layout = resolve([HEADLINE, PANEL], { dolly: { x: 40 } }).layout;
   assert.ok(layout.parts[0].rect.width > 900, "the panel's part covers its travel");
+});
+
+test("hero fill: a ui-scene's hero is its headline as drawn under the stage, the box the safe-zone check uses", () => {
+  const stage = { tilt: 6, dolly: { x: 30, y: 20, scale: 1.05 } };
+  const headline = { ...HEADLINE, rect: { x: 90, y: 330, width: 900, height: 130 }, props: { text: "EARSHOT", size: 130 } };
+  const panel = { ...PANEL, rect: { x: 130, y: 560, width: 820, height: 560 } };
+  const layout = resolve([headline, panel], stage).layout;
+  const drawn = uiStageBox(uiTextBox("headline", headline.props, headline.rect), 0, { ...stage, duration: 5 }, 1080, 1920);
+  assert.deepEqual(layout.rect, drawn);
+  assert.ok(drawn.width > uiTextBox("headline", headline.props, headline.rect).width, "the dolly's zoom widens it");
+  // With the guide's stage, a centred headline drawn at 87% of the safe width still sits in the safe zone.
+  const wide = { ...headline, props: { text: "SEVENTEEN CHAR XX", size: 70 } };
+  const box = uiStageBox(uiTextBox("headline", wide.props, wide.rect), 0, { ...stage, duration: 5 }, 1080, 1920);
+  assert.ok(box.width / 860 > 0.85, `drawn at ${Math.round(box.width / 8.6)}%`);
+  assert.doesNotThrow(() => resolve([wide, panel], stage));
 });
 
 test("flashAt: an exposure flash on each beat (anchors allowed): quick attack, slow decay", () => {

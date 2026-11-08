@@ -942,7 +942,21 @@ A style pack is `.launchclip/styles/<name>/style.json`:
 - `applyStyle(story, pack, {intro?, outro?})` → `{story, applied, warnings}`.
   Explicit story values always win. Brand colours and fonts fill per role;
   `motion`, `camera`, `ambient` and `layout` fill per key and are carried
-  through as data (renderers that do not read them ignore them); the captions
+  through as data (renderers that do not read them ignore them). "Per key"
+  is a deep fill, field by field: a key the story leaves out takes the
+  pack's; where both hold an object the fill recurses into it; anywhere else
+  (a string, number, boolean or array) the story's value replaces the
+  pack's whole. Of a pack's `motion` only `grammar`, a named `feel` and
+  `blur` reach the story (`storyMotionOf`). So with signal-ui's `motion`
+  (`{grammar: {base: "snappy", defaultTransition: {cuts: {type: "push-blur",
+  dur: 0.5, direction: "up"}, world: {...}}}, feel: "kinetic", blur:
+  {samples: 6, shutter: 1.5}}`): a story `motion: {blur: false}` keeps the
+  grammar and feel and turns blur off; `motion: {grammar: "smooth"}` replaces
+  the whole grammar; `motion: {grammar: {defaultTransition: {cuts: {type:
+  "light-sweep"}}}}` keeps `base` and `world` and fills the cuts
+  transition's `dur` 0.5 and `direction` from the pack (give every field you
+  mean, or a string grammar, to replace them); `motion: {blur: {samples:
+  4}}` keeps the pack's `shutter` 1.5. The captions
   overlay gets the pack's preset (with `captions.lanes[story.lane]` on top,
   `packCaptionsFor`) only when it names neither `preset` nor `style`, and its
   other options per key (a story with no `overlays` at all
@@ -2414,7 +2428,63 @@ a pure function of time, in both renderers.
   sets in (`uiTextBox`): inside the platform safe zone and clear of the
   caption band. Panels may use the whole stage and run under the captions;
   a tilted panel is checked at its footprint (`uiTiltBox`). Panels below
-  their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail.
+  their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail: meter
+  560×320, timeline 600×340, terminal 560×320, results 560×420, downloads
+  560×300, frame-ruler 800×440, marker-snap 560×240, pad-grid 600×480,
+  scan-plane 600×360, comment 560×120 and at least 0.75 of the height its
+  parts stack to (`uiCommentHeight`: the 120 px box, 260 with the sent
+  bubble, 385 with a reply, 485 with reply links), bloom 200×200;
+  lock-cards needs 110 px a card plus 26, 120 for its counter and 64 for a
+  title.
+- **Painted bounds**: every kind paints inside its rect, so the layout
+  checks, which see each element at its rect, see what is drawn
+  (`test/ui_painted_bounds.test.js` paints each kind in Chromium at its
+  smallest and a roomier size and measures it). frame-ruler lays its bands
+  (pin, ruler, lane and slot, counter) out from the rect height and scales
+  the drawing to fit below 560 px; comment stacks its parts from the top
+  and scales them to fit (`uiFit`); lock-cards centres its cards (200 px at
+  most) between title and counter; results keeps its fanned cards' corners
+  inside; scan-plane keeps its pins, labels and scan line inside. Only a
+  bloom (light) and an element's own entrance move run past the rect.
+- **Footprint under tilt and the stage** (what the stage, text and layout
+  checks measure, design px, 9:16). An element tilt `{x, y, z}` turns the
+  rect: width′ = (w·cos z + h·sin z)·g and height′ = (w·sin z + h·cos z)·g,
+  g = 1 + 0.5·sin(max(|x|, |y|)) (`uiTiltBox`; x 38° gives g 1.31). The
+  stage then moves a top-level box at depth d: the dolly scales it about
+  (540, 864) by S′ = (1 − 0.16 d)(1 + (S − 1)(1 − 0.65 d)) and shifts it by
+  (dx, dy)(1 − 0.65 d) by the scene's end; the stage tilt T projects a point
+  (x, y) to x″ = 540 + (x − 540)·k, k = 1 / (1 − (y − 960)·sin T / 1600), so
+  rows below the canvas centre widen and rows above narrow. The footprint is
+  the union of the box at rest and at the dolly's end (`uiStageBox`). Rule
+  of thumb for a front panel centred on 540 whose widest row (its bottom
+  edge, below y 960) lands at y_b: right edge = 540 + (W/2·S + dx)·k(y_b),
+  so it fits the stage (x 40–1040) when W ≤ 2·(500/k − |dx|)/S. Tilt 6°,
+  dolly {x: 30, y: 20, scale: 1.05}, bottom at y 1300: k ≈ 1.026, W ≤ 870.
+  A centred headline must fit the safe zone (x 80–940) the same way: with
+  that stage the widest is about 730 px of text (750 drawn, 87% of the safe
+  width); at tilt 10°, dolly x 80, scale 1.08 about 630 (81%).
+- **Hero fill**: a ui-scene's hero is its largest text box, else its
+  largest panel (role media, no fill check). Its rect is the drawn
+  footprint above (`uiStageBox` of `uiTextBox`), the same box the safe-zone
+  check uses, so hero-fill and the stage rule measure one thing. With the
+  stages the planning guide recommends (tilt up to 10°, dolly x up to 80,
+  scale up to 1.08) the widest a centred headline can be is at least 80% of
+  the safe width, so a hero headline drawn at 70–90% (602–774 px in 9:16)
+  always fits, and the warning means the hero headline is set too small,
+  not that the stage grew it: raise its size or lengthen it. A bigger
+  dolly (x past about 190 at tilt 10°) narrows the room below 70%; there, shorten the
+  dolly's x rather than the headline.
+- **Cadence** (`kit/core/cadence.mjs uiPanelEntrances`): the storyboard
+  cadence counts a top-level element as a visual change, like a cut, when
+  its rect covers at least 20% of the design canvas (414 720 px² in 9:16,
+  e.g. 760×546) and its `at` is 0.3 s or more after its scene starts, as the
+  pixel measure does. Its rect counts, not its tilted footprint, and any
+  kind of that size counts; children, beats and flashes do not. One
+  entering in the first 0.3 s is part of the scene's own cut, and changes
+  within 0.25 s of each other merge into one.
+- **lock-cards icons**: a card's `icon` is any short text or emoji shown in
+  its well once it unlocks (default `✓`); before that the well shows `🔒`.
+  There is no fixed list: use one glyph (`✓`, `★`, `⚡`, `♪`, `🔊`, `🎬`).
 - **Captions**: modules get `ctx.captions`, the story's captions position
   (`storyCaptionPosition`: auto, middle, top); the band elements avoid is
   placed by the same `captionBandAt` the layout check uses.
