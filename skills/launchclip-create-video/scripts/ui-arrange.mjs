@@ -24,7 +24,7 @@ export const ARRANGE_KEYS = Object.freeze(['id', 'kind', 'arrange', 'rect', 'at'
 const CHILD_FORBIDDEN = Object.freeze(['rect', 'depth', 'tilt']);
 // Kinds an arrangement cannot place: text is checked against the safe zone
 // and caption band on its own, and light is not a card.
-const UNARRANGED = new Set(['headline', 'chip', 'bloom', 'stack']);
+const UNARRANGED = new Set(['headline', 'chip', 'bloom', 'burst', 'host', 'stack']);
 // Seconds between children entering, front to back.
 const STAGGER = 0.07;
 
@@ -189,7 +189,7 @@ export function expandArrangements(check, elements, {stage, band, footprint, min
       const at = `${path}.children[${k}]`;
       if (!child || typeof child !== 'object') check.fail(at, 'must be an element object');
       for (const key of CHILD_FORBIDDEN) if (child[key] !== undefined) check.fail(`${at}.${key}`, `is set by arrange "${type}"; drop it, or take the element out of the arrangement to place it by hand`);
-      if (UNARRANGED.has(child.kind)) check.fail(`${at}.kind`, `is ${child.kind}; an arrangement places panels (window, timeline, terminal, card-wall…). Put headlines, chips and blooms beside the stack as their own elements`);
+      if (UNARRANGED.has(child.kind)) check.fail(`${at}.kind`, `is ${child.kind}; an arrangement places panels (window, timeline, terminal, card-wall…). Put headlines, chips, hosts, blooms and bursts beside the stack as their own elements`);
     });
     const slots = arrangementSlots(type, raw.children.length, region, band);
     // Deeper cards draw behind; z breaks ties among cards at one depth, the hero on top.
