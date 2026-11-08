@@ -39,7 +39,7 @@ function uiN(v) { return Math.round(v * 100) / 100; }
 
 /**
  * An entrance at t0 as inline style: kinds up, down, left, right, zoom, slam,
- * pop, drop, fade, focus, cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
+ * pop, drop, fade, focus, hop (a jump in, landing on its feet), cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
  * move blurs while it is fast. focus arrives out of focus (14 px blur, scale
  * 1.06) and pulls sharp over 0.42 s, most of it in the first half. o: {d,
  * dist, ov, base (a transform kept under the move)}. Before t0 the element is hidden.
@@ -49,6 +49,14 @@ function uiEnter(t, t0, kind, o) {
   if (t < t0) return 'opacity:0;visibility:hidden;' + (base ? 'transform:' + base + ';' : '');
   // cut: on screen from t0 exactly as it settles (a scene that opens on a built frame).
   if (kind === 'cut') return base ? 'transform:' + base + ';' : '';
+  // hop: a jump from dist below along a parabola that rises past its rest
+  // and lands, then a squash on its feet (no blur: it reads as a character).
+  if (kind === 'hop') {
+    const hd = opt.d || 0.5, hp = uiClamp((t - t0) / hd), hdist = opt.dist || 140;
+    const hy = hdist * (1 - hp) * (1 - 4 * hp), land = uiClamp(1 - (t - t0 - hd) / 0.16);
+    const squash = hp >= 1 && land > 0 ? ' scale(' + uiN((1 + 0.12 * land) * 1000) / 1000 + ',' + uiN((1 - 0.16 * land) * 1000) / 1000 + ')' : '';
+    return 'opacity:' + uiClamp(hp * 6).toFixed(3) + ';transform-origin:50% 100%;transform:' + base + ' translateY(' + uiN(hy) + 'px)' + squash + ';';
+  }
   const k = kind || 'up', d = opt.d || (k === 'focus' ? 0.42 : 0.36), p = uiClamp((t - t0) / d);
   const spring = k === 'slam' || k === 'pop' || opt.ov;
   const e = spring ? uiOutBack(p, opt.ov || 1.4) : k === 'focus' ? uiOutCubic(p) : uiOutExpo(p), v = 1 - uiOutExpo(p);
