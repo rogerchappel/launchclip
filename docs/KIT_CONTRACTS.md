@@ -683,6 +683,54 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
   once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
   with blur in one filter).
+- `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
+  `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
+  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
+  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
+  horizontal (20–80, default 64), sweep across the middle of the frame, each
+  over 0.78 of the transition, started 0.08 apart, fading in and out over
+  the first and last 22 % of its travel, over a faint wash of the colour that
+  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
+  Remotion blends their group the same way), so nothing opaque ever covers
+  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
+  4 px, a white-hot centre line); a streak moves about 60 px a frame at
+  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
+  rather than stepping it. Both renderers draw the same markup and CSS and
+  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
+  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
+  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  bright parts melt into glowing blobs on a dark field) and drifts forward to
+  1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
+  `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and
+  clears its veil and scale by the end (`power2.out`). Largest frame-to-frame
+  change measured on a dark interface reel: 25 (17.6 with heavy motion
+  blur), spread over about ten frames.
+- `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
+  is where the content travels, `"up"` by default): the camera pushes into the
+  outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
+  direction, `power2.in`) with a directional smear along the travel
+  (`smearX` / `smearY`, a deviation up to 2.6 % of that span: 50 px on 1920)
+  and an exposure dip (`dip`, `brightness(0.55)` at the cut). The cut is at
+  48 % of the transition, a 10 % crossfade; the incoming plate is held hidden,
+  then arrives 6 % of the frame back along the travel, at 1.06 and defocused
+  (`focus`: `blur(14px) brightness(0.6)`), and settles (`expo.out`) while it
+  racks sharp (`power2.out`: two thirds of the blur gone in four frames).
+  The smear is an SVG `feGaussianBlur` with one non-zero deviation, drawn on
+  the layer's outer element (`smearFilterId`, `smearFilterSvg`): HyperFrames
+  tweens its `attr.stdDeviation` and switches the element's `--lc-smear`
+  filter on with it; Remotion renders the filter per frame from
+  `layerStateAt`. Largest frame-to-frame change measured: 8.
+- Layer state gains `veil`, `dip` and `focus` (one CSS filter each, like
+  `rackIn`: `veilFilter`, `dipFilter`, `focusFilter`, so GSAP never mixes two
+  filters on a layer) and `smearX` / `smearY` (`SMEAR_PROPS`, never part of
+  the layer's own filter). Incoming tweens that start after the transition
+  does are preceded by a hold at their first value (`held`), as the
+  dot-wipe's hidden first half, so the incoming plate is in its first state
+  from the transition's first frame.
+- Golden and parity fixture: `examples/story/cinematic-transitions-9x16`
+  (three interface scenes on a dark brand, a light-sweep and a push-blur,
+  `motion.blur {samples: 6, shutter: 1.5}`).
 
 ### Gates
 
@@ -2353,17 +2401,46 @@ a pure function of time, in both renderers.
   elements behind it. Light, not content: it is not a layout part, does
   not count as the scene's first thing on screen and may run off the stage.
 
-## Motion blur (`src/motion_blur.js`)
+## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
-`story.motion.blur`: `true` (3 samples) or `{samples: 2 | 3 | 4}`. The
-HyperFrames adapter renders at `fps × samples` and blends each output frame
-from the sub-frames centred on it (`tmix`, then `select`), a 240° shutter at
-3 samples: fast moves smear along their path and settled panels stay sharp.
-Render time grows with the samples. With blur on, the HyperFrames compiler
-snaps caption times to half frames (`snapCaptionChunks`), so a word change
-falls between two frames' sub-frames and no frame blends two words. `story.motion` is part of the segment
-hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
-pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
+`story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
+shutter?: 0.25–1.5}`. The HyperFrames adapter renders `rate` sub-frames per
+output frame (`fps × rate`) and blends each output frame from the `samples`
+consecutive sub-frames centred on it (`tmix`, then `select`): fast moves smear
+along their path and settled panels stay sharp. A sub-frame stands for
+1/rate of a frame, so the blend spans `samples / rate` frames (the shutter);
+`rate = round(samples / shutter)`, at least `samples / 1.5` and at most 8
+(`resolveMotionBlur` gives the effective shutter). Over one frame,
+neighbouring output frames share sub-frames (overlapping windows): a heavy,
+cinematic smear for no extra render cost.
+
+| setting | rate (render cost) | shutter | look |
+| --- | --- | --- | --- |
+| `true` / `{samples: 3}` | 3× | 1 | the original blend; light |
+| `{samples: 4, shutter: 1.33}` | 3× | 1.33 | stronger, same cost |
+| `{samples: 6, shutter: 1.5}` | 4× | 1.5 | heavy: fast moves read soft, as a film camera's |
+| `{samples: 6, shutter: 0.75}` | 8× | 0.75 | short, smooth trails; the most expensive |
+
+The browser render dominates (it scales with `rate`); the blend is one ffmpeg
+pass (`samples` frames mixed per output frame). On a 9:16 interface reel of
+8 s the heavy setting rendered in about 21 s against 5–10 s without blur.
+
+Captions never show two words. The HyperFrames compiler snaps caption times
+(`snapCaptionChunks(chunks, fps, captionSnapOffset(plan))`) into the gap
+between two output frames' one-frame windows (`rate` sub-frames each: half
+frames at rate 3, 0.625 of a frame at rate 4), so a blend of at most one
+frame never straddles a word change. With a shutter over one frame every
+instant lies in two windows, so the compiler also writes
+`launchclip-motion-blur.json` (`{guard: {frames, rect}}`; `guardFrames`,
+`guardRect`) into the project: the output frames whose heavy window
+straddles a change, and the caption band (`bandTop` and band height plus 4 %
+of the frame either side, full width; the whole frame when captions sit in
+footage-layout zones). On those frames the blend takes that rect from the
+one-frame blend, feathered over its top and bottom fifth so the swap never
+shows as a seam. A preview window rebases the frames to its own start.
+`story.motion` is part of the segment hash, so changing the blur
+re-renders. The Remotion adapter ignores it. A style pack's `motion.feel`
+and `motion.blur` pass into the story with its grammar.
 
 ## Story lighting (`kit/core/lighting.mjs`)
 

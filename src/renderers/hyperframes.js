@@ -4,7 +4,7 @@ import path from "node:path";
 import { hyperframesInvocation } from "../toolchain.js";
 import { adapterError, captureCommand, runCommand, structuredOk } from "./command.js";
 import { HYPERFRAMES_FFMPEG_TIMEOUT_MS, hyperframesEnv } from "./hyperframes_env.js";
-import { blendSubframes } from "../motion_blur.js";
+import { blendSubframes, readMotionBlurGuard } from "../motion_blur.js";
 
 // HyperFrames renderer adapter (docs/KIT_CONTRACTS.md "Renderer adapter").
 // It wraps the same CLI invocations used by production_render.js,
@@ -35,18 +35,24 @@ export function createHyperframesRenderer(defaults = {}) {
       return args;
     },
 
-    // opts.motionBlur {samples, fps}: render samples × fps, then blend each
-    // output frame from the sub-frames centred on it (src/motion_blur.js).
+    // opts.motionBlur {samples, fps, rate?}: render rate × fps (rate defaults
+    // to samples), then blend each output frame from the samples sub-frames
+    // centred on it (src/motion_blur.js); the compiler's guard file, when the
+    // project has one, keeps the caption band on a one-frame blend where a
+    // heavy shutter would straddle a word change.
     async render(projectDir, outFile, opts = {}) {
       const project = path.resolve(projectDir);
       const output = path.resolve(outFile);
       await mkdir(path.dirname(output), { recursive: true });
-      const blur = opts.motionBlur?.samples > 1 ? opts.motionBlur : null;
+      const blur = opts.motionBlur?.samples > 1 ? { rate: opts.motionBlur.samples, ...opts.motionBlur } : null;
       const target = blur ? `${output}.subframes.mp4` : output;
-      const result = await hf(runner(opts), this.renderArgs(project, target, blur ? { ...opts, fps: blur.fps * blur.samples } : opts), { cwd: project, env: hyperframesRenderEnv() });
+      const result = await hf(runner(opts), this.renderArgs(project, target, blur ? { ...opts, fps: blur.fps * blur.rate } : opts), { cwd: project, env: hyperframesRenderEnv() });
       if (!result.ok) throw adapterError("HyperFrames render", result);
-      if (blur) await (opts.blend ?? blendSubframes)(target, output, { samples: blur.samples, fps: blur.fps });
-      return { renderer: "hyperframes", output, raw: result, ...(blur ? { motionBlur: { samples: blur.samples } } : {}) };
+      if (blur) {
+        const guard = blur.guard ?? (blur.samples > blur.rate ? await readMotionBlurGuard(project) : null);
+        await (opts.blend ?? blendSubframes)(target, output, { samples: blur.samples, fps: blur.fps, ...(blur.rate !== blur.samples ? { rate: blur.rate } : {}), ...(guard ? { guard } : {}) });
+      }
+      return { renderer: "hyperframes", output, raw: result, ...(blur ? { motionBlur: { samples: blur.samples, ...(blur.rate !== blur.samples ? { rate: blur.rate } : {}) } } : {}) };
     },
 
     async still(projectDir, seconds, outFile, opts = {}) {
