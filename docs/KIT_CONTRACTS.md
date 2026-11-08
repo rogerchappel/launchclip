@@ -2324,8 +2324,23 @@ a pure function of time, in both renderers.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane, bloom (`kit/core/ui-components.mjs`). Props are listed in the planning
-  prompt's "Interface scenes" section.
+  scan-plane, bloom (`kit/core/ui-components.mjs`); host (`kit/core/ui-host.mjs`).
+  Props are listed in the planning prompt's "Interface scenes" section.
+- **Host**: a code-drawn pixel mascot (a 22 × 17 cell sprite in the accent
+  or `props.tone`, drawn as crisp SVG rects, no external art). Poses
+  (`props.pose`, changed on beats with `set: {pose}`): idle, hop, point-left,
+  point-right, cheer, surprised. It is never static: a two-step bob, a
+  breath and a blink every ~3 s under every pose; a pose change pops; hop
+  and cheer loop; surprised jumps under a "!". It enters with `hop` by
+  default (a parabolic jump that lands with a squash, cue `pop-soft`;
+  `props.from` below, left or right). `props.perch` names a top-level
+  element by id: the rect's x and y are replaced so its feet stand on that
+  element's top edge at `props.along` (0–1, default 0.8) of its width; it
+  takes that element's depth, cannot enter before it, leaves at its `out`
+  unless it names its own, and refuses a tilted element. Smallest size 132 ×
+  102. A pose change pushes a `pose` event (hop and cheer span until the
+  next change), which the holds and states gates count; other beats stay
+  `beat` events.
 - **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
   the safe zone's top to its foot, clear of the caption band; `bleed: true`
   lifts that for decorative elements. The first element enters by 0.6 s. A
@@ -2337,7 +2352,8 @@ a pure function of time, in both renderers.
   the accent tint from `bg`, `paper` and `accent`; `params.alert` is the
   broken-state colour (default `#ff4b3e`).
 - **Events**: a top-level element's entrance asks for a sound by its kind
-  (slam `hit-soft`, pop `pop-soft`, zoom `whoosh-soft`, drop `hit-soft`) or
+  (slam `hit-soft`, pop `pop-soft`, zoom `whoosh-soft`, drop `hit-soft`, hop
+  `pop-soft`) or
   its `cue` (null for none); a beat's `cue` adds one at the beat.
 - **Painter**: `paintUi(host, spec, t)` writes the host's HTML for the
   absolute time `t`. The functions in `ui-paint.mjs`, `ui-components.mjs` and
