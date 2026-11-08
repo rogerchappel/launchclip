@@ -206,7 +206,11 @@ export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVo
   return parts.join(';');
 }
 
-/** The score's mix: too many inputs for a command line's filter, so the graph goes in a file. */
+/**
+ * The score's mix: too many inputs for a command line's filter, so the graph goes in a file.
+ * -filter_complex_script, not its newer -/filter_complex spelling: that needs ffmpeg 7, and distro
+ * packages are often older.
+ */
 function buildScoreMix({ voice, music, cues, duration, out, musicVolume, room }) {
   const inputs = [];
   if (voice) inputs.push('-i', voice);
@@ -219,7 +223,7 @@ function buildScoreMix({ voice, music, cues, duration, out, musicVolume, room })
   try {
     const script = path.join(dir, 'graph.txt');
     writeFileSync(script, filter);
-    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-/filter_complex', script, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex_script', script, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
