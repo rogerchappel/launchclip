@@ -2498,6 +2498,45 @@ Validation (`kit/core/story.mjs`): `camera.mode: "world"`; track 0; `dur` ≥ 2
 s; `span` "chapter" or 3–8; `hold` 0 … `dur − 1`; never into the first shot;
 at most one overview per 60 s.
 
+## Look measures (`src/render_look_analysis.js`)
+
+The motion report (`analyzeRenderMotion`, `launchclip.render-motion.v1`)
+carries a `look` block from a fourth pass: every frame grey at 30 fps on a
+grid with a 360 px short side (360×640 for 9:16), streamed so a long render
+stays in constant memory. A 720p upload and a 1080p render read on the same
+grid. Per frame, *change* is the mean absolute grey difference from the
+previous frame and *sharpness* is the variance of the 4-neighbour Laplacian.
+
+| Measure | Definition | Gate |
+|---|---|---|
+| `moving_sharpness_ratio` | median sharpness of moving frames (change > 3) ÷ that of held frames (change < 0.4; all frames when fewer than 3 are held) | p90 ceiling |
+| `soft_frame_share` | share of frames with sharpness under 35% of the held median | p10 floor |
+| `change_p99` | 99th percentile of change (`max_change` is reported, not gated) | p90 ceiling |
+| `top_light_ratio` | median over frames of the top band's mean grey (rows 0–17.2%) ÷ the middle band's (39–61%) | p10 floor |
+| `midtone_share` | mean share of pixels with grey 29–109 | p10 floor |
+| `burst_change_mean` | mean change over frames with change > 2.5 | p10 floor |
+
+A measure is null when there are too few frames to say (fewer than 3 moving
+frames for the ratio). The sharpness measures are against the video's own
+held frames, so platform compression moves them little.
+
+They are profile measures (`PROFILE_MEASURES`, listed in `LOOK_MEASURES` and
+`MOTION_MEASURES`). `launchclip profile measure` records them, and
+`cinematicMotionExpectations` turns a profile's bands into
+`maximum_moving_sharpness_ratio`, `minimum_soft_frame_share`,
+`maximum_change_p99`, `minimum_top_light_ratio`, `minimum_midtone_share` and
+`minimum_burst_change_mean`. They have no defaults: a profile without the band
+(and the renderer eval) is not held to them. Outside a band,
+`evaluateMotionQuality` adds a `look` finding (`major`, with `measure`,
+`value` and `floor` or `ceiling`) that names the levers: motion blur with a
+longer shutter on fast moves (`motion.blur` shutter) and `push-blur`
+transitions for the sharpness ratio and the hardest jumps; rack-focus
+entrances (`enter: "focus"`) and depth layers for soft frames; a key light
+(`story.light`) and `light-sweep` transitions for the top light; light or
+haze layers for mid-tones; more travel for timid bursts. finish's `motion`
+gate lists the six values under `look`. `ui-explainer-reel` carries the
+bands, 15% either side of its reference.
+
 ## Footage-led lane (RFC phase 6)
 
 The `footage-led` lane plays a recording full-frame under the story. It uses
