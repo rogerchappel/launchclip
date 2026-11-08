@@ -17,9 +17,25 @@
     }
   },
   "motion": {
-    "grammar": "snappy",
+    "grammar": {
+      "base": "snappy",
+      "defaultTransition": {
+        "cuts": {
+          "type": "push-blur",
+          "dur": 0.5,
+          "direction": "up"
+        },
+        "world": {
+          "type": "whip-pan",
+          "dur": 0.36
+        }
+      }
+    },
     "feel": "kinetic",
-    "blur": true
+    "blur": {
+      "samples": 6,
+      "shutter": 1.5
+    }
   },
   "captions": {
     "preset": "word-chip",
