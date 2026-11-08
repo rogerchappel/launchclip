@@ -11,8 +11,8 @@
   "provenance": {
     "kind": "measured",
     "tool": "launchclip profile measure",
-    "measured_at": "2026-11-07T19:47:32.843Z",
-    "note": "Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds, shot_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic. shot_seconds is left out because the reference changes scene with whip-pans and wipes, which the cut detector does not see, so it measured one 46 s shot. first_motion_seconds p90 is 0.35 s, not the reference's 0: the reference opens mid-move, while a reel that opens on a built frame needs a fraction of a second before whole-frame motion registers.",
+    "measured_at": "2026-11-08T00:33:01.997Z",
+    "note": "Measured from 1 reference video (public-statistics). Only statistics are stored; coverage is estimated from pixels. With one reference, p50 is its value and p10 and p90 are set 15% either side so the gate holds a band, not an exact match. Left out: face_time, text_hold_seconds, shot_seconds. One public faceless explainer reel (9:16, 46 s) that walks through software tools on dark animated interface panels with a small sprite host. face_time is left out because the face probe reads the sprite host as a presenter; text_hold_seconds because the designed-region estimate sees the whole interface as one graphic. shot_seconds is left out because the reference changes scene with whip-pans and wipes, which the cut detector does not see, so it measured one 46 s shot. The look measures (moving_sharpness_ratio, soft_frame_share, change_p99, top_light_ratio, midtone_share, burst_change_mean) are read on a fixed 360×640 grey grid, the sharpness ones against the reference's own held frames, so its 720p platform compression shifts them little. first_motion_seconds p90 is 0.35 s, not the reference's 0: the reference opens mid-move, while a reel that opens on a built frame needs a fraction of a second before whole-frame motion registers.",
     "sources": [
       {
         "id": "ref-01",
@@ -22,7 +22,7 @@
         "duration_seconds": 45.833,
         "width": 720,
         "height": 1280,
-        "measured_at": "2026-11-07T19:47:32.843Z"
+        "measured_at": "2026-11-08T00:33:01.997Z"
       }
     ]
   },
@@ -45,7 +45,7 @@
     "first_visual_seconds": {
       "p10": 0,
       "p50": 0,
-      "p90": 0.0
+      "p90": 0
     },
     "flow_velocity_p90": {
       "p10": 6.9909,
@@ -91,6 +91,36 @@
       "p10": 11.1273,
       "p50": 13.091,
       "p90": 15.0546
+    },
+    "moving_sharpness_ratio": {
+      "p10": 0.6873,
+      "p50": 0.8086,
+      "p90": 0.9299
+    },
+    "soft_frame_share": {
+      "p10": 0.1224,
+      "p50": 0.144,
+      "p90": 0.1656
+    },
+    "change_p99": {
+      "p10": 18.3575,
+      "p50": 21.597,
+      "p90": 24.8366
+    },
+    "top_light_ratio": {
+      "p10": 1.0049,
+      "p50": 1.1822,
+      "p90": 1.3595
+    },
+    "midtone_share": {
+      "p10": 0.1516,
+      "p50": 0.1783,
+      "p90": 0.205
+    },
+    "burst_change_mean": {
+      "p10": 5.8523,
+      "p50": 6.885,
+      "p90": 7.9177
     }
   },
   "description": "A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that shows software tools and workflows on dark animated interface panels: timelines, meters, terminals and cards that build and change on the words.",
