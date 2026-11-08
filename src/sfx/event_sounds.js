@@ -7,6 +7,9 @@
 //                    reused from the cache and the project lock after that;
 //   --sfx kit        the kit and library cues, as before (the default without
 //                    ELEVENLABS_API_KEY);
+//   --sfx earshot    the cue sounds rendered from Earshot's sound bank when the
+//                    earshot tool is installed (src/sfx/earshot.js; free,
+//                    offline), else the kit;
 //   --sfx off        no sound effects.
 //
 // What a cue should sound like comes from rules over the cue's event name,
@@ -23,11 +26,12 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pinnedCache } from "../state_dirs.js";
+import { findEarshot } from "./earshot.js";
 import { hashOf } from "./library.js";
 import { generateSoundEffect } from "./seed.js";
 import { integratedLoudness, processFile } from "./process.js";
 
-export const SFX_MODES = Object.freeze(["generated", "kit", "off"]);
+export const SFX_MODES = Object.freeze(["generated", "kit", "off", "earshot"]);
 export const EVENT_SOUND_MODEL = "eleven_text_to_sound_v2";
 export const EVENT_SOUND_FORMAT = "mp3_44100_128";
 // The repository's estimate for ElevenLabs sound effects: about 40 credits per
@@ -54,11 +58,19 @@ export function parseSfxMode(value) {
   return mode;
 }
 
-/** The mode a run uses: the flag, else generated with a key and kit without one. */
-export function resolveSfxMode(flag, env = process.env, { fallback = "kit" } = {}) {
+/**
+ * The mode a run uses: the flag, else generated with a key and kit without
+ * one. earshot falls back to kit when the earshot tool is not installed
+ * (`earshot`: its path, found at run time).
+ */
+export function resolveSfxMode(flag, env = process.env, { fallback = "kit", earshot = findEarshot } = {}) {
   const mode = parseSfxMode(flag);
   const keyed = Boolean(env?.ELEVENLABS_API_KEY);
   if (mode === "generated" && !keyed) return { mode: "kit", warning: "sfx: --sfx generated needs ELEVENLABS_API_KEY; using the kit sounds" };
+  if (mode === "earshot") {
+    const bin = earshot(env);
+    return bin ? { mode, earshot: bin } : { mode: "kit", warning: "sfx: --sfx earshot needs the earshot tool on PATH (or $LAUNCHCLIP_EARSHOT); install it with: uv tool install \"earshot @ git+https://github.com/Leonxlnx/earshot\"; using the kit sounds" };
+  }
   if (mode) return { mode };
   return { mode: fallback === "generated" && !keyed ? "kit" : fallback };
 }

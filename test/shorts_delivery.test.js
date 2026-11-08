@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_profiles.js";
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
 import { SFX, bedExpressions } from "../src/scripts/synth-audio-kit.mjs";
 import { parseEbur128Summary, parseLoudnormJson } from "../src/scripts/master-loudness.mjs";
-import { AMBIENCE_DUCK, MUSIC_DUCK, duckSettings, mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
+import { AMBIENCE_DUCK, MUSIC_DUCK, buildMix, duckSettings, mixGraph, normalizeCues } from "../src/scripts/build-mix.mjs";
 import { evidenceSchedule } from "../src/scripts/build-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -60,6 +62,37 @@ test("subscription skill links the Shorts delivery floor", async () => {
   assert.match(reference, /synth-audio-kit\.mjs/);
 });
 
+test("the mix stays stereo when the narration is mono", () => {
+  const cues = normalizeCues([{ cue: "whoosh", at: 1 }], "sfx");
+  const graph = mixGraph({ cues, duration: 10, hasVoice: true, hasMusic: true, mono: [0] });
+  assert.match(graph, /\[vo\]pan=stereo\|c0=c0\|c1=c0\[mix0\]/);
+  assert.match(graph, /\[bed\]aformat=channel_layouts=stereo\[mix1\]/);
+  assert.match(graph, /\[s0\]aformat=channel_layouts=stereo\[mix2\]/);
+  assert.match(graph, /\[mix0\]\[mix1\]\[mix2\]amix=inputs=3/);
+});
+
+test("a mono narration leaves a stereo cue wide and keeps its balance", { skip: process.env.LAUNCHCLIP_MEDIA_TESTS !== "1" }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "stereo-mix-"));
+  const run = (args) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...args]);
+  const voice = path.join(dir, "voice.wav");
+  const cue = path.join(dir, "cue.wav");
+  const out = path.join(dir, "mix.wav");
+  run(["-f", "lavfi", "-i", "sine=f=220:d=1:r=48000", "-ac", "1", voice]);
+  run(["-f", "lavfi", "-i", "sine=f=660:d=1:r=48000", "-af", "pan=stereo|c0=c0|c1=0*c0", cue]);
+  buildMix({ voice, cues: [{ file: cue, at: 0, volume: 1, offset: 0 }], duration: 1, out });
+  const pcm = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", out, "-f", "s16le", "-"], { maxBuffer: 1 << 26 });
+  let left = 0;
+  let right = 0;
+  for (let i = 0; i + 3 < pcm.length; i += 4) {
+    left += pcm.readInt16LE(i) ** 2;
+    right += pcm.readInt16LE(i + 2) ** 2;
+  }
+  // Left carries the voice and the cue, right only the voice at full level.
+  const db = 10 * Math.log10(left / right);
+  assert.ok(db > 2 && db < 4, `left is ${db.toFixed(1)} dB over right`);
+  await rm(dir, { recursive: true, force: true });
+});
+
 test("builds a ducked mix graph with event-bound SFX", () => {
   const cues = normalizeCues([{ cue: "whoosh", at: 5.72, volume: 0.5 }, { file: "hit.wav", at: 1 }], "sfx");
   assert.equal(cues[0].file, path.resolve("sfx/whoosh.wav"));
@@ -80,7 +113,7 @@ test("a speech key ducks the bed without being mixed in", () => {
   assert.match(graph, /\[0\]atrim=start=1:duration=4,asetpts=PTS-STARTPTS\[kc0\];\[0\]atrim=start=6:duration=5,asetpts=PTS-STARTPTS\[kc1\];\[kc0\]\[kc1\]concat=n=2:v=0:a=1,aformat=channel_layouts=stereo\[key\]/);
   assert.match(graph, /\[1\]volume=0\.42\[bedraw\]/);
   assert.match(graph, /\[bedraw\]\[keypad\]sidechaincompress/);
-  assert.match(graph, /\[bed\]amix=inputs=1:/, "the key itself is not in the mix");
+  assert.match(graph, /\[bed\]aformat=channel_layouts=stereo\[mix0\];\[mix0\]amix=inputs=1:/, "the key itself is not in the mix");
   // A voice keys as before; the key is then ignored.
   assert.equal(mixGraph({ cues: [], duration: 9, hasVoice: true, hasMusic: true }), mixGraph({ cues: [], duration: 9, hasVoice: true, hasMusic: true, hasKey: false }));
   assert.match(mixGraph({ cues: [], duration: 9, hasVoice: false, hasMusic: true, hasKey: true }), /\[0\]anull,aformat=channel_layouts=stereo\[key\]/);

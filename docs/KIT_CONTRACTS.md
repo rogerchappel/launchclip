@@ -870,6 +870,7 @@ A style pack is `.launchclip/styles/<name>/style.json`:
              lanes?: {motion | voiceover-motion | footage-led: {preset, ...options}}},
  sound?: {sfx_library?: path, sfx_density?: low|normal|high | 0-1,
           palette?: <sound palette id>, ambience?: auto|none|<bed id>,
+          score?: boolean,
           music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?,
                    genre?, bpm?, key?, progression?: index}},
  modules?: {prefer?: [id], avoid?: [id], params?: {<module>: {param: default}}},

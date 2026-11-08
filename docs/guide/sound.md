@@ -60,6 +60,18 @@ node scripts/sound-audition.mjs --out audition
 
 It writes one WAV per palette (every effect in turn), a 20-second clip per genre, every ambience loop, and a mastered test mix per genre, and checks them all against the loudness and audio gates.
 
+## A score instead of a bed
+
+A style or story can ask for a sound score: `"sound": {"score": true}` (the `signal-ui` style does). The whole soundtrack is then planned from what the video does and says, with no music underneath unless the story or `--music` asks for a track:
+
+- **Moments carry the emotion.** A scene hit with a `moment` says what the viewer should feel: `{"at": "word:cheap", "event": "cheap", "moment": "letdown"}`. The moments are `letdown`, `promise`, `reveal`, `impact`, `crystallise`, `wonder`, `miss` and `resolve`. Unlocks, an exact-frame landing and the close get one on their own.
+- **Big turns use the whole room.** A scene with energy 3 or `build` opens with a whoosh crossing the stereo field over a deep bass drum, and the room drops away just before it.
+- **Interfaces sound like hardware.** A playhead or scan hunts like a typewriter carriage, with an arcade blip and a type bar on each find. A dial clicks through its detents and stops dead, a fader slides and seats, and a frame ruler steps and slows.
+- **Rewards climb.** Each unlock plays a rising arpeggio higher than the last, and the finds in a scan climb note by note.
+- **Everything else that changes on screen** gets a small sound, panned to where it happens. `sfx_density` thins these out.
+
+Everything pitched stays in one key (`sound.music.key`, default A major), and bass notes are only its tonic or fifth. The bass drums, blips and plucks are made by LaunchClip itself. With [Earshot](https://github.com/Leonxlnx/earshot) installed, the rest come from its sound bank, retuned to the key; without it, they come from your library or the built-in kit, which is thinner, and `finish` says so. `qa/sfx.json` lists every cue with the reason it is there.
+
 ## Your own sound-effect library
 
 The built-in effects are good. If you want effects that are unique to you, seed a library once (a library wins over the palette for the families it has):

@@ -22,6 +22,8 @@ export const STORY_CAMERA_TRANSITIONS = ["pan", "pull", "orbit", "whip-pan"];
 export const STORY_CAMERA_MODES = ["cuts", "world"];
 export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
+// What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
+export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
@@ -644,6 +646,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         }
         if (!nonEmpty(hit.event)) err(`${hitPath}.event must be a non-empty string`);
         if (hit.cue !== undefined && !nonEmpty(hit.cue)) err(`${hitPath}.cue must be a non-empty string`);
+        if (hit.moment !== undefined && !STORY_MOMENTS.includes(hit.moment)) err(`${hitPath}.moment must be one of ${STORY_MOMENTS.join(", ")}`);
       }
     }
     // Shot states (kit/core/shot-states.mjs checks the set and the module side).

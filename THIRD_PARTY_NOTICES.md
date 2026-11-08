@@ -110,6 +110,14 @@ governed by the ElevenLabs terms of service for the account that generated
 them. `finish` records the source of every cue in `qa/sfx.json` and states
 the licence in `AUDIO-MANIFEST.json`.
 
+`finish --sfx earshot` (opt-in) renders cue sounds with
+[Earshot](https://github.com/Leonxlnx/earshot) (MIT), a separate tool the
+user installs; LaunchClip ships none of its code or audio. Only its sound
+bank is used: 237 sounds are code recipes, and 15 are recipes fitted to
+CC0 1.0 recordings on Freesound (Earshot `docs/CREDITS_FIT.md`). CC0 asks for
+no attribution; `AUDIO-MANIFEST.json` credits the recordists of any fitted
+sound a video uses (`sfx_credits`).
+
 ## Bundled fonts
 
 Both renderers draw text with font files from these packages, pinned to exact
