@@ -21,27 +21,36 @@ import {timingRules} from './catalog-b-base.mjs';
 import {mixColor} from './catalog-b-base.mjs';
 import {abs, el} from './catalog-h-view.mjs';
 import {UI_KINDS} from './ui-runtime.mjs';
+import {uiHostPoses} from './ui-host.mjs';
 import {uiDepthAt, uiStageProject} from './ui-paint.mjs';
 import {captionBandAt, profileGeometry} from './layout-check.mjs';
 
-const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'cut']);
+const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'hop', 'cut']);
 const EXITS = Object.freeze(['lift', 'rack']);
 const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue'];
 // The entrance an element makes when it names none: a headline racks into
-// focus, a bloom is its own swell, everything else rises.
-const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut'});
+// focus, a bloom is its own swell, a host hops in, everything else rises.
+const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut', host: 'hop'});
 const MAX_FLASHES = 12;
 const MAX_ELEMENTS = 120;
 // Text props checked for length and escaped by the painter; headline text must fit its rect.
 const HEADLINE_ADVANCE = 0.6;
 // The sound an entrance asks for when the element names none.
-const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud'});
+const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud', hop: 'pop-soft'});
 // Kinds whose text the safe zone and caption band rules apply to.
 const TEXT_KINDS = new Set(['headline', 'chip']);
 // The smallest rect a panel draws legibly in (design px); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-const MIN_SIZE = Object.freeze({bloom: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
+const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, bloom: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
 const LOCK_CARD_MIN = 110;
+// The host mascot (kit/core/ui-host.mjs): its poses, its props, what a beat
+// may set, the poses that keep moving while held, and where a perch rests it
+// along its element's top edge by default (0 left, 1 right).
+const HOST_POSES = Object.freeze(uiHostPoses());
+const HOST_PROPS = ['pose', 'tone', 'from', 'perch', 'along'];
+const HOST_BEAT_PROPS = ['pose', 'tone'];
+const HOST_LOOPS = new Set(['hop', 'cheer']);
+const HOST_ALONG = 0.8;
 
 /** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
 export function uiTextBox(kind, props, rect, beats = []) {
@@ -132,18 +141,53 @@ function uiResolve(params, ctx) {
   let firstAt = Infinity;
   const time = (value, path) => check.num(value, path, 0, b.duration);
 
+  // Top-level elements by id, for a host's perch (it may name one listed after it).
+  const byId = new Map();
+  for (const raw of Array.isArray(p.elements) ? p.elements : []) if (raw && typeof raw === 'object' && typeof raw.id === 'string') byId.set(raw.id, raw);
+  /** A perched host's rect: its feet on its element's top edge, centred at along (0–1) of its width; and that element's layer, entrance and out. */
+  const perchOf = (raw, path, parent, size) => {
+    const id = check.str(raw.props.perch, `${path}.props.perch`, 40);
+    if (parent) check.fail(`${path}.props.perch`, 'rests a top-level host on a top-level element; a host inside a window or stack places itself with its rect');
+    const target = byId.get(id);
+    if (!target || target === raw) check.fail(`${path}.props.perch`, `names "${id}", which is not ${target === raw ? 'another' : 'a top-level'} element's id${byId.size ? ` (ids: ${[...byId.keys()].filter((key) => byId.get(key) !== raw).join(', ')})` : ''}`);
+    if (target.kind === 'host' || target.kind === 'bloom') check.fail(`${path}.props.perch`, `names "${id}", a ${target.kind}; a host perches on a panel, a headline or a chip`);
+    if (target.tilt !== undefined) check.fail(`${path}.props.perch`, `names "${id}", which is tilted; a host perches on a flat element's top edge`);
+    const r = target.rect ?? {};
+    if (![r.x, r.y, r.width].every(Number.isFinite)) check.fail(`${path}.props.perch`, `names "${id}", whose rect is not set in numbers`);
+    const along = raw.props.along === undefined ? HOST_ALONG : check.num(raw.props.along, `${path}.props.along`, 0, 1);
+    const rect = {x: r2(r.x + along * r.width - size.width / 2), y: r2(r.y - size.height), ...size};
+    return {id, rect, depth: Number.isFinite(target.depth) ? target.depth : 0, at: Number.isFinite(target.at) ? target.at : 0, out: Number.isFinite(target.out) ? target.out : undefined};
+  };
+  /**
+   * A host's pose events: each pose change is a change on screen (with its
+   * beat's cue), and a looping pose (hop, cheer) keeps moving until the next
+   * change, its leaving or the scene's end, so its event spans that time.
+   */
+  const hostEvents = (beats, props, at, out, n) => {
+    const changes = beats.filter((beat) => beat.set.pose !== undefined);
+    const end = out ?? b.duration;
+    const span = (pose, from, k) => (HOST_LOOPS.has(pose) ? {endTime: rt(b.start + Math.max(from, (k < changes.length ? changes[k].at : end)))} : {});
+    // A host that enters already looping (cheer from the start) moves from its entrance on.
+    if (HOST_LOOPS.has(props.pose)) b.events.push({id: `${b.id}-pose-${n}-0`, name: 'pose', time: rt(b.start + at), role: 'emphasis', ...span(props.pose, at, 0)});
+    changes.forEach((beat, k) => b.events.push({id: `${b.id}-pose-${n}-${k + 1}`, name: 'pose', time: rt(b.start + beat.at), role: 'emphasis', ...span(beat.set.pose, beat.at, k + 1), ...(beat.cue ? {cue: beat.cue} : {})}));
+  };
+
   const element = (raw, path, parent) => {
     check.obj(raw, path, ELEMENT_KEYS, ['kind', 'rect', 'at']);
     if (++count > MAX_ELEMENTS) check.fail(path, `is one element too many: a ui-scene draws at most ${MAX_ELEMENTS}`);
     const kind = check.oneOf(raw.kind, `${path}.kind`, UI_KINDS);
-    check.obj(raw.rect, `${path}.rect`, ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);
-    const rect = {x: check.num(raw.rect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(raw.rect.y, `${path}.rect.y`, -H, 2 * H),
-      width: check.num(raw.rect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(raw.rect.height, `${path}.rect.height`, 4, 2 * H)};
+    // A perched host takes only its size: the perch places it.
+    const perched = kind === 'host' && raw.props && typeof raw.props === 'object' && raw.props.perch !== undefined;
+    check.obj(raw.rect, `${path}.rect`, ['x', 'y', 'width', 'height'], perched ? ['width', 'height'] : ['x', 'y', 'width', 'height']);
+    const size = {width: check.num(raw.rect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(raw.rect.height, `${path}.rect.height`, 4, 2 * H)};
+    const perch = perched ? perchOf(raw, path, parent, size) : null;
+    const rect = perch ? perch.rect : {x: check.num(raw.rect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(raw.rect.y, `${path}.rect.y`, -H, 2 * H), ...size};
     const bleed = raw.bleed === undefined ? false : check.bool(raw.bleed, `${path}.bleed`);
     const min = MIN_SIZE[kind];
     if (min && (rect.width + 0.5 < min.width || rect.height + 0.5 < min.height)) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; a ${kind} needs at least ${min.width}×${min.height} to draw legibly`);
     const tilt = raw.tilt === undefined ? undefined : tiltOf(check, raw.tilt, `${path}.tilt`);
-    let depth = 0;
+    // A perched host shares its element's layer, so depth and the dolly keep it on the edge.
+    let depth = perch && raw.depth === undefined ? perch.depth : 0;
     if (raw.depth !== undefined) {
       if (parent) check.fail(`${path}.depth`, 'sets a layer of the scene; only top-level elements take depth (a child sits at its parent\'s)');
       depth = check.num(raw.depth, `${path}.depth`, 0, 1);
@@ -158,9 +202,11 @@ function uiResolve(params, ctx) {
     }
     const at = time(raw.at, `${path}.at`);
     if (parent && at + 1e-9 < parent.at) check.fail(`${path}.at`, `is before its parent enters (${parent.at} s)`);
+    if (perch && at + 1e-9 < perch.at) check.fail(`${path}.at`, `is before "${perch.id}", the element it perches on, enters (${perch.at} s)`);
     // A bloom is light, not something on screen.
     if (kind !== 'bloom') firstAt = Math.min(firstAt, at);
-    const out = raw.out === undefined ? undefined : time(raw.out, `${path}.out`);
+    // A perched host leaves with its element unless it names its own out.
+    const out = raw.out === undefined ? perch?.out : time(raw.out, `${path}.out`);
     if (out !== undefined && out <= at) check.fail(`${path}.out`, 'must be after at');
     const enter = raw.enter === undefined ? DEFAULT_ENTER[kind] ?? 'up' : check.oneOf(raw.enter, `${path}.enter`, ENTERS);
     // An element that racked into focus racks out of it.
@@ -179,18 +225,23 @@ function uiResolve(params, ctx) {
       ids.add(id);
     }
     const props = raw.props === undefined ? {} : raw.props;
-    check.obj(props, `${path}.props`, Object.keys(props));
+    check.obj(props, `${path}.props`, kind === 'host' ? HOST_PROPS : Object.keys(props));
     if (kind === 'headline') headlineFits(check, props, rect, `${path}.props`);
+    if (kind === 'host') hostProps(check, props, `${path}.props`);
     const beats = (raw.beats ?? []).map((beat, k) => {
       check.obj(beat, `${path}.beats[${k}]`, ['at', 'set', 'cue'], ['at', 'set']);
-      check.obj(beat.set, `${path}.beats[${k}].set`, Object.keys(beat.set));
+      check.obj(beat.set, `${path}.beats[${k}].set`, kind === 'host' ? HOST_BEAT_PROPS : Object.keys(beat.set));
       if (kind === 'headline' && beat.set.text !== undefined) headlineFits(check, {...props, ...beat.set}, rect, `${path}.beats[${k}].set`);
+      if (kind === 'host') hostProps(check, beat.set, `${path}.beats[${k}].set`);
       const beatAt = time(beat.at, `${path}.beats[${k}].at`);
       const cue = beat.cue === undefined ? null : check.str(beat.cue, `${path}.beats[${k}].cue`, 32);
       // Every beat is a change on screen (the holds gate counts events); only a cue makes a sound.
-      b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
-      return {at: beatAt, set: beat.set};
+      // A host's pose change is a pose event, pushed below once the poses are in order.
+      if (!(kind === 'host' && beat.set.pose !== undefined)) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
+      return {at: beatAt, set: beat.set, ...(cue ? {cue} : {})};
     }).sort((x, y) => x.at - y.at);
+    if (kind === 'host') hostEvents(beats, props, at, out, count);
+    for (const beat of beats) delete beat.cue;
     if (!parent && !bleed && TEXT_KINDS.has(kind)) {
       const box = shown(uiTextBox(kind, props, rect, beats), depth), eps = 0.5;
       const outside = box.x < safe.x - eps || box.y < safe.y - eps || box.x + box.width > safe.x + safe.width + eps || box.y + box.height > safe.y + safe.height + eps;
@@ -295,6 +346,14 @@ function tiltOf(check, tilt, path) {
   return out;
 }
 
+/** A host's props (or a beat's set): a pose it draws, a tone, a side to hop in from, a perch id and where along it. */
+function hostProps(check, props, path) {
+  if (props.pose !== undefined) check.oneOf(props.pose, `${path}.pose`, HOST_POSES);
+  if (props.tone !== undefined && (typeof props.tone !== 'string' || !/^(ink|muted|accent|alert|#[0-9a-fA-F]{6})$/.test(props.tone))) check.fail(`${path}.tone`, 'must be ink, muted, accent, alert or #rrggbb');
+  if (props.from !== undefined) check.oneOf(props.from, `${path}.from`, ['below', 'left', 'right']);
+  if (props.along !== undefined) check.num(props.along, `${path}.along`, 0, 1);
+}
+
 /** A headline's text must be a short string that sets inside its rect at its size. */
 function headlineFits(check, props, rect, path) {
   const text = check.str(props.text, `${path}.text`, 40);
@@ -347,11 +406,11 @@ export function uiReadingWords(params) {
 
 export const uiScene = {
   id: 'ui-scene',
-  describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips), each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
+  describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips) and a pixel mascot host that hops in, idles and reacts, each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
   params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
     alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)',
     stage: '{tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)'},
-  events: ['enter', 'beat'],
+  events: ['enter', 'beat', 'pose'],
   timing: {...timingRules({rules: ['the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands', 'every time is seconds from the scene start, inside the scene', 'a child enters no earlier than its parent']}), leadIn: 0},
   variants: ['default'],
   resolve: uiResolve, view: uiView, timeline: uiTimeline
