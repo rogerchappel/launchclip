@@ -2520,9 +2520,12 @@ own copy of the ranges, `STORY_LIGHT_*`, in step by test/lighting.test.js).
   the darkened bg. The wrap and halos are screen blends at a fraction of the
   key, so white text does not move.
 - **Lit dot grid.** `background: {kind: "dot-grid", params: {lit}}` (0–1,
-  default 0 = today's even grid) masks the dots by the key's falloff (and,
-  fainter, the pool's): full under the light, `1 − lit` elsewhere, and
-  brightens them by up to 1.6× under the light (still clamped). Without a
+  default 0 = today's even grid) masks the dots by the square of the key's
+  falloff (and, at 0.35, the pool's): full under the light, fading out well
+  inside the glow, `(1 − lit)²` elsewhere; and a lit grid is quieter, its
+  dots at `1 − 0.35 × lit` of the even grid's alpha (still clamped). Light
+  reveals the grid on a smooth dark ground; signal-ui sets lit 0.85 and
+  intensity 0.06. Without a
   story light the mask uses the `studio` key. `litMask(story, lit)` is the
   mask; it is in shares of the box, so a panel fill gets it too.
 

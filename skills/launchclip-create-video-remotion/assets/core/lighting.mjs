@@ -398,21 +398,24 @@ export function lightOverStyle({ width, height }) {
 
 /**
  * The CSS mask for a lit dot grid (backgrounds.mjs dot-grid params.lit): the
- * dots show fully under the key light (and, fainter, its floor pool) and at
- * 1 − lit elsewhere. Shares of the masked box, so it fits the canvas or a
- * panel. Without a story light the key is the studio preset's.
+ * dots show under the key light (and, fainter, its floor pool) and almost
+ * nowhere else. Light reveals the grid; it is not a pattern of its own. The
+ * mask follows the square of the light's falloff, so the dots fade out well
+ * inside the glow, and leaves (1 − lit)² elsewhere (0.09 at lit 0.7, 0.02 at
+ * 0.85). Shares of the masked box, so it fits the canvas or a panel. Without
+ * a story light the key is the studio preset's.
  */
 export function litMask(story, lit, { width = 1080, height = 1920 } = {}) {
   if (!(lit > 0)) return null;
   const light = storyLight(story) ?? storyLight({ light: { preset: 'studio' } });
   const key = keyEllipse(light.key ?? LIGHT_PRESETS.studio.key, { width, height });
   const pct = (value) => `${round(value * 100, 2)}%`;
-  const floor = round(1 - lit, 3);
-  const falloff = (alpha) => FALLOFF.map(([stop, k]) => `rgba(0, 0, 0, ${round(alpha * k, 4)}) ${stop}%`).join(', ');
+  const floor = round((1 - lit) ** 2, 3);
+  const falloff = (alpha) => FALLOFF.map(([stop, k]) => `rgba(0, 0, 0, ${round(alpha * k * k, 4)}) ${stop}%`).join(', ');
   const layers = [`radial-gradient(ellipse ${pct(key.rx * 1.15)} ${pct(key.ry * 1.15)} at ${pct(key.x)} ${pct(key.y)}, ${falloff(1)})`];
   if (light.pool) {
     const pool = poolEllipse(light.pool, { width, height });
-    layers.push(`radial-gradient(ellipse ${pct(pool.rx)} ${pct(pool.ry)} at ${pct(pool.x)} ${pct(pool.y)}, ${falloff(0.6)})`);
+    layers.push(`radial-gradient(ellipse ${pct(pool.rx)} ${pct(pool.ry)} at ${pct(pool.x)} ${pct(pool.y)}, ${falloff(0.35)})`);
   }
   if (floor > 0) layers.push(`linear-gradient(rgba(0, 0, 0, ${floor}), rgba(0, 0, 0, ${floor}))`);
   return layers.join(', ');
