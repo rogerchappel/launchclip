@@ -34,10 +34,10 @@ import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lig
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
 import { feelGsap, feelPlan } from './kinetic.mjs';
-import { MOTION_BLUR_GUARD_FILE, captionSnapOffset, guardFrames, guardRect, resolveMotionBlur } from './motion-blur.mjs';
+import { MOTION_BLUR_GUARD_FILE } from './motion-blur.mjs';
 import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from './dot-wipe.mjs';
 import { profileGeometry } from './layout-check.mjs';
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords, snapCaptionChunks } from './captions.mjs';
+import { CAPTION_DEFAULT_COLORS, blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from './medium.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
@@ -539,7 +539,6 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume)}" data-track-index="0"></audio>` : '';
 
   // Captions.
-  const blurPlan = resolveMotionBlur(story);
   let blurGuard = null;
   let captions = null;
   let captionWords = [];
@@ -548,7 +547,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const loaded = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     // Motion blur blends sub-frames: caption changes go between two frames'
     // one-frame windows (half frames at 3 sub-frames) so no frame shows two words.
-    const chunks = loaded && blurPlan ? snapCaptionChunks(loaded, format.fps, captionSnapOffset(blurPlan)) : loaded;
+    const chunks = blurSnappedChunks(loaded, story, format.fps);
     if (chunks?.length) {
       captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
@@ -560,11 +559,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       // A shutter over one frame: the frames whose blend straddles a word
       // change take the caption band from the one-frame blend
       // (src/motion_blur.js reads this file).
-      if (captions && blurPlan?.overlap) {
-        const changes = chunks.flatMap((chunk) => [chunk.start, chunk.end, ...(chunk.words ?? []).flatMap((word) => [word.start, word.end])]).map(Number);
-        const frames = guardFrames(blurPlan, changes, format.fps);
-        if (frames.length) blurGuard = { frames, rect: guardRect(captionsPlan.options, format, /lc-cap-z\d/.test(captionsPlan.css)) };
-      }
+      if (captions) blurGuard = captionBlurGuard(story, chunks, captionsPlan, format);
     }
   }
 
