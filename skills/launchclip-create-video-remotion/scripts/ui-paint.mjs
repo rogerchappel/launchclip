@@ -188,14 +188,89 @@ function uiPanelStyle(c, ring) { return 'background:linear-gradient(180deg,' + c
 // element's own box at 0,0); t is seconds from the scene start, el.props has
 // the beats applied.
 
-/** headline: {text, size, tone, glow, align, weight, swap: {at, text, size}}. */
+/**
+ * A headline's props at t: a swap from swap.at on, its lines or its text
+ * standing in for the headline's own.
+ */
+function uiHeadlineState(p, t) {
+  if (!p.swap || !(t >= p.swap.at)) return p;
+  const next = Object.assign({}, p, p.swap);
+  if (p.swap.lines === undefined && p.swap.text !== undefined) delete next.lines;
+  return next;
+}
+
+/**
+ * The lines a headline sets, top to bottom, each {text (markup kept), size,
+ * weight, spacing (em), advance (em a character, for the layout check), gap
+ * (px above it), accent, tone, count, enter, at}. A headline with props.lines
+ * sets rich lines: size s 52, m 76, l 112 (the default), xl 200 or px; small
+ * lines are tracked out and lighter, big ones tight and black. Lines after
+ * the first enter props.stagger s apart (0.12) unless they name an at. A
+ * headline with text sets that one line at props.size (112). elAt: when the
+ * element enters.
+ */
+function uiHeadlineLines(p, elAt) {
+  const at0 = elAt || 0;
+  if (!(Array.isArray(p.lines) && p.lines.length)) return [{text: String(p.text === undefined || p.text === null ? '' : p.text), size: p.size || 112, weight: p.weight || 900, spacing: -0.045, advance: 0.6, gap: 0, at: at0}];
+  const sizes = {s: 52, m: 76, l: 112, xl: 200};
+  const stagger = p.stagger === undefined ? 0.12 : p.stagger;
+  return p.lines.map(function (ln, i) {
+    const size = typeof ln.size === 'number' ? ln.size : sizes[ln.size] || 112;
+    const spacing = size <= 60 ? 0.06 : size <= 90 ? -0.01 : -0.045;
+    return {text: String(ln.text === undefined || ln.text === null ? '' : ln.text), size: size, weight: ln.weight || (size <= 60 ? 700 : size <= 90 ? 800 : 900), spacing: spacing,
+      advance: 0.6 + spacing + 0.045, gap: i ? Math.round(size * 0.06) : 0, accent: !!ln.accent, tone: ln.tone, count: ln.count, enter: ln.enter, at: ln.at === undefined ? at0 + i * stagger : ln.at};
+  });
+}
+
+/** The text a headline line shows, markup (*word* for the accent) taken out. */
+function uiHeadlinePlain(text) { return String(text).replace(/\*([^*]*)\*/g, '$1'); }
+
+/**
+ * A count-up: the first number in text, run from `from` to its value by q
+ * (0–1), keeping its decimals and thousands commas.
+ */
+function uiCountText(text, q, from) {
+  return String(text).replace(/\d[\d,]*(\.\d+)?/, function (m, frac) {
+    const to = parseFloat(m.replace(/,/g, '')), dec = frac ? frac.length - 1 : 0;
+    const v = uiLerp(from || 0, to, q);
+    let s = v.toFixed(dec);
+    if (m.indexOf(',') >= 0) { const parts = s.split('.'); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); s = parts.join('.'); }
+    return s;
+  });
+}
+
+/**
+ * headline: {text, size, tone, glow, align, weight, swap: {at, text, size, lines}}
+ * or rich lines {lines: [{text (*word* in the accent), size (s|m|l|xl|px),
+ * accent, weight, tone, count (true or {from, dur}: the number counts up as
+ * the line lands), enter, at}], stagger}.
+ */
 function uiHeadline(el, t, ctx) {
-  const p = el.props, c = ctx.c;
-  const swapped = p.swap && t >= p.swap.at;
-  const text = swapped ? p.swap.text : p.text, size = (swapped && p.swap.size) || p.size || 112;
+  const p = uiHeadlineState(el.props, t), c = ctx.c;
   const color = uiTone(c, p.tone, 'ink');
-  const glow = p.glow ? 'text-shadow:0 0 28px ' + color + '8c,0 0 6px ' + color + '99;' : '';
-  return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:' + (p.align === 'left' ? 'flex-start' : p.align === 'right' ? 'flex-end' : 'center') + '"><div style="font-family:' + ctx.fonts.display + ';font-weight:' + (p.weight || 900) + ';letter-spacing:-.045em;line-height:.92;white-space:nowrap;font-size:' + size + 'px;color:' + color + ';' + glow + '">' + uiEsc(text) + '</div></div>';
+  const glowOf = function (col) { return 'text-shadow:0 0 28px ' + col + '8c,0 0 6px ' + col + '99;'; };
+  const justify = p.align === 'left' ? 'flex-start' : p.align === 'right' ? 'flex-end' : 'center';
+  if (!(Array.isArray(p.lines) && p.lines.length)) {
+    const line = uiHeadlineLines(p, el.at)[0];
+    return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:' + justify + '"><div style="font-family:' + ctx.fonts.display + ';font-weight:' + line.weight + ';letter-spacing:-.045em;line-height:.92;white-space:nowrap;font-size:' + line.size + 'px;color:' + color + ';' + (p.glow ? glowOf(color) : '') + '">' + uiEsc(line.text) + '</div></div>';
+  }
+  const lines = uiHeadlineLines(p, el.at);
+  let s = '';
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    const col = ln.accent ? c.accent : uiTone(c, ln.tone || p.tone, 'ink');
+    let text = ln.text;
+    if (ln.count) {
+      const cfg = typeof ln.count === 'object' ? ln.count : {};
+      text = uiCountText(text, uiOutCubic(uiP(t, ln.at + 0.05, cfg.dur === undefined ? 0.9 : cfg.dur)), cfg.from);
+    }
+    // *word* sets in the accent; the rest in the line's colour.
+    const html = uiEsc(text).replace(/\*([^*]*)\*/g, function (m, w) { return '<span style="color:' + c.accent + ';' + (p.glow ? glowOf(c.accent) : '') + '">' + w + '</span>'; });
+    // The first line rides the element's own entrance; later ones land on their own.
+    const enter = i === 0 && ln.at <= el.at ? '' : uiEnter(t, ln.at, ln.enter || 'up', {dist: Math.round(ln.size * 0.45), d: 0.38});
+    s += '<div style="margin-top:' + ln.gap + 'px;height:' + ln.size + 'px;line-height:1;font-family:' + ctx.fonts.display + ';font-weight:' + ln.weight + ';letter-spacing:' + ln.spacing + 'em;white-space:nowrap;font-size:' + ln.size + 'px;' + (ln.count ? 'font-variant-numeric:tabular-nums;' : '') + 'color:' + col + ';' + (p.glow ? glowOf(col) : '') + enter + '">' + html + '</div>';
+  }
+  return '<div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:' + justify + '">' + s + '</div>';
 }
 
 /** chip: {text, tone, fill, size, rotate, glow, font}. */
@@ -414,4 +489,4 @@ function uiStage(elements, t, ctx) {
 }
 
 export {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiInOut, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiExit, uiFlash, uiStageView, uiStageProject, uiDepthAt, uiSurfaceRadius, uiShake, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiDots, uiHeader, uiPanelStyle,
-  uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards, uiPropsAt, uiElementHtml, uiChildren, uiStage};
+  uiHeadlineState, uiHeadlineLines, uiHeadlinePlain, uiCountText, uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards, uiPropsAt, uiElementHtml, uiChildren, uiStage};
