@@ -307,42 +307,39 @@ test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per 
   for (const f of [0, 31, 33, 40, 200, 359]) assert.deepEqual(feelStateAt(plan, f / 30), samples[f]);
 });
 
-test('snap: the ambient camera holds still on a framing, then snaps to the next, and never reveals an edge', () => {
+test('snap: the ambient camera creeps through a hold, then snaps to the next framing, and never reveals an edge', () => {
   const s = story({motion: {feel: 'snap'}});
   const plan = planOf(s);
   const a = feelSamples(plan);
   assert.deepEqual(a, feelSamples(planOf(story({motion: {feel: 'snap'}}))), 'the same story gives the same frames');
   assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
   assert.equal(plan.ambient.mode, 'step');
-  const {poses, move} = plan.ambient;
-  assert.equal(move, 0.22);
-  // Holds of 0.55–1.15 s between moves, alternating wide and tight framings far enough apart to blur.
+  const {poses, move, creep} = plan.ambient;
+  assert.deepEqual([move, creep], [0.22, 0.2]);
+  // Holds of 0.45–0.95 s between moves, alternating wide and tight framings far enough apart to blur.
   for (let k = 1; k < poses.length; k += 1) {
     const hold = poses[k].at - poses[k - 1].at - move;
-    assert.ok(hold >= 0.55 - 1e-6 && hold <= 1.15 + 1e-6, `hold ${k} is ${hold}`);
-    assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.045 - 1.012) - 1e-6, `move ${k} changes the framing`);
+    assert.ok(hold >= 0.45 - 1e-6 && hold <= 0.95 + 1e-6, `hold ${k} is ${hold}`);
+    assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.05 - 1.012) - 1e-6, `move ${k} changes the framing`);
   }
-  // Away from kicks the camera is exactly still through each hold.
-  const kicked = (f) => plan.kicks.some((kick) => f / 30 >= kick.at - 1e-9 && f / 30 < kick.at + 0.6);
-  let still = 0, total = 0;
-  for (let f = 1; f < a.length; f += 1) {
-    if (kicked(f) || kicked(f - 1)) continue;
-    total += 1;
-    if (a[f].x === a[f - 1].x && a[f].y === a[f - 1].y && a[f].scale === a[f - 1].scale) still += 1;
-  }
-  assert.ok(still / total > 0.6, `held ${still} of ${total} frames`);
-  // A move is fast: the framing changes across the move window and not before it.
-  const second = poses[1];
-  const before = feelStateAt({...plan, kicks: []}, second.at - move - 0.02), after = feelStateAt({...plan, kicks: []}, second.at + 0.01);
-  assert.ok(Math.abs(after.scale - before.scale) > 0.005);
+  // A hold creeps a fifth of the way, slowly; the snap covers the rest at many times the speed.
+  const still = {...plan, kicks: []};
+  const [p0, p1] = poses;
+  const holdEnd = p1.at - move;
+  const scaleAt = (t) => feelStateAt(still, t).scale;
+  const holdSpeed = Math.abs(scaleAt(holdEnd - 0.01) - scaleAt(p0.at + 0.01)) / (holdEnd - p0.at - 0.02);
+  const snapSpeed = Math.abs(scaleAt(p1.at) - scaleAt(holdEnd)) / move;
+  assert.ok(Math.abs(scaleAt(holdEnd) - (p0.s + (p1.s - p0.s) * creep)) < 1e-4, 'the hold ends a fifth of the way there');
+  assert.ok(snapSpeed > 8 * holdSpeed, `snap ${snapSpeed} vs hold ${holdSpeed}`);
+  assert.ok(Math.abs(scaleAt(p1.at) - p1.s) < 1e-4, 'the snap lands on the next framing');
   // Kicks return fast with the preset's own timing; the grammar holds still.
   assert.deepEqual(kickTiming(resolveFeel(s)), {...KICK, punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut'});
   assert.equal(resolveGrammar(s).hold.level, 'off');
-  // A step mode on the kinetic preset takes the snap defaults for hold and move.
+  // A step mode on the kinetic preset takes the snap defaults for hold and move, with no creep.
   const custom = resolveFeel(story({motion: {feel: {preset: 'kinetic', ambient: {mode: 'step'}}}}));
-  assert.deepEqual([custom.ambient.hold, custom.ambient.move], [[0.55, 1.15], 0.22]);
+  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[0.45, 0.95], 0.22, 0]);
   assert.equal(ambientSteps(custom.ambient, {width: 1080, height: 1920, duration: 12}).mode, 'step');
-  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}]) {
+  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}, {ambient: {creep: 0.8}}]) {
     assert.ok(feelErrors(bad).length > 0, JSON.stringify(bad));
     assert.equal(validateStory(story({motion: {feel: bad}})).ok, false, JSON.stringify(bad));
   }

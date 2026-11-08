@@ -120,21 +120,22 @@ export function ambientSteps(ambient, { width, height, duration }) {
     poses.push({ at: round(at, 6), x: round(side(k) * reach(width, ambient.shift * width), 3), y: round(side(Math.floor(k / 2) + k) * reach(height, ambient.shift * height * 0.6), 3), s: scale });
     at += h0 + (h1 - h0) * random() + move;
   }
-  return { mode: 'step', move, poses };
+  return { mode: 'step', move, creep: ambient.creep ?? 0, poses };
 }
 
 // The ambient camera at t → {x, y, s}.
 function ambientAt(ambient, t) {
   if (!ambient) return { x: 0, y: 0, s: 1 };
   if (ambient.mode !== 'step') return { x: wave(ambient.x, t), y: wave(ambient.y, t), s: ambient.s.mid + wave(ambient.s, t) };
-  const { poses, move } = ambient;
+  const { poses, move, creep = 0 } = ambient;
   let k = poses.length - 1;
   while (k > 0 && poses[k].at > t + EPS) k -= 1;
-  const next = poses[k + 1];
-  const start = next ? next.at - move : Infinity;
-  if (!next || t < start) return { x: poses[k].x, y: poses[k].y, s: poses[k].s };
-  const u = getEase('expo.inOut')(Math.min(1, (t - start) / move));
-  const a = poses[k];
+  const a = poses[k], next = poses[k + 1];
+  if (!next) return { x: a.x, y: a.y, s: a.s };
+  // The hold creeps the first `creep` of the way towards the next framing
+  // (linear, slow enough to stay sharp); the snap covers the rest.
+  const start = next.at - move;
+  const u = t < start ? creep * Math.max(0, (t - a.at) / Math.max(EPS, start - a.at)) : creep + (1 - creep) * getEase('expo.inOut')(Math.min(1, (t - start) / move));
   return { x: a.x + (next.x - a.x) * u, y: a.y + (next.y - a.y) * u, s: a.s + (next.s - a.s) * u };
 }
 

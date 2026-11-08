@@ -26,7 +26,7 @@
 //     the spring can settle;
 //   - a tuned whip-pan (0.26 s, the expo whip with full directional blur) as
 //     the default cut, and the dot-wipe transition for chapter turns.
-// What "snap" turns on: the same, except the ambient camera holds still on a
+// What "snap" turns on: the same, except the ambient camera holds (creeping) on a
 // framing (ambient.mode "step": hold[] seconds) and snaps to the next in
 // `move` seconds, kicks punch and return fast, and held shots get no drift.
 // Explicit motion.grammar overrides always win over the feel's.
@@ -52,15 +52,17 @@ export const FEELS = Object.freeze({
     dotWipe: 0.5
   }),
   // Hold sharp, then snap: measured on an interface explainer reel, the
-  // camera rests (no drift, so a held frame is crisp) for about half a second
-  // to a second, then jumps to its next framing in 0.22 s on an expo ease, far
-  // enough that the motion blur smears it. About a tenth of the reel is truly
+  // camera holds (creeping a fifth of the way to its next framing, too slowly
+  // to blur, so a held frame is crisp but not frozen) for about half a second
+  // to a second, then jumps the rest of the way in 0.22 s on an expo ease, far
+  // enough that the motion blur smears it. A camera frozen for the whole hold
+  // left a quarter of a reel's frames dead still. About a tenth of the reel is truly
   // still and the moves change the frame twice as hard as a steady drift.
   snap: Object.freeze({
     id: 'snap',
-    describe: 'Holds sharp, then snaps: the camera rests on a framing for 0.55–1.15 s, then jumps to the next in 0.22 s (expo), kicks punch and return fast, entrances spring, cuts whip in 0.26 s',
+    describe: 'Holds sharp, then snaps: the camera creeps slowly on a framing for 0.45–0.95 s, then jumps to the next in 0.22 s (expo), kicks punch and return fast, entrances spring, cuts whip in 0.26 s',
     base: 'snappy',
-    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.045]), shift: 0.012, period: Object.freeze([4, 7]), hold: Object.freeze([0.55, 1.15]), move: 0.22 }),
+    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([0.45, 0.95]), move: 0.22, creep: 0.2 }),
     kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
     kick: Object.freeze({ punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut' }),
     spring: SPRING_OVERSHOOT,
@@ -74,7 +76,7 @@ export const FEELS = Object.freeze({
 export const FEEL_LIMITS = Object.freeze({
   scale: Object.freeze([1, 1.08]), shift: Object.freeze([0, 0.02]), period: Object.freeze([2, 20]),
   kickScale: Object.freeze([1.03, 1.4]), gap: Object.freeze([1.1, 10]), spring: Object.freeze([0, 0.6]),
-  hold: Object.freeze([0.2, 4]), move: Object.freeze([0.08, 0.6])
+  hold: Object.freeze([0.2, 4]), move: Object.freeze([0.08, 0.6]), creep: Object.freeze([0, 0.5])
 });
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -92,12 +94,13 @@ export function feelErrors(value, path = 'motion.feel') {
   if (value.preset !== undefined && !FEEL_NAMES.includes(value.preset)) errors.push(`${path}.preset must be one of ${FEEL_NAMES.join(', ')}`);
   const ambient = value.ambient;
   if (ambient !== undefined && ambient !== false) {
-    if (!isObject(ambient)) errors.push(`${path}.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?}`);
+    if (!isObject(ambient)) errors.push(`${path}.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?, creep?}`);
     else {
-      for (const key of Object.keys(ambient)) if (!['mode', 'scale', 'shift', 'period', 'hold', 'move'].includes(key)) errors.push(`${path}.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move)`);
+      for (const key of Object.keys(ambient)) if (!['mode', 'scale', 'shift', 'period', 'hold', 'move', 'creep'].includes(key)) errors.push(`${path}.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move, creep)`);
       if (ambient.mode !== undefined && !['drift', 'step'].includes(ambient.mode)) errors.push(`${path}.ambient.mode must be drift (a slow wave) or step (holds, then snaps)`);
       if (ambient.hold !== undefined && !pair(ambient.hold, FEEL_LIMITS.hold)) errors.push(`${path}.ambient.hold must be [lo, hi] seconds between 0.2 and 4`);
       if (ambient.move !== undefined && !inRange(ambient.move, FEEL_LIMITS.move)) errors.push(`${path}.ambient.move must be seconds between 0.08 and 0.6`);
+      if (ambient.creep !== undefined && !inRange(ambient.creep, FEEL_LIMITS.creep)) errors.push(`${path}.ambient.creep must be a share between 0 and 0.5 of each move made slowly during the hold`);
       if (ambient.scale !== undefined && !pair(ambient.scale, FEEL_LIMITS.scale)) errors.push(`${path}.ambient.scale must be [lo, hi] between 1 and 1.08`);
       if (ambient.shift !== undefined && !inRange(ambient.shift, FEEL_LIMITS.shift)) errors.push(`${path}.ambient.shift must be a share of the frame between 0 and 0.02`);
       if (ambient.period !== undefined && !pair(ambient.period, FEEL_LIMITS.period)) errors.push(`${path}.ambient.period must be [lo, hi] seconds between 2 and 20`);
@@ -158,7 +161,7 @@ export function resolveFeel(story) {
   const camera = !(story?.lane === 'footage-led' || isObject(story?.base) || typeof story?.base === 'string');
   return {
     id: preset.id, describe: preset.describe, named, base: preset.base,
-    ambient: ambient ? { mode: ambient.mode ?? 'drift', scale: [...ambient.scale], shift: ambient.shift, period: [...ambient.period], ...(ambient.mode === 'step' ? { hold: [...(ambient.hold ?? FEELS.snap.ambient.hold)], move: ambient.move ?? FEELS.snap.ambient.move } : {}) } : null,
+    ambient: ambient ? { mode: ambient.mode ?? 'drift', scale: [...ambient.scale], shift: ambient.shift, period: [...ambient.period], ...(ambient.mode === 'step' ? { hold: [...(ambient.hold ?? FEELS.snap.ambient.hold)], move: ambient.move ?? FEELS.snap.ambient.move, creep: ambient.creep ?? (preset.ambient.mode === 'step' ? preset.ambient.creep ?? 0 : 0) } : {}) } : null,
     kicks, kick: preset.kick ?? null, explicit, spring: num(own.spring) ? own.spring : preset.spring, whip: preset.whip, dotWipe: preset.dotWipe, camera
   };
 }
