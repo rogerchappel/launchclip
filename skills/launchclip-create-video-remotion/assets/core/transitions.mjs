@@ -30,6 +30,15 @@
 // grows in from the edges, the plates swap under the full cover at the
 // midpoint, and the dots shrink away; here only the hard swap.
 //
+// Cinematic transitions, of light and camera rather than graphics:
+// light-sweep (kit/core/light-sweep.mjs draws streaks of light over the cut;
+// here the outgoing plate darkens and melts into soft blobs, `veil`, and
+// drifts forward while the incoming one rises from under the same veil) and
+// push-blur (the outgoing plate pushes in and travels with a directional
+// smear, `smearX`/`smearY`, and an exposure dip, `dip`; the incoming one
+// arrives slightly large and defocused, `focus`, and racks sharp in a few
+// frames).
+//
 // Empty plates: a short gap between two plates (a gap in scene timing, plus
 // any lead-in before the next scene draws anything, sceneLeadIn) would show a
 // dead frame. When that whole span is under HOLD_GAP seconds the previous
@@ -39,7 +48,7 @@
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
@@ -99,9 +108,16 @@ export function coveredPlates(plates, mode = 'world') {
  * insets of a straight-edged clip (null = none); glow: extra brightness (0 =
  * none, 0.8 = brightness(1.8)); rackIn: a rack-focus card arriving, 1 → 0
  * (blur(RACK.blurIn × v) brightness(1 + RACK.lift × v) in one filter, so the
- * two never overwrite each other in GSAP).
+ * two never overwrite each other in GSAP). The cinematic transitions' props
+ * are one filter each the same way: veil (light-sweep, 0 → 1: blur, darken,
+ * contrast), dip (push-blur's exposure dip, 0 → 1) and focus (push-blur's
+ * defocused arrival, 1 → 0); smearX / smearY are a directional blur's
+ * deviations in px, drawn by an SVG filter on the layer's outer element
+ * (smearFilterId), not by the layer's own CSS filter.
  */
-export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0, rackIn: 0 });
+export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0, rackIn: 0, veil: 0, dip: 0, focus: 0, smearX: 0, smearY: 0 });
+/** Layer props drawn as the directional smear (an SVG feGaussianBlur on the outer element). */
+export const SMEAR_PROPS = Object.freeze(['smearX', 'smearY']);
 const WIPE_PROPS = ['wipeT', 'wipeR', 'wipeB', 'wipeL'];
 
 const EPS = 1e-6;
@@ -139,6 +155,24 @@ export function sceneLeadIn(scene, fps = 30) {
 const RACK = Object.freeze({ blurIn: 22, scaleIn: 1.08, blurOut: 26, scaleOut: 0.9, lift: 0.45 });
 // glow-wipe: peak extra brightness at the wipe edge.
 const GLOW_WIPE = 0.85;
+/**
+ * light-sweep: the veil at full (blur px at 1080 on the short side, the share
+ * of light taken away, extra contrast, so the brightest parts stay as glowing
+ * blobs on a dark field), the drift forward of the outgoing plate and the
+ * scale the incoming one settles from, and the timing (shares of the
+ * transition): the outgoing plate veils over its first `veil`, the incoming
+ * one fades up from `rise` over `fade` and clears its veil by the end.
+ */
+export const LIGHT_SWEEP_LAYER = Object.freeze({ blur: 22, dim: 0.72, contrast: 0.35, scaleOut: 1.08, scaleIn: 1.05, veil: 0.6, rise: 0.4, fade: 0.32, outFade: 0.3 });
+/**
+ * push-blur: the outgoing plate's push (scale) and travel (a share of the
+ * frame along the direction), its smear at the cut (deviation, a share of
+ * that span) and its exposure dip (the share of light taken away); the
+ * incoming plate's travel and scale it settles from, its defocus (px at 1080)
+ * and how dark it arrives; the cut at `cut` of the transition, the swap a
+ * crossfade over `swap`.
+ */
+export const PUSH_BLUR = Object.freeze({ scaleOut: 1.15, travelOut: 0.12, smear: 0.026, dip: 0.45, travelIn: 0.05, scaleIn: 1.06, defocus: 14, focusDim: 0.4, cut: 0.48, swap: 0.1 });
 
 /**
  * Layer transform (pivoting on the canvas centre) that puts rect `a`'s centre
@@ -248,6 +282,31 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
         in: [t('opacity', 0, 0, 'none', 0, half), t('opacity', 0, 1, 'none', half, 0)],
         out: [t('opacity', 1, 0, 'none', half, 0)] };
     }
+    case 'light-sweep': {
+      // Light streaks sweep over the cut (light-sweep.mjs); the outgoing plate
+      // darkens into soft blobs and drifts forward, fading as the incoming one
+      // rises from under the same veil and sharpens.
+      const L = LIGHT_SWEEP_LAYER;
+      return { type, duration: d,
+        in: held([t('opacity', 0, 1, 'power1.inOut', d * L.rise, d * L.fade), t('veil', 1, 0, 'power2.out', d * L.rise, d * (1 - L.rise)), t('scale', L.scaleIn, 1, 'power2.out', d * L.rise, d * (1 - L.rise))]),
+        out: [t('veil', 0, 1, 'power1.in', 0, d * L.veil), t('scale', 1, L.scaleOut, 'power1.in'), t('opacity', 1, 0, 'power1.inOut', d * L.rise, d * L.outFade)] };
+    }
+    case 'push-blur': {
+      // The camera pushes into the outgoing plate (direction: where the
+      // content travels, "up" by default) with a smear along the travel and an
+      // exposure dip; at the cut the incoming plate takes over, slightly
+      // large and defocused, and racks sharp in a few frames (power2.out).
+      const P = PUSH_BLUR;
+      const toward = transition?.direction ?? 'up';
+      const axisP = toward === 'left' || toward === 'right' ? 'x' : 'y';
+      const spanP = axisP === 'x' ? width : height;
+      const signP = toward === 'up' || toward === 'left' ? -1 : 1;
+      const cut = d * P.cut, rest = d - cut;
+      const smear = axisP === 'x' ? 'smearX' : 'smearY';
+      return { type, duration: d,
+        in: held([t('opacity', 0, 1, 'none', cut - d * P.swap / 2, d * P.swap), t(axisP, -signP * P.travelIn * spanP, 0, 'expo.out', cut, rest), t('scale', P.scaleIn, 1, 'expo.out', cut, rest), t('focus', 1, 0, 'power2.out', cut, rest)]),
+        out: [t('scale', 1, P.scaleOut, 'power2.in', 0, cut + d * P.swap / 2), t(axisP, 0, signP * P.travelOut * spanP, 'power2.in', 0, cut + d * P.swap / 2), t(smear, 0, round(P.smear * spanP, 2), 'power2.in', 0, cut + d * P.swap / 2), t('dip', 0, 1, 'power2.in', 0, cut + d * P.swap / 2), t('opacity', 1, 0, 'none', cut - d * P.swap / 2, d * P.swap)] };
+    }
     case 'card-to-card': {
       // Morph continuity: the incoming card starts where the outgoing card
       // was (FLIP: same centre and area) and settles on its own rect, while
@@ -262,6 +321,14 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     default:
       return { type: 'cut', duration: 0, in: [], out: [] };
   }
+}
+
+// Tweens that start after the transition does, each preceded by a hold at its
+// `from` value from the start (as the dot-wipe's hidden first half), so the
+// incoming layer is in its first state from the transition's first frame.
+function held(tweens) {
+  const holds = tweens.filter((tw) => tw.start > 0).map((tw) => ({ ...tw, to: tw.from, start: 0, duration: tw.start, ease: 'none' }));
+  return [...holds, ...tweens];
 }
 
 /**
@@ -295,6 +362,9 @@ export function layerStyle(state) {
   if (state.blur > 0.001) filters.push(`blur(${round(state.blur, 3)}px)`);
   if (state.rackIn > 0.0001) filters.push(...rackFilter(state.rackIn));
   if (state.glow > 0.001) filters.push(`brightness(${round(1 + state.glow, 4)})`);
+  if (state.veil > 0.0001) filters.push(...veilFilter(state.veil));
+  if (state.dip > 0.0001) filters.push(dipFilter(state.dip));
+  if (state.focus > 0.0001) filters.push(...focusFilter(state.focus));
   if (filters.length) style.filter = filters.join(' ');
   if (state.iris !== null && state.iris !== undefined) style.clipPath = `circle(${round(state.iris, 2)}px at 50% 50%)`;
   else if (WIPE_PROPS.some((prop) => state[prop] !== null && state[prop] !== undefined)) style.clipPath = wipeCss(state);
@@ -304,6 +374,32 @@ export function layerStyle(state) {
 /** A rack-focus arrival at v (1 → 0): its blur and its exposure lift, as filter functions. */
 export function rackFilter(v) {
   return [`blur(${round(RACK.blurIn * v, 3)}px)`, `brightness(${round(1 + RACK.lift * v, 4)})`];
+}
+
+/** A light-sweep veil at v (0 → 1): blur, darken and a little contrast, as filter functions. */
+export function veilFilter(v) {
+  const L = LIGHT_SWEEP_LAYER;
+  return [`blur(${round(L.blur * v, 3)}px)`, `brightness(${round(1 - L.dim * v, 4)})`, `contrast(${round(1 + L.contrast * v, 4)})`];
+}
+
+/** A push-blur exposure dip at v (0 → 1). */
+export function dipFilter(v) {
+  return `brightness(${round(1 - PUSH_BLUR.dip * v, 4)})`;
+}
+
+/** A push-blur arrival at v (1 → 0): its defocus and how dark it is, as filter functions. */
+export function focusFilter(v) {
+  return [`blur(${round(PUSH_BLUR.defocus * v, 3)}px)`, `brightness(${round(1 - PUSH_BLUR.focusDim * v, 4)})`];
+}
+
+/** The id of a layer's smear filter (an SVG filter both renderers draw), from its scene id. */
+export function smearFilterId(sceneId) {
+  return `lc-smear-${String(sceneId).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+}
+
+/** The SVG (a string) of a layer's smear filter at deviations x, y (px); the blur element is #<id>-k. */
+export function smearFilterSvg(id, x = 0, y = 0) {
+  return `<svg class="lc-smear-defs" width="0" height="0" aria-hidden="true" style="position:absolute"><defs><filter id="${id}" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feGaussianBlur id="${id}-k" in="SourceGraphic" stdDeviation="${round(x, 3)} ${round(y, 3)}"></feGaussianBlur></filter></defs></svg>`;
 }
 
 /** A wipe state → CSS inset() (unset edges are 0 %). */
@@ -318,6 +414,9 @@ export function gsapVars(prop, value) {
   if (prop === 'iris') return { clipPath: `circle(${round(value, 2)}px at 50% 50%)` };
   if (prop === 'glow') return { filter: `brightness(${round(1 + value, 4)})` };
   if (prop === 'rackIn') return { filter: rackFilter(value).join(' ') };
+  if (prop === 'veil') return { filter: veilFilter(value).join(' ') };
+  if (prop === 'dip') return { filter: dipFilter(value) };
+  if (prop === 'focus') return { filter: focusFilter(value).join(' ') };
   if (WIPE_PROPS.includes(prop)) return { clipPath: wipeCss({ [prop]: value }) };
   return { [prop]: value };
 }
