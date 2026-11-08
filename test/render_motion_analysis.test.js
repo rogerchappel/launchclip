@@ -79,7 +79,7 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
   assert.equal(metrics.cut_rate_per_minute, 12);
   assert.ok(metrics.motion.frame_difference.length > 0);
   assert.equal(metrics.optical_flow.method, "block-matching");
-  assert.equal(rawCalls, 3, "one raw pass for stillness, one for optical flow, one for zoom detection");
+  assert.equal(rawCalls, 4, "one raw pass each for stillness, optical flow, zoom detection and the look");
   assert.deepEqual(metrics.motion.zoom_events, []);
   assert.equal(metrics.motion.zoom.method, "scale-fit");
   assert.match(commands[1][1].join(" "), /tblend=all_mode=difference/);

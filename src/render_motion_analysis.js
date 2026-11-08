@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { LOOK, lookAccumulator, lookFrameArgs, lookGrid, streamRawFrames } from "./render_look_analysis.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +68,12 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   const stillness = analyzeStillness(Buffer.isBuffer(rawStill.stdout) ? rawStill.stdout : Buffer.from(rawStill.stdout ?? "", "binary"), stillGrid.width, stillGrid.height, STILLNESS.fps, options);
   const zoom = analyzeZoom(Buffer.isBuffer(rawZoom.stdout) ? rawZoom.stdout : Buffer.from(rawZoom.stdout ?? "", "binary"), zoomGrid.width, zoomGrid.height, ZOOM_DETECT.fps, { cutTimes: cuts });
   const camera = cameraMoves({ ...stillness, zoom_times: zoom.zoom_times }, opticalFlow);
+  // A fourth pass reads the look (src/render_look_analysis.js): sharpness,
+  // light and mid-tones on a 360-px-short-side grid, streamed frame by frame.
+  const lookSize = lookGrid(Number(video.width), Number(video.height));
+  const look = lookAccumulator(lookSize.width, lookSize.height);
+  const readLook = adapters.streamRaw ?? (adapters.runRaw || adapters.run ? bufferedFrames(runRaw) : streamRawFrames);
+  await readLook("ffmpeg", lookFrameArgs(resolved, lookSize), lookSize.width * lookSize.height, (frame) => look.push(frame));
   const shotDurations = boundariesToDurations([0, ...cuts, duration]);
   return {
     schema_version: "launchclip.render-motion.v1",
@@ -98,6 +105,7 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
       zoom: zoom.method
     },
     optical_flow: opticalFlow,
+    look: look.result(),
     family: classifyMotionFamily({ cut_rate_per_minute: rate(cuts.length, duration), hold_ratio: series.hold_ratio, motion_bursts_per_minute: rate(series.bursts.length, duration) })
   };
 }
@@ -802,6 +810,7 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   if (expected.minimum_camera_moves_per_minute != null && cameraRate != null && below(cameraRate, expected.minimum_camera_moves_per_minute)) {
     findings.push({ ...finding("motion", "major", `Only ${Number(cameraRate).toFixed(1)} whole-frame camera moves per minute were detected; expected at least ${Number(expected.minimum_camera_moves_per_minute).toFixed(1)}. Move the camera between and inside scenes: zoom-kicks on stressed words, drifts through holds, whips or dot-wipes between scenes.`), measure: "camera_moves_per_min", value: Number(cameraRate), floor: Number(expected.minimum_camera_moves_per_minute) });
   }
+  findings.push(...lookFindings(metrics, expected));
   const firstMotion = firstMeaningfulMotionSeconds(metrics);
   if (expected.maximum_first_motion_seconds != null && (firstMotion == null || firstMotion > Number(expected.maximum_first_motion_seconds))) {
     findings.push(finding("hook", "major", firstMotion == null
@@ -816,6 +825,41 @@ export function evaluateMotionQuality(metrics, expected = {}) {
     }
   }
   return { ok: !findings.some((entry) => entry.severity === "blocking" || entry.severity === "major"), findings };
+}
+
+// The look findings (src/render_look_analysis.js): one per look measure
+// outside the profile's band, each naming the levers that move it. A measure
+// gates only when the expectations carry its bound (a profile measured with
+// it); a render without a look pass is not judged.
+export const LOOK_CHECKS = Object.freeze([
+  { measure: "moving_sharpness_ratio", key: "maximum_moving_sharpness_ratio", side: "ceiling",
+    say: (value, bound) => `Moving frames are ${value.toFixed(2)}× as sharp as held ones (median Laplacian variance); expected at most ${bound.toFixed(2)}×. Fast moves slide past as crisp cut-outs: stronger motion blur on fast moves (motion.blur shutter), and push-blur transitions between scenes.` },
+  { measure: "soft_frame_share", key: "minimum_soft_frame_share", side: "floor",
+    say: (value, bound) => `Only ${(value * 100).toFixed(1)}% of frames are soft (sharpness under ${LOOK_SOFT_PERCENT}% of the held median); expected at least ${(bound * 100).toFixed(1)}%. Nothing ever leaves focus: rack-focus entrances (enter: "focus"), depth layers behind the panels, and push-blur transitions.` },
+  { measure: "change_p99", key: "maximum_change_p99", side: "ceiling",
+    say: (value, bound, look) => `The hardest single-frame jumps change ${value.toFixed(1)} grey levels (99th percentile${look.max_change != null ? `, max ${Number(look.max_change).toFixed(1)}` : ""}); expected at most ${bound.toFixed(1)}. Moves snap in one frame: stronger motion blur on fast moves (motion.blur shutter), ease whips and kicks over more frames, or carry the change with a light-sweep or push-blur transition.` },
+  { measure: "top_light_ratio", key: "minimum_top_light_ratio", side: "floor",
+    say: (value, bound) => `The top of the frame is ${value.toFixed(2)}× as bright as the middle (median); expected at least ${bound.toFixed(2)}×. The frame is unlit: a key light from above (story.light), or light-sweep transitions that carry light across the frame.` },
+  { measure: "midtone_share", key: "minimum_midtone_share", side: "floor",
+    say: (value, bound) => `Only ${(value * 100).toFixed(1)}% of pixels are mid-tones (grey ${LOOK_MIDTONE}); expected at least ${(bound * 100).toFixed(1)}%. The frame is near-black background and bright ink with nothing between: light or haze layers (story.light), translucent depth planes behind the panels.` },
+  { measure: "burst_change_mean", key: "minimum_burst_change_mean", side: "floor",
+    say: (value, bound) => `Motion bursts change the frame by ${value.toFixed(2)} grey levels on average; expected at least ${bound.toFixed(2)}. Moves are timid: more travel on whips and kicks, bigger entrances, and light-sweep transitions through scene changes.` }
+]);
+
+const LOOK_SOFT_PERCENT = Math.round(LOOK.softSharpness * 100);
+const LOOK_MIDTONE = `${LOOK.midtone[0]}–${LOOK.midtone[1]}`;
+
+function lookFindings(metrics, expected) {
+  const look = metrics.look ?? {};
+  const out = [];
+  for (const check of LOOK_CHECKS) {
+    const bound = expected[check.key];
+    const value = look[check.measure];
+    if (bound == null || value == null || !Number.isFinite(Number(value))) continue;
+    const outside = check.side === "ceiling" ? above(value, bound) : below(value, bound);
+    if (outside) out.push({ ...finding("look", "major", check.say(Number(value), Number(bound), look)), measure: check.measure, value: Number(value), [check.side]: Number(bound) });
+  }
+  return out;
 }
 
 // What a director does about a still span, worst first. A span that runs
@@ -1092,6 +1136,15 @@ function round(value, places = 5) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// A raw-frame reader over a buffered runRaw (the test adapters).
+function bufferedFrames(runRaw) {
+  return async (command, args, frameSize, onFrame) => {
+    const { stdout } = await runRaw(command, args);
+    const buffer = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout ?? "", "binary");
+    for (let offset = 0; frameSize > 0 && offset + frameSize <= buffer.length; offset += frameSize) onFrame(buffer.subarray(offset, offset + frameSize));
+  };
 }
 
 async function runCommand(command, args) {
