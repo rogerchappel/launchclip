@@ -296,7 +296,7 @@ test('HyperFrames: the feel wraps every scene under the dot wipes and captions; 
 
 test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per frame and the wipe the same SVG and CSS', async () => {
   const tsx = await readFile(path.join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
-  assert.match(tsx, /feelStateAt\(plan, frame \/ plan\.fps\)/);
+  assert.match(tsx, /feelStateAt\(plan, Math\.floor\(\(frame \* plan\.fps\) \/ fps \+ 1e-6\) \/ plan\.fps\)/);
   assert.match(tsx, /dotWipeSvg\(width, height, wipe\.color\)/);
   assert.match(tsx, /dotWipeCss\(width, height\)/);
   assert.match(tsx, /dotWipeCover\(wipe, t\)/);
