@@ -358,3 +358,15 @@ test("rich headline: lines stagger in, the accent word takes the accent, a stat 
 test("text hold: a rich headline is read by all its lines, markup out", () => {
   assert.equal(uiReadingWords({ elements: [RICH, { ...STAT, beats: [{ at: 2, set: { lines: [{ text: "ONE *TWO* THREE FOUR" }] } }] }] }), 4 + 4);
 });
+
+test("planning guide: rich headlines pair a small setup with a big payoff, one accent word, numbers huge; its examples resolve", async () => {
+  const { interfaceLines } = await import("@launchclip/core/planning-prompt.mjs");
+  const guide = interfaceLines().join("\n");
+  assert.match(guide, /small setup line over a big payoff line/);
+  assert.match(guide, /at most one accent word per headline/);
+  assert.match(guide, /Put a number huge/);
+  // The guide's own examples, as a planner would place them above a panel.
+  const rect = { x: 80, y: 300, width: 860, height: 270 };
+  assert.doesNotThrow(() => resolve([{ kind: "headline", rect, at: 0, props: { lines: [{ text: "RIGHT PLACE.", size: "s" }, { text: "RIGHT *LEVEL.*", size: "l" }] } }]));
+  assert.doesNotThrow(() => resolve([{ kind: "headline", rect, at: 0, props: { lines: [{ text: "5M+", size: "xl", accent: true, count: true }, { text: "CREATORS", size: "s" }] } }]));
+});
