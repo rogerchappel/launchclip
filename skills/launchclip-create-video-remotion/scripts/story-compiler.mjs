@@ -24,7 +24,7 @@ import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { SMEAR_PROPS, gsapVars, holdTime, layerStateAt, sceneWindows, smearFilterId, smearFilterSvg } from './transitions.mjs';
-import { LIGHT_SWEEP, lightSweepCss, lightSweepGsap, lightSweepHtml, lightSweeps } from './light-sweep.mjs';
+import { LIGHT_SWEEP, lightSweepCss, lightSweepDipHtml, lightSweepGsap, lightSweepHtml, lightSweeps } from './light-sweep.mjs';
 import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from './ambient.mjs';
@@ -580,7 +580,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;--lc-dc:${dotWipePeak(wipe)};z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
   // Light sweeps (kit/core/light-sweep.mjs): streaks of light added over every scene.
   const sweeps = isolate ? [] : lightSweeps(story, windows);
-  wipeMarkup.push(...sweeps.map((sweep) => `<div id="${sweep.id}" class="lc-light-sweep" data-launchclip-transition="light-sweep" aria-hidden="true" style="opacity:0;--lc-ls:0;z-index:${LIGHT_SWEEP.z.hyperframes}">${lightSweepHtml(W, H, sweep)}</div>`));
+  // Per sweep the dip (a shade over every scene) and the light screened over it.
+  wipeMarkup.push(...sweeps.map((sweep) => `<div id="${sweep.id}-dip" class="lc-light-sweep-dip" data-launchclip-transition="light-sweep" aria-hidden="true" style="opacity:0;--lc-ls:0;z-index:${LIGHT_SWEEP.z.hyperframes}">${lightSweepDipHtml()}</div><div id="${sweep.id}" class="lc-light-sweep" data-launchclip-transition="light-sweep" aria-hidden="true" style="opacity:0;--lc-ls:0;z-index:${LIGHT_SWEEP.z.hyperframes}">${lightSweepHtml(W, H, sweep)}</div>`));
 
   // Brand frame (kit/core/brand-frame.mjs): kicker, section labels and the
   // progress line over every scene, under the captions.

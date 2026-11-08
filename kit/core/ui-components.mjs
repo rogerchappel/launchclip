@@ -6,13 +6,13 @@
 // functions (no module-level constants); settled parts hold still, life comes
 // from staggered entrances and timed state changes.
 
-import {uiClamp, uiP, uiLerp, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
+import {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
 
 /** Kind → draw function for the components in this file. */
 function UI_COMPONENT_TABLE() {
   return {
     stack: uiStack, meter: uiMeter, terminal: uiTerminal, results: uiResults, 'card-wall': uiCardWall, downloads: uiDownloads,
-    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane, bloom: uiBloom
+    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane, bloom: uiBloom, burst: uiBurst
   };
 }
 
@@ -378,4 +378,53 @@ function uiBloom(el, t, ctx) {
   return '<div style="position:absolute;inset:0;transform:scale(' + sc + ')">' + layer(0, col, 0.5, 18) + layer(14, col, 0.6, 24) + layer(32, col, 0.8, 22) + layer(43, '#ffffff', 0.55, 12) + '</div>';
 }
 
-export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiFrameRuler, uiPadGrid, uiScanPlane, uiBloom};
+/**
+ * burst: the hero beat's light. Thin bright rays shoot out of a flare core
+ * at the rect's centre (the module centres the rect on props.target), reach
+ * its half diagonal's worth of the larger side, and fade, all over
+ * `duration` (s, 0.6). {rays (6–24, 14), tone (accent), strength (0–1.5,
+ * 1), duration}. Each ray's angle, reach and weight come from uiHash, so a
+ * frame is a pure function of t. Crisp cores over one blurred copy (their
+ * glow), a white-hot core, a soft halo and a thin horizontal flare;
+ * the painter screens it over what sits behind.
+ */
+function uiBurst(el, t, ctx) {
+  const p = el.props, c = ctx.c, a0 = el.at;
+  const dur = p.duration || 0.6, n = Math.round(p.rays || 14), gain = p.strength === undefined ? 1 : p.strength;
+  const q = uiP(t, a0, dur);
+  if (t < a0 || q >= 1 || gain <= 0) return '';
+  const col = uiTone(c, p.tone, 'accent');
+  const w = el.rect.width, h = el.rect.height, cx = w / 2, cy = h / 2, reach = Math.max(w, h) / 2;
+  // A near-instant attack, the spokes racing out on an expo ease, the light
+  // falling away over the last three quarters.
+  const attack = uiOutCubic(uiP(t, a0, Math.min(0.06, dur * 0.12)));
+  const grow = uiOutExpo(q);
+  const fall = uiP(t, a0 + dur * 0.22, dur * 0.78), fade = (1 - fall) * (1 - fall);
+  const k = attack * fade * gain;
+  if (k <= 0.004) return '';
+  const spin = 7 * grow;
+  let core = '', glow = '';
+  for (let i = 0; i < n; i++) {
+    const ha = uiHash(i * 3 + 1), hl = uiHash(i * 3 + 2), hw = uiHash(i * 3 + 3);
+    const angle = (360 * i) / n + (ha - 0.5) * (300 / n) + spin - 90;
+    const len = reach * (0.55 + 0.45 * hl);
+    const head = len * (0.18 + 0.82 * grow), tail = len * (0.04 + 0.34 * grow * grow);
+    const span = Math.max(1, head - tail), thick = 2 + 3.5 * hw * hw;
+    const op = uiClamp(k * (0.6 + 0.4 * hl));
+    const box = function (th) { return 'position:absolute;left:' + uiN(cx + tail) + 'px;top:' + uiN(cy - th / 2) + 'px;width:' + uiN(span) + 'px;height:' + uiN(th) + 'px;transform-origin:' + uiN(-tail) + 'px 50%;transform:rotate(' + uiN(angle) + 'deg);border-radius:' + uiN(th) + 'px;opacity:' + op.toFixed(3) + ';'; };
+    core += '<div style="' + box(thick) + 'background:linear-gradient(to right,#ffffff 0%,' + col + ' 38%,' + col + '00 100%)"></div>';
+    glow += '<div style="' + box(thick * 5) + 'background:linear-gradient(to right,' + col + ' 0%,' + col + '00 100%)"></div>';
+  }
+  const disc = function (r, inner, outer, op) { return '<div style="position:absolute;left:' + uiN(cx - r) + 'px;top:' + uiN(cy - r) + 'px;width:' + uiN(2 * r) + 'px;height:' + uiN(2 * r) + 'px;border-radius:50%;background:radial-gradient(closest-side,' + inner + ' 0%,' + outer + ' 35%,' + outer + '00 100%);opacity:' + uiClamp(op).toFixed(3) + '"></div>'; };
+  // The flare core flashes hardest at the attack and shrinks back as the rays leave.
+  const flare = attack * Math.pow(1 - q, 1.6) * gain;
+  const coreR = reach * (0.14 + 0.1 * grow) * (0.7 + 0.3 * attack);
+  const lineW = reach * (0.5 + 0.9 * grow);
+  const line = '<div style="position:absolute;left:' + uiN(cx - lineW) + 'px;top:' + uiN(cy - 1.5) + 'px;width:' + uiN(2 * lineW) + 'px;height:3px;border-radius:3px;background:linear-gradient(to right,' + col + '00,' + col + ' 30%,#ffffff 50%,' + col + ' 70%,' + col + '00);opacity:' + uiClamp(flare * 0.8).toFixed(3) + '"></div>';
+  return '<div style="position:absolute;inset:0;overflow:visible">'
+    + disc(reach * 0.75, col, col, k * 0.22)
+    + '<div style="position:absolute;inset:0;filter:blur(' + uiN(Math.max(4, reach * 0.018)) + 'px)">' + glow + '</div>'
+    + core + disc(coreR, '#ffffff', col, flare) + line + '</div>';
+}
+
+export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiFrameRuler, uiPadGrid, uiScanPlane, uiBloom, uiBurst};
