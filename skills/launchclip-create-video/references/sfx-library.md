@@ -23,6 +23,15 @@ that no library has (`missing`); they fall back to the procedural kit, and
 fills only those families (paid only with a key and an uncached request; add
 `--provider synth` to stay free) and leaves every other family locked.
 
+Refused clips: every cue file is measured before mixing, and one whose
+energy is mostly above 5 kHz (hiss: an air burst, not a click) or that is a
+sustained noise wash is refused, and the cue takes a passing variant or the
+kit's. Seeding refuses such clips too, but a library seeded before that guard
+can still hold one, refused on every render (`sfx tick at 3.2s: tick-1.wav
+refused (hiss: 98% of its energy is above 5 kHz)`). `sfx seed --missing`
+counts a family whose every variant is refused as missing and replaces it
+(`--provider synth` for the free, original procedural sound).
+
 ## Families
 
 | Family | Use | Kept length |

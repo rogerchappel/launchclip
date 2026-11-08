@@ -1234,7 +1234,9 @@ const STAGES = [
       // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
       const guarded = await guardCueTimbre(resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId }), { libraries: plan.libraries, kit, storyId: plan.storyId });
       let cues = guarded.cues;
-      for (const finding of guarded.findings) ctx.warnings.push(`sfx ${finding.cue} at ${finding.at}s: ${path.basename(finding.file)} refused (${finding.problem}); ${finding.replacement ? `used ${path.basename(finding.replacement)}` : "cue dropped"}`);
+      // A refused library clip (one seeded before the guard) is refused on every render until its library replaces it.
+      const fixHint = (file) => (path.resolve(file).startsWith(path.resolve(kitDir) + path.sep) ? "" : `; replace it with: launchclip sfx seed --missing --dir ${path.dirname(path.dirname(file))}`);
+      for (const finding of guarded.findings) ctx.warnings.push(`sfx ${finding.cue} at ${finding.at}s: ${path.basename(finding.file)} refused (${finding.problem}); ${finding.replacement ? `used ${path.basename(finding.replacement)}` : "cue dropped"}${fixHint(finding.file)}`);
       // --sfx generated: the accent cues get a sound described from what is on
       // screen and said (src/sfx/event_sounds.js); a miss keeps the kit file.
       let eventSounds = { generated: [], cost_usd: 0, warnings: [] };
