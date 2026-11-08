@@ -260,7 +260,8 @@ export const CAPTION_ENTRANCES = Object.freeze({
   'slide-up': Object.freeze({ from: Object.freeze({ opacity: 0, y: 44, scale: 1 }), dur: 0.24, ease: 'power3.out' }),
   'slide-left': Object.freeze({ from: Object.freeze({ opacity: 0, x: -48, y: 0, scale: 1 }), dur: 0.24, ease: 'power3.out' }),
   scale: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1.28 }), dur: 0.2, ease: 'back.out(2.6)' }),
-  none: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1 }), dur: 0.02, ease: 'none' })
+  // none: on screen within a blur sub-frame, like the none exit.
+  none: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1 }), dur: 0.005, ease: 'none' })
 });
 export const CAPTION_EXITS = Object.freeze({
   'fade-up': Object.freeze({ to: Object.freeze({ opacity: 0, y: -10 }), dur: 0.1, ease: 'power2.in' }),
@@ -305,7 +306,7 @@ export const CAPTION_PRESETS = Object.freeze({
   // The interface-explainer caption: a single word, uppercase and bare, on a
   // small translucent chip that reads over busy panels without competing
   // with the headline.
-  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small, nearly opaque dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'none', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231ce6' }, plate: 'card' }),
+  'word-chip': preset({ description: 'One word at a time, as spoken, uppercase with no punctuation, on a small opaque dark chip: a quiet word tag over busy interface panels.', layout: 'single', word: 'none', font: 'body', weight: 700, size: 40, case: 'upper', letterSpacing: '0.04em', stroke: 0, shadow: 'none', maxWords: 1, maxChars: 24, entrance: 'none', exit: 'none', punctuation: false, colors: { idle: '#f4f6ee', active: '#f4f6ee', plate: '#20231c' }, plate: 'card' }),
   bubble: preset({ description: 'Each word is a rounded chip; the active chip turns primary.', font: 'body', weight: 800, size: 54, case: 'as-is', letterSpacing: '0em', gap: 0.2, stroke: 0, shadow: 'none', word: 'chip', maxWords: 4, maxChars: 22, entrance: 'none', exit: 'fade', colors: { idle: 'ink' } }),
   // The footage-led default (docs/VIDEO_QUALITY_RFC.md §9.1): quiet enough to
   // sit under a talking head all the way through.
@@ -361,19 +362,22 @@ export function captionPresetName(overlay, story) {
 }
 
 /**
- * Caption times snapped to half-frame boundaries ((k + 0.5) / fps). With
- * motion blur (src/motion_blur.js) each output frame blends the sub-frames
- * within a third of a frame of it, so a word that changes half-way between
- * two frames lands in neither blend: the picture smears, the captions stay
- * sharp and never show two words at once.
+ * Caption times snapped to (k + offset) / fps, by default half-frame
+ * boundaries. With motion blur (kit/core/motion-blur.mjs) each output frame
+ * blends the sub-frames around it; offset is captionSnapOffset(plan), the
+ * gap between two frames' one-frame windows (0.5 at 3 sub-frames per
+ * frame), so a word change lands in neither blend: the picture smears, the
+ * captions stay sharp and never show two words at once.
  */
-export function snapCaptionChunks(chunks, fps) {
+export function snapCaptionChunks(chunks, fps, offset = 0.5) {
   const rate = Number(fps) || 30;
-  const snap = (t) => (Number.isFinite(Number(t)) ? round((Math.round(Number(t) * rate - 0.5) + 0.5) / rate) : t);
+  const at = Number.isFinite(Number(offset)) ? Number(offset) : 0.5;
+  // Rounded to the millisecond, well inside the gap (half a sub-frame: at
+  // least 2 ms at 30 fps).
+  const snap = (t) => (Number.isFinite(Number(t)) ? round((Math.round(Number(t) * rate - at) + at) / rate) : t);
   return chunks.map((chunk) => ({ ...chunk, start: snap(chunk.start), end: snap(chunk.end), ...(Array.isArray(chunk.words) ? { words: chunk.words.map((word) => ({ ...word, start: snap(word.start), end: snap(word.end) })) } : {}) }));
 }
 
-/** The words as a preset shows them: punctuation: false drops leading and trailing marks ("now," → "now"). */
 export function shownWords(words, preset) {
   if (preset?.punctuation !== false) return words;
   return words.map((word) => ({ ...word, text: String(word.text).replace(/^[\s"“‘(\[¡¿]+|[\s.,!?;:…"”’)\]]+$/gu, '') || String(word.text) }));

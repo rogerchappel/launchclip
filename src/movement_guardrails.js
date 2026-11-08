@@ -59,6 +59,10 @@ function opSpans(model) {
       else if (op.type === "loop") spans.push([op.start, op.start + op.cycle * (op.repeats ?? 1)]);
       else if (op.type === "set" && op.props && "text" in op.props) spans.push([op.time - 0.05, op.time + 0.05]);
     }
+    // A ui-scene paints its elements (kit/core/ui-runtime.mjs), so its op list
+    // only holds the scene's own exit: its entrances, beats, flashes and
+    // component changes are its events.
+    if (model.content?.ui) for (const event of Array.isArray(model.events) ? model.events : []) if (Number.isFinite(event?.time)) spans.push([event.time, Math.max(event.time + 0.5, Number(event.endTime) || 0)]);
     if (spans.length) return spans;
   }
   const m = model.motion ?? {};

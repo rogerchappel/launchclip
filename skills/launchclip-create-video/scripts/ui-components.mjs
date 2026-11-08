@@ -12,7 +12,7 @@ import {uiClamp, uiP, uiLerp, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, 
 function UI_COMPONENT_TABLE() {
   return {
     stack: uiStack, meter: uiMeter, terminal: uiTerminal, results: uiResults, 'card-wall': uiCardWall, downloads: uiDownloads,
-    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane
+    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane, bloom: uiBloom
   };
 }
 
@@ -361,4 +361,21 @@ function uiScanPlane(el, t, ctx) {
   return '<div style="position:absolute;inset:0;' + uiPanelStyle(c, '') + 'overflow:visible">' + s + '</div>';
 }
 
-export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiFrameRuler, uiPadGrid, uiScanPlane};
+/**
+ * bloom: a big soft light that swells at el.at and fades, sized by its rect:
+ * for unlocks, hits and reveals. {tone (accent), strength (0–1.5, 1), rise
+ * (s, 0.22), duration (s the fade takes, 1.4)}. Layered radial gradients with
+ * a white-hot core; the painter screens it over what sits behind.
+ */
+function uiBloom(el, t, ctx) {
+  const p = el.props, c = ctx.c, a0 = el.at;
+  const col = uiTone(c, p.tone, 'accent'), rise = p.rise || 0.22, dur = p.duration || 1.4;
+  const up = uiOutCubic(uiP(t, a0, rise)), q = uiP(t, a0 + rise, dur);
+  const k = up * (1 - q * q * (3 - 2 * q)) * (p.strength === undefined ? 1 : p.strength);
+  if (k <= 0.004) return '';
+  const sc = uiN((0.7 + 0.42 * uiOutCubic(uiP(t, a0, rise + dur * 0.6))) * 1000) / 1000;
+  const layer = function (inset, color, op, stop) { return '<div style="position:absolute;inset:' + inset + '%;border-radius:50%;background:radial-gradient(closest-side,' + color + ' 0%,' + color + ' ' + stop + '%,transparent 100%);opacity:' + uiClamp(op * k).toFixed(3) + '"></div>'; };
+  return '<div style="position:absolute;inset:0;transform:scale(' + sc + ')">' + layer(0, col, 0.5, 18) + layer(14, col, 0.6, 24) + layer(32, col, 0.8, 22) + layer(43, '#ffffff', 0.55, 12) + '</div>';
+}
+
+export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiFrameRuler, uiPadGrid, uiScanPlane, uiBloom};

@@ -39,18 +39,19 @@ function uiN(v) { return Math.round(v * 100) / 100; }
 
 /**
  * An entrance at t0 as inline style: kinds up, down, left, right, zoom, slam,
- * pop, drop, fade, cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
- * move blurs while it is fast. o: {d, dist, ov, base (a transform kept under
- * the move)}. Before t0 the element is hidden.
+ * pop, drop, fade, focus, cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
+ * move blurs while it is fast. focus arrives out of focus (14 px blur, scale
+ * 1.06) and pulls sharp over 0.42 s, most of it in the first half. o: {d,
+ * dist, ov, base (a transform kept under the move)}. Before t0 the element is hidden.
  */
 function uiEnter(t, t0, kind, o) {
   const opt = o || {}, base = opt.base || '';
   if (t < t0) return 'opacity:0;visibility:hidden;' + (base ? 'transform:' + base + ';' : '');
   // cut: on screen from t0 exactly as it settles (a scene that opens on a built frame).
   if (kind === 'cut') return base ? 'transform:' + base + ';' : '';
-  const k = kind || 'up', d = opt.d || 0.36, p = uiClamp((t - t0) / d);
+  const k = kind || 'up', d = opt.d || (k === 'focus' ? 0.42 : 0.36), p = uiClamp((t - t0) / d);
   const spring = k === 'slam' || k === 'pop' || opt.ov;
-  const e = spring ? uiOutBack(p, opt.ov || 1.4) : uiOutExpo(p), v = 1 - uiOutExpo(p);
+  const e = spring ? uiOutBack(p, opt.ov || 1.4) : k === 'focus' ? uiOutCubic(p) : uiOutExpo(p), v = 1 - uiOutExpo(p);
   const dist = opt.dist || 140;
   let tr = '', bl = 0;
   if (k === 'up') { tr = 'translateY(' + uiN((1 - e) * dist) + 'px)'; bl = v * 3; }
@@ -61,15 +62,70 @@ function uiEnter(t, t0, kind, o) {
   else if (k === 'slam') { tr = 'scale(' + uiN(uiLerp(2.1, 1, e) * 1000) / 1000 + ')'; bl = v * 5; }
   else if (k === 'pop') { tr = 'scale(' + uiN(Math.max(0, e) * 1000) / 1000 + ')'; }
   else if (k === 'drop') { tr = 'translateY(' + uiN(-(1 - e) * dist) + 'px) rotate(' + uiN((1 - e) * -8) + 'deg)'; bl = v * 3; }
-  const op = k === 'fade' ? uiClamp(p * 1.4) : uiClamp(p * 5);
+  else if (k === 'focus') { tr = 'scale(' + uiN(uiLerp(1.06, 1, e) * 1000) / 1000 + ')'; bl = (1 - e) * 14; }
+  const op = k === 'fade' ? uiClamp(p * 1.4) : k === 'focus' ? uiClamp(p * 2.5) : uiClamp(p * 5);
   return 'opacity:' + op.toFixed(3) + ';transform:' + base + ' ' + tr + ';' + (bl > 0.4 ? 'filter:blur(' + bl.toFixed(1) + 'px);' : '');
 }
 
-/** An exit at t0 (lift, fade, blur) layered over the entrance style; '' before t0. */
-function uiExit(t, t0) {
+/**
+ * An exit at t0 layered over the entrance style; '' before t0. lift (the
+ * default) rises, fades and blurs; rack throws the element out of focus
+ * (blur to 12 px, scale to 1.04) as it fades, the focus entrance reversed.
+ */
+function uiExit(t, t0, kind) {
   if (t0 === undefined || t0 === null || t < t0) return '';
+  if (kind === 'rack') { const q = uiClamp((t - t0) / 0.3), e = q * q; return 'opacity:' + (1 - e).toFixed(3) + ';scale:' + (1 + 0.04 * e).toFixed(4) + ';' + (q > 0.02 && q < 1 ? 'filter:blur(' + (q * 12).toFixed(1) + 'px);' : ''); }
   const p = uiClamp((t - t0) / 0.28);
   return 'opacity:' + (1 - p).toFixed(3) + ';translate:0 ' + uiN(-40 * uiOutCubic(p)) + 'px;' + (p > 0.05 && p < 1 ? 'filter:blur(' + (p * 6).toFixed(1) + 'px);' : '');
+}
+
+/**
+ * A beat flash's strength 0–1 at t: an exposure flash at each time in at (a
+ * number or a list) that peaks 0.05 s after it and decays over 0.3 s.
+ */
+function uiFlash(t, at) {
+  if (at === undefined || at === null) return 0;
+  const list = Array.isArray(at) ? at : [at];
+  let k = 0;
+  for (let i = 0; i < list.length; i++) {
+    const dt = t - list[i];
+    if (dt < 0 || dt > 0.35) continue;
+    k = Math.max(k, dt < 0.05 ? dt / 0.05 : Math.pow(1 - (dt - 0.05) / 0.3, 2));
+  }
+  return k;
+}
+
+/** The stage's look-down: perspective (design px) and the origin it turns about. */
+function uiStageView(w, h) { return {p: 1600, cx: w / 2, cy: h / 2}; }
+
+/** A design-px point on the stage turned by tilt deg about rotateX (top away), as projected. */
+function uiStageProject(x, y, tilt, w, h) {
+  const v = uiStageView(w, h), a = (tilt || 0) * Math.PI / 180;
+  const dy = y - v.cy, z = dy * Math.sin(a), k = 1 / (1 - z / v.p);
+  return [v.cx + (x - v.cx) * k, v.cy + dy * Math.cos(a) * k];
+}
+
+/**
+ * Where depth and the stage's dolly put a top-level element at scene time t:
+ * a scale s about the point (cx, cy) and a shift (x, y), then blur (design
+ * px) and dim (brightness). depth 0 is the front, 1 far back: smaller,
+ * dimmer, softer. The dolly is a camera move over the whole scene (a gentle
+ * ease from rest to stage.dolly), shared by every element and scaled by depth:
+ * far layers travel 35% as far as near ones.
+ */
+function uiDepthAt(depth, stage, t, w, h) {
+  const d = uiClamp(depth || 0), st = stage || {}, dl = st.dolly || {};
+  const p = st.duration > 0 ? uiClamp(t / st.duration) : 0;
+  const q = 0.5 * p + 0.25 - 0.25 * Math.cos(Math.PI * p);
+  const near = 1 - 0.65 * d;
+  const zoom = 1 + ((dl.scale || 1) - 1) * q * near;
+  return {s: (1 - 0.16 * d) * zoom, x: (dl.x || 0) * q * near, y: (dl.y || 0) * q * near, cx: w / 2, cy: h * 0.45, blur: 5 * d, dim: 1 - 0.42 * d};
+}
+
+/** The corner radius of a kind's panel surface (a flash lights it), 0 for kinds without one. */
+function uiSurfaceRadius(kind) {
+  const panels = {window: 26, timeline: 26, 'lock-cards': 26, meter: 26, 'marker-snap': 26, terminal: 26, downloads: 26, 'scan-plane': 26};
+  return panels[kind] || 0;
 }
 
 /** A decaying shake in px from t0. */
@@ -298,25 +354,64 @@ function uiPropsAt(el, t) {
   return props;
 }
 
+/**
+ * One element as HTML at scene time t, placed at its rect with its entrance,
+ * exit and flash; '' before it enters or after it has left. staged: a
+ * top-level element on a scene with depth or a stage, wrapped in a layer
+ * that carries its depth, the dolly and its flash.
+ */
+function uiElementHtml(el0, t, ctx, staged) {
+  if (el0.out !== undefined && t >= el0.out + 0.3) return '';
+  if (t < el0.at) return '';
+  const el = Object.assign({}, el0, {props: uiPropsAt(el0, t)});
+  const draw = ctx.components[el.kind];
+  if (!draw) return '';
+  const r = el.rect;
+  const base = (el.props.rotate ? 'rotate(' + el.props.rotate + 'deg) ' : '') + (el.tilt ? 'perspective(1400px) rotateX(' + (el.tilt.x || 0) + 'deg) rotateY(' + (el.tilt.y || 0) + 'deg) rotateZ(' + (el.tilt.z || 0) + 'deg)' : '');
+  const style = uiEnter(t, el.at, el.enter || 'up', {base: base, d: el.enterDuration, dist: el.dist, ov: el.overshoot}) + uiExit(t, el.out, el.exit);
+  const z = el.z ? 'z-index:' + el.z + ';' : '';
+  const blend = el.kind === 'bloom' ? 'mix-blend-mode:screen;' : '';
+  const fk = uiFlash(t, el.flashAt);
+  if (!staged && fk <= 0) return '<div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:' + uiN(r.x) + 'px;top:' + uiN(r.y) + 'px;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + z + blend + style + '">' + draw(el, t, ctx) + '</div>';
+  // The flash: a panel's surface lifts toward white (or the accent) with a
+  // halo; a surface-less kind brightens and glows.
+  const fc = el.flashTone === 'accent' ? ctx.c.accent : '#ffffff', rad = uiSurfaceRadius(el.kind);
+  const lift = fk > 0 && rad ? '<div style="position:absolute;inset:0;border-radius:' + rad + 'px;pointer-events:none;background:' + fc + ';mix-blend-mode:screen;opacity:' + (fk * 0.42).toFixed(3) + ';box-shadow:0 0 ' + uiN(40 + 80 * fk) + 'px ' + uiN(10 * fk) + 'px ' + fc + '"></div>' : '';
+  const inner = '<div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:0;top:0;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + style + '">' + draw(el, t, ctx) + lift + '</div>';
+  const dp = staged ? uiDepthAt(el.depth, ctx.stage, t, ctx.width, ctx.height) : {s: 1, x: 0, y: 0, cx: 0, cy: 0, blur: 0, dim: 1};
+  const moved = dp.s !== 1 || dp.x !== 0 || dp.y !== 0;
+  const tr = moved ? 'transform-origin:' + uiN(dp.cx - r.x) + 'px ' + uiN(dp.cy - r.y) + 'px;transform:translate(' + uiN(dp.x) + 'px,' + uiN(dp.y) + 'px) scale(' + (Math.round(dp.s * 10000) / 10000) + ');' : '';
+  let filter = '';
+  if (dp.blur > 0.05) filter += 'blur(' + dp.blur.toFixed(2) + 'px) ';
+  const bright = dp.dim * (1 + (rad ? 0.35 : 0.9) * fk);
+  if (Math.abs(bright - 1) > 0.002) filter += 'brightness(' + bright.toFixed(3) + ') ';
+  if (fk > 0 && !rad) filter += 'drop-shadow(0 0 ' + uiN(8 + 22 * fk) + 'px ' + fc + ') ';
+  return '<div style="position:absolute;left:' + uiN(r.x) + 'px;top:' + uiN(r.y) + 'px;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + z + blend + tr + (filter ? 'filter:' + filter.trim() + ';' : '') + '">' + inner + '</div>';
+}
+
 /** Elements as HTML at scene time t, each placed at its rect with its entrance and exit. */
 function uiChildren(elements, t, ctx) {
   let s = '';
   const list = elements || [];
-  for (let i = 0; i < list.length; i++) {
-    const el0 = list[i];
-    if (el0.out !== undefined && t >= el0.out + 0.3) continue;
-    if (t < el0.at) continue;
-    const el = Object.assign({}, el0, {props: uiPropsAt(el0, t)});
-    const draw = ctx.components[el.kind];
-    if (!draw) continue;
-    const r = el.rect;
-    const base = (el.props.rotate ? 'rotate(' + el.props.rotate + 'deg) ' : '') + (el.tilt ? 'perspective(1400px) rotateX(' + (el.tilt.x || 0) + 'deg) rotateY(' + (el.tilt.y || 0) + 'deg) rotateZ(' + (el.tilt.z || 0) + 'deg)' : '');
-    const style = uiEnter(t, el.at, el.enter || 'up', {base: base, d: el.enterDuration, dist: el.dist, ov: el.overshoot}) + uiExit(t, el.out);
-    const z = el.z ? 'z-index:' + el.z + ';' : '';
-    s += '<div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:' + uiN(r.x) + 'px;top:' + uiN(r.y) + 'px;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + z + style + '">' + draw(el, t, ctx) + '</div>';
-  }
+  for (let i = 0; i < list.length; i++) s += uiElementHtml(list[i], t, ctx, false);
   return s;
 }
 
-export {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiInOut, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiExit, uiShake, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiDots, uiHeader, uiPanelStyle,
-  uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards, uiPropsAt, uiChildren};
+/**
+ * The scene's top-level elements: with depth or a stage, far elements draw
+ * first (behind nearer ones; z still lifts one) and each sits in its depth
+ * layer; otherwise as uiChildren.
+ */
+function uiStage(elements, t, ctx) {
+  const list = elements || [];
+  let deep = !!ctx.stage;
+  for (let i = 0; i < list.length; i++) if (list[i].depth) deep = true;
+  if (!deep) return uiChildren(list, t, ctx);
+  const order = list.map(function (el, i) { return {el: el, i: i}; }).sort(function (a, b) { return ((b.el.depth || 0) - (a.el.depth || 0)) || a.i - b.i; });
+  let s = '';
+  for (let i = 0; i < order.length; i++) s += uiElementHtml(order[i].el, t, ctx, true);
+  return s;
+}
+
+export {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiInOut, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiExit, uiFlash, uiStageView, uiStageProject, uiDepthAt, uiSurfaceRadius, uiShake, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiDots, uiHeader, uiPanelStyle,
+  uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards, uiPropsAt, uiElementHtml, uiChildren, uiStage};

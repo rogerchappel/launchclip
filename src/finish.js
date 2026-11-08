@@ -16,7 +16,7 @@
 // rewritten: synthesised voice, words, captions and the mix are set on a copy
 // written to .launchclip/finish/storyboard.json (resolved:
 // .launchclip/finish/story.resolved.json), which is what gets rendered.
-import { motionBlurSamples } from "./motion_blur.js";
+import { motionBlurOptions } from "./motion_blur.js";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
@@ -1589,8 +1590,8 @@ async function renderStory(ctx, adapter, { output, scenes = [], previewScene = n
       const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project, ...extra });
       ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
       ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-      const samples = motionBlurSamples(ctx.resolved);
-      await adapter.render(hfDir, file, { quality: ctx.quality, workers: ctx.concurrency, ...(samples ? { motionBlur: { samples, fps: ctx.resolved?.format?.fps ?? 30 } } : {}) });
+      const motionBlur = motionBlurOptions(ctx.resolved, ctx.resolved?.format?.fps ?? 30);
+      await adapter.render(hfDir, file, { quality: ctx.quality, workers: ctx.concurrency, ...(motionBlur ? { motionBlur } : {}) });
     };
     return renderWithSegments({
       ...common,
@@ -1697,7 +1698,9 @@ async function runGates(ctx) {
       camera_moves: motion.motion.camera_moves,
       worst_spans: worstStillSpans(motion, { limit: 6 })
     };
-    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), ...(stillness ? { stillness } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
+    // The look measures (sharpness under motion, light, mid-tones), when measured.
+    const look = motion?.look?.frames ? Object.fromEntries(LOOK_MEASURES.map((name) => [name, motion.look[name] ?? null])) : null;
+    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), ...(stillness ? { stillness } : {}), ...(look ? { look } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
     gates.motion = { status: "failed", error: error.message };
   }

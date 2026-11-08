@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { uiReadingWords } from "@launchclip/core/catalog-i-ui.mjs";
-import { resolveAnchor, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
+import { resolveAnchor, resolveStory, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
 import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
 import { emitCatalogH } from "../kit/hyperframes/catalog-h.mjs";
-import { motionBlurArgs, motionBlurFilter, motionBlurSamples } from "../src/motion_blur.js";
+import { motionBlurArgs, motionBlurFilter, motionBlurOptions, motionBlurSamples } from "../src/motion_blur.js";
 import { createHyperframesRenderer } from "../src/renderers/hyperframes.js";
 
 const BRAND = { colors: { bg: "#0a0b08", primary: "#c8ff3a", accent: "#c8ff3a", ink: "#0a0b08", paper: "#f4f6ee" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
@@ -130,13 +130,15 @@ test("story: ui-scene times may be word anchors, resolved to seconds from the sc
   assert.deepEqual(params.elements[0], { at: 2.3, out: 3, props: { unlockAt: 3, text: "word:exact", cards: [{ unlockAt: 2.5 }], doneAt: [2.5, 2] }, beats: [{ at: 3, set: { clipAt: 2.5 } }] });
 });
 
-test("story: motion.blur is true, false or {samples: 2–4}", () => {
+test("story: motion.blur is true, false or {samples: 2–6, shutter: 0.25–1.5}", () => {
   const base = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 6 }, brand: BRAND, scenes: [{ id: "s1", module: "hook-title", start: 0, end: 6, params: { title: "Hi" } }] };
   const errors = (blur) => validateStory({ ...base, motion: { blur } }).errors.filter((message) => /blur/.test(message));
   assert.deepEqual(errors(true), []);
   assert.deepEqual(errors({ samples: 4 }), []);
-  assert.match(errors({ samples: 8 })[0], /samples must be 2, 3 or 4/);
-  assert.match(errors({ shutter: 1 })[0], /motion\.blur\.shutter is not supported/);
+  assert.deepEqual(errors({ samples: 6, shutter: 1.5 }), []);
+  assert.match(errors({ samples: 8 })[0], /samples must be a whole number from 2 to 6/);
+  assert.match(errors({ shutter: 2 })[0], /shutter must be the share of a frame the blur spans, 0\.25 to 1\.5/);
+  assert.match(errors({ angle: 1 })[0], /motion\.blur\.angle is not supported/);
 });
 
 test("motion blur: samples per frame, a centred blend and a renderer pass at samples × fps", async () => {
@@ -159,6 +161,76 @@ test("motion blur: samples per frame, a centred blend and a renderer pass at sam
   calls.length = 0;
   await renderer.render("/tmp/hf", "/tmp/out/plain.mp4", {});
   assert.equal(calls[0].includes("--fps"), false, "no blur: the composition's own fps");
+});
+
+test("motion blur: a shutter sets the sub-frames per frame; over one frame the windows overlap", async () => {
+  const { resolveMotionBlur, captionSnapOffset, windowOffsets } = await import("@launchclip/core/motion-blur.mjs");
+  assert.equal(resolveMotionBlur({}), null);
+  assert.equal(resolveMotionBlur({ motion: { blur: false } }), null);
+  // true is the original blend: 3 sub-frames, 3 per frame.
+  assert.deepEqual(resolveMotionBlur({ motion: { blur: true } }), { samples: 3, rate: 3, shutter: 1, centre: 1, overlap: false, cost: 3 });
+  // Heavy: 6 samples over 1.5 frames from 4 sub-frames a frame (4× render).
+  assert.deepEqual(resolveMotionBlur({ motion: { blur: { samples: 6, shutter: 1.5 } } }), { samples: 6, rate: 4, shutter: 1.5, centre: 3, overlap: true, cost: 4 });
+  assert.equal(resolveMotionBlur({ motion: { blur: { samples: 4, shutter: 1.33 } } }).rate, 3);
+  // A short shutter with many samples is clamped at 8 sub-frames a frame.
+  assert.equal(resolveMotionBlur({ motion: { blur: { samples: 6, shutter: 0.25 } } }).rate, 8);
+  assert.deepEqual(windowOffsets(3), [-1, 1]);
+  assert.deepEqual(windowOffsets(6), [-2, 3]);
+  assert.equal(captionSnapOffset({ rate: 3 }), 0.5);
+  assert.equal(captionSnapOffset({ rate: 4 }), 0.625);
+  assert.deepEqual(motionBlurOptions({ motion: { blur: { samples: 6, shutter: 1.5 } } }, 30), { samples: 6, rate: 4, shutter: 1.5, fps: 30 });
+  // tmix over 6, keeping the sub-frame 3 past each frame's own (every 4th).
+  assert.equal(motionBlurFilter(6, 30, { rate: 4 }), "tmix=frames=6:weights='1 1 1 1 1 1',select='eq(mod(n\\,4)\\,3)',setpts=N/(30*TB)");
+  const calls = [];
+  const blends = [];
+  const renderer = createHyperframesRenderer({ run: async (command, args) => { calls.push(args); return { ok: true, stdout: "", stderr: "", code: 0 }; } });
+  const result = await renderer.render("/tmp/hf-none", "/tmp/out/heavy.mp4", { motionBlur: { samples: 6, rate: 4, fps: 30 }, blend: async (input, output, options) => blends.push(options) });
+  assert.equal(calls[0][calls[0].indexOf("--fps") + 1], "120");
+  assert.deepEqual(blends, [{ samples: 6, fps: 30, rate: 4 }]);
+  assert.deepEqual(result.motionBlur, { samples: 6, rate: 4 });
+});
+
+test("motion blur: for any shutter, no output frame shows two caption words", async () => {
+  const { snapCaptionChunks } = await import("@launchclip/core/captions.mjs");
+  const { resolveMotionBlur, captionSnapOffset, guardFrames, windowOffsets } = await import("@launchclip/core/motion-blur.mjs");
+  const fps = 30;
+  const raw = [{ start: 0.41, end: 1.234, words: [{ text: "when", start: 0.41, end: 0.7 }, { text: "the", start: 0.71, end: 1.234 }] }, { start: 1.3, end: 2.02, words: [{ text: "cut", start: 1.3, end: 2.02 }] }];
+  for (const samples of [2, 3, 4, 5, 6]) {
+    for (const shutter of [0.25, 0.5, 0.75, 1, 1.25, 1.5]) {
+      const plan = resolveMotionBlur({ motion: { blur: { samples, shutter } } });
+      const chunks = snapCaptionChunks(raw, fps, captionSnapOffset(plan));
+      const changes = chunks.flatMap((chunk) => [chunk.start, chunk.end, ...chunk.words.flatMap((word) => [word.start, word.end])]);
+      const guarded = new Set(guardFrames(plan, changes, fps));
+      // The sub-frame times a frame blends: its heavy window, or on a guarded
+      // frame (its caption band) the one-frame window of rate samples.
+      const window = (frame, n) => { const [a, b] = windowOffsets(n); return Array.from({ length: b - a + 1 }, (_, k) => (frame * plan.rate + a + k) / (fps * plan.rate)); };
+      for (const t of changes) {
+        const f = Math.round(t * fps);
+        for (let frame = Math.max(0, f - 2); frame <= f + 2; frame += 1) {
+          const own = window(frame, guarded.has(frame) ? plan.rate : plan.samples);
+          assert.ok(own.every((s) => s < t) || own.every((s) => s > t), `samples ${samples} shutter ${shutter} t=${t}: frame ${frame} blends across the change`);
+        }
+      }
+      if (!plan.overlap) assert.equal(guarded.size, 0);
+    }
+  }
+});
+
+test("motion blur: guarded frames take the feathered caption band from the one-frame blend", async () => {
+  const { guardRect, MOTION_BLUR_GUARD_FILE } = await import("@launchclip/core/motion-blur.mjs");
+  const rect = guardRect({ bandTop: 0.52, band: { height: 0.12 } }, { width: 1080, height: 1920 });
+  assert.deepEqual(rect, { x: 0, y: 922, width: 1080, height: 384 });
+  assert.deepEqual(guardRect({ bandTop: 0.52, band: { height: 0.12 } }, { width: 1080, height: 1920 }, true), { x: 0, y: 0, width: 1080, height: 1920 });
+  const filter = motionBlurFilter(6, 30, { rate: 4, guard: { frames: [3, 4, 5, 9], rect } });
+  assert.match(filter, /^\[0:v\]split=2/);
+  assert.match(filter, /tmix=frames=4:weights='1 1 1 1',select='eq\(mod\(n\\,4\)\\,2\)'/);
+  assert.match(filter, /crop=1080:384:0:922,format=yuva420p,geq=/);
+  assert.match(filter, /overlay=0:922:enable='between\(n\\,3\\,5\)\+eq\(n\\,9\)'\[v\]$/);
+  const args = motionBlurArgs("in.mp4", "out.mp4", { samples: 6, rate: 4, fps: 30, guard: { frames: [3], rect } });
+  assert.deepEqual(args.slice(args.indexOf("-filter_complex") + 2, args.indexOf("-filter_complex") + 6), ["-map", "[v]", "-map", "0:a?"]);
+  // A shutter of one frame or less needs no guard: the plain filter.
+  assert.equal(motionBlurFilter(3, 30, { guard: { frames: [3], rect } }), motionBlurFilter(3, 30));
+  assert.equal(MOTION_BLUR_GUARD_FILE, "launchclip-motion-blur.json");
 });
 
 test("text hold: a ui-scene is read by its headlines; panel labels are glanced at", () => {
@@ -213,4 +285,14 @@ test("word-chip captions: one word at a time even when a word is shorter than th
     const shown = plan.nodes.filter((line) => (captionElementStateAt(index, line.id, t).opacity ?? 0) > 0.02);
     assert.ok(shown.length <= 1, `two words at ${t.toFixed(3)} s`);
   }
+});
+
+test("holds gate: a ui-scene's component changes (typing, lines, unlocks) count as motion", async () => {
+  const { holdGate } = await import("../src/movement_guardrails.js");
+  const terminal = (lines) => ({ kind: "terminal", rect: { x: 60, y: 400, width: 960, height: 700 }, at: 0, enter: "cut", props: { title: "t", prompt: "make a sound", typeAt: 0.2, lines } });
+  const story = (lines) => resolveStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand: BRAND, scenes: [{ id: "s1", module: "ui-scene", start: 0, end: 8, params: { elements: [terminal(lines)] } }] });
+  const still = holdGate(story([]));
+  assert.ok(still.findings.some((finding) => finding.rule === "static-hold"), "a terminal that only types its prompt holds still");
+  const typing = holdGate(story([1.5, 2.5, 3.5, 4.5, 5.5, 6.5].map((at, k) => ({ at, key: `k${k}`, text: "line" }))));
+  assert.deepEqual(typing.findings.filter((finding) => finding.rule === "static-hold"), [], JSON.stringify(typing.findings));
 });

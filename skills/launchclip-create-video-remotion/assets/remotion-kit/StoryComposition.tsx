@@ -32,8 +32,15 @@
 //   one wrapper around every scene and the world camera that drifts,
 //   breathes and kicks, from the same per-frame samples the HyperFrames
 //   compiler sets on #lc-feel;
+// - story lighting (kit/core/lighting.mjs): the under group inside every plate
+//   over its background, the over group above every scene and under the dot
+//   wipes, each layer's style evaluated per frame from the same functions the
+//   HyperFrames compiler turns into GSAP;
 // - dot wipes (kit/core/dot-wipe.mjs): the same halftone SVG and CSS rule as
 //   HyperFrames over every scene, its cover (--lc-dw) evaluated per frame;
+// - light sweeps (kit/core/light-sweep.mjs): the same streak markup and CSS,
+//   screen-blended over every scene, the progress (--lc-ls) per frame, and
+//   push-blur's smear as the same SVG filter on the outgoing scene;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
@@ -42,7 +49,7 @@ import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
 import { placeholderModel, resolveModule } from "../core/modules.mjs";
 // @ts-ignore plain ESM from kit/core
-import { holdTime, layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs";
+import { holdTime, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearFilterSvg } from "../core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -57,6 +64,8 @@ import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle
 import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSvg, layoutFillClip, panelFillPlan, sceneBackground } from "../core/backgrounds.mjs";
 // @ts-ignore plain ESM from kit/core
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "../core/plates.mjs";
+// @ts-ignore plain ESM from kit/core
+import { LIGHT_OVER_ID, LIGHT_Z, lightLayerStyle, lightOverStyle, lightPlan } from "../core/lighting.mjs";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -75,6 +84,8 @@ import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } f
 import { feelPlan, feelStateAt, feelTransform } from "../core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
 import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "../core/dot-wipe.mjs";
+// @ts-ignore plain ESM from kit/core
+import { LIGHT_SWEEP, lightSweepCss, lightSweepHtml, lightSweepProgress, lightSweeps } from "../core/light-sweep.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -154,6 +165,25 @@ export const BackgroundField: React.FC<{ plan: any; t: number }> = ({ plan, t })
   </AbsoluteFill>
 );
 
+// Story lighting (kit/core/lighting.mjs): light layers at absolute time t.
+// Matches the HyperFrames .lc-light-layer markup (under: inside the plate;
+// over: #lc-light-over above every scene).
+export const LightField: React.FC<{ layers: any[]; t: number }> = ({ layers, t }) => (
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} data-launchclip-light="under" aria-hidden>
+    {layers.map((layer: any) => <div key={layer.id} style={lightLayerStyle(layer, t) as React.CSSProperties} />)}
+  </AbsoluteFill>
+);
+
+const LightOver: React.FC<{ plan: any; zIndex: number }> = ({ plan, zIndex }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  return (
+    <div id={LIGHT_OVER_ID} data-launchclip-light="over" aria-hidden style={{ ...(lightOverStyle({ width, height }) as React.CSSProperties), zIndex }}>
+      {plan.over.map((layer: any) => <div key={layer.id} style={lightLayerStyle(layer, frame / fps) as React.CSSProperties} />)}
+    </div>
+  );
+};
+
 // One background or plate layer at absolute time t: its style and SVG, or, for
 // a video plate, its clip muted and cover-cropped in the layer's box, playing
 // from video.start `from` frames into the enclosing Sequence. Matches the
@@ -215,17 +245,23 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, drift, zoom, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, zoom, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
-  const style = layerStyle(layerStateAt(t, tweens, getEase));
+  const state = layerStateAt(t, tweens, getEase);
+  const style = layerStyle(state);
+  // push-blur's directional smear (transitions.mjs smearX / smearY): an SVG
+  // feGaussianBlur on the outer element, as the HyperFrames #lc-scene.
+  const smearId = smearFilterId(`r${React.useId()}`);
+  const smearing = state.smearX > 0 || state.smearY > 0;
   // freeze: true holds the first frame (the loop clone), a number holds that frame (an overview hold).
   const content = freeze === true ? <Freeze frame={0}>{children}</Freeze> : typeof freeze === "number" ? <Freeze frame={freeze}>{children}</Freeze> : children;
   const own = (
     <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate && !transparent ? { backgroundColor: background } : {}) }}>
       {field ? <AmbientField blobs={field} t={t} /> : null}
       {backdrop ? <BackgroundField plan={backdrop} t={t} /> : null}
+      {light?.length ? <LightField layers={light} t={t} /> : null}
       {drift ? <AbsoluteFill style={driftStyle(drift, t)}>{content}</AbsoluteFill> : content}
     </AbsoluteFill>
   );
@@ -237,7 +273,8 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
     </AbsoluteFill>
   ) : own;
   return (
-    <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
+    <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}), ...(smearing ? { filter: `url(#${smearId})` } : {}) }}>
+      {smearing ? <div style={{ position: "absolute" }} dangerouslySetInnerHTML={{ __html: smearFilterSvg(smearId, state.smearX, state.smearY) }} /> : null}
       {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
     </AbsoluteFill>
   );
@@ -434,6 +471,22 @@ const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
   );
 };
 
+// One light sweep (kit/core/light-sweep.mjs) over its window: the HyperFrames
+// markup and CSS, its progress set per frame on --lc-ls.
+const LightSweepLayer: React.FC<{ sweep: any }> = ({ sweep }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const t = sweep.start + frame / fps;
+  const html = React.useMemo(() => ({ __html: lightSweepHtml(width, height, sweep) }), [width, height, sweep]);
+  const css = React.useMemo(() => lightSweepCss(width, height), [width, height]);
+  return (
+    <>
+      <style>{css}</style>
+      <div className="lc-light-sweep" aria-hidden style={{ zIndex: LIGHT_SWEEP.z.remotion, ["--lc-ls" as any]: lightSweepProgress(sweep, t) }} dangerouslySetInnerHTML={html} />
+    </>
+  );
+};
+
 const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   const frame = useCurrentFrame();
   const defs = React.useMemo(() => ({ __html: mediumDefs(plan) }), [plan]);
@@ -495,6 +548,9 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const geometry = React.useMemo(() => profileGeometry({ width: story.format.width, height: story.format.height }), [story]);
   const fieldFor = (scene: any) => (field && !scenePlatePlan(story, scene) && sceneBackground(story, scene) ? field.blobs : null);
   const backdropFor = (scene: any) => scenePlatePlan(story, scene) ?? (backdrop && sceneBackground(story, scene) ? backdrop : null);
+  // Story lighting: the under group on every plate that draws a background, as the HyperFrames compiler.
+  const light = React.useMemo(() => lightPlan(story), [story]);
+  const lightFor = (scene: any) => (light?.under.length && (scenePlatePlan(story, scene) || sceneBackground(story, scene)) ? light.under : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
   const backdrops = React.useMemo(() => (plan?.mode === "world" ? worldBackdrops(story, plan, windows) : null), [story, plan, windows]);
   const covered = Boolean(backdrops?.segments.every((segment: any) => segment.plan));
@@ -504,6 +560,12 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // The story feel (kit/core/kinetic.mjs) and dot wipes (kit/core/dot-wipe.mjs), as the HyperFrames compiler.
   const feel = React.useMemo(() => feelPlan(story, { windows, camera: plan, words: Array.isArray(__captions) ? __captions : [] }), [story, windows, plan, __captions]);
   const wipes = React.useMemo(() => dotWipes(story, windows), [story, windows]);
+  const sweeps = React.useMemo(() => lightSweeps(story, windows), [story, windows]);
+  const sweepLayers = sweeps.map((sweep: any) => (
+    <Sequence key={sweep.id} name={`light-sweep → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
+      <LightSweepLayer sweep={sweep} />
+    </Sequence>
+  ));
   const wipeLayers = wipes.map((wipe: any) => (
     <Sequence key={wipe.id} name={`dot-wipe → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
       <DotWipeLayer wipe={wipe} />
@@ -526,7 +588,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     const sceneLayer = ({ entry, render, model }: any) => (
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
-          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={zoomFor(entry, model)}
+          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={zoomFor(entry, model)}
           placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
           parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
@@ -536,6 +598,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     return (
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
         {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
+        {world && light?.under.length ? <LightField layers={light.under} t={frame / fps} /> : null}
         {feelWrap(<>
         <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && (backdrop || covered))} backdrops={backdrops} background={background}>
           {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
@@ -549,7 +612,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           ))) : null}
           {loop ? (
             <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
-              <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={world ? null : fieldFor(loop.scene)} backdrop={world ? null : backdropFor(loop.scene)} placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>
+              <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={world ? null : fieldFor(loop.scene)} backdrop={world ? null : backdropFor(loop.scene)} light={world ? null : lightFor(loop.scene)} placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>
             </Sequence>
           ) : null}
           {loop && world ? loopRiders.map((rider: any) => (
@@ -563,6 +626,9 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
         </AbsoluteFill>
         </>)}
+        {/* Light sweeps add light (screen) to everything under them; their own group blends, as the HyperFrames root does. */}
+        {sweepLayers.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLayers}</AbsoluteFill> : null}
+        {light?.over.length ? <LightOver plan={light} zIndex={CAMERA_STACK.scenes} /> : null}
         {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {wipeLayers}
@@ -580,7 +646,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
     <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
+      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
     </Sequence>
@@ -596,10 +662,12 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
-          <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)}>{loop.render()}</SceneLayer>
+          <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)} light={lightFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
       </>)}
+      {sweepLayers}
+      {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
       {wipeLayers}
       {medium ? <MediumLayer plan={medium} /> : null}
       <BrandFrame story={story} />

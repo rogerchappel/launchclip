@@ -45,7 +45,13 @@ export function motionMeasures(motion) {
     hook_events: hookEventSeconds(motion, HOOK_WINDOW_SECONDS).length,
     still_share: numberOrNull(motion.motion?.still_share),
     longest_still_seconds: numberOrNull(motion.motion?.longest_still_seconds),
-    camera_moves_per_min: numberOrNull(motion.motion?.camera_moves_per_minute)
+    camera_moves_per_min: numberOrNull(motion.motion?.camera_moves_per_minute),
+    moving_sharpness_ratio: numberOrNull(motion.look?.moving_sharpness_ratio),
+    soft_frame_share: numberOrNull(motion.look?.soft_frame_share),
+    change_p99: numberOrNull(motion.look?.change_p99),
+    top_light_ratio: numberOrNull(motion.look?.top_light_ratio),
+    midtone_share: numberOrNull(motion.look?.midtone_share),
+    burst_change_mean: numberOrNull(motion.look?.burst_change_mean)
   };
 }
 

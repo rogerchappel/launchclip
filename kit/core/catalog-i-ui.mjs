@@ -21,10 +21,16 @@ import {timingRules} from './catalog-b-base.mjs';
 import {mixColor} from './catalog-b-base.mjs';
 import {abs, el} from './catalog-h-view.mjs';
 import {UI_KINDS} from './ui-runtime.mjs';
+import {uiDepthAt, uiStageProject} from './ui-paint.mjs';
 import {captionBandAt, profileGeometry} from './layout-check.mjs';
 
-const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'cut']);
-const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'props', 'beats', 'children', 'tilt', 'z', 'bleed', 'cue'];
+const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'cut']);
+const EXITS = Object.freeze(['lift', 'rack']);
+const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue'];
+// The entrance an element makes when it names none: a headline racks into
+// focus, a bloom is its own swell, everything else rises.
+const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut'});
+const MAX_FLASHES = 12;
 const MAX_ELEMENTS = 120;
 // Text props checked for length and escaped by the painter; headline text must fit its rect.
 const HEADLINE_ADVANCE = 0.6;
@@ -34,7 +40,7 @@ const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh
 const TEXT_KINDS = new Set(['headline', 'chip']);
 // The smallest rect a panel draws legibly in (design px); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-const MIN_SIZE = Object.freeze({meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
+const MIN_SIZE = Object.freeze({bloom: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
 const LOCK_CARD_MIN = 110;
 
 /** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
@@ -66,6 +72,26 @@ export function uiTiltBox(rect, tilt) {
 }
 
 /**
+ * A top-level box as the stage shows it (design px): moved by its depth and
+ * the stage's dolly, then turned by the stage's tilt, as the painter does
+ * (uiDepthAt, uiStageProject). The dolly runs on straight lines, so the
+ * bounds of the box at the scene's start and end hold it all scene long.
+ */
+export function uiStageBox(box, depth, stage, width, height) {
+  if (!stage && !depth) return box;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const t of [0, stage?.duration ?? 0]) {
+    const d = uiDepthAt(depth, stage, t, width, height);
+    for (const [px, py] of [[box.x, box.y], [box.x + box.width, box.y], [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]]) {
+      const mx = d.cx + d.x + (px - d.cx) * d.s, my = d.cy + d.y + (py - d.cy) * d.s;
+      const [sx, sy] = stage?.tilt ? uiStageProject(mx, my, stage.tilt, width, height) : [mx, my];
+      x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
+    }
+  }
+  return {x: r2(x0), y: r2(y0), width: r2(x1 - x0), height: r2(y1 - y0)};
+}
+
+/**
  * The painter's theme from the brand: dark surfaces from bg, text from paper,
  * the accent for state, and an alert colour (params.alert, default a warm red)
  * for the broken "before" state.
@@ -81,7 +107,7 @@ export function uiTheme(colors, alert = '#ff4b3e') {
 }
 
 function uiResolve(params, ctx) {
-  const b = createHBase('ui-scene', params, ctx, {allowed: ['elements', 'alert'], required: ['elements']});
+  const b = createHBase('ui-scene', params, ctx, {allowed: ['elements', 'alert', 'stage'], required: ['elements']});
   const {check, unit} = b;
   const p = b.params;
   const W = r2(b.canvas.width / unit), H = r2(b.canvas.height / unit);
@@ -98,6 +124,9 @@ function uiResolve(params, ctx) {
   const placedBand = captionBandAt(cap, b.canvas, ctx.captions ?? 'auto');
   const band = {x: r2(placedBand.x / unit), y: r2(placedBand.y / unit), width: r2(placedBand.width / unit), height: r2(placedBand.height / unit)};
   const alert = p.alert === undefined ? '#ff4b3e' : b.resolveColor(p.alert, 'params.alert', '#ff4b3e');
+  const stageView = p.stage === undefined ? undefined : stageOf(check, p.stage, b.duration);
+  // Where a top-level box shows once depth and the stage have moved it.
+  const shown = (box, depth) => uiStageBox(box, depth, stageView, W, H);
   let count = 0;
   const ids = new Set();
   let firstAt = Infinity;
@@ -114,19 +143,35 @@ function uiResolve(params, ctx) {
     const min = MIN_SIZE[kind];
     if (min && (rect.width + 0.5 < min.width || rect.height + 0.5 < min.height)) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; a ${kind} needs at least ${min.width}×${min.height} to draw legibly`);
     const tilt = raw.tilt === undefined ? undefined : tiltOf(check, raw.tilt, `${path}.tilt`);
-    const footprint = uiTiltBox(rect, tilt);
-    if (!parent && !bleed && !TEXT_KINDS.has(kind)) {
+    let depth = 0;
+    if (raw.depth !== undefined) {
+      if (parent) check.fail(`${path}.depth`, 'sets a layer of the scene; only top-level elements take depth (a child sits at its parent\'s)');
+      depth = check.num(raw.depth, `${path}.depth`, 0, 1);
+    }
+    const footprint = parent ? uiTiltBox(rect, tilt) : shown(uiTiltBox(rect, tilt), depth);
+    // A bloom fades to nothing at its edges: light may run off the stage.
+    if (!parent && !bleed && !TEXT_KINDS.has(kind) && kind !== 'bloom') {
       const r = footprint, eps = 0.5;
       if (r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps) {
-        check.fail(`${path}.rect`, `${tilt ? `turned by its tilt, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
+        check.fail(`${path}.rect`, `${tilt || depth || stageView ? `${tilt ? 'turned by its tilt' : 'placed by its depth and the stage'}, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
       }
     }
     const at = time(raw.at, `${path}.at`);
     if (parent && at + 1e-9 < parent.at) check.fail(`${path}.at`, `is before its parent enters (${parent.at} s)`);
-    firstAt = Math.min(firstAt, at);
+    // A bloom is light, not something on screen.
+    if (kind !== 'bloom') firstAt = Math.min(firstAt, at);
     const out = raw.out === undefined ? undefined : time(raw.out, `${path}.out`);
     if (out !== undefined && out <= at) check.fail(`${path}.out`, 'must be after at');
-    const enter = raw.enter === undefined ? 'up' : check.oneOf(raw.enter, `${path}.enter`, ENTERS);
+    const enter = raw.enter === undefined ? DEFAULT_ENTER[kind] ?? 'up' : check.oneOf(raw.enter, `${path}.enter`, ENTERS);
+    // An element that racked into focus racks out of it.
+    const exit = raw.exit === undefined ? (enter === 'focus' ? 'rack' : 'lift') : check.oneOf(raw.exit, `${path}.exit`, EXITS);
+    let flashAt = undefined;
+    if (raw.flashAt !== undefined) {
+      const list = Array.isArray(raw.flashAt) ? raw.flashAt : [raw.flashAt];
+      if (!list.length || list.length > MAX_FLASHES) check.fail(`${path}.flashAt`, `must be a time or a list of 1–${MAX_FLASHES} times`);
+      flashAt = list.map((value, k) => time(value, `${path}.flashAt${Array.isArray(raw.flashAt) ? `[${k}]` : ''}`)).sort((x, y) => x - y);
+    }
+    const flashTone = raw.flashTone === undefined ? undefined : check.oneOf(raw.flashTone, `${path}.flashTone`, ['white', 'accent']);
     let id = undefined;
     if (raw.id !== undefined) {
       id = check.str(raw.id, `${path}.id`, 40);
@@ -142,11 +187,12 @@ function uiResolve(params, ctx) {
       if (kind === 'headline' && beat.set.text !== undefined) headlineFits(check, {...props, ...beat.set}, rect, `${path}.beats[${k}].set`);
       const beatAt = time(beat.at, `${path}.beats[${k}].at`);
       const cue = beat.cue === undefined ? null : check.str(beat.cue, `${path}.beats[${k}].cue`, 32);
-      if (cue) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', cue});
+      // Every beat is a change on screen (the holds gate counts events); only a cue makes a sound.
+      b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
       return {at: beatAt, set: beat.set};
     }).sort((x, y) => x.at - y.at);
     if (!parent && !bleed && TEXT_KINDS.has(kind)) {
-      const box = uiTextBox(kind, props, rect, beats), eps = 0.5;
+      const box = shown(uiTextBox(kind, props, rect, beats), depth), eps = 0.5;
       const outside = box.x < safe.x - eps || box.y < safe.y - eps || box.x + box.width > safe.x + safe.width + eps || box.y + box.height > safe.y + safe.height + eps;
       const inBand = box.y < band.y + band.height && box.y + box.height > band.y && box.x < band.x + band.width && box.x + box.width > band.x;
       if (outside || inBand) check.fail(`${path}.rect`, `sets its text in {x: ${box.x}, y: ${box.y}, width: ${box.width}, height: ${box.height}}, which must sit inside the platform safe zone {x: ${safe.x}, y: ${safe.y}, width: ${safe.width}, height: ${safe.height}} (design px) and clear of the caption band (y ${band.y}–${r2(band.y + band.height)}): headlines and chips are the text people read`);
@@ -157,9 +203,15 @@ function uiResolve(params, ctx) {
       if (n && room + 0.5 < LOCK_CARD_MIN) check.fail(`${path}.rect`, `gives each of its ${n} cards ${Math.round(room)} px; a card needs at least ${LOCK_CARD_MIN} px (height ${Math.ceil(rect.height + (LOCK_CARD_MIN - room) * n)} or more)`);
     }
     const cue = raw.cue === undefined ? ENTER_CUES[enter] ?? null : raw.cue === null ? null : check.str(raw.cue, `${path}.cue`, 32);
-    if (cue && !parent) b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', cue});
+    // The component's own timed changes (typing, a line arriving, an unlock, a scan, a snap: any
+    // prop named at or ending in At) are changes on screen too, so the holds gate sees them.
+    for (const t of propTimes(props).filter((v) => v > at && v <= b.duration).slice(0, 24)) b.events.push({id: `${b.id}-state-${count}-${b.events.length}`, name: 'state', time: rt(b.start + t), role: 'emphasis'});
+    // A moving entrance (a focus pull included) and each flash are changes on screen; a cut is not.
+    if (!parent && enter !== 'cut') b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', ...(cue ? {cue} : {})});
+    if (flashAt) flashAt.forEach((t, k) => b.events.push({id: `${b.id}-flash-${count}-${k}`, name: 'flash', time: rt(b.start + t), endTime: rt(b.start + t + 0.35), role: 'emphasis'}));
     const node = {kind, rect, at, enter, props, beats,
-      ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(tilt ? {tilt} : {}),
+      ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(exit !== 'lift' ? {exit} : {}), ...(tilt ? {tilt} : {}),
+      ...(depth ? {depth} : {}), ...(flashAt ? {flashAt} : {}), ...(flashTone ? {flashTone} : {}),
       ...(raw.z !== undefined ? {z: check.int(raw.z, `${path}.z`, 0, 50)} : {}),
       ...(raw.enterDuration !== undefined ? {enterDuration: check.num(raw.enterDuration, `${path}.enterDuration`, 0.1, 1.5)} : {}),
       ...(raw.dist !== undefined ? {dist: check.num(raw.dist, `${path}.dist`, 0, 2000)} : {}),
@@ -176,18 +228,20 @@ function uiResolve(params, ctx) {
   // A scene that opens the video should show something at frame 0: enter: "cut" at 0.
   if (firstAt > 0.6) check.fail('params.elements', `leave the scene empty until ${r2(firstAt)} s; put something on screen by 0.6 s`);
 
-  const spec = {start: b.start, width: W, height: H, unit: r2(unit), theme: uiTheme(b.colors, alert), fonts: {display: b.fonts.display, body: b.fonts.body, mono: b.fonts.meta}, elements};
+  const spec = {start: b.start, width: W, height: H, unit: r2(unit), theme: uiTheme(b.colors, alert), fonts: {display: b.fonts.display, body: b.fonts.body, mono: b.fonts.meta}, elements, ...(stageView ? {stage: stageView} : {})};
   const content = {ui: {[`${b.id}-ui`]: spec}, elementCount: count, captionBand: band};
   const model = b.finish(content);
   // The layout checks see each element: text as text at the box it sets in,
   // panels as media at their (tilted) footprint, which may run under the
-  // captions. The largest text box is the module's rect (the hero), else the
-  // largest panel. No hold drift: settled elements hold still.
+  // captions, both where depth and the stage show them. The largest text box
+  // is the module's rect (the hero), else the largest panel. Blooms are light
+  // and do not count. No hold drift: settled elements hold still (the
+  // stage's dolly is the camera).
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
   // Bleed panels count too (they fill the frame); bleed text is decoration.
   const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
-    rect: TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt)}))
-    .filter(({k, text}) => !(text && p.elements[k].bleed));
+    rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), bloom: element.kind === 'bloom'}))
+    .filter(({k, text, bloom}) => !bloom && !(text && p.elements[k].bleed));
   model.layout.drift = false;
   if (parts.length) {
     const area = (r) => r.width * r.height;
@@ -205,6 +259,33 @@ function uiResolve(params, ctx) {
     }));
   }
   return model;
+}
+
+/**
+ * params.stage: {tilt (deg, the whole scene turned top-away about rotateX, a
+ * camera looking down), dolly {x, y (design px the front layer travels over
+ * the scene), scale (the front layer's zoom by the scene's end)}}. The spec
+ * carries the scene's duration, which the dolly runs over.
+ */
+function stageOf(check, stage, duration) {
+  check.obj(stage, 'params.stage', ['tilt', 'dolly'], []);
+  const out = {tilt: stage.tilt === undefined ? 0 : check.num(stage.tilt, 'params.stage.tilt', -20, 20)};
+  if (stage.dolly !== undefined) {
+    check.obj(stage.dolly, 'params.stage.dolly', ['x', 'y', 'scale'], []);
+    out.dolly = {x: stage.dolly.x === undefined ? 0 : check.num(stage.dolly.x, 'params.stage.dolly.x', -400, 400),
+      y: stage.dolly.y === undefined ? 0 : check.num(stage.dolly.y, 'params.stage.dolly.y', -400, 400),
+      scale: stage.dolly.scale === undefined ? 1 : check.num(stage.dolly.scale, 'params.stage.dolly.scale', 0.8, 1.3)};
+  }
+  out.duration = r2(duration);
+  return out;
+}
+
+/** Every time (seconds from the scene start) among a component's props: keys named at or ending in At, at any depth. */
+function propTimes(value, key = '') {
+  if (typeof value === 'number') return /^(at|[a-z][a-z0-9]*At)$/.test(key) && Number.isFinite(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap((item) => propTimes(item, key));
+  if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => propTimes(v, k));
+  return [];
 }
 
 function tiltOf(check, tilt, path) {
@@ -267,8 +348,9 @@ export function uiReadingWords(params) {
 export const uiScene = {
   id: 'ui-scene',
   describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips), each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
-  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}), out (s, optional), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
-    alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)'},
+  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
+    alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)',
+    stage: '{tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)'},
   events: ['enter', 'beat'],
   timing: {...timingRules({rules: ['the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands', 'every time is seconds from the scene start, inside the scene', 'a child enters no earlier than its parent']}), leadIn: 0},
   variants: ['default'],

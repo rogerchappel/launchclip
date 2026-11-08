@@ -683,6 +683,54 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
   once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
   with blur in one filter).
+- `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
+  `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
+  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
+  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
+  horizontal (20–80, default 64), sweep across the middle of the frame, each
+  over 0.78 of the transition, started 0.08 apart, fading in and out over
+  the first and last 22 % of its travel, over a faint wash of the colour that
+  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
+  Remotion blends their group the same way), so nothing opaque ever covers
+  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
+  4 px, a white-hot centre line); a streak moves about 60 px a frame at
+  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
+  rather than stepping it. Both renderers draw the same markup and CSS and
+  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
+  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
+  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  bright parts melt into glowing blobs on a dark field) and drifts forward to
+  1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
+  `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and
+  clears its veil and scale by the end (`power2.out`). Largest frame-to-frame
+  change measured on a dark interface reel: 25 (17.6 with heavy motion
+  blur), spread over about ten frames.
+- `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
+  is where the content travels, `"up"` by default): the camera pushes into the
+  outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
+  direction, `power2.in`) with a directional smear along the travel
+  (`smearX` / `smearY`, a deviation up to 2.6 % of that span: 50 px on 1920)
+  and an exposure dip (`dip`, `brightness(0.55)` at the cut). The cut is at
+  48 % of the transition, a 10 % crossfade; the incoming plate is held hidden,
+  then arrives 6 % of the frame back along the travel, at 1.06 and defocused
+  (`focus`: `blur(14px) brightness(0.6)`), and settles (`expo.out`) while it
+  racks sharp (`power2.out`: two thirds of the blur gone in four frames).
+  The smear is an SVG `feGaussianBlur` with one non-zero deviation, drawn on
+  the layer's outer element (`smearFilterId`, `smearFilterSvg`): HyperFrames
+  tweens its `attr.stdDeviation` and switches the element's `--lc-smear`
+  filter on with it; Remotion renders the filter per frame from
+  `layerStateAt`. Largest frame-to-frame change measured: 8.
+- Layer state gains `veil`, `dip` and `focus` (one CSS filter each, like
+  `rackIn`: `veilFilter`, `dipFilter`, `focusFilter`, so GSAP never mixes two
+  filters on a layer) and `smearX` / `smearY` (`SMEAR_PROPS`, never part of
+  the layer's own filter). Incoming tweens that start after the transition
+  does are preceded by a hold at their first value (`held`), as the
+  dot-wipe's hidden first half, so the incoming plate is in its first state
+  from the transition's first frame.
+- Golden and parity fixture: `examples/story/cinematic-transitions-9x16`
+  (three interface scenes on a dark brand, a light-sweep and a push-blur,
+  `motion.blur {samples: 6, shutter: 1.5}`).
 
 ### Gates
 
@@ -2267,15 +2315,16 @@ out tuned UI components as `params.elements`, and a painter draws them as DOM,
 a pure function of time, in both renderers.
 
 - **Elements**: `{kind, rect {x, y, width, height}, at, enter, out?, props,
-  beats? [{at, set, cue?}], children?, tilt? {x, y, z}, z?, bleed?, cue?,
-  enterDuration?, dist?, overshoot?, id?}`. Rects are design px: the canvas
+  beats? [{at, set, cue?}], children?, tilt? {x, y, z}, z?, depth?, exit?,
+  flashAt?, flashTone?, bleed?, cue?, enterDuration?, dist?, overshoot?,
+  id?}`. Rects are design px: the canvas
   divided by `unit` (1080 × 1920 in 9:16, 1920 × 1080 in 16:9). Times are
   seconds from the scene start. A beat merges `set` into the props from `at`
   on. `window` and `stack` place `children` relative to themselves.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane (`kit/core/ui-components.mjs`). Props are listed in the planning
+  scan-plane, bloom (`kit/core/ui-components.mjs`). Props are listed in the planning
   prompt's "Interface scenes" section.
 - **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
   the safe zone's top to its foot, clear of the caption band; `bleed: true`
@@ -2319,18 +2368,142 @@ a pure function of time, in both renderers.
   (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%
   of the canvas entering after 0.3 s as a visual change, as the pixel
   measure does.
+- **Focus**: `enter: "focus"` arrives out of focus (14 px blur, scale 1.06,
+  opacity ramping in) and pulls sharp over 0.42 s with an ease-out, so most
+  of the pull lands in the first half. A headline that names no entrance
+  focuses in; a bloom cuts in (it is its own swell); the rest rise (`up`).
+  `exit`: `lift` (default) or `rack`, the focus pull reversed over 0.3 s
+  (blur to 12 px, scale 1.04, fade); an element that focused in racks out.
+  Text is checked at its settled box: the 1.06 arrival is blurred and
+  half-transparent.
+- **Depth**: `depth` 0 (front, default) to 1 (far back), top-level elements
+  only. A deeper element scales toward the stage's point (width / 2,
+  0.45 × height) by up to 0.84, dims to brightness 0.58 and blurs up to
+  5 px; far elements draw first, `z` still lifts one (`uiDepthAt`).
+- **Stage**: `params.stage {tilt, dolly {x, y, scale}}`. `tilt` (−20 to 20
+  deg) turns the whole drawing about rotateX under a 1600 px perspective,
+  top away (a camera looking down). `dolly` is a camera move over the whole
+  scene, a gentle ease from rest to the front layer shifted by x, y (±400
+  design px) and zoomed by `scale` (0.8–1.3); a layer at depth d travels
+  1 − 0.65 d as far (parallax). Deterministic, a function of scene time;
+  nothing moves on its own. The stage and text checks and the layout parts
+  use each top-level box as the stage shows it at the scene's start and end
+  (`uiStageBox`; the dolly runs on straight lines, so those bound it).
+- **Flash**: `flashAt` (seconds, an anchor, or a list of up to 12) lights
+  an element on a beat: peak 0.05 s after, decaying over 0.3 s (`uiFlash`).
+  A panel's surface lifts toward `flashTone` (`white`, default, or
+  `accent`) with a halo; a kind without a surface (headline, chip,
+  waveform...) brightens and glows. Any element, children included.
+- **Bloom**: `kind: "bloom"`, a big soft light sized by its rect (at least
+  200 × 200): it swells from `at` over `rise` (0.22 s) and fades over
+  `duration` (1.4 s); props `tone` (accent), `strength` (1). Layered radial
+  gradients with a white core, screened (`mix-blend-mode: screen`) over the
+  elements behind it. Light, not content: it is not a layout part, does
+  not count as the scene's first thing on screen and may run off the stage.
 
-## Motion blur (`src/motion_blur.js`)
+## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
-`story.motion.blur`: `true` (3 samples) or `{samples: 2 | 3 | 4}`. The
-HyperFrames adapter renders at `fps × samples` and blends each output frame
-from the sub-frames centred on it (`tmix`, then `select`), a 240° shutter at
-3 samples: fast moves smear along their path and settled panels stay sharp.
-Render time grows with the samples. With blur on, the HyperFrames compiler
-snaps caption times to half frames (`snapCaptionChunks`), so a word change
-falls between two frames' sub-frames and no frame blends two words. `story.motion` is part of the segment
-hash, so turning blur on re-renders. The Remotion adapter ignores it. A style
-pack's `motion.feel` and `motion.blur` pass into the story with its grammar.
+`story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
+shutter?: 0.25–1.5}`. The HyperFrames adapter renders `rate` sub-frames per
+output frame (`fps × rate`) and blends each output frame from the `samples`
+consecutive sub-frames centred on it (`tmix`, then `select`): fast moves smear
+along their path and settled panels stay sharp. A sub-frame stands for
+1/rate of a frame, so the blend spans `samples / rate` frames (the shutter);
+`rate = round(samples / shutter)`, at least `samples / 1.5` and at most 8
+(`resolveMotionBlur` gives the effective shutter). Over one frame,
+neighbouring output frames share sub-frames (overlapping windows): a heavy,
+cinematic smear for no extra render cost.
+
+| setting | rate (render cost) | shutter | look |
+| --- | --- | --- | --- |
+| `true` / `{samples: 3}` | 3× | 1 | the original blend; light |
+| `{samples: 4, shutter: 1.33}` | 3× | 1.33 | stronger, same cost |
+| `{samples: 6, shutter: 1.5}` | 4× | 1.5 | heavy: fast moves read soft, as a film camera's |
+| `{samples: 6, shutter: 0.75}` | 8× | 0.75 | short, smooth trails; the most expensive |
+
+The browser render dominates (it scales with `rate`); the blend is one ffmpeg
+pass (`samples` frames mixed per output frame). On a 9:16 interface reel of
+8 s the heavy setting rendered in about 21 s against 5–10 s without blur.
+
+Captions never show two words. The HyperFrames compiler snaps caption times
+(`snapCaptionChunks(chunks, fps, captionSnapOffset(plan))`) into the gap
+between two output frames' one-frame windows (`rate` sub-frames each: half
+frames at rate 3, 0.625 of a frame at rate 4), so a blend of at most one
+frame never straddles a word change. With a shutter over one frame every
+instant lies in two windows, so the compiler also writes
+`launchclip-motion-blur.json` (`{guard: {frames, rect}}`; `guardFrames`,
+`guardRect`) into the project: the output frames whose heavy window
+straddles a change, and the caption band (`bandTop` and band height plus 4 %
+of the frame either side, full width; the whole frame when captions sit in
+footage-layout zones). On those frames the blend takes that rect from the
+one-frame blend, feathered over its top and bottom fifth so the swap never
+shows as a seam. A preview window rebases the frames to its own start.
+`story.motion` is part of the segment hash, so changing the blur
+re-renders. The Remotion adapter ignores it. A style pack's `motion.feel`
+and `motion.blur` pass into the story with its grammar.
+
+## Story lighting (`kit/core/lighting.mjs`)
+
+`story.light` (a style pack's `light`, filled whole by `applyStyle` when the
+story has none) lights a dark frame the way a stage is lit: a soft key glow
+from an edge, a pool on the floor, darker corners, faint haze for mid-tones
+and blooms on key beats. `{preset?, key?, pool?, vignette?, haze?, wrap?,
+pulses?}`; `lightErrors()` and `validateStory` check it (story.mjs keeps its
+own copy of the ranges, `STORY_LIGHT_*`, in step by test/lighting.test.js).
+
+- **Presets** (`LIGHT_PRESETS`): `none`, `studio` (soft top-centre key, floor
+  pool, gentle corners and haze), `spot` (narrower, brighter key, deep
+  corners), `soft` (wide, low key, more haze). A story's layer fields win
+  field by field; `false` turns a layer off; without a preset only the named
+  layers draw, at the kit's defaults. `preset: "none"` alone is no light, and
+  the compile is byte for byte today's.
+- **Layers** (`LIGHT_PARAMS`; x, y are shares of the canvas, intensity 0–1):
+  `key {x [0.5], y [0], size 0.3–2 [1], intensity [0.6], drift [0.5], color}`
+  a large soft radial glow hung from an edge (top centre by default), drifting
+  and breathing slowly (x, y, scale and opacity waves; `drift: 0` holds it);
+  `pool {x, size, intensity [0.4], color}` a wide glow on the floor;
+  `vignette {intensity [0.5]}` corners toward black; `haze {intensity [0.4],
+  speed 0–2 [1]}` three wide, faint bands of the key colour washed toward
+  paper drifting past each other (the frame's mid-tones); `wrap {intensity
+  [0.35]}` the key again, screen-blended over the scenes at a fraction, so
+  panels near the light lift a little. `color` is `accent` (default),
+  `primary`, `paper` or `#rrggbb`.
+- **Pulses**: `[{at, x [0.5], y [0.45], radius 0.05–1 [0.35] (of the short
+  side), intensity [0.7], duration 0.2–4 s [1.2], color}]`, at most 24. A
+  soft bloom swells (sine.out, 30% of the duration, at most 0.4 s), grows
+  from 0.72× to 1.12× (power2.out) and fades (sine.inOut). `at` is story
+  seconds or a time anchor (`word:<text>[#n][±s]`, `beat:<n>`,
+  `downbeat:<n>`), resolved by `resolveStory`.
+- **Where they draw.** `lightPlan(story)` → `{under, over}`. The under group
+  (haze, key, pool, pulses) sits inside every plate that draws a background,
+  over its background and under the content (HyperFrames
+  `#lc-light-under-<scene>`, Remotion `LightField` in `SceneLayer`); a pulse
+  is emitted only in the plates whose window it overlaps. The over group
+  (wrap and the pulses' halos, `mix-blend-mode: screen`, then the vignette)
+  is one full-canvas layer, `#lc-light-over`, above every scene and the
+  camera and outside the story feel's wrapper, under the dot wipes, the
+  medium, the brand frame and the captions (HyperFrames z-index 78000,
+  Remotion 47; in a world-camera story it is a root sibling after the
+  overlays). In world mode the under group sits once, fixed, in `#lc-bg`
+  under the camera. Footage-led stories and module reviews have no light.
+- **Pure time.** Layers have the background-layer shape (box, inline CSS,
+  wave axes) plus an opacity axis and, for a pulse, an envelope.
+  `lightTweens(layer, from, to)` are the GSAP fromTo tweens (axes as
+  half-period sine.inOut segments, pulses as swell, fade and growth);
+  `lightLayerStyle(layer, t)` is the Remotion style from the same functions,
+  so any seek gives the same pixels. Ambient level `off` stills the drift and
+  the haze; pulses still play.
+- **Text stays readable.** Every alpha laid over bg is clamped so paper text
+  keeps 4.5:1 on the lit tone (or bg's own ratio when that is lower), stacking
+  haze, key and pulse in order; the vignette is clamped the same way against
+  the darkened bg. The wrap and halos are screen blends at a fraction of the
+  key, so white text does not move.
+- **Lit dot grid.** `background: {kind: "dot-grid", params: {lit}}` (0–1,
+  default 0 = today's even grid) masks the dots by the key's falloff (and,
+  fainter, the pool's): full under the light, `1 − lit` elsewhere, and
+  brightens them by up to 1.6× under the light (still clamped). Without a
+  story light the mask uses the `studio` key. `litMask(story, lit)` is the
+  mask; it is in shares of the box, so a panel fill gets it too.
 
 ## Zooms inside a shot (`kit/core/zooms.mjs`)
 
@@ -2497,6 +2670,45 @@ beat, then dives into the incoming shot. World mode only.
 Validation (`kit/core/story.mjs`): `camera.mode: "world"`; track 0; `dur` ≥ 2
 s; `span` "chapter" or 3–8; `hold` 0 … `dur − 1`; never into the first shot;
 at most one overview per 60 s.
+
+## Look measures (`src/render_look_analysis.js`)
+
+The motion report (`analyzeRenderMotion`, `launchclip.render-motion.v1`)
+carries a `look` block from a fourth pass: every frame grey at 30 fps on a
+grid with a 360 px short side (360×640 for 9:16), streamed so a long render
+stays in constant memory. A 720p upload and a 1080p render read on the same
+grid. Per frame, *change* is the mean absolute grey difference from the
+previous frame and *sharpness* is the variance of the 4-neighbour Laplacian.
+
+| Measure | Definition | Gate |
+|---|---|---|
+| `moving_sharpness_ratio` | median sharpness of moving frames (change > 3) ÷ that of held frames (change < 0.4; all frames when fewer than 3 are held) | p90 ceiling |
+| `soft_frame_share` | share of frames with sharpness under 35% of the held median | p10 floor |
+| `change_p99` | 99th percentile of change (`max_change` is reported, not gated) | p90 ceiling |
+| `top_light_ratio` | median over frames of the top band's mean grey (rows 0–17.2%) ÷ the middle band's (39–61%) | p10 floor |
+| `midtone_share` | mean share of pixels with grey 29–109 | p10 floor |
+| `burst_change_mean` | mean change over frames with change > 2.5 | p10 floor |
+
+A measure is null when there are too few frames to say (fewer than 3 moving
+frames for the ratio). The sharpness measures are against the video's own
+held frames, so platform compression moves them little.
+
+They are profile measures (`PROFILE_MEASURES`, listed in `LOOK_MEASURES` and
+`MOTION_MEASURES`). `launchclip profile measure` records them, and
+`cinematicMotionExpectations` turns a profile's bands into
+`maximum_moving_sharpness_ratio`, `minimum_soft_frame_share`,
+`maximum_change_p99`, `minimum_top_light_ratio`, `minimum_midtone_share` and
+`minimum_burst_change_mean`. They have no defaults: a profile without the band
+(and the renderer eval) is not held to them. Outside a band,
+`evaluateMotionQuality` adds a `look` finding (`major`, with `measure`,
+`value` and `floor` or `ceiling`) that names the levers: motion blur with a
+longer shutter on fast moves (`motion.blur` shutter) and `push-blur`
+transitions for the sharpness ratio and the hardest jumps; rack-focus
+entrances (`enter: "focus"`) and depth layers for soft frames; a key light
+(`story.light`) and `light-sweep` transitions for the top light; light or
+haze layers for mid-tones; more travel for timid bursts. finish's `motion`
+gate lists the six values under `look`. `ui-explainer-reel` carries the
+bands, 15% either side of its reference.
 
 ## Footage-led lane (RFC phase 6)
 
