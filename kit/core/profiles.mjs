@@ -57,6 +57,14 @@ export const PROFILE_MEASURES = Object.freeze({
   still_share: { unit: 'share', check: 'max', describe: 'share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps)' },
   longest_still_seconds: { unit: 's', check: 'max', describe: 'longest near-still run inside the video (a closing hold does not count)' },
   camera_moves_per_min: { unit: '/min', check: 'min', describe: 'whole-frame camera moves (shifts, pans, zooms) per minute' },
+  // The look (src/render_look_analysis.js): grey frames at 30 fps on a 360-px
+  // short side; the sharpness measures are against the video's own held frames.
+  moving_sharpness_ratio: { unit: 'ratio', check: 'max', describe: 'median sharpness (Laplacian variance) of moving frames (change over 3 grey levels) over that of held frames (under 0.4); under 1 means moves blur' },
+  soft_frame_share: { unit: 'share', check: 'min', describe: 'share of frames softer than 35% of the held frames\' median sharpness (defocused, blurred or hazed)' },
+  change_p99: { unit: 'grey', check: 'max', describe: '99th-percentile single-frame change (mean absolute grey difference): how hard the hardest jumps are' },
+  top_light_ratio: { unit: 'ratio', check: 'min', describe: 'median ratio of the top band\'s mean grey (top 17%) to the middle band\'s (39–61%): over 1 means light falls from above' },
+  midtone_share: { unit: 'share', check: 'min', describe: 'mean share of pixels with grey 29–109 (neither near-black background nor bright ink: haze, glows, translucent layers)' },
+  burst_change_mean: { unit: 'grey', check: 'min', describe: 'mean single-frame change while something moves (change over 2.5 grey levels)' },
   scene_seconds: { unit: 's', check: 'band', stat: 'p50', describe: 'scene length (character stories)' },
   character_screen_time: { unit: 'share', check: 'band', describe: 'share of the runtime with a character on screen' },
   expression_changes_per_min: { unit: '/min', check: 'band', describe: 'pose or expression changes per minute' },
@@ -64,7 +72,9 @@ export const PROFILE_MEASURES = Object.freeze({
 });
 
 // The measures the motion gate reads (src/cinematic_check.js).
-export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events', 'still_share', 'longest_still_seconds', 'camera_moves_per_min']);
+export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events', 'still_share', 'longest_still_seconds', 'camera_moves_per_min', 'moving_sharpness_ratio', 'soft_frame_share', 'change_p99', 'top_light_ratio', 'midtone_share', 'burst_change_mean']);
+// The look measures among them: they gate only when a profile carries them.
+export const LOOK_MEASURES = Object.freeze(['moving_sharpness_ratio', 'soft_frame_share', 'change_p99', 'top_light_ratio', 'midtone_share', 'burst_change_mean']);
 // The measures the coverage gate reads from the storyboard and direction map.
 export const COVERAGE_MEASURES = Object.freeze(['coverage', 'face_time', 'longest_undressed_seconds', 'first_visual_seconds', 'subject_effect_share', 'longest_without_reset_seconds']);
 

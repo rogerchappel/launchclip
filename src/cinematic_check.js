@@ -326,7 +326,10 @@ function mixResult(volume, source, manifest) {
  * flow_velocity_p90 and motion_bursts_per_min floors (p10), hold_ratio and
  * first_motion_seconds ceilings (p90), change_energy_p50 floor and
  * hook_events floor, still_share and longest_still_seconds ceilings (p90)
- * and camera_moves_per_min floor (p10; no default).
+ * and camera_moves_per_min floor (p10; no default), and the look bands with
+ * no default: moving_sharpness_ratio and change_p99 ceilings (p90),
+ * soft_frame_share, top_light_ratio, midtone_share and burst_change_mean
+ * floors (p10).
  * A locked-off talking head barely moves, so the footage-led profiles hold
  * far lower floors than the motion ones and no still-share ceiling. Without a
  * profile, or for a stillness measure the profile does not carry, the fixed
@@ -362,7 +365,15 @@ export function cinematicMotionExpectations({ duration, width, height, profile: 
       maximum_still_share: band("still_share", "p90", stillDefaults.still_share),
       maximum_longest_still_seconds: band("longest_still_seconds", "p90", stillDefaults.longest_still_seconds),
       // Only a profile measured with camera moves holds a floor on them.
-      minimum_camera_moves_per_minute: band("camera_moves_per_min", "p10", null)
+      minimum_camera_moves_per_minute: band("camera_moves_per_min", "p10", null),
+      // The look (src/render_look_analysis.js): no default, so only a
+      // profile measured with these bands holds a render to them.
+      maximum_moving_sharpness_ratio: band("moving_sharpness_ratio", "p90", null),
+      minimum_soft_frame_share: band("soft_frame_share", "p10", null),
+      maximum_change_p99: band("change_p99", "p90", null),
+      minimum_top_light_ratio: band("top_light_ratio", "p10", null),
+      minimum_midtone_share: band("midtone_share", "p10", null),
+      minimum_burst_change_mean: band("burst_change_mean", "p10", null)
     }
   };
 }

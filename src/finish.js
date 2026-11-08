@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
@@ -1697,7 +1698,9 @@ async function runGates(ctx) {
       camera_moves: motion.motion.camera_moves,
       worst_spans: worstStillSpans(motion, { limit: 6 })
     };
-    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), ...(stillness ? { stillness } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
+    // The look measures (sharpness under motion, light, mid-tones), when measured.
+    const look = motion?.look?.frames ? Object.fromEntries(LOOK_MEASURES.map((name) => [name, motion.look[name] ?? null])) : null;
+    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), ...(stillness ? { stillness } : {}), ...(look ? { look } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
     gates.motion = { status: "failed", error: error.message };
   }
