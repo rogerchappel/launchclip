@@ -201,6 +201,38 @@ function ms(value) {
   return Math.round(value * 1000) / 1000;
 }
 
+// Words a narration repeats without meaning to: an anchor on one of them
+// lands on its first occurrence, which is rarely the one meant.
+const COMMON_WORDS = new Set("a an and are as at be but by can do for from has have he her his how i if in into is it its just me more my no not now of on one or our out so that the their them then there they this to up us was we what when which who will with you your".split(" "));
+
+/**
+ * Word anchors without #n on a word the narration says more than once, when
+ * the word is a common one (COMMON_WORDS) or three letters or fewer:
+ * "word:it" is the first "it", whichever scene names it. Walks every string
+ * in the story. → [{path, anchor, word, count}]
+ */
+export function ambiguousWordAnchors(story, words) {
+  const tokens = wordList(words);
+  if (!tokens.length) return [];
+  const out = [];
+  const seen = new Set();
+  const visit = (value, path) => {
+    if (typeof value === "string") {
+      const match = WORD_ANCHOR.exec(value.trim());
+      if (!match || match[2] !== undefined) return;
+      const text = normalizeWord(match[1]);
+      if (!text || !(COMMON_WORDS.has(text) || text.length <= 3)) return;
+      const count = findWord(tokens, text).length;
+      if (count > 1 && !seen.has(`${path}|${value}`)) { seen.add(`${path}|${value}`); out.push({ path, anchor: value, word: text, count }); }
+      return;
+    }
+    if (Array.isArray(value)) value.forEach((item, i) => visit(item, `${path}[${i}]`));
+    else if (isObject(value)) for (const [key, item] of Object.entries(value)) visit(item, path ? `${path}.${key}` : key);
+  };
+  visit(story, "");
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 
@@ -1112,7 +1144,7 @@ function validateMotion(motion, err) {
 }
 
 // Story feel (kit/core/feel.mjs feelErrors / kickErrors, repeated here).
-export const STORY_FEELS = ["kinetic"];
+export const STORY_FEELS = ["kinetic", "snap"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
 
@@ -1134,9 +1166,13 @@ function validateFeel(feel, err) {
   if (feel.preset !== undefined && !STORY_FEELS.includes(feel.preset)) err(`motion.feel.preset must be one of ${STORY_FEELS.join(", ")}`);
   const ambient = feel.ambient;
   if (ambient !== undefined && ambient !== false) {
-    if (!isObject(ambient)) err("motion.feel.ambient must be false or {scale?, shift?, period?}");
+    if (!isObject(ambient)) err("motion.feel.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?, creep?}");
     else {
-      for (const key of Object.keys(ambient)) if (!["scale", "shift", "period"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: scale, shift, period)`);
+      for (const key of Object.keys(ambient)) if (!["mode", "scale", "shift", "period", "hold", "move", "creep"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move, creep)`);
+      if (ambient.mode !== undefined && !["drift", "step"].includes(ambient.mode)) err("motion.feel.ambient.mode must be drift (a slow wave) or step (holds, then snaps)");
+      if (ambient.hold !== undefined && !feelPair(ambient.hold, 0.2, 4)) err("motion.feel.ambient.hold must be [lo, hi] seconds between 0.2 and 4");
+      if (ambient.move !== undefined && !feelRange(ambient.move, 0.08, 0.6)) err("motion.feel.ambient.move must be seconds between 0.08 and 0.6");
+      if (ambient.creep !== undefined && !feelRange(ambient.creep, 0, 0.5)) err("motion.feel.ambient.creep must be a share between 0 and 0.5 of each move made slowly during the hold");
       if (ambient.scale !== undefined && !feelPair(ambient.scale, 1, 1.08)) err("motion.feel.ambient.scale must be [lo, hi] between 1 and 1.08");
       if (ambient.shift !== undefined && !feelRange(ambient.shift, 0, 0.02)) err("motion.feel.ambient.shift must be a share of the frame between 0 and 0.02");
       if (ambient.period !== undefined && !feelPair(ambient.period, 2, 20)) err("motion.feel.ambient.period must be [lo, hi] seconds between 2 and 20");

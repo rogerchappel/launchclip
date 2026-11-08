@@ -74,9 +74,21 @@ export function captionLines(story, chunks) {
 export function captionBacking(o, cls = "") {
   if (o.word === "chip" && o.colors.chip) return { color: o.colors.chip, alpha: 1 };
   if (o.layout === "band" && o.colors.band) return { color: o.colors.band, alpha: 1 };
-  if (/lc-cap-legible/.test(cls) && o.plateStyle !== "scrim") return { color: o.legiblePlate, alpha: 0xeb / 255 };
-  if (/lc-cap-plate/.test(cls)) return { color: o.colors.plate, alpha: o.plate === "card" ? 1 : 0xd9 / 255 };
+  // A plate is one box around the whole line, centred where the plan centres
+  // the line (the band's middle): its padding (em, top right bottom left, as
+  // captionPlanCss draws it) and the line's type let the measurement find it
+  // there (plateBoxAt).
+  const line = (pad) => ({ pad, lineHeight: o.lineHeight, advance: captionAdvance(o) });
+  if (/lc-cap-legible/.test(cls) && o.plateStyle !== "scrim") return { color: o.legiblePlate, alpha: 0xeb / 255, line: line([0.18, 0.5, 0.22, 0.5]) };
+  if (/lc-cap-plate/.test(cls)) return o.plate === "card" ? { color: o.colors.plate, alpha: 1, line: line([0.3, 0.55, 0.38, 0.55]) } : { color: o.colors.plate, alpha: 0xd9 / 255, line: line([0.32, 0.6, 0.32, 0.6]) };
   return null;
+}
+
+// A low estimate of the em a character of the line advances: narrow enough
+// that the plate box it implies never runs past the real plate.
+function captionAdvance(o) {
+  const spacing = Number.parseFloat(String(o.letterSpacing ?? "0")) || 0;
+  return Math.max(0.3, (o.case === "upper" ? 0.56 : 0.48) + spacing);
 }
 
 /** The caption band in canvas px, a little taller than the plan's band so a line that wraps stays inside. */
@@ -91,7 +103,7 @@ export function captionBandRect(options, format) {
  * Legibility of one line in a decoded frame (canvas-sized RGBA image).
  * → {found, contrast, camouflage, legible}
  */
-export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plate = null, plateAlpha = 1 } = {}) {
+export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plate = null, plateAlpha = 1, plateLine = null } = {}) {
   const L = CAPTION_LEGIBILITY;
   // On a plate, a preset colour close to the plate's own (a light active
   // colour on a light plate) is the plate, not the text.
@@ -101,7 +113,7 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plat
   const at = (x, y) => { const o = (y * image.width + x) * 4; return [image.pixels[o], image.pixels[o + 1], image.pixels[o + 2]]; };
   const near = (p) => Math.min(...text.map((c) => distance(p, c)));
   if (plateRgb) {
-    const onPlate = plateLegibility(image, { x0, y0, x1, y1 }, plateRgb, text, { at, near, size, chars, alpha: plateAlpha });
+    const onPlate = plateLegibility(image, { x0, y0, x1, y1 }, plateRgb, text, { at, near, size, chars, alpha: plateAlpha, line: plateLine });
     if (onPlate) return onPlate;
   }
   const xs = [], ys = [];
@@ -145,15 +157,22 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plat
  * quarter. → result | null (no backing in the band: judge it like any other
  * line, against what is behind it).
  */
-function plateLegibility(image, band, plateRgb, text, { at, near, size, chars, alpha = 1 }) {
+function plateLegibility(image, band, plateRgb, text, { at, near, size, chars, alpha = 1, line = null }) {
   const L = CAPTION_LEGIBILITY;
   const tolerance = 40 + (1 - Math.max(0, Math.min(1, alpha))) * 255 * Math.sqrt(3);
-  const xs = [], ys = [];
-  for (let y = band.y0; y < band.y1; y += 2) for (let x = band.x0; x < band.x1; x += 2) if (distance(at(x, y), plateRgb) < tolerance) { xs.push(x); ys.push(y); }
-  const expectedArea = chars * 0.55 * size * size * 0.6 / 4;
-  if (xs.length < expectedArea / 3) return null;
+  // A line plate is found where the plan puts it. Searched for by colour
+  // alone, a plate the colour of the scene's own panels (a dark word chip
+  // over a dark interface) spreads to the whole band, and the scene's text
+  // and motion-blurred edges in it are read as the caption's.
   const pct = (list, q) => { const sorted = [...list].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]; };
-  const box = { x0: pct(xs, 0.03), x1: pct(xs, 0.97), y0: pct(ys, 0.03), y1: pct(ys, 0.97) };
+  let box = line ? plateBoxAt(band, (x, y) => distance(at(x, y), plateRgb) < tolerance, { size, chars, line }) : null;
+  if (!box) {
+    const xs = [], ys = [];
+    for (let y = band.y0; y < band.y1; y += 2) for (let x = band.x0; x < band.x1; x += 2) if (distance(at(x, y), plateRgb) < tolerance) { xs.push(x); ys.push(y); }
+    const expectedArea = chars * 0.55 * size * size * 0.6 / 4;
+    if (xs.length < expectedArea / 3) return null;
+    box = { x0: pct(xs, 0.03), x1: pct(xs, 0.97), y0: pct(ys, 0.03), y1: pct(ys, 0.97) };
+  }
   const w = box.x1 - box.x0 + 1, h = box.y1 - box.y0 + 1;
   if (w < 2 || h < 2) return null;
   const glyph = new Uint8Array(w * h);
@@ -171,6 +190,53 @@ function plateLegibility(image, band, plateRgb, text, { at, near, size, chars, a
   }
   const worst = contrasts.length ? pct(contrasts, 0.25) : 1;
   return { found: true, contrast: round(worst), camouflage: 0, legible: worst >= L.contrast, onPlate: true, box: { x: box.x0, y: box.y0, width: w - 1, height: h - 1 } };
+}
+
+/**
+ * A line plate's box in the frame, found where the plan centres the line:
+ * the middle of the band. Its size comes from the plan (rows of type plus the
+ * plate's padding, a low estimate of the text's width) and is then measured:
+ * along its padding rows and columns (glyph-free) from the middle out, as
+ * far as the plate's colour runs, never past the estimate (a scene the
+ * plate's own colour beside it would carry the run on). The box may fall
+ * short of the plate; it never runs past it into the scene. → {x0, y0, x1, y1}
+ * | null (no plate at the middle: the caller searches the band by colour).
+ */
+function plateBoxAt(band, isPlate, { size, chars, line }) {
+  const [pt, pr, pb, pl] = line.pad.map((v) => v * size);
+  const cx = Math.round((band.x0 + band.x1) / 2), cy = Math.round((band.y0 + band.y1) / 2);
+  const room = band.x1 - band.x0 - pl - pr;
+  const textWidth = chars * size * line.advance;
+  if (room <= 0 || textWidth <= 0) return null;
+  const rows = Math.max(1, Math.ceil(textWidth / room));
+  let hw = (Math.min(room, textWidth) + pl + pr) / 2, hh = (rows * size * line.lineHeight + pt + pb) / 2;
+  const inside = (x, y) => x >= band.x0 && x < band.x1 && y >= band.y0 && y < band.y1 && isPlate(x, y);
+  // How far the plate runs from (x, y) in steps (dx, dy), up to cap px; one stray pixel (compression) does not end it.
+  const run = (x, y, dx, dy, cap) => {
+    let n = 0, miss = 0;
+    for (let k = 1; k <= cap; k += 1) {
+      if (inside(x + dx * k, y + dy * k)) { n = k; miss = 0; } else if (++miss > 1) break;
+    }
+    return n;
+  };
+  // Twice: the width from the padding rows, then the height from the padding columns.
+  for (let pass = 0; pass < 2; pass += 1) {
+    const rowsAt = [Math.round(cy - hh + pt * 0.5), Math.round(cy + hh - pb * 0.5)];
+    if (!rowsAt.every((y) => inside(cx, y))) return null;
+    const cap = Math.ceil(hw);
+    hw = Math.min(...rowsAt.flatMap((y) => [run(cx, y, -1, 0, cap), run(cx, y, 1, 0, cap)]));
+    if (hw < size * 0.5) return null;
+    // Only a run that ended at the plate's edge puts the columns in its
+    // padding; one the estimate stopped may stand on a glyph, and the plan's
+    // height stands.
+    if (hw >= cap) break;
+    const colsAt = [Math.round(cx - hw + pl * 0.5), Math.round(cx + hw - pr * 0.5)];
+    if (!colsAt.every((x) => inside(x, cy))) break;
+    hh = Math.min(...colsAt.flatMap((x) => [run(x, cy, 0, -1, Math.ceil(hh)), run(x, cy, 0, 1, Math.ceil(hh))]));
+    if (hh < size * 0.4) return null;
+  }
+  // A pixel in from each edge: the plate's anti-aliased border is not its colour.
+  return { x0: Math.ceil(cx - hw + 1), x1: Math.floor(cx + hw - 1), y0: Math.ceil(cy - hh + 1), y1: Math.floor(cy + hh - 1) };
 }
 
 // A square dilation of a w × h mask by r px (separable running max).
@@ -219,7 +285,7 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   const out = [];
   for (const line of lines) {
     const image = await frame(video, line.time, format);
-    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1 }) });
+    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1, plateLine: line.backing?.line ?? null }) });
   }
   return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
 }

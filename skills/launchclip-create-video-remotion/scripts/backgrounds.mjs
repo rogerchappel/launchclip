@@ -355,9 +355,11 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
     case 'dot-grid': {
       const cell = round(40 * u * params.scale, 2);
       const radius = round(cell * (0.07 + 0.1 * params.density), 2);
-      // lit: the dots brighten under the key light and fade to 1 − lit away from it.
+      // lit: the dots show where the key light falls and all but vanish away
+      // from it (lighting.mjs litMask); a lit grid is quieter, light on a
+      // smooth dark ground rather than a pattern.
       const lit = params.lit ?? 0;
-      const alpha = lay(tint, (0.3 + 0.45 * params.intensity) * (1 + 0.6 * lit));
+      const alpha = lay(tint, (0.3 + 0.45 * params.intensity) * (1 - 0.35 * lit));
       const mask = litMask(story, lit, { width: W, height: H });
       layers.push({ id: 'dots', box: over(cell), svg: null,
         style: { backgroundImage: `radial-gradient(circle at ${round(cell / 2, 2)}px ${round(cell / 2, 2)}px, ${rgba(tint, alpha)} ${radius}px, ${rgba(tint, 0)} ${round(radius + 1.2 * u, 2)}px)`, backgroundSize: `${cell}px ${cell}px`, ...(mask ? { maskImage: mask, WebkitMaskImage: mask } : {}) },

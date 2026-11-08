@@ -14,6 +14,10 @@
 //   between scale[0] and scale[1]; each period lies in period[] seconds and
 //   divides the story's duration, so a loop seam matches. scale[0] is the
 //   overscan the drift needs, so the edge never shows.
+// - Stepped ambient (ambient.mode "step", the snap feel): no wave; the
+//   camera rests on a framing for hold[] seconds and moves to the next in
+//   `move` seconds on expo.inOut (ambientSteps), so holds are crisp and
+//   moves blur. Framings alternate wide and tight within scale[].
 // - A kick multiplies the scale about its origin: a punch from 1 to its
 //   scale over KICK.punch (power2.out), a spring settle (motion.mjs
 //   springEase, 27 % overshoot) towards a rest just above 1, chosen so the
@@ -65,8 +69,12 @@ export function dividingPeriod(duration, target, [lo, hi]) {
   return round(duration / n, 6);
 }
 
-/** The ambient waves for a frame and duration. → {x, y, s: {amp, period, phase, mid?}} */
+/**
+ * The ambient camera for a frame and duration: waves (mode drift) →
+ * {x, y, s: {amp, period, phase, mid?}}, or steps (mode step, ambientSteps).
+ */
 export function ambientWaves(ambient, { width, height, duration }) {
+  if (ambient.mode === 'step') return ambientSteps(ambient, { width, height, duration });
   const [lo, hi] = ambient.period;
   return {
     x: { amp: round(ambient.shift * width, 4), period: dividingPeriod(duration, (lo + hi) / 2, ambient.period), phase: 0 },
@@ -77,10 +85,67 @@ export function ambientWaves(ambient, { width, height, duration }) {
 
 const wave = (axis, t) => axis.amp * Math.sin((2 * Math.PI * t) / axis.period + axis.phase);
 
+// A fixed-seed generator (mulberry32), so a story's steps never change between renders.
+function stepRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * A stepped ambient camera (ambient.mode "step"): it rests on a framing for
+ * hold[] seconds, then moves to the next in `move` seconds on expo.inOut.
+ * Framings alternate between the wide and tight halves of scale[] and
+ * between sides of ±shift, so every move travels far enough to blur and no
+ * two holds look alike. → {mode: 'step', move, poses: [{at, x, y, s}]}: pose
+ * k holds from poses[k].at to poses[k + 1].at − move, then moves.
+ */
+export function ambientSteps(ambient, { width, height, duration }) {
+  const random = stepRandom(0x5eed + Math.round(duration * 1000));
+  const [lo, hi] = ambient.scale, [h0, h1] = ambient.hold;
+  const move = ambient.move;
+  const poses = [];
+  for (let k = 0, at = 0; at < duration + h1 + move; k += 1) {
+    const tight = k % 2 === 1;
+    const share = tight ? 0.6 + 0.4 * random() : 0.35 * random();
+    const side = (n) => (n % 2 ? 1 : -1) * (0.45 + 0.55 * random());
+    const scale = round(lo + (hi - lo) * share, 6);
+    // Each framing's translate stays inside its own overscan, so the edge never shows.
+    const reach = (size, amount) => Math.min(amount, 0.9 * ((scale - 1) * size) / 2);
+    poses.push({ at: round(at, 6), x: round(side(k) * reach(width, ambient.shift * width), 3), y: round(side(Math.floor(k / 2) + k) * reach(height, ambient.shift * height * 0.6), 3), s: scale });
+    at += h0 + (h1 - h0) * random() + move;
+  }
+  return { mode: 'step', move, creep: ambient.creep ?? 0, poses };
+}
+
+// The ambient camera at t → {x, y, s}.
+function ambientAt(ambient, t) {
+  if (!ambient) return { x: 0, y: 0, s: 1 };
+  if (ambient.mode !== 'step') return { x: wave(ambient.x, t), y: wave(ambient.y, t), s: ambient.s.mid + wave(ambient.s, t) };
+  const { poses, move, creep = 0 } = ambient;
+  let k = poses.length - 1;
+  while (k > 0 && poses[k].at > t + EPS) k -= 1;
+  const a = poses[k], next = poses[k + 1];
+  if (!next) return { x: a.x, y: a.y, s: a.s };
+  // The hold creeps the first `creep` of the way towards the next framing
+  // (linear, slow enough to stay sharp); the snap covers the rest.
+  const start = next.at - move;
+  const u = t < start ? creep * Math.max(0, (t - a.at) / Math.max(EPS, start - a.at)) : creep + (1 - creep) * getEase('expo.inOut')(Math.min(1, (t - start) / move));
+  return { x: a.x + (next.x - a.x) * u, y: a.y + (next.y - a.y) * u, s: a.s + (next.s - a.s) * u };
+}
+
 /**
  * Spans no kick may overlap (absolute seconds, padded by KICK.margin):
- * every track-0 transition in, the loop ending, the camera plan's moves and
- * every zoom inside a shot. → [{start, end, why}]
+ * every track-0 transition in (from its scene's start, never before: a
+ * transition does not pre-roll), the loop ending, the camera plan's moves
+ * and every zoom inside a shot. A kick occupies [at, at + punch + settle],
+ * so one starting up to 0.47 s (0.32 s with snap) before a span is refused
+ * too. → [{start, end, why}]
  */
 export function feelBusy(story, windows, camera = null) {
   const out = [];
@@ -115,7 +180,8 @@ const normToken = (text) => String(text ?? '').toLowerCase().replace(/#\d+$/, ''
 export function feelKicks(story, feel, { busy = [], words = [] } = {}) {
   const width = Number(story.format.width), height = Number(story.format.height);
   const duration = Number(story?.resolved?.duration ?? story.format.duration);
-  const span = KICK.punch + KICK.settle;
+  const timing = kickTiming(feel);
+  const span = timing.punch + timing.settle;
   const warnings = [], kicks = [];
   const blocked = (at) => busy.find((window) => at < window.end - EPS && at + span > window.start + EPS);
   const crowded = (at) => kicks.some((kick) => Math.abs(kick.at - at) < feel.kicks.gap - EPS);
@@ -127,7 +193,8 @@ export function feelKicks(story, feel, { busy = [], words = [] } = {}) {
     const at = round(Number(kick.at), 6);
     const busyWith = blocked(at);
     if (!inside(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s leaves no room for the kick inside the story`); continue; }
-    if (busyWith) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it would run during ${busyWith.why}`); continue; }
+    // A kick runs from at for its punch and settle: one that starts before a busy span still overlaps it.
+    if (busyWith) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s its punch and settle (${at}–${round(at + span, 3)}s) would overlap ${busyWith.why} (${busyWith.start}–${busyWith.end}s, the move ±${KICK.margin}s); start it by ${round(busyWith.start - span, 3)}s or after ${busyWith.end}s`); continue; }
     if (crowded(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it is within ${feel.kicks.gap}s of another kick`); continue; }
     kicks.push({ at, scale: num(kick.scale) ? kick.scale : feel.kicks.scale, origin: origin(kick.origin), source: `camera.kicks[${index}]` });
   }
@@ -174,7 +241,7 @@ export function feelSafeArea({ width, height }) {
 }
 
 // The ambient scale at t (1 without one).
-const ambientScale = (ambient, t) => (ambient ? ambient.s.mid + wave(ambient.s, t) : 1);
+const ambientScale = (ambient, t) => ambientAt(ambient, t).s;
 
 /**
  * Kicks reduced so the content area stays in frame: each kick's peak times
@@ -182,12 +249,12 @@ const ambientScale = (ambient, t) => (ambient ? ambient.s.mid + wave(ambient.s, 
  * area.maxScale. → {kicks, warnings} (a warning per explicit kick reduced,
  * and one for the feel's kicks.scale when the story set it)
  */
-export function contentSafeKicks(kicks, { ambient, area, fps = 30, story = null } = {}) {
+export function contentSafeKicks(kicks, { ambient, area, fps = 30, story = null, timing = KICK } = {}) {
   const warnings = [];
   let autoReduced = null;
   const out = kicks.map((kick) => {
     let peak = 1;
-    const span = KICK.punch + KICK.settle;
+    const span = timing.punch + timing.settle;
     for (let i = 0; i <= Math.ceil(span * fps); i += 1) peak = Math.max(peak, ambientScale(ambient, kick.at + i / fps));
     const most = Math.floor((area.maxScale / peak) * 1e4) / 1e4;
     if (kick.scale <= most + EPS) return kick;
@@ -206,15 +273,20 @@ export function kickRest(scale, overshoot) {
   return round((1 + overshoot * scale) / (1 + overshoot), 6);
 }
 
-/** One kick's scale multiplier at absolute t (1 outside it). */
-export function kickValue(kick, t, overshoot) {
+/** A feel's kick timing: KICK with the preset's own punch, settle and relax over it. */
+export function kickTiming(feel) {
+  return feel?.kick ? { ...KICK, ...feel.kick } : KICK;
+}
+
+/** One kick's scale multiplier at absolute t (1 outside it); timing defaults to KICK. */
+export function kickValue(kick, t, overshoot, timing = KICK) {
   const u = t - kick.at;
   if (u < 0) return 1;
   const S = kick.scale, R = kickRest(S, overshoot);
-  if (u < KICK.punch) return 1 + (S - 1) * getEase(KICK.punchEase)(u / KICK.punch);
-  if (u < KICK.punch + KICK.settle) return S + (R - S) * getEase(springEase(overshoot))((u - KICK.punch) / KICK.settle);
-  const relax = u - KICK.punch - KICK.settle;
-  if (relax < KICK.relax) return R + (1 - R) * getEase(KICK.relaxEase)(relax / KICK.relax);
+  if (u < timing.punch) return 1 + (S - 1) * getEase(timing.punchEase)(u / timing.punch);
+  if (u < timing.punch + timing.settle) return S + (R - S) * getEase(springEase(overshoot))((u - timing.punch) / timing.settle);
+  const relax = u - timing.punch - timing.settle;
+  if (relax < timing.relax) return R + (1 - R) * getEase(timing.relaxEase)(relax / timing.relax);
   return 1;
 }
 
@@ -239,10 +311,11 @@ export function feelPlan(story, { windows, camera = null, words = [] } = {}) {
   const busy = feelBusy(story, windows, camera);
   const found = feelKicks(story, feel, { busy, words });
   const safe = feelSafeArea({ width, height });
-  const reduced = contentSafeKicks(found.kicks, { ambient, area: safe, fps, story });
+  const timing = kickTiming(feel);
+  const reduced = contentSafeKicks(found.kicks, { ambient, area: safe, fps, story, timing });
   const kicks = reduced.kicks, warnings = [...found.warnings, ...reduced.warnings];
   if (!ambient && !kicks.length) return warnings.length ? { width, height, fps, duration, frames, feel: feel.id, ambient: null, spring: feel.spring, kicks: [], busy, safe, warnings, idle: true } : null;
-  return { width, height, fps, duration, frames, feel: feel.id, ambient, spring: feel.spring, kicks, busy, safe, warnings };
+  return { width, height, fps, duration, frames, feel: feel.id, ambient, spring: feel.spring, kicks, ...(feel.kick ? { timing } : {}), busy, safe, warnings };
 }
 
 // The translate range on one axis that keeps the canvas covered (|v| ≤
@@ -266,11 +339,11 @@ export function feelStateAt(plan, t) {
   if (!plan || plan.idle) return { x: 0, y: 0, scale: 1 };
   const W = plan.width, H = plan.height;
   let dx = 0, dy = 0, a = 1;
-  if (plan.ambient) { dx = wave(plan.ambient.x, t); dy = wave(plan.ambient.y, t); a = plan.ambient.s.mid + wave(plan.ambient.s, t); }
+  if (plan.ambient) ({ x: dx, y: dy, s: a } = ambientAt(plan.ambient, t));
   let scale = a, x = dx, y = dy;
   const kick = [...plan.kicks].reverse().find((entry) => t >= entry.at - EPS);
   if (kick) {
-    const k = kickValue(kick, t, plan.spring);
+    const k = kickValue(kick, t, plan.spring, plan.timing ?? KICK);
     scale = a * k;
     x = dx + a * (1 - k) * (kick.origin.x - W / 2);
     y = dy + a * (1 - k) * (kick.origin.y - H / 2);
@@ -313,7 +386,7 @@ export function feelGsap(plan, samples = feelSamples(plan)) {
     last = state;
   });
   return [
-    `// story feel (${plan.feel}): ${plan.ambient ? 'ambient drift and breathing' : 'no ambient'}, ${plan.kicks.length} kick(s) at ${plan.kicks.map((kick) => kick.at).join(', ') || '-'}`,
+    `// story feel (${plan.feel}): ${plan.ambient ? (plan.ambient.mode === 'step' ? `ambient holds and snaps (${plan.ambient.poses.length} framings)` : 'ambient drift and breathing') : 'no ambient'}, ${plan.kicks.length} kick(s) at ${plan.kicks.map((kick) => kick.at).join(', ') || '-'}`,
     `(function () { var F = ${JSON.stringify(rows)}; for (var i = 0; i < F.length; i++) { var f = F[i][0]; tl.set(${JSON.stringify(FEEL_SELECTOR)}, { x: F[i][1], y: F[i][2], scale: F[i][3], force3D: false }, f === 0 ? 0 : Math.max(0, f / ${plan.fps} - ${FEEL_LEAD})); } })();`
   ];
 }

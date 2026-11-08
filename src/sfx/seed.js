@@ -21,6 +21,7 @@ import path from "node:path";
 import { writeFileAtomic } from "../atomic_write.js";
 import { promisify } from "node:util";
 import { decodeAudio, processFile, writeWavFile, SAMPLE_RATE } from "./process.js";
+import { measureTimbre, timbreProblem } from "./timbre.js";
 import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashOf, libraryVariants, missingFamilies, readLibrary, resolveLibraries, summarizeLibrary, userLibraryDir, writeLibrary } from "./library.js";
 
 const execFileAsync = promisify(execFile);
@@ -29,6 +30,31 @@ export const SYNTH_SCRIPT = path.join(ROOT, "src", "scripts", "synth-audio-kit.m
 export const PROMPTS_FILE = path.join(import.meta.dirname, "prompts.json");
 export const ELEVENLABS_API = "https://api.elevenlabs.io";
 export const SOUND_GENERATION_PATH = "/v1/sound-generation";
+
+/**
+ * Families of `known` whose every variant on disk fails the timbre guard
+ * (src/sfx/timbre.js): seeded before the guard existed, they are refused in
+ * every render and give way to the kit. --missing replaces them.
+ * measure(file) → timbre | null (null: unreadable, not a refusal). → [family]
+ */
+export async function refusedFamilies(library, known, { measure = measureFile } = {}) {
+  const out = [];
+  for (const family of known) {
+    const variants = libraryVariants(library, family);
+    if (!variants.length) continue;
+    let passes = false;
+    for (const variant of variants) {
+      const timbre = await measure(path.resolve(library.dir, variant.file));
+      if (!timbre || !timbreProblem(family, timbre)) { passes = true; break; }
+    }
+    if (!passes) out.push(family);
+  }
+  return out;
+}
+
+async function measureFile(file) {
+  try { const { channels, sampleRate } = await decodeAudio(file); return measureTimbre(channels, sampleRate); } catch { return null; }
+}
 
 export async function loadPrompts(file = PROMPTS_FILE) {
   const prompts = JSON.parse(await readFile(file, "utf8"));
@@ -110,11 +136,13 @@ export async function seedLibrary(options = {}) {
   const known = Object.keys(prompts.families);
   for (const family of [...(only ?? []), ...reroll]) if (!known.includes(family)) throw new Error(`Unknown SFX family "${family}". Families: ${known.join(", ")} (aliases: typing, ui)`);
   // --missing: only the families this library has no usable file for
-  // (absent, empty, or every variant file deleted), never the rest.
+  // (absent, empty, every variant file deleted, or every variant refused by
+  // the timbre guard), never the rest.
   if (options.missing && (only || reroll.length || options.force)) throw new Error("--missing fills only the missing families; it cannot be combined with --only, --reroll or --force");
   const loaded = { dir, manifest };
-  const candidates = options.missing ? missingFamilies(loaded, known) : only ?? (reroll.length ? reroll : known);
-  const targets = candidates.filter((family) => options.force || reroll.includes(family) || !libraryVariants(loaded, family).length);
+  const refused = options.missing ? await refusedFamilies(loaded, known, options.measureTimbre ? { measure: options.measureTimbre } : {}) : [];
+  const candidates = options.missing ? [...missingFamilies(loaded, known), ...refused] : only ?? (reroll.length ? reroll : known);
+  const targets = candidates.filter((family) => options.force || reroll.includes(family) || refused.includes(family) || !libraryVariants(loaded, family).length);
   const variantsOverride = options.variants != null ? Number(options.variants) : null;
   if (variantsOverride != null && !(Number.isInteger(variantsOverride) && variantsOverride >= 1 && variantsOverride <= 8)) throw new Error("--variants must be an integer from 1 to 8");
   const result = { dir, provider: requested, generations: 0, cached: 0, seeded: [], locked: (options.missing ? known : candidates).filter((family) => !targets.includes(family)), kept: {}, rejected: {}, warnings: [], ...(options.missing ? { missing: targets } : {}) };

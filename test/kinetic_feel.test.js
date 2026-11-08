@@ -9,7 +9,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {STORY_FEELS, STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {FEEL_NAMES, feelErrors, kickErrors, resolveFeel} from '@launchclip/core/feel.mjs';
-import {KICK, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
+import {KICK, ambientSteps, kickTiming, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
 import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipePhases, dotWipes, resolveDotWipeColor} from '@launchclip/core/dot-wipe.mjs';
 import {TRANSITION_TYPES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {cameraPlan} from '@launchclip/core/camera-world.mjs';
@@ -144,6 +144,8 @@ test('kicks are content-safe: the content area (safe zone, headline and top-bar 
   assert.ok(rise > 1.04, `the kick still punches (×${rise.toFixed(3)})`);
 });
 
+const round3 = (v) => Math.round(v * 1000) / 1000;
+
 test('kicks never overlap each other or another camera move, and automatic kicks follow emphasis', () => {
   const s = story({camera: {mode: 'cuts', kicks: [{at: 1}, {at: 1.6}, {at: 4.1}, {at: 8.2}, {at: 10}]}});
   const windows = sceneWindows(s);
@@ -153,6 +155,14 @@ test('kicks never overlap each other or another camera move, and automatic kicks
   assert.deepEqual(kicks.map((kick) => kick.at), [1, 10]);
   assert.equal(warnings.length, 3);
   assert.ok(warnings.some((w) => /within 1.5s/.test(w)) && warnings.some((w) => /whip-pan/.test(w)) && warnings.some((w) => /dot-wipe/.test(w)));
+  // A transition starts at its scene's start (no pre-roll); a kick just before it is refused because
+  // its own punch and settle run into it, and the warning gives both windows and where to move it.
+  const wipe = busy.find((span) => /dot-wipe/.test(span.why));
+  const before = round3(wipe.start - 0.3);
+  const single = story({camera: {mode: 'cuts', kicks: [{at: before}]}});
+  const late = feelKicks(single, resolveFeel(single), {busy: [wipe]});
+  assert.equal(late.kicks.length, 0);
+  assert.match(late.warnings[0], new RegExp(`at ${before}s its punch and settle \\(${before}–${round3(before + 0.47)}s\\) would overlap .*dot-wipe \\(${wipe.start}–${wipe.end}s, the move ±0.06s\\); start it by ${round3(wipe.start - 0.47)}s or after ${wipe.end}s`));
   // Automatic: numbers and emphasis words in the narration, at most one per gap, never in a move.
   const words = [{start: 0.5, end: 0.8, words: [{text: 'Twelve', start: 0.5, end: 0.8}]}, {start: 1, end: 2, words: [{text: 'cut', start: 1, end: 1.2}, {text: '12', start: 1.3, end: 1.6}, {text: '40%', start: 2.0, end: 2.4}]},
     {start: 4, end: 5, words: [{text: '3', start: 4.05, end: 4.3}, {text: '7', start: 5.2, end: 5.4}]}, {start: 9, end: 10, words: [{text: '99', start: 9.2, end: 9.5}]}];
@@ -295,4 +305,42 @@ test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per 
   const plan = planOf(story({camera: {mode: 'cuts', kicks: [{at: 1}]}}));
   const samples = feelSamples(plan);
   for (const f of [0, 31, 33, 40, 200, 359]) assert.deepEqual(feelStateAt(plan, f / 30), samples[f]);
+});
+
+test('snap: the ambient camera holds still on a framing, then snaps to the next, and never reveals an edge', () => {
+  const s = story({motion: {feel: 'snap'}});
+  const plan = planOf(s);
+  const a = feelSamples(plan);
+  assert.deepEqual(a, feelSamples(planOf(story({motion: {feel: 'snap'}}))), 'the same story gives the same frames');
+  assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
+  assert.equal(plan.ambient.mode, 'step');
+  const {poses, move, creep} = plan.ambient;
+  assert.deepEqual([move, creep], [0.22, 0]);
+  // Holds of 0.35–0.8 s between moves, alternating wide and tight framings far enough apart to blur.
+  for (let k = 1; k < poses.length; k += 1) {
+    const hold = poses[k].at - poses[k - 1].at - move;
+    assert.ok(hold >= 0.35 - 1e-6 && hold <= 0.8 + 1e-6, `hold ${k} is ${hold}`);
+    assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.05 - 1.012) - 1e-6, `move ${k} changes the framing`);
+  }
+  // The camera is exactly still through a hold, and the snap lands on the next framing in `move` seconds.
+  const still = {...plan, kicks: []};
+  const [p0, p1] = poses;
+  const holdEnd = p1.at - move;
+  const scaleAt = (t) => feelStateAt(still, t).scale;
+  assert.equal(scaleAt(p0.at + 0.05), scaleAt(holdEnd - 0.001));
+  assert.ok(Math.abs(scaleAt(p1.at) - p1.s) < 1e-4, 'the snap lands on the next framing');
+  // With creep, a hold covers that share of the way slowly and the snap the rest.
+  const creeping = {...still, ambient: {...still.ambient, creep: 0.3}};
+  assert.ok(Math.abs(feelStateAt(creeping, holdEnd).scale - (p0.s + (p1.s - p0.s) * 0.3)) < 1e-4);
+  // Kicks return fast with the preset's own timing; the grammar holds still.
+  assert.deepEqual(kickTiming(resolveFeel(s)), {...KICK, punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut'});
+  assert.equal(resolveGrammar(s).hold.level, 'off');
+  // A step mode on the kinetic preset takes the snap defaults for hold and move, with no creep.
+  const custom = resolveFeel(story({motion: {feel: {preset: 'kinetic', ambient: {mode: 'step'}}}}));
+  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[0.35, 0.8], 0.22, 0]);
+  assert.equal(ambientSteps(custom.ambient, {width: 1080, height: 1920, duration: 12}).mode, 'step');
+  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}, {ambient: {creep: 0.8}}]) {
+    assert.ok(feelErrors(bad).length > 0, JSON.stringify(bad));
+    assert.equal(validateStory(story({motion: {feel: bad}})).ok, false, JSON.stringify(bad));
+  }
 });

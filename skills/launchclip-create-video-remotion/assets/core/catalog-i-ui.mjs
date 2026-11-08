@@ -15,49 +15,111 @@
 // do. An element marked bleed (a decorative waveform or card wall) may run
 // to the canvas edge. Settled elements hold still: the module opts out of
 // the hold drift (layout.drift false); the camera carries the life.
+//
+// A top-level stack with arrange (fan, wall, stack, orbit) lays its children
+// out as a collage in depth layers across its region (kit/core/ui-arrange.mjs);
+// they resolve as ordinary top-level elements. A portrait scene declares its
+// stage (layout.fill), so the layout check warns when a band of it stays
+// empty (stage-fill).
 
 import {createHBase, r2, rt} from './catalog-h-base.mjs';
 import {timingRules} from './catalog-b-base.mjs';
 import {mixColor} from './catalog-b-base.mjs';
 import {abs, el} from './catalog-h-view.mjs';
 import {UI_KINDS} from './ui-runtime.mjs';
-import {uiDepthAt, uiStageProject} from './ui-paint.mjs';
+import {uiHostPoses} from './ui-host.mjs';
+import {uiDepthAt, uiHeadlineLines, uiHeadlinePlain, uiStageProject} from './ui-paint.mjs';
+import {uiCommentHeight} from './ui-components.mjs';
 import {captionBandAt, profileGeometry} from './layout-check.mjs';
+import {ARRANGEMENTS, expandArrangements} from './ui-arrange.mjs';
 
-const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'cut']);
+const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'hop', 'cut']);
 const EXITS = Object.freeze(['lift', 'rack']);
 const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue'];
 // The entrance an element makes when it names none: a headline racks into
-// focus, a bloom is its own swell, everything else rises.
-const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut'});
+// focus, a bloom and a burst are their own swell, a host hops in, everything else rises.
+const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut', burst: 'cut', host: 'hop'});
+// Light kinds: drawn over the scene, never content (no layout part, not the
+// scene's first thing on screen, free to run off the stage).
+const LIGHT_KINDS = new Set(['bloom', 'burst']);
+// A burst centred on a target without a rect of its own reaches this far (design px square).
+const BURST_SIZE = 920;
 const MAX_FLASHES = 12;
 const MAX_ELEMENTS = 120;
 // Text props checked for length and escaped by the painter; headline text must fit its rect.
 const HEADLINE_ADVANCE = 0.6;
 // The sound an entrance asks for when the element names none.
-const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud'});
+const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh-soft', drop: 'thud', hop: 'pop-soft'});
 // Kinds whose text the safe zone and caption band rules apply to.
 const TEXT_KINDS = new Set(['headline', 'chip']);
-// The smallest rect a panel draws legibly in (design px); lock-cards also
+// The smallest rect a panel draws legibly in (design px), and paints within
+// (test/ui_painted_bounds.test.js); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-const MIN_SIZE = Object.freeze({bloom: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
+export const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}, 'scan-plane': {width: 600, height: 360}, comment: {width: 560, height: 120}});
 const LOCK_CARD_MIN = 110;
+// A pad-grid's pads need this much (design px) to keep their labels legible; pads sit 20 px apart.
+const PAD_MIN = Object.freeze({width: 150, height: 130});
+// A comment scales its stacked parts to fit its rect, to no less than this.
+const COMMENT_MIN_SCALE = 0.75;
+// The host mascot (kit/core/ui-host.mjs): its poses, its props, what a beat
+// may set, the poses that keep moving while held, and where a perch rests it
+// along its element's top edge by default (0 left, 1 right).
+const HOST_POSES = Object.freeze(uiHostPoses());
+const HOST_PROPS = ['pose', 'tone', 'from', 'perch', 'along'];
+const HOST_BEAT_PROPS = ['pose', 'tone'];
+const HOST_LOOPS = new Set(['hop', 'cheer']);
+const HOST_ALONG = 0.8;
 
 /** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
 export function uiTextBox(kind, props, rect, beats = []) {
-  const states = [props, ...(props.swap ? [{...props, ...props.swap}] : []), ...beats.map((beat) => ({...props, ...beat.set}))];
   let width = 0, height = 0;
-  for (const state of states) {
+  for (const state of headlineStates(props, beats)) {
+    if (kind === 'headline') {
+      const m = headlineMeasure(state);
+      width = Math.max(width, m.width);
+      height = Math.max(height, m.height);
+      continue;
+    }
     const text = String(state.text ?? '');
-    const size = Number(state.size) || (kind === 'headline' ? 112 : 30);
-    width = Math.max(width, kind === 'headline' ? text.length * size * HEADLINE_ADVANCE : text.length * size * 0.62 + size * 1.2);
-    height = Math.max(height, kind === 'headline' ? size * 1.05 : size * 1.45);
+    const size = Number(state.size) || 30;
+    width = Math.max(width, text.length * size * 0.62 + size * 1.2);
+    height = Math.max(height, size * 1.45);
   }
   width = Math.min(rect.width, width);
   height = Math.min(rect.height, height);
   const align = props.align ?? 'center';
   const x = align === 'left' ? rect.x : align === 'right' ? rect.x + rect.width - width : rect.x + (rect.width - width) / 2;
   return {x: r2(x), y: r2(rect.y + (rect.height - height) / 2), width: r2(width), height: r2(height)};
+}
+
+/**
+ * Every state an element's text shows: its props, its swap (whose text
+ * stands in for the lines, as the painter's uiHeadlineState) and each beat
+ * merged in, in order (uiPropsAt).
+ */
+function headlineStates(props, beats) {
+  const states = [props];
+  if (props.swap) {
+    const swapped = {...props, ...props.swap};
+    if (props.swap.text !== undefined && props.swap.lines === undefined) delete swapped.lines;
+    states.push(swapped);
+  }
+  let at = props;
+  for (const beat of beats) { at = {...at, ...beat.set}; states.push(at); }
+  return states;
+}
+
+/**
+ * A headline state's text block (design px): its single line at its size,
+ * or its rich lines stacked, each at its own size, tracking and gap, as the
+ * painter sets them (uiHeadlineLines).
+ */
+function headlineMeasure(state) {
+  const rich = Array.isArray(state.lines) && state.lines.length;
+  const lines = uiHeadlineLines(state, 0);
+  if (!rich) return {width: lines[0].text.length * lines[0].size * HEADLINE_ADVANCE, height: lines[0].size * 1.05, lines: [{width: lines[0].text.length * lines[0].size * HEADLINE_ADVANCE}]};
+  const each = lines.map((line) => ({width: uiHeadlinePlain(line.text).length * line.size * line.advance, height: line.size + line.gap}));
+  return {width: Math.max(...each.map((line) => line.width)), height: each.reduce((sum, line) => sum + line.height, 0), lines: each};
 }
 
 /** A tilted element's footprint: the rect turned by tilt.z, grown for the perspective of tilt.x and tilt.y. */
@@ -132,25 +194,63 @@ function uiResolve(params, ctx) {
   let firstAt = Infinity;
   const time = (value, path) => check.num(value, path, 0, b.duration);
 
+  // Top-level elements by id, for a host's perch (it may name one listed after it).
+  const byId = new Map();
+  for (const raw of Array.isArray(p.elements) ? p.elements : []) if (raw && typeof raw === 'object' && typeof raw.id === 'string') byId.set(raw.id, raw);
+  /** A perched host's rect: its feet on its element's top edge, centred at along (0–1) of its width; and that element's layer, entrance and out. */
+  const perchOf = (raw, path, parent, size) => {
+    const id = check.str(raw.props.perch, `${path}.props.perch`, 40);
+    if (parent) check.fail(`${path}.props.perch`, 'rests a top-level host on a top-level element; a host inside a window or stack places itself with its rect');
+    const target = byId.get(id);
+    if (!target || target === raw) check.fail(`${path}.props.perch`, `names "${id}", which is not ${target === raw ? 'another' : 'a top-level'} element's id${byId.size ? ` (ids: ${[...byId.keys()].filter((key) => byId.get(key) !== raw).join(', ')})` : ''}`);
+    if (target.kind === 'host' || LIGHT_KINDS.has(target.kind)) check.fail(`${path}.props.perch`, `names "${id}", a ${target.kind}; a host perches on a panel, a headline or a chip`);
+    if (target.tilt !== undefined) check.fail(`${path}.props.perch`, `names "${id}", which is tilted; a host perches on a flat element's top edge`);
+    const r = target.rect ?? {};
+    if (![r.x, r.y, r.width].every(Number.isFinite)) check.fail(`${path}.props.perch`, `names "${id}", whose rect is not set in numbers`);
+    const along = raw.props.along === undefined ? HOST_ALONG : check.num(raw.props.along, `${path}.props.along`, 0, 1);
+    const rect = {x: r2(r.x + along * r.width - size.width / 2), y: r2(r.y - size.height), ...size};
+    return {id, rect, depth: Number.isFinite(target.depth) ? target.depth : 0, at: Number.isFinite(target.at) ? target.at : 0, out: Number.isFinite(target.out) ? target.out : undefined};
+  };
+  /**
+   * A host's pose events: each pose change is a change on screen (with its
+   * beat's cue), and a looping pose (hop, cheer) keeps moving until the next
+   * change, its leaving or the scene's end, so its event spans that time.
+   */
+  const hostEvents = (beats, props, at, out, n) => {
+    const changes = beats.filter((beat) => beat.set.pose !== undefined);
+    const end = out ?? b.duration;
+    const span = (pose, from, k) => (HOST_LOOPS.has(pose) ? {endTime: rt(b.start + Math.max(from, (k < changes.length ? changes[k].at : end)))} : {});
+    // A host that enters already looping (cheer from the start) moves from its entrance on.
+    if (HOST_LOOPS.has(props.pose)) b.events.push({id: `${b.id}-pose-${n}-0`, name: 'pose', time: rt(b.start + at), role: 'emphasis', ...span(props.pose, at, 0)});
+    changes.forEach((beat, k) => b.events.push({id: `${b.id}-pose-${n}-${k + 1}`, name: 'pose', time: rt(b.start + beat.at), role: 'emphasis', ...span(beat.set.pose, beat.at, k + 1), ...(beat.cue ? {cue: beat.cue} : {})}));
+  };
+
   const element = (raw, path, parent) => {
-    check.obj(raw, path, ELEMENT_KEYS, ['kind', 'rect', 'at']);
+    // A burst aimed at another element (props.target) may leave its rect out.
+    const aimed = raw?.kind === 'burst' && raw?.props?.target !== undefined;
+    check.obj(raw, path, ELEMENT_KEYS, aimed ? ['kind', 'at'] : ['kind', 'rect', 'at']);
     if (++count > MAX_ELEMENTS) check.fail(path, `is one element too many: a ui-scene draws at most ${MAX_ELEMENTS}`);
     const kind = check.oneOf(raw.kind, `${path}.kind`, UI_KINDS);
-    check.obj(raw.rect, `${path}.rect`, ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);
-    const rect = {x: check.num(raw.rect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(raw.rect.y, `${path}.rect.y`, -H, 2 * H),
-      width: check.num(raw.rect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(raw.rect.height, `${path}.rect.height`, 4, 2 * H)};
+    // A burst aimed at a target may leave its rect out; a perched host takes only its size: the perch places it.
+    const rawRect = raw.rect ?? {x: 0, y: 0, width: BURST_SIZE, height: BURST_SIZE};
+    const perched = kind === 'host' && raw.props && typeof raw.props === 'object' && raw.props.perch !== undefined;
+    check.obj(rawRect, `${path}.rect`, ['x', 'y', 'width', 'height'], perched ? ['width', 'height'] : ['x', 'y', 'width', 'height']);
+    const size = {width: check.num(rawRect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(rawRect.height, `${path}.rect.height`, 4, 2 * H)};
+    const perch = perched ? perchOf(raw, path, parent, size) : null;
+    const rect = perch ? perch.rect : {x: check.num(rawRect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(rawRect.y, `${path}.rect.y`, -H, 2 * H), ...size};
     const bleed = raw.bleed === undefined ? false : check.bool(raw.bleed, `${path}.bleed`);
     const min = MIN_SIZE[kind];
     if (min && (rect.width + 0.5 < min.width || rect.height + 0.5 < min.height)) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; a ${kind} needs at least ${min.width}×${min.height} to draw legibly`);
     const tilt = raw.tilt === undefined ? undefined : tiltOf(check, raw.tilt, `${path}.tilt`);
-    let depth = 0;
+    // A perched host shares its element's layer, so depth and the dolly keep it on the edge.
+    let depth = perch && raw.depth === undefined ? perch.depth : 0;
     if (raw.depth !== undefined) {
       if (parent) check.fail(`${path}.depth`, 'sets a layer of the scene; only top-level elements take depth (a child sits at its parent\'s)');
       depth = check.num(raw.depth, `${path}.depth`, 0, 1);
     }
     const footprint = parent ? uiTiltBox(rect, tilt) : shown(uiTiltBox(rect, tilt), depth);
-    // A bloom fades to nothing at its edges: light may run off the stage.
-    if (!parent && !bleed && !TEXT_KINDS.has(kind) && kind !== 'bloom') {
+    // Light (a bloom, a burst) fades to nothing at its edges: it may run off the stage.
+    if (!parent && !bleed && !TEXT_KINDS.has(kind) && !LIGHT_KINDS.has(kind)) {
       const r = footprint, eps = 0.5;
       if (r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps) {
         check.fail(`${path}.rect`, `${tilt || depth || stageView ? `${tilt ? 'turned by its tilt' : 'placed by its depth and the stage'}, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
@@ -158,9 +258,11 @@ function uiResolve(params, ctx) {
     }
     const at = time(raw.at, `${path}.at`);
     if (parent && at + 1e-9 < parent.at) check.fail(`${path}.at`, `is before its parent enters (${parent.at} s)`);
-    // A bloom is light, not something on screen.
-    if (kind !== 'bloom') firstAt = Math.min(firstAt, at);
-    const out = raw.out === undefined ? undefined : time(raw.out, `${path}.out`);
+    if (perch && at + 1e-9 < perch.at) check.fail(`${path}.at`, `is before "${perch.id}", the element it perches on, enters (${perch.at} s)`);
+    // A bloom or a burst is light, not something on screen.
+    if (!LIGHT_KINDS.has(kind)) firstAt = Math.min(firstAt, at);
+    // A perched host leaves with its element unless it names its own out.
+    const out = raw.out === undefined ? perch?.out : time(raw.out, `${path}.out`);
     if (out !== undefined && out <= at) check.fail(`${path}.out`, 'must be after at');
     const enter = raw.enter === undefined ? DEFAULT_ENTER[kind] ?? 'up' : check.oneOf(raw.enter, `${path}.enter`, ENTERS);
     // An element that racked into focus racks out of it.
@@ -179,23 +281,49 @@ function uiResolve(params, ctx) {
       ids.add(id);
     }
     const props = raw.props === undefined ? {} : raw.props;
-    check.obj(props, `${path}.props`, Object.keys(props));
-    if (kind === 'headline') headlineFits(check, props, rect, `${path}.props`);
+    check.obj(props, `${path}.props`, kind === 'host' ? HOST_PROPS : Object.keys(props));
+    if (kind === 'headline') {
+      headlineFits(check, props, rect, `${path}.props`, {at, time});
+      if (props.swap !== undefined) {
+        check.obj(props.swap, `${path}.props.swap`, Object.keys(props.swap), ['at']);
+        if (props.swap.text !== undefined || props.swap.lines !== undefined) headlineFits(check, headlineStates(props, [])[1], rect, `${path}.props.swap`, {at, time});
+      }
+    }
+    if (kind === 'burst') burstProps(check, props, `${path}.props`);
+    if (kind === 'host') hostProps(check, props, `${path}.props`);
+    let state = props;
     const beats = (raw.beats ?? []).map((beat, k) => {
       check.obj(beat, `${path}.beats[${k}]`, ['at', 'set', 'cue'], ['at', 'set']);
-      check.obj(beat.set, `${path}.beats[${k}].set`, Object.keys(beat.set));
-      if (kind === 'headline' && beat.set.text !== undefined) headlineFits(check, {...props, ...beat.set}, rect, `${path}.beats[${k}].set`);
+      check.obj(beat.set, `${path}.beats[${k}].set`, kind === 'host' ? HOST_BEAT_PROPS : Object.keys(beat.set));
+      if (kind === 'headline') {
+        if (Array.isArray(state.lines) && beat.set.text !== undefined && beat.set.lines === undefined) check.fail(`${path}.beats[${k}].set.text`, 'changes a headline set in lines; change them with set.lines');
+        state = {...state, ...beat.set};
+        if (beat.set.text !== undefined || beat.set.lines !== undefined) headlineFits(check, state, rect, `${path}.beats[${k}].set`, {at, time});
+      }
+      if (kind === 'host') hostProps(check, beat.set, `${path}.beats[${k}].set`);
       const beatAt = time(beat.at, `${path}.beats[${k}].at`);
       const cue = beat.cue === undefined ? null : check.str(beat.cue, `${path}.beats[${k}].cue`, 32);
       // Every beat is a change on screen (the holds gate counts events); only a cue makes a sound.
-      b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
-      return {at: beatAt, set: beat.set};
+      // A host's pose change is a pose event, pushed below once the poses are in order.
+      if (!(kind === 'host' && beat.set.pose !== undefined)) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
+      return {at: beatAt, set: beat.set, ...(cue ? {cue} : {})};
     }).sort((x, y) => x.at - y.at);
+    if (kind === 'host') hostEvents(beats, props, at, out, count);
+    for (const beat of beats) delete beat.cue;
     if (!parent && !bleed && TEXT_KINDS.has(kind)) {
       const box = shown(uiTextBox(kind, props, rect, beats), depth), eps = 0.5;
       const outside = box.x < safe.x - eps || box.y < safe.y - eps || box.x + box.width > safe.x + safe.width + eps || box.y + box.height > safe.y + safe.height + eps;
       const inBand = box.y < band.y + band.height && box.y + box.height > band.y && box.x < band.x + band.width && box.x + box.width > band.x;
       if (outside || inBand) check.fail(`${path}.rect`, `sets its text in {x: ${box.x}, y: ${box.y}, width: ${box.width}, height: ${box.height}}, which must sit inside the platform safe zone {x: ${safe.x}, y: ${safe.y}, width: ${safe.width}, height: ${safe.height}} (design px) and clear of the caption band (y ${band.y}–${r2(band.y + band.height)}): headlines and chips are the text people read`);
+    }
+    if (kind === 'pad-grid') {
+      const n = Array.isArray(props.pads) ? props.pads.length : 9, cols = Math.max(1, Math.min(n, Number(props.cols) || 3)), rows = Math.ceil(n / cols);
+      const need = {width: cols * (PAD_MIN.width + 20) - 20, height: rows * (PAD_MIN.height + 20) - 20};
+      if (rect.width + 0.5 < need.width || rect.height + 0.5 < need.height) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; ${n} pads in ${cols} columns (${rows} rows) need at least ${need.width}×${need.height} (${PAD_MIN.width}×${PAD_MIN.height} a pad); widen it, or set more cols for fewer rows`);
+    }
+    if (kind === 'comment') {
+      const need = Math.ceil(uiCommentHeight(props) * COMMENT_MIN_SCALE);
+      if (rect.height + 0.5 < need) check.fail(`${path}.rect`, `is ${rect.height} px tall; this comment stacks to ${uiCommentHeight(props)} px (its box, the sent bubble${props.reply ? ', the reply' : ''}) and needs a height of ${need} or more to draw legibly (it scales to fit)`);
     }
     if (kind === 'lock-cards') {
       const n = Array.isArray(props.cards) ? props.cards.length : 0;
@@ -209,6 +337,8 @@ function uiResolve(params, ctx) {
     // A moving entrance (a focus pull included) and each flash are changes on screen; a cut is not.
     if (!parent && enter !== 'cut') b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', ...(cue ? {cue} : {})});
     if (flashAt) flashAt.forEach((t, k) => b.events.push({id: `${b.id}-flash-${count}-${k}`, name: 'flash', time: rt(b.start + t), endTime: rt(b.start + t + 0.35), role: 'emphasis'}));
+    // A burst is the hero beat: an emphasis on screen (with its cue, if it names one).
+    if (kind === 'burst') b.events.push({id: `${b.id}-burst-${count}`, name: 'burst', time: rt(b.start + at), endTime: rt(b.start + at + (props.duration ?? 0.6)), role: 'emphasis', ...(cue ? {cue} : {})});
     const node = {kind, rect, at, enter, props, beats,
       ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(exit !== 'lift' ? {exit} : {}), ...(tilt ? {tilt} : {}),
       ...(depth ? {depth} : {}), ...(flashAt ? {flashAt} : {}), ...(flashTone ? {flashTone} : {}),
@@ -216,6 +346,10 @@ function uiResolve(params, ctx) {
       ...(raw.enterDuration !== undefined ? {enterDuration: check.num(raw.enterDuration, `${path}.enterDuration`, 0.1, 1.5)} : {}),
       ...(raw.dist !== undefined ? {dist: check.num(raw.dist, `${path}.dist`, 0, 2000)} : {}),
       ...(raw.overshoot !== undefined ? {overshoot: check.num(raw.overshoot, `${path}.overshoot`, 0, 3)} : {})};
+    if (kind === 'burst' && props.target !== undefined) {
+      if (parent) check.fail(`${path}.props.target`, 'aims a top-level burst; a child burst sits in its parent, so give it a rect instead');
+      aims.push({node, sized: raw.rect !== undefined, path: `${path}.props.target`});
+    }
     if (raw.children !== undefined) {
       if (!Array.isArray(raw.children)) check.fail(`${path}.children`, 'must be an array of elements');
       node.children = raw.children.map((child, k) => element(child, `${path}.children[${k}]`, node));
@@ -224,7 +358,30 @@ function uiResolve(params, ctx) {
   };
 
   if (!Array.isArray(p.elements) || !p.elements.length) check.fail('params.elements', 'must be a non-empty array of elements');
-  const elements = p.elements.map((raw, k) => element(raw, `params.elements[${k}]`, null));
+  const aims = [];
+  // Arranged stacks (arrange fan, wall, stack, orbit) become their children, placed in depth layers.
+  const placed = expandArrangements(check, p.elements, {stage, band, minSize: MIN_SIZE, footprint: (rect, tilt, depth) => shown(uiTiltBox(rect, tilt), depth)});
+  const raws = placed.map(({raw}) => raw);
+  const elements = placed.map(({raw, path}) => element(raw, path, null));
+  // A burst aimed at an element centres its rect on that element's centre
+  // (where its text sets, for a headline or chip; children by their parent's offset).
+  if (aims.length) {
+    const centres = new Map();
+    const walk = (list, ox, oy) => {
+      for (const node of list) {
+        const r = TEXT_KINDS.has(node.kind) ? uiTextBox(node.kind, node.props, node.rect, node.beats) : node.rect;
+        if (node.id) centres.set(node.id, {x: ox + r.x + r.width / 2, y: oy + r.y + r.height / 2});
+        if (node.children) walk(node.children, ox + node.rect.x, oy + node.rect.y);
+      }
+    };
+    walk(elements, 0, 0);
+    for (const {node, sized, path} of aims) {
+      const centre = centres.get(node.props.target);
+      if (!centre || node.props.target === node.id) check.fail(path, `names "${node.props.target}", which is not the id of another element in this scene`);
+      const width = sized ? node.rect.width : BURST_SIZE, height = sized ? node.rect.height : BURST_SIZE;
+      node.rect = {x: r2(centre.x - width / 2), y: r2(centre.y - height / 2), width, height};
+    }
+  }
   // A scene that opens the video should show something at frame 0: enter: "cut" at 0.
   if (firstAt > 0.6) check.fail('params.elements', `leave the scene empty until ${r2(firstAt)} s; put something on screen by 0.6 s`);
 
@@ -240,9 +397,12 @@ function uiResolve(params, ctx) {
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
   // Bleed panels count too (they fill the frame); bleed text is decoration.
   const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
-    rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), bloom: element.kind === 'bloom'}))
-    .filter(({k, text, bloom}) => !bloom && !(text && p.elements[k].bleed));
+    rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), light: LIGHT_KINDS.has(element.kind)}))
+    .filter(({k, text, light}) => !light && !(text && raws[k].bleed));
   model.layout.drift = false;
+  // A portrait scene fills its stage top to bottom: the layout check's
+  // stage-fill rule warns when a band of it stays empty (STAGE_FILL).
+  if (b.portrait) model.layout.fill = {group: b.id, stage: scale(stage)};
   if (parts.length) {
     const area = (r) => r.width * r.height;
     const pool = parts.some((part) => part.text) ? parts.filter((part) => part.text) : parts;
@@ -295,12 +455,70 @@ function tiltOf(check, tilt, path) {
   return out;
 }
 
-/** A headline's text must be a short string that sets inside its rect at its size. */
-function headlineFits(check, props, rect, path) {
-  const text = check.str(props.text, `${path}.text`, 40);
-  const size = props.size === undefined ? 112 : check.num(props.size, `${path}.size`, 28, 320);
-  const width = text.length * size * HEADLINE_ADVANCE;
-  if (width > rect.width * 1.04) check.fail(`${path}.text`, `"${text}" at ${size} px sets about ${Math.round(width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, lower size or widen the rect`);
+/** A host's props (or a beat's set): a pose it draws, a tone, a side to hop in from, a perch id and where along it. */
+function hostProps(check, props, path) {
+  if (props.pose !== undefined) check.oneOf(props.pose, `${path}.pose`, HOST_POSES);
+  if (props.tone !== undefined && (typeof props.tone !== 'string' || !/^(ink|muted|accent|alert|#[0-9a-fA-F]{6})$/.test(props.tone))) check.fail(`${path}.tone`, 'must be ink, muted, accent, alert or #rrggbb');
+  if (props.from !== undefined) check.oneOf(props.from, `${path}.from`, ['below', 'left', 'right']);
+  if (props.along !== undefined) check.num(props.along, `${path}.along`, 0, 1);
+}
+
+/** A burst's props: its ray count, length, strength, tone and target. */
+function burstProps(check, props, path) {
+  if (props.rays !== undefined) check.int(props.rays, `${path}.rays`, 6, 24);
+  if (props.duration !== undefined) check.num(props.duration, `${path}.duration`, 0.3, 1.2);
+  if (props.strength !== undefined) check.num(props.strength, `${path}.strength`, 0, 1.5);
+  if (props.tone !== undefined) check.str(props.tone, `${path}.tone`, 16);
+  if (props.target !== undefined) check.str(props.target, `${path}.target`, 40);
+}
+
+const LINE_KEYS = ['text', 'size', 'accent', 'weight', 'tone', 'count', 'enter', 'at'];
+const LINE_SIZES = ['s', 'm', 'l', 'xl'];
+const MAX_LINES = 4;
+
+/**
+ * A headline's text must be a short string that sets inside its rect at its
+ * size; rich lines (props.lines) each fit its width and together its height.
+ */
+function headlineFits(check, props, rect, path, {at, time}) {
+  const rich = props.lines !== undefined && props.lines !== null;
+  if (!rich) {
+    const text = check.str(props.text, `${path}.text`, 40);
+    const size = props.size === undefined ? 112 : check.num(props.size, `${path}.size`, 28, 320);
+    const width = text.length * size * HEADLINE_ADVANCE;
+    if (width > rect.width * 1.04) check.fail(`${path}.text`, `"${text}" at ${size} px sets about ${Math.round(width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, lower size or widen the rect`);
+    return;
+  }
+  if (props.text !== undefined && props.text !== null && props.lines !== undefined && path.endsWith('.props')) check.fail(`${path}`, 'sets text or lines, not both');
+  if (!Array.isArray(props.lines) || !props.lines.length || props.lines.length > MAX_LINES) check.fail(`${path}.lines`, `must be a list of 1–${MAX_LINES} lines [{text, size (${LINE_SIZES.join(', ')} or px), accent, weight, tone, count, enter, at}]`);
+  if (props.stagger !== undefined) check.num(props.stagger, `${path}.stagger`, 0, 1);
+  props.lines.forEach((line, k) => {
+    const lp = `${path}.lines[${k}]`;
+    check.obj(line, lp, LINE_KEYS, ['text']);
+    const text = check.str(line.text, `${lp}.text`, 44);
+    const marks = (text.match(/\*/g) ?? []).length;
+    if (marks % 2) check.fail(`${lp}.text`, `"${text}" opens an accent with * it does not close (*word* sets a word in the accent)`);
+    if (uiHeadlinePlain(text).length > 40) check.fail(`${lp}.text`, 'must be at most 40 characters');
+    if (line.size !== undefined && !(typeof line.size === 'number' ? (check.num(line.size, `${lp}.size`, 28, 320), true) : LINE_SIZES.includes(line.size))) check.fail(`${lp}.size`, `must be one of ${LINE_SIZES.join(', ')} or px (28–320)`);
+    if (line.accent !== undefined) check.bool(line.accent, `${lp}.accent`);
+    if (line.weight !== undefined) check.int(line.weight, `${lp}.weight`, 300, 900);
+    if (line.tone !== undefined) check.str(line.tone, `${lp}.tone`, 16);
+    if (line.enter !== undefined) check.oneOf(line.enter, `${lp}.enter`, ENTERS);
+    if (line.at !== undefined && time(line.at, `${lp}.at`) + 1e-9 < at) check.fail(`${lp}.at`, `is before its headline enters (${at} s)`);
+    if (line.count !== undefined) {
+      if (typeof line.count === 'object' && line.count !== null) {
+        check.obj(line.count, `${lp}.count`, ['from', 'dur'], []);
+        if (line.count.from !== undefined) check.num(line.count.from, `${lp}.count.from`, -1e12, 1e12);
+        if (line.count.dur !== undefined) check.num(line.count.dur, `${lp}.count.dur`, 0.2, 3);
+      } else check.bool(line.count, `${lp}.count`);
+      if (line.count && !/\d/.test(text)) check.fail(`${lp}.count`, `counts up the number in its text, and "${text}" has none`);
+    }
+  });
+  const m = headlineMeasure(props);
+  m.lines.forEach((line, k) => {
+    if (line.width > rect.width * 1.04) check.fail(`${path}.lines[${k}].text`, `"${uiHeadlinePlain(props.lines[k].text)}" at size ${props.lines[k].size ?? 'l'} sets about ${Math.round(line.width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, pick a smaller size or widen the rect`);
+  });
+  if (m.height > rect.height * 1.04) check.fail(`${path}.lines`, `stack about ${Math.round(m.height)} px tall, taller than their rect (${Math.round(rect.height)} px); raise the rect's height, drop a line or pick smaller sizes`);
 }
 
 /** The host every element is painted into: the whole canvas, under the module rect's origin. */
@@ -335,8 +553,10 @@ export function uiReadingWords(params) {
     for (const element of Array.isArray(elements) ? elements : []) {
       if (!element || typeof element !== 'object') continue;
       if (element.kind === 'headline') {
-        const states = [element.props?.text, element.props?.swap?.text, ...(element.beats ?? []).map((beat) => beat?.set?.text)];
-        words += Math.max(0, ...states.map(count));
+        // A state's words: its text, or its rich lines read together (markup out).
+        const read = (state) => (Array.isArray(state?.lines) ? state.lines.map((line) => uiHeadlinePlain(line?.text ?? '')).join(' ') : state?.text);
+        const states = [element.props, element.props?.swap, ...(element.beats ?? []).map((beat) => beat?.set)];
+        words += Math.max(0, ...states.map((state) => count(read(state))));
       }
       walk(element.children);
     }
@@ -347,11 +567,11 @@ export function uiReadingWords(params) {
 
 export const uiScene = {
   id: 'ui-scene',
-  describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips), each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
-  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
+  describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips) and a pixel mascot host that hops in, idles and reacts, each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
+  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all); a top-level {kind: "stack", arrange (${ARRANGEMENTS.join(', ')}), rect (region, default the stage), at, enter, children [panels without rect, depth or tilt, the first the front hero]} lays its children out as a layered collage`,
     alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)',
     stage: '{tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)'},
-  events: ['enter', 'beat'],
+  events: ['enter', 'beat', 'pose'],
   timing: {...timingRules({rules: ['the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands', 'every time is seconds from the scene start, inside the scene', 'a child enters no earlier than its parent']}), leadIn: 0},
   variants: ['default'],
   resolve: uiResolve, view: uiView, timeline: uiTimeline

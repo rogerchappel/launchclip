@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.style.v3",
   "name": "signal-ui",
-  "description": "Tool and workflow explainers on dark animated interface panels: near-black, one signal-lime accent and a warm red for the broken state, a tight grotesque with a mono for interface text, a coarse dot grid, small one-word captions, kinetic camera and real motion blur.",
+  "description": "Tool and workflow explainers on dark animated interface panels: near-black, one signal-lime accent and a warm red for the broken state, a tight grotesque with a mono for interface text, a dark ground with a faint dot grid only where the key light falls, small one-word captions, kinetic camera and real motion blur.",
   "brand": {
     "colors": {
       "bg": "#0a0b08",
@@ -31,7 +31,7 @@
         }
       }
     },
-    "feel": "kinetic",
+    "feel": "snap",
     "blur": {
       "samples": 6,
       "shutter": 1.5
@@ -112,12 +112,12 @@
       "color": "primary",
       "scale": 0.75,
       "density": 0.3,
-      "intensity": 0.15,
+      "intensity": 0.06,
       "speed": 0,
-      "lit": 0.7
+      "lit": 0.85
     }
   },
-  "notes": "Measured from one public interface-explainer reel (kit/profiles/ui-explainer-reel.json): about 11% still frames, a 20 px dot period at 720 wide, one-word captions about 52 px tall, three or more type sizes with a hero headline. Settled panels hold still; life comes from entrances, timed state changes inside the panels and the shared camera.",
+  "notes": "Measured from one public interface-explainer reel (kit/profiles/ui-explainer-reel.json): about 11% still frames, a 20 px dot period at 720 wide, one-word captions about 52 px tall, three or more type sizes with a hero headline. Settled panels hold still; life comes from entrances, timed state changes inside the panels, the shared camera and a ui-scene host: the pixel mascot in the accent, perched on the hero panel in most interface scenes, reacting on the key words.",
   "light": {
     "preset": "studio"
   }

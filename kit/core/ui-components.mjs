@@ -6,13 +6,13 @@
 // functions (no module-level constants); settled parts hold still, life comes
 // from staggered entrances and timed state changes.
 
-import {uiClamp, uiP, uiLerp, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
+import {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
 
 /** Kind → draw function for the components in this file. */
 function UI_COMPONENT_TABLE() {
   return {
     stack: uiStack, meter: uiMeter, terminal: uiTerminal, results: uiResults, 'card-wall': uiCardWall, downloads: uiDownloads,
-    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane, bloom: uiBloom
+    comment: uiComment, 'marker-snap': uiMarkerSnap, 'frame-ruler': uiFrameRuler, 'pad-grid': uiPadGrid, 'scan-plane': uiScanPlane, bloom: uiBloom, burst: uiBurst
   };
 }
 
@@ -100,14 +100,15 @@ function uiTerminal(el, t, ctx) {
   const caretUntil = lines.length ? lineAt(0) : out ? outAt : 1e9;
   let s = uiHeader(ctx, p.title || 'terminal', p.sub, p.right);
   s += uiDiv('left:30px;top:100px;width:' + (w - 60) + 'px;font-family:' + ctx.fonts.mono + ';font-size:36px;line-height:1.3;color:' + c.ink, '<span style="color:' + c.accent + '">❯</span> ' + uiEsc(uiTyped(prompt, t, typeAt, cps)) + (t < caretUntil ? uiCaret(t, c.accent) : ''));
-  const lh = 62, l0 = 190;
+  // Lines tighten (to 44 px) so the output well keeps 140 px inside the rect.
+  const l0 = 190, lh = out && lines.length ? Math.max(44, Math.min(62, (h - l0 - 30 - 40 - 140) / lines.length)) : 62;
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
     s += uiDiv('left:30px;top:' + (l0 + i * lh) + 'px;white-space:nowrap;font-family:' + ctx.fonts.mono + ';font-size:32px;color:' + c.soft + ';' + uiEnter(t, lineAt(i), 'left', {dist: 60}),
       '<span style="color:' + c.muted + '">' + uiPad(i + 1) + '</span>&nbsp; ' + (ln.key ? '<span style="color:' + c.accent + '">' + uiEsc(ln.key) + '</span> = ' : '') + uiEsc(ln.text));
   }
   if (out) {
-    const y = l0 + lines.length * lh + 40, wh = Math.max(140, Math.min(240, h - y - 30)), ww = w - 100, bh = wh - 80;
+    const y = l0 + lines.length * lh + 40, wh = Math.max(100, Math.min(240, h - y - 30)), ww = w - 100, bh = wh - 80;
     const shape = out.shape || 'rise';
     const env = shape === 'rise' ? function (q) { return 0.1 + 0.9 * Math.pow(q, 1.6); } : shape === 'decay' ? function (q) { return Math.exp(-q * 4); } : null;
     const col = shape === 'rise' ? function (q) { return q > 0.7 ? c.accent : c.soft; } : shape === 'decay' ? function (q) { return q < 0.18 ? c.accent : c.soft; } : c.soft;
@@ -140,9 +141,13 @@ function uiResults(el, t, ctx) {
     uiDiv('left:30px;top:32px;font-size:56px;line-height:1;color:' + c.muted, '⌕') + uiDiv('left:110px;top:38px;white-space:nowrap;font-family:' + ctx.fonts.mono + ';font-size:42px;color:' + c.ink, uiEsc(uiTyped(q, t, typeAt, cps)) + (t < firstAt + 0.4 ? uiCaret(t, c.accent) : '')));
   const n = cards.length, fan = p.layout !== 'row';
   const top = 170, avail = h - top;
-  const cw = fan ? Math.min(420, w * 0.44) : (w - 24 * Math.max(0, n - 1)) / Math.max(1, n);
-  const chh = fan ? Math.min(560, avail - 40) : Math.min(560, avail);
-  const y0 = fan ? top + Math.max(20, (avail - chh) / 2) : top;
+  // A fanned card k steps from the middle sits k × 0.71 card widths over and
+  // turns 4° a step: the outer cards' corners stay inside the rect.
+  const reach = 0.71 * Math.max(0, (n - 1) / 2) + 0.5 + 0.06 * Math.max(0, (n - 1) / 2);
+  const cw = fan ? Math.min(420, w * 0.44, w * 0.48 / reach) : (w - 24 * Math.max(0, n - 1)) / Math.max(1, n);
+  // Fanned cards turn up to 4° a step: 30 px clear above and below holds their corners.
+  const chh = fan ? Math.min(560, avail - 60) : Math.min(560, avail);
+  const y0 = fan ? top + (avail - chh) / 2 : top;
   const mid = (n - 1) / 2;
   const fs = Math.min(34, cw * 0.085);
   for (let i = 0; i < n; i++) {
@@ -234,9 +239,12 @@ function uiDownloads(el, t, ctx) {
  * comment: a comment box. {avatarLabel, placeholder, text, typeAt, cps (12), sendAt,
  * sent ("you: …", the part before ": " muted), reply, replyAt, links: [labels] or linkLabel}.
  * The text types, the send button dips, the sent bubble and the reply land.
+ * The parts stack from the top (uiCommentHeight); a rect shorter than they
+ * need scales the drawing to fit.
  */
 function uiComment(el, t, ctx) {
-  const p = el.props, c = ctx.c, w = el.rect.width, a0 = el.at;
+  const p = el.props, c = ctx.c, a0 = el.at;
+  const natH = uiCommentHeight(p), s0 = Math.min(1, el.rect.height / natH), w = el.rect.width / s0;
   const text = String(p.text || ''), cps = p.cps || 12;
   const typeAt = p.typeAt === undefined ? a0 + 0.3 : p.typeAt;
   const sendAt = p.sendAt === undefined ? typeAt + text.length / cps + 0.4 : p.sendAt;
@@ -261,51 +269,77 @@ function uiComment(el, t, ctx) {
       inner += uiDiv('left:' + lx + 'px;top:110px;' + uiEnter(t, replyAt + 0.1 + i * 0.1, 'pop'), uiChipHtml(ctx, {text: '↗ ' + links[i], size: 26}));
       lx += Math.round(String(links[i]).length * 15.6 + 2 * 26 * 0.6 + 50);
     }
-    s += uiDiv('left:' + uiN(w * 0.25) + 'px;top:285px;width:' + uiN(w * 0.75) + 'px;height:' + (links.length ? 200 : 100) + 'px;border-radius:24px;background:' + c.tint + ';box-shadow:0 0 0 3px ' + c.accent + ';' + uiEnter(t, replyAt, 'up', {dist: 100}), inner);
+    s += uiDiv('left:' + uiN(w * 0.25) + 'px;top:' + (sent ? 285 : 150) + 'px;width:' + uiN(w * 0.75) + 'px;height:' + (links.length ? 200 : 100) + 'px;border-radius:24px;background:' + c.tint + ';box-shadow:0 0 0 3px ' + c.accent + ';' + uiEnter(t, replyAt, 'up', {dist: 100}), inner);
   }
-  return s;
+  return uiFit(s, el.rect.width, el.rect.height, w, natH);
+}
+
+/** The height (design px) a comment's parts stack to: the box, the sent bubble, the reply (taller with links). */
+function uiCommentHeight(p) {
+  const sent = p.sent === undefined ? true : !!p.sent;
+  const links = p.links || (p.linkLabel ? [p.linkLabel] : []);
+  if (p.reply) return (sent ? 285 : 150) + (links.length ? 200 : 100);
+  return sent ? 260 : 120;
+}
+
+/**
+ * A drawing laid out in a natW × natH box, scaled down (never up) to fit w × h
+ * and centred: for components whose parts have a smallest legible size, so a
+ * short rect shrinks the drawing rather than letting it spill out of the rect.
+ */
+function uiFit(inner, w, h, natW, natH) {
+  const s = Math.min(1, w / natW, h / natH);
+  if (s >= 0.999) return inner;
+  return '<div style="position:absolute;left:' + uiN((w - natW * s) / 2) + 'px;top:' + uiN((h - natH * s) / 2) + 'px;width:' + uiN(natW) + 'px;height:' + uiN(natH) + 'px;transform-origin:0 0;transform:scale(' + (Math.round(s * 10000) / 10000) + ')">' + inner + '</div>';
 }
 
 /**
  * frame-ruler: a ruler of frame numbers; the playhead eases from start to target,
  * the target number turns accent, a clip drops into the dashed slot.
  * {from, target, start, snapAt, pin, lane, slot: {label, dropAt}, counterLabel}.
+ * Laid out top to bottom in its rect (pin, ruler, lane and slot, counter); a
+ * rect shorter than 560 px scales the drawing to fit.
  */
 function uiFrameRuler(el, t, ctx) {
-  const p = el.props, c = ctx.c, w = el.rect.width, h = el.rect.height, a0 = el.at;
+  const p = el.props, c = ctx.c, a0 = el.at;
+  const s0 = Math.min(1, el.rect.height / 560), w = el.rect.width / s0, h = el.rect.height / s0;
   const target = p.target === undefined ? 547 : p.target, from = p.from === undefined ? target - 9 : p.from;
   const start = p.start === undefined ? target - 3 : p.start;
   const snapAt = p.snapAt === undefined ? a0 + 1 : p.snapAt;
   const slot = p.slot || {}, dropAt = slot.dropAt === undefined ? snapAt + 0.4 : slot.dropAt;
   const step = 120, xOf = function (f) { return w / 2 - 38 + (f - target) * step; };
   const ph = uiP(t, a0 + 0.1, Math.max(0.2, snapAt - a0 - 0.1)), pos = uiLerp(start, target, uiOutBack(ph, 1.1)), cur = Math.round(pos);
-  const done = t >= snapAt, ry = 340;
+  const done = t >= snapAt;
+  // Bands: the pin's head from tp, the ruler at ry, the lane and slot at sy, the counter at the foot.
+  const extra = h - 560, tp = extra * 0.2, ry = tp + 150, sh = 120 + Math.min(30, extra * 0.1), sy = ry + 150 + extra * 0.3, ch = 120;
   let r = '';
   for (let f = from; f <= target + (target - from); f++) {
     const x = xOf(f);
     if (x < -140 || x > w + 20) continue;
     r += uiDiv('left:' + uiN(x) + 'px;top:0;font-family:' + ctx.fonts.mono + ';font-size:34px;font-weight:600;color:' + (f === target && done ? c.accent : c.soft), uiPad(f, 4)) + uiDiv('left:' + uiN(x + 38) + 'px;top:52px;width:3px;height:70px;background:' + c.dim, '') + uiDiv('left:' + uiN(x + 98) + 'px;top:90px;width:2px;height:32px;background:' + c.line2, '');
   }
-  let s = uiDiv('left:0;top:' + ry + 'px;width:' + w + 'px;height:130px;' + uiEnter(t, a0, 'left', {dist: 300, d: 0.4}), r);
+  // The ruler runs on past the rect's sides: clipped there, its ends fading out.
+  const fade = 'linear-gradient(90deg,transparent 0,#000 80px,#000 calc(100% - 80px),transparent 100%)';
+  let s = uiDiv('left:0;top:' + uiN(ry) + 'px;width:' + uiN(w) + 'px;height:130px;overflow:hidden;-webkit-mask-image:' + fade + ';mask-image:' + fade + ';' + uiEnter(t, a0, 'left', {dist: 300, d: 0.4}), r);
   const pinX = xOf(target) + 38;
-  s += uiDiv('left:' + uiN(pinX - 2) + 'px;top:80px;width:5px;height:' + (ry - 80) + 'px;background:' + c.accent + ';' + uiEnter(t, a0 + 0.15, 'down', {dist: 70}),
+  s += uiDiv('left:' + uiN(pinX - 2) + 'px;top:' + uiN(tp + 80) + 'px;width:5px;height:' + uiN(ry - tp - 80) + 'px;background:' + c.accent + ';' + uiEnter(t, a0 + 0.15, 'down', {dist: 70}),
     uiDiv('left:-40px;top:-80px;width:84px;height:84px;border-radius:50%;background:' + c.accent + ';box-shadow:0 0 40px ' + c.accent, '<div style="margin:26px;width:32px;height:32px;border-radius:50%;background:' + c.bg + '"></div>') +
     uiDiv('left:60px;top:-66px;white-space:nowrap;border-radius:999px;padding:6px 18px;font-family:' + ctx.fonts.mono + ';font-weight:700;font-size:36px;background:' + c.ink + ';color:' + c.bg, uiEsc(p.pin || 'HIT · F ' + uiPad(target, 4))));
-  const phx = xOf(pos) + 38, phH = Math.min(560, h - 280 - 160);
-  s += uiDiv('left:' + uiN(phx - 3) + 'px;top:280px;width:7px;height:' + uiN(phH) + 'px;background:#ffffff;box-shadow:0 0 14px #ffffff;' + uiEnter(t, a0 + 0.1, 'down', {dist: 100}), '<div style="position:absolute;left:-18px;top:-10px;width:42px;height:34px;background:#ffffff;clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%)"></div>');
-  if (p.lane !== false) s += uiDiv('left:40px;top:540px;font-family:' + ctx.fonts.mono + ';font-size:36px;color:' + c.muted + ';' + uiEnter(t, a0 + 0.2, 'left', {dist: 80}), uiEsc(p.lane || 'A2 · sfx'));
+  const phx = xOf(pos) + 38;
+  s += uiDiv('left:' + uiN(phx - 3) + 'px;top:' + uiN(ry - 60) + 'px;width:7px;height:' + uiN(sy + sh - ry + 60) + 'px;background:#ffffff;box-shadow:0 0 14px #ffffff;' + uiEnter(t, a0 + 0.1, 'down', {dist: 100}), '<div style="position:absolute;left:-18px;top:-10px;width:42px;height:34px;background:#ffffff;clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%)"></div>');
+  if (p.lane !== false) s += uiDiv('left:40px;top:' + uiN(sy + (sh - 44) / 2) + 'px;width:' + uiN(Math.max(0, pinX - 70)) + 'px;white-space:nowrap;overflow:hidden;font-family:' + ctx.fonts.mono + ';font-size:36px;line-height:44px;color:' + c.muted + ';' + uiEnter(t, a0 + 0.2, 'left', {dist: 80}), uiEsc(p.lane || 'A2 · sfx'));
   if (p.slot !== false) {
-    const sw = Math.max(160, Math.min(380, w - pinX - 20));
-    s += uiDiv('left:' + uiN(pinX) + 'px;top:520px;width:' + uiN(sw) + 'px;height:150px;box-sizing:border-box;border:4px dashed ' + c.accent + ';border-radius:12px;' + uiEnter(t, a0 + 0.25, 'pop'), '');
-    s += uiDiv('left:' + uiN(pinX) + 'px;top:520px;width:' + uiN(sw) + 'px;height:150px;border-radius:12px;background:' + c.accentDim + ';box-shadow:0 0 0 4px ' + c.accent + ',0 0 40px ' + c.accent + '66;' + uiEnter(t, dropAt, 'drop', {dist: 260, d: 0.3}),
-      uiDiv('left:16px;top:10px;white-space:nowrap;font-family:' + ctx.fonts.mono + ';font-size:26px;color:' + c.accent, uiEsc(slot.label || '▸ impact.wav')) + uiDiv('left:16px;top:50px;width:' + uiN(sw - 40) + 'px;height:86px', uiWave(30, sw - 40, 86, 88, c.accent, t, -1, {env: function (q) { return Math.exp(-q * 4); }})));
+    const sw = Math.max(160, Math.min(380, w - pinX - 20)), wv = Math.max(30, sh - 64);
+    s += uiDiv('left:' + uiN(pinX) + 'px;top:' + uiN(sy) + 'px;width:' + uiN(sw) + 'px;height:' + uiN(sh) + 'px;box-sizing:border-box;border:4px dashed ' + c.accent + ';border-radius:12px;' + uiEnter(t, a0 + 0.25, 'pop'), '');
+    s += uiDiv('left:' + uiN(pinX) + 'px;top:' + uiN(sy) + 'px;width:' + uiN(sw) + 'px;height:' + uiN(sh) + 'px;border-radius:12px;overflow:hidden;background:' + c.accentDim + ';box-shadow:0 0 0 4px ' + c.accent + ',0 0 40px ' + c.accent + '66;' + uiEnter(t, dropAt, 'drop', {dist: 260, d: 0.3}),
+      uiDiv('left:16px;top:10px;white-space:nowrap;font-family:' + ctx.fonts.mono + ';font-size:26px;color:' + c.accent, uiEsc(slot.label || '▸ impact.wav')) + uiDiv('left:16px;top:48px;width:' + uiN(sw - 40) + 'px;height:' + uiN(wv) + 'px', uiWave(30, sw - 40, wv, 88, c.accent, t, -1, {env: function (q) { return Math.exp(-q * 4); }})));
   }
   if (p.counterLabel !== false) {
     const bw = Math.min(580, w - 80);
-    s += uiDiv('left:' + uiN((w - bw) / 2) + 'px;top:' + uiN(h - 140) + 'px;width:' + uiN(bw) + 'px;height:140px;border-radius:20px;background:' + c.panel + ';box-shadow:0 0 0 2px ' + c.line + ';text-align:center;white-space:nowrap;' + uiEnter(t, a0 + 0.3, 'up', {dist: 100}),
-      '<span style="font-family:' + ctx.fonts.mono + ';font-size:36px;color:' + c.muted + ';letter-spacing:.1em;line-height:140px">' + uiEsc(p.counterLabel || 'FRAME') + ' </span><span style="font-family:' + ctx.fonts.mono + ';font-size:96px;font-weight:800;line-height:140px;color:' + (done ? c.accent : c.ink) + '">' + uiPad(cur, 4) + '</span>');
+    s += uiDiv('left:' + uiN((w - bw) / 2) + 'px;top:' + uiN(h - ch) + 'px;width:' + uiN(bw) + 'px;height:' + ch + 'px;border-radius:20px;background:' + c.panel + ';box-shadow:0 0 0 2px ' + c.line + ';text-align:center;white-space:nowrap;' + uiEnter(t, a0 + 0.3, 'up', {dist: 100}),
+      '<span style="font-family:' + ctx.fonts.mono + ';font-size:34px;color:' + c.muted + ';letter-spacing:.1em;line-height:' + ch + 'px">' + uiEsc(p.counterLabel || 'FRAME') + ' </span><span style="font-family:' + ctx.fonts.mono + ';font-size:84px;font-weight:800;line-height:' + ch + 'px;color:' + (done ? c.accent : c.ink) + '">' + uiPad(cur, 4) + '</span>');
   }
-  return s;
+  return uiFit(s, el.rect.width, el.rect.height, w, h);
 }
 
 /**
@@ -350,14 +384,15 @@ function uiScanPlane(el, t, ctx) {
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i];
     const fx = m.x !== undefined ? m.x : 0.1 + 0.75 * i / Math.max(1, markers.length - 1);
-    const x = fx * w;
-    const at = m.at !== undefined ? m.at : scanAt + scanDur * uiClamp((x + 40) / (w - 20));
-    s += uiDiv('left:' + uiN(x) + 'px;top:0;width:4px;height:' + h + 'px;background:' + c.accent + ';box-shadow:0 0 12px ' + c.accent + ';' + uiEnter(t, at, 'down', {dist: 120, d: 0.25}),
-      '<div style="position:absolute;left:-16px;top:-18px;width:36px;height:36px;border-radius:50%;background:' + c.accent + '"></div>' + (m.label ? '<div style="position:absolute;left:24px;top:-20px;white-space:nowrap;border-radius:999px;padding:6px 18px;font-family:' + ctx.fonts.mono + ';font-weight:700;font-size:24px;background:' + c.ink + ';color:' + c.bg + '">' + uiEsc(m.label) + '</div>' : ''));
-    s += uiDiv('left:' + uiN(x - 40) + 'px;top:' + uiN(h * 0.714) + 'px;width:120px;height:' + uiN(Math.min(90, h * 0.16)) + 'px;box-sizing:border-box;border-radius:10px;border:3px dashed ' + c.accent + ';background:' + c.accent + '1f;' + uiEnter(t, at + 0.12, 'drop', {dist: 120}), '');
+    // The pin's head (36 px) stays inside the plane.
+    const x = uiClamp(fx * w, 20, w - 24);
+    const at = m.at !== undefined ? m.at : scanAt + scanDur * uiClamp(x / (w - 8));
+    s += uiDiv('left:' + uiN(x) + 'px;top:20px;width:4px;height:' + (h - 20) + 'px;background:' + c.accent + ';box-shadow:0 0 12px ' + c.accent + ';' + uiEnter(t, at, 'down', {dist: 120, d: 0.25}),
+      '<div style="position:absolute;left:-16px;top:-18px;width:36px;height:36px;border-radius:50%;background:' + c.accent + '"></div>' + (m.label ? '<div style="position:absolute;' + (x > w - 220 ? 'right' : 'left') + ':24px;top:-20px;white-space:nowrap;border-radius:999px;padding:6px 18px;font-family:' + ctx.fonts.mono + ';font-weight:700;font-size:24px;background:' + c.ink + ';color:' + c.bg + '">' + uiEsc(m.label) + '</div>' : ''));
+    s += uiDiv('left:' + uiN(uiClamp(x - 40, 0, w - 120)) + 'px;top:' + uiN(h * 0.714) + 'px;width:120px;height:' + uiN(Math.min(90, h * 0.16)) + 'px;box-sizing:border-box;border-radius:10px;border:3px dashed ' + c.accent + ';background:' + c.accent + '1f;' + uiEnter(t, at + 0.12, 'drop', {dist: 120}), '');
   }
   const sq = uiP(t, scanAt, scanDur), fade = 1 - uiP(t, scanAt + scanDur, 0.4);
-  if (t >= scanAt && fade > 0) s += uiDiv('left:' + uiN(uiLerp(-40, w - 60, sq)) + 'px;top:-20px;width:8px;height:' + (h + 40) + 'px;background:#ffffff;box-shadow:0 0 30px 8px ' + c.accent + '99;opacity:' + fade.toFixed(3), '');
+  if (t >= scanAt && fade > 0) s += uiDiv('left:' + uiN(uiLerp(0, w - 8, sq)) + 'px;top:0;width:8px;height:' + h + 'px;background:#ffffff;box-shadow:0 0 30px 8px ' + c.accent + '99;opacity:' + fade.toFixed(3), '');
   return '<div style="position:absolute;inset:0;' + uiPanelStyle(c, '') + 'overflow:visible">' + s + '</div>';
 }
 
@@ -378,4 +413,53 @@ function uiBloom(el, t, ctx) {
   return '<div style="position:absolute;inset:0;transform:scale(' + sc + ')">' + layer(0, col, 0.5, 18) + layer(14, col, 0.6, 24) + layer(32, col, 0.8, 22) + layer(43, '#ffffff', 0.55, 12) + '</div>';
 }
 
-export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiFrameRuler, uiPadGrid, uiScanPlane, uiBloom};
+/**
+ * burst: the hero beat's light. Thin bright rays shoot out of a flare core
+ * at the rect's centre (the module centres the rect on props.target), reach
+ * its half diagonal's worth of the larger side, and fade, all over
+ * `duration` (s, 0.6). {rays (6–24, 14), tone (accent), strength (0–1.5,
+ * 1), duration}. Each ray's angle, reach and weight come from uiHash, so a
+ * frame is a pure function of t. Crisp cores over one blurred copy (their
+ * glow), a white-hot core, a soft halo and a thin horizontal flare;
+ * the painter screens it over what sits behind.
+ */
+function uiBurst(el, t, ctx) {
+  const p = el.props, c = ctx.c, a0 = el.at;
+  const dur = p.duration || 0.6, n = Math.round(p.rays || 14), gain = p.strength === undefined ? 1 : p.strength;
+  const q = uiP(t, a0, dur);
+  if (t < a0 || q >= 1 || gain <= 0) return '';
+  const col = uiTone(c, p.tone, 'accent');
+  const w = el.rect.width, h = el.rect.height, cx = w / 2, cy = h / 2, reach = Math.max(w, h) / 2;
+  // A near-instant attack, the spokes racing out on an expo ease, the light
+  // falling away over the last three quarters.
+  const attack = uiOutCubic(uiP(t, a0, Math.min(0.06, dur * 0.12)));
+  const grow = uiOutExpo(q);
+  const fall = uiP(t, a0 + dur * 0.22, dur * 0.78), fade = (1 - fall) * (1 - fall);
+  const k = attack * fade * gain;
+  if (k <= 0.004) return '';
+  const spin = 7 * grow;
+  let core = '', glow = '';
+  for (let i = 0; i < n; i++) {
+    const ha = uiHash(i * 3 + 1), hl = uiHash(i * 3 + 2), hw = uiHash(i * 3 + 3);
+    const angle = (360 * i) / n + (ha - 0.5) * (300 / n) + spin - 90;
+    const len = reach * (0.55 + 0.45 * hl);
+    const head = len * (0.18 + 0.82 * grow), tail = len * (0.04 + 0.34 * grow * grow);
+    const span = Math.max(1, head - tail), thick = 2 + 3.5 * hw * hw;
+    const op = uiClamp(k * (0.6 + 0.4 * hl));
+    const box = function (th) { return 'position:absolute;left:' + uiN(cx + tail) + 'px;top:' + uiN(cy - th / 2) + 'px;width:' + uiN(span) + 'px;height:' + uiN(th) + 'px;transform-origin:' + uiN(-tail) + 'px 50%;transform:rotate(' + uiN(angle) + 'deg);border-radius:' + uiN(th) + 'px;opacity:' + op.toFixed(3) + ';'; };
+    core += '<div style="' + box(thick) + 'background:linear-gradient(to right,#ffffff 0%,' + col + ' 38%,' + col + '00 100%)"></div>';
+    glow += '<div style="' + box(thick * 5) + 'background:linear-gradient(to right,' + col + ' 0%,' + col + '00 100%)"></div>';
+  }
+  const disc = function (r, inner, outer, op) { return '<div style="position:absolute;left:' + uiN(cx - r) + 'px;top:' + uiN(cy - r) + 'px;width:' + uiN(2 * r) + 'px;height:' + uiN(2 * r) + 'px;border-radius:50%;background:radial-gradient(closest-side,' + inner + ' 0%,' + outer + ' 35%,' + outer + '00 100%);opacity:' + uiClamp(op).toFixed(3) + '"></div>'; };
+  // The flare core flashes hardest at the attack and shrinks back as the rays leave.
+  const flare = attack * Math.pow(1 - q, 1.6) * gain;
+  const coreR = reach * (0.14 + 0.1 * grow) * (0.7 + 0.3 * attack);
+  const lineW = reach * (0.5 + 0.9 * grow);
+  const line = '<div style="position:absolute;left:' + uiN(cx - lineW) + 'px;top:' + uiN(cy - 1.5) + 'px;width:' + uiN(2 * lineW) + 'px;height:3px;border-radius:3px;background:linear-gradient(to right,' + col + '00,' + col + ' 30%,#ffffff 50%,' + col + ' 70%,' + col + '00);opacity:' + uiClamp(flare * 0.8).toFixed(3) + '"></div>';
+  return '<div style="position:absolute;inset:0;overflow:visible">'
+    + disc(reach * 0.75, col, col, k * 0.22)
+    + '<div style="position:absolute;inset:0;filter:blur(' + uiN(Math.max(4, reach * 0.018)) + 'px)">' + glow + '</div>'
+    + core + disc(coreR, '#ffffff', col, flare) + line + '</div>';
+}
+
+export {UI_COMPONENT_TABLE, uiStack, uiBar, uiRingChip, uiMeter, uiMarkerSnap, uiTerminal, uiResults, uiCardWall, uiDownloads, uiComment, uiCommentHeight, uiFit, uiFrameRuler, uiPadGrid, uiScanPlane, uiBloom, uiBurst};

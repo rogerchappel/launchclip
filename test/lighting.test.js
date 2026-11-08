@@ -184,7 +184,12 @@ test("a lit dot grid shows its dots where the key light falls", () => {
   const mask = plan.layers[0].style.maskImage;
   assert.equal(plan.layers[0].style.WebkitMaskImage, mask);
   assert.match(mask, /at 30% 0%/, "the mask follows the key");
-  assert.match(mask, /linear-gradient\(rgba\(0, 0, 0, 0\.3\), rgba\(0, 0, 0, 0\.3\)\)$/, "1 − lit elsewhere");
+  assert.match(mask, /linear-gradient\(rgba\(0, 0, 0, 0\.09\), rgba\(0, 0, 0, 0\.09\)\)$/, "(1 − lit)² elsewhere: the grid all but vanishes away from the light");
+  // The dots fade with the square of the light's falloff: half way out, a seventh as strong.
+  assert.match(mask, /rgba\(0, 0, 0, 0\.1444\) 50%/);
+  // A lit grid is quieter than an even one, never brighter.
+  const alphaOf = (p) => parseInt(/#[0-9a-f]{6}([0-9a-f]{2}) [\d.]+px/.exec(p.layers[0].style.backgroundImage)[1], 16);
+  assert.ok(alphaOf(plan) < alphaOf(even));
   // Without a story light the key is the studio preset's; with lit 1 nothing shows away from it.
   assert.match(litMask(story(), 1), /at 50% 0%/);
   assert.doesNotMatch(litMask(story(), 1), /linear-gradient/);

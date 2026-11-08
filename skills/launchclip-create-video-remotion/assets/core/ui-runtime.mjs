@@ -1,11 +1,13 @@
 // The ui-scene painter entry point: paintUi(host, spec, t) and UI_RUNTIME, the
 // source HyperFrames inlines into the page (the helpers and core components in
-// ui-paint.mjs, the rest of the component library in ui-components.mjs).
+// ui-paint.mjs, the rest of the component library in ui-components.mjs, the
+// pixel mascot host in ui-host.mjs).
 // Remotion imports paintUi and calls it from a layout effect. Contract:
 // docs/KIT_CONTRACTS.md, "UI scenes".
 
 import * as core from './ui-paint.mjs';
 import * as more from './ui-components.mjs';
+import * as mascot from './ui-host.mjs';
 import {uiStage, uiStageView} from './ui-paint.mjs';
 import {UI_COMPONENT_TABLE} from './ui-components.mjs';
 
@@ -30,13 +32,14 @@ function paintUi(host, spec, t) {
 /** Component kind → draw function. */
 function uiComponentTable() {
   return Object.assign({
-    headline: uiHeadline, chip: uiChip, waveform: uiWaveform, window: uiWindow, timeline: uiTimeline, 'lock-cards': uiLockCards
+    headline: uiHeadline, chip: uiChip, waveform: uiWaveform, window: uiWindow, timeline: uiTimeline, 'lock-cards': uiLockCards, host: uiHost
   }, UI_COMPONENT_TABLE());
 }
 
 const {uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards} = core;
+const {uiHost} = mascot;
 
-const RUNTIME_FUNCTIONS = [...Object.values(core), ...Object.values(more).filter(fn => typeof fn === 'function'), uiComponentTable, paintUi];
+const RUNTIME_FUNCTIONS = [...Object.values(core), ...Object.values(more).filter(fn => typeof fn === 'function'), ...Object.values(mascot), uiComponentTable, paintUi];
 
 /** The painter's source for the page: window.lcPaintUi(host, spec, t). */
 export const UI_RUNTIME = `window.lcPaintUi = window.lcPaintUi || (function () {\n${RUNTIME_FUNCTIONS.map(String).join('\n')}\nreturn paintUi;\n})();`;

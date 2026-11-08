@@ -12,7 +12,7 @@ import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {LIGHT_SWEEP_LAYER, PUSH_BLUR, SMEAR_PROPS, TRANSITION_TYPES, gsapVars, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearFilterSvg, transitionTweens} from '@launchclip/core/transitions.mjs';
-import {LIGHT_SWEEP, lightSweepCss, lightSweepGsap, lightSweepHtml, lightSweepOptions, lightSweepProgress, lightSweepStreaks, lightSweeps} from '@launchclip/core/light-sweep.mjs';
+import {LIGHT_SWEEP, lightSweepBokeh, lightSweepCss, lightSweepDipAt, lightSweepDipHtml, lightSweepGsap, lightSweepHtml, lightSweepOptions, lightSweepProgress, lightSweepSpots, lightSweepStreaks, lightSweeps} from '@launchclip/core/light-sweep.mjs';
 import {MOTION_BLUR_GUARD_FILE} from '@launchclip/core/motion-blur.mjs';
 import {getEase} from '@launchclip/core/motion.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
@@ -59,8 +59,11 @@ test('light-sweep: the outgoing plate veils and drifts forward; the incoming one
   assert.ok(at(outgoing, 10 + d * 0.3).veil > 0.2 && at(outgoing, 10 + d * 0.3).veil < 1);
   assert.deepEqual(pick(at(outgoing, 10 + d), ['opacity', 'scale']), {opacity: 0, scale: L.scaleOut});
   // The veil is one filter: blur, darken, contrast.
-  assert.equal(layerStyle({...at(outgoing, 10 + d * L.veil)}).filter, `blur(${L.blur}px) brightness(${1 - L.dim}) contrast(${1 + L.contrast})`);
-  assert.deepEqual(gsapVars('veil', 1), {filter: `blur(${L.blur}px) brightness(${1 - L.dim}) contrast(${1 + L.contrast})`});
+  const veiled = `blur(${L.blur}px) brightness(${Math.round((1 - L.dim) * 1e4) / 1e4}) contrast(${1 + L.contrast})`;
+  assert.equal(layerStyle({...at(outgoing, 10 + d * L.veil)}).filter, veiled);
+  assert.deepEqual(gsapVars('veil', 1), {filter: veiled});
+  // Deep: the veiled plate keeps at most a quarter of its light.
+  assert.ok(1 - L.dim <= 0.25);
   assert.deepEqual(gsapVars('veil', 0), {filter: 'blur(0px) brightness(1) contrast(1)'});
 });
 
@@ -104,24 +107,60 @@ test('light sweep streaks: options, geometry and one progress variable both rend
   assert.deepEqual(lightSweepOptions({streaks: 9, angle: 5, color: 'ink'}), {streaks: 4, angle: 20, color: 'ink'});
   const streaks = lightSweepStreaks(1080, 1920, {streaks: 3});
   assert.equal(streaks.length, 3);
-  // Every streak covers the frame's diagonal and finishes inside the sweep.
+  const diagonal = Math.hypot(1080, 1920), frames = 0.5 * 30;
   for (const streak of streaks) {
-    assert.ok(streak.length > Math.hypot(1080, 1920));
+    // Each one finishes inside the sweep and shoots along its line from
+    // beyond one end of the frame to beyond the other.
     assert.ok(streak.offset + streak.span <= 1 + 1e-9);
+    assert.ok(streak.run + streak.length / 2 > diagonal / 2);
+    // Thin and crisp: a core of at most 8 px in a glow of at most 40 at 1080.
+    assert.ok(streak.core <= 8 && streak.halo <= 40, `${streak.core} / ${streak.halo}`);
+    // Across the frame it drifts slowly (at most 10 px a frame over a 0.5 s
+    // sweep), so the sub-frame blur smears it instead of stepping copies.
+    assert.ok((2 * streak.travel) / (streak.span * frames) <= 10, `${streak.travel}`);
   }
-  const html = lightSweepHtml(1080, 1920, {streaks: 3, angle: 64, color: '#c8ff3a'});
+  // Spread across the frame, not stacked on one line.
+  assert.ok(Math.max(...streaks.map((st) => st.lane)) - Math.min(...streaks.map((st) => st.lane)) > 0.1 * diagonal);
+  const html = lightSweepHtml(1080, 1920, {id: 'lc-ls-b', streaks: 3, angle: 64, color: '#c8ff3a'});
   assert.equal((html.match(/lc-ls-core/g) ?? []).length, 3);
   assert.equal((html.match(/lc-ls-halo/g) ?? []).length, 3);
-  assert.match(html, /rotate\(-64deg\) translateY\(calc\(\(clamp\(0, \(var\(--lc-ls\) - 0\) \/ 0\.78, 1\)/);
+  assert.match(html, /rotate\(-64deg\) translate\(calc\(\(clamp\(0, \(var\(--lc-ls\) - 0\) \/ 0\.84, 1\) \* 2 - 1\) \* \d+px\), calc\(/);
   assert.match(html, /rgba\(200,255,58,/);
-  assert.match(lightSweepCss(1080, 1920), /\.lc-light-sweep \{[^}]*mix-blend-mode: screen;/);
+  assert.match(html, /rgba\(255,255,255,1\) 30%/, 'a white-hot core');
+  const css = lightSweepCss(1080, 1920);
+  assert.match(css, /\.lc-light-sweep \{[^}]*mix-blend-mode: screen;/);
+  assert.match(css, /\.lc-light-sweep-dip \{(?![^}]*mix-blend-mode)[^}]*\}/, 'the dip is a plain shade, not screened');
+  // The dip: near black at the middle (with the veil, about a tenth of the light left), clear at both ends.
+  assert.equal(lightSweepDipAt(0), 0);
+  assert.equal(lightSweepDipAt(1), 0);
+  assert.ok(lightSweepDipAt(0.5) >= 0.9);
+  assert.ok(lightSweepDipAt(0.15) > 0.3 && lightSweepDipAt(0.15) < lightSweepDipAt(0.3));
+  assert.ok((1 - lightSweepDipAt(0.5)) * (1 - LIGHT_SWEEP_LAYER.dim) < 0.02, 'the plates under it all but black');
+  assert.match(lightSweepDipHtml(), /background|opacity:calc\(0\.94 \* clamp\(0, min\(var\(--lc-ls\) \/ 0\.28, \(1 - var\(--lc-ls\)\) \/ 0\.34\), 1\)\)/);
+  // Bokeh: deterministic, seeded by the sweep, on the outgoing interface's spots first.
+  const spots = [{x: 60, y: 460, width: 960, height: 420}, {x: 60, y: 300, width: 960, height: 130}];
+  const discs = lightSweepBokeh(1080, 1920, {id: 'lc-ls-b', spots});
+  assert.equal(discs.length, LIGHT_SWEEP.bokeh.count);
+  assert.deepEqual(discs, lightSweepBokeh(1080, 1920, {id: 'lc-ls-b', spots}));
+  assert.notDeepEqual(discs, lightSweepBokeh(1080, 1920, {id: 'lc-ls-c', spots}));
+  discs.slice(0, 2).forEach((disc, i) => assert.ok(disc.x >= spots[i].x && disc.x <= spots[i].x + spots[i].width && disc.y >= spots[i].y && disc.y <= spots[i].y + spots[i].height, 'on its spot'));
+  for (const disc of discs) {
+    assert.ok(disc.size > 0 && disc.size <= 1080 * LIGHT_SWEEP.bokeh.size[1] + 0.1);
+    assert.ok(disc.dy < 0, 'drifts up');
+    assert.ok(disc.from > 0 && disc.to <= 1 && disc.from < disc.to);
+  }
+  assert.equal((html.match(/lc-ls-bokeh/g) ?? []).length, LIGHT_SWEEP.bokeh.count);
+  assert.doesNotMatch(html + lightSweepDipHtml(), /NaN|undefined/);
   const s = resolveStory(two({type: 'light-sweep', dur: 0.5, streaks: 2}));
   const sweeps = lightSweeps(s, sceneWindows(s));
-  assert.deepEqual(sweeps, [{id: 'lc-ls-b', sceneId: 'b', start: 6, dur: 0.5, streaks: 2, angle: 64, color: '#c8ff3a'}]);
+  assert.deepEqual(sweeps, [{id: 'lc-ls-b', sceneId: 'b', start: 6, dur: 0.5, streaks: 2, angle: 64, color: '#c8ff3a', spots: []}]);
   assert.equal(lightSweepProgress(sweeps[0], 5.9), 0);
   assert.equal(lightSweepProgress(sweeps[0], 6.25), 0.5);
   assert.equal(lightSweepProgress(sweeps[0], 6.5), 0);
   assert.deepEqual(lightSweepGsap(sweeps[0]), [
+    'tl.set("#lc-ls-b-dip", { opacity: 1 }, 6);',
+    'tl.fromTo("#lc-ls-b-dip", { "--lc-ls": 0 }, { "--lc-ls": 1, duration: 0.5, ease: "none", immediateRender: false }, 6);',
+    'tl.set("#lc-ls-b-dip", { opacity: 0 }, 6.5);',
     'tl.set("#lc-ls-b", { opacity: 1 }, 6);',
     'tl.fromTo("#lc-ls-b", { "--lc-ls": 0 }, { "--lc-ls": 1, duration: 0.5, ease: "none", immediateRender: false }, 6);',
     'tl.set("#lc-ls-b", { opacity: 0 }, 6.5);'
@@ -130,6 +169,15 @@ test('light sweep streaks: options, geometry and one progress variable both rend
   const looped = resolveStory(raw([card('a', 0, 12)], {ending: {loop_to: 'a', in: {type: 'light-sweep', dur: 0.4}}}));
   assert.equal(lightSweeps(looped, sceneWindows(looped))[0].id, 'lc-ls-a-loop');
   assert.equal(LIGHT_SWEEP.z.hyperframes, 79000);
+  // Out of a ui-scene, the bokeh sit on its interface (largest element first, light left out).
+  const ui = {id: 'u', module: 'ui-scene', start: 0, end: 6, params: {elements: [
+    {kind: 'headline', rect: {x: 60, y: 300, width: 960, height: 130}, at: 0, enter: 'cut', props: {text: 'HI', size: 100}},
+    {kind: 'window', rect: {x: 60, y: 460, width: 960, height: 600}, at: 0, enter: 'cut', props: {title: 'x'}},
+    {kind: 'burst', rect: {x: 0, y: 0, width: 900, height: 900}, at: 1, props: {}}]}};
+  assert.deepEqual(lightSweepSpots(ui, 1080, 1920), [{x: 60, y: 460, width: 960, height: 600}, {x: 60, y: 300, width: 960, height: 130}]);
+  assert.deepEqual(lightSweepSpots(card('a', 0, 6), 1080, 1920), []);
+  const fromUi = resolveStory(raw([ui, card('b', 6, 12, {in: {type: 'light-sweep', dur: 0.5}})]));
+  assert.equal(lightSweeps(fromUi, sceneWindows(fromUi))[0].spots.length, 2);
 });
 
 test('HyperFrames: the sweep sits over the scenes, the smear filter rides the outgoing scene, and blur writes its caption guard', async () => {
@@ -137,7 +185,10 @@ test('HyperFrames: the sweep sits over the scenes, the smear filter rides the ou
   const {html, warnings} = await compileStoryToHyperFrames(s, {write: false, sourceDir: EXAMPLE});
   assert.deepEqual(warnings, []);
   const sweep = html.indexOf('<div id="lc-ls-s2" class="lc-light-sweep"');
-  assert.ok(sweep > html.indexOf('data-launchclip-scene="s3"'), 'the sweep is drawn after (over) every scene');
+  const dip = html.indexOf('<div id="lc-ls-s2-dip" class="lc-light-sweep-dip"');
+  assert.ok(dip > html.indexOf('data-launchclip-scene="s3"'), 'the dip is drawn after (over) every scene');
+  assert.ok(sweep > dip, 'and the light over the dip');
+  assert.match(html, /tl\.fromTo\("#lc-ls-s2-dip", \{ "--lc-ls": 0 \}/);
   assert.match(html, /tl\.fromTo\("#lc-ls-s2", \{ "--lc-ls": 0 \}/);
   // s2 leaves by push-blur: its outer element carries the smear filter.
   assert.match(html, /<div id="lc-scene-s2" [^>]*style="z-index:\d+;--lc-smear:none;filter:var\(--lc-smear\)"><svg class="lc-smear-defs"/);
@@ -167,8 +218,14 @@ test('HyperFrames: the sweep sits over the scenes, the smear filter rides the ou
 test('Remotion draws the same sweep markup and smear filter from the same state', async () => {
   const tsx = await readFile(path.join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
   assert.match(tsx, /lightSweepHtml\(width, height, sweep\)/);
-  assert.match(tsx, /\["--lc-ls" as any\]: lightSweepProgress\(sweep, t\)/);
-  assert.match(tsx, /mixBlendMode: "screen"/);
+  assert.match(tsx, /lightSweepDipHtml\(\)/);
+  assert.match(tsx, /const progress = lightSweepProgress\(sweep, t\)/);
+  // The dip, then the light, both driven by the same progress.
+  assert.match(tsx, /className="lc-light-sweep-dip"[^\n]*\["--lc-ls" as any\]: progress[^\n]*\n\s*: <div className="lc-light-sweep"[^\n]*\["--lc-ls" as any\]: progress/);
+  assert.match(tsx, /\{sweepDips\}\n\s*\{sweepLights\}/);
+  // Under the camera the dips sit in a plain group (a shade darkens) and only the lights' group screens.
+  assert.match(tsx, /<AbsoluteFill style=\{\{ zIndex: CAMERA_STACK\.scenes, pointerEvents: "none" \}\}>\{sweepDips\}/);
+  assert.match(tsx, /mixBlendMode: "screen", pointerEvents: "none" \}\}>\{sweepLights\}/);
   assert.match(tsx, /smearFilterSvg\(smearId, state\.smearX, state\.smearY\)/);
   assert.match(tsx, /filter: `url\(#\$\{smearId\}\)`/);
 });

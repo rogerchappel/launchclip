@@ -1,0 +1,46 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Interface host mascot (9:16)",
+  "notes": "The ui-scene host (kit/core/ui-host.mjs): a code-drawn pixel mascot that hops in, perches on a panel's top edge, idles with a bob and a blink, and reacts on its beats (surprised, point, hop, cheer). Two interface scenes joined by a push-blur. No narration and no paid calls. Values are illustrative.",
+  "lane": "motion",
+  "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 6, "platform": "youtube-shorts" },
+  "brand": {
+    "colors": { "bg": "#0a0b08", "primary": "#c8ff3a", "accent": "#c8ff3a", "ink": "#0a0b08", "paper": "#f4f6ee" },
+    "fonts": { "display": "inter", "body": "inter", "meta": "jetbrains-mono" }
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "ui-scene",
+      "start": 0,
+      "end": 3,
+      "params": {
+        "elements": [
+          { "kind": "headline", "rect": { "x": 60, "y": 300, "width": 960, "height": 130 }, "at": 0, "enter": "cut", "props": { "text": "ONE PROMPT", "size": 120 } },
+          { "id": "term", "kind": "terminal", "rect": { "x": 60, "y": 660, "width": 960, "height": 600 }, "at": 0, "enter": "cut",
+            "props": { "title": "launchclip", "sub": "make", "prompt": "make a launch video", "typeAt": 0.4, "cps": 30,
+              "lines": [ { "at": 1.3, "key": "plan", "text": "6 scenes" }, { "at": 1.7, "key": "render", "text": "hyperframes" } ],
+              "output": { "at": 2.1, "label": "final.mp4" } } },
+          { "kind": "host", "rect": { "width": 176, "height": 136 }, "at": 0.25, "props": { "perch": "term", "along": 0.8 },
+            "beats": [ { "at": 1.3, "set": { "pose": "surprised" }, "cue": "pop-soft" }, { "at": 2.1, "set": { "pose": "point-left" } } ] }
+        ]
+      }
+    },
+    {
+      "id": "s2",
+      "module": "ui-scene",
+      "start": 3,
+      "end": 6,
+      "in": { "type": "push-blur", "dur": 0.45, "direction": "up" },
+      "params": {
+        "elements": [
+          { "kind": "headline", "rect": { "x": 60, "y": 300, "width": 960, "height": 130 }, "at": 0, "enter": "cut", "props": { "text": "SHIPPED", "tone": "accent", "size": 120 } },
+          { "id": "cards", "kind": "lock-cards", "rect": { "x": 60, "y": 660, "width": 960, "height": 640 }, "at": 0, "enter": "cut",
+            "props": { "title": "toolkit", "cards": [ { "no": "01", "name": "Plan", "unlockAt": 0.8 }, { "no": "02", "name": "Render", "unlockAt": 1.4 }, { "no": "03", "name": "Ship", "unlockAt": 2 } ] } },
+          { "kind": "host", "rect": { "width": 176, "height": 136 }, "at": 0.2, "props": { "perch": "cards", "along": 0.18, "from": "left" },
+            "beats": [ { "at": 1.2, "set": { "pose": "hop" } }, { "at": 2, "set": { "pose": "cheer" }, "cue": "success" } ] }
+        ]
+      }
+    }
+  ]
+}

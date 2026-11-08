@@ -85,7 +85,7 @@ import { feelPlan, feelStateAt, feelTransform } from "../core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
 import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "../core/dot-wipe.mjs";
 // @ts-ignore plain ESM from kit/core
-import { LIGHT_SWEEP, lightSweepCss, lightSweepHtml, lightSweepProgress, lightSweeps } from "../core/light-sweep.mjs";
+import { LIGHT_SWEEP, lightSweepCss, lightSweepDipHtml, lightSweepHtml, lightSweepProgress, lightSweeps } from "../core/light-sweep.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -472,17 +472,21 @@ const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
 };
 
 // One light sweep (kit/core/light-sweep.mjs) over its window: the HyperFrames
-// markup and CSS, its progress set per frame on --lc-ls.
-const LightSweepLayer: React.FC<{ sweep: any }> = ({ sweep }) => {
+// markup and CSS (the dip, then the light over it), its progress set per
+// frame on --lc-ls.
+const LightSweepLayer: React.FC<{ sweep: any; part: "dip" | "light" }> = ({ sweep, part }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = sweep.start + frame / fps;
   const html = React.useMemo(() => ({ __html: lightSweepHtml(width, height, sweep) }), [width, height, sweep]);
+  const dip = React.useMemo(() => ({ __html: lightSweepDipHtml() }), []);
   const css = React.useMemo(() => lightSweepCss(width, height), [width, height]);
+  const progress = lightSweepProgress(sweep, t);
   return (
     <>
       <style>{css}</style>
-      <div className="lc-light-sweep" aria-hidden style={{ zIndex: LIGHT_SWEEP.z.remotion, ["--lc-ls" as any]: lightSweepProgress(sweep, t) }} dangerouslySetInnerHTML={html} />
+      {part === "dip" ? <div className="lc-light-sweep-dip" aria-hidden style={{ zIndex: LIGHT_SWEEP.z.remotion, ["--lc-ls" as any]: progress }} dangerouslySetInnerHTML={dip} />
+        : <div className="lc-light-sweep" aria-hidden style={{ zIndex: LIGHT_SWEEP.z.remotion, ["--lc-ls" as any]: progress }} dangerouslySetInnerHTML={html} />}
     </>
   );
 };
@@ -561,11 +565,13 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const feel = React.useMemo(() => feelPlan(story, { windows, camera: plan, words: Array.isArray(__captions) ? __captions : [] }), [story, windows, plan, __captions]);
   const wipes = React.useMemo(() => dotWipes(story, windows), [story, windows]);
   const sweeps = React.useMemo(() => lightSweeps(story, windows), [story, windows]);
-  const sweepLayers = sweeps.map((sweep: any) => (
-    <Sequence key={sweep.id} name={`light-sweep → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
-      <LightSweepLayer sweep={sweep} />
+  // Per sweep its dip (a shade) and its light (screened over it), as two layers.
+  const sweepParts = (part: "dip" | "light") => sweeps.map((sweep: any) => (
+    <Sequence key={`${sweep.id}-${part}`} name={`light-sweep ${part} → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
+      <LightSweepLayer sweep={sweep} part={part} />
     </Sequence>
   ));
+  const sweepDips = sweepParts("dip"), sweepLights = sweepParts("light");
   const wipeLayers = wipes.map((wipe: any) => (
     <Sequence key={wipe.id} name={`dot-wipe → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
       <DotWipeLayer wipe={wipe} />
@@ -626,8 +632,9 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
         </AbsoluteFill>
         </>)}
-        {/* Light sweeps add light (screen) to everything under them; their own group blends, as the HyperFrames root does. */}
-        {sweepLayers.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLayers}</AbsoluteFill> : null}
+        {/* Light sweeps darken everything under them (the dip, a plain shade), then add light (screen) over it; the light's own group blends, as the HyperFrames root does. */}
+        {sweepDips.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, pointerEvents: "none" }}>{sweepDips}</AbsoluteFill> : null}
+        {sweepLights.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLights}</AbsoluteFill> : null}
         {light?.over.length ? <LightOver plan={light} zIndex={CAMERA_STACK.scenes} /> : null}
         {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
@@ -666,7 +673,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </Sequence>
       ) : null}
       </>)}
-      {sweepLayers}
+      {sweepDips}
+      {sweepLights}
       {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
       {wipeLayers}
       {medium ? <MediumLayer plan={medium} /> : null}

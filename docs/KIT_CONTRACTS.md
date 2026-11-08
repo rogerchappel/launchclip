@@ -685,21 +685,31 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   with blur in one filter).
 - `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
   `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
-  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
-  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
-  horizontal (20–80, default 64), sweep across the middle of the frame, each
-  over 0.78 of the transition, started 0.08 apart, fading in and out over
-  the first and last 22 % of its travel, over a faint wash of the colour that
-  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
-  Remotion blends their group the same way), so nothing opaque ever covers
-  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
-  4 px, a white-hot centre line); a streak moves about 60 px a frame at
-  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
-  rather than stepping it. Both renderers draw the same markup and CSS and
-  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
-  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  light, not graphics. The frame dips nearly to black: a plain black shade
+  (`lightSweepDipHtml`, not blended) over every scene and the background
+  rises to 0.94 by 28 % of the transition, holds, and clears from 66 % to the
+  end; with the plates' veil the frame keeps about a tenth of its light at
+  the middle. Over it, screened (`mix-blend-mode: screen`), 2–4 thin crisp
+  streaks (default 3) of the colour (as the dot-wipe's `color`, default
+  `"accent"`), tilted `angle` degrees from the horizontal (20–80, default
+  64), each a white-hot core of about 5 px (blur 1 px at 1080) in a glow of
+  about 30 px (blur 12 px), shoot along their own lines from beyond one end
+  of the frame to beyond the other, each over 0.84 of the transition,
+  started 0.07 apart, fading in and out over the first and last 18 % of its
+  travel. Across the frame they sit on spaced lanes and drift only about
+  6 px a frame at 1080 × 1920 over 0.5 s, so heavy sub-frame motion blur
+  lengthens them instead of stepping copies. Twelve soft bokeh discs (a
+  white-hot point in a glow of the colour, 1–4.5 % of the short side) drift
+  up through the dark, the first on the outgoing ui-scene's element boxes
+  (`lightSweepSpots`, largest first), the rest seeded across the middle
+  band; positions come from a hash of the sweep's id, never `Math.random`.
+  A faint wash of the colour peaks mid-sweep. Both renderers draw the same
+  markup and CSS for the dip and the light and drive one custom property,
+  `--lc-ls` (0 → 1, linear; HyperFrames tweens it on `#id-dip` and `#id`,
+  Remotion sets `lightSweepProgress` on both; under the camera only the
+  lights' group blends), stacked as the dot-wipe. The layer
   side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
-  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  (`power1.in`; `blur(26px) brightness(0.2) contrast(1.5)` at full: its
   bright parts melt into glowing blobs on a dark field) and drifts forward to
   1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
   `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and
@@ -932,7 +942,21 @@ A style pack is `.launchclip/styles/<name>/style.json`:
 - `applyStyle(story, pack, {intro?, outro?})` → `{story, applied, warnings}`.
   Explicit story values always win. Brand colours and fonts fill per role;
   `motion`, `camera`, `ambient` and `layout` fill per key and are carried
-  through as data (renderers that do not read them ignore them); the captions
+  through as data (renderers that do not read them ignore them). "Per key"
+  is a deep fill, field by field: a key the story leaves out takes the
+  pack's; where both hold an object the fill recurses into it; anywhere else
+  (a string, number, boolean or array) the story's value replaces the
+  pack's whole. Of a pack's `motion` only `grammar`, a named `feel` and
+  `blur` reach the story (`storyMotionOf`). So with signal-ui's `motion`
+  (`{grammar: {base: "snappy", defaultTransition: {cuts: {type: "push-blur",
+  dur: 0.5, direction: "up"}, world: {...}}}, feel: "kinetic", blur:
+  {samples: 6, shutter: 1.5}}`): a story `motion: {blur: false}` keeps the
+  grammar and feel and turns blur off; `motion: {grammar: "smooth"}` replaces
+  the whole grammar; `motion: {grammar: {defaultTransition: {cuts: {type:
+  "light-sweep"}}}}` keeps `base` and `world` and fills the cuts
+  transition's `dur` 0.5 and `direction` from the pack (give every field you
+  mean, or a string grammar, to replace them); `motion: {blur: {samples:
+  4}}` keeps the pack's `shutter` 1.5. The captions
   overlay gets the pack's preset (with `captions.lanes[story.lane]` on top,
   `packCaptionsFor`) only when it names neither `preset` nor `style`, and its
   other options per key (a story with no `overlays` at all
@@ -2242,8 +2266,10 @@ One setting turns on the habits of a top faceless animated reel together:
 "camera": {"mode": "cuts", "kicks": [{"at": "word:twelve"}, {"at": 6.1, "scale": 1.2, "origin": {"x": 0.5, "y": 0.4}}]}
 ```
 
-- `motion.feel`: `"kinetic"`, or `{preset: "kinetic", ambient?: false |
-  {scale?: [lo, hi] (1–1.08), shift?: 0–0.02, period?: [lo, hi] s (2–20)},
+- `motion.feel`: `"kinetic"`, `"snap"`, or `{preset: "kinetic" | "snap", ambient?: false |
+  {mode?: "drift" | "step", scale?: [lo, hi] (1–1.08), shift?: 0–0.02,
+  period?: [lo, hi] s (2–20), hold?: [lo, hi] s (0.2–4), move?: s (0.08–0.6),
+  creep?: 0–0.5},
   kicks?: false | "auto" | {auto?, scale?: 1.03–1.4, gap?: 1.1–10 s},
   spring?: overshoot 0–0.6}`.
 - `camera.kicks`: `[{at: seconds | anchor, scale?: 1.03–1.4 (1.05),
@@ -2267,6 +2293,25 @@ One setting turns on the habits of a top faceless animated reel together:
   (1.02–1.045; 1.02 is the overscan the drift needs), periods in
   `period` (4–7 s) that divide the story duration, so loop seams match. In
   world mode the camera's own drift stays and the feel adds kicks only.
+- `snap` (hold sharp, then snap): the kinetic feel with a stepped ambient
+  camera (`ambient.mode: "step"`, `kinetic.mjs ambientSteps`). The wrapper
+  rests on a framing for `hold` (0.35–0.8 s) with no drift, so a held frame
+  is crisp, then moves to the next in `move` (0.22 s, `expo.inOut`), far
+  enough that motion blur smears it. Framings alternate between the wide
+  and tight halves of `scale` (1.012–1.05) and between sides of ±`shift`
+  (1.6 %), each translate inside its own overscan; the sequence comes from a
+  fixed seed and the duration, so renders repeat. `creep` (0–0.5, default 0)
+  makes a hold cover that share of the way slowly; measured, it does not
+  help: slow motion registers on detailed frames first, so the frames left
+  still are the sparse, soft ones. Kicks punch in 0.1 s, settle in 0.22 s
+  and return in 0.2 s (`expo.inOut`) instead of the slow relax, and the
+  grammar's hold level is `off` (no hold drift, no media push). Measured on
+  an interface explainer reference: about a tenth of its frames are still
+  and its moves change the frame twice as hard as a steady drift; the
+  drifting `kinetic` camera is never still and never blurs. With `snap` a
+  reel's look measures land on the reference's (moving frames 0.77× as
+  sharp as held ones, 15 % soft), and what keeps it from reading still is
+  its content: a host, counters, live panels.
 - Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
   settle over 0.35 s with the feel's overshoot towards a rest
   `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
@@ -2276,7 +2321,12 @@ One setting turns on the habits of a top faceless animated reel together:
   impact hits) and strong scene hits; explicit kicks go first. At most one
   per `gap` (1.5 s), never in a busy span (`feelBusy`: track-0 transitions,
   the loop ending, the camera plan's moves and zooms inside a shot, padded
-  0.06 s). A dropped explicit kick is a compile warning.
+  0.06 s). A transition in runs from its scene's start for its `dur`; it
+  never pre-rolls. A kick occupies `[at, at + 0.47 s]` (punch 0.12 s and
+  settle 0.35 s), so it must end before the span starts: a kick into a
+  scene starting at S with a transition of D s is refused anywhere in
+  `(S − 0.53, S + D + 0.06)`. A dropped explicit kick is a compile warning
+  that names both windows and the latest start before the span.
 - Content-safe kicks (`feelSafeArea`, `contentSafeKicks`): the content area
   is the profile safe zone, widened in a portrait frame to a 60 px content
   margin (of 1080) on the left, right and top, where headlines and top bars
@@ -2324,8 +2374,23 @@ a pure function of time, in both renderers.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane, bloom (`kit/core/ui-components.mjs`). Props are listed in the planning
-  prompt's "Interface scenes" section.
+  scan-plane, bloom, burst (`kit/core/ui-components.mjs`); host (`kit/core/ui-host.mjs`).
+  Props are listed in the planning prompt's "Interface scenes" section.
+- **Host**: a code-drawn pixel mascot (a 22 × 17 cell sprite in the accent
+  or `props.tone`, drawn as crisp SVG rects, no external art). Poses
+  (`props.pose`, changed on beats with `set: {pose}`): idle, hop, point-left,
+  point-right, cheer, surprised. It is never static: a two-step bob, a
+  breath and a blink every ~3 s under every pose; a pose change pops; hop
+  and cheer loop; surprised jumps under a "!". It enters with `hop` by
+  default (a parabolic jump that lands with a squash, cue `pop-soft`;
+  `props.from` below, left or right). `props.perch` names a top-level
+  element by id: the rect's x and y are replaced so its feet stand on that
+  element's top edge at `props.along` (0–1, default 0.8) of its width; it
+  takes that element's depth, cannot enter before it, leaves at its `out`
+  unless it names its own, and refuses a tilted element. Smallest size 132 ×
+  102. A pose change pushes a `pose` event (hop and cheer span until the
+  next change), which the holds and states gates count; other beats stay
+  `beat` events.
 - **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
   the safe zone's top to its foot, clear of the caption band; `bleed: true`
   lifts that for decorative elements. The first element enters by 0.6 s. A
@@ -2337,7 +2402,8 @@ a pure function of time, in both renderers.
   the accent tint from `bg`, `paper` and `accent`; `params.alert` is the
   broken-state colour (default `#ff4b3e`).
 - **Events**: a top-level element's entrance asks for a sound by its kind
-  (slam `hit-soft`, pop `pop-soft`, zoom `whoosh-soft`, drop `hit-soft`) or
+  (slam `hit-soft`, pop `pop-soft`, zoom `whoosh-soft`, drop `hit-soft`, hop
+  `pop-soft`) or
   its `cue` (null for none); a beat's `cue` adds one at the beat.
 - **Painter**: `paintUi(host, spec, t)` writes the host's HTML for the
   absolute time `t`. The functions in `ui-paint.mjs`, `ui-components.mjs` and
@@ -2350,11 +2416,81 @@ a pure function of time, in both renderers.
   on its own) and keeps the exit.
 - **Entrances**: `cut` puts an element on screen at `at` as it settles, so a
   scene that opens the video shows a built frame at frame 0.
+- **Rich headlines**: a headline sets `props.lines` (1–4) instead of
+  `text`: `[{text, size, accent, weight, tone, count, enter, at}]`. Sizes are
+  `s` 52 px (tracked out, weight 700), `m` 76 (800), `l` 112 (default, 900),
+  `xl` 200, or px; `*word*` in a line sets that word in the accent, `accent:
+  true` the whole line; `count` (true or `{from, dur}`) runs the line's first
+  number up from `from` (0) over `dur` (0.9 s) as it lands, keeping its
+  decimals and commas. Lines stack in a column, aligned by `align`, each
+  after a gap of 6% of its size; after the first they enter `stagger` s
+  apart (0.12) or at their own `at`, rising by default. The box
+  (`uiTextBox`) is the widest line by the tallest stack across the
+  headline's states, as the painter sets them (`uiHeadlineLines`); every
+  line must fit the rect's width and the stack its height. A beat changes
+  the lines with `set.lines`; `swap.text` stands in for them.
 - **Text and panels**: headlines and chips are checked at the box their text
   sets in (`uiTextBox`): inside the platform safe zone and clear of the
   caption band. Panels may use the whole stage and run under the captions;
   a tilted panel is checked at its footprint (`uiTiltBox`). Panels below
-  their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail.
+  their smallest legible size (`MIN_SIZE`, `LOCK_CARD_MIN`) fail: meter
+  560×320, timeline 600×340, terminal 560×320, results 560×420, downloads
+  560×300, frame-ruler 800×440, marker-snap 560×240, pad-grid 150×130 a pad
+  plus 20 px gaps (9 pads in 3 columns: 490×430; set `cols` for fewer rows),
+  scan-plane 600×360, comment 560×120 and at least 0.75 of the height its
+  parts stack to (`uiCommentHeight`: the 120 px box, 260 with the sent
+  bubble, 385 with a reply, 485 with reply links), bloom 200×200;
+  lock-cards needs 110 px a card plus 26, 120 for its counter and 64 for a
+  title.
+- **Painted bounds**: every kind paints inside its rect, so the layout
+  checks, which see each element at its rect, see what is drawn
+  (`test/ui_painted_bounds.test.js` paints each kind in Chromium at its
+  smallest and a roomier size and measures it). frame-ruler lays its bands
+  (pin, ruler, lane and slot, counter) out from the rect height and scales
+  the drawing to fit below 560 px; comment stacks its parts from the top
+  and scales them to fit (`uiFit`); lock-cards centres its cards (200 px at
+  most) between title and counter; results keeps its fanned cards' corners
+  inside; scan-plane keeps its pins, labels and scan line inside. Only a
+  bloom (light) and an element's own entrance move run past the rect.
+- **Footprint under tilt and the stage** (what the stage, text and layout
+  checks measure, design px, 9:16). An element tilt `{x, y, z}` turns the
+  rect: width′ = (w·cos z + h·sin z)·g and height′ = (w·sin z + h·cos z)·g,
+  g = 1 + 0.5·sin(max(|x|, |y|)) (`uiTiltBox`; x 38° gives g 1.31). The
+  stage then moves a top-level box at depth d: the dolly scales it about
+  (540, 864) by S′ = (1 − 0.16 d)(1 + (S − 1)(1 − 0.65 d)) and shifts it by
+  (dx, dy)(1 − 0.65 d) by the scene's end; the stage tilt T projects a point
+  (x, y) to x″ = 540 + (x − 540)·k, k = 1 / (1 − (y − 960)·sin T / 1600), so
+  rows below the canvas centre widen and rows above narrow. The footprint is
+  the union of the box at rest and at the dolly's end (`uiStageBox`). Rule
+  of thumb for a front panel centred on 540 whose widest row (its bottom
+  edge, below y 960) lands at y_b: right edge = 540 + (W/2·S + dx)·k(y_b),
+  so it fits the stage (x 40–1040) when W ≤ 2·(500/k − |dx|)/S. Tilt 6°,
+  dolly {x: 30, y: 20, scale: 1.05}, bottom at y 1300: k ≈ 1.026, W ≤ 870.
+  A centred headline must fit the safe zone (x 80–940) the same way: with
+  that stage the widest is about 730 px of text (750 drawn, 87% of the safe
+  width); at tilt 10°, dolly x 80, scale 1.08 about 630 (81%).
+- **Hero fill**: a ui-scene's hero is its largest text box, else its
+  largest panel (role media, no fill check). Its rect is the drawn
+  footprint above (`uiStageBox` of `uiTextBox`), the same box the safe-zone
+  check uses, so hero-fill and the stage rule measure one thing. With the
+  stages the planning guide recommends (tilt up to 10°, dolly x up to 80,
+  scale up to 1.08) the widest a centred headline can be is at least 80% of
+  the safe width, so a hero headline drawn at 70–90% (602–774 px in 9:16)
+  always fits, and the warning means the hero headline is set too small,
+  not that the stage grew it: raise its size or lengthen it. A bigger
+  dolly (x past about 190 at tilt 10°) narrows the room below 70%; there, shorten the
+  dolly's x rather than the headline.
+- **Cadence** (`kit/core/cadence.mjs uiPanelEntrances`): the storyboard
+  cadence counts a top-level element as a visual change, like a cut, when
+  its rect covers at least 20% of the design canvas (414 720 px² in 9:16,
+  e.g. 760×546) and its `at` is 0.3 s or more after its scene starts, as the
+  pixel measure does. Its rect counts, not its tilted footprint, and any
+  kind of that size counts; children, beats and flashes do not. One
+  entering in the first 0.3 s is part of the scene's own cut, and changes
+  within 0.25 s of each other merge into one.
+- **lock-cards icons**: a card's `icon` is any short text or emoji shown in
+  its well once it unlocks (default `✓`); before that the well shows `🔒`.
+  There is no fixed list: use one glyph (`✓`, `★`, `⚡`, `♪`, `🔊`, `🎬`).
 - **Captions**: modules get `ctx.captions`, the story's captions position
   (`storyCaptionPosition`: auto, middle, top); the band elements avoid is
   placed by the same `captionBandAt` the layout check uses.
@@ -2400,6 +2536,39 @@ a pure function of time, in both renderers.
   gradients with a white core, screened (`mix-blend-mode: screen`) over the
   elements behind it. Light, not content: it is not a layout part, does
   not count as the scene's first thing on screen and may run off the stage.
+- **Arrangements** (`kit/core/ui-arrange.mjs`): a top-level
+  `{kind: "stack", arrange, rect?, at, enter?, out?, exit?, cue?, id?,
+  children}` lays its children out as a layered collage over its region
+  (`rect`, default the whole stage), then resolves as those children placed
+  as ordinary top-level elements (`rect`, `tilt`, `depth`, `z`). The first
+  child is the sharp front hero; `fan` (2–5) fans the rest on a diagonal
+  behind it, `wall` (3–16) puts it in front of a curved wall of small cards
+  at depth 0.85, `stack` (2–5) cascades the rest below it, each smaller and
+  deeper, and `orbit` (3–7) rings it with cards far at the top and near at
+  the foot. Each child is fitted so the footprint the stage check sees (its
+  tilt, depth and the dolly included) lands on its slot inside the region,
+  never below its kind's minimum size; the hero keeps clear of the caption
+  band when the region has room. Children take no `rect`, `depth` or
+  `tilt`, and no text or light kinds; they enter 0.07 s apart from the
+  stack's `at` unless they name their own, inherit its entrance, and only
+  the hero keeps an entrance sound. A child's own children are scaled down
+  to fit the size it was given.
+- **Stage fill**: a portrait scene's layout declares its stage
+  (`layout.fill {group, stage}`), and every part carries it. The layout
+  check's `stage-fill` rule (`STAGE_FILL`) warns when a band of the stage
+  over 25% of its height has nothing at least 25% of the stage wide in it
+  for more than 1.5 s, naming the band and how to fill it.
+- **Burst**: `kind: "burst"`, the hero beat's light. Thin bright rays
+  (`rays`, 6–24, default 14) and a white-hot flare core with a thin
+  horizontal flare shoot out of the rect's centre at `at`: the spokes race
+  out on an expo ease and the whole burst fades by `duration` (0.3–1.2 s,
+  default 0.6); props `tone` (accent), `strength` (0–1.5, 1). `props.target`
+  (another element's id) centres the rect on that element (its text box for
+  a headline or chip; top-level bursts only); without a rect the burst is a
+  920 px square. Each ray's angle, reach and weight come from `uiHash`, so
+  it is a function of time. Screened like a bloom and, like it, light, not
+  content. It pushes a `burst` event, role `emphasis`, with the element's
+  `cue` if it names one. Use it on one or two hero beats a reel.
 
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
@@ -2499,9 +2668,12 @@ own copy of the ranges, `STORY_LIGHT_*`, in step by test/lighting.test.js).
   the darkened bg. The wrap and halos are screen blends at a fraction of the
   key, so white text does not move.
 - **Lit dot grid.** `background: {kind: "dot-grid", params: {lit}}` (0–1,
-  default 0 = today's even grid) masks the dots by the key's falloff (and,
-  fainter, the pool's): full under the light, `1 − lit` elsewhere, and
-  brightens them by up to 1.6× under the light (still clamped). Without a
+  default 0 = today's even grid) masks the dots by the square of the key's
+  falloff (and, at 0.35, the pool's): full under the light, fading out well
+  inside the glow, `(1 − lit)²` elsewhere; and a lit grid is quieter, its
+  dots at `1 − 0.35 × lit` of the even grid's alpha (still clamped). Light
+  reveals the grid on a smooth dark ground; signal-ui sets lit 0.85 and
+  intensity 0.06. Without a
   story light the mask uses the `studio` key. `litMask(story, lit)` is the
   mask; it is in shares of the box, so a panel fill gets it too.
 
