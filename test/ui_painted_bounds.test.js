@@ -33,10 +33,11 @@ const PROPS = {
   "frame-ruler": { snapAt: 0.5, pin: "HIT · F 0547" },
   "pad-grid": { runAt: 0.5 },
   "scan-plane": { scanAt: 2, scanDur: 3, markers: [{ label: "intro", x: 0.02, at: 1.6 }, { label: "logo", x: 0.48, at: 1.8 }, { label: "outro", x: 0.99, at: 2 }] },
-  bloom: {}
+  bloom: {},
+  host: { pose: "cheer" }
 };
-// Light and groups: a bloom swells past its rect by design and is not a layout part; a stack draws only its children.
-const EXEMPT = new Set(["bloom", "stack"]);
+// Light and groups: a bloom and a burst swell past their rect by design and are not layout parts; a stack draws only its children.
+const EXEMPT = new Set(["bloom", "burst", "stack"]);
 // Kinds without a smallest size, measured at a typical one.
 const TYPICAL = { "pad-grid": { width: 490, height: 430 }, headline: { width: 900, height: 120 }, chip: { width: 320, height: 64 }, waveform: { width: 900, height: 220 }, window: { width: 740, height: 440 }, "card-wall": { width: 900, height: 900 } };
 // Settled, mid-change (an unlock, the scan running) and late; no part is mid-entrance.
@@ -83,7 +84,9 @@ test("ui-scene: every kind paints inside its rect, at its smallest legible size 
           return { x0, y0, x1, y1 };
         }, [spec, time]);
         const over = { left: rect.x - box.x0, top: rect.y - box.y0, right: box.x1 - rect.x - rect.width, bottom: box.y1 - rect.y - rect.height };
-        if (Object.values(over).some((v) => v > 2)) failures.push(`${kind} ${size.width}×${size.height} at ${time} s paints past its rect by ${JSON.stringify(Object.fromEntries(Object.entries(over).map(([k, v]) => [k, Math.round(v)])))}`);
+        // A host jumps and throws sparkles as it reacts: it may reach a third of its height above its rect and a sixth of its width to each side, and its contact shadow sits just under its feet.
+        const room = kind === "host" ? { left: size.width / 6, top: size.height / 3, right: size.width / 6, bottom: 6 } : { left: 2, top: 2, right: 2, bottom: 2 };
+        if (Object.entries(over).some(([side, v]) => v > room[side] && v > 2)) failures.push(`${kind} ${size.width}×${size.height} at ${time} s paints past its rect by ${JSON.stringify(Object.fromEntries(Object.entries(over).map(([k, v]) => [k, Math.round(v)])))}`);
       }
     }
   }
