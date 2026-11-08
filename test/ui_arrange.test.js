@@ -119,3 +119,15 @@ test("arrange: an element listed after an arranged stack draws over its cards, o
   assert.ok(byId.burst.z > hero.z && byId.after.z > hero.z, "listed after: above the hero");
   assert.equal(byId.own.z, 5, "its own z wins");
 });
+
+test("layout parts rest only to the scene's end: a model's render end through the next transition is shown, not at rest", () => {
+  const layout = { canvas: { width: 1080, height: 1920 }, parts: [{ id: "el-1", rect: { x: 60, y: 660, width: 960, height: 600 }, role: "media", start: 0, end: 3.18 }] };
+  const canvas = { width: 1080, height: 1920 };
+  const a = layoutExtras(layout, { id: "s1", start: 0, end: 2.68, canvas }).parts[0];
+  assert.equal(a.end, 2.68);
+  assert.equal(a.shownEnd, 3.18, "the transition's tail still counts as on screen");
+  const b = layoutExtras({ ...layout, parts: [{ ...layout.parts[0], start: 2.68, end: 6 }] }, { id: "s2", start: 2.68, end: 6, canvas }).parts[0];
+  assert.equal(b.shownEnd, undefined);
+  const { findings } = checkLayout({ canvas, elements: [a, b], duration: 6 });
+  assert.deepEqual(findings.filter((finding) => finding.rule === "collision"), [], "two scenes' panels do not collide through the transition between them");
+});

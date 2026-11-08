@@ -312,12 +312,20 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
 // parts: [elements]}.
 export function layoutExtras(layout, { id, start, end, track, canvas, hidesCaptions } = {}) {
   const allowOcclusion = Array.isArray(layout?.allowOcclusion) ? layout.allowOcclusion.map(String) : null;
-  const parts = (Array.isArray(layout?.parts) ? layout.parts : []).flatMap((part) => elementsFromEditorialLayout(
-    { canvas: layout.canvas, rect: part.rect, ...(part.motion ? { motion: part.motion } : {}) },
-    { id: `${id}-${part.id}`, role: part.role ?? "text", start: part.start ?? start, end: part.end ?? end, track, canvas, hidesCaptions,
-      ...(layout?.fill?.stage ? { fill: { group: layout.fill.group ?? id, stage: layout.fill.stage } } : {}),
-      ...(part.minTextPx != null ? { minTextPx: part.minTextPx } : {}),
-      ...(Array.isArray(part.over) && part.over.length ? { allowOcclusion: part.over.map((ref) => (ref === "self" ? id : `${id}-${ref}`)) } : {}) }));
+  const parts = (Array.isArray(layout?.parts) ? layout.parts : []).flatMap((part) => {
+    // A model's end may run through the next scene's transition (its render
+    // end). A part is at rest only to the scene's end, like the module's main
+    // element, and the transition's tail still counts as shown (shownEnd).
+    const partEnd = part.end ?? end;
+    const restEnd = Number.isFinite(Number(end)) ? Math.min(partEnd, Number(end)) : partEnd;
+    return elementsFromEditorialLayout(
+      { canvas: layout.canvas, rect: part.rect, ...(part.motion ? { motion: part.motion } : {}) },
+      { id: `${id}-${part.id}`, role: part.role ?? "text", start: part.start ?? start, end: restEnd, track, canvas, hidesCaptions,
+        ...(layout?.fill?.stage ? { fill: { group: layout.fill.group ?? id, stage: layout.fill.stage } } : {}),
+        ...(part.minTextPx != null ? { minTextPx: part.minTextPx } : {}),
+        ...(Array.isArray(part.over) && part.over.length ? { allowOcclusion: part.over.map((ref) => (ref === "self" ? id : `${id}-${ref}`)) } : {}) })
+      .map((element) => (partEnd > restEnd ? { ...element, shownEnd: partEnd } : element));
+  });
   return { ...(allowOcclusion ? { allowOcclusion } : {}), parts };
 }
 
