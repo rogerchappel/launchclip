@@ -31,7 +31,7 @@
         }
       }
     },
-    "feel": "kinetic",
+    "feel": "snap",
     "blur": {
       "samples": 6,
       "shutter": 1.5
