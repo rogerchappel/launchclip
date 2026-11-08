@@ -28,8 +28,13 @@ const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'po
 const EXITS = Object.freeze(['lift', 'rack']);
 const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue'];
 // The entrance an element makes when it names none: a headline racks into
-// focus, a bloom is its own swell, everything else rises.
-const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut'});
+// focus, a bloom and a burst are their own swell, everything else rises.
+const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut', burst: 'cut'});
+// Light kinds: drawn over the scene, never content (no layout part, not the
+// scene's first thing on screen, free to run off the stage).
+const LIGHT_KINDS = new Set(['bloom', 'burst']);
+// A burst centred on a target without a rect of its own reaches this far (design px square).
+const BURST_SIZE = 920;
 const MAX_FLASHES = 12;
 const MAX_ELEMENTS = 120;
 // Text props checked for length and escaped by the painter; headline text must fit its rect.
@@ -40,7 +45,7 @@ const ENTER_CUES = Object.freeze({slam: 'impact', pop: 'pop-soft', zoom: 'whoosh
 const TEXT_KINDS = new Set(['headline', 'chip']);
 // The smallest rect a panel draws legibly in (design px); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-const MIN_SIZE = Object.freeze({bloom: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
+const MIN_SIZE = Object.freeze({bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}});
 const LOCK_CARD_MIN = 110;
 
 /** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
@@ -133,12 +138,15 @@ function uiResolve(params, ctx) {
   const time = (value, path) => check.num(value, path, 0, b.duration);
 
   const element = (raw, path, parent) => {
-    check.obj(raw, path, ELEMENT_KEYS, ['kind', 'rect', 'at']);
+    // A burst aimed at another element (props.target) may leave its rect out.
+    const aimed = raw?.kind === 'burst' && raw?.props?.target !== undefined;
+    check.obj(raw, path, ELEMENT_KEYS, aimed ? ['kind', 'at'] : ['kind', 'rect', 'at']);
     if (++count > MAX_ELEMENTS) check.fail(path, `is one element too many: a ui-scene draws at most ${MAX_ELEMENTS}`);
     const kind = check.oneOf(raw.kind, `${path}.kind`, UI_KINDS);
-    check.obj(raw.rect, `${path}.rect`, ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);
-    const rect = {x: check.num(raw.rect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(raw.rect.y, `${path}.rect.y`, -H, 2 * H),
-      width: check.num(raw.rect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(raw.rect.height, `${path}.rect.height`, 4, 2 * H)};
+    const rawRect = raw.rect ?? {x: 0, y: 0, width: BURST_SIZE, height: BURST_SIZE};
+    check.obj(rawRect, `${path}.rect`, ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);
+    const rect = {x: check.num(rawRect.x, `${path}.rect.x`, -W, 2 * W), y: check.num(rawRect.y, `${path}.rect.y`, -H, 2 * H),
+      width: check.num(rawRect.width, `${path}.rect.width`, 4, 2 * W), height: check.num(rawRect.height, `${path}.rect.height`, 4, 2 * H)};
     const bleed = raw.bleed === undefined ? false : check.bool(raw.bleed, `${path}.bleed`);
     const min = MIN_SIZE[kind];
     if (min && (rect.width + 0.5 < min.width || rect.height + 0.5 < min.height)) check.fail(`${path}.rect`, `is ${rect.width}×${rect.height}; a ${kind} needs at least ${min.width}×${min.height} to draw legibly`);
@@ -149,8 +157,8 @@ function uiResolve(params, ctx) {
       depth = check.num(raw.depth, `${path}.depth`, 0, 1);
     }
     const footprint = parent ? uiTiltBox(rect, tilt) : shown(uiTiltBox(rect, tilt), depth);
-    // A bloom fades to nothing at its edges: light may run off the stage.
-    if (!parent && !bleed && !TEXT_KINDS.has(kind) && kind !== 'bloom') {
+    // Light (a bloom, a burst) fades to nothing at its edges: it may run off the stage.
+    if (!parent && !bleed && !TEXT_KINDS.has(kind) && !LIGHT_KINDS.has(kind)) {
       const r = footprint, eps = 0.5;
       if (r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps) {
         check.fail(`${path}.rect`, `${tilt || depth || stageView ? `${tilt ? 'turned by its tilt' : 'placed by its depth and the stage'}, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
@@ -158,8 +166,8 @@ function uiResolve(params, ctx) {
     }
     const at = time(raw.at, `${path}.at`);
     if (parent && at + 1e-9 < parent.at) check.fail(`${path}.at`, `is before its parent enters (${parent.at} s)`);
-    // A bloom is light, not something on screen.
-    if (kind !== 'bloom') firstAt = Math.min(firstAt, at);
+    // A bloom or a burst is light, not something on screen.
+    if (!LIGHT_KINDS.has(kind)) firstAt = Math.min(firstAt, at);
     const out = raw.out === undefined ? undefined : time(raw.out, `${path}.out`);
     if (out !== undefined && out <= at) check.fail(`${path}.out`, 'must be after at');
     const enter = raw.enter === undefined ? DEFAULT_ENTER[kind] ?? 'up' : check.oneOf(raw.enter, `${path}.enter`, ENTERS);
@@ -181,6 +189,7 @@ function uiResolve(params, ctx) {
     const props = raw.props === undefined ? {} : raw.props;
     check.obj(props, `${path}.props`, Object.keys(props));
     if (kind === 'headline') headlineFits(check, props, rect, `${path}.props`);
+    if (kind === 'burst') burstProps(check, props, `${path}.props`);
     const beats = (raw.beats ?? []).map((beat, k) => {
       check.obj(beat, `${path}.beats[${k}]`, ['at', 'set', 'cue'], ['at', 'set']);
       check.obj(beat.set, `${path}.beats[${k}].set`, Object.keys(beat.set));
@@ -209,6 +218,8 @@ function uiResolve(params, ctx) {
     // A moving entrance (a focus pull included) and each flash are changes on screen; a cut is not.
     if (!parent && enter !== 'cut') b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', ...(cue ? {cue} : {})});
     if (flashAt) flashAt.forEach((t, k) => b.events.push({id: `${b.id}-flash-${count}-${k}`, name: 'flash', time: rt(b.start + t), endTime: rt(b.start + t + 0.35), role: 'emphasis'}));
+    // A burst is the hero beat: an emphasis on screen (with its cue, if it names one).
+    if (kind === 'burst') b.events.push({id: `${b.id}-burst-${count}`, name: 'burst', time: rt(b.start + at), endTime: rt(b.start + at + (props.duration ?? 0.6)), role: 'emphasis', ...(cue ? {cue} : {})});
     const node = {kind, rect, at, enter, props, beats,
       ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(exit !== 'lift' ? {exit} : {}), ...(tilt ? {tilt} : {}),
       ...(depth ? {depth} : {}), ...(flashAt ? {flashAt} : {}), ...(flashTone ? {flashTone} : {}),
@@ -216,6 +227,10 @@ function uiResolve(params, ctx) {
       ...(raw.enterDuration !== undefined ? {enterDuration: check.num(raw.enterDuration, `${path}.enterDuration`, 0.1, 1.5)} : {}),
       ...(raw.dist !== undefined ? {dist: check.num(raw.dist, `${path}.dist`, 0, 2000)} : {}),
       ...(raw.overshoot !== undefined ? {overshoot: check.num(raw.overshoot, `${path}.overshoot`, 0, 3)} : {})};
+    if (kind === 'burst' && props.target !== undefined) {
+      if (parent) check.fail(`${path}.props.target`, 'aims a top-level burst; a child burst sits in its parent, so give it a rect instead');
+      aims.push({node, sized: raw.rect !== undefined, path: `${path}.props.target`});
+    }
     if (raw.children !== undefined) {
       if (!Array.isArray(raw.children)) check.fail(`${path}.children`, 'must be an array of elements');
       node.children = raw.children.map((child, k) => element(child, `${path}.children[${k}]`, node));
@@ -224,7 +239,27 @@ function uiResolve(params, ctx) {
   };
 
   if (!Array.isArray(p.elements) || !p.elements.length) check.fail('params.elements', 'must be a non-empty array of elements');
+  const aims = [];
   const elements = p.elements.map((raw, k) => element(raw, `params.elements[${k}]`, null));
+  // A burst aimed at an element centres its rect on that element's centre
+  // (where its text sets, for a headline or chip; children by their parent's offset).
+  if (aims.length) {
+    const centres = new Map();
+    const walk = (list, ox, oy) => {
+      for (const node of list) {
+        const r = TEXT_KINDS.has(node.kind) ? uiTextBox(node.kind, node.props, node.rect, node.beats) : node.rect;
+        if (node.id) centres.set(node.id, {x: ox + r.x + r.width / 2, y: oy + r.y + r.height / 2});
+        if (node.children) walk(node.children, ox + node.rect.x, oy + node.rect.y);
+      }
+    };
+    walk(elements, 0, 0);
+    for (const {node, sized, path} of aims) {
+      const centre = centres.get(node.props.target);
+      if (!centre || node.props.target === node.id) check.fail(path, `names "${node.props.target}", which is not the id of another element in this scene`);
+      const width = sized ? node.rect.width : BURST_SIZE, height = sized ? node.rect.height : BURST_SIZE;
+      node.rect = {x: r2(centre.x - width / 2), y: r2(centre.y - height / 2), width, height};
+    }
+  }
   // A scene that opens the video should show something at frame 0: enter: "cut" at 0.
   if (firstAt > 0.6) check.fail('params.elements', `leave the scene empty until ${r2(firstAt)} s; put something on screen by 0.6 s`);
 
@@ -240,8 +275,8 @@ function uiResolve(params, ctx) {
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
   // Bleed panels count too (they fill the frame); bleed text is decoration.
   const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
-    rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), bloom: element.kind === 'bloom'}))
-    .filter(({k, text, bloom}) => !bloom && !(text && p.elements[k].bleed));
+    rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), light: LIGHT_KINDS.has(element.kind)}))
+    .filter(({k, text, light}) => !light && !(text && p.elements[k].bleed));
   model.layout.drift = false;
   if (parts.length) {
     const area = (r) => r.width * r.height;
@@ -293,6 +328,15 @@ function tiltOf(check, tilt, path) {
   const out = {};
   for (const axis of ['x', 'y', 'z']) if (tilt[axis] !== undefined) out[axis] = check.num(tilt[axis], `${path}.${axis}`, -60, 60);
   return out;
+}
+
+/** A burst's props: its ray count, length, strength, tone and target. */
+function burstProps(check, props, path) {
+  if (props.rays !== undefined) check.int(props.rays, `${path}.rays`, 6, 24);
+  if (props.duration !== undefined) check.num(props.duration, `${path}.duration`, 0.3, 1.2);
+  if (props.strength !== undefined) check.num(props.strength, `${path}.strength`, 0, 1.5);
+  if (props.tone !== undefined) check.str(props.tone, `${path}.tone`, 16);
+  if (props.target !== undefined) check.str(props.target, `${path}.target`, 40);
 }
 
 /** A headline's text must be a short string that sets inside its rect at its size. */
