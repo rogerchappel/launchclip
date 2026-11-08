@@ -108,3 +108,14 @@ test("arrange: every arrangement under a headline fills the stage (no stage-fill
     for (const stage of [undefined, { tilt: 8, dolly: { x: 30, y: 24, scale: 1.05 } }]) assert.deepEqual(fillFindings(resolve([HEADLINE, arranged(arrange)], { stage })), [], arrange);
   }
 });
+
+test("arrange: an element listed after an arranged stack draws over its cards, one listed before stays behind", () => {
+  const chip = { kind: "chip", rect: { x: 400, y: 900, width: 280, height: 80 }, at: 1, props: { text: "HI" } };
+  const burst = { kind: "burst", at: 1.5, props: { target: "s-0" } };
+  const elements = resolve([{ ...chip, id: "before" }, arranged("fan", 3, { id: "s" }), burst, { ...chip, id: "after" }, { ...chip, id: "own", z: 5 }]).content.ui["s1-ui"].elements;
+  const byId = Object.fromEntries(elements.map((el) => [el.id ?? el.kind, el]));
+  const hero = byId["s-0"];
+  assert.equal(byId.before.z, undefined, "listed before the stack: no z, behind its cards");
+  assert.ok(byId.burst.z > hero.z && byId.after.z > hero.z, "listed after: above the hero");
+  assert.equal(byId.own.z, 5, "its own z wins");
+});
