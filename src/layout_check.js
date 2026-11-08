@@ -131,7 +131,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
           ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
           ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
-          ...(model.hidesCaptions ? { hidesCaptions: true } : {})
+          ...(model.hidesCaptions ? { hidesCaptions: true } : {}),
+          ...(model.layout.fill?.stage ? { fill: { group: model.layout.fill.group ?? scene.id, stage: model.layout.fill.stage } } : {})
         }, ...extras.parts, ...fullFrameMedia(scene, model, media[scene.id], canvas)];
       } catch (error) {
         specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });

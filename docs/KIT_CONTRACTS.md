@@ -2416,6 +2416,28 @@ a pure function of time, in both renderers.
   gradients with a white core, screened (`mix-blend-mode: screen`) over the
   elements behind it. Light, not content: it is not a layout part, does
   not count as the scene's first thing on screen and may run off the stage.
+- **Arrangements** (`kit/core/ui-arrange.mjs`): a top-level
+  `{kind: "stack", arrange, rect?, at, enter?, out?, exit?, cue?, id?,
+  children}` lays its children out as a layered collage over its region
+  (`rect`, default the whole stage), then resolves as those children placed
+  as ordinary top-level elements (`rect`, `tilt`, `depth`, `z`). The first
+  child is the sharp front hero; `fan` (2–5) fans the rest on a diagonal
+  behind it, `wall` (3–16) puts it in front of a curved wall of small cards
+  at depth 0.85, `stack` (2–5) cascades the rest below it, each smaller and
+  deeper, and `orbit` (3–7) rings it with cards far at the top and near at
+  the foot. Each child is fitted so the footprint the stage check sees (its
+  tilt, depth and the dolly included) lands on its slot inside the region,
+  never below its kind's minimum size; the hero keeps clear of the caption
+  band when the region has room. Children take no `rect`, `depth` or
+  `tilt`, and no text or light kinds; they enter 0.07 s apart from the
+  stack's `at` unless they name their own, inherit its entrance, and only
+  the hero keeps an entrance sound. A child's own children are scaled down
+  to fit the size it was given.
+- **Stage fill**: a portrait scene's layout declares its stage
+  (`layout.fill {group, stage}`), and every part carries it. The layout
+  check's `stage-fill` rule (`STAGE_FILL`) warns when a band of the stage
+  over 25% of its height has nothing at least 25% of the stage wide in it
+  for more than 1.5 s, naming the band and how to fill it.
 
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 

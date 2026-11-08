@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Light and camera transitions (golden, 9:16)",
-  "notes": "Golden story for the cinematic transitions (kit/core/light-sweep.mjs, kit/core/transitions.mjs): three interface scenes on a dark brand joined by a light-sweep and a push-blur, with heavy sub-frame motion blur (6 samples over 1.5 frames). No narration and no paid calls. Values are illustrative.",
+  "notes": "Golden story for the cinematic transitions (kit/core/light-sweep.mjs, kit/core/transitions.mjs): three interface scenes on a dark brand (each a headline and a panel over a card wall at depth 1, so the frame fills top to bottom) joined by a light-sweep and a push-blur, with heavy sub-frame motion blur (6 samples over 1.5 frames). No narration and no paid calls. Values are illustrative.",
   "lane": "motion",
   "format": {
     "width": 1080,
@@ -52,6 +52,41 @@
               "text": "SOUNDS CHEAP",
               "tone": "alert",
               "size": 110
+            }
+          },
+          {
+            "kind": "card-wall",
+            "rect": {
+              "x": 0,
+              "y": 480,
+              "width": 1080,
+              "height": 1000
+            },
+            "at": 0,
+            "enter": "cut",
+            "bleed": true,
+            "depth": 1,
+            "props": {
+              "cards": [
+                {
+                  "label": "voice.wav"
+                },
+                {
+                  "label": "boing.wav"
+                },
+                {
+                  "label": "whoosh.wav"
+                },
+                {
+                  "label": "music.wav"
+                },
+                {
+                  "label": "room_tone"
+                },
+                {
+                  "label": "sfx_bus"
+                }
+              ]
             }
           },
           {
@@ -137,6 +172,41 @@
             }
           },
           {
+            "kind": "card-wall",
+            "rect": {
+              "x": 0,
+              "y": 480,
+              "width": 1080,
+              "height": 1000
+            },
+            "at": 0,
+            "enter": "cut",
+            "bleed": true,
+            "depth": 1,
+            "props": {
+              "cards": [
+                {
+                  "label": "earshot"
+                },
+                {
+                  "label": "sfx pass"
+                },
+                {
+                  "label": "openverse"
+                },
+                {
+                  "label": "sound kit"
+                },
+                {
+                  "label": "mixer"
+                },
+                {
+                  "label": "library"
+                }
+              ]
+            }
+          },
+          {
             "kind": "lock-cards",
             "rect": {
               "x": 60,
@@ -189,6 +259,41 @@
               "text": "REAL SOUND",
               "tone": "accent",
               "size": 110
+            }
+          },
+          {
+            "kind": "card-wall",
+            "rect": {
+              "x": 0,
+              "y": 480,
+              "width": 1080,
+              "height": 1000
+            },
+            "at": 0,
+            "enter": "cut",
+            "bleed": true,
+            "depth": 1,
+            "props": {
+              "cards": [
+                {
+                  "label": "whoosh_02"
+                },
+                {
+                  "label": "hit_soft"
+                },
+                {
+                  "label": "riser"
+                },
+                {
+                  "label": "page_flip"
+                },
+                {
+                  "label": "clock_tick"
+                },
+                {
+                  "label": "applause"
+                }
+              ]
             }
           },
           {
