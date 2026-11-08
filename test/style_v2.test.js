@@ -163,7 +163,7 @@ test("v1 packs upgrade to v2 and still load", async () => {
 
 test("built-in starter styles validate, pass contrast and merge into a valid story", async () => {
   const builtins = await listBuiltinStyles();
-  assert.ok(builtins.length >= 4 && builtins.length <= 7);
+  assert.ok(builtins.length >= 4 && builtins.length <= 8);
   const presets = new Set();
   const displays = new Set();
   const explainer = JSON.parse(await readFile(path.join(EXPLAINER, "storyboard.json"), "utf8"));

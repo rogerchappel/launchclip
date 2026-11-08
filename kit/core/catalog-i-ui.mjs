@@ -35,7 +35,11 @@ import {ARRANGEMENTS, expandArrangements} from './ui-arrange.mjs';
 
 const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'hop', 'cut']);
 const EXITS = Object.freeze(['lift', 'rack']);
-const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue'];
+const ELEMENT_KEYS = ['id', 'kind', 'rect', 'at', 'enter', 'enterDuration', 'dist', 'overshoot', 'out', 'exit', 'props', 'beats', 'children', 'tilt', 'z', 'depth', 'flashAt', 'flashTone', 'bleed', 'cue', 'lift', 'screen'];
+// Cut-out part shapes and the path commands a part's d may use (a planner writes these).
+const PART_SHAPES = new Set(['rect', 'circle', 'ellipse', 'path', 'text']);
+const PATH_D = /^[MLHVCSQTAZmlhvcsqtaz0-9eE,.\s+-]+$/;
+const MAX_PARTS = 80;
 // The entrance an element makes when it names none: a headline racks into
 // focus, a bloom and a burst are their own swell, a host hops in, everything else rises.
 const DEFAULT_ENTER = Object.freeze({headline: 'focus', bloom: 'cut', burst: 'cut', host: 'hop'});
@@ -55,7 +59,7 @@ const TEXT_KINDS = new Set(['headline', 'chip']);
 // The smallest rect a panel draws legibly in (design px), and paints within
 // (test/ui_painted_bounds.test.js); lock-cards also
 // needs LOCK_CARD_MIN px a card.
-export const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}, 'scan-plane': {width: 600, height: 360}, comment: {width: 560, height: 120}});
+export const MIN_SIZE = Object.freeze({host: {width: 132, height: 102}, cutout: {width: 40, height: 40}, limb: {width: 60, height: 60}, 'paper-fold': {width: 240, height: 120}, 'paper-sheet': {width: 240, height: 240}, 'torn-strip': {width: 100, height: 40}, tape: {width: 40, height: 16}, 'callout-pin': {width: 140, height: 44}, bloom: {width: 200, height: 200}, burst: {width: 200, height: 200}, meter: {width: 560, height: 320}, timeline: {width: 600, height: 340}, terminal: {width: 560, height: 320}, results: {width: 560, height: 420}, downloads: {width: 560, height: 300}, 'frame-ruler': {width: 800, height: 440}, 'marker-snap': {width: 560, height: 240}, 'scan-plane': {width: 600, height: 360}, comment: {width: 560, height: 120}});
 const LOCK_CARD_MIN = 110;
 // A pad-grid's pads need this much (design px) to keep their labels legible; pads sit 20 px apart.
 const PAD_MIN = Object.freeze({width: 150, height: 130});
@@ -250,7 +254,8 @@ function uiResolve(params, ctx) {
     }
     const footprint = parent ? uiTiltBox(rect, tilt) : shown(uiTiltBox(rect, tilt), depth);
     // Light (a bloom, a burst) fades to nothing at its edges: it may run off the stage.
-    if (!parent && !bleed && !TEXT_KINDS.has(kind) && !LIGHT_KINDS.has(kind)) {
+    // On a rig the camera decides what the 3D world shows, so only what stays flat on the screen has a box here.
+    if (!(stageView?.rig && raw.screen !== true) && !parent && !bleed && !TEXT_KINDS.has(kind) && !LIGHT_KINDS.has(kind)) {
       const r = footprint, eps = 0.5;
       if (r.x < stage.x - eps || r.y < stage.y - eps || r.x + r.width > stage.x + stage.width + eps || r.y + r.height > stage.y + stage.height + eps) {
         check.fail(`${path}.rect`, `${tilt || depth || stageView ? `${tilt ? 'turned by its tilt' : 'placed by its depth and the stage'}, it covers {x: ${r.x}, y: ${r.y}, width: ${r.width}, height: ${r.height}}, which ` : ''}must sit on the stage, {x: ${stage.x}, y: ${stage.y}, width: ${stage.width}, height: ${stage.height}} (design px); mark a decorative element bleed: true to let it run to the edge`);
@@ -308,6 +313,7 @@ function uiResolve(params, ctx) {
       if (!(kind === 'host' && beat.set.pose !== undefined)) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
       return {at: beatAt, set: beat.set, ...(cue ? {cue} : {})};
     }).sort((x, y) => x.at - y.at);
+    paperProps(check, kind, props, rect, path, time);
     if (kind === 'host') hostEvents(beats, props, at, out, count);
     for (const beat of beats) delete beat.cue;
     if (!parent && !bleed && TEXT_KINDS.has(kind)) {
@@ -343,6 +349,8 @@ function uiResolve(params, ctx) {
       ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(exit !== 'lift' ? {exit} : {}), ...(tilt ? {tilt} : {}),
       ...(depth ? {depth} : {}), ...(flashAt ? {flashAt} : {}), ...(flashTone ? {flashTone} : {}),
       ...(raw.z !== undefined ? {z: check.int(raw.z, `${path}.z`, 0, 50)} : {}),
+      ...(raw.lift !== undefined ? {lift: check.num(raw.lift, `${path}.lift`, -600, 900)} : {}),
+      ...(raw.screen === true ? {screen: true} : {}),
       ...(raw.enterDuration !== undefined ? {enterDuration: check.num(raw.enterDuration, `${path}.enterDuration`, 0.1, 1.5)} : {}),
       ...(raw.dist !== undefined ? {dist: check.num(raw.dist, `${path}.dist`, 0, 2000)} : {}),
       ...(raw.overshoot !== undefined ? {overshoot: check.num(raw.overshoot, `${path}.overshoot`, 0, 3)} : {})};
@@ -396,9 +404,13 @@ function uiResolve(params, ctx) {
   // stage's dolly is the camera).
   const scale = (r) => ({x: r2(r.x * unit), y: r2(r.y * unit), width: r2(r.width * unit), height: r2(r.height * unit)});
   // Bleed panels count too (they fill the frame); bleed text is decoration.
-  const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
+  // On a rig the world turns in 3D, so only what stays flat on the screen has a box to check.
+  const rigged = Boolean(stageView?.rig);
+  const parts = elements.map((element, k) => ({k, skip: rigged && !element.screen, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
     rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), light: LIGHT_KINDS.has(element.kind)}))
-    .filter(({k, text, light}) => !light && !(text && raws[k].bleed));
+    .filter(({k, text, light, skip}) => !light && !skip && !(text && raws[k].bleed));
+  // The 3D world is one part to the checks: it fills the stage the camera moves over.
+  if (rigged) parts.push({k: 'world', text: false, at: 0, rect: stage, light: false});
   model.layout.drift = false;
   // A portrait scene fills its stage top to bottom: the layout check's
   // stage-fill rule warns when a band of it stays empty (STAGE_FILL).
@@ -428,7 +440,7 @@ function uiResolve(params, ctx) {
  * carries the scene's duration, which the dolly runs over.
  */
 function stageOf(check, stage, duration) {
-  check.obj(stage, 'params.stage', ['tilt', 'dolly'], []);
+  check.obj(stage, 'params.stage', ['tilt', 'dolly', 'rig'], []);
   const out = {tilt: stage.tilt === undefined ? 0 : check.num(stage.tilt, 'params.stage.tilt', -20, 20)};
   if (stage.dolly !== undefined) {
     check.obj(stage.dolly, 'params.stage.dolly', ['x', 'y', 'scale'], []);
@@ -436,8 +448,69 @@ function stageOf(check, stage, duration) {
       y: stage.dolly.y === undefined ? 0 : check.num(stage.dolly.y, 'params.stage.dolly.y', -400, 400),
       scale: stage.dolly.scale === undefined ? 1 : check.num(stage.dolly.scale, 'params.stage.dolly.scale', 0.8, 1.3)};
   }
+  if (stage.rig !== undefined) {
+    const rig = stage.rig;
+    check.obj(rig, 'params.stage.rig', ['keys', 'explode', 'steps', 'float'], ['keys']);
+    if (!Array.isArray(rig.keys) || !rig.keys.length) check.fail('params.stage.rig.keys', 'must be a non-empty array of {at, rx, ry, rz, scale, x, y, ease}');
+    let previous = -Infinity;
+    const keys = rig.keys.map((key, k) => {
+      const path = `params.stage.rig.keys[${k}]`;
+      check.obj(key, path, ['at', 'rx', 'ry', 'rz', 'scale', 'x', 'y', 'ease'], ['at']);
+      const at = check.num(key.at, `${path}.at`, -60, 600);
+      if (at < previous) check.fail(`${path}.at`, 'must not be before the key above it');
+      previous = at;
+      const out2 = {at};
+      for (const name of ['rx', 'ry', 'rz']) if (key[name] !== undefined) out2[name] = check.num(key[name], `${path}.${name}`, -85, 85);
+      if (key.scale !== undefined) out2.scale = check.num(key.scale, `${path}.scale`, 0.3, 2);
+      for (const name of ['x', 'y']) if (key[name] !== undefined) out2[name] = check.num(key[name], `${path}.${name}`, -600, 600);
+      if (key.ease !== undefined) { if (!['back', 'smooth'].includes(key.ease)) check.fail(`${path}.ease`, 'must be back or smooth'); out2.ease = key.ease; }
+      return out2;
+    });
+    out.rig = {keys};
+    if (rig.explode !== undefined) {
+      check.obj(rig.explode, 'params.stage.rig.explode', ['at', 'dur'], ['at']);
+      out.rig.explode = {at: check.num(rig.explode.at, 'params.stage.rig.explode.at', -60, 600), dur: rig.explode.dur === undefined ? 0.8 : check.num(rig.explode.dur, 'params.stage.rig.explode.dur', 0.1, 4)};
+    }
+    if (rig.steps !== undefined) out.rig.steps = check.num(rig.steps, 'params.stage.rig.steps', 6, 30);
+    if (rig.float !== undefined) out.rig.float = check.num(rig.float, 'params.stage.rig.float', 0, 6);
+  }
   out.duration = r2(duration);
   return out;
+}
+
+/** The paper kinds' props: what the painter cannot draw, or a planner would get wrong silently. */
+function paperProps(check, kind, props, rect, path) {
+  if (kind === 'cutout') {
+    if (!Array.isArray(props.parts) || !props.parts.length) check.fail(`${path}.props.parts`, 'must be a non-empty array of shapes');
+    if (props.parts.length > MAX_PARTS) check.fail(`${path}.props.parts`, `has ${props.parts.length} parts; at most ${MAX_PARTS}`);
+    if (props.view !== undefined && !(Array.isArray(props.view) && props.view.length === 2 && props.view.every((v) => Number.isFinite(v) && v > 0))) check.fail(`${path}.props.view`, 'must be [width, height]');
+    props.parts.forEach((part, k) => {
+      const at = `${path}.props.parts[${k}]`;
+      if (!PART_SHAPES.has(part?.shape)) check.fail(`${at}.shape`, `must be one of ${[...PART_SHAPES].join(', ')}`);
+      if (part.shape === 'path') {
+        if (typeof part.d !== 'string' || !PATH_D.test(part.d)) check.fail(`${at}.d`, 'must be SVG path commands and numbers');
+        if (part.shade && !(Array.isArray(part.box) && part.box.length === 4)) check.fail(`${at}.box`, 'must be [x, y, width, height]: a shaded path needs the box its shading fills');
+      }
+      if (part.shape === 'text' && typeof part.text !== 'string') check.fail(`${at}.text`, 'must be text');
+      if (part.shade && !['dots', 'lines'].includes(part.shade.kind)) check.fail(`${at}.shade.kind`, 'must be dots or lines');
+    });
+  }
+  if (kind === 'limb') {
+    if (!Array.isArray(props.path) || props.path.length < 2) check.fail(`${path}.props.path`, 'must be at least two [x, y] points');
+    props.path.forEach(([x, y], k) => {
+      if (!(x >= 0 && x <= rect.width && y >= 0 && y <= rect.height)) check.fail(`${path}.props.path[${k}]`, `[${x}, ${y}] is outside its rect (${rect.width}×${rect.height}); points are px inside the rect`);
+    });
+  }
+  if (kind === 'paper-fold') {
+    if (!Array.isArray(props.panels) || props.panels.length < 2 || props.panels.length > 12) check.fail(`${path}.props.panels`, 'must be 2–12 panels');
+    if (rect.width / props.panels.length < 70) check.fail(`${path}.rect`, `gives each of its ${props.panels.length} panels ${Math.round(rect.width / props.panels.length)} px; a panel needs at least 70`);
+  }
+  if (kind === 'torn-strip') {
+    const text = String(props.text ?? '').replace(/\*/g, '');
+    const width = text.length * (props.size ?? 56) * 0.62;
+    if (!text) check.fail(`${path}.props.text`, 'is required');
+    if (width > rect.width - 24) check.fail(`${path}.props.text`, `"${text}" at size ${props.size ?? 56} needs about ${Math.round(width)} px; its strip is ${rect.width} wide`);
+  }
 }
 
 /** Every time (seconds from the scene start) among a component's props: keys named at or ending in At, at any depth. */

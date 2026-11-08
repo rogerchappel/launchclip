@@ -27,6 +27,18 @@ Explainer motion: motion, 20–180 s.
 - References: 0
 - Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.
 
+## paper-diorama
+
+Paper diorama reel: motion, 30–75 s, 9:16.
+
+- Provenance: measured (measured 2026-11-08T22:45:31.516Z)
+- References: 1
+- Note: Measured from one public reel, as statistics only, with bands at ±25% because one reference cannot show its own spread. Moving sharpness and soft-frame share are left out: they are unstable with few held frames. A target, not a survey.
+
+| Source | Rights | Duration | SHA-256 |
+| --- | --- | --- | --- |
+| reel-c.mp4 | public-statistics | 33.451 s | `c02b1c914cb4` |
+
 ## product-demo
 
 Product demo: demo-led, 20–120 s.

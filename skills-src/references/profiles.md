@@ -14,6 +14,7 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | --- | --- | --- | --- | --- | --- |
 | animated-explainer-reel | motion | motion, voiceover-motion | 9:16 | 30–75 s | measured |
 | explainer-motion | motion | motion, voiceover-motion | any | 20–180 s | seed |
+| paper-diorama | motion | style-named | 9:16 | 30–75 s | measured |
 | product-demo | demo-led | motion, voiceover-motion | any | 20–120 s | seed |
 | short-motion | motion | motion, voiceover-motion | 9:16 | 5–60 s | seed |
 | short-talking-head | footage-led | footage-led | 9:16 | 5–60 s | seed |
@@ -100,6 +101,30 @@ A motion or voiceover-motion explainer of 30 s to 3 minutes, any aspect.
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+
+## paper-diorama
+
+A faceless reel staged as a printed paper diorama in real 3D: cut-outs and folds on a moving camera, the paper stepping like stop motion. A style names this profile; a story never lands on it by matching.
+
+| Measure | p10 | p50 | p90 |
+| --- | --- | --- | --- |
+| visual_changes_per_min | 32.2875 | 43.05 | 53.8125 |
+| coverage | 66% | 88% | 100% |
+| longest_undressed_seconds | 3 | 4 | 5 |
+| first_visual_seconds | 0 | 0 | 0 |
+| flow_velocity_p90 | 6.0432 | 8.0576 | 10.072 |
+| hold_ratio | 52% | 69% | 86% |
+| motion_bursts_per_min | 37.6672 | 50.223 | 62.7788 |
+| change_energy_p50 | 1.9954 | 2.6605 | 3.3256 |
+| first_motion_seconds | 0 | 0 | 0.35 |
+| hook_events | 2.25 | 3 | 3.75 |
+| still_share | 15% | 20% | 25% |
+| longest_still_seconds | 0.675 | 0.9 | 1.125 |
+| camera_moves_per_min | 14.7975 | 19.73 | 24.6625 |
+| change_p99 | 24.1073 | 32.143 | 40.1788 |
+| top_light_ratio | 0.3569 | 0.4759 | 0.5949 |
+| midtone_share | 18% | 24% | 30% |
+| burst_change_mean | 6.8918 | 9.189 | 11.4863 |
 
 ## product-demo
 

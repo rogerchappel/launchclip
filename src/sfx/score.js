@@ -390,6 +390,21 @@ export function planScore(story, { seed = "", key: keyName = "A", density = 1 } 
         }
         claimed.push([from, settle]);
       }
+      // Paper: a fold creases panel by panel, a limb slithers out, a page's flaps snap up.
+      if (element.kind === "paper-fold") {
+        const open = start + (num(props.openAt) ?? at);
+        const panels = Array.isArray(props.panels) ? props.panels.length : 0;
+        add("move", open, 0.42, { pan, shot: scene.id, why: "the map unfolds" });
+        for (let k = 0; k < panels; k += 1) add("strike", open + 0.06 + k * 0.09, 0.2 + 0.03 * k, { pan: -0.7 + (1.4 * k) / Math.max(1, panels - 1), shot: scene.id, why: "a fold creases open" });
+        claimed.push([open, open + 0.9]);
+      }
+      if (element.kind === "limb") {
+        add("carriage", start + (num(props.growAt) ?? at), 0.3, { pan, shot: scene.id, why: "a limb slides out from behind" });
+      }
+      if (element.kind === "paper-sheet" && num(props.flapAt) !== null && props.flaps) {
+        add("latch", start + props.flapAt, 0.45, { pan: -0.6, shot: scene.id, why: "a side panel folds up" });
+        add("latch", start + props.flapAt + 0.05, 0.45, { pan: 0.6, shot: scene.id, why: "a side panel folds up" });
+      }
       if (element.kind === "marker-snap" && num(props.snapAt)) {
         add("latch", start + props.snapAt, 0.5, { pan, shot: scene.id, why: "the marker snaps in" });
       }

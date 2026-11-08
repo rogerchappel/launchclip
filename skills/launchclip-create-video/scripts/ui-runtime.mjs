@@ -8,6 +8,8 @@
 import * as core from './ui-paint.mjs';
 import * as more from './ui-components.mjs';
 import * as mascot from './ui-host.mjs';
+import * as paper from './ui-paper.mjs';
+import {uiPaperTable} from './ui-paper.mjs';
 import {uiStage, uiStageView} from './ui-paint.mjs';
 import {UI_COMPONENT_TABLE} from './ui-components.mjs';
 
@@ -33,13 +35,13 @@ function paintUi(host, spec, t) {
 function uiComponentTable() {
   return Object.assign({
     headline: uiHeadline, chip: uiChip, waveform: uiWaveform, window: uiWindow, timeline: uiTimeline, 'lock-cards': uiLockCards, host: uiHost
-  }, UI_COMPONENT_TABLE());
+  }, UI_COMPONENT_TABLE(), uiPaperTable());
 }
 
 const {uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards} = core;
 const {uiHost} = mascot;
 
-const RUNTIME_FUNCTIONS = [...Object.values(core), ...Object.values(more).filter(fn => typeof fn === 'function'), ...Object.values(mascot), uiComponentTable, paintUi];
+const RUNTIME_FUNCTIONS = [...Object.values(core), ...Object.values(more).filter(fn => typeof fn === 'function'), ...Object.values(paper).filter(fn => typeof fn === 'function'), ...Object.values(mascot), uiComponentTable, paintUi];
 
 /** The painter's source for the page: window.lcPaintUi(host, spec, t). */
 export const UI_RUNTIME = `window.lcPaintUi = window.lcPaintUi || (function () {\n${RUNTIME_FUNCTIONS.map(String).join('\n')}\nreturn paintUi;\n})();`;

@@ -1,0 +1,124 @@
+{
+  "schema": "launchclip.style.v3",
+  "name": "paper-collage",
+  "description": "A diorama of printed paper in real 3D: die-cut cut-outs with halftone and engraving, torn strips and tape on a dark table, on a camera that swings, orbits and tips into an exploded view.",
+  "brand": {
+    "colors": {
+      "bg": "#0a0b08",
+      "paper": "#efece1",
+      "ink": "#0a0b08",
+      "primary": "#f2bd2e",
+      "accent": "#f2bd2e"
+    },
+    "fonts": {
+      "display": "oswald",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": {
+      "base": "snappy",
+      "defaultTransition": {
+        "cuts": {
+          "type": "push-blur",
+          "dur": 0.5,
+          "direction": "up"
+        },
+        "world": {
+          "type": "whip-pan",
+          "dur": 0.36
+        }
+      }
+    },
+    "feel": "steady"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "captions": {
+    "preset": "pop-word",
+    "position": "low",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
+  },
+  "sound": {
+    "sfx_density": "high",
+    "score": true
+  },
+  "modules": {
+    "prefer": [
+      "ui-scene"
+    ],
+    "avoid": []
+  },
+  "layouts": {
+    "by_intent": {
+      "product": "full",
+      "process": "full"
+    },
+    "by_section": {
+      "hook": "full"
+    },
+    "panel": {
+      "treatment": "solid",
+      "radius": 26
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "primary",
+    "illustration": false,
+    "prefer": {
+      "product": [
+        "ui-scene"
+      ],
+      "process": [
+        "ui-scene"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "flat",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
+  "brand_frame": {
+    "enabled": false,
+    "kicker": {
+      "underline": false,
+      "position": "top-left",
+      "logo": false
+    },
+    "sections": false,
+    "progress": false,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.85,
+    "density": 0.75,
+    "playfulness": 0.5,
+    "polish": 0.8
+  },
+  "profile": "paper-diorama",
+  "background": {
+    "kind": "dot-grid",
+    "params": {
+      "color": "primary",
+      "scale": 0.75,
+      "density": 0.3,
+      "intensity": 0.06,
+      "speed": 0,
+      "lit": 0.85
+    }
+  },
+  "notes": "Built with ui-scene paper kinds on a stage rig. Every object is drawn from shapes; the paper is a material, not an image.",
+  "light": {
+    "preset": "studio"
+  }
+}
