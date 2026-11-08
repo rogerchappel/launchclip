@@ -75,6 +75,7 @@ export function dividingPeriod(duration, target, [lo, hi]) {
  */
 export function ambientWaves(ambient, { width, height, duration }) {
   if (ambient.mode === 'step') return ambientSteps(ambient, { width, height, duration });
+  if (ambient.mode === 'steady') return ambientPath(ambient, { width, height, duration });
   const [lo, hi] = ambient.period;
   return {
     x: { amp: round(ambient.shift * width, 4), period: dividingPeriod(duration, (lo + hi) / 2, ambient.period), phase: 0 },
@@ -123,9 +124,46 @@ export function ambientSteps(ambient, { width, height, duration }) {
   return { mode: 'step', move, creep: ambient.creep ?? 0, poses };
 }
 
+/**
+ * A steadicam (ambient.mode "steady"): one smooth path through wandering
+ * framings, a knot every period[] seconds, so nothing repeats on a beat. Each
+ * knot moves only a part of the way across the range from the last, and a
+ * Catmull-Rom spline joins them with continuous velocity: the camera never
+ * stops, snaps or reverses sharply. → {mode: 'steady', knots: [{at, x, y, s}]}
+ */
+export function ambientPath(ambient, { width, height, duration }) {
+  const random = stepRandom(0x57ead + Math.round(duration * 1000));
+  const [lo, hi] = ambient.scale, [p0, p1] = ambient.period;
+  const wander = (value, min, max) => Math.min(max, Math.max(min, value + (random() - 0.5) * (max - min) * 0.7));
+  const dx = ambient.shift * width, dy = ambient.shift * height * 0.6;
+  let x = 0, y = 0, s = (lo + hi) / 2;
+  const knots = [];
+  for (let at = -p1; at < duration + 2 * p1; at += p0 + (p1 - p0) * random()) {
+    x = wander(x, -dx, dx); y = wander(y, -dy, dy); s = wander(s, lo, hi);
+    knots.push({ at: round(at, 6), x: round(x, 3), y: round(y, 3), s: round(s, 6) });
+  }
+  return { mode: 'steady', knots };
+}
+
+// A Catmull-Rom spline over unevenly spaced knots, by its tangents, at u in the span from b to c.
+function spline(a, b, c, d, key, u) {
+  const span = c.at - b.at;
+  const m1 = ((c[key] - a[key]) / (c.at - a.at)) * span, m2 = ((d[key] - b[key]) / (d.at - b.at)) * span;
+  const u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * b[key] + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * c[key] + (u3 - u2) * m2;
+}
+
 // The ambient camera at t → {x, y, s}.
 function ambientAt(ambient, t) {
   if (!ambient) return { x: 0, y: 0, s: 1 };
+  if (ambient.mode === 'steady') {
+    const { knots } = ambient;
+    let k = 1;
+    while (k < knots.length - 3 && knots[k + 1].at <= t) k += 1;
+    const [a, b, c, d] = knots.slice(k - 1, k + 3);
+    const u = Math.min(1, Math.max(0, (t - b.at) / (c.at - b.at)));
+    return { x: spline(a, b, c, d, 'x', u), y: spline(a, b, c, d, 'y', u), s: spline(a, b, c, d, 's', u) };
+  }
   if (ambient.mode !== 'step') return { x: wave(ambient.x, t), y: wave(ambient.y, t), s: ambient.s.mid + wave(ambient.s, t) };
   const { poses, move, creep = 0 } = ambient;
   let k = poses.length - 1;
@@ -386,7 +424,7 @@ export function feelGsap(plan, samples = feelSamples(plan)) {
     last = state;
   });
   return [
-    `// story feel (${plan.feel}): ${plan.ambient ? (plan.ambient.mode === 'step' ? `ambient holds and snaps (${plan.ambient.poses.length} framings)` : 'ambient drift and breathing') : 'no ambient'}, ${plan.kicks.length} kick(s) at ${plan.kicks.map((kick) => kick.at).join(', ') || '-'}`,
+    `// story feel (${plan.feel}): ${plan.ambient ? (plan.ambient.mode === 'step' ? `ambient holds and snaps (${plan.ambient.poses.length} framings)` : plan.ambient.mode === 'steady' ? `ambient steadicam (${plan.ambient.knots.length} knots)` : 'ambient drift and breathing') : 'no ambient'}, ${plan.kicks.length} kick(s) at ${plan.kicks.map((kick) => kick.at).join(', ') || '-'}`,
     `(function () { var F = ${JSON.stringify(rows)}; for (var i = 0; i < F.length; i++) { var f = F[i][0]; tl.set(${JSON.stringify(FEEL_SELECTOR)}, { x: F[i][1], y: F[i][2], scale: F[i][3], force3D: false }, f === 0 ? 0 : Math.max(0, f / ${plan.fps} - ${FEEL_LEAD})); } })();`
   ];
 }

@@ -810,6 +810,9 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   if (expected.minimum_camera_moves_per_minute != null && cameraRate != null && below(cameraRate, expected.minimum_camera_moves_per_minute)) {
     findings.push({ ...finding("motion", "major", `Only ${Number(cameraRate).toFixed(1)} whole-frame camera moves per minute were detected; expected at least ${Number(expected.minimum_camera_moves_per_minute).toFixed(1)}. Move the camera between and inside scenes: zoom-kicks on stressed words, drifts through holds, whips or dot-wipes between scenes.`), measure: "camera_moves_per_min", value: Number(cameraRate), floor: Number(expected.minimum_camera_moves_per_minute) });
   }
+  if (expected.maximum_camera_moves_per_minute != null && cameraRate != null && cameraRate > Number(expected.maximum_camera_moves_per_minute)) {
+    findings.push({ ...finding("motion", "major", `${Number(cameraRate).toFixed(1)} whole-frame camera moves per minute were detected; expected at most ${Number(expected.maximum_camera_moves_per_minute).toFixed(1)}. A camera that reframes this often pumps and disorients: use the steady feel (motion.feel "steady") and keep camera.kicks to the few words that earn one.`), source: "camera" });
+  }
   findings.push(...lookFindings(metrics, expected));
   const firstMotion = firstMeaningfulMotionSeconds(metrics);
   if (expected.maximum_first_motion_seconds != null && (firstMotion == null || firstMotion > Number(expected.maximum_first_motion_seconds))) {

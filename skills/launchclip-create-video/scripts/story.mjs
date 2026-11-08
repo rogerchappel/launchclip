@@ -1147,7 +1147,7 @@ function validateMotion(motion, err) {
 }
 
 // Story feel (kit/core/feel.mjs feelErrors / kickErrors, repeated here).
-export const STORY_FEELS = ["kinetic", "snap"];
+export const STORY_FEELS = ["kinetic", "snap", "steady"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
 
@@ -1172,8 +1172,8 @@ function validateFeel(feel, err) {
     if (!isObject(ambient)) err("motion.feel.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?, creep?}");
     else {
       for (const key of Object.keys(ambient)) if (!["mode", "scale", "shift", "period", "hold", "move", "creep"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move, creep)`);
-      if (ambient.mode !== undefined && !["drift", "step"].includes(ambient.mode)) err("motion.feel.ambient.mode must be drift (a slow wave) or step (holds, then snaps)");
-      if (ambient.hold !== undefined && !feelPair(ambient.hold, 0.2, 4)) err("motion.feel.ambient.hold must be [lo, hi] seconds between 0.2 and 4");
+      if (ambient.mode !== undefined && !["drift", "step", "steady"].includes(ambient.mode)) err("motion.feel.ambient.mode must be drift (a slow wave), step (holds, then snaps) or steady (a steadicam path)");
+      if (ambient.hold !== undefined && !feelPair(ambient.hold, 1.2, 10)) err("motion.feel.ambient.hold must be [lo, hi] seconds between 1.2 and 10 (a camera that moves more often pumps)");
       if (ambient.move !== undefined && !feelRange(ambient.move, 0.08, 0.6)) err("motion.feel.ambient.move must be seconds between 0.08 and 0.6");
       if (ambient.creep !== undefined && !feelRange(ambient.creep, 0, 0.5)) err("motion.feel.ambient.creep must be a share between 0 and 0.5 of each move made slowly during the hold");
       if (ambient.scale !== undefined && !feelPair(ambient.scale, 1, 1.08)) err("motion.feel.ambient.scale must be [lo, hi] between 1 and 1.08");

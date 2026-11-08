@@ -56,7 +56,7 @@ async function main(argv) {
     rows.push({name: 'story: examples/story/minimal', fonts: 'brand roles + captions + ambient', minSsim: story.minSsim, threshold: story.threshold.ssim, pass: story.pass, seconds: (Date.now() - t0) / 1000, failures: story.samples.filter(sample => !sample.pass)});
     const t1 = Date.now();
     const ui = await runStoryParity(CI_UI_STORY.project, {times: CI_UI_STORY.times, out: path.join(out, 'story-ui')});
-    rows.push({name: 'story: examples/story/ui-parity-9x16', fonts: 'signal-ui: ui-scene, light, sweep, burst, snap', minSsim: ui.minSsim, threshold: ui.threshold.ssim, pass: ui.pass, seconds: (Date.now() - t1) / 1000, failures: ui.samples.filter(sample => !sample.pass)});
+    rows.push({name: 'story: examples/story/ui-parity-9x16', fonts: 'signal-ui: ui-scene, light, sweep, burst, steady', minSsim: ui.minSsim, threshold: ui.threshold.ssim, pass: ui.pass, seconds: (Date.now() - t1) / 1000, failures: ui.samples.filter(sample => !sample.pass)});
   } finally {
     await rm(work, {recursive: true, force: true});
   }

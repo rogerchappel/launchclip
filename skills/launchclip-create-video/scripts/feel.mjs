@@ -3,7 +3,7 @@
 // Plain ESM; imports only ./motion.mjs. Canonical copy: kit/core/feel.mjs.
 // Contract: docs/KIT_CONTRACTS.md, "Story feel".
 //
-//   story.motion.feel = "kinetic" | "snap"
+//   story.motion.feel = "kinetic" | "snap" | "steady"
 //   story.motion.feel = {preset: "kinetic", ambient?: false | {scale?: [lo, hi],
 //                        shift?, period?: [lo, hi]}, kicks?: false | "auto" |
 //                        {auto?, scale?, gap?}, spring?: overshoot}
@@ -29,13 +29,15 @@
 // What "snap" turns on: the same, except the ambient camera holds still on a
 // framing (ambient.mode "step": hold[] seconds) and snaps to the next in
 // `move` seconds, kicks punch and return fast, and held shots get no drift.
+// What "steady" turns on: the same, except the ambient camera floats on one
+// smooth path (ambient.mode "steady"), kicks only where asked, and eased.
 // Explicit motion.grammar overrides always win over the feel's.
 // Footage-led stories (a base recording) keep their own camera: the feel's
 // ambient camera and kicks are off there; its grammar still applies.
 
 import { SPRING_OVERSHOOT, springEase } from './motion.mjs';
 
-export const FEEL_NAMES = Object.freeze(['kinetic', 'snap']);
+export const FEEL_NAMES = Object.freeze(['kinetic', 'snap', 'steady']);
 
 export const FEELS = Object.freeze({
   kinetic: Object.freeze({
@@ -60,11 +62,29 @@ export const FEELS = Object.freeze({
   // keeps the reel from reading still is its content (a host, live panels).
   snap: Object.freeze({
     id: 'snap',
-    describe: 'Holds sharp, then snaps: the camera rests on a framing for 0.35–0.8 s, then jumps to the next in 0.22 s (expo), kicks punch and return fast, entrances spring, cuts whip in 0.26 s',
+    describe: 'Holds sharp, then snaps: the camera rests on a framing for 1.6–4.5 s, then jumps to the next in 0.28 s (expo), kicks punch and return, entrances spring, cuts whip in 0.26 s',
     base: 'snappy',
-    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([0.35, 0.8]), move: 0.22, creep: 0 }),
-    kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
+    ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([1.6, 4.5]), move: 0.28, creep: 0 }),
+    kicks: Object.freeze({ auto: true, scale: 1.05, gap: 3.5 }),
     kick: Object.freeze({ punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut' }),
+    spring: SPRING_OVERSHOOT,
+    whip: 0.26,
+    dotWipe: 0.5,
+    hold: 'off'
+  }),
+  // A steadicam: the camera floats on one smooth path through wandering
+  // framings, never stopping or reversing on a beat. A camera that stepped
+  // every second, or zoomed in and out on one, read as disorienting pumping;
+  // this keeps every frame in gentle motion at a speed that stays sharp. It
+  // moves no more than a walking operator would, and kicks are explicit,
+  // rare and eased.
+  steady: Object.freeze({
+    id: 'steady',
+    describe: 'A steadicam: the camera floats on one smooth path through wandering framings, never stopping or snapping; kicks only where asked, eased; entrances spring, cuts whip in 0.26 s',
+    base: 'snappy',
+    ambient: Object.freeze({ mode: 'steady', scale: Object.freeze([1.025, 1.06]), shift: 0.012, period: Object.freeze([3, 6]) }),
+    kicks: Object.freeze({ auto: false, scale: 1.03, gap: 3 }),
+    kick: Object.freeze({ punch: 0.3, settle: 0.45, relax: 0.9, punchEase: 'sine.inOut', relaxEase: 'sine.inOut' }),
     spring: SPRING_OVERSHOOT,
     whip: 0.26,
     dotWipe: 0.5,
@@ -76,7 +96,7 @@ export const FEELS = Object.freeze({
 export const FEEL_LIMITS = Object.freeze({
   scale: Object.freeze([1, 1.08]), shift: Object.freeze([0, 0.02]), period: Object.freeze([2, 20]),
   kickScale: Object.freeze([1.03, 1.4]), gap: Object.freeze([1.1, 10]), spring: Object.freeze([0, 0.6]),
-  hold: Object.freeze([0.2, 4]), move: Object.freeze([0.08, 0.6]), creep: Object.freeze([0, 0.5])
+  hold: Object.freeze([1.2, 10]), move: Object.freeze([0.08, 0.6]), creep: Object.freeze([0, 0.5])
 });
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -97,8 +117,8 @@ export function feelErrors(value, path = 'motion.feel') {
     if (!isObject(ambient)) errors.push(`${path}.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?, creep?}`);
     else {
       for (const key of Object.keys(ambient)) if (!['mode', 'scale', 'shift', 'period', 'hold', 'move', 'creep'].includes(key)) errors.push(`${path}.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move, creep)`);
-      if (ambient.mode !== undefined && !['drift', 'step'].includes(ambient.mode)) errors.push(`${path}.ambient.mode must be drift (a slow wave) or step (holds, then snaps)`);
-      if (ambient.hold !== undefined && !pair(ambient.hold, FEEL_LIMITS.hold)) errors.push(`${path}.ambient.hold must be [lo, hi] seconds between 0.2 and 4`);
+      if (ambient.mode !== undefined && !['drift', 'step', 'steady'].includes(ambient.mode)) errors.push(`${path}.ambient.mode must be drift (a slow wave), step (holds, then snaps) or steady (a steadicam path)`);
+      if (ambient.hold !== undefined && !pair(ambient.hold, FEEL_LIMITS.hold)) errors.push(`${path}.ambient.hold must be [lo, hi] seconds between 1.2 and 10 (a camera that moves more often pumps)`);
       if (ambient.move !== undefined && !inRange(ambient.move, FEEL_LIMITS.move)) errors.push(`${path}.ambient.move must be seconds between 0.08 and 0.6`);
       if (ambient.creep !== undefined && !inRange(ambient.creep, FEEL_LIMITS.creep)) errors.push(`${path}.ambient.creep must be a share between 0 and 0.5 of each move made slowly during the hold`);
       if (ambient.scale !== undefined && !pair(ambient.scale, FEEL_LIMITS.scale)) errors.push(`${path}.ambient.scale must be [lo, hi] between 1 and 1.08`);

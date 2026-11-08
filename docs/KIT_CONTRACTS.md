@@ -2270,9 +2270,9 @@ One setting turns on the habits of a top faceless animated reel together:
 "camera": {"mode": "cuts", "kicks": [{"at": "word:twelve"}, {"at": 6.1, "scale": 1.2, "origin": {"x": 0.5, "y": 0.4}}]}
 ```
 
-- `motion.feel`: `"kinetic"`, `"snap"`, or `{preset: "kinetic" | "snap", ambient?: false |
-  {mode?: "drift" | "step", scale?: [lo, hi] (1–1.08), shift?: 0–0.02,
-  period?: [lo, hi] s (2–20), hold?: [lo, hi] s (0.2–4), move?: s (0.08–0.6),
+- `motion.feel`: `"kinetic"`, `"snap"`, `"steady"`, or `{preset: "kinetic" | "snap" | "steady", ambient?: false |
+  {mode?: "drift" | "step" | "steady", scale?: [lo, hi] (1–1.08), shift?: 0–0.02,
+  period?: [lo, hi] s (2–20), hold?: [lo, hi] s (1.2–10), move?: s (0.08–0.6),
   creep?: 0–0.5},
   kicks?: false | "auto" | {auto?, scale?: 1.03–1.4, gap?: 1.1–10 s},
   spring?: overshoot 0–0.6}`.
@@ -2297,25 +2297,22 @@ One setting turns on the habits of a top faceless animated reel together:
   (1.02–1.045; 1.02 is the overscan the drift needs), periods in
   `period` (4–7 s) that divide the story duration, so loop seams match. In
   world mode the camera's own drift stays and the feel adds kicks only.
-- `snap` (hold sharp, then snap): the kinetic feel with a stepped ambient
-  camera (`ambient.mode: "step"`, `kinetic.mjs ambientSteps`). The wrapper
-  rests on a framing for `hold` (0.35–0.8 s) with no drift, so a held frame
-  is crisp, then moves to the next in `move` (0.22 s, `expo.inOut`), far
-  enough that motion blur smears it. Framings alternate between the wide
-  and tight halves of `scale` (1.012–1.05) and between sides of ±`shift`
-  (1.6 %), each translate inside its own overscan; the sequence comes from a
-  fixed seed and the duration, so renders repeat. `creep` (0–0.5, default 0)
-  makes a hold cover that share of the way slowly; measured, it does not
-  help: slow motion registers on detailed frames first, so the frames left
-  still are the sparse, soft ones. Kicks punch in 0.1 s, settle in 0.22 s
-  and return in 0.2 s (`expo.inOut`) instead of the slow relax, and the
-  grammar's hold level is `off` (no hold drift, no media push). Measured on
-  an interface explainer reference: about a tenth of its frames are still
-  and its moves change the frame twice as hard as a steady drift; the
-  drifting `kinetic` camera is never still and never blurs. With `snap` a
-  reel's look measures land on the reference's (moving frames 0.77× as
-  sharp as held ones, 15 % soft), and what keeps it from reading still is
-  its content: a host, counters, live panels.
+- `steady` (a steadicam, the `signal-ui` default): the ambient camera floats on
+  one smooth path (`ambient.mode: "steady"`, `kinetic.mjs ambientPath`): framings
+  wander within `scale` (1.025–1.06) and ±`shift` (1.2 %), a knot every `period`
+  (3–6 s, uneven, from a fixed seed and the duration), joined by a Catmull-Rom
+  spline with continuous velocity. It never stops, snaps or zooms in and out on
+  a beat. There are no automatic kicks; explicit kicks are eased (0.3 s in,
+  0.45 s settle, 0.9 s back, `sine.inOut`) and at most one per 3 s. The hold
+  level is `off`.
+- `snap` (hold sharp, then snap): a stepped camera (`ambient.mode: "step"`,
+  `ambientSteps`) that rests on a framing for `hold` (1.6–4.5 s), then moves to
+  the next in `move` (0.28 s, `expo.inOut`). `hold` is at least 1.2 s:
+  stepping about every second alternated wide and tight framings and read as
+  disorienting pumping. Automatic kicks are at most one per 3.5 s.
+- A profile measured with `camera_moves_per_min` also caps it at twice its p90:
+  the motion gate reports a camera that reframes far more often than the
+  reference.
 - Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
   settle over 0.35 s with the feel's overshoot towards a rest
   `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then

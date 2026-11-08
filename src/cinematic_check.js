@@ -366,6 +366,8 @@ export function cinematicMotionExpectations({ duration, width, height, profile: 
       maximum_longest_still_seconds: band("longest_still_seconds", "p90", stillDefaults.longest_still_seconds),
       // Only a profile measured with camera moves holds a floor on them.
       minimum_camera_moves_per_minute: band("camera_moves_per_min", "p10", null),
+      // Twice the reference's busiest: a camera that reframes far more often than a measured reel pumps.
+      maximum_camera_moves_per_minute: band("camera_moves_per_min", "p90", null) == null ? null : band("camera_moves_per_min", "p90", null) * 2,
       // The look (src/render_look_analysis.js): no default, so only a
       // profile measured with these bands holds a render to them.
       maximum_moving_sharpness_ratio: band("moving_sharpness_ratio", "p90", null),

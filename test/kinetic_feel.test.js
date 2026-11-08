@@ -9,7 +9,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {STORY_FEELS, STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {FEEL_NAMES, feelErrors, kickErrors, resolveFeel} from '@launchclip/core/feel.mjs';
-import {KICK, ambientSteps, kickTiming, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
+import {KICK, ambientPath, ambientSteps, kickTiming, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
 import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipePhases, dotWipes, resolveDotWipeColor} from '@launchclip/core/dot-wipe.mjs';
 import {TRANSITION_TYPES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {cameraPlan} from '@launchclip/core/camera-world.mjs';
@@ -315,11 +315,11 @@ test('snap: the ambient camera holds still on a framing, then snaps to the next,
   assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
   assert.equal(plan.ambient.mode, 'step');
   const {poses, move, creep} = plan.ambient;
-  assert.deepEqual([move, creep], [0.22, 0]);
-  // Holds of 0.35–0.8 s between moves, alternating wide and tight framings far enough apart to blur.
+  assert.deepEqual([move, creep], [0.28, 0]);
+  // Holds of 1.6–4.5 s between moves, alternating wide and tight framings far enough apart to blur.
   for (let k = 1; k < poses.length; k += 1) {
     const hold = poses[k].at - poses[k - 1].at - move;
-    assert.ok(hold >= 0.35 - 1e-6 && hold <= 0.8 + 1e-6, `hold ${k} is ${hold}`);
+    assert.ok(hold >= 1.6 - 1e-6 && hold <= 4.5 + 1e-6, `hold ${k} is ${hold}`);
     assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.05 - 1.012) - 1e-6, `move ${k} changes the framing`);
   }
   // The camera is exactly still through a hold, and the snap lands on the next framing in `move` seconds.
@@ -337,10 +337,37 @@ test('snap: the ambient camera holds still on a framing, then snaps to the next,
   assert.equal(resolveGrammar(s).hold.level, 'off');
   // A step mode on the kinetic preset takes the snap defaults for hold and move, with no creep.
   const custom = resolveFeel(story({motion: {feel: {preset: 'kinetic', ambient: {mode: 'step'}}}}));
-  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[0.35, 0.8], 0.22, 0]);
+  assert.deepEqual([custom.ambient.hold, custom.ambient.move, custom.ambient.creep], [[1.6, 4.5], 0.28, 0]);
   assert.equal(ambientSteps(custom.ambient, {width: 1080, height: 1920, duration: 12}).mode, 'step');
-  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}, {ambient: {creep: 0.8}}]) {
+  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.35, 0.8]}}, {ambient: {move: 1}}, {ambient: {creep: 0.8}}]) {
     assert.ok(feelErrors(bad).length > 0, JSON.stringify(bad));
     assert.equal(validateStory(story({motion: {feel: bad}})).ok, false, JSON.stringify(bad));
   }
+});
+
+test('steady: a steadicam floats on one smooth path, never still, snapping or pumping, and never reveals an edge', () => {
+  const s = story({motion: {feel: 'steady'}}, [card('a', 0, 20), card('b', 20, 40, {in: {type: 'whip-pan', dur: 0.26, direction: 'left'}})]);
+  const s2 = {...s, format: {...s.format, duration: 40}};
+  const plan = planOf(s2);
+  const a = feelSamples(plan);
+  assert.deepEqual(a, feelSamples(planOf(s2)), 'the same story gives the same frames');
+  assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
+  assert.equal(plan.ambient.mode, 'steady');
+  assert.equal(plan.kicks.length, 0, 'no automatic kicks');
+  let reversals = 0, last = 0;
+  for (let f = 1; f < a.length; f += 1) {
+    const d = a[f].scale - a[f - 1].scale;
+    const speed = Math.hypot(a[f].x - a[f - 1].x, a[f].y - a[f - 1].y);
+    assert.ok(speed < 1.5, `frame ${f} moves ${speed} px: no snap`);
+    assert.ok(Math.abs(d) < 0.001, `frame ${f} changes scale by ${d}: no zoom jump`);
+    assert.ok(speed > 0 || d !== 0, `frame ${f} repeats: never still`);
+    if (Math.abs(d) > 1e-6) { const sign = Math.sign(d); if (last && sign !== last) reversals += 1; last = sign; }
+  }
+  assert.ok(reversals / (a.length / 30 / 60) <= 16, `zoom turns ${reversals} times: not on a beat`);
+  // Knots are unevenly spaced, so nothing repeats on a beat.
+  const {knots} = plan.ambient;
+  const gaps = new Set(knots.slice(1).map((knot, k) => Math.round((knot.at - knots[k].at) * 100)));
+  assert.ok(gaps.size > knots.length / 2, 'the path has no period');
+  assert.equal(ambientPath(resolveFeel(s2).ambient, {width: 1080, height: 1920, duration: 40}).mode, 'steady');
+  assert.equal(validateStory(story({motion: {feel: {preset: 'steady', ambient: {period: [2.5, 5]}}}})).ok, true);
 });

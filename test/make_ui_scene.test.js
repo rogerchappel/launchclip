@@ -85,7 +85,7 @@ test("make: a tool-explainer brief, --style signal-ui and a canned ui-scene plan
   assert.equal(report.status, "ready-for-review", JSON.stringify({ stages: report.stages, repairs: report.repairs }));
   assert.equal(report.routing.lane, "motion");
   assert.equal(report.style.name, "signal-ui");
-  assert.equal(report.profile.id, "ui-explainer-reel");
+  assert.equal(report.profile.id, "ui-steady-reel");
   assert.equal(report.repairs.used, 0, JSON.stringify(report.repairs.attempts));
   assert.ok(!report.notices.some((line) => /world look/.test(line)), report.notices.join("\n"));
 
@@ -116,7 +116,7 @@ test("make: a tool-explainer brief, --style signal-ui and a canned ui-scene plan
   const burst = resolved.scenes[2].params.elements.find((el) => el.kind === "burst");
   assert.equal(typeof burst.at, "number", "element anchors resolve");
   assert.equal(story.style, "signal-ui");
-  assert.equal(story.motion.feel, "snap");
+  assert.equal(story.motion.feel, "steady");
   assert.deepEqual(story.motion.blur, { samples: 6, shutter: 1.5 });
   assert.equal(story.light.preset, "studio");
   assert.equal(story.background.kind, "dot-grid");
@@ -124,7 +124,7 @@ test("make: a tool-explainer brief, --style signal-ui and a canned ui-scene plan
   assert.equal(story.overlays.find((overlay) => overlay.type === "captions").position, "low");
   assert.equal(story.brand.colors.accent, "#c8ff3a");
   assert.equal(story.plate, undefined, "the style's dot grid stays the ground: no stock plates over it");
-  assert.equal(story.camera.mode, "cuts", "the snap feel is the camera");
+  assert.equal(story.camera.mode, "cuts", "the steady feel is the camera");
 });
 
 test("make: the canned ui-scene plan renders a real Remotion draft", { skip: mediaSkip(), timeout: 900_000 }, async (t) => {
