@@ -9,7 +9,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {STORY_FEELS, STORY_TRANSITIONS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {FEEL_NAMES, feelErrors, kickErrors, resolveFeel} from '@launchclip/core/feel.mjs';
-import {KICK, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
+import {KICK, ambientSteps, kickTiming, feelBusy, feelCovers, feelGsap, feelKicks, feelPlan, feelSafeArea, feelSamples, feelStateAt, kickRest, kickValue} from '@launchclip/core/kinetic.mjs';
 import {DOT_WIPE, dotRadius, dotWipeColor, dotWipeCover, dotWipeCss, dotWipeGrid, dotWipeGsap, dotWipePhases, dotWipes, resolveDotWipeColor} from '@launchclip/core/dot-wipe.mjs';
 import {TRANSITION_TYPES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {cameraPlan} from '@launchclip/core/camera-world.mjs';
@@ -295,4 +295,45 @@ test('Remotion draws the same feel and wipes: the wrapper reads feelStateAt per 
   const plan = planOf(story({camera: {mode: 'cuts', kicks: [{at: 1}]}}));
   const samples = feelSamples(plan);
   for (const f of [0, 31, 33, 40, 200, 359]) assert.deepEqual(feelStateAt(plan, f / 30), samples[f]);
+});
+
+test('snap: the ambient camera holds still on a framing, then snaps to the next, and never reveals an edge', () => {
+  const s = story({motion: {feel: 'snap'}});
+  const plan = planOf(s);
+  const a = feelSamples(plan);
+  assert.deepEqual(a, feelSamples(planOf(story({motion: {feel: 'snap'}}))), 'the same story gives the same frames');
+  assert.ok(a.every((state) => feelCovers(state, size)), 'the wrapper always covers the canvas');
+  assert.equal(plan.ambient.mode, 'step');
+  const {poses, move} = plan.ambient;
+  assert.equal(move, 0.22);
+  // Holds of 0.55–1.15 s between moves, alternating wide and tight framings far enough apart to blur.
+  for (let k = 1; k < poses.length; k += 1) {
+    const hold = poses[k].at - poses[k - 1].at - move;
+    assert.ok(hold >= 0.55 - 1e-6 && hold <= 1.15 + 1e-6, `hold ${k} is ${hold}`);
+    assert.ok(Math.abs(poses[k].s - poses[k - 1].s) >= 0.25 * (1.045 - 1.012) - 1e-6, `move ${k} changes the framing`);
+  }
+  // Away from kicks the camera is exactly still through each hold.
+  const kicked = (f) => plan.kicks.some((kick) => f / 30 >= kick.at - 1e-9 && f / 30 < kick.at + 0.6);
+  let still = 0, total = 0;
+  for (let f = 1; f < a.length; f += 1) {
+    if (kicked(f) || kicked(f - 1)) continue;
+    total += 1;
+    if (a[f].x === a[f - 1].x && a[f].y === a[f - 1].y && a[f].scale === a[f - 1].scale) still += 1;
+  }
+  assert.ok(still / total > 0.6, `held ${still} of ${total} frames`);
+  // A move is fast: the framing changes across the move window and not before it.
+  const second = poses[1];
+  const before = feelStateAt({...plan, kicks: []}, second.at - move - 0.02), after = feelStateAt({...plan, kicks: []}, second.at + 0.01);
+  assert.ok(Math.abs(after.scale - before.scale) > 0.005);
+  // Kicks return fast with the preset's own timing; the grammar holds still.
+  assert.deepEqual(kickTiming(resolveFeel(s)), {...KICK, punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut'});
+  assert.equal(resolveGrammar(s).hold.level, 'off');
+  // A step mode on the kinetic preset takes the snap defaults for hold and move.
+  const custom = resolveFeel(story({motion: {feel: {preset: 'kinetic', ambient: {mode: 'step'}}}}));
+  assert.deepEqual([custom.ambient.hold, custom.ambient.move], [[0.55, 1.15], 0.22]);
+  assert.equal(ambientSteps(custom.ambient, {width: 1080, height: 1920, duration: 12}).mode, 'step');
+  for (const bad of [{ambient: {mode: 'jitter'}}, {ambient: {mode: 'step', hold: [0.1, 0.2]}}, {ambient: {move: 1}}]) {
+    assert.ok(feelErrors(bad).length > 0, JSON.stringify(bad));
+    assert.equal(validateStory(story({motion: {feel: bad}})).ok, false, JSON.stringify(bad));
+  }
 });
