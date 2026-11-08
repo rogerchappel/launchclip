@@ -68,14 +68,14 @@ export function duckSettings(depth) {
   return Object.freeze({ threshold, ratio: DUCK_RATIO, attack: MUSIC_DUCK.attack, release: MUSIC_DUCK.release });
 }
 
-export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, musicDuck = null, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null }) {
+export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, musicDuck = null, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null, mono = [] }) {
   const parts = [];
   const mixInputs = [];
   let index = 0;
   const keys = (hasMusic ? 1 : 0) + (hasAmbience ? 1 : 0);
   if (hasVoice) {
     parts.push(keys === 2 ? `[${index}]asplit=3[vo][key][akey]` : keys === 1 ? `[${index}]asplit=2[vo][${hasMusic ? 'key' : 'akey'}]` : `[${index}]anull[vo]`);
-    mixInputs.push('[vo]');
+    mixInputs.push({ label: '[vo]', input: index });
     index += 1;
   }
   // A key without a voice: the speech is heard elsewhere, so it only feeds
@@ -95,25 +95,46 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     const settings = duckSettings(musicDuck);
     // --music-duck 1: the key still has to be read, so it feeds a null sink.
     parts.push(!keyed ? '[bedraw]anull[bed]' : settings ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]${duck(settings)}[bed]` : '[key]anullsink;[bedraw]anull[bed]');
-    mixInputs.push('[bed]');
+    mixInputs.push({ label: '[bed]', input: index });
     index += 1;
   }
   if (hasAmbience) {
     // The loop arrives endless (-stream_loop -1): cut it to length first.
     parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}[ambraw]`);
     parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]${duck(AMBIENCE_DUCK)}[amb]` : '[ambraw]anull[amb]');
-    mixInputs.push('[amb]');
+    mixInputs.push({ label: '[amb]', input: index });
     index += 1;
   }
   cues.forEach((cue, i) => {
     const trim = cue.offset > 0 ? `atrim=start=${cue.offset},asetpts=PTS-STARTPTS,afade=t=in:d=0.004,` : '';
     parts.push(`[${index + i}]${trim}adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}[s${i}]`);
-    mixInputs.push(`[s${i}]`);
+    mixInputs.push({ label: `[s${i}]`, input: index + i });
   });
   if (!mixInputs.length) throw new Error('nothing to mix: pass --voice, --music or cues');
   const fadeStart = Math.max(0, duration - 0.25);
-  parts.push(`${mixInputs.join('')}amix=inputs=${mixInputs.length}:normalize=0,apad=whole_dur=${duration},atrim=0:${duration},afade=t=out:st=${fadeStart}:d=0.25,alimiter=limit=0.89:level=0[out]`);
+  // amix settles on one channel layout, and a mono input (a narration, usually)
+  // makes that layout mono: every stereo cue would fold to the centre. So each
+  // input goes in as stereo. A mono one is copied to both sides at full level,
+  // because aformat's upmix would drop it 3 dB against the stereo inputs.
+  mixInputs.forEach(({ label, input }, i) => parts.push(`${label}${mono.includes(input) ? 'pan=stereo|c0=c0|c1=c0' : 'aformat=channel_layouts=stereo'}[mix${i}]`));
+  parts.push(`${mixInputs.map((_, i) => `[mix${i}]`).join('')}amix=inputs=${mixInputs.length}:normalize=0,apad=whole_dur=${duration},atrim=0:${duration},afade=t=out:st=${fadeStart}:d=0.25,alimiter=limit=0.89:level=0[out]`);
   return parts.join(';');
+}
+
+/** The indexes of the inputs with one channel. An input that can't be read is left for ffmpeg to report. */
+function monoInputs(files) {
+  const channels = new Map();
+  const channelsOf = (file) => {
+    if (!channels.has(file)) {
+      try {
+        channels.set(file, Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', file], { encoding: 'utf8' }).trim()));
+      } catch {
+        channels.set(file, null);
+      }
+    }
+    return channels.get(file);
+  };
+  return files.flatMap((file, index) => (channelsOf(file) === 1 ? [index] : []));
 }
 
 export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, musicDuck = null, ambienceVolume = 0.5, key = null, keySegments = null }) {
@@ -124,7 +145,8 @@ export function buildMix({ voice, music, ambience = null, cues = [], duration, o
   if (music) inputs.push('-i', music);
   if (ambience) inputs.push('-stream_loop', '-1', '-i', ambience);
   for (const cue of cues) inputs.push('-i', cue.file);
-  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, musicDuck, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
+  const files = inputs.flatMap((value, i) => (inputs[i - 1] === '-i' ? [value] : []));
+  const filter = mixGraph({ mono: monoInputs(files), cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, musicDuck, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
   mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
 }

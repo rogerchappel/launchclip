@@ -154,7 +154,7 @@ test("palette event names reach the new families only with a sound block", () =>
 });
 
 test("the mix graph is unchanged without ambience and ducks the loop with it", () => {
-  const before = "[0]asplit=2[vo][key];[1]volume=0.3[bedraw];[key]apad=whole_dur=10[keypad];[bedraw][keypad]sidechaincompress=threshold=0.1:ratio=3:attack=30:release=400:makeup=1[bed];[vo][bed]amix=inputs=2:normalize=0,apad=whole_dur=10,atrim=0:10,afade=t=out:st=9.75:d=0.25,alimiter=limit=0.89:level=0[out]";
+  const before = "[0]asplit=2[vo][key];[1]volume=0.3[bedraw];[key]apad=whole_dur=10[keypad];[bedraw][keypad]sidechaincompress=threshold=0.1:ratio=3:attack=30:release=400:makeup=1[bed];[vo]aformat=channel_layouts=stereo[mix0];[bed]aformat=channel_layouts=stereo[mix1];[mix0][mix1]amix=inputs=2:normalize=0,apad=whole_dur=10,atrim=0:10,afade=t=out:st=9.75:d=0.25,alimiter=limit=0.89:level=0[out]";
   assert.equal(mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, musicVolume: 0.3 }), before);
   const graph = mixGraph({ cues: [], duration: 10, hasVoice: true, hasMusic: true, hasAmbience: true, ambienceVolume: 0.5 });
   assert.match(graph, /asplit=3\[vo\]\[key\]\[akey\]/);
