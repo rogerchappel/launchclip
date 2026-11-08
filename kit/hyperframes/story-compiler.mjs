@@ -23,7 +23,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { baseMediaStyle, deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
-import { gsapVars, holdTime, layerStateAt, sceneWindows } from '../core/transitions.mjs';
+import { SMEAR_PROPS, gsapVars, holdTime, layerStateAt, sceneWindows, smearFilterId, smearFilterSvg } from '../core/transitions.mjs';
+import { LIGHT_SWEEP, lightSweepCss, lightSweepGsap, lightSweepHtml, lightSweeps } from '../core/light-sweep.mjs';
 import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
@@ -328,11 +329,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const plain = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
     const layer = zooming.length ? `<div id="lc-zs-${id}" class="lc-zoom"><div id="lc-zp-${id}" class="lc-zoom">${plain}</div></div>` : plain;
     const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
-    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.rides ?? entry.id]) : ''}">${body}</div>`);
+    const smear = smearLayer(entry.tweens, id, `#${outer}`);
+    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.rides ?? entry.id]) : ''}${smear.style}">${smear.svg}${body}</div>`);
     css.push(out.css ?? '');
     motion.push(`// ${entry.scene.id} (${entry.scene.module}) ${num(entry.start)}–${num(entry.renderEnd)}s`);
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
-    motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
+    motion.push(...sceneTweens(entry.tweens, `#${inner}`), ...smear.lines);
     motion.push(...opsGsap(parallax, { overlay: `#lc-par-${id}` }));
     motion.push(...opsGsap(zooming, { zoom: `#lc-zs-${id}`, pan: `#lc-zp-${id}` }));
     if (zooming.length) usesZoom = true;
@@ -351,7 +353,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       markup.push(`<div id="${behindOuter}" class="lc-scene" data-launchclip-scene="${id}" data-launchclip-part="behind" style="z-index:${zBehind}"><div id="${behindInner}" class="lc-layer">${out.behind.html}</div></div>`);
       css.push(out.behind.css ?? '');
       motion.push(...toggle(`#${behindOuter}`, entry.start, entry.renderEnd, D));
-      motion.push(...entry.tweens.map((tw) => tweenCode(`#${behindInner}`, tw)));
+      motion.push(...sceneTweens(entry.tweens, `#${behindInner}`));
       if (out.behind.motion) motion.push(`{\n${out.behind.motion}\n}`);
       zBehind += 10;
     }
@@ -404,13 +406,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       // the field keeps moving with absolute time (in world mode it is the
       // camera's depth layer instead).
       const ambient = plate && plan?.mode !== 'world' && drawsBackground(entry.scene) ? fieldLayer(id, loop.start, loop.end, entry.scene) : { html: '', motion: [] };
-      (plan ? world : markup).push(`<div id="${outer}" class="lc-scene${plate ? ' lc-plate' : ''} lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
+      const smear = smearLayer(loop.tweens, id, `#${outer}`);
+      (plan ? world : markup).push(`<div id="${outer}" class="lc-scene${plate ? ' lc-plate' : ''} lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}${smear.style}">${smear.svg}<div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
       motion.push(...ambient.motion);
       if (media.elements.length) warnings.push(`${entry.id}: root media is not repeated in the loop ending`);
       css.push(out.css ?? '');
       motion.push(`// loop ending → ${entry.id} at its first state, ${num(loop.start)}–${num(loop.end)}s`);
       motion.push(...toggle(`#${outer}`, loop.start, loop.end + 1, D));
-      motion.push(...loop.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
+      motion.push(...sceneTweens(loop.tweens, `#${inner}`), ...smear.lines);
       if (out.motion) {
         // The hold never moves loopTl's playhead, and GSAP does not render a
         // tl.set at a playhead that has not moved (a scene at 0 s), so the
@@ -555,6 +558,9 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // Dot wipes (kit/core/dot-wipe.mjs): a halftone grid over every scene.
   const wipes = isolate ? [] : dotWipes(story, windows);
   const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;--lc-dc:${dotWipePeak(wipe)};z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
+  // Light sweeps (kit/core/light-sweep.mjs): streaks of light added over every scene.
+  const sweeps = isolate ? [] : lightSweeps(story, windows);
+  wipeMarkup.push(...sweeps.map((sweep) => `<div id="${sweep.id}" class="lc-light-sweep" data-launchclip-transition="light-sweep" aria-hidden="true" style="opacity:0;--lc-ls:0;z-index:${LIGHT_SWEEP.z.hyperframes}">${lightSweepHtml(W, H, sweep)}</div>`));
 
   // Brand frame (kit/core/brand-frame.mjs): kicker, section labels and the
   // progress line over every scene, under the captions.
@@ -591,7 +597,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-plate > .lc-layer { background: ${bg}; }${usesZoom ? `\n    .lc-zoom { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }\n    .lc-plate > .lc-zoom > .lc-zoom > .lc-layer { background: ${bg}; }` : ''}${plan ? `\n    ${cameraCss(plan, W, H)}` : ''}
     .lc-ambient-field { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; pointer-events: none; }
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
-    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }${feelLines.length ? `\n    .lc-feel { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }` : ''}${wipes.length ? `\n    ${dotWipeCss(W, H).split('\n').join('\n    ')}` : ''}
+    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }${feelLines.length ? `\n    .lc-feel { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }` : ''}${wipes.length ? `\n    ${dotWipeCss(W, H).split('\n').join('\n    ')}` : ''}${sweeps.length ? `\n    ${lightSweepCss(W, H).split('\n').join('\n    ')}` : ''}
     ${placeholderCss()}
     ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
     ${css.filter(Boolean).join('\n    ')}
@@ -611,7 +617,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)])].map((line) => `      ${line}`).join('\n')}` : ''}
+${seamTweens(motion.join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// light-sweep into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}
       ${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
@@ -864,6 +870,32 @@ function toggle(selector, start, end, duration) {
   const lines = [`tl.fromTo(${js(selector)}, { opacity: 0 }, { opacity: 1, duration: 0, immediateRender: false }, ${at(start)});`];
   if (end < duration - 1e-6) lines.push(`tl.fromTo(${js(selector)}, { opacity: 1 }, { opacity: 0, duration: 0, immediateRender: false }, ${at(end)});`);
   return lines;
+}
+
+// A layer's tweens as GSAP lines; the smear props are drawn on the outer
+// element instead (smearLayer).
+function sceneTweens(tweens, selector) {
+  return tweens.filter((tw) => !SMEAR_PROPS.includes(tw.prop)).map((tw) => tweenCode(selector, tw));
+}
+
+// push-blur's directional smear (kit/core/transitions.mjs smearX / smearY):
+// an SVG feGaussianBlur in the layer's outer element, its stdDeviation
+// tweened, and the outer element's filter (--lc-smear) switched to it while
+// the smear runs. → {svg, style, lines} (empty without smear tweens)
+function smearLayer(tweens, id, outer) {
+  const smears = tweens.filter((tw) => SMEAR_PROPS.includes(tw.prop));
+  if (!smears.length) return { svg: '', style: '', lines: [] };
+  const filter = smearFilterId(id);
+  const dev = (tw, value) => (tw.prop === 'smearX' ? `${num(value)} 0` : `0 ${num(value)}`);
+  const lines = [];
+  for (const tw of smears) {
+    const end = tw.at + tw.duration;
+    lines.push(`tl.fromTo(${js(outer)}, { "--lc-smear": "none" }, { "--lc-smear": "url(#${filter})", duration: 0, immediateRender: false }, ${num(Math.max(0, tw.at - TOGGLE_LEAD))});`);
+    lines.push(`tl.fromTo(${js(`#${filter}-k`)}, { attr: { stdDeviation: "${dev(tw, tw.from)}" } }, { attr: { stdDeviation: "${dev(tw, tw.to)}" }, duration: ${round(tw.duration, 4)}, ease: ${js(tw.ease)}, immediateRender: false }, ${num(tw.at)});`);
+    // Back to no filter once the smear is gone (a smear to 0 ends unfiltered).
+    if (!(tw.to > 0)) lines.push(`tl.fromTo(${js(outer)}, { "--lc-smear": "url(#${filter})" }, { "--lc-smear": "none", duration: 0, immediateRender: false }, ${num(end)});`);
+  }
+  return { svg: smearFilterSvg(filter), style: ';--lc-smear:none;filter:var(--lc-smear)', lines };
 }
 
 function tweenCode(selector, tw) {

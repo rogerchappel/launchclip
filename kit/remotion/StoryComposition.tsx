@@ -34,6 +34,9 @@
 //   compiler sets on #lc-feel;
 // - dot wipes (kit/core/dot-wipe.mjs): the same halftone SVG and CSS rule as
 //   HyperFrames over every scene, its cover (--lc-dw) evaluated per frame;
+// - light sweeps (kit/core/light-sweep.mjs): the same streak markup and CSS,
+//   screen-blended over every scene, the progress (--lc-ls) per frame, and
+//   push-blur's smear as the same SVG filter on the outgoing scene;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
@@ -42,7 +45,7 @@ import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
 import { placeholderModel, resolveModule } from "@launchclip/core/modules.mjs";
 // @ts-ignore plain ESM from kit/core
-import { holdTime, layerStateAt, layerStyle, sceneWindows } from "@launchclip/core/transitions.mjs";
+import { holdTime, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearFilterSvg } from "@launchclip/core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "@launchclip/core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -75,6 +78,8 @@ import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } f
 import { feelPlan, feelStateAt, feelTransform } from "@launchclip/core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
 import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "@launchclip/core/dot-wipe.mjs";
+// @ts-ignore plain ESM from kit/core
+import { LIGHT_SWEEP, lightSweepCss, lightSweepHtml, lightSweepProgress, lightSweeps } from "@launchclip/core/light-sweep.mjs";
 import { LayoutFrame } from "./LayoutFrame";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
@@ -219,7 +224,12 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
-  const style = layerStyle(layerStateAt(t, tweens, getEase));
+  const state = layerStateAt(t, tweens, getEase);
+  const style = layerStyle(state);
+  // push-blur's directional smear (transitions.mjs smearX / smearY): an SVG
+  // feGaussianBlur on the outer element, as the HyperFrames #lc-scene.
+  const smearId = smearFilterId(`r${React.useId()}`);
+  const smearing = state.smearX > 0 || state.smearY > 0;
   // freeze: true holds the first frame (the loop clone), a number holds that frame (an overview hold).
   const content = freeze === true ? <Freeze frame={0}>{children}</Freeze> : typeof freeze === "number" ? <Freeze frame={freeze}>{children}</Freeze> : children;
   const own = (
@@ -237,7 +247,8 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
     </AbsoluteFill>
   ) : own;
   return (
-    <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
+    <AbsoluteFill style={{ overflow: transparent ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}), ...(smearing ? { filter: `url(#${smearId})` } : {}) }}>
+      {smearing ? <div style={{ position: "absolute" }} dangerouslySetInnerHTML={{ __html: smearFilterSvg(smearId, state.smearX, state.smearY) }} /> : null}
       {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
     </AbsoluteFill>
   );
@@ -434,6 +445,22 @@ const DotWipeLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
   );
 };
 
+// One light sweep (kit/core/light-sweep.mjs) over its window: the HyperFrames
+// markup and CSS, its progress set per frame on --lc-ls.
+const LightSweepLayer: React.FC<{ sweep: any }> = ({ sweep }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const t = sweep.start + frame / fps;
+  const html = React.useMemo(() => ({ __html: lightSweepHtml(width, height, sweep) }), [width, height, sweep]);
+  const css = React.useMemo(() => lightSweepCss(width, height), [width, height]);
+  return (
+    <>
+      <style>{css}</style>
+      <div className="lc-light-sweep" aria-hidden style={{ zIndex: LIGHT_SWEEP.z.remotion, ["--lc-ls" as any]: lightSweepProgress(sweep, t) }} dangerouslySetInnerHTML={html} />
+    </>
+  );
+};
+
 const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   const frame = useCurrentFrame();
   const defs = React.useMemo(() => ({ __html: mediumDefs(plan) }), [plan]);
@@ -504,6 +531,12 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // The story feel (kit/core/kinetic.mjs) and dot wipes (kit/core/dot-wipe.mjs), as the HyperFrames compiler.
   const feel = React.useMemo(() => feelPlan(story, { windows, camera: plan, words: Array.isArray(__captions) ? __captions : [] }), [story, windows, plan, __captions]);
   const wipes = React.useMemo(() => dotWipes(story, windows), [story, windows]);
+  const sweeps = React.useMemo(() => lightSweeps(story, windows), [story, windows]);
+  const sweepLayers = sweeps.map((sweep: any) => (
+    <Sequence key={sweep.id} name={`light-sweep → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
+      <LightSweepLayer sweep={sweep} />
+    </Sequence>
+  ));
   const wipeLayers = wipes.map((wipe: any) => (
     <Sequence key={wipe.id} name={`dot-wipe → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
       <DotWipeLayer wipe={wipe} />
@@ -563,6 +596,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
         </AbsoluteFill>
         </>)}
+        {/* Light sweeps add light (screen) to everything under them; their own group blends, as the HyperFrames root does. */}
+        {sweepLayers.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLayers}</AbsoluteFill> : null}
         {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {wipeLayers}
@@ -600,6 +635,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </Sequence>
       ) : null}
       </>)}
+      {sweepLayers}
       {wipeLayers}
       {medium ? <MediumLayer plan={medium} /> : null}
       <BrandFrame story={story} />

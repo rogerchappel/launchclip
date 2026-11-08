@@ -49,6 +49,14 @@ export const CAMERA_PARITY = Object.freeze([
   // drift at rest, inside both kicks, mid whip-pan and through the dot wipe
   // (cover, full cover before the swap, reveal). Measured 0.980–0.996.
   {id: 'kinetic-feel-9x16', threshold: 0.97, times: [1.0, 2.0, 2.1, 4.1, 6.2, 8.1, 8.2, 8.4, 11.0]},
+  // Light and camera transitions (kit/core/light-sweep.mjs, transitions.mjs):
+  // through the light-sweep (streaks over the veiled outgoing scene, the cut,
+  // the incoming one rising) and the push-blur (smeared push, the cut, the
+  // defocused arrival racking sharp). Motion blur is HyperFrames-only and
+  // stills are unblended. Measured 0.95–0.998: mid-sweep (3.3 s) the
+  // streaks sit on the same pixels, but each renderer's Chrome rasterises
+  // their blurred gradients over the dark veil a little differently.
+  {id: 'cinematic-transitions-9x16', threshold: 0.94, times: [1.5, 3.1, 3.2, 3.3, 3.4, 5.7, 5.8, 5.9, 6.0, 7.0]},
   {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
     files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);

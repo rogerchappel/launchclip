@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -260,12 +260,34 @@ function storyFps(story) {
   return Number.isFinite(fps) && fps > 0 ? fps : 30;
 }
 
+// light-sweep options (kit/core/light-sweep.mjs LIGHT_SWEEP.streakRange and
+// angleRange, repeated here import-free).
+const LIGHT_SWEEP_STREAKS = [2, 4];
+const LIGHT_SWEEP_ANGLE = [20, 80];
+
+/** Validation messages for a light-sweep's options (scene.in or ending.in). */
+function lightSweepOptionErrors(transition, path) {
+  const errors = [];
+  if (transition.type !== "light-sweep") {
+    for (const key of ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
+    return errors;
+  }
+  const { color, streaks, angle } = transition;
+  if (color !== undefined && !(DOT_WIPE_COLORS.includes(color) || (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(color)}`);
+  const [slo, shi] = LIGHT_SWEEP_STREAKS, [alo, ahi] = LIGHT_SWEEP_ANGLE;
+  if (streaks !== undefined && !(Number.isInteger(streaks) && streaks >= slo && streaks <= shi)) errors.push(`${path}.streaks must be a whole number of light streaks from ${slo} to ${shi}; got ${JSON.stringify(streaks)}`);
+  if (angle !== undefined && !(typeof angle === "number" && angle >= alo && angle <= ahi)) errors.push(`${path}.angle must be the streaks' tilt from the horizontal, ${alo} to ${ahi} degrees; got ${JSON.stringify(angle)}`);
+  for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; "light-sweep" does not take it`);
+  return errors;
+}
+
 /** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
 function dotWipeOptionErrors(transition, path, fps) {
   const errors = [];
-  // hold is also the overview's (seconds); color and cover are the wipe's alone.
+  // hold is also the overview's (seconds); color and cover are the wipe's
+  // alone (color also the light-sweep's, checked there).
   if (transition.type !== "dot-wipe") {
-    for (const key of ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    for (const key of transition.type === "light-sweep" ? [] : ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
   }
   const { color, cover, hold, dur } = transition;
@@ -557,8 +579,9 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if (transition.type === "dot-wipe" && track !== 0) err(`${path}.in.type "dot-wipe" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
+        for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -707,6 +730,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`ending.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
           cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
           for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
+          for (const message of lightSweepOptionErrors(transition, "ending.in")) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);

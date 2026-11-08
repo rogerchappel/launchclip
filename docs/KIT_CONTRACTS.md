@@ -683,6 +683,54 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 - Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
   once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
   with blur in one filter).
+- `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
+  `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
+  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
+  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
+  horizontal (20–80, default 64), sweep across the middle of the frame, each
+  over 0.78 of the transition, started 0.08 apart, fading in and out over
+  the first and last 22 % of its travel, over a faint wash of the colour that
+  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
+  Remotion blends their group the same way), so nothing opaque ever covers
+  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
+  4 px, a white-hot centre line); a streak moves about 60 px a frame at
+  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
+  rather than stepping it. Both renderers draw the same markup and CSS and
+  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
+  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
+  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  bright parts melt into glowing blobs on a dark field) and drifts forward to
+  1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
+  `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and
+  clears its veil and scale by the end (`power2.out`). Largest frame-to-frame
+  change measured on a dark interface reel: 25 (17.6 with heavy motion
+  blur), spread over about ten frames.
+- `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
+  is where the content travels, `"up"` by default): the camera pushes into the
+  outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
+  direction, `power2.in`) with a directional smear along the travel
+  (`smearX` / `smearY`, a deviation up to 2.6 % of that span: 50 px on 1920)
+  and an exposure dip (`dip`, `brightness(0.55)` at the cut). The cut is at
+  48 % of the transition, a 10 % crossfade; the incoming plate is held hidden,
+  then arrives 6 % of the frame back along the travel, at 1.06 and defocused
+  (`focus`: `blur(14px) brightness(0.6)`), and settles (`expo.out`) while it
+  racks sharp (`power2.out`: two thirds of the blur gone in four frames).
+  The smear is an SVG `feGaussianBlur` with one non-zero deviation, drawn on
+  the layer's outer element (`smearFilterId`, `smearFilterSvg`): HyperFrames
+  tweens its `attr.stdDeviation` and switches the element's `--lc-smear`
+  filter on with it; Remotion renders the filter per frame from
+  `layerStateAt`. Largest frame-to-frame change measured: 8.
+- Layer state gains `veil`, `dip` and `focus` (one CSS filter each, like
+  `rackIn`: `veilFilter`, `dipFilter`, `focusFilter`, so GSAP never mixes two
+  filters on a layer) and `smearX` / `smearY` (`SMEAR_PROPS`, never part of
+  the layer's own filter). Incoming tweens that start after the transition
+  does are preceded by a hold at their first value (`held`), as the
+  dot-wipe's hidden first half, so the incoming plate is in its first state
+  from the transition's first frame.
+- Golden and parity fixture: `examples/story/cinematic-transitions-9x16`
+  (three interface scenes on a dark brand, a light-sweep and a push-blur,
+  `motion.blur {samples: 6, shutter: 1.5}`).
 
 ### Gates
 
