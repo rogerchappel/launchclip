@@ -201,6 +201,38 @@ function ms(value) {
   return Math.round(value * 1000) / 1000;
 }
 
+// Words a narration repeats without meaning to: an anchor on one of them
+// lands on its first occurrence, which is rarely the one meant.
+const COMMON_WORDS = new Set("a an and are as at be but by can do for from has have he her his how i if in into is it its just me more my no not now of on one or our out so that the their them then there they this to up us was we what when which who will with you your".split(" "));
+
+/**
+ * Word anchors without #n on a word the narration says more than once, when
+ * the word is a common one (COMMON_WORDS) or three letters or fewer:
+ * "word:it" is the first "it", whichever scene names it. Walks every string
+ * in the story. → [{path, anchor, word, count}]
+ */
+export function ambiguousWordAnchors(story, words) {
+  const tokens = wordList(words);
+  if (!tokens.length) return [];
+  const out = [];
+  const seen = new Set();
+  const visit = (value, path) => {
+    if (typeof value === "string") {
+      const match = WORD_ANCHOR.exec(value.trim());
+      if (!match || match[2] !== undefined) return;
+      const text = normalizeWord(match[1]);
+      if (!text || !(COMMON_WORDS.has(text) || text.length <= 3)) return;
+      const count = findWord(tokens, text).length;
+      if (count > 1 && !seen.has(`${path}|${value}`)) { seen.add(`${path}|${value}`); out.push({ path, anchor: value, word: text, count }); }
+      return;
+    }
+    if (Array.isArray(value)) value.forEach((item, i) => visit(item, `${path}[${i}]`));
+    else if (isObject(value)) for (const [key, item] of Object.entries(value)) visit(item, path ? `${path}.${key}` : key);
+  };
+  visit(story, "");
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 

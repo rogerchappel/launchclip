@@ -5,7 +5,7 @@ import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory a
 import { knownModules, resolveModule, sceneRenderEnd, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { captionColorWarnings } from "@launchclip/core/captions.mjs";
-import { CAST_MODULES } from "@launchclip/core/story.mjs";
+import { CAST_MODULES, ambiguousWordAnchors } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { migrateStory, stampStory } from "@launchclip/core/story-migrations.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
@@ -171,6 +171,8 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
         errors.push(...second.errors.filter((entry) => !errors.includes(entry)));
         // Gaps between anchored scenes are only known once times resolve.
         for (const warning of second.warnings) if (warning.startsWith("empty plate") && !validation.warnings.includes(warning)) validation.warnings.push(warning);
+        // "word:it" resolves to the first "it" of the narration: name the occurrence of a repeated common word.
+        for (const entry of ambiguousWordAnchors(story, words?.list ?? [])) validation.warnings.push(`anchor ${entry.path}: "${entry.anchor}" names "${entry.word}", which the narration says ${entry.count} times; it resolves to the first. Add #n for the one meant (e.g. "word:${entry.word}#2")`);
         if (second.ok) {
           boundaries = deriveBoundaries(resolved);
           errors.push(...moduleParamErrors(resolved));
