@@ -19,6 +19,7 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | short-talking-head | footage-led | footage-led | 9:16 | 5–60 s | seed |
 | story-characters | characters | motion, voiceover-motion | 16:9, 9:16 | 20–180 s | seed |
 | ui-explainer-reel | motion | motion, voiceover-motion | 9:16 | 30–75 s | measured |
+| ui-steady-reel | motion | style-named | 9:16 | 30–75 s | measured |
 | youtube-long-form | footage-led | footage-led | 16:9, 1:1 | 300–1800 s | seed |
 | youtube-talking-head-launch | footage-led | footage-led | 16:9, 1:1 | 60–300 s | seed |
 
@@ -206,6 +207,30 @@ A faceless explainer reel for Reels, Shorts and TikTok, 30–75 s in 9:16, that 
 | camera_moves_per_min | 11.1273 | 13.091 | 15.0546 |
 | moving_sharpness_ratio | 0.6873 | 0.8086 | 0.9299 |
 | soft_frame_share | 12% | 14% | 17% |
+| change_p99 | 18.3575 | 21.597 | 24.8366 |
+| top_light_ratio | 1.0049 | 1.1822 | 1.3595 |
+| midtone_share | 15% | 18% | 21% |
+| burst_change_mean | 5.8523 | 6.885 | 7.9177 |
+
+## ui-steady-reel
+
+The same faceless interface reel as ui-explainer-reel with a steadicam camera: it floats on one path instead of snapping between framings, so it changes the frame less and reframes less often. A style names this profile; a story never lands on it by matching.
+
+| Measure | p10 | p50 | p90 |
+| --- | --- | --- | --- |
+| visual_changes_per_min | 18.9125 | 22.25 | 25.5875 |
+| coverage | 81% | 96% | 100% |
+| longest_undressed_seconds | 0 | 1 | 1.15 |
+| first_visual_seconds | 0 | 0 | 0 |
+| flow_velocity_p90 | 6.9909 | 8.2246 | 9.4583 |
+| hold_ratio | 56% | 66% | 76% |
+| motion_bursts_per_min | 22.2547 | 26.182 | 30.1093 |
+| change_energy_p50 | 1.478 | 1.7388 | 1.9996 |
+| first_motion_seconds | 0 | 0 | 0.35 |
+| hook_events | 1 | 2 | 3 |
+| still_share | 9% | 11% | 12% |
+| longest_still_seconds | 0.9919 | 1.167 | 1.342 |
+| camera_moves_per_min | 8.7176 | 10.256 | 11.7944 |
 | change_p99 | 18.3575 | 21.597 | 24.8366 |
 | top_light_ratio | 1.0049 | 1.1822 | 1.3595 |
 | midtone_share | 15% | 18% | 21% |

@@ -109,7 +109,7 @@
     "playfulness": 0.5,
     "polish": 0.8
   },
-  "profile": "ui-explainer-reel",
+  "profile": "ui-steady-reel",
   "background": {
     "kind": "dot-grid",
     "params": {
@@ -121,7 +121,7 @@
       "lit": 0.85
     }
   },
-  "notes": "Measured from one public interface-explainer reel (kit/profiles/ui-explainer-reel.json): about 11% still frames, a 20 px dot period at 720 wide, one-word captions about 52 px tall, three or more type sizes with a hero headline. Settled panels hold still; life comes from entrances, timed state changes inside the panels, the shared camera and a ui-scene host: the pixel mascot in the accent, perched on the hero panel in most interface scenes, reacting on the key words.",
+  "notes": "Its layout and type come from one public interface-explainer reel (kit/profiles/ui-explainer-reel.json); its camera is the steady feel, gated by kit/profiles/ui-steady-reel.json. That reel measured about 11% still frames, a 20 px dot period at 720 wide, one-word captions about 52 px tall, three or more type sizes with a hero headline. Settled panels hold still; life comes from entrances, timed state changes inside the panels, the shared camera and a ui-scene host: the pixel mascot in the accent, perched on the hero panel in most interface scenes, reacting on the key words.",
   "light": {
     "preset": "studio"
   }

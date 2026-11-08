@@ -1,0 +1,130 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "ui-steady-reel",
+  "title": "UI reel, steady camera",
+  "format": "motion",
+  "duration_seconds": [
+    30,
+    75
+  ],
+  "references": 1,
+  "provenance": {
+    "kind": "measured",
+    "tool": "launchclip profile measure",
+    "measured_at": "2026-11-08T20:02:35.348Z",
+    "note": "Bands from ui-explainer-reel, with frame-change energy and camera moves re-centred (\u00b115%) on one of our own renders with the steady camera, approved by eye: a target, not a survey. Moving sharpness and soft-frame share are left out: a steady camera has few held frames to compare, and they swung widely between renders.",
+    "sources": [
+      {
+        "id": "ref-01",
+        "title": "steady-reel.mp4",
+        "rights": "own",
+        "sha256": "2dc6f7196daeb12eec9ae0bd32f3639b95f8c2f6e90a6fa424a5e45b63c57cef",
+        "duration_seconds": 46.8,
+        "width": 1080,
+        "height": 1920,
+        "measured_at": "2026-11-08T20:02:35.348Z"
+      }
+    ]
+  },
+  "measures": {
+    "visual_changes_per_min": {
+      "p10": 18.9125,
+      "p50": 22.25,
+      "p90": 25.5875
+    },
+    "coverage": {
+      "p10": 0.813,
+      "p50": 0.9565,
+      "p90": 1
+    },
+    "longest_undressed_seconds": {
+      "p10": 0,
+      "p50": 1,
+      "p90": 1.15
+    },
+    "first_visual_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0
+    },
+    "flow_velocity_p90": {
+      "p10": 6.9909,
+      "p50": 8.2246,
+      "p90": 9.4583
+    },
+    "hold_ratio": {
+      "p10": 0.5642,
+      "p50": 0.6638,
+      "p90": 0.7634
+    },
+    "motion_bursts_per_min": {
+      "p10": 22.2547,
+      "p50": 26.182,
+      "p90": 30.1093
+    },
+    "change_energy_p50": {
+      "p10": 1.478,
+      "p50": 1.7388,
+      "p90": 1.9996
+    },
+    "first_motion_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0.35
+    },
+    "hook_events": {
+      "p10": 1,
+      "p50": 2,
+      "p90": 3
+    },
+    "still_share": {
+      "p10": 0.0921,
+      "p50": 0.1084,
+      "p90": 0.1247
+    },
+    "longest_still_seconds": {
+      "p10": 0.9919,
+      "p50": 1.167,
+      "p90": 1.342
+    },
+    "camera_moves_per_min": {
+      "p10": 8.7176,
+      "p50": 10.256,
+      "p90": 11.7944
+    },
+    "change_p99": {
+      "p10": 18.3575,
+      "p50": 21.597,
+      "p90": 24.8366
+    },
+    "top_light_ratio": {
+      "p10": 1.0049,
+      "p50": 1.1822,
+      "p90": 1.3595
+    },
+    "midtone_share": {
+      "p10": 0.1516,
+      "p50": 0.1783,
+      "p90": 0.205
+    },
+    "burst_change_mean": {
+      "p10": 5.8523,
+      "p50": 6.885,
+      "p90": 7.9177
+    }
+  },
+  "description": "The same faceless interface reel as ui-explainer-reel with a steadicam camera: it floats on one path instead of snapping between framings, so it changes the frame less and reframes less often. A style names this profile; a story never lands on it by matching.",
+  "match": {
+    "lanes": [
+      "style-named"
+    ],
+    "aspects": [
+      "9:16"
+    ],
+    "platforms": [
+      "youtube-shorts",
+      "instagram-reels",
+      "tiktok"
+    ]
+  }
+}

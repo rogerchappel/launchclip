@@ -85,7 +85,7 @@ test("make: a tool-explainer brief, --style signal-ui and a canned ui-scene plan
   assert.equal(report.status, "ready-for-review", JSON.stringify({ stages: report.stages, repairs: report.repairs }));
   assert.equal(report.routing.lane, "motion");
   assert.equal(report.style.name, "signal-ui");
-  assert.equal(report.profile.id, "ui-explainer-reel");
+  assert.equal(report.profile.id, "ui-steady-reel");
   assert.equal(report.repairs.used, 0, JSON.stringify(report.repairs.attempts));
   assert.ok(!report.notices.some((line) => /world look/.test(line)), report.notices.join("\n"));
 

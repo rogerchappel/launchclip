@@ -71,6 +71,18 @@ UI explainer reel: motion, 30–75 s, 9:16.
 | --- | --- | --- | --- |
 | reel-c.mp4 | public-statistics | 45.833 s | `22142d685096` |
 
+## ui-steady-reel
+
+UI reel, steady camera: motion, 30–75 s, 9:16.
+
+- Provenance: measured (measured 2026-11-08T20:02:35.348Z)
+- References: 1
+- Note: Bands from ui-explainer-reel, with frame-change energy and camera moves re-centred (±15%) on one of our own renders with the steady camera, approved by eye: a target, not a survey. Moving sharpness and soft-frame share are left out: a steady camera has few held frames to compare, and they swung widely between renders.
+
+| Source | Rights | Duration | SHA-256 |
+| --- | --- | --- | --- |
+| steady-reel.mp4 | own | 46.8 s | `2dc6f7196dae` |
+
 ## youtube-long-form
 
 YouTube long form: footage-led, 300–1800 s, 16:9 or 1:1.
