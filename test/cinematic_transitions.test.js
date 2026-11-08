@@ -176,3 +176,15 @@ test('Remotion draws the same sweep markup and smear filter from the same state'
 function pick(object, keys) {
   return Object.fromEntries(keys.map((key) => [key, object[key]]));
 }
+
+test("motion blur: a reel's worth of guarded caption frames splits into short overlays ffmpeg can parse", async () => {
+  const { motionBlurFilter } = await import("../src/motion_blur.js");
+  // 47 s of word changes: two guarded frames every 7 frames, 200 runs.
+  const frames = [];
+  for (let n = 0; n < 1400; n += 7) frames.push(n, n + 1);
+  const filter = motionBlurFilter(6, 30, { rate: 4, guard: { frames, rect: { x: 0, y: 998, width: 1080, height: 231 } } });
+  const enables = [...filter.matchAll(/enable='([^']*)'/g)].map((match) => match[1].split("+").length);
+  assert.equal(enables.reduce((sum, count) => sum + count, 0), 200, "every run is guarded once");
+  assert.ok(enables.every((count) => count <= 24), `an overlay guards at most 24 runs (${enables.join(", ")})`);
+  assert.match(filter, /\[v\]$/);
+});

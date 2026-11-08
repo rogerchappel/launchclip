@@ -34,14 +34,22 @@ function blendChain(samples, rate, fps) {
   return `tmix=frames=${samples}:weights='${weights}',select='eq(mod(n\\,${rate})\\,${last})',setpts=N/(${fps}*TB)`;
 }
 
-// eq(n,a)+eq(n,b)… with runs of frames folded into between(n,a,b).
-function frameExpr(frames) {
+// Runs of guarded frames, [first, last] each.
+function frameRuns(frames) {
   const runs = [];
   for (const n of [...new Set(frames)].sort((a, b) => a - b)) {
     const run = runs.at(-1);
     if (run && n === run[1] + 1) run[1] = n;
     else runs.push([n, n]);
   }
+  return runs;
+}
+
+// eq(n,a)+between(n,b,c)… for a few runs. ffmpeg parses a long sum of
+// terms recursively and runs out of memory on a reel's worth of word
+// changes, so each overlay takes at most GUARD_RUNS runs.
+const GUARD_RUNS = 24;
+function frameExpr(runs) {
   return runs.map(([a, b]) => (a === b ? `eq(n\\,${a})` : `between(n\\,${a}\\,${b})`)).join("+");
 }
 
@@ -60,7 +68,11 @@ export function motionBlurFilter(samples, fps, { rate = samples, guard = null } 
   // swap of blends never shows as a seam.
   const feather = Math.max(1, Math.round(guard.feather ?? height * 0.2));
   const alpha = `a='255*clip(min(Y\\,${height - 1}-Y)/${feather}\\,0\\,1)'`;
-  return `[0:v]split=2[lc_a][lc_b];[lc_a]${main}[lc_h];[lc_b]${blendChain(rate, rate, fps)},crop=${width}:${height}:${x}:${y},format=yuva420p,geq=lum='p(X\\,Y)':cb='p(X\\,Y)':cr='p(X\\,Y)':${alpha}[lc_g];[lc_h][lc_g]overlay=${x}:${y}:enable='${frameExpr(guard.frames)}'[v]`;
+  const runs = frameRuns(guard.frames);
+  const chunks = Array.from({ length: Math.ceil(runs.length / GUARD_RUNS) }, (_, k) => runs.slice(k * GUARD_RUNS, (k + 1) * GUARD_RUNS));
+  const band = `[lc_b]${blendChain(rate, rate, fps)},crop=${width}:${height}:${x}:${y},format=yuva420p,geq=lum='p(X\\,Y)':cb='p(X\\,Y)':cr='p(X\\,Y)':${alpha}${chunks.length > 1 ? `,split=${chunks.length}` : ""}${chunks.map((_, k) => `[lc_g${k}]`).join("")}`;
+  const overlays = chunks.map((chunk, k) => `[${k ? `lc_o${k - 1}` : "lc_h"}][lc_g${k}]overlay=${x}:${y}:enable='${frameExpr(chunk)}'[${k === chunks.length - 1 ? "v" : `lc_o${k}`}]`);
+  return [`[0:v]split=2[lc_a][lc_b];[lc_a]${main}[lc_h]`, band, ...overlays].join(";");
 }
 
 /** ffmpeg arguments that blend `input` (rendered at fps × rate) into `output` at fps; audio is copied. */
