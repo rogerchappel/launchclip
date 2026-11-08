@@ -211,7 +211,7 @@ test("the HyperFrames compile paints under the frame and captions, and is unchan
 test("the Remotion story draws the same layer under its frame and captions", async () => {
   const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
   assert.match(source, /mediumPlan\(story\)/);
-  assert.match(source, /mediumLayerStyle\(plan, frame\)/);
+  assert.match(source, /mediumLayerStyle\(plan, \(frame \* plan\.fps\) \/ fps\)/);
   assert.equal((source.match(/\{medium \? <MediumLayer plan=\{medium\} \/> : null\}\n\s*<BrandFrame/g) ?? []).length, 2, "both paths draw it right before the brand frame");
 });
 

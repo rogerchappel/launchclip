@@ -52,8 +52,8 @@ export const CAMERA_PARITY = Object.freeze([
   // Light and camera transitions (kit/core/light-sweep.mjs, transitions.mjs):
   // through the light-sweep (streaks over the veiled outgoing scene, the cut,
   // the incoming one rising) and the push-blur (smeared push, the cut, the
-  // defocused arrival racking sharp). Motion blur is HyperFrames-only and
-  // stills are unblended. Measured 0.95–0.998: mid-sweep (3.3 s) the
+  // defocused arrival racking sharp). Stills are unblended in both renderers.
+  // Measured 0.95–0.998: mid-sweep (3.3 s) the
   // streaks sit on the same pixels, but each renderer's Chrome rasterises
   // their blurred gradients over the dark veil a little differently.
   {id: 'cinematic-transitions-9x16', threshold: 0.94, times: [1.5, 3.1, 3.2, 3.3, 3.4, 5.7, 5.8, 5.9, 6.0, 7.0]},

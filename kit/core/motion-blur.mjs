@@ -1,5 +1,5 @@
 // Real motion blur from sub-frames (story.motion.blur), the plan shared by
-// the HyperFrames compiler (where caption changes go) and the render's blend
+// both renderers (where caption changes go) and the render's blend
 // (src/motion_blur.js). Plain ESM, no imports. Canonical copy:
 // kit/core/motion-blur.mjs. Contract: docs/KIT_CONTRACTS.md, "Motion blur".
 //

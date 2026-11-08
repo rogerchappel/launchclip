@@ -2573,9 +2573,10 @@ a pure function of time, in both renderers.
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
 `story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
-shutter?: 0.25–1.5}`. The HyperFrames adapter renders `rate` sub-frames per
-output frame (`fps × rate`) and blends each output frame from the `samples`
-consecutive sub-frames centred on it (`tmix`, then `select`): fast moves smear
+shutter?: 0.25–1.5}`. Both renderers render `rate` sub-frames per output
+frame (`fps × rate`) and blend each output frame from the `samples`
+consecutive sub-frames centred on it (`tmix`, then `select`, the same
+`src/motion_blur.js` in both, sampling the same instants): fast moves smear
 along their path and settled panels stay sharp. A sub-frame stands for
 1/rate of a frame, so the blend spans `samples / rate` frames (the shutter);
 `rate = round(samples / shutter)`, at least `samples / 1.5` and at most 8
@@ -2592,23 +2593,47 @@ cinematic smear for no extra render cost.
 
 The browser render dominates (it scales with `rate`); the blend is one ffmpeg
 pass (`samples` frames mixed per output frame). On a 9:16 interface reel of
-8 s the heavy setting rendered in about 21 s against 5–10 s without blur.
+8 s the heavy setting rendered in about 21 s against 5–10 s without blur in
+HyperFrames; a 6 s reel in Remotion took 26 s of browser render and 4 s of
+blend. Remotion's cached segments also hold `rate` times the pictures on disk
+(lossless; about 8 MB per second of reel at rate 4 on that reel).
 
-Captions never show two words. The HyperFrames compiler snaps caption times
-(`snapCaptionChunks(chunks, fps, captionSnapOffset(plan))`) into the gap
+Captions never show two words. Both renderers snap caption times
+(`blurSnappedChunks`: `snapCaptionChunks(chunks, fps, captionSnapOffset(plan))`)
+into the gap
 between two output frames' one-frame windows (`rate` sub-frames each: half
 frames at rate 3, 0.625 of a frame at rate 4), so a blend of at most one
 frame never straddles a word change. With a shutter over one frame every
-instant lies in two windows, so the compiler also writes
-`launchclip-motion-blur.json` (`{guard: {frames, rect}}`; `guardFrames`,
-`guardRect`) into the project: the output frames whose heavy window
+instant lies in two windows, so there is also a guard (`captionBlurGuard`:
+`{frames, rect}`; `guardFrames`, `guardRect`), which the HyperFrames compiler
+writes to `launchclip-motion-blur.json` in its project and the Remotion path
+computes from the same chunks (`storyMotionBlurGuard`): the output frames whose heavy window
 straddles a change, and the caption band (`bandTop` and band height plus 4 %
 of the frame either side, full width; the whole frame when captions sit in
 footage-layout zones). On those frames the blend takes that rect from the
 one-frame blend, feathered over its top and bottom fifth so the swap never
 shows as a seam. A preview window rebases the frames to its own start.
-`story.motion` is part of the segment hash, so changing the blur
-re-renders. The Remotion adapter ignores it. A style pack's `motion.feel`
+
+In Remotion, `__subframes` (`withSubframes`) makes the composition run at
+`fps × rate` while `format.fps` and `resolved.fps` stay the story's: raising
+those would change every plan built from them (the camera's velocity blur
+falls with the frame rate, the feel would sample finer). So the plans are the
+ones HyperFrames compiles, everything drawn samples absolute time, and what
+HyperFrames steps per story frame (the feel, the medium's boil) steps per
+story frame. Layers mount on whole story frames, the segment plan's frame
+space; HyperFrames shows a scene that starts between frames from its exact
+time, so around such a cut the two differ by up to half a frame.
+
+The segment cache stays on: a segment holds its sub-frames unblended and the
+blend runs after the join, on every render. A blur window that straddles a
+join blends the same pictures as a single pass, and an edit re-renders only
+the segments it touches. `story.motion` and the rate are part of the segment
+hash, so changing the blur re-renders. `--preview-scene` blends the preview's
+own sub-frames: its first frame's window has no sub-frames from before the
+preview, which the result's `motion_blur.note` says (a HyperFrames preview
+window has the same edge). Stills stay unblended in both. A custom adapter opts in with
+`subframes: true`; without it segments stay on story frames, unblurred, and
+an adapter without `renderSegments` takes `motionBlur` in `render`. A style pack's `motion.feel`
 and `motion.blur` pass into the story with its grammar.
 
 ## Story lighting (`kit/core/lighting.mjs`)
@@ -3037,8 +3062,12 @@ The example is `examples/story/footage/`; regenerate its recording with
   storyboard project through both renderer adapters.
 - `npm run parity:ci` (`scripts/parity-ci.mjs`) is the cross-OS smoke the CI
   `parity` job runs on ubuntu: five fixtures that between them draw every
-  default registry font, at the settle and mid-hold times, plus two stills of
-  `examples/story/minimal`, with one shared Remotion bundle.
+  default registry font, at the settle and mid-hold times (one shared Remotion
+  bundle), plus stills of `examples/story/minimal` and of
+  `examples/story/ui-parity-9x16`: interface scenes on `signal-ui` (perched host,
+  burst, arranged stacks, counted headline, light-sweep, push-blur, studio light,
+  dot grid, word-chip captions, snap feel). That story sets `motion.blur: false`,
+  so a still is one frame on both renderers. Story times snap to whole frames.
 
 ## Direction constraints (`src/constraints.js`)
 

@@ -37,6 +37,9 @@
       "shutter": 1.5
     }
   },
+  "camera": {
+    "mode": "cuts"
+  },
   "captions": {
     "preset": "word-chip",
     "position": "low",

@@ -80,7 +80,8 @@ jobs:
   # Cross-OS renderer parity: the bundled fonts must make HyperFrames and
   # Remotion draw the same text on Linux as on macOS. Five representative
   # fixtures (every default registry font) plus full-frame stills of
-  # examples/story/minimal (scripts/parity-ci.mjs). The full corpus runs
+  # examples/story/minimal and examples/story/ui-parity-9x16 (interface scenes
+  # on signal-ui, scripts/parity-ci.mjs). The full corpus runs
   # locally with LAUNCHCLIP_PARITY=1 node --test test/parity.test.js.
   parity:
     name: Renderer parity on ubuntu-latest

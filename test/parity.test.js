@@ -8,6 +8,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DEFAULT_ENTRY, runParity, runStoryParity} from '../scripts/parity.mjs';
 import {backgroundFixtures, runBackgroundParity} from '../scripts/parity-backgrounds.mjs';
+import {CI_UI_STORY} from '../scripts/parity-ci.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const DIR = path.join(ROOT, 'test', 'fixtures', 'parity');
@@ -37,7 +38,9 @@ const STORY_PARITY = Object.freeze([
   // World camera: each cast rides its world plate (at rest, mid-pan, at rest).
   {id: 'world-ride-9x16', times: [1.5, 3.5, 5.5]},
   // World camera: world plates bleed past their frame (at rest with drift, mid-pan, at rest).
-  {id: 'world-travel-9x16', times: [1.5, 3.5, 5.5]}
+  {id: 'world-travel-9x16', times: [1.5, 3.5, 5.5]},
+  // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
+  {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {

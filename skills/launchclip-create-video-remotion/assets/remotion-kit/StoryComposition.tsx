@@ -42,6 +42,15 @@
 //   screen-blended over every scene, the progress (--lc-ls) per frame, and
 //   push-blur's smear as the same SVG filter on the outgoing scene;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
+//
+// Motion blur (story.motion.blur, kit/core/motion-blur.mjs): the renderer sets
+// __subframes: the composition runs at fps × rate (calculateStoryMetadata),
+// while story.format.fps and story.resolved.fps stay the story's, so every
+// plan (the camera's velocity blur, the feel's samples, the medium's boil,
+// model timings) is the one HyperFrames compiles. Everything drawn samples
+// absolute time, frame / the video config's fps. What steps per story frame
+// in HyperFrames (the feel, the medium) steps per story frame here too, and
+// layers mount on whole story frames, the frame space of the segment plan.
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { assetUrl } from "./media";
@@ -53,7 +62,7 @@ import { holdTime, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearF
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
-import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
+import { blurSnappedChunks, captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -100,6 +109,8 @@ export type StoryProps = Record<string, any> & {
   customModules?: Record<string, React.ComponentType<CustomModuleProps>>;
   /** Filled by calculateStoryMetadata: caption chunks loaded from captions.json or NARRATION.json. */
   __captions?: any[] | null;
+  /** Sub-frames per output frame of a motion-blur render (src/renderers/remotion.js): the composition runs at fps × this. */
+  __subframes?: number;
 };
 
 // Error boundary so one failing module renders the placeholder instead of
@@ -450,7 +461,9 @@ function subjectPlan(story: any, base: any, layers: any[], layout: any = null) {
 // feelStateAt(plan, f / fps) is exactly the sample HyperFrames sets for frame f.
 const FeelLayer: React.FC<{ plan: any; children: React.ReactNode }> = ({ plan, children }) => {
   const frame = useCurrentFrame();
-  const state = feelStateAt(plan, frame / plan.fps);
+  const { fps } = useVideoConfig();
+  // A sub-frame render holds each story frame's sample, as the HyperFrames tl.set does.
+  const state = feelStateAt(plan, Math.floor((frame * plan.fps) / fps + 1e-6) / plan.fps);
   return <AbsoluteFill style={{ transformOrigin: "50% 50%", transform: feelTransform(state) }}>{children}</AbsoluteFill>;
 };
 
@@ -493,11 +506,12 @@ const LightSweepLayer: React.FC<{ sweep: any; part: "dip" | "light" }> = ({ swee
 
 const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const defs = React.useMemo(() => ({ __html: mediumDefs(plan) }), [plan]);
   return (
     <>
       <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} />
-      <div id={MEDIUM_LAYER_ID} data-launchclip-medium={plan.kind} style={{ ...mediumLayerStyle(plan, frame), zIndex: MEDIUM_Z.remotion } as React.CSSProperties} aria-hidden />
+      <div id={MEDIUM_LAYER_ID} data-launchclip-medium={plan.kind} style={{ ...mediumLayerStyle(plan, (frame * plan.fps) / fps), zIndex: MEDIUM_Z.remotion } as React.CSSProperties} aria-hidden />
     </>
   );
 };
@@ -507,8 +521,11 @@ function captionOverlay(story: any) {
 }
 
 export const StoryComposition: React.FC<StoryProps> = (props) => {
-  const { customModules, __captions, ...story } = props;
+  const { customModules, __captions, __subframes, ...story } = props;
   const { fps } = useVideoConfig();
+  // The story's own fps, and the sub-frames per story frame (1 without motion blur).
+  const storyFps = Number(story.resolved?.fps ?? story.format?.fps ?? fps);
+  const rate = Math.max(1, Math.round(fps / storyFps));
   const frame = useCurrentFrame();
   const fonts = ensureFonts(story.brand);
   const colors = story.brand?.colors ?? {};
@@ -531,13 +548,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const cameraOps = React.useMemo(() => {
     const models = layers.map((layer: any) => layer.model);
     const rooms = [...models, ...(layout?.rooms ?? [])];
-    const cameraModels = withLayoutCameras(models, layout, { fps, duration: Number(story.resolved?.duration ?? story.format?.duration) });
+    const cameraModels = withLayoutCameras(models, layout, { fps: storyFps, duration: Number(story.resolved?.duration ?? story.format?.duration) });
     return baseCameraOps(cameraModels, { roomFilterAt: (t: number) => roomStateAt(rooms, t).filter });
-  }, [layers, layout, fps, story]);
+  }, [layers, layout, storyFps, story]);
   // Footage-led: the recording carries the voice; audio.mix is the bed.
   const audio = base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;
-  const frames = (seconds: number) => Math.round(seconds * fps);
+  // Layers mount on whole story frames (the frame space of kit/core/render-segments.mjs), in composition frames.
+  const frames = (seconds: number) => Math.round(seconds * storyFps) * rate;
   // A background kind other than blobs (kit/core/backgrounds.mjs) replaces the field.
   // A backdrop plate (kit/core/plates.mjs) replaces the background on the
   // scenes it covers. In world mode the plates are the camera's backdrops
@@ -611,7 +629,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           {/* Overview holds: a shot the overview frames, frozen on its settled last frame (holdTime), as the HyperFrames held clones. */}
           {world ? layers.filter((layer: any) => layer.entry.plate && layer.entry.holds?.length).flatMap((layer: any) => layer.entry.holds.map((hold: any, k: number) => (
             <Sequence key={`${layer.entry.id}-held-${k}`} name={`${layer.entry.id} · held for ${hold.overview}`} from={frames(hold.start)} durationInFrames={Math.max(1, frames(hold.end) - frames(hold.start))} premountFor={fps}>
-              <SceneLayer startFrame={frames(hold.start)} tweens={[]} plate background={background} freeze={frames(holdTime(layer.entry, layer.model, fps)) - frames(layer.entry.start)} placement={plan.placements[layer.entry.id]} transparent>
+              <SceneLayer startFrame={frames(hold.start)} tweens={[]} plate background={background} freeze={frames(holdTime(layer.entry, layer.model, storyFps)) - frames(layer.entry.start)} placement={plan.placements[layer.entry.id]} transparent>
                 <SceneStartFrame.Provider value={frames(layer.entry.start)}>{layer.render()}</SceneStartFrame.Provider>
               </SceneLayer>
             </Sequence>
@@ -705,9 +723,10 @@ export async function loadStoryCaptions(story: any): Promise<any[] | null> {
 export const calculateStoryMetadata: CalculateMetadataFunction<StoryProps> = async ({ props }) => {
   const fps = Number(props.resolved?.fps ?? props.format?.fps ?? 30);
   const duration = Number(props.resolved?.duration ?? props.format?.duration);
-  const durationInFrames = Math.max(1, Number(props.resolved?.frames ?? Math.round(duration * fps)));
-  const captions = Array.isArray(props.__captions) ? props.__captions : await loadStoryCaptions(props);
-  return { width: props.format.width, height: props.format.height, fps, durationInFrames, props: { ...props, __captions: captions } };
+  const rate = Math.max(1, Math.round(Number(props.__subframes) || 1));
+  const durationInFrames = Math.max(1, Number(props.resolved?.frames ?? Math.round(duration * fps))) * rate;
+  const captions = blurSnappedChunks(Array.isArray(props.__captions) ? props.__captions : await loadStoryCaptions(props), props, fps);
+  return { width: props.format.width, height: props.format.height, fps: fps * rate, durationInFrames, props: { ...props, __captions: captions } };
 };
 
 // ModuleReview: one scene's module on brand.colors.bg for its duration, with

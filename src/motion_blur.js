@@ -75,11 +75,18 @@ export function motionBlurFilter(samples, fps, { rate = samples, guard = null } 
   return [`[0:v]split=2[lc_a][lc_b];[lc_a]${main}[lc_h]`, band, ...overlays].join(";");
 }
 
-/** ffmpeg arguments that blend `input` (rendered at fps × rate) into `output` at fps; audio is copied. */
-export function motionBlurArgs(input, output, { samples, fps, rate = samples, guard = null }) {
+// The blend's own encode, when it is the last one (HyperFrames).
+const FINAL_ENCODE = Object.freeze(["-c:v", "libx264", "-preset", "medium", "-crf", "16"]);
+
+/**
+ * ffmpeg arguments that blend `input` (rendered at fps × rate) into `output`
+ * at fps; audio is copied. encode: the video encoder's arguments, for a blend
+ * that a delivery encode follows (Remotion's lossless mezzanine).
+ */
+export function motionBlurArgs(input, output, { samples, fps, rate = samples, guard = null, encode = FINAL_ENCODE }) {
   const filter = motionBlurFilter(samples, fps, { rate, guard });
   const graph = filter.startsWith("[0:v]") ? ["-filter_complex", filter, "-map", "[v]", "-map", "0:a?"] : ["-vf", filter];
-  return ["-v", "error", "-y", "-i", input, ...graph, "-r", String(fps), "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", output];
+  return ["-v", "error", "-y", "-i", input, ...graph, "-r", String(fps), ...encode, "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", output];
 }
 
 /** The compiler's guard for a project ({frames, rect}), or null when it wrote none. */
@@ -93,9 +100,9 @@ export async function readMotionBlurGuard(projectDir) {
 }
 
 /** Blend `input` into `output` in place of a render at fps; `input` is removed. */
-export async function blendSubframes(input, output, { samples, fps, rate = samples, guard = null, ffmpeg = "ffmpeg", run = spawnFfmpeg } = {}) {
+export async function blendSubframes(input, output, { samples, fps, rate = samples, guard = null, encode, ffmpeg = "ffmpeg", run = spawnFfmpeg } = {}) {
   const tmp = `${output}.blur.mp4`;
-  await run(ffmpeg, motionBlurArgs(input, tmp, { samples, fps, rate, guard }));
+  await run(ffmpeg, motionBlurArgs(input, tmp, { samples, fps, rate, guard, ...(encode ? { encode } : {}) }));
   await rename(tmp, output);
   if (input !== output) await rm(input, { force: true });
   return output;

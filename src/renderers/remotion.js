@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadStoryModule, readProjectStory } from "../story_loader.js";
 import { adapterError, captureCommand, runCommand } from "./command.js";
+import { blendSubframes } from "../motion_blur.js";
 import { MEZZANINE, encodeRemotionDelivery, remotionBrowserExecutable, remotionRoot, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
 
 export { remotionRoot };
@@ -18,6 +19,7 @@ export const COMPOSITION_ID = "LaunchclipStory";
 export const DEFAULT_REMOTION_ENTRY = path.join(PACKAGE_ROOT, "kit", "remotion", "entry.tsx");
 export const DEFAULT_LAYOUT_CHECK_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/layout-check.mjs"));
 const RESOLVED_STORY = path.join(".launchclip", "story.resolved.json");
+const SUBFRAME_STORY = path.join(".launchclip", "story.subframes.json");
 const LAYOUT_CHECK_EXPORTS = ["checkStoryLayout", "checkLayout", "layoutCheck", "default"];
 const BLOCKING_SEVERITIES = new Set(["error", "blocking", "fatal", "major"]);
 
@@ -66,6 +68,7 @@ export function createRemotionRenderer(defaults = {}) {
       if (!loaded) throw new Error(`Remotion projects need storyboard.json: none found in ${project}`);
       let props = loaded.resolved;
       if (opts.fps) props = withFps(props, Number(opts.fps));
+      if (opts.subframes > 1) props = withSubframes(props, opts.subframes);
       const format = opts.fps ? loaded.module.storyFormat(props) : loaded.format;
       // opts.propsFile: write the props elsewhere (the cover still keeps the project's file).
       const propsFile = opts.propsFile ? path.resolve(opts.propsFile) : path.join(project, RESOLVED_STORY);
@@ -91,20 +94,31 @@ export function createRemotionRenderer(defaults = {}) {
       return ["compositions", entry, "--props", propsFile, "--public-dir", project, "--quiet"];
     },
 
+    // opts.motionBlur {samples, fps, rate, guard?}: render rate × fps, then
+    // blend each output frame from the samples sub-frames centred on it
+    // (src/motion_blur.js), as the HyperFrames adapter does.
     async render(projectDir, outFile, opts = {}) {
-      const prepared = await adapter.prepare(projectDir, opts);
-      await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
-      const result = await remotion(runner(opts), adapter.renderArgs(prepared, outFile, opts), prepared.project);
+      const blur = opts.motionBlur?.samples > 1 ? { rate: opts.motionBlur.samples, ...opts.motionBlur } : null;
+      const prepared = await adapter.prepare(projectDir, blur ? { ...opts, subframes: blur.rate, propsFile: opts.propsFile ?? path.join(path.resolve(projectDir), SUBFRAME_STORY) } : opts);
+      const output = path.resolve(outFile);
+      await mkdir(path.dirname(output), { recursive: true });
+      const target = blur ? `${output}.subframes.mp4` : output;
+      const result = await remotion(runner(opts), adapter.renderArgs(prepared, target, opts), prepared.project);
       if (!result.ok) throw adapterError("Remotion render", result);
-      return { renderer: "remotion", output: path.resolve(outFile), format: prepared.format, props: prepared.propsFile, raw: result };
+      if (blur) await (opts.blend ?? blendSubframes)(target, output, { samples: blur.samples, fps: blur.fps, rate: blur.rate, ...(blur.guard ? { guard: blur.guard } : {}) });
+      return { renderer: "remotion", output, format: prepared.format, props: prepared.propsFile, raw: result, ...(blur ? { motionBlur: { samples: blur.samples, rate: blur.rate } } : {}) };
     },
 
     // Partial rendering (src/render_segments.js): lossless video-only segments
     // by frame range, through one bundle and one browser.
     // segments: [{startFrame, endFrame (exclusive), output}]; opts.story as in prepare.
+    // opts.subframes: the composition runs at fps × subframes and the ranges
+    // are in its frames (motion blur; the blend follows the join).
+    subframes: true,
     async renderSegments(projectDir, segments, opts = {}) {
-      const prepared = await adapter.prepare(projectDir, opts);
-      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency, onSegment: opts.onSegment, browserExecutable: browser(opts) });
+      const { subframes, ...own } = opts;
+      const prepared = await adapter.prepare(projectDir, own);
+      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: subframes > 1 ? withSubframes(prepared.props, subframes) : prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency, onSegment: opts.onSegment, browserExecutable: browser(opts) });
     },
 
     segmentEncoder: () => ({ ...MEZZANINE }),
@@ -192,6 +206,14 @@ function withFps(props, fps) {
     format: { ...(props?.format ?? {}), fps },
     resolved: { ...(props?.resolved ?? {}), fps, ...(Number.isFinite(duration) ? { frames: Math.round(duration * fps) } : {}) }
   };
+}
+
+// A motion-blur render: the composition runs at rate × the story's fps
+// (calculateStoryMetadata), while format.fps and resolved.fps stay the story's,
+// so every plan built from them matches the HyperFrames compile.
+export function withSubframes(props, rate) {
+  if (!Number.isInteger(rate) || rate < 1) throw new Error(`Invalid sub-frame rate: ${rate}`);
+  return { ...props, __subframes: rate };
 }
 
 export function frameAt(seconds, format) {

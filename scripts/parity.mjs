@@ -358,9 +358,13 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
     const hfDir = path.join(workDir, 'hyperframes');
     const compiled = await compileStoryToHyperFrames(loaded.resolved, {projectDir: hfDir, sourceDir: project});
     const hyperframes = getRenderer('hyperframes'), remotion = getRenderer('remotion');
+    // Whole frames only: the HyperFrames snapshot floors a time to its frame and
+    // Remotion rounds it, so a time between frames would compare two different frames.
+    const fps = loaded.resolved?.resolved?.fps ?? loaded.resolved?.format?.fps ?? 30;
     const samples = [];
-    for (const time of times) {
-      const name = `t${time}`;
+    for (const asked of times) {
+      const time = Math.round(asked * fps) / fps;
+      const name = `t${asked}`;
       const hf = path.join(outDir, `${name}.hyperframes.png`), rmFile = path.join(outDir, `${name}.remotion.png`);
       await hyperframes.still(hfDir, time, hf);
       await remotion.still(project, time, rmFile);

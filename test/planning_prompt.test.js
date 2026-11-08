@@ -207,3 +207,18 @@ test("interfaceLines: fill the frame in depth layers, vary the arrangement, neve
   assert.match(text, /more than twice in a row/);
   assert.match(text, /stage-fill/);
 });
+
+test("suggestModules: a software-tool explainer brief hints ui-scene, ahead of the other rows", () => {
+  for (const brief of ["An 8-second tool explainer for Clipline, a CLI that snaps every clip on your timeline to the beat", "Explain how our CLI turns a repo into a launch video.", "A 30-second explainer for a software tool: the terminal scans your repo and unlocks the render step.", "How our tool works, in 30 seconds."]) {
+    assert.equal(suggestModules(brief, { lane: "motion" })[0]?.modules[0], "ui-scene", brief);
+  }
+  assert.ok(!suggestModules("Explain why compound interest builds wealth over decades.", { lane: "motion" }).some((hint) => hint.modules.includes("ui-scene")));
+});
+
+test("planning prompt: a pack that sets its camera decides it; otherwise the brief's wording does", () => {
+  const brief = { tier: "structured", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand: { colors: { bg: "#000000", paper: "#ffffff", ink: "#000000", primary: "#ffffff", accent: "#ffffff" }, fonts: { display: "inter", body: "inter", meta: "inter" } }, artDirection: "a calm tool explainer" };
+  assert.match(planningPrompt(brief), /For this request: motion\.grammar "smooth" and camera\.mode "world"/);
+  const packed = planningPrompt({ ...brief, style: { name: "pack", motion: { feel: "snap" }, camera: { mode: "cuts" } } });
+  assert.doesNotMatch(packed, /For this request: motion\.grammar/);
+  assert.match(packed, /the style pack sets the motion and camera \(camera\.mode "cuts"\)/);
+});

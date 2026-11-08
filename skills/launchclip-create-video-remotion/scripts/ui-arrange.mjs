@@ -27,6 +27,8 @@ const CHILD_FORBIDDEN = Object.freeze(['rect', 'depth', 'tilt']);
 const UNARRANGED = new Set(['headline', 'chip', 'bloom', 'burst', 'host', 'stack']);
 // Seconds between children entering, front to back.
 const STAGGER = 0.07;
+// The z of an element listed after a stack: above the hero (z 40 at most).
+const ABOVE_ARRANGED = 41;
 
 const r2 = (value) => Math.round(value * 100) / 100;
 
@@ -171,7 +173,14 @@ export function expandArrangements(check, elements, {stage, band, footprint, min
   const out = [];
   elements.forEach((raw, index) => {
     const path = `params.elements[${index}]`;
-    if (!raw || typeof raw !== 'object' || raw.arrange === undefined) { out.push({raw, path}); return; }
+    if (!raw || typeof raw !== 'object' || raw.arrange === undefined) {
+      // List order is draw order: an element listed after an arranged stack
+      // (a burst, a bloom, a chip on the hero) draws over the stack's z-indexed
+      // cards unless it names its own z.
+      const over = raw && typeof raw === 'object' && raw.z === undefined && elements.slice(0, index).some((item) => item?.arrange !== undefined);
+      out.push({raw: over ? {...raw, z: ABOVE_ARRANGED} : raw, path});
+      return;
+    }
     check.obj(raw, path, ARRANGE_KEYS, ['kind', 'arrange', 'at', 'children']);
     if (raw.kind !== 'stack') check.fail(`${path}.arrange`, `arranges a stack's children; set kind "stack" (it is "${raw.kind}")`);
     const type = check.oneOf(raw.arrange, `${path}.arrange`, ARRANGEMENTS);
