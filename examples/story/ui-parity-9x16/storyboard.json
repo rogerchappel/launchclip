@@ -1,0 +1,294 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Interface parity (9:16)",
+  "notes": "Renderer parity fixture for the interface features (scripts/parity-ci.mjs): the signal-ui style's studio light, quiet dot grid, word-chip captions and snap feel, a perched host that changes pose, a wall and a fanned stack, rich headlines with a counted number, a burst, a light-sweep and the style's push-blur. motion.blur is false so stills never depend on motion blur: a still is one frame on both renderers. Values are illustrative; no narration audio and no paid calls.",
+  "lane": "motion",
+  "style": "signal-ui",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 9.6,
+    "platform": "youtube-shorts"
+  },
+  "motion": {
+    "blur": false
+  },
+  "audio": {
+    "words": "NARRATION.json"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "ui-scene",
+      "start": 0,
+      "end": 3.4,
+      "params": {
+        "elements": [
+          {
+            "kind": "headline",
+            "rect": {
+              "x": 80,
+              "y": 280,
+              "width": 860,
+              "height": 210
+            },
+            "at": 0,
+            "enter": "cut",
+            "props": {
+              "lines": [
+                {
+                  "text": "ONE PROMPT.",
+                  "size": "s"
+                },
+                {
+                  "text": "*FINAL* CUT.",
+                  "size": "l"
+                }
+              ]
+            }
+          },
+          {
+            "id": "term",
+            "kind": "terminal",
+            "rect": {
+              "x": 60,
+              "y": 660,
+              "width": 960,
+              "height": 600
+            },
+            "at": 0,
+            "enter": "cut",
+            "props": {
+              "title": "launchclip",
+              "sub": "make",
+              "prompt": "make a launch video",
+              "typeAt": 0.3,
+              "cps": 30,
+              "lines": [
+                {
+                  "at": "word:plans",
+                  "key": "plan",
+                  "text": "6 scenes"
+                },
+                {
+                  "at": "word:scene",
+                  "key": "render",
+                  "text": "hyperframes"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "host",
+            "rect": {
+              "width": 176,
+              "height": 136
+            },
+            "at": 0.3,
+            "props": {
+              "perch": "term",
+              "along": 0.8
+            },
+            "beats": [
+              {
+                "at": "word:final",
+                "set": {
+                  "pose": "surprised"
+                }
+              },
+              {
+                "at": "word:plans",
+                "set": {
+                  "pose": "point-left"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "s2",
+      "module": "ui-scene",
+      "start": 3.4,
+      "end": 7.2,
+      "in": {
+        "type": "light-sweep",
+        "dur": 0.5
+      },
+      "params": {
+        "elements": [
+          {
+            "kind": "headline",
+            "rect": {
+              "x": 80,
+              "y": 280,
+              "width": 860,
+              "height": 300
+            },
+            "at": 0,
+            "enter": "cut",
+            "props": {
+              "lines": [
+                {
+                  "text": "12X",
+                  "size": "xl",
+                  "accent": true,
+                  "count": {
+                    "from": 0,
+                    "dur": 0.9
+                  },
+                  "at": "word:twelve"
+                },
+                {
+                  "text": "FASTER",
+                  "size": "s"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "stack",
+            "arrange": "wall",
+            "rect": {
+              "x": 40,
+              "y": 620,
+              "width": 1000,
+              "height": 830
+            },
+            "at": 0,
+            "enter": "cut",
+            "children": [
+              {
+                "id": "gauge",
+                "kind": "meter",
+                "props": {
+                  "title": "PACE",
+                  "unit": "CUTS",
+                  "from": 2,
+                  "to": 12,
+                  "settleAt": "word:faster"
+                }
+              },
+              {
+                "kind": "window",
+                "props": {
+                  "title": "plan.json"
+                }
+              },
+              {
+                "kind": "window",
+                "props": {
+                  "title": "render.log"
+                }
+              },
+              {
+                "kind": "window",
+                "props": {
+                  "title": "captions"
+                }
+              },
+              {
+                "kind": "window",
+                "props": {
+                  "title": "sound"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "burst",
+            "at": "word:lock",
+            "props": {
+              "target": "gauge",
+              "rays": 14
+            },
+            "cue": "impact"
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "module": "ui-scene",
+      "start": 7.2,
+      "end": 9.6,
+      "in": {
+        "type": "push-blur",
+        "dur": 0.5
+      },
+      "params": {
+        "elements": [
+          {
+            "kind": "headline",
+            "rect": {
+              "x": 80,
+              "y": 280,
+              "width": 860,
+              "height": 210
+            },
+            "at": 0,
+            "enter": "cut",
+            "props": {
+              "lines": [
+                {
+                  "text": "NO TIMELINE.",
+                  "size": "s"
+                },
+                {
+                  "text": "*JUST* SHIP.",
+                  "size": "l"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "stack",
+            "arrange": "fan",
+            "rect": {
+              "x": 40,
+              "y": 560,
+              "width": 1000,
+              "height": 890
+            },
+            "at": 0,
+            "enter": "cut",
+            "children": [
+              {
+                "kind": "terminal",
+                "props": {
+                  "title": "launchclip",
+                  "sub": "ship",
+                  "prompt": "publish final.mp4",
+                  "typeAt": 0.1,
+                  "cps": 40
+                }
+              },
+              {
+                "kind": "meter",
+                "props": {
+                  "title": "LOUDNESS",
+                  "from": -31,
+                  "to": -14,
+                  "settleAt": 0.8
+                }
+              },
+              {
+                "kind": "window",
+                "props": {
+                  "title": "final.mp4"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions"
+    }
+  ]
+}

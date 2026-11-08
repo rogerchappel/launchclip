@@ -6,8 +6,9 @@
 // A handful of representative fixtures, chosen so every default registry font
 // is drawn (Anton, Inter, JetBrains Mono, Space Grotesk, STIX Two Text and
 // Math, Instrument Serif), at two sampled times each, plus full-frame stills
-// of examples/story/minimal through both renderer adapters (captions,
-// transitions and plates included). The Remotion entry is bundled once. Exits 1
+// of examples/story/minimal (captions, transitions and plates included) and
+// examples/story/ui-parity-9x16 (the interface features) through both renderer
+// adapters. The fixtures' Remotion entry is bundled once. Exits 1
 // when any sample is below its SSIM threshold. The full corpus stays in
 // `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js`.
 import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
@@ -30,6 +31,11 @@ export const CI_TIMES = 'settle,mid';
 // Story times: a settled hold (ambient field and drift well under way), the
 // s1→s2 fade, and late in s2's hold.
 export const CI_STORY = Object.freeze({project: path.join(ROOT, 'examples', 'story', 'minimal'), times: [1.2, 2.6, 3.6, 5.5]});
+// The interface features on the signal-ui style (motion.blur is false in the
+// story, so a still is one frame on both renderers): a hold with the perched
+// host's pose change, the light-sweep before and after its swap, the counted
+// number mid-count, the burst, the push-blur, and a hold on the fanned stack.
+export const CI_UI_STORY = Object.freeze({project: path.join(ROOT, 'examples', 'story', 'ui-parity-9x16'), times: [1.8, 3.6, 3.8, 4.6, 6.5, 7.4, 9]});
 
 async function main(argv) {
   const outIndex = argv.indexOf('--out');
@@ -48,6 +54,9 @@ async function main(argv) {
     const t0 = Date.now();
     const story = await runStoryParity(CI_STORY.project, {times: CI_STORY.times, out: path.join(out, 'story-minimal')});
     rows.push({name: 'story: examples/story/minimal', fonts: 'brand roles + captions + ambient', minSsim: story.minSsim, threshold: story.threshold.ssim, pass: story.pass, seconds: (Date.now() - t0) / 1000, failures: story.samples.filter(sample => !sample.pass)});
+    const t1 = Date.now();
+    const ui = await runStoryParity(CI_UI_STORY.project, {times: CI_UI_STORY.times, out: path.join(out, 'story-ui')});
+    rows.push({name: 'story: examples/story/ui-parity-9x16', fonts: 'signal-ui: ui-scene, light, sweep, burst, snap', minSsim: ui.minSsim, threshold: ui.threshold.ssim, pass: ui.pass, seconds: (Date.now() - t1) / 1000, failures: ui.samples.filter(sample => !sample.pass)});
   } finally {
     await rm(work, {recursive: true, force: true});
   }

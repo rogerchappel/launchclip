@@ -3037,8 +3037,12 @@ The example is `examples/story/footage/`; regenerate its recording with
   storyboard project through both renderer adapters.
 - `npm run parity:ci` (`scripts/parity-ci.mjs`) is the cross-OS smoke the CI
   `parity` job runs on ubuntu: five fixtures that between them draw every
-  default registry font, at the settle and mid-hold times, plus two stills of
-  `examples/story/minimal`, with one shared Remotion bundle.
+  default registry font, at the settle and mid-hold times (one shared Remotion
+  bundle), plus stills of `examples/story/minimal` and of
+  `examples/story/ui-parity-9x16`: interface scenes on `signal-ui` (perched host,
+  burst, arranged stacks, counted headline, light-sweep, push-blur, studio light,
+  dot grid, word-chip captions, snap feel). That story sets `motion.blur: false`,
+  so a still is one frame on both renderers. Story times snap to whole frames.
 
 ## Direction constraints (`src/constraints.js`)
 

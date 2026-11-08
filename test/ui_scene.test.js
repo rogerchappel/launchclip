@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { uiReadingWords } from "@launchclip/core/catalog-i-ui.mjs";
 import { resolveAnchor, resolveStory, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
@@ -7,6 +9,10 @@ import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
 import { emitCatalogH } from "../kit/hyperframes/catalog-h.mjs";
 import { motionBlurArgs, motionBlurFilter, motionBlurOptions, motionBlurSamples } from "../src/motion_blur.js";
 import { createHyperframesRenderer } from "../src/renderers/hyperframes.js";
+import { CI_UI_STORY } from "../scripts/parity-ci.mjs";
+import { readProjectStory } from "../src/story_loader.js";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const BRAND = { colors: { bg: "#0a0b08", primary: "#c8ff3a", accent: "#c8ff3a", ink: "#0a0b08", paper: "#f4f6ee" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
 const PANEL = { kind: "timeline", rect: { x: 50, y: 400, width: 980, height: 760 }, at: 0, enter: "zoom", props: { title: "sequence_01", clipAt: 1.5, tracks: [{ label: "A1", kind: "audio" }, { label: "A2", kind: "sfx", clips: [{ label: "BOING!", x: 0.02, width: 0.3, tone: "alert", at: 0.6, flipAt: 3, flipLabel: "whoosh.wav" }] }] } };
@@ -377,4 +383,24 @@ test("planning guide: rich headlines pair a small setup with a big payoff, one a
   const rect = { x: 80, y: 300, width: 860, height: 270 };
   assert.doesNotThrow(() => resolve([{ kind: "headline", rect, at: 0, props: { lines: [{ text: "RIGHT PLACE.", size: "s" }, { text: "RIGHT *LEVEL.*", size: "l" }] } }]));
   assert.doesNotThrow(() => resolve([{ kind: "headline", rect, at: 0, props: { lines: [{ text: "5M+", size: "xl", accent: true, count: true }, { text: "CREATORS", size: "s" }] } }]));
+});
+
+// The renderer parity smoke's fixture (scripts/parity-ci.mjs) must keep drawing the features it exists to compare.
+test("the interface parity fixture validates and still uses every feature it compares", async () => {
+  const project = path.join(ROOT, "examples", "story", "ui-parity-9x16");
+  const { resolved } = await readProjectStory(project);
+  assert.equal(resolved.motion.feel, "snap");
+  assert.equal(resolved.motion.blur, false, "parity stills must not depend on motion blur");
+  assert.equal(resolved.light.preset, "studio");
+  assert.equal(resolved.background.kind, "dot-grid");
+  assert.equal(resolved.overlays[0].preset, "word-chip");
+  const elements = resolved.scenes.flatMap((scene) => scene.params.elements);
+  const host = elements.find((el) => el.kind === "host");
+  assert.ok(host.props.perch && host.beats.some((beat) => beat.set.pose), "a perched host with a pose change");
+  assert.ok(elements.some((el) => el.kind === "burst"));
+  assert.ok(elements.some((el) => el.kind === "stack" && el.arrange === "fan") && elements.some((el) => el.kind === "stack" && el.arrange === "wall"));
+  assert.ok(elements.some((el) => el.kind === "headline" && el.props.lines?.some((line) => line.count)), "a counted number");
+  assert.deepEqual(resolved.scenes.map((scene) => scene.in?.type).filter(Boolean), ["light-sweep", "push-blur"]);
+  assert.ok(resolved.format.duration < 10);
+  for (const time of CI_UI_STORY.times) assert.ok(Math.abs(time * 30 - Math.round(time * 30)) < 1e-9, `${time} is a whole frame`);
 });

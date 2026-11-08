@@ -1,0 +1,99 @@
+{
+  "words": [
+    {
+      "text": "One",
+      "start": 0.3,
+      "end": 0.55
+    },
+    {
+      "text": "prompt.",
+      "start": 0.6,
+      "end": 1.05
+    },
+    {
+      "text": "Final",
+      "start": 1.2,
+      "end": 1.55
+    },
+    {
+      "text": "cut.",
+      "start": 1.6,
+      "end": 1.95
+    },
+    {
+      "text": "It",
+      "start": 2.1,
+      "end": 2.2
+    },
+    {
+      "text": "plans",
+      "start": 2.25,
+      "end": 2.6
+    },
+    {
+      "text": "every",
+      "start": 2.65,
+      "end": 2.9
+    },
+    {
+      "text": "scene,",
+      "start": 2.95,
+      "end": 3.3
+    },
+    {
+      "text": "and",
+      "start": 3.6,
+      "end": 3.75
+    },
+    {
+      "text": "renders",
+      "start": 3.8,
+      "end": 4.25
+    },
+    {
+      "text": "twelve",
+      "start": 4.3,
+      "end": 4.7
+    },
+    {
+      "text": "times",
+      "start": 4.75,
+      "end": 5.05
+    },
+    {
+      "text": "faster.",
+      "start": 5.1,
+      "end": 5.6
+    },
+    {
+      "text": "Every",
+      "start": 6.0,
+      "end": 6.3
+    },
+    {
+      "text": "lock",
+      "start": 6.35,
+      "end": 6.65
+    },
+    {
+      "text": "opens.",
+      "start": 6.7,
+      "end": 7.2
+    },
+    {
+      "text": "Just",
+      "start": 7.5,
+      "end": 7.8
+    },
+    {
+      "text": "ship",
+      "start": 7.85,
+      "end": 8.2
+    },
+    {
+      "text": "it.",
+      "start": 8.25,
+      "end": 8.6
+    }
+  ]
+}
