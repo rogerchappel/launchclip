@@ -143,7 +143,8 @@ function ambientAt(ambient, t) {
  * every track-0 transition in (from its scene's start, never before: a
  * transition does not pre-roll), the loop ending, the camera plan's moves
  * and every zoom inside a shot. A kick occupies [at, at + punch + settle],
- * so one starting up to 0.47 s before a span is refused too. → [{start, end, why}]
+ * so one starting up to 0.47 s (0.32 s with snap) before a span is refused
+ * too. → [{start, end, why}]
  */
 export function feelBusy(story, windows, camera = null) {
   const out = [];
