@@ -36,6 +36,7 @@ test("stage-fill: a headline over one flat panel warns with a repair; a back lay
   assert.deepEqual(finding.ids, ["s1"]);
   assert.equal(finding.at, 1);
   assert.match(finding.detail, /s1 leaves the foot of its stage empty \(y 1000–1450, 450 px, 37% of the stage y 240–1450\) for 5s \(1s–6s\)/);
+  assert.match(finding.detail, /arrange "fan", "wall", "stack" or "orbit"/);
   assert.match(finding.detail, /a card-wall at depth 1 with bleed: true/);
   // A bleed card wall behind the panel fills the foot too.
   const wall = { kind: "card-wall", rect: { x: 0, y: 500, width: 1080, height: 1000 }, at: 0, enter: "cut", bleed: true, depth: 1, props: { cards: [{ label: "a" }] } };

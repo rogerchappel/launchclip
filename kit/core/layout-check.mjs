@@ -526,7 +526,7 @@ function stageFillFindings(items, step) {
         const height = worst.y1 - worst.y0;
         const where = worst.y0 <= stage.y + EPSILON ? "the top of" : worst.y1 >= stage.y + stage.height - EPSILON ? "the foot of" : "the middle of";
         out.push({ rule: "stage-fill", severity: "warning", ids: [id], at: round(start),
-          detail: `${id} leaves ${where} its stage empty (y ${Math.round(worst.y0)}–${Math.round(worst.y1)}, ${Math.round(height)} px, ${Math.round((height / stage.height) * 100)}% of the stage y ${Math.round(stage.y)}–${Math.round(stage.y + stage.height)}) for ${round(length)}s (${round(start)}s–${round(start + length)}s); fill the frame in 2–3 depth layers: add a back layer over y ${Math.round(worst.y0)}–${Math.round(worst.y1)} (a card-wall at depth 1 with bleed: true), or grow the hero panel into it` });
+          detail: `${id} leaves ${where} its stage empty (y ${Math.round(worst.y0)}–${Math.round(worst.y1)}, ${Math.round(height)} px, ${Math.round((height / stage.height) * 100)}% of the stage y ${Math.round(stage.y)}–${Math.round(stage.y + stage.height)}) for ${round(length)}s (${round(start)}s–${round(start + length)}s); fill the frame in 2–3 depth layers: put its panels in an arranged stack (kind "stack", arrange "fan", "wall", "stack" or "orbit") whose rect spans the band, add a back layer over y ${Math.round(worst.y0)}–${Math.round(worst.y1)} (a card-wall at depth 1 with bleed: true), or grow the hero panel into it` });
       }
       worst = null;
     };
