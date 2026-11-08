@@ -2350,6 +2350,19 @@ a pure function of time, in both renderers.
   on its own) and keeps the exit.
 - **Entrances**: `cut` puts an element on screen at `at` as it settles, so a
   scene that opens the video shows a built frame at frame 0.
+- **Rich headlines**: a headline sets `props.lines` (1–4) instead of
+  `text`: `[{text, size, accent, weight, tone, count, enter, at}]`. Sizes are
+  `s` 52 px (tracked out, weight 700), `m` 76 (800), `l` 112 (default, 900),
+  `xl` 200, or px; `*word*` in a line sets that word in the accent, `accent:
+  true` the whole line; `count` (true or `{from, dur}`) runs the line's first
+  number up from `from` (0) over `dur` (0.9 s) as it lands, keeping its
+  decimals and commas. Lines stack in a column, aligned by `align`, each
+  after a gap of 6% of its size; after the first they enter `stagger` s
+  apart (0.12) or at their own `at`, rising by default. The box
+  (`uiTextBox`) is the widest line by the tallest stack across the
+  headline's states, as the painter sets them (`uiHeadlineLines`); every
+  line must fit the rect's width and the stack its height. A beat changes
+  the lines with `set.lines`; `swap.text` stands in for them.
 - **Text and panels**: headlines and chips are checked at the box their text
   sets in (`uiTextBox`): inside the platform safe zone and clear of the
   caption band. Panels may use the whole stage and run under the captions;

@@ -296,3 +296,65 @@ test("holds gate: a ui-scene's component changes (typing, lines, unlocks) count 
   const typing = holdGate(story([1.5, 2.5, 3.5, 4.5, 5.5, 6.5].map((at, k) => ({ at, key: `k${k}`, text: "line" }))));
   assert.deepEqual(typing.findings.filter((finding) => finding.rule === "static-hold"), [], JSON.stringify(typing.findings));
 });
+
+// Rich headlines: a small setup line over a big payoff line, a huge
+// counted stat over a small word, one accent word in a line.
+const RICH = { kind: "headline", rect: { x: 80, y: 300, width: 860, height: 260 }, at: 0.2, props: { lines: [{ text: "RIGHT PLACE.", size: "s" }, { text: "RIGHT *LEVEL.*", size: "l" }] } };
+const STAT = { kind: "headline", rect: { x: 80, y: 300, width: 860, height: 260 }, at: 0.2, props: { lines: [{ text: "1,250+", size: "xl", accent: true, count: true }, { text: "CREATORS", size: "s" }] } };
+
+test("rich headline: lines of mixed sizes are measured as stacked, each at its own size", async () => {
+  const { uiTextBox } = await import("@launchclip/core/catalog-i-ui.mjs");
+  // RIGHT PLACE. (12 × 52 × 0.705, tracked out) over RIGHT LEVEL. (12 × 112 × 0.6, markup out): 52 + a 7 px gap + 112.
+  assert.deepEqual(uiTextBox("headline", RICH.props, RICH.rect), { x: 106.8, y: 344.5, width: 806.4, height: 171 });
+  const small = uiTextBox("headline", { lines: [{ text: "RIGHT PLACE.", size: "s" }, { text: "RIGHT LEVEL.", size: "m" }] }, RICH.rect);
+  assert.deepEqual([small.width, small.height], [579.12, 52 + 5 + 76]);
+  // The single-line headline keeps its measure.
+  assert.deepEqual(uiTextBox("headline", { text: "ABC", size: 100 }, RICH.rect), { x: 420, y: 377.5, width: 180, height: 105 });
+  // A stack is checked as a whole: tall enough to reach the caption band, it fails where one big line would pass.
+  const low = { ...RICH, rect: { x: 80, y: 1000, width: 860, height: 200 }, props: { lines: [{ text: "RIGHT", size: "m" }, { text: "LEVEL", size: "l" }] } };
+  assert.doesNotThrow(() => resolve([{ ...low, props: { text: "LEVEL", size: 112 } }]));
+  assert.throws(() => resolve([low]), /clear of the caption band/);
+});
+
+test("rich headline: the schema refuses lines that do not fit or do not parse", () => {
+  const bad = (props, pattern) => assert.throws(() => resolve([{ ...RICH, props }]), pattern);
+  bad({ lines: [{ text: "RIGHT LEVEL.", size: "xl" }] }, /"RIGHT LEVEL\." at size xl sets about 1440 px wide, wider than its rect/);
+  bad({ lines: [{ text: "ONE", size: "xl" }, { text: "TWO", size: "l" }] }, /stack about 319 px tall, taller than their rect \(260 px\)/);
+  bad({ lines: [{ text: "RIGHT *LEVEL", size: "l" }] }, /opens an accent with \*/);
+  bad({ lines: [{ text: "MILLIONS", count: true }] }, /has none/);
+  bad({ lines: [{ text: "A", size: "xxl" }] }, /must be one of s, m, l, xl or px/);
+  bad({ text: "A", lines: [{ text: "A" }] }, /sets text or lines, not both/);
+  bad({ lines: [] }, /must be a list of 1–4 lines/);
+  bad({ lines: [{ text: "A", at: 0.1 }] }, /is before its headline enters/);
+  assert.throws(() => resolve([{ ...RICH, beats: [{ at: 2, set: { text: "NEW" } }] }]), /change them with set\.lines/);
+  assert.doesNotThrow(() => resolve([{ ...RICH, beats: [{ at: 2, set: { lines: [{ text: "NEW", size: "l" }] } }] }]));
+});
+
+test("rich headline: lines stagger in, the accent word takes the accent, a stat counts up", () => {
+  const spec = resolve([RICH, { ...STAT, rect: { x: 80, y: 600, width: 860, height: 260 } }]).content.ui["s1-ui"];
+  const at = (t) => { const node = host(); paintUi(node, spec, 1 + t); return node.innerHTML; };
+  // At 0.25 s the setup line is up and the payoff line (0.12 s later) has not landed.
+  const early = at(0.25);
+  assert.match(early, /RIGHT PLACE\./);
+  assert.match(early, /font-size:112px;[^"]*visibility:hidden[^"]*">RIGHT <span style="color:#c8ff3a;">LEVEL\.<\/span>/);
+  // The setup line is tracked out and lighter; the payoff tight and black.
+  assert.match(at(1), /font-weight:700;letter-spacing:0\.06em;white-space:nowrap;font-size:52px/);
+  assert.match(at(1), /font-weight:900;letter-spacing:-0\.045em;white-space:nowrap;font-size:112px/);
+  assert.doesNotMatch(at(1), /\*/);
+  // The stat: from 0 to its value, with its commas, in the accent.
+  assert.match(at(0.22), />0\+</);
+  const mid = at(0.55).match(/>([\d,]+)\+</)[1];
+  assert.ok(Number(mid.replace(/,/g, "")) > 0 && Number(mid.replace(/,/g, "")) < 1250, mid);
+  assert.match(at(2), /color:#c8ff3a;[^"]*">1,250\+</);
+  // The page runtime draws the same.
+  const window = {};
+  new Function("window", UI_RUNTIME)(window);
+  const page = host(), node = host();
+  window.lcPaintUi(page, spec, 1.5);
+  paintUi(node, spec, 1.5);
+  assert.equal(page.innerHTML, node.innerHTML);
+});
+
+test("text hold: a rich headline is read by all its lines, markup out", () => {
+  assert.equal(uiReadingWords({ elements: [RICH, { ...STAT, beats: [{ at: 2, set: { lines: [{ text: "ONE *TWO* THREE FOUR" }] } }] }] }), 4 + 4);
+});
