@@ -389,7 +389,7 @@ test("planning guide: rich headlines pair a small setup with a big payoff, one a
 test("the interface parity fixture validates and still uses every feature it compares", async () => {
   const project = path.join(ROOT, "examples", "story", "ui-parity-9x16");
   const { resolved } = await readProjectStory(project);
-  assert.equal(resolved.motion.feel, "snap");
+  assert.equal(resolved.motion.feel, "steady");
   assert.equal(resolved.motion.blur, false, "parity stills must not depend on motion blur");
   assert.equal(resolved.light.preset, "studio");
   assert.equal(resolved.background.kind, "dot-grid");

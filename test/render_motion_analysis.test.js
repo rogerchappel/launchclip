@@ -530,3 +530,12 @@ test("block matching is sub-pixel, so the flow velocity is continuous rather tha
   assert.ok(speeds[0] < speeds[1] && speeds[1] < speeds[2] && speeds[2] < speeds[3], `monotonic ${speeds.join(", ")}`);
   assert.ok(new Set(speeds.map((value) => Math.round(value))).size === 4, "no two steps collapse onto one whole-pixel value");
 });
+
+test("a measured profile caps camera moves: a camera that reframes every second pumps", () => {
+  const profile = { id: "reel", format: "motion", provenance: { kind: "measured" }, measures: { camera_moves_per_min: { p10: 11, p90: 15 } } };
+  const expected = cinematicMotionExpectations({ duration: 60, width: 1080, height: 1920, profile }).expected;
+  assert.equal(expected.maximum_camera_moves_per_minute, 30);
+  const at = (rate) => { const metrics = stillMetrics({ still_share: 0.05, longest_still_seconds: 0.2, energy: 2.4 }); metrics.motion.camera_moves_per_minute = rate; return evaluateMotionQuality(metrics, { maximum_camera_moves_per_minute: expected.maximum_camera_moves_per_minute }).findings.filter((item) => item.source === "camera"); };
+  assert.equal(at(25).length, 0);
+  assert.match(at(49)[0].message, /pumps/);
+});

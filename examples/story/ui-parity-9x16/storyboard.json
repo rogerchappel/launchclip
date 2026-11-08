@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Interface parity (9:16)",
-  "notes": "Renderer parity fixture for the interface features (scripts/parity-ci.mjs): the signal-ui style's studio light, quiet dot grid, word-chip captions and snap feel, a perched host that changes pose, a wall and a fanned stack, rich headlines with a counted number, a burst, a light-sweep and the style's push-blur. motion.blur is false so stills never depend on motion blur: a still is one frame on both renderers. Values are illustrative; no narration audio and no paid calls.",
+  "notes": "Renderer parity fixture for the interface features (scripts/parity-ci.mjs): the signal-ui style's studio light, quiet dot grid, word-chip captions and steady feel, a perched host that changes pose, a wall and a fanned stack, rich headlines with a counted number, a burst, a light-sweep and the style's push-blur. motion.blur is false so stills never depend on motion blur: a still is one frame on both renderers. Values are illustrative; no narration audio and no paid calls.",
   "lane": "motion",
   "style": "signal-ui",
   "format": {
