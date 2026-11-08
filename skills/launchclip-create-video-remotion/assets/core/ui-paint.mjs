@@ -390,6 +390,8 @@ function uiLockCards(el, t, ctx) {
   const cards = p.cards || [];
   const head = p.title ? 64 : 0, foot = p.counter === false ? 0 : 120;
   const ch = Math.min(200, (h - head - foot - 26 - 20 * (cards.length - 1)) / Math.max(1, cards.length));
+  // Cards stop growing at 200 px: a taller rect centres the stack between the title and the counter.
+  const slack = Math.max(0, (h - head - foot - 26 - 20 * (cards.length - 1)) - ch * cards.length) / 2;
   let s = p.title ? uiHeader(ctx, p.title, p.sub, p.right) : '';
   let open = 0;
   for (let i = 0; i < cards.length; i++) {
@@ -399,7 +401,7 @@ function uiLockCards(el, t, ctx) {
     if (isOpen) open++;
     const fp = isOpen ? uiP(t, cd.unlockAt, 0.3) : 1;
     const focus = p.focus === i || fresh;
-    const y = head + 26 + i * (ch + 20);
+    const y = head + 26 + slack + i * (ch + 20);
     const ring = isOpen ? (focus ? '0 0 0 4px ' + c.accent + ',0 0 ' + uiN(uiLerp(80, 30, fp)) + 'px ' + c.accent + '80' : '0 0 0 2px ' + c.accentDim) : '0 0 0 2px ' + c.line;
     const icon = isOpen ? uiEsc(cd.icon || '✓') : '🔒';
     const box = ch - 44;

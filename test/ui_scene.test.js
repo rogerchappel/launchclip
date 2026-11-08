@@ -51,6 +51,13 @@ test("ui-scene: text stays in the safe zone clear of the captions; panels use th
   // Panels too small to draw legibly.
   assert.throws(() => resolve([{ kind: "meter", rect: { x: 60, y: 400, width: 900, height: 225 }, at: 0, props: {} }]), /a meter needs at least 560×320/);
   assert.throws(() => resolve([{ kind: "lock-cards", rect: { x: 60, y: 400, width: 900, height: 380 }, at: 0, props: { cards: [{ name: "A" }, { name: "B" }, { name: "C" }] } }]), /a card needs at least 110 px/);
+  assert.throws(() => resolve([{ kind: "pad-grid", rect: { x: 60, y: 400, width: 900, height: 400 }, at: 0, props: {} }]), /a pad-grid needs at least 600×480/);
+  assert.throws(() => resolve([{ kind: "scan-plane", rect: { x: 60, y: 400, width: 500, height: 520 }, at: 0, props: {} }]), /a scan-plane needs at least 600×360/);
+  // A comment scales its stacked parts to fit, to no less than 0.75: a reply with links stacks to 485 px.
+  const comment = { kind: "comment", at: 0, props: { text: "SOUND", reply: "Here are the links", links: ["Open link"] } };
+  assert.throws(() => resolve([{ ...comment, rect: { x: 130, y: 850, width: 820, height: 185 } }]), /stacks to 485 px .* height of 364 or more/);
+  assert.doesNotThrow(() => resolve([{ ...comment, rect: { x: 130, y: 850, width: 820, height: 364 } }]));
+  assert.doesNotThrow(() => resolve([{ ...comment, props: { text: "SOUND" }, rect: { x: 130, y: 850, width: 820, height: 195 } }]));
   // The layout checks: text boxes as text, panels as media; no hold drift.
   const layout = resolve([HEADLINE, PANEL]).layout;
   assert.equal(layout.drift, false);
