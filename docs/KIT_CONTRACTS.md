@@ -685,21 +685,31 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   with blur in one filter).
 - `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
   `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
-  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
-  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
-  horizontal (20–80, default 64), sweep across the middle of the frame, each
-  over 0.78 of the transition, started 0.08 apart, fading in and out over
-  the first and last 22 % of its travel, over a faint wash of the colour that
-  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
-  Remotion blends their group the same way), so nothing opaque ever covers
-  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
-  4 px, a white-hot centre line); a streak moves about 60 px a frame at
-  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
-  rather than stepping it. Both renderers draw the same markup and CSS and
-  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
-  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  light, not graphics. The frame dips nearly to black: a plain black shade
+  (`lightSweepDipHtml`, not blended) over every scene and the background
+  rises to 0.94 by 28 % of the transition, holds, and clears from 66 % to the
+  end; with the plates' veil the frame keeps about a tenth of its light at
+  the middle. Over it, screened (`mix-blend-mode: screen`), 2–4 thin crisp
+  streaks (default 3) of the colour (as the dot-wipe's `color`, default
+  `"accent"`), tilted `angle` degrees from the horizontal (20–80, default
+  64), each a white-hot core of about 5 px (blur 1 px at 1080) in a glow of
+  about 30 px (blur 12 px), shoot along their own lines from beyond one end
+  of the frame to beyond the other, each over 0.84 of the transition,
+  started 0.07 apart, fading in and out over the first and last 18 % of its
+  travel. Across the frame they sit on spaced lanes and drift only about
+  6 px a frame at 1080 × 1920 over 0.5 s, so heavy sub-frame motion blur
+  lengthens them instead of stepping copies. Twelve soft bokeh discs (a
+  white-hot point in a glow of the colour, 1–4.5 % of the short side) drift
+  up through the dark, the first on the outgoing ui-scene's element boxes
+  (`lightSweepSpots`, largest first), the rest seeded across the middle
+  band; positions come from a hash of the sweep's id, never `Math.random`.
+  A faint wash of the colour peaks mid-sweep. Both renderers draw the same
+  markup and CSS for the dip and the light and drive one custom property,
+  `--lc-ls` (0 → 1, linear; HyperFrames tweens it on `#id-dip` and `#id`,
+  Remotion sets `lightSweepProgress` on both; under the camera only the
+  lights' group blends), stacked as the dot-wipe. The layer
   side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
-  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  (`power1.in`; `blur(26px) brightness(0.2) contrast(1.5)` at full: its
   bright parts melt into glowing blobs on a dark field) and drifts forward to
   1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
   `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and

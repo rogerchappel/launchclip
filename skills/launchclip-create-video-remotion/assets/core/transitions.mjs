@@ -163,7 +163,7 @@ const GLOW_WIPE = 0.85;
  * transition): the outgoing plate veils over its first `veil`, the incoming
  * one fades up from `rise` over `fade` and clears its veil by the end.
  */
-export const LIGHT_SWEEP_LAYER = Object.freeze({ blur: 22, dim: 0.72, contrast: 0.35, scaleOut: 1.08, scaleIn: 1.05, veil: 0.6, rise: 0.4, fade: 0.32, outFade: 0.3 });
+export const LIGHT_SWEEP_LAYER = Object.freeze({ blur: 26, dim: 0.8, contrast: 0.5, scaleOut: 1.08, scaleIn: 1.05, veil: 0.6, rise: 0.4, fade: 0.32, outFade: 0.3 });
 /**
  * push-blur: the outgoing plate's push (scale) and travel (a share of the
  * frame along the direction), its smear at the cut (deviation, a share of
