@@ -15,6 +15,12 @@
 // do. An element marked bleed (a decorative waveform or card wall) may run
 // to the canvas edge. Settled elements hold still: the module opts out of
 // the hold drift (layout.drift false); the camera carries the life.
+//
+// A top-level stack with arrange (fan, wall, stack, orbit) lays its children
+// out as a collage in depth layers across its region (kit/core/ui-arrange.mjs);
+// they resolve as ordinary top-level elements. A portrait scene declares its
+// stage (layout.fill), so the layout check warns when a band of it stays
+// empty (stage-fill).
 
 import {createHBase, r2, rt} from './catalog-h-base.mjs';
 import {timingRules} from './catalog-b-base.mjs';
@@ -24,6 +30,7 @@ import {UI_KINDS} from './ui-runtime.mjs';
 import {uiHostPoses} from './ui-host.mjs';
 import {uiDepthAt, uiStageProject} from './ui-paint.mjs';
 import {captionBandAt, profileGeometry} from './layout-check.mjs';
+import {ARRANGEMENTS, expandArrangements} from './ui-arrange.mjs';
 
 const ENTERS = Object.freeze(['up', 'down', 'left', 'right', 'zoom', 'slam', 'pop', 'drop', 'fade', 'focus', 'hop', 'cut']);
 const EXITS = Object.freeze(['lift', 'rack']);
@@ -275,7 +282,10 @@ function uiResolve(params, ctx) {
   };
 
   if (!Array.isArray(p.elements) || !p.elements.length) check.fail('params.elements', 'must be a non-empty array of elements');
-  const elements = p.elements.map((raw, k) => element(raw, `params.elements[${k}]`, null));
+  // Arranged stacks (arrange fan, wall, stack, orbit) become their children, placed in depth layers.
+  const placed = expandArrangements(check, p.elements, {stage, band, minSize: MIN_SIZE, footprint: (rect, tilt, depth) => shown(uiTiltBox(rect, tilt), depth)});
+  const raws = placed.map(({raw}) => raw);
+  const elements = placed.map(({raw, path}) => element(raw, path, null));
   // A scene that opens the video should show something at frame 0: enter: "cut" at 0.
   if (firstAt > 0.6) check.fail('params.elements', `leave the scene empty until ${r2(firstAt)} s; put something on screen by 0.6 s`);
 
@@ -292,8 +302,11 @@ function uiResolve(params, ctx) {
   // Bleed panels count too (they fill the frame); bleed text is decoration.
   const parts = elements.map((element, k) => ({k, text: TEXT_KINDS.has(element.kind), at: element.at, out: element.out,
     rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), bloom: element.kind === 'bloom'}))
-    .filter(({k, text, bloom}) => !bloom && !(text && p.elements[k].bleed));
+    .filter(({k, text, bloom}) => !bloom && !(text && raws[k].bleed));
   model.layout.drift = false;
+  // A portrait scene fills its stage top to bottom: the layout check's
+  // stage-fill rule warns when a band of it stays empty (STAGE_FILL).
+  if (b.portrait) model.layout.fill = {group: b.id, stage: scale(stage)};
   if (parts.length) {
     const area = (r) => r.width * r.height;
     const pool = parts.some((part) => part.text) ? parts.filter((part) => part.text) : parts;
@@ -407,7 +420,7 @@ export function uiReadingWords(params) {
 export const uiScene = {
   id: 'ui-scene',
   describe: 'An animated interface scene built from tuned UI components (editor timeline, loudness meter, locked tool cards, terminal, search results, card wall, downloads list, comment box, frame ruler, pad grid, scan plane, headlines and chips) and a pixel mascot host that hops in, idles and reacts, each placed with a rect, an entrance time and timed beats, and painted frame by frame. For a reel that explains a tool or a workflow on screen.',
-  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all)`,
+  params: {elements: `[{kind (${UI_KINDS.join(', ')}), rect {x, y, width, height} design px inside the safe zone, at (s), enter (${ENTERS.join(', ')}; headline default focus), out (s, optional), exit (${EXITS.join(', ')}; rack after focus), props {...the component's props}, beats [{at, set {...props}, cue}] (optional), children (window and stack), tilt {x, y, z} deg (optional), z, depth 0–1 (top level; 0 front), flashAt (s or a list), flashTone (white, accent), bleed, cue}] (at most ${MAX_ELEMENTS} in all); a top-level {kind: "stack", arrange (${ARRANGEMENTS.join(', ')}), rect (region, default the stage), at, enter, children [panels without rect, depth or tilt, the first the front hero]} lays its children out as a layered collage`,
     alert: 'the "before" / broken-state colour, #rrggbb (default #ff4b3e)',
     stage: '{tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)'},
   events: ['enter', 'beat', 'pose'],
