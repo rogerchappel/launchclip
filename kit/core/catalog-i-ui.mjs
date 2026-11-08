@@ -187,7 +187,8 @@ function uiResolve(params, ctx) {
       if (kind === 'headline' && beat.set.text !== undefined) headlineFits(check, {...props, ...beat.set}, rect, `${path}.beats[${k}].set`);
       const beatAt = time(beat.at, `${path}.beats[${k}].at`);
       const cue = beat.cue === undefined ? null : check.str(beat.cue, `${path}.beats[${k}].cue`, 32);
-      if (cue) b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', cue});
+      // Every beat is a change on screen (the holds gate counts events); only a cue makes a sound.
+      b.events.push({id: `${b.id}-beat-${count}-${k}`, name: 'beat', time: rt(b.start + beatAt), role: 'emphasis', ...(cue ? {cue} : {})});
       return {at: beatAt, set: beat.set};
     }).sort((x, y) => x.at - y.at);
     if (!parent && !bleed && TEXT_KINDS.has(kind)) {
@@ -202,7 +203,12 @@ function uiResolve(params, ctx) {
       if (n && room + 0.5 < LOCK_CARD_MIN) check.fail(`${path}.rect`, `gives each of its ${n} cards ${Math.round(room)} px; a card needs at least ${LOCK_CARD_MIN} px (height ${Math.ceil(rect.height + (LOCK_CARD_MIN - room) * n)} or more)`);
     }
     const cue = raw.cue === undefined ? ENTER_CUES[enter] ?? null : raw.cue === null ? null : check.str(raw.cue, `${path}.cue`, 32);
-    if (cue && !parent) b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', cue});
+    // The component's own timed changes (typing, a line arriving, an unlock, a scan, a snap: any
+    // prop named at or ending in At) are changes on screen too, so the holds gate sees them.
+    for (const t of propTimes(props).filter((v) => v > at && v <= b.duration).slice(0, 24)) b.events.push({id: `${b.id}-state-${count}-${b.events.length}`, name: 'state', time: rt(b.start + t), role: 'emphasis'});
+    // A moving entrance (a focus pull included) and each flash are changes on screen; a cut is not.
+    if (!parent && enter !== 'cut') b.events.push({id: `${b.id}-el-${count}`, name: 'enter', time: rt(b.start + at), role: enter === 'slam' ? 'emphasis' : 'enter', ...(cue ? {cue} : {})});
+    if (flashAt) flashAt.forEach((t, k) => b.events.push({id: `${b.id}-flash-${count}-${k}`, name: 'flash', time: rt(b.start + t), endTime: rt(b.start + t + 0.35), role: 'emphasis'}));
     const node = {kind, rect, at, enter, props, beats,
       ...(id ? {id} : {}), ...(out !== undefined ? {out} : {}), ...(exit !== 'lift' ? {exit} : {}), ...(tilt ? {tilt} : {}),
       ...(depth ? {depth} : {}), ...(flashAt ? {flashAt} : {}), ...(flashTone ? {flashTone} : {}),
@@ -272,6 +278,14 @@ function stageOf(check, stage, duration) {
   }
   out.duration = r2(duration);
   return out;
+}
+
+/** Every time (seconds from the scene start) among a component's props: keys named at or ending in At, at any depth. */
+function propTimes(value, key = '') {
+  if (typeof value === 'number') return /^(at|[a-z][a-z0-9]*At)$/.test(key) && Number.isFinite(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap((item) => propTimes(item, key));
+  if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => propTimes(v, k));
+  return [];
 }
 
 function tiltOf(check, tilt, path) {

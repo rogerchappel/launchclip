@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { uiReadingWords } from "@launchclip/core/catalog-i-ui.mjs";
-import { resolveAnchor, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
+import { resolveAnchor, resolveStory, resolveUiAnchors, validateStory } from "@launchclip/core/story.mjs";
 import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
 import { emitCatalogH } from "../kit/hyperframes/catalog-h.mjs";
 import { motionBlurArgs, motionBlurFilter, motionBlurOptions, motionBlurSamples } from "../src/motion_blur.js";
@@ -285,4 +285,14 @@ test("word-chip captions: one word at a time even when a word is shorter than th
     const shown = plan.nodes.filter((line) => (captionElementStateAt(index, line.id, t).opacity ?? 0) > 0.02);
     assert.ok(shown.length <= 1, `two words at ${t.toFixed(3)} s`);
   }
+});
+
+test("holds gate: a ui-scene's component changes (typing, lines, unlocks) count as motion", async () => {
+  const { holdGate } = await import("../src/movement_guardrails.js");
+  const terminal = (lines) => ({ kind: "terminal", rect: { x: 60, y: 400, width: 960, height: 700 }, at: 0, enter: "cut", props: { title: "t", prompt: "make a sound", typeAt: 0.2, lines } });
+  const story = (lines) => resolveStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand: BRAND, scenes: [{ id: "s1", module: "ui-scene", start: 0, end: 8, params: { elements: [terminal(lines)] } }] });
+  const still = holdGate(story([]));
+  assert.ok(still.findings.some((finding) => finding.rule === "static-hold"), "a terminal that only types its prompt holds still");
+  const typing = holdGate(story([1.5, 2.5, 3.5, 4.5, 5.5, 6.5].map((at, k) => ({ at, key: `k${k}`, text: "line" }))));
+  assert.deepEqual(typing.findings.filter((finding) => finding.rule === "static-hold"), [], JSON.stringify(typing.findings));
 });
