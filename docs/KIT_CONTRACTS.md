@@ -2302,7 +2302,12 @@ One setting turns on the habits of a top faceless animated reel together:
   impact hits) and strong scene hits; explicit kicks go first. At most one
   per `gap` (1.5 s), never in a busy span (`feelBusy`: track-0 transitions,
   the loop ending, the camera plan's moves and zooms inside a shot, padded
-  0.06 s). A dropped explicit kick is a compile warning.
+  0.06 s). A transition in runs from its scene's start for its `dur`; it
+  never pre-rolls. A kick occupies `[at, at + 0.47 s]` (punch 0.12 s and
+  settle 0.35 s), so it must end before the span starts: a kick into a
+  scene starting at S with a transition of D s is refused anywhere in
+  `(S − 0.53, S + D + 0.06)`. A dropped explicit kick is a compile warning
+  that names both windows and the latest start before the span.
 - Content-safe kicks (`feelSafeArea`, `contentSafeKicks`): the content area
   is the profile safe zone, widened in a portrait frame to a 60 px content
   margin (of 1080) on the left, right and top, where headlines and top bars

@@ -144,6 +144,8 @@ test('kicks are content-safe: the content area (safe zone, headline and top-bar 
   assert.ok(rise > 1.04, `the kick still punches (×${rise.toFixed(3)})`);
 });
 
+const round3 = (v) => Math.round(v * 1000) / 1000;
+
 test('kicks never overlap each other or another camera move, and automatic kicks follow emphasis', () => {
   const s = story({camera: {mode: 'cuts', kicks: [{at: 1}, {at: 1.6}, {at: 4.1}, {at: 8.2}, {at: 10}]}});
   const windows = sceneWindows(s);
@@ -153,6 +155,14 @@ test('kicks never overlap each other or another camera move, and automatic kicks
   assert.deepEqual(kicks.map((kick) => kick.at), [1, 10]);
   assert.equal(warnings.length, 3);
   assert.ok(warnings.some((w) => /within 1.5s/.test(w)) && warnings.some((w) => /whip-pan/.test(w)) && warnings.some((w) => /dot-wipe/.test(w)));
+  // A transition starts at its scene's start (no pre-roll); a kick just before it is refused because
+  // its own punch and settle run into it, and the warning gives both windows and where to move it.
+  const wipe = busy.find((span) => /dot-wipe/.test(span.why));
+  const before = round3(wipe.start - 0.3);
+  const single = story({camera: {mode: 'cuts', kicks: [{at: before}]}});
+  const late = feelKicks(single, resolveFeel(single), {busy: [wipe]});
+  assert.equal(late.kicks.length, 0);
+  assert.match(late.warnings[0], new RegExp(`at ${before}s its punch and settle \\(${before}–${round3(before + 0.47)}s\\) would overlap .*dot-wipe \\(${wipe.start}–${wipe.end}s, the move ±0.06s\\); start it by ${round3(wipe.start - 0.47)}s or after ${wipe.end}s`));
   // Automatic: numbers and emphasis words in the narration, at most one per gap, never in a move.
   const words = [{start: 0.5, end: 0.8, words: [{text: 'Twelve', start: 0.5, end: 0.8}]}, {start: 1, end: 2, words: [{text: 'cut', start: 1, end: 1.2}, {text: '12', start: 1.3, end: 1.6}, {text: '40%', start: 2.0, end: 2.4}]},
     {start: 4, end: 5, words: [{text: '3', start: 4.05, end: 4.3}, {text: '7', start: 5.2, end: 5.4}]}, {start: 9, end: 10, words: [{text: '99', start: 9.2, end: 9.5}]}];

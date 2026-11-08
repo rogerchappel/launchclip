@@ -140,8 +140,10 @@ function ambientAt(ambient, t) {
 
 /**
  * Spans no kick may overlap (absolute seconds, padded by KICK.margin):
- * every track-0 transition in, the loop ending, the camera plan's moves and
- * every zoom inside a shot. → [{start, end, why}]
+ * every track-0 transition in (from its scene's start, never before: a
+ * transition does not pre-roll), the loop ending, the camera plan's moves
+ * and every zoom inside a shot. A kick occupies [at, at + punch + settle],
+ * so one starting up to 0.47 s before a span is refused too. → [{start, end, why}]
  */
 export function feelBusy(story, windows, camera = null) {
   const out = [];
@@ -189,7 +191,8 @@ export function feelKicks(story, feel, { busy = [], words = [] } = {}) {
     const at = round(Number(kick.at), 6);
     const busyWith = blocked(at);
     if (!inside(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s leaves no room for the kick inside the story`); continue; }
-    if (busyWith) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it would run during ${busyWith.why}`); continue; }
+    // A kick runs from at for its punch and settle: one that starts before a busy span still overlaps it.
+    if (busyWith) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s its punch and settle (${at}–${round(at + span, 3)}s) would overlap ${busyWith.why} (${busyWith.start}–${busyWith.end}s, the move ±${KICK.margin}s); start it by ${round(busyWith.start - span, 3)}s or after ${busyWith.end}s`); continue; }
     if (crowded(at)) { warnings.push(`camera.kicks[${index}] skipped: at ${at}s it is within ${feel.kicks.gap}s of another kick`); continue; }
     kicks.push({ at, scale: num(kick.scale) ? kick.scale : feel.kicks.scale, origin: origin(kick.origin), source: `camera.kicks[${index}]` });
   }
