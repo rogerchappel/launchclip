@@ -2400,6 +2400,11 @@ a pure function of time, in both renderers.
   gradients with a white core, screened (`mix-blend-mode: screen`) over the
   elements behind it. Light, not content: it is not a layout part, does
   not count as the scene's first thing on screen and may run off the stage.
+- **Stage fill**: a portrait scene's layout declares its stage
+  (`layout.fill {group, stage}`), and every part carries it. The layout
+  check's `stage-fill` rule (`STAGE_FILL`) warns when a band of the stage
+  over 25% of its height has nothing at least 25% of the stage wide in it
+  for more than 1.5 s, naming the band and how to fill it.
 
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 

@@ -15,6 +15,9 @@
 // do. An element marked bleed (a decorative waveform or card wall) may run
 // to the canvas edge. Settled elements hold still: the module opts out of
 // the hold drift (layout.drift false); the camera carries the life.
+//
+// A portrait scene declares its stage (layout.fill), so the layout check
+// warns when a band of it stays empty (stage-fill).
 
 import {createHBase, r2, rt} from './catalog-h-base.mjs';
 import {timingRules} from './catalog-b-base.mjs';
@@ -243,6 +246,9 @@ function uiResolve(params, ctx) {
     rect: shown(TEXT_KINDS.has(element.kind) ? uiTextBox(element.kind, element.props, element.rect, element.beats) : uiTiltBox(element.rect, element.tilt), element.depth), bloom: element.kind === 'bloom'}))
     .filter(({k, text, bloom}) => !bloom && !(text && p.elements[k].bleed));
   model.layout.drift = false;
+  // A portrait scene fills its stage top to bottom: the layout check's
+  // stage-fill rule warns when a band of it stays empty (STAGE_FILL).
+  if (b.portrait) model.layout.fill = {group: b.id, stage: scale(stage)};
   if (parts.length) {
     const area = (r) => r.width * r.height;
     const pool = parts.some((part) => part.text) ? parts.filter((part) => part.text) : parts;

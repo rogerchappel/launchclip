@@ -8,6 +8,14 @@
 const ROLES = new Set(["text", "hero", "media", "caption", "decor"]);
 const EPSILON = 1e-6;
 
+// Stage fill (ui-scene, 9:16): a layered interface scene fills its stage top
+// to bottom. An element declares the stage it fills with fill {group, stage}
+// (canvas px; kit/core/catalog-i-ui.mjs sets it on every part of a portrait
+// ui-scene). A horizontal band of the stage with nothing in it (no element at
+// least minWidthShare of the stage wide reaching into it) taller than
+// maxGapShare of the stage, held longer than seconds, is a warning.
+export const STAGE_FILL = Object.freeze({ maxGapShare: 0.25, seconds: 1.5, minWidthShare: 0.25 });
+
 // Reference geometry. Shorts values come from STORYBOARD_ENGINE_RFC.md §5
 // (key content within y 280–1450, x 80–940, centre of mass near y 860, key text
 // at least 44 px) and the caption band from shorts-delivery.md (y 1190–1420,
@@ -205,6 +213,9 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
     });
   }
 
+  // 8. Stage fill (warning): a ui-scene leaving a band of its stage empty.
+  for (const finding of stageFillFindings(items, step)) findings.push(finding);
+
   findings.sort((a, b) => a.at - b.at || (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1) || a.rule.localeCompare(b.rule));
   return {
     status: findings.some((finding) => finding.severity === "error") ? "failed" : "passed",
@@ -260,7 +271,7 @@ export function checkCameraSweeps({ band, frames = [], captionVisible = [], step
 // Adapts the `layout` object returned by editorial modules
 // ({canvas, rect, motion?: {enterEnd, exitStart, end}}) into elements.
 // Without motion the layout carries no timing, so pass start and end.
-export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, minSecondaryTextPx, textRole, allowOcclusion, hidesCaptions } = {}) {
+export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, minSecondaryTextPx, textRole, allowOcclusion, hidesCaptions, fill } = {}) {
   if (!layout || typeof layout !== "object" || !layout.rect) throw new Error("editorial layout must include rect");
   if (!id) throw new Error("editorial layout element needs an id");
   const motion = layout.motion;
@@ -284,6 +295,9 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
   if (textRole !== undefined) element.textRole = textRole;
   if (allowOcclusion) element.allowOcclusion = allowOcclusion;
   if (hidesCaptions) element.hidesCaptions = true;
+  // A stage this element fills with its group (layout.fill, or the caller's for a part).
+  const stageFill = fill ?? layout.fill;
+  if (stageFill?.stage) element.fill = { group: String(stageFill.group ?? id), stage: { x: stageFill.stage.x * sx, y: stageFill.stage.y * sy, width: stageFill.stage.width * sx, height: stageFill.stage.height * sy } };
   return [element];
 }
 
@@ -301,6 +315,7 @@ export function layoutExtras(layout, { id, start, end, track, canvas, hidesCapti
   const parts = (Array.isArray(layout?.parts) ? layout.parts : []).flatMap((part) => elementsFromEditorialLayout(
     { canvas: layout.canvas, rect: part.rect, ...(part.motion ? { motion: part.motion } : {}) },
     { id: `${id}-${part.id}`, role: part.role ?? "text", start: part.start ?? start, end: part.end ?? end, track, canvas, hidesCaptions,
+      ...(layout?.fill?.stage ? { fill: { group: layout.fill.group ?? id, stage: layout.fill.stage } } : {}),
       ...(part.minTextPx != null ? { minTextPx: part.minTextPx } : {}),
       ...(Array.isArray(part.over) && part.over.length ? { allowOcclusion: part.over.map((ref) => (ref === "self" ? id : `${id}-${ref}`)) } : {}) }));
   return { ...(allowOcclusion ? { allowOcclusion } : {}), parts };
@@ -389,7 +404,8 @@ function normalizeElement(element, index) {
     textRole: element.textRole === "body" ? "body" : "key",
     allowOcclusion: Array.isArray(element.allowOcclusion) ? element.allowOcclusion.map(String) : [],
     hidesCaptions: element.hidesCaptions === true,
-    hide: Array.isArray(element.hide) ? element.hide.map(([a, b]) => [Number(a), Number(b)]) : []
+    hide: Array.isArray(element.hide) ? element.hide.map(([a, b]) => [Number(a), Number(b)]) : [],
+    fill: element.fill && typeof element.fill === "object" && element.fill.stage ? { group: String(element.fill.group ?? id), stage: validRect(element.fill.stage, `element ${id} fill.stage`) } : null
   };
 }
 
@@ -469,6 +485,65 @@ function centerOfMass(items) {
     sum += w * centerY(item.rect);
   }
   return weight > 0 ? sum / weight : null;
+}
+
+/**
+ * The tallest band of a stage no item reaches into: items' rects projected
+ * onto the stage's height (only items at least minWidth wide count).
+ * → {y0, y1} in canvas px, or null when the stage is empty.
+ */
+export function emptiestBand(stage, rects, minWidth = 0) {
+  const top = stage.y, bottom = stage.y + stage.height;
+  const spans = rects.filter((rect) => rect.width + EPSILON >= minWidth)
+    .map((rect) => [Math.max(top, rect.y), Math.min(bottom, rect.y + rect.height)])
+    .filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0]);
+  let best = null, cursor = top;
+  const consider = (y0, y1) => { if (y1 - y0 > EPSILON && (!best || y1 - y0 > best.y1 - best.y0)) best = { y0, y1 }; };
+  for (const [a, b] of spans) { consider(cursor, a); cursor = Math.max(cursor, b); }
+  consider(cursor, bottom);
+  return best;
+}
+
+function stageFillFindings(items, step) {
+  const groups = new Map();
+  for (const item of items) {
+    if (!item.fill || !item.rect || item.role === "caption" || item.role === "decor") continue;
+    const group = groups.get(item.fill.group) ?? { stage: item.fill.stage, items: [] };
+    group.items.push(item);
+    groups.set(item.fill.group, group);
+  }
+  const out = [];
+  for (const [id, { stage, items: members }] of groups) {
+    // The scene's window: its main element's (the id the group is named for), else its members'.
+    const main = members.find((item) => item.id === id);
+    const from = main ? main.start : Math.min(...members.map((item) => item.start));
+    const to = main ? main.end : Math.max(...members.map((item) => item.end));
+    const limit = STAGE_FILL.maxGapShare * stage.height, minWidth = STAGE_FILL.minWidthShare * stage.width;
+    const first = Math.floor(from / step + EPSILON), last = Math.ceil(to / step - EPSILON);
+    let worst = null;
+    const flush = (start, length) => {
+      if (length > STAGE_FILL.seconds + EPSILON && worst) {
+        const height = worst.y1 - worst.y0;
+        const where = worst.y0 <= stage.y + EPSILON ? "the top of" : worst.y1 >= stage.y + stage.height - EPSILON ? "the foot of" : "the middle of";
+        out.push({ rule: "stage-fill", severity: "warning", ids: [id], at: round(start),
+          detail: `${id} leaves ${where} its stage empty (y ${Math.round(worst.y0)}–${Math.round(worst.y1)}, ${Math.round(height)} px, ${Math.round((height / stage.height) * 100)}% of the stage y ${Math.round(stage.y)}–${Math.round(stage.y + stage.height)}) for ${round(length)}s (${round(start)}s–${round(start + length)}s); fill the frame in 2–3 depth layers: add a back layer over y ${Math.round(worst.y0)}–${Math.round(worst.y1)} (a card-wall at depth 1 with bleed: true), or grow the hero panel into it` });
+      }
+      worst = null;
+    };
+    let runStart = null;
+    for (let index = first; index < last; index += 1) {
+      const t = index * step;
+      const band = emptiestBand(stage, members.filter((item) => active(item, t)).map((item) => item.rect), minWidth);
+      const empty = band && band.y1 - band.y0 > limit + EPSILON;
+      if (empty) {
+        if (runStart === null) runStart = index;
+        // The band reported is the one empty all run long: the run's smallest.
+        if (!worst || band.y1 - band.y0 < worst.y1 - worst.y0) worst = band;
+      } else if (runStart !== null) { flush(runStart * step, (index - runStart) * step); runStart = null; }
+    }
+    if (runStart !== null) flush(runStart * step, (last - runStart) * step);
+  }
+  return out;
 }
 
 // Calls onRun(start, length) for every maximal run of samples where test(t) holds.
