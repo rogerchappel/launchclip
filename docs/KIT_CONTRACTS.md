@@ -2267,15 +2267,16 @@ out tuned UI components as `params.elements`, and a painter draws them as DOM,
 a pure function of time, in both renderers.
 
 - **Elements**: `{kind, rect {x, y, width, height}, at, enter, out?, props,
-  beats? [{at, set, cue?}], children?, tilt? {x, y, z}, z?, bleed?, cue?,
-  enterDuration?, dist?, overshoot?, id?}`. Rects are design px: the canvas
+  beats? [{at, set, cue?}], children?, tilt? {x, y, z}, z?, depth?, exit?,
+  flashAt?, flashTone?, bleed?, cue?, enterDuration?, dist?, overshoot?,
+  id?}`. Rects are design px: the canvas
   divided by `unit` (1080 × 1920 in 9:16, 1920 × 1080 in 16:9). Times are
   seconds from the scene start. A beat merges `set` into the props from `at`
   on. `window` and `stack` place `children` relative to themselves.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane (`kit/core/ui-components.mjs`). Props are listed in the planning
+  scan-plane, bloom (`kit/core/ui-components.mjs`). Props are listed in the planning
   prompt's "Interface scenes" section.
 - **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
   the safe zone's top to its foot, clear of the caption band; `bleed: true`
@@ -2319,6 +2320,38 @@ a pure function of time, in both renderers.
   (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%
   of the canvas entering after 0.3 s as a visual change, as the pixel
   measure does.
+- **Focus**: `enter: "focus"` arrives out of focus (14 px blur, scale 1.06,
+  opacity ramping in) and pulls sharp over 0.42 s with an ease-out, so most
+  of the pull lands in the first half. A headline that names no entrance
+  focuses in; a bloom cuts in (it is its own swell); the rest rise (`up`).
+  `exit`: `lift` (default) or `rack`, the focus pull reversed over 0.3 s
+  (blur to 12 px, scale 1.04, fade); an element that focused in racks out.
+  Text is checked at its settled box: the 1.06 arrival is blurred and
+  half-transparent.
+- **Depth**: `depth` 0 (front, default) to 1 (far back), top-level elements
+  only. A deeper element scales toward the stage's point (width / 2,
+  0.45 × height) by up to 0.84, dims to brightness 0.58 and blurs up to
+  5 px; far elements draw first, `z` still lifts one (`uiDepthAt`).
+- **Stage**: `params.stage {tilt, dolly {x, y, scale}}`. `tilt` (−20 to 20
+  deg) turns the whole drawing about rotateX under a 1600 px perspective,
+  top away (a camera looking down). `dolly` is a camera move over the whole
+  scene, a gentle ease from rest to the front layer shifted by x, y (±400
+  design px) and zoomed by `scale` (0.8–1.3); a layer at depth d travels
+  1 − 0.65 d as far (parallax). Deterministic, a function of scene time;
+  nothing moves on its own. The stage and text checks and the layout parts
+  use each top-level box as the stage shows it at the scene's start and end
+  (`uiStageBox`; the dolly runs on straight lines, so those bound it).
+- **Flash**: `flashAt` (seconds, an anchor, or a list of up to 12) lights
+  an element on a beat: peak 0.05 s after, decaying over 0.3 s (`uiFlash`).
+  A panel's surface lifts toward `flashTone` (`white`, default, or
+  `accent`) with a halo; a kind without a surface (headline, chip,
+  waveform...) brightens and glows. Any element, children included.
+- **Bloom**: `kind: "bloom"`, a big soft light sized by its rect (at least
+  200 × 200): it swells from `at` over `rise` (0.22 s) and fades over
+  `duration` (1.4 s); props `tone` (accent), `strength` (1). Layered radial
+  gradients with a white core, screened (`mix-blend-mode: screen`) over the
+  elements behind it. Light, not content: it is not a layout part, does
+  not count as the scene's first thing on screen and may run off the stage.
 
 ## Motion blur (`src/motion_blur.js`)
 
