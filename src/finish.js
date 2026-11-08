@@ -37,7 +37,7 @@ import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, pr
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
-import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
+import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills, storyMotionBlurGuard } from "./render_segments.js";
 import { renderShare } from "./capacity.js";
 import { withSlot } from "./queue.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
@@ -1603,7 +1603,9 @@ async function renderStory(ctx, adapter, { output, scenes = [], previewScene = n
   }
   if (PARTIAL_RENDERERS.includes(ctx.rendererName) && typeof adapter.renderSegments === "function") return renderWithSegments(common);
   if (previewScene) throw new Error(`--preview-scene needs a renderer adapter that renders frame ranges; the ${ctx.rendererName} adapter in use has no renderSegments`);
-  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved, concurrency: ctx.concurrency });
+  const motionBlur = motionBlurOptions(ctx.resolved, ctx.resolved?.format?.fps ?? 30);
+  const guard = motionBlur ? await storyMotionBlurGuard(ctx.project, ctx.resolved) : null;
+  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved, concurrency: ctx.concurrency, ...(motionBlur ? { motionBlur: { ...motionBlur, ...(guard ? { guard } : {}) } } : {}) });
   return null;
 }
 
