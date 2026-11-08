@@ -1112,7 +1112,7 @@ function validateMotion(motion, err) {
 }
 
 // Story feel (kit/core/feel.mjs feelErrors / kickErrors, repeated here).
-export const STORY_FEELS = ["kinetic"];
+export const STORY_FEELS = ["kinetic", "snap"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
 
@@ -1134,9 +1134,12 @@ function validateFeel(feel, err) {
   if (feel.preset !== undefined && !STORY_FEELS.includes(feel.preset)) err(`motion.feel.preset must be one of ${STORY_FEELS.join(", ")}`);
   const ambient = feel.ambient;
   if (ambient !== undefined && ambient !== false) {
-    if (!isObject(ambient)) err("motion.feel.ambient must be false or {scale?, shift?, period?}");
+    if (!isObject(ambient)) err("motion.feel.ambient must be false or {mode?, scale?, shift?, period?, hold?, move?}");
     else {
-      for (const key of Object.keys(ambient)) if (!["scale", "shift", "period"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: scale, shift, period)`);
+      for (const key of Object.keys(ambient)) if (!["mode", "scale", "shift", "period", "hold", "move"].includes(key)) err(`motion.feel.ambient.${key} is not supported (allowed: mode, scale, shift, period, hold, move)`);
+      if (ambient.mode !== undefined && !["drift", "step"].includes(ambient.mode)) err("motion.feel.ambient.mode must be drift (a slow wave) or step (holds, then snaps)");
+      if (ambient.hold !== undefined && !feelPair(ambient.hold, 0.2, 4)) err("motion.feel.ambient.hold must be [lo, hi] seconds between 0.2 and 4");
+      if (ambient.move !== undefined && !feelRange(ambient.move, 0.08, 0.6)) err("motion.feel.ambient.move must be seconds between 0.08 and 0.6");
       if (ambient.scale !== undefined && !feelPair(ambient.scale, 1, 1.08)) err("motion.feel.ambient.scale must be [lo, hi] between 1 and 1.08");
       if (ambient.shift !== undefined && !feelRange(ambient.shift, 0, 0.02)) err("motion.feel.ambient.shift must be a share of the frame between 0 and 0.02");
       if (ambient.period !== undefined && !feelPair(ambient.period, 2, 20)) err("motion.feel.ambient.period must be [lo, hi] seconds between 2 and 20");
