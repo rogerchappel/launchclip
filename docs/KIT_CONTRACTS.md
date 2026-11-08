@@ -2324,7 +2324,7 @@ a pure function of time, in both renderers.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane, bloom (`kit/core/ui-components.mjs`). Props are listed in the planning
+  scan-plane, bloom, burst (`kit/core/ui-components.mjs`). Props are listed in the planning
   prompt's "Interface scenes" section.
 - **Stage**: top-level rects sit inside x 40 to width − 40, from 40 px above
   the safe zone's top to its foot, clear of the caption band; `bleed: true`
@@ -2400,6 +2400,17 @@ a pure function of time, in both renderers.
   gradients with a white core, screened (`mix-blend-mode: screen`) over the
   elements behind it. Light, not content: it is not a layout part, does
   not count as the scene's first thing on screen and may run off the stage.
+- **Burst**: `kind: "burst"`, the hero beat's light. Thin bright rays
+  (`rays`, 6–24, default 14) and a white-hot flare core with a thin
+  horizontal flare shoot out of the rect's centre at `at`: the spokes race
+  out on an expo ease and the whole burst fades by `duration` (0.3–1.2 s,
+  default 0.6); props `tone` (accent), `strength` (0–1.5, 1). `props.target`
+  (another element's id) centres the rect on that element (its text box for
+  a headline or chip; top-level bursts only); without a rect the burst is a
+  920 px square. Each ray's angle, reach and weight come from `uiHash`, so
+  it is a function of time. Screened like a bloom and, like it, light, not
+  content. It pushes a `burst` event, role `emphasis`, with the element's
+  `cue` if it names one. Use it on one or two hero beats a reel.
 
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 

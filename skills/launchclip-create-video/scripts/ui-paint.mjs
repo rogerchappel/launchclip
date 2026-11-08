@@ -370,7 +370,7 @@ function uiElementHtml(el0, t, ctx, staged) {
   const base = (el.props.rotate ? 'rotate(' + el.props.rotate + 'deg) ' : '') + (el.tilt ? 'perspective(1400px) rotateX(' + (el.tilt.x || 0) + 'deg) rotateY(' + (el.tilt.y || 0) + 'deg) rotateZ(' + (el.tilt.z || 0) + 'deg)' : '');
   const style = uiEnter(t, el.at, el.enter || 'up', {base: base, d: el.enterDuration, dist: el.dist, ov: el.overshoot}) + uiExit(t, el.out, el.exit);
   const z = el.z ? 'z-index:' + el.z + ';' : '';
-  const blend = el.kind === 'bloom' ? 'mix-blend-mode:screen;' : '';
+  const blend = el.kind === 'bloom' || el.kind === 'burst' ? 'mix-blend-mode:screen;' : '';
   const fk = uiFlash(t, el.flashAt);
   if (!staged && fk <= 0) return '<div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:' + uiN(r.x) + 'px;top:' + uiN(r.y) + 'px;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + z + blend + style + '">' + draw(el, t, ctx) + '</div>';
   // The flash: a panel's surface lifts toward white (or the accent) with a
