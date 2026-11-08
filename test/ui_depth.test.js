@@ -5,6 +5,7 @@ import { uiStageBox } from "@launchclip/core/catalog-i-ui.mjs";
 import { resolveAnchor, resolveUiAnchors } from "@launchclip/core/story.mjs";
 import { uiDepthAt, uiEnter, uiExit, uiFlash, uiStageProject } from "@launchclip/core/ui-paint.mjs";
 import { UI_KINDS, UI_RUNTIME, paintUi } from "@launchclip/core/ui-runtime.mjs";
+import { interfaceLines } from "@launchclip/core/planning-prompt.mjs";
 
 const BRAND = { colors: { bg: "#0a0b08", primary: "#c8ff3a", accent: "#c8ff3a", ink: "#0a0b08", paper: "#f4f6ee" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
 const HEADLINE = { kind: "headline", rect: { x: 60, y: 330, width: 960, height: 130 }, at: 0.2, props: { text: "FIX IT", size: 110 } };
@@ -145,11 +146,60 @@ test("bloom: a soft light that swells and fades, screened over the scene, never 
   assert.throws(() => resolve([{ ...bloom, at: 0 }, { ...PANEL, at: 1 }]), /put something on screen by 0.6 s/, "a bloom alone is not a built frame");
 });
 
+test("burst: thin rays and a flare core shoot out of a point on the hero beat, an emphasis, never content", () => {
+  assert.ok(UI_KINDS.includes("burst"));
+  const hero = { ...PANEL, id: "hero" };
+  const burst = { kind: "burst", at: 1.5, props: { target: "hero", rays: 12 }, cue: "impact" };
+  const model = resolve([hero, burst]);
+  const spec = model.content.ui["s1-ui"];
+  const placed = spec.elements[1];
+  // Aimed without a rect: a 920 px square centred on the target's centre.
+  assert.deepEqual(placed.rect, { x: 540 - 460, y: 840 - 460, width: 920, height: 920 });
+  assert.equal(placed.enter, "cut");
+  // The hero beat is an emphasis, with its cue, over the burst's 0.6 s.
+  const event = model.events.find((e) => e.name === "burst");
+  assert.deepEqual({ time: event.time, endTime: event.endTime, role: event.role, cue: event.cue }, { time: 2.5, endTime: 3.1, role: "emphasis", cue: "impact" });
+  assert.deepEqual(model.layout.parts, [], "light is not a layout part");
+  // An explicit rect keeps its size and is recentred on the target.
+  const sized = resolve([hero, { ...burst, rect: { x: 0, y: 0, width: 600, height: 400 } }]).content.ui["s1-ui"].elements[1];
+  assert.deepEqual(sized.rect, { x: 240, y: 640, width: 600, height: 400 });
+  // A burst with a rect and no target fires from the rect's centre.
+  assert.doesNotThrow(() => resolve([hero, { kind: "burst", rect: { x: -100, y: 1200, width: 800, height: 800 }, at: 1 }]), "light may run off the stage");
+  // Rays: one crisp core and one glow copy each, screened, in the accent.
+  const peak = paint(spec, 2.62);
+  assert.match(peak, /mix-blend-mode:screen/);
+  assert.equal((peak.match(/linear-gradient\(to right,#ffffff 0%,#c8ff3a/g) ?? []).length, 12, "12 crisp ray cores");
+  assert.equal((peak.match(/linear-gradient\(to right,#c8ff3a 0%/g) ?? []).length, 12, "12 ray glows");
+  assert.match(peak, /radial-gradient\(closest-side,#ffffff 0%,#c8ff3a/, "a white-hot flare core");
+  // The rays race out, then the whole burst fades and is gone by 0.6 s.
+  const widths = (html) => [...html.matchAll(/width:([\d.]+)px;height:[\d.]+px;transform-origin/g)].map((m) => Number(m[1]));
+  const sum = (list) => list.reduce((a, b) => a + b, 0);
+  assert.ok(sum(widths(paint(spec, 2.7))) > sum(widths(paint(spec, 2.53))), "the rays lengthen");
+  const opacity = (html) => Number(/;opacity:([\d.]+);background:linear-gradient\(to right,#ffffff/.exec(html)?.[1] ?? 0);
+  assert.ok(opacity(paint(spec, 2.6)) > opacity(paint(spec, 2.95)), "and fade");
+  assert.doesNotMatch(paint(spec, 2.49), /linear-gradient\(to right,#ffffff/, "nothing before the beat");
+  assert.doesNotMatch(paint(spec, 3.11), /linear-gradient\(to right,#ffffff/, "gone after its duration");
+  assert.equal(paint(spec, 2.62), paint(spec, 2.62), "a pure function of t");
+  // Options are checked; the target must be another element.
+  assert.throws(() => resolve([hero, { ...burst, props: { target: "nope" } }]), /not the id of another element/);
+  assert.throws(() => resolve([hero, { ...burst, props: { target: "hero", rays: 40 } }]), /rays/);
+  assert.throws(() => resolve([hero, { ...burst, props: { target: "hero", duration: 3 } }]), /duration/);
+  assert.throws(() => resolve([hero, { kind: "burst", at: 1 }]), /rect/, "no rect and no target");
+  assert.throws(() => resolve([{ ...burst, at: 0, props: { rays: 12 }, rect: { x: 0, y: 400, width: 600, height: 600 } }, { ...PANEL, at: 1 }]), /put something on screen by 0.6 s/, "a burst alone is not a built frame");
+  // Word anchors resolve in its at, as any element's.
+  const words = [{ text: "unlocked", start: 13.2, end: 13.6 }];
+  assert.equal(resolveUiAnchors({ elements: [{ ...burst, at: "word:unlocked" }] }, 10, (value) => resolveAnchor(value, { words })).elements[0].at, 3.2);
+  // The guide puts it on the hero beat, once or twice a reel.
+  const line = interfaceLines().find((text) => /burst element/.test(text));
+  assert.match(line, /once or twice per reel/);
+  assert.match(line, /props\.target/);
+});
+
 test("UI_RUNTIME: the serialised painter draws depth, stage, flashes and blooms as the module does, text escaped", () => {
-  const spec = resolve([{ ...HEADLINE, id: 'a"b', flashAt: 2 }, { ...PANEL, rect: { x: 140, y: 560, width: 800, height: 560 }, flashAt: [1.5], props: { title: "<b>&</b>" } }, WALL, { kind: "bloom", rect: { x: 140, y: 500, width: 600, height: 600 }, at: 0.8, props: {} }], { tilt: 8, dolly: { x: 40, scale: 1.04 } }).content.ui["s1-ui"];
+  const spec = resolve([{ ...HEADLINE, id: 'a"b', flashAt: 2 }, { ...PANEL, rect: { x: 140, y: 560, width: 800, height: 560 }, flashAt: [1.5], props: { title: "<b>&</b>" } }, WALL, { kind: "bloom", rect: { x: 140, y: 500, width: 600, height: 600 }, at: 0.8, props: {} }, { kind: "burst", rect: { x: 140, y: 500, width: 700, height: 700 }, at: 2.4, props: { rays: 10 } }], { tilt: 8, dolly: { x: 40, scale: 1.04 } }).content.ui["s1-ui"];
   const window = {};
   new Function("window", UI_RUNTIME)(window);
-  for (const t of [1.25, 2.6, 3.05, 5.5]) {
+  for (const t of [1.25, 2.6, 3.05, 3.6, 5.5]) {
     const page = { innerHTML: "" };
     window.lcPaintUi(page, spec, t);
     assert.equal(page.innerHTML, paint(spec, t));

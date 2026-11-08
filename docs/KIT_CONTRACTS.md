@@ -685,21 +685,31 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   with blur in one filter).
 - `light-sweep` (`kit/core/light-sweep.mjs`, track-0 scenes only, 0.4–0.6 s;
   `{type: "light-sweep", dur, streaks?, angle?, color?}`): a transition of
-  light, not graphics. 2–4 soft streaks (default 3) of the colour (as the
-  dot-wipe's `color`, default `"accent"`), tilted `angle` degrees from the
-  horizontal (20–80, default 64), sweep across the middle of the frame, each
-  over 0.78 of the transition, started 0.08 apart, fading in and out over
-  the first and last 22 % of its travel, over a faint wash of the colour that
-  peaks mid-sweep. They are added to the picture (`mix-blend-mode: screen`;
-  Remotion blends their group the same way), so nothing opaque ever covers
-  the frame. Each streak is a halo (blur 30 px at 1080) under a core (blur
-  4 px, a white-hot centre line); a streak moves about 60 px a frame at
-  1080 × 1920 over 0.5 s, slow enough that sub-frame motion blur smears it
-  rather than stepping it. Both renderers draw the same markup and CSS and
-  drive one custom property, `--lc-ls` (0 → 1, linear; HyperFrames tweens
-  it, Remotion sets `lightSweepProgress`), stacked as the dot-wipe. The layer
+  light, not graphics. The frame dips nearly to black: a plain black shade
+  (`lightSweepDipHtml`, not blended) over every scene and the background
+  rises to 0.94 by 28 % of the transition, holds, and clears from 66 % to the
+  end; with the plates' veil the frame keeps about a tenth of its light at
+  the middle. Over it, screened (`mix-blend-mode: screen`), 2–4 thin crisp
+  streaks (default 3) of the colour (as the dot-wipe's `color`, default
+  `"accent"`), tilted `angle` degrees from the horizontal (20–80, default
+  64), each a white-hot core of about 5 px (blur 1 px at 1080) in a glow of
+  about 30 px (blur 12 px), shoot along their own lines from beyond one end
+  of the frame to beyond the other, each over 0.84 of the transition,
+  started 0.07 apart, fading in and out over the first and last 18 % of its
+  travel. Across the frame they sit on spaced lanes and drift only about
+  6 px a frame at 1080 × 1920 over 0.5 s, so heavy sub-frame motion blur
+  lengthens them instead of stepping copies. Twelve soft bokeh discs (a
+  white-hot point in a glow of the colour, 1–4.5 % of the short side) drift
+  up through the dark, the first on the outgoing ui-scene's element boxes
+  (`lightSweepSpots`, largest first), the rest seeded across the middle
+  band; positions come from a hash of the sweep's id, never `Math.random`.
+  A faint wash of the colour peaks mid-sweep. Both renderers draw the same
+  markup and CSS for the dip and the light and drive one custom property,
+  `--lc-ls` (0 → 1, linear; HyperFrames tweens it on `#id-dip` and `#id`,
+  Remotion sets `lightSweepProgress` on both; under the camera only the
+  lights' group blends), stacked as the dot-wipe. The layer
   side: the outgoing plate takes `veil` 0 → 1 over the first 60 %
-  (`power1.in`; `blur(22px) brightness(0.28) contrast(1.35)` at full: its
+  (`power1.in`; `blur(26px) brightness(0.2) contrast(1.5)` at full: its
   bright parts melt into glowing blobs on a dark field) and drifts forward to
   1.08, fading from 40 % over 30 %; the incoming plate is held hidden at
   `veil` 1 and 1.05 from the first frame, fades up from 40 % over 32 % and
@@ -2324,7 +2334,7 @@ a pure function of time, in both renderers.
 - **Kinds** (`UI_KINDS`): headline, chip, waveform, window, timeline,
   lock-cards, stack (`kit/core/ui-paint.mjs`); meter, terminal, results,
   card-wall, downloads, comment, marker-snap, frame-ruler, pad-grid,
-  scan-plane, bloom (`kit/core/ui-components.mjs`); host (`kit/core/ui-host.mjs`).
+  scan-plane, bloom, burst (`kit/core/ui-components.mjs`); host (`kit/core/ui-host.mjs`).
   Props are listed in the planning prompt's "Interface scenes" section.
 - **Host**: a code-drawn pixel mascot (a 22 × 17 cell sprite in the accent
   or `props.tone`, drawn as crisp SVG rects, no external art). Poses
@@ -2451,6 +2461,17 @@ a pure function of time, in both renderers.
   check's `stage-fill` rule (`STAGE_FILL`) warns when a band of the stage
   over 25% of its height has nothing at least 25% of the stage wide in it
   for more than 1.5 s, naming the band and how to fill it.
+- **Burst**: `kind: "burst"`, the hero beat's light. Thin bright rays
+  (`rays`, 6–24, default 14) and a white-hot flare core with a thin
+  horizontal flare shoot out of the rect's centre at `at`: the spokes race
+  out on an expo ease and the whole burst fades by `duration` (0.3–1.2 s,
+  default 0.6); props `tone` (accent), `strength` (0–1.5, 1). `props.target`
+  (another element's id) centres the rect on that element (its text box for
+  a headline or chip; top-level bursts only); without a rect the burst is a
+  920 px square. Each ray's angle, reach and weight come from `uiHash`, so
+  it is a function of time. Screened like a bloom and, like it, light, not
+  content. It pushes a `burst` event, role `emphasis`, with the element's
+  `cue` if it names one. Use it on one or two hero beats a reel.
 
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
@@ -2550,9 +2571,12 @@ own copy of the ranges, `STORY_LIGHT_*`, in step by test/lighting.test.js).
   the darkened bg. The wrap and halos are screen blends at a fraction of the
   key, so white text does not move.
 - **Lit dot grid.** `background: {kind: "dot-grid", params: {lit}}` (0–1,
-  default 0 = today's even grid) masks the dots by the key's falloff (and,
-  fainter, the pool's): full under the light, `1 − lit` elsewhere, and
-  brightens them by up to 1.6× under the light (still clamped). Without a
+  default 0 = today's even grid) masks the dots by the square of the key's
+  falloff (and, at 0.35, the pool's): full under the light, fading out well
+  inside the glow, `(1 − lit)²` elsewhere; and a lit grid is quieter, its
+  dots at `1 − 0.35 × lit` of the even grid's alpha (still clamped). Light
+  reveals the grid on a smooth dark ground; signal-ui sets lit 0.85 and
+  intensity 0.06. Without a
   story light the mask uses the `studio` key. `litMask(story, lit)` is the
   mask; it is in shares of the box, so a panel fill gets it too.
 
