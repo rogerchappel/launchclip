@@ -15,6 +15,7 @@ import {LIGHT_SWEEP_LAYER, PUSH_BLUR, SMEAR_PROPS, TRANSITION_TYPES, gsapVars, l
 import {LIGHT_SWEEP, lightSweepBokeh, lightSweepCss, lightSweepDipAt, lightSweepDipHtml, lightSweepGsap, lightSweepHtml, lightSweepOptions, lightSweepProgress, lightSweepSpots, lightSweepStreaks, lightSweeps} from '@launchclip/core/light-sweep.mjs';
 import {MOTION_BLUR_GUARD_FILE} from '@launchclip/core/motion-blur.mjs';
 import {getEase} from '@launchclip/core/motion.mjs';
+import {resolveGrammar} from '@launchclip/core/grammar.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -244,4 +245,19 @@ test("motion blur: a reel's worth of guarded caption frames splits into short ov
   assert.equal(enables.reduce((sum, count) => sum + count, 0), 200, "every run is guarded once");
   assert.ok(enables.every((count) => count <= 24), `an overlay guards at most 24 runs (${enables.join(", ")})`);
   assert.match(filter, /\[v\]$/);
+});
+
+// Found by the interface parity fixture: with a springing feel the veil overshot
+// below 0, a negative blur is an invalid filter, and each renderer fell back differently.
+test('transition filters never overshoot: a springing grammar eases only the transforms', () => {
+  for (const motion of [{feel: 'snap'}, {feel: 'kinetic'}, {grammar: 'playful'}]) {
+    const grammar = resolveGrammar(motion);
+    for (const type of ['light-sweep', 'push-blur', 'rack-focus', 'glow-wipe']) {
+      const tweens = transitionTweens({type, dur: 0.5}, {...size, grammar});
+      for (const tw of [...tweens.in, ...tweens.out]) {
+        if (!['veil', 'dip', 'focus', 'rackIn', 'glow', 'smearX', 'smearY', 'blur', 'opacity'].includes(tw.prop)) continue;
+        assert.doesNotMatch(String(tw.ease), /elastic|back|bounce/, `${JSON.stringify(motion)} ${type} ${tw.prop}: ${tw.ease}`);
+      }
+    }
+  }
 });

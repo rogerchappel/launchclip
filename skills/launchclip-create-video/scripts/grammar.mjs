@@ -236,7 +236,10 @@ export function calmEase(name) {
   return `power2.${type}`;
 }
 
-const CALM_PROPS = new Set(['opacity', 'blur', 'filter', 'color', 'backgroundColor', 'borderColor', 'iris', 'clipPath', 'strokeDashoffset', 'text', 'textContent', 'autoAlpha']);
+// veil, dip, focus, rackIn, glow and the smears are transition layer props drawn
+// as filters (kit/core/transitions.mjs): overshooting below 0 makes a negative
+// blur, an invalid filter the browser drops.
+const CALM_PROPS = new Set(['opacity', 'blur', 'filter', 'veil', 'dip', 'focus', 'rackIn', 'glow', 'smearX', 'smearY', 'color', 'backgroundColor', 'borderColor', 'iris', 'clipPath', 'strokeDashoffset', 'text', 'textContent', 'autoAlpha']);
 
 /** Whether every animated prop is a transform (x, y, scale, rotation, …), so an overshooting ease is safe. */
 export function transformOnly(props) {
