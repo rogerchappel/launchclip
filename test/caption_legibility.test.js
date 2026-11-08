@@ -116,7 +116,7 @@ const blend = (top, bottom, alpha) => top.map((v, i) => Math.round(v * alpha + b
 test("a line on its preset plate (85% opaque) is measured against the plate, not the tan floor beside it", () => {
   const s = story({ preset: "typewriter" });
   const { lines, options } = captionLines(s, chunks);
-  assert.deepEqual(lines[0].backing, { color: options.colors.plate, alpha: 0xd9 / 255 });
+  assert.deepEqual({ ...lines[0].backing, line: undefined }, { color: options.colors.plate, alpha: 0xd9 / 255, line: undefined });
   const rect = captionBandRect(options, s.format);
   const text = rgb(options.colors.idle);
   const line = { x: 360, y: rect.y + 80, width: 360, height: 70 };
@@ -170,4 +170,44 @@ test("a plate the same colour as its text still fails: the backing is measured, 
   const close = text.map((v) => Math.max(0, v - 12));
   const result = lineLegibility(image({ bg: TAN, text, rect: line, under: { x: 330, y: rect.y + 64, width: 420, height: 102, color: close } }), rect, lines[0].colors, { size: options.size, chars: 10, plate: lines[0].backing.color, plateAlpha: lines[0].backing.alpha });
   assert.notEqual(result.legible, true, JSON.stringify(result));
+});
+
+// The opaque word chip over a dark interface whose panels share the chip's
+// colour: searched for by colour alone, the "plate" spread over the whole
+// band and the scene's own motion-blurred white bars were read as the
+// caption, so a word on an opaque chip failed at 2.83:1.
+test("an opaque word chip is found where the plan centres it, not by its colour across a scene of the same colour", () => {
+  const s = story({ preset: "word-chip" });
+  const words = [{ id: "cap-001", start: 0, end: 0.6, words: [{ text: "gives", start: 0, end: 0.6 }] }];
+  const { lines, options } = captionLines(s, words);
+  assert.equal(lines[0].backing.alpha, 1);
+  assert.ok(lines[0].backing.line, "a line plate carries its geometry");
+  const rect = captionBandRect(options, s.format);
+  const plate = rgb(options.colors.plate), ink = rgb(options.colors.idle);
+  const width = 1080, height = 1920;
+  const cx = Math.round(rect.x + rect.width / 2), cy = Math.round(rect.y + rect.height / 2);
+  const draw = ({ chip = true, text = ink } = {}) => {
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    const put = (x, y, [r, g, b]) => { const o = (y * width + x) * 4; pixels[o] = r; pixels[o + 1] = g; pixels[o + 2] = b; pixels[o + 3] = 255; };
+    // The panel: a shade off the chip's own colour, with blurred white waveform bars across the band.
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const phase = x % 12;
+      const bar = y > rect.y + 40 && y < rect.y + rect.height - 40 ? (phase < 2 ? [240, 240, 236] : phase < 5 ? [150, 152, 146] : null) : null;
+      put(x, y, bar ?? plate.map((v) => v - 6));
+    }
+    // The chip: 172 × 68 at the band's middle, its word in glyph stripes.
+    if (chip) for (let y = cy - 34; y < cy + 34; y++) for (let x = cx - 86; x < cx + 86; x++) put(x, y, plate);
+    for (let y = cy - 14; y < cy + 14; y++) for (let x = cx - 64; x < cx + 64; x++) if ((x >> 2) % 2 === 0) put(x, y, text);
+    return { width, height, pixels };
+  };
+  const opts = { size: options.size, chars: lines[0].chars, plate: lines[0].backing.color, plateAlpha: 1 };
+  const onChip = lineLegibility(draw(), rect, lines[0].colors, { ...opts, plateLine: lines[0].backing.line });
+  assert.equal(onChip.onPlate, true, JSON.stringify(onChip));
+  assert.equal(onChip.legible, true, JSON.stringify(onChip));
+  assert.ok(onChip.contrast >= 10 && onChip.box.width <= 172 && onChip.box.height <= 68, JSON.stringify(onChip));
+  // Searched for by colour alone, the same frame failed: the scene's bars were read as the caption.
+  assert.equal(lineLegibility(draw(), rect, lines[0].colors, opts).legible, false);
+  // Still measured, not assumed: a word not drawn in its colour is never passed, and with no chip drawn the word is judged on the scene.
+  assert.equal(lineLegibility(draw({ text: plate.map((v) => v + 30) }), rect, lines[0].colors, { ...opts, plateLine: lines[0].backing.line }).legible === true, false);
+  assert.equal(lineLegibility(draw({ chip: false }), rect, lines[0].colors, { ...opts, plateLine: lines[0].backing.line }).legible, false);
 });
