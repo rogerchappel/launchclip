@@ -28,7 +28,7 @@ import {mixColor} from './catalog-b-base.mjs';
 import {abs, el} from './catalog-h-view.mjs';
 import {UI_KINDS} from './ui-runtime.mjs';
 import {uiHostPoses} from './ui-host.mjs';
-import {uiDepthAt, uiStageProject} from './ui-paint.mjs';
+import {uiDepthAt, uiHeadlineLines, uiHeadlinePlain, uiStageProject} from './ui-paint.mjs';
 import {captionBandAt, profileGeometry} from './layout-check.mjs';
 import {ARRANGEMENTS, expandArrangements} from './ui-arrange.mjs';
 
@@ -61,19 +61,54 @@ const HOST_ALONG = 0.8;
 
 /** The box a headline or chip's text sets in (design px): its width and line height at its size, placed by its align. */
 export function uiTextBox(kind, props, rect, beats = []) {
-  const states = [props, ...(props.swap ? [{...props, ...props.swap}] : []), ...beats.map((beat) => ({...props, ...beat.set}))];
   let width = 0, height = 0;
-  for (const state of states) {
+  for (const state of headlineStates(props, beats)) {
+    if (kind === 'headline') {
+      const m = headlineMeasure(state);
+      width = Math.max(width, m.width);
+      height = Math.max(height, m.height);
+      continue;
+    }
     const text = String(state.text ?? '');
-    const size = Number(state.size) || (kind === 'headline' ? 112 : 30);
-    width = Math.max(width, kind === 'headline' ? text.length * size * HEADLINE_ADVANCE : text.length * size * 0.62 + size * 1.2);
-    height = Math.max(height, kind === 'headline' ? size * 1.05 : size * 1.45);
+    const size = Number(state.size) || 30;
+    width = Math.max(width, text.length * size * 0.62 + size * 1.2);
+    height = Math.max(height, size * 1.45);
   }
   width = Math.min(rect.width, width);
   height = Math.min(rect.height, height);
   const align = props.align ?? 'center';
   const x = align === 'left' ? rect.x : align === 'right' ? rect.x + rect.width - width : rect.x + (rect.width - width) / 2;
   return {x: r2(x), y: r2(rect.y + (rect.height - height) / 2), width: r2(width), height: r2(height)};
+}
+
+/**
+ * Every state an element's text shows: its props, its swap (whose text
+ * stands in for the lines, as the painter's uiHeadlineState) and each beat
+ * merged in, in order (uiPropsAt).
+ */
+function headlineStates(props, beats) {
+  const states = [props];
+  if (props.swap) {
+    const swapped = {...props, ...props.swap};
+    if (props.swap.text !== undefined && props.swap.lines === undefined) delete swapped.lines;
+    states.push(swapped);
+  }
+  let at = props;
+  for (const beat of beats) { at = {...at, ...beat.set}; states.push(at); }
+  return states;
+}
+
+/**
+ * A headline state's text block (design px): its single line at its size,
+ * or its rich lines stacked, each at its own size, tracking and gap, as the
+ * painter sets them (uiHeadlineLines).
+ */
+function headlineMeasure(state) {
+  const rich = Array.isArray(state.lines) && state.lines.length;
+  const lines = uiHeadlineLines(state, 0);
+  if (!rich) return {width: lines[0].text.length * lines[0].size * HEADLINE_ADVANCE, height: lines[0].size * 1.05, lines: [{width: lines[0].text.length * lines[0].size * HEADLINE_ADVANCE}]};
+  const each = lines.map((line) => ({width: uiHeadlinePlain(line.text).length * line.size * line.advance, height: line.size + line.gap}));
+  return {width: Math.max(...each.map((line) => line.width)), height: each.reduce((sum, line) => sum + line.height, 0), lines: each};
 }
 
 /** A tilted element's footprint: the rect turned by tilt.z, grown for the perspective of tilt.x and tilt.y. */
@@ -233,12 +268,23 @@ function uiResolve(params, ctx) {
     }
     const props = raw.props === undefined ? {} : raw.props;
     check.obj(props, `${path}.props`, kind === 'host' ? HOST_PROPS : Object.keys(props));
-    if (kind === 'headline') headlineFits(check, props, rect, `${path}.props`);
+    if (kind === 'headline') {
+      headlineFits(check, props, rect, `${path}.props`, {at, time});
+      if (props.swap !== undefined) {
+        check.obj(props.swap, `${path}.props.swap`, Object.keys(props.swap), ['at']);
+        if (props.swap.text !== undefined || props.swap.lines !== undefined) headlineFits(check, headlineStates(props, [])[1], rect, `${path}.props.swap`, {at, time});
+      }
+    }
     if (kind === 'host') hostProps(check, props, `${path}.props`);
+    let state = props;
     const beats = (raw.beats ?? []).map((beat, k) => {
       check.obj(beat, `${path}.beats[${k}]`, ['at', 'set', 'cue'], ['at', 'set']);
       check.obj(beat.set, `${path}.beats[${k}].set`, kind === 'host' ? HOST_BEAT_PROPS : Object.keys(beat.set));
-      if (kind === 'headline' && beat.set.text !== undefined) headlineFits(check, {...props, ...beat.set}, rect, `${path}.beats[${k}].set`);
+      if (kind === 'headline') {
+        if (Array.isArray(state.lines) && beat.set.text !== undefined && beat.set.lines === undefined) check.fail(`${path}.beats[${k}].set.text`, 'changes a headline set in lines; change them with set.lines');
+        state = {...state, ...beat.set};
+        if (beat.set.text !== undefined || beat.set.lines !== undefined) headlineFits(check, state, rect, `${path}.beats[${k}].set`, {at, time});
+      }
       if (kind === 'host') hostProps(check, beat.set, `${path}.beats[${k}].set`);
       const beatAt = time(beat.at, `${path}.beats[${k}].at`);
       const cue = beat.cue === undefined ? null : check.str(beat.cue, `${path}.beats[${k}].cue`, 32);
@@ -367,12 +413,53 @@ function hostProps(check, props, path) {
   if (props.along !== undefined) check.num(props.along, `${path}.along`, 0, 1);
 }
 
-/** A headline's text must be a short string that sets inside its rect at its size. */
-function headlineFits(check, props, rect, path) {
-  const text = check.str(props.text, `${path}.text`, 40);
-  const size = props.size === undefined ? 112 : check.num(props.size, `${path}.size`, 28, 320);
-  const width = text.length * size * HEADLINE_ADVANCE;
-  if (width > rect.width * 1.04) check.fail(`${path}.text`, `"${text}" at ${size} px sets about ${Math.round(width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, lower size or widen the rect`);
+const LINE_KEYS = ['text', 'size', 'accent', 'weight', 'tone', 'count', 'enter', 'at'];
+const LINE_SIZES = ['s', 'm', 'l', 'xl'];
+const MAX_LINES = 4;
+
+/**
+ * A headline's text must be a short string that sets inside its rect at its
+ * size; rich lines (props.lines) each fit its width and together its height.
+ */
+function headlineFits(check, props, rect, path, {at, time}) {
+  const rich = props.lines !== undefined && props.lines !== null;
+  if (!rich) {
+    const text = check.str(props.text, `${path}.text`, 40);
+    const size = props.size === undefined ? 112 : check.num(props.size, `${path}.size`, 28, 320);
+    const width = text.length * size * HEADLINE_ADVANCE;
+    if (width > rect.width * 1.04) check.fail(`${path}.text`, `"${text}" at ${size} px sets about ${Math.round(width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, lower size or widen the rect`);
+    return;
+  }
+  if (props.text !== undefined && props.text !== null && props.lines !== undefined && path.endsWith('.props')) check.fail(`${path}`, 'sets text or lines, not both');
+  if (!Array.isArray(props.lines) || !props.lines.length || props.lines.length > MAX_LINES) check.fail(`${path}.lines`, `must be a list of 1–${MAX_LINES} lines [{text, size (${LINE_SIZES.join(', ')} or px), accent, weight, tone, count, enter, at}]`);
+  if (props.stagger !== undefined) check.num(props.stagger, `${path}.stagger`, 0, 1);
+  props.lines.forEach((line, k) => {
+    const lp = `${path}.lines[${k}]`;
+    check.obj(line, lp, LINE_KEYS, ['text']);
+    const text = check.str(line.text, `${lp}.text`, 44);
+    const marks = (text.match(/\*/g) ?? []).length;
+    if (marks % 2) check.fail(`${lp}.text`, `"${text}" opens an accent with * it does not close (*word* sets a word in the accent)`);
+    if (uiHeadlinePlain(text).length > 40) check.fail(`${lp}.text`, 'must be at most 40 characters');
+    if (line.size !== undefined && !(typeof line.size === 'number' ? (check.num(line.size, `${lp}.size`, 28, 320), true) : LINE_SIZES.includes(line.size))) check.fail(`${lp}.size`, `must be one of ${LINE_SIZES.join(', ')} or px (28–320)`);
+    if (line.accent !== undefined) check.bool(line.accent, `${lp}.accent`);
+    if (line.weight !== undefined) check.int(line.weight, `${lp}.weight`, 300, 900);
+    if (line.tone !== undefined) check.str(line.tone, `${lp}.tone`, 16);
+    if (line.enter !== undefined) check.oneOf(line.enter, `${lp}.enter`, ENTERS);
+    if (line.at !== undefined && time(line.at, `${lp}.at`) + 1e-9 < at) check.fail(`${lp}.at`, `is before its headline enters (${at} s)`);
+    if (line.count !== undefined) {
+      if (typeof line.count === 'object' && line.count !== null) {
+        check.obj(line.count, `${lp}.count`, ['from', 'dur'], []);
+        if (line.count.from !== undefined) check.num(line.count.from, `${lp}.count.from`, -1e12, 1e12);
+        if (line.count.dur !== undefined) check.num(line.count.dur, `${lp}.count.dur`, 0.2, 3);
+      } else check.bool(line.count, `${lp}.count`);
+      if (line.count && !/\d/.test(text)) check.fail(`${lp}.count`, `counts up the number in its text, and "${text}" has none`);
+    }
+  });
+  const m = headlineMeasure(props);
+  m.lines.forEach((line, k) => {
+    if (line.width > rect.width * 1.04) check.fail(`${path}.lines[${k}].text`, `"${uiHeadlinePlain(props.lines[k].text)}" at size ${props.lines[k].size ?? 'l'} sets about ${Math.round(line.width)} px wide, wider than its rect (${Math.round(rect.width)} px); shorten it, pick a smaller size or widen the rect`);
+  });
+  if (m.height > rect.height * 1.04) check.fail(`${path}.lines`, `stack about ${Math.round(m.height)} px tall, taller than their rect (${Math.round(rect.height)} px); raise the rect's height, drop a line or pick smaller sizes`);
 }
 
 /** The host every element is painted into: the whole canvas, under the module rect's origin. */
@@ -407,8 +494,10 @@ export function uiReadingWords(params) {
     for (const element of Array.isArray(elements) ? elements : []) {
       if (!element || typeof element !== 'object') continue;
       if (element.kind === 'headline') {
-        const states = [element.props?.text, element.props?.swap?.text, ...(element.beats ?? []).map((beat) => beat?.set?.text)];
-        words += Math.max(0, ...states.map(count));
+        // A state's words: its text, or its rich lines read together (markup out).
+        const read = (state) => (Array.isArray(state?.lines) ? state.lines.map((line) => uiHeadlinePlain(line?.text ?? '')).join(' ') : state?.text);
+        const states = [element.props, element.props?.swap, ...(element.beats ?? []).map((beat) => beat?.set)];
+        words += Math.max(0, ...states.map((state) => count(read(state))));
       }
       walk(element.children);
     }
