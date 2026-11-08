@@ -1550,6 +1550,9 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
 ```
 
 - A fixture is `{story, sceneId, threshold?: {ssim: 0.97}}`.
+- A sample passes at the SSIM threshold, or at SSIM ≥ 0.9 with PSNR ≥ 48 dB
+  (`samplePasses`): SSIM misreads near-black frames, where sub-visible banding
+  differs between OS and Chromium builds while the pixels barely differ.
 - The harness renders that scene in HyperFrames (a temporary project compiled
   by `kit/hyperframes/story-compiler.mjs`, filtered to the one scene, then
   `hyperframes snapshot`) and in Remotion (`ModuleReview` through `remotion still`).

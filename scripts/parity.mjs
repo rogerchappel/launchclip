@@ -31,6 +31,18 @@ const HYPERFRAMES_CLI = path.join(path.dirname(require.resolve('hyperframes/pack
 const REMOTION_CLI = path.join(path.dirname(require.resolve('@remotion/cli/package.json')), 'remotion-cli.js');
 const GSAP_MIN = path.join(path.dirname(require.resolve('gsap/package.json')), 'dist', 'gsap.min.js');
 export const DEFAULT_THRESHOLD = {ssim: .97};
+// SSIM is unreliable on a near-black frame: with almost no variance in the
+// dark gradients, sub-visible banding differences (OS and Chromium builds
+// quantise them differently) pull it down while the pixels barely differ. A
+// sample under the SSIM threshold still passes when its error is invisible:
+// 48 dB PSNR is about one grey level of error, and the SSIM floor keeps a
+// structural difference failing even so.
+export const DARK_FRAME = Object.freeze({psnr: 48, ssim: .9});
+
+/** Whether a sample's metrics pass: SSIM at the threshold, or an invisible error on a frame SSIM misreads. */
+export function samplePasses({ssim, psnr}, threshold = DEFAULT_THRESHOLD.ssim) {
+  return ssim >= threshold || (ssim >= DARK_FRAME.ssim && psnr >= DARK_FRAME.psnr);
+}
 export const DEFAULT_ENTRY = path.join(ROOT, 'kit', 'remotion', 'entry.tsx');
 const STORY_COMPILER = path.join(ROOT, 'kit', 'hyperframes', 'story-compiler.mjs');
 const MODULES = path.join(ROOT, 'kit', 'core', 'modules.mjs');
@@ -302,7 +314,7 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
       const metrics = await compareStills(hf[i], rm.outputs[i].file);
       const sideFile = path.join(outDir, `${sample.name}.side-by-side.png`), diffFile = path.join(outDir, `${sample.name}.diff.png`);
       await sideBySide(hf[i], rm.outputs[i].file, sideFile, diffFile);
-      results.push({name: sample.name, time: sample.time, remotionFrame: rm.outputs[i].frame, ssim: metrics.ssim, psnr: metrics.psnr, pass: metrics.ssim >= threshold.ssim,
+      results.push({name: sample.name, time: sample.time, remotionFrame: rm.outputs[i].frame, ssim: metrics.ssim, psnr: metrics.psnr, pass: samplePasses(metrics, threshold.ssim),
         hyperframes: path.relative(outDir, hf[i]), remotion: path.relative(outDir, rm.outputs[i].file), sideBySide: path.relative(outDir, sideFile), diff: path.relative(outDir, diffFile)});
     }
     const report = {fixture: path.relative(ROOT, path.resolve(fixturePath)), sceneId: scene.id, module: model.kind ?? model.module, threshold,
@@ -371,7 +383,7 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
       const metrics = await compareStills(hf, rmFile);
       const sideFile = path.join(outDir, `${name}.side-by-side.png`), diffFile = path.join(outDir, `${name}.diff.png`);
       await sideBySide(hf, rmFile, sideFile, diffFile);
-      samples.push({name, time, ssim: metrics.ssim, psnr: metrics.psnr, pass: metrics.ssim >= threshold,
+      samples.push({name, time, ssim: metrics.ssim, psnr: metrics.psnr, pass: samplePasses(metrics, threshold),
         hyperframes: path.basename(hf), remotion: path.basename(rmFile), sideBySide: path.basename(sideFile), diff: path.basename(diffFile)});
     }
     const report = {project: path.relative(ROOT, source), threshold: {ssim: threshold}, warnings: compiled.warnings,
