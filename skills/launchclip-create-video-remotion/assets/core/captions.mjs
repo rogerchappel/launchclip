@@ -11,6 +11,7 @@
 
 import { getEase, interpolateColor } from './motion.mjs';
 import { brandFontStacks } from './fonts.mjs';
+import { captionSnapOffset, guardFrames, guardRect, resolveMotionBlur } from './motion-blur.mjs';
 
 const STRONG_BREAK = /[.!?…]$/;
 const SOFT_BREAK = /[,;:—–-]$/;
@@ -376,6 +377,31 @@ export function snapCaptionChunks(chunks, fps, offset = 0.5) {
   // least 2 ms at 30 fps).
   const snap = (t) => (Number.isFinite(Number(t)) ? round((Math.round(Number(t) * rate - at) + at) / rate) : t);
   return chunks.map((chunk) => ({ ...chunk, start: snap(chunk.start), end: snap(chunk.end), ...(Array.isArray(chunk.words) ? { words: chunk.words.map((word) => ({ ...word, start: snap(word.start), end: snap(word.end) })) } : {}) }));
+}
+
+/**
+ * The chunks as a story with motion.blur shows them, in either renderer:
+ * snapped into the gap between two frames' one-frame windows. No blur, no
+ * change. fps: the story's.
+ */
+export function blurSnappedChunks(chunks, story, fps) {
+  const plan = resolveMotionBlur(story);
+  return plan && Array.isArray(chunks) ? snapCaptionChunks(chunks, fps, captionSnapOffset(plan)) : chunks;
+}
+
+/**
+ * The caption guard of a story with a shutter over one frame, or null: the
+ * output frames whose heavy window straddles a word change, and the rect
+ * (the caption band) they take from the one-frame blend (src/motion_blur.js).
+ * chunks: the snapped chunks; captionsPlan: captionPlan() of them; format:
+ * {width, height, fps}, fps the story's.
+ */
+export function captionBlurGuard(story, chunks, captionsPlan, format) {
+  const plan = resolveMotionBlur(story);
+  if (!plan?.overlap || !captionsPlan?.nodes?.length) return null;
+  const changes = chunks.flatMap((chunk) => [chunk.start, chunk.end, ...(chunk.words ?? []).flatMap((word) => [word.start, word.end])]).map(Number);
+  const frames = guardFrames(plan, changes, format.fps);
+  return frames.length ? { frames, rect: guardRect(captionsPlan.options, format, /lc-cap-z\d/.test(captionsPlan.css)) } : null;
 }
 
 export function shownWords(words, preset) {

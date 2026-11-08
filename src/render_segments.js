@@ -29,6 +29,13 @@
 // the join stamps every frame from its index, the delivery encode passes
 // frames through, the mux is limited by frame count, and the joined, encoded
 // and final files must each hold the story's frame count.
+//
+// Motion blur (story.motion.blur, src/motion_blur.js): the cached segments hold
+// the sub-frames (rate per story frame, unblended), and the blend runs after
+// the join, on every render (it is cheap). A blur window that straddles a join
+// therefore blends the same pictures as a single pass, and the cache still
+// spares every segment an edit did not touch. story.motion and the sub-frame
+// rate are in the hash.
 // HyperFrames' CLI has no frame range, so it renders whole videos, cached by
 // the hash of the whole timeline; a one-scene preview renders a composition
 // of just that scene's window instead (renderSceneWindow).
@@ -41,10 +48,13 @@ import path from "node:path";
 import { writeFileAtomic } from "./atomic_write.js";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { captionChunksFrom, chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
+import { blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionPlan, captionsOverlayOf, chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
+import { layoutPlan } from "@launchclip/core/footage-layout.mjs";
+import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { allFontFaces } from "@launchclip/core/fonts.mjs";
 import { SEGMENT_SCHEMA, captionOverlay, collectAssets, hashSegments, hashValue, planSegments, sceneModels, segmentsForScenes, shownCaptionChunks, storyFrames, storySoundtrack } from "@launchclip/core/render-segments.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
+import { blendSubframes, motionBlurOptions } from "./motion_blur.js";
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -90,19 +100,36 @@ async function treeContentHash(directory, { filter = () => true } = {}) {
  * captions). null without a captions overlay or when the file is missing.
  */
 export async function storyCaptionChunks(project, story, { models = sceneModels(story) } = {}) {
-  const overlay = captionOverlay(story);
-  if (!overlay) return null;
-  let chunks = null;
+  if (!captionOverlay(story)) return null;
+  return shownCaptionChunks(story, await loadedCaptionChunks(project, story), { models });
+}
+
+async function loadedCaptionChunks(project, story, overlay = captionOverlay(story)) {
   try {
-    if (overlay.src) chunks = captionChunksFrom(JSON.parse(await readFile(path.join(project, overlay.src), "utf8")));
-    else if (story.audio?.words) {
-      const words = narrationWords(JSON.parse(await readFile(path.join(project, story.audio.words), "utf8")));
-      chunks = words.length ? chunkWords(words) : null;
-    }
+    if (overlay.src) return captionChunksFrom(JSON.parse(await readFile(path.join(project, overlay.src), "utf8")));
+    if (!story.audio?.words) return null;
+    const words = narrationWords(JSON.parse(await readFile(path.join(project, story.audio.words), "utf8")));
+    return words.length ? chunkWords(words) : null;
   } catch {
     return null;
   }
-  return shownCaptionChunks(story, chunks, { models });
+}
+
+/**
+ * The motion-blur guard of a story ({frames, rect}, frames of the whole
+ * story), or null: what the HyperFrames compiler writes to its sidecar, from
+ * the chunks, hidden ranges and caption zones StoryComposition draws with.
+ */
+export async function storyMotionBlurGuard(project, story, { models = sceneModels(story) } = {}) {
+  const overlay = captionsOverlayOf(story);
+  if (!overlay) return null;
+  const { fps, width, height } = storyFrames(story);
+  const chunks = blurSnappedChunks(await loadedCaptionChunks(project, story, overlay), story, fps);
+  if (!chunks?.length) return null;
+  const hide = [...(overlay.hide ?? []), ...sceneWindows(story).scenes.filter((entry) => models.get(entry.id)?.hidesCaptions).map((entry) => [entry.start, entry.renderEnd])];
+  const format = { width, height, fps };
+  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyBase(story) ? layoutPlan(story)?.captions : undefined });
+  return captionBlurGuard(story, chunks, plan, format);
 }
 
 // The kit sources that render for each renderer (content, not mtimes, so a
@@ -289,6 +316,11 @@ export function defaultSegmentTools() {
       if (!audio) { await copyFile(video, output); return; }
       await ffmpeg(muxArgs({ video, audio, output, offset, duration, frames, fps }));
     },
+    // Blend sub-frames down to story frames, as a lossless mezzanine (the
+    // delivery encode follows); options: {samples, rate, fps, guard}.
+    async blend(input, output, options) {
+      await blendSubframes(input, output, { ...options, encode: ["-c:v", "libx264", "-qp", "0", "-preset", "ultrafast"] });
+    },
     async countFrames(file) {
       const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", file]);
       return Number(String(stdout).trim());
@@ -363,8 +395,11 @@ export async function renderWithSegments(options) {
 
   if (!partial) return renderWhole({ ...options, tools, now, dir, index, plan, inputs, forced: range ? new Set([...forced, "range"]) : forced, started, seconds });
 
+  // Motion blur: segments hold `subframes` pictures per story frame.
+  const blur = adapter.subframes === true ? motionBlurOptions(story, plan.fps) : null;
+  const subframes = blur?.rate ?? 1;
   const encoder = typeof adapter.segmentEncoder === "function" ? adapter.segmentEncoder() : adapter.segmentEncoder ?? null;
-  const hashed = hashSegments(story, plan, inputs, { encoder });
+  const hashed = hashSegments(story, plan, inputs, { encoder: blur ? { ...encoder, subframes } : encoder });
   const scope = options.previewScene ? contiguous(hashed, segmentsForScenes(hashed, [options.previewScene])) : hashed;
   const entries = scope.map((segment) => {
     const file = segmentFile(dir, segment.hash);
@@ -376,7 +411,7 @@ export async function renderWithSegments(options) {
   // that failed its final check) is re-rendered rather than joined.
   for (const entry of entries.filter((item) => item.status === "reused")) {
     const count = await tools.countFrames(entry.file);
-    if (Number.isFinite(count) && count !== entry.segment.frames) {
+    if (Number.isFinite(count) && count !== entry.segment.frames * subframes) {
       await rm(entry.file, { force: true });
       Object.assign(entry, { status: "rendered", repaired: `the cached segment had ${count} frames` });
     }
@@ -388,7 +423,7 @@ export async function renderWithSegments(options) {
   const renderStarted = now();
   const timings = new Map();
   if (work.length) {
-    const results = await renderVerifiedSegments({ project, adapter, tools, work, story, kitHash: inputs.kit, quality, concurrency, progress: options.progress });
+    const results = await renderVerifiedSegments({ project, adapter, tools, work, story, kitHash: inputs.kit, quality, concurrency, subframes, progress: options.progress });
     for (const entry of work) {
       await rename(`${entry.file}.partial.mp4`, entry.file);
       const { seconds: took, retried } = results.get(entry);
@@ -412,28 +447,40 @@ export async function renderWithSegments(options) {
   const output = path.resolve(options.output);
   await mkdir(path.dirname(output), { recursive: true });
   const joined = `${output}.joined.mp4`;
+  const blended = `${output}.blended.mp4`;
   const encoded = `${output}.video.mp4`;
   const first = scope[0].startFrame;
   const last = scope.at(-1).endFrame;
   // Every stage keeps every frame; a stage that does not fails the render
   // stage here, naming itself, instead of shipping a video a frame short.
-  const expectFrames = async (stage, file) => {
+  const expectFrames = async (stage, file, per = 1) => {
     const count = await tools.countFrames(file);
-    if (Number.isFinite(count) && count !== last - first) {
-      await Promise.all([joined, encoded, output].map((temporary) => rm(temporary, { force: true })));
-      throw new Error(`render stage failed: the ${stage} has ${count} frames; the ${options.previewScene ? `preview of scene "${options.previewScene}"` : "story"} has ${last - first} (frames ${first}–${last} at ${plan.fps} fps)`);
+    if (Number.isFinite(count) && count !== (last - first) * per) {
+      await Promise.all([joined, blended, encoded, output].map((temporary) => rm(temporary, { force: true })));
+      throw new Error(`render stage failed: the ${stage} has ${count} frames; the ${options.previewScene ? `preview of scene "${options.previewScene}"` : "story"} has ${(last - first) * per} (frames ${first}–${last} at ${plan.fps} fps${per > 1 ? `, ${per} sub-frames each` : ""})`);
     }
   };
   const joinStarted = now();
-  await tools.concat(entries.map((entry) => entry.file), joined, { fps: plan.fps, frames: entries.map((entry) => entry.segment.frames) });
-  await expectFrames("joined segments", joined);
+  await tools.concat(entries.map((entry) => entry.file), joined, { fps: plan.fps * subframes, frames: entries.map((entry) => entry.segment.frames * subframes) });
+  await expectFrames("joined segments", joined, subframes);
   seconds.join = round3((now() - joinStarted) / 1000);
+  let pictures = joined;
+  let guardFrames = 0;
+  if (blur) {
+    const blendStarted = now();
+    const guard = rebaseGuard(await storyMotionBlurGuard(project, story, { models: inputs.models }), first, last);
+    guardFrames = guard?.frames.length ?? 0;
+    await tools.blend(joined, blended, { samples: blur.samples, rate: blur.rate, fps: plan.fps, ...(guard ? { guard } : {}) });
+    await expectFrames("motion-blur blend", blended);
+    pictures = blended;
+    seconds.blend = round3((now() - blendStarted) / 1000);
+  }
   const encodeStarted = now();
   if (typeof adapter.encodeDelivery === "function") {
-    await adapter.encodeDelivery(joined, encoded, { quality });
+    await adapter.encodeDelivery(pictures, encoded, { quality });
     await expectFrames("delivery encode", encoded);
-  } else await rename(joined, encoded);
-  await rm(joined, { force: true });
+  } else await rename(pictures, encoded);
+  await Promise.all([joined, blended].map((temporary) => rm(temporary, { force: true })));
   seconds.encode = round3((now() - encodeStarted) / 1000);
   const muxStarted = now();
   const audio = await soundtrackFile({ project, story, adapter, dir, inputs, tools });
@@ -458,6 +505,7 @@ export async function renderWithSegments(options) {
     seconds,
     seconds_saved: round3(saved),
     cache: rel(project, dir),
+    ...(blur ? { motion_blur: { samples: blur.samples, rate: blur.rate, shutter: blur.shutter, guard_frames: guardFrames, ...(first > 0 ? { note: `a preview blends only its own sub-frames: its first frame's window starts at frame ${first} (the final's reaches back into the frame before)` } : {}) } } : {}),
     audio: audio ? { source: audio.source, volume: audio.volume } : null,
     plan: entries.map((entry) => ({ id: entry.segment.id, kind: entry.segment.kind, frames: [entry.segment.startFrame, entry.segment.endFrame], scenes: entry.segment.scenes, hash: short(entry.segment.hash), status: entry.status, seconds: timings.get(entry.segment.hash) == null ? null : round3(timings.get(entry.segment.hash)), ...(entry.retried ? { retried: entry.retried } : {}), ...(entry.repaired ? { repaired: entry.repaired } : {}) }))
   };
@@ -471,9 +519,9 @@ export async function renderWithSegments(options) {
  * work: [{segment, file}] (each renders to `${file}.partial.mp4`).
  * → Map(entry → {seconds, retried: null | "had N frames"})
  */
-export async function renderVerifiedSegments({ project, adapter, tools, work, story, kitHash, quality, concurrency, progress }) {
+export async function renderVerifiedSegments({ project, adapter, tools, work, story, kitHash, quality, concurrency, subframes = 1, progress }) {
   const results = new Map();
-  const frames = work.reduce((sum, entry) => sum + entry.segment.frames, 0);
+  const frames = work.reduce((sum, entry) => sum + entry.segment.frames * subframes, 0);
   let doneFrames = 0;
   const render = async (list) => {
     progress?.({ step: "render", done: doneFrames, total: frames, unit: "frames" });
@@ -481,14 +529,14 @@ export async function renderVerifiedSegments({ project, adapter, tools, work, st
       doneFrames = Math.min(frames, doneFrames + (segment.endFrame - segment.startFrame));
       progress?.({ step: "render", done: doneFrames, total: frames, unit: "frames" });
     };
-    const result = await adapter.renderSegments(project, list.map((entry) => ({ startFrame: entry.segment.startFrame, endFrame: entry.segment.endFrame, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash, quality, concurrency, onSegment });
+    const result = await adapter.renderSegments(project, list.map((entry) => ({ startFrame: entry.segment.startFrame * subframes, endFrame: entry.segment.endFrame * subframes, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash, quality, concurrency, onSegment, ...(subframes > 1 ? { subframes } : {}) });
     list.forEach((entry, i) => results.set(entry, { seconds: Number(result?.segments?.[i]?.seconds), retried: results.get(entry)?.retried ?? null }));
   };
   const problem = async (entry) => {
     const temporary = `${entry.file}.partial.mp4`;
     if (!existsSync(temporary)) return "was not written";
     const count = await tools.countFrames(temporary);
-    return Number.isFinite(count) && count !== entry.segment.frames ? `had ${count} frames` : null;
+    return Number.isFinite(count) && count !== entry.segment.frames * subframes ? `had ${count} frames` : null;
   };
   const check = async (list) => {
     const bad = [];
@@ -510,7 +558,7 @@ export async function renderVerifiedSegments({ project, adapter, tools, work, st
     for (const entry of work) await rm(`${entry.file}.partial.mp4`, { force: true });
     const detail = second.map(({ entry, found }) => {
       const before = first.find((item) => item.entry === entry).found;
-      return `segment ${entry.segment.id} (frames ${entry.segment.startFrame}–${entry.segment.endFrame}, ${entry.segment.frames} expected) ${before}, then ${found} when re-rendered`;
+      return `segment ${entry.segment.id} (frames ${entry.segment.startFrame}–${entry.segment.endFrame}, ${entry.segment.frames * subframes} expected) ${before}, then ${found} when re-rendered`;
     }).join("; ");
     throw new Error(`render stage failed: ${detail} (${rel(project, path.dirname(work[0].file))})`);
   }
@@ -637,6 +685,13 @@ async function soundtrackFile({ project, story, adapter, dir, inputs, tools }) {
     await rename(`${file}.partial.m4a`, file);
   }
   return { file, key, volume: soundtrack.volume, source: soundtrack.src };
+}
+
+// The guard in the frames of a stretch [first, last) of the story (a preview
+// starts at its own frame 0), or null when none falls inside it.
+function rebaseGuard(guard, first, last) {
+  const frames = (guard?.frames ?? []).filter((frame) => frame >= first && frame < last).map((frame) => frame - first);
+  return frames.length ? { ...guard, frames } : null;
 }
 
 function contiguous(all, chosen) {
