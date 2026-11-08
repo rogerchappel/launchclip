@@ -55,7 +55,9 @@ test("ui-scene: text stays in the safe zone clear of the captions; panels use th
   const layout = resolve([HEADLINE, PANEL]).layout;
   assert.equal(layout.drift, false);
   assert.deepEqual(layout.rect, { x: 144, y: 297.25, width: 792, height: 115.5 });
-  assert.deepEqual(layout.parts, [{ id: "el-1", rect: { x: 50, y: 400, width: 980, height: 760 }, role: "media", start: 1, end: 6 }]);
+  assert.deepEqual(layout.parts, [{ id: "el-1", rect: { x: 50, y: 400, width: 980, height: 760 }, role: "media", start: 1, end: 6, over: ["self"] }]);
+  // A scene's own elements may overlap (a chip on a panel); other scenes still collide.
+  assert.deepEqual(layout.allowOcclusion, ["s1-el-1"]);
   assert.equal(resolve([PANEL]).layout.role, "media");
   // A scene that opens the video is built at frame 0 with enter: "cut".
   const opened = host();
@@ -179,4 +181,36 @@ test("motion blur: caption changes land between two frames' sub-frames, so no fr
     }
   }
   assert.deepEqual(chunks[0].words.map((word) => word.start), [0.417, 0.717]);
+});
+
+test("word-chip captions: one bare uppercase word, low-centre, where the layout check puts the band", async () => {
+  const { captionBandFor, captionBandTop, captionPlan, shownWords } = await import("@launchclip/core/captions.mjs");
+  const { captionBandAt, profileGeometry } = await import("@launchclip/core/layout-check.mjs");
+  assert.deepEqual(shownWords([{ text: "now," }, { text: '"timeline."' }, { text: "don't" }, { text: "…" }], { punctuation: false }).map((word) => word.text), ["now", "timeline", "don't", "…"]);
+  const format = { width: 1080, height: 1920 };
+  const band = captionBandAt(profileGeometry(format, "shorts").captionBand, format, "low");
+  // The two band sources differ by under a pixel (230 px in the profile, 12% of 1920 in the captions).
+  assert.ok(Math.abs(band.y - captionBandTop(format, "low") * 1920) < 1);
+  assert.ok(Math.abs(band.y + band.height / 2 - 0.58 * 1920) < 1);
+  assert.ok(Math.abs(captionBandFor(format).height * 1920 - band.height) < 1);
+  const chunks = [{ id: "cap-001", start: 0.4, end: 1.2, words: [{ text: "now,", start: 0.4, end: 0.7 }] }];
+  const plan = captionPlan(chunks, { type: "captions", preset: "word-chip", position: "low" }, { brand: BRAND, format });
+  const texts = [];
+  const walk = (node) => { if (node.text) texts.push(node.text); (node.children ?? []).forEach(walk); };
+  plan.nodes.forEach(walk);
+  assert.deepEqual(texts, ["now"]);
+  assert.match(plan.css, /text-transform: uppercase/);
+});
+
+test("word-chip captions: one word at a time even when a word is shorter than the entrance", async () => {
+  const { captionPlan, indexCaptionTweens, captionElementStateAt, snapCaptionChunks } = await import("@launchclip/core/captions.mjs");
+  // "a" lasts 0.06 s, under the line's 0.12 s minimum before its exit.
+  const chunks = snapCaptionChunks([{ start: 1.1, end: 1.16, words: [{ text: "a", start: 1.1, end: 1.16 }] }, { start: 1.17, end: 1.6, words: [{ text: "slick", start: 1.17, end: 1.6 }] }], 30);
+  const plan = captionPlan(chunks, { type: "captions", preset: "word-chip", position: "low" }, { brand: BRAND, format: { width: 1080, height: 1920 } });
+  const index = indexCaptionTweens(plan.tweens);
+  for (let k = 90; k < 160; k += 1) {
+    const t = k / 90;
+    const shown = plan.nodes.filter((line) => (captionElementStateAt(index, line.id, t).opacity ?? 0) > 0.02);
+    assert.ok(shown.length <= 1, `two words at ${t.toFixed(3)} s`);
+  }
 });

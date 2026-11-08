@@ -1291,7 +1291,11 @@ each element with `captionElementStateAt` (GSAP forward-seek semantics) and
 timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
-`position: top|middle` (`captionBandAt`).
+`position: top|middle|low` (`captionBandAt`; `low` centres it 58% down).
+A preset with `punctuation: false` (word-chip) shows each word without its
+leading and trailing marks (`shownWords`). In a one-word layout (`single`) a line
+leaves when the next arrives, however short its word, so two words never
+show at once.
 
 Captions during camera moves: `hide_during_moves` is `"auto"` (default),
 `true` or `false`. Auto dips the captions out for every world-camera move that
@@ -2308,7 +2312,8 @@ a pure function of time, in both renderers.
 - **Layout**: text boxes are layout `text`, panels layout `media` (no
   safe-zone or caption-band check); `model.layout.rect` is the largest text
   box (else the largest panel, role media) and `model.layout.parts` the
-  others, each with its own window. `model.layout.drift` is false: settled
+  others, each with its own window. A scene's elements may overlap each
+  other (`allowOcclusion`, parts' `over`); bleed panels count as media. `model.layout.drift` is false: settled
   elements hold still.
 - **Gates**: the text-hold gate reads a ui-scene by its headlines only
   (`uiReadingWords`); the storyboard cadence counts a panel of at least 20%

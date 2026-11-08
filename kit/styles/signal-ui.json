@@ -23,7 +23,7 @@
   },
   "captions": {
     "preset": "word-chip",
-    "position": "middle",
+    "position": "low",
     "lanes": {
       "footage-led": {
         "preset": "quiet-accent"
