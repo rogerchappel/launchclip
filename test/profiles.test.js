@@ -16,7 +16,7 @@ import { runProfileCommand } from "../src/profile_cli.js";
 import { runStoryCommand } from "../src/story_cli.js";
 import { runCli } from "../src/cli.js";
 
-const SHIPPED = ["animated-explainer-reel", "explainer-motion", "product-demo", "short-motion", "short-talking-head", "story-characters", "ui-explainer-reel", "ui-steady-reel", "youtube-long-form", "youtube-talking-head-launch"];
+const SHIPPED = ["animated-explainer-reel", "explainer-motion", "paper-diorama", "product-demo", "short-motion", "short-talking-head", "story-characters", "ui-explainer-reel", "ui-steady-reel", "youtube-long-form", "youtube-talking-head-launch"];
 const example = (name) => fileURLToPath(new URL(`../examples/story/${name}/storyboard.json`, import.meta.url));
 
 async function resolved(name) {
@@ -29,7 +29,7 @@ function seed(overrides = {}) {
 }
 
 // Profiles measured from references; the rest are seeds.
-const MEASURED = ["animated-explainer-reel", "ui-explainer-reel", "ui-steady-reel"];
+const MEASURED = ["animated-explainer-reel", "paper-diorama", "ui-explainer-reel", "ui-steady-reel"];
 
 test("the six RFC profiles and story-characters ship as valid seed profiles", () => {
   const profiles = shippedProfiles();

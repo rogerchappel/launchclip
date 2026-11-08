@@ -103,6 +103,56 @@ function uiFlash(t, at) {
   return k;
 }
 
+/**
+ * A stage rig: the whole scene as a real 3D diorama. Its pose at scene time t,
+ * interpolated between rig.keys [{at, rx, ry, rz, scale, x, y, ease}] (ease "back"
+ * overshoots into that key), and how far its exploded view has spread (0–1).
+ */
+function uiRigAt(rig, t) {
+  const keys = rig.keys || [];
+  const pose = {rx: 0, ry: 0, rz: 0, scale: 1, x: 0, y: 0, explode: 0};
+  const names = ['rx', 'ry', 'rz', 'scale', 'x', 'y'];
+  const value = function (key, name) { return key[name] === undefined ? pose[name] : key[name]; };
+  if (keys.length) {
+    let a = keys[0], b = keys[0];
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].at <= t) { a = keys[i]; b = keys[Math.min(i + 1, keys.length - 1)]; }
+    }
+    const span = b.at - a.at, u = span > 0 ? uiClamp((t - a.at) / span) : t >= a.at ? 1 : 0;
+    const e = t < keys[0].at ? 0 : b.ease === 'back' ? uiOutBack(u, 1.25) : uiInOut(u);
+    for (let i = 0; i < names.length; i++) pose[names[i]] = value(a, names[i]) + (value(b, names[i]) - value(a, names[i])) * e;
+  }
+  if (rig.explode) pose.explode = uiOutCubic(uiP(t, rig.explode.at, rig.explode.dur || 0.8));
+  // A hand-held float, so the diorama never quite rests.
+  const float = rig.float === undefined ? 1.6 : rig.float;
+  pose.rx += Math.sin(t * 1.9) * float;
+  pose.ry += Math.sin(t * 1.3 + 1) * float * 1.4;
+  pose.rz += Math.sin(t * 1.1 + 2) * float * 0.5;
+  pose.scale *= 1 + Math.sin(t * 0.9) * 0.012 * float;
+  return pose;
+}
+
+/** Where a design-px point at height z shows on screen at a rig pose: [x, y]. */
+function uiRigProject(x, y, z, pose, w, h) {
+  const rad = function (d) { return d * Math.PI / 180; };
+  let px = x - w / 2, py = y - h / 2, pz = z;
+  const cz = Math.cos(rad(pose.rz)), sz = Math.sin(rad(pose.rz));
+  let nx = px * cz - py * sz, ny = px * sz + py * cz;
+  px = nx; py = ny;
+  const cy = Math.cos(rad(pose.ry)), sy = Math.sin(rad(pose.ry));
+  nx = px * cy + pz * sy;
+  let nz = -px * sy + pz * cy;
+  px = nx; pz = nz;
+  const cx = Math.cos(rad(pose.rx)), sx = Math.sin(rad(pose.rx));
+  ny = py * cx - pz * sx;
+  nz = py * sx + pz * cx;
+  py = ny; pz = nz;
+  const s = pose.scale;
+  // scale() leaves depth alone, so perspective divides by the unscaled height.
+  const k = 1900 / (1900 - pz);
+  return [w / 2 + (px * s + pose.x) * k, h / 2 + (py * s + pose.y) * k];
+}
+
 /** The stage's look-down: perspective (design px) and the origin it turns about. */
 function uiStageView(w, h) { return {p: 1600, cx: w / 2, cy: h / 2}; }
 
@@ -463,6 +513,14 @@ function uiElementHtml(el0, t, ctx, staged) {
   const fc = el.flashTone === 'accent' ? ctx.c.accent : '#ffffff', rad = uiSurfaceRadius(el.kind);
   const lift = fk > 0 && rad ? '<div style="position:absolute;inset:0;border-radius:' + rad + 'px;pointer-events:none;background:' + fc + ';mix-blend-mode:screen;opacity:' + (fk * 0.42).toFixed(3) + ';box-shadow:0 0 ' + uiN(40 + 80 * fk) + 'px ' + uiN(10 * fk) + 'px ' + fc + '"></div>' : '';
   const inner = '<div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:0;top:0;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;' + style + '">' + draw(el, t, ctx) + lift + '</div>';
+  // On a rig an element is a plane at its own height, not a depth layer.
+  if (staged && ctx.rigPose) {
+    const lift = (el.lift || 0) * (1 + 2 * ctx.rigPose.explode);
+    // Every piece of paper shivers a little, redrawn on threes.
+    const beat = ctx.stage.rig.steps ? Math.floor(t * ctx.stage.rig.steps / 3) : 0, key = (r.x + r.y * 3 + r.width * 7) % 97;
+    const jx = ctx.stage.rig.steps ? (uiHash(key + beat * 13) - 0.5) * 2.2 : 0, jy = ctx.stage.rig.steps ? (uiHash(key + beat * 17 + 5) - 0.5) * 2.2 : 0;
+    return '<div style="position:absolute;left:' + uiN(r.x) + 'px;top:' + uiN(r.y) + 'px;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;transform-style:preserve-3d;transform:translate3d(' + uiN(jx) + 'px,' + uiN(jy) + 'px,' + uiN(lift) + 'px);"><div data-ui="' + uiEsc(el.id || '') + '" style="position:absolute;left:0;top:0;width:' + uiN(r.width) + 'px;height:' + uiN(r.height) + 'px;transform-style:preserve-3d;' + style + '">' + draw(el, t, ctx) + '</div></div>';
+  }
   const dp = staged ? uiDepthAt(el.depth, ctx.stage, t, ctx.width, ctx.height) : {s: 1, x: 0, y: 0, cx: 0, cy: 0, blur: 0, dim: 1};
   const moved = dp.s !== 1 || dp.x !== 0 || dp.y !== 0;
   const tr = moved ? 'transform-origin:' + uiN(dp.cx - r.x) + 'px ' + uiN(dp.cy - r.y) + 'px;transform:translate(' + uiN(dp.x) + 'px,' + uiN(dp.y) + 'px) scale(' + (Math.round(dp.s * 10000) / 10000) + ');' : '';
@@ -487,8 +545,23 @@ function uiChildren(elements, t, ctx) {
  * first (behind nearer ones; z still lifts one) and each sits in its depth
  * layer; otherwise as uiChildren.
  */
-function uiStage(elements, t, ctx) {
+function uiStage(elements, t0, ctx) {
   const list = elements || [];
+  ctx.list = list;
+  let t = t0;
+  const rig = ctx.stage && ctx.stage.rig;
+  if (rig) {
+    // Stop motion: the paper moves in steps a second, as if shot by hand, while the camera stays smooth.
+    if (rig.steps) t = Math.floor(t0 * rig.steps) / rig.steps;
+    const pose = uiRigAt(rig, t0);
+    ctx.rigPose = pose;
+    let world = '', flat = '';
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].screen) flat += uiElementHtml(list[i], t, ctx, false);
+      else world += uiElementHtml(list[i], t, ctx, true);
+    }
+    return '<div style="position:absolute;inset:0;perspective:1900px;perspective-origin:50% 50%"><div style="position:absolute;inset:0;transform-style:preserve-3d;transform:translate(' + uiN(pose.x) + 'px,' + uiN(pose.y) + 'px) scale(' + pose.scale.toFixed(4) + ') rotateX(' + pose.rx.toFixed(3) + 'deg) rotateY(' + pose.ry.toFixed(3) + 'deg) rotateZ(' + pose.rz.toFixed(3) + 'deg)">' + world + '</div></div>' + flat;
+  }
   let deep = !!ctx.stage;
   for (let i = 0; i < list.length; i++) if (list[i].depth) deep = true;
   if (!deep) return uiChildren(list, t, ctx);
@@ -498,5 +571,5 @@ function uiStage(elements, t, ctx) {
   return s;
 }
 
-export {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiInOut, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiExit, uiFlash, uiStageView, uiStageProject, uiDepthAt, uiSurfaceRadius, uiShake, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiDots, uiHeader, uiPanelStyle,
+export {uiRigAt, uiRigProject, uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiInOut, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiExit, uiFlash, uiStageView, uiStageProject, uiDepthAt, uiSurfaceRadius, uiShake, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiDots, uiHeader, uiPanelStyle,
   uiHeadlineState, uiHeadlineLines, uiHeadlinePlain, uiCountText, uiHeadline, uiChip, uiWaveform, uiWindow, uiTimeline, uiLockCards, uiPropsAt, uiElementHtml, uiChildren, uiStage};

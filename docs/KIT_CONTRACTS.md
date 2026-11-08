@@ -2571,6 +2571,12 @@ a pure function of time, in both renderers.
   content. It pushes a `burst` event, role `emphasis`, with the element's
   `cue` if it names one. Use it on one or two hero beats a reel.
 
+### Paper diorama (`stage.rig` and the paper kinds)
+
+`params.stage.rig` {keys [{at, rx, ry, rz, scale, x, y, ease: back|smooth}], explode {at, dur}, steps, float} turns the scene into real 3D: one camera over planes at their own heights. An element takes `lift` (px off the base; the exploded view spreads it to 3×) and `screen: true` keeps it flat on the screen. The camera is smooth at the frame rate; `steps` (15) holds the paper for two frames, like stop motion. `float` (deg, 1.6) is a hand-held drift so the diorama never rests. On a rig only `screen` elements have a box for the layout checks; the world counts as one part that fills the stage.
+
+Kinds: `cutout` (an object drawn from shapes, die-cut, with halftone or engraved `shade`, a part's `at` pops it on its word), `limb` (grows from its first point, outline until `fillAt`), `paper-fold` (hinged panels opening like a map), `paper-sheet` (a page with `flaps` folding up), `torn-strip` (`typeAt` types it like a prompt), `tape`, `callout-pin` (a leader line to `target`, projected through the rig). A cut-out's `d` takes only SVG path commands and numbers, and its text is escaped. The `paper-collage` style has no frame-blended motion blur, which would ghost the stepped paper, and is gated by the `paper-diorama` profile.
+
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
 `story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,

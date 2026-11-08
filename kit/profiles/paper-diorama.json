@@ -1,0 +1,130 @@
+{
+  "schema": "launchclip.cadence-profile.v1",
+  "id": "paper-diorama",
+  "title": "Paper diorama reel",
+  "format": "motion",
+  "duration_seconds": [
+    30,
+    75
+  ],
+  "references": 1,
+  "provenance": {
+    "kind": "measured",
+    "tool": "launchclip profile measure",
+    "measured_at": "2026-11-08T22:45:31.516Z",
+    "note": "Measured from one public reel, as statistics only, with bands at \u00b125% because one reference cannot show its own spread. Moving sharpness and soft-frame share are left out: they are unstable with few held frames. A target, not a survey.",
+    "sources": [
+      {
+        "id": "ref-01",
+        "title": "reel-c.mp4",
+        "rights": "public-statistics",
+        "sha256": "c02b1c914cb4c352aa0a3691aca7d1e5fc0c8714f58d966d830d0a88fbac7821",
+        "duration_seconds": 33.451,
+        "width": 1080,
+        "height": 1920,
+        "measured_at": "2026-11-08T22:45:31.516Z"
+      }
+    ]
+  },
+  "measures": {
+    "visual_changes_per_min": {
+      "p10": 32.2875,
+      "p50": 43.05,
+      "p90": 53.8125
+    },
+    "coverage": {
+      "p10": 0.66,
+      "p50": 0.88,
+      "p90": 1
+    },
+    "longest_undressed_seconds": {
+      "p10": 3.0,
+      "p50": 4,
+      "p90": 5.0
+    },
+    "first_visual_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0
+    },
+    "flow_velocity_p90": {
+      "p10": 6.0432,
+      "p50": 8.0576,
+      "p90": 10.072
+    },
+    "hold_ratio": {
+      "p10": 0.515,
+      "p50": 0.6867,
+      "p90": 0.8584
+    },
+    "motion_bursts_per_min": {
+      "p10": 37.6672,
+      "p50": 50.223,
+      "p90": 62.7788
+    },
+    "change_energy_p50": {
+      "p10": 1.9954,
+      "p50": 2.6605,
+      "p90": 3.3256
+    },
+    "first_motion_seconds": {
+      "p10": 0,
+      "p50": 0,
+      "p90": 0.35
+    },
+    "hook_events": {
+      "p10": 2.25,
+      "p50": 3,
+      "p90": 3.75
+    },
+    "still_share": {
+      "p10": 0.1472,
+      "p50": 0.1962,
+      "p90": 0.2453
+    },
+    "longest_still_seconds": {
+      "p10": 0.675,
+      "p50": 0.9,
+      "p90": 1.125
+    },
+    "camera_moves_per_min": {
+      "p10": 14.7975,
+      "p50": 19.73,
+      "p90": 24.6625
+    },
+    "change_p99": {
+      "p10": 24.1073,
+      "p50": 32.143,
+      "p90": 40.1788
+    },
+    "top_light_ratio": {
+      "p10": 0.3569,
+      "p50": 0.4759,
+      "p90": 0.5949
+    },
+    "midtone_share": {
+      "p10": 0.1823,
+      "p50": 0.2431,
+      "p90": 0.3039
+    },
+    "burst_change_mean": {
+      "p10": 6.8918,
+      "p50": 9.189,
+      "p90": 11.4863
+    }
+  },
+  "description": "A faceless reel staged as a printed paper diorama in real 3D: cut-outs and folds on a moving camera, the paper stepping like stop motion. A style names this profile; a story never lands on it by matching.",
+  "match": {
+    "lanes": [
+      "style-named"
+    ],
+    "aspects": [
+      "9:16"
+    ],
+    "platforms": [
+      "youtube-shorts",
+      "instagram-reels",
+      "tiktok"
+    ]
+  }
+}

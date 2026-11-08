@@ -67,6 +67,7 @@ A style or story can ask for a sound score: `"sound": {"score": true}` (the `sig
 - **Moments carry the emotion.** A scene hit with a `moment` says what the viewer should feel: `{"at": "word:cheap", "event": "cheap", "moment": "letdown"}`. The moments are `letdown`, `promise`, `reveal`, `impact`, `crystallise`, `wonder`, `miss` and `resolve`. Unlocks, an exact-frame landing and the close get one on their own.
 - **Big turns use the whole room.** A scene with energy 3 or `build` opens with a whoosh crossing the stereo field over a deep bass drum, and the room drops away just before it.
 - **Interfaces sound like hardware.** A playhead or scan hunts like a typewriter carriage, with an arcade blip and a type bar on each find. A dial clicks through its detents and stops dead, a fader slides and seats, and a frame ruler steps and slows.
+- **Paper sounds like paper.** A map fold creases open panel by panel, a limb slides out from behind, and side panels snap up.
 - **Rewards climb.** Each unlock plays a rising arpeggio higher than the last, and the finds in a scan climb note by note.
 - **Everything else that changes on screen** gets a small sound, panned to where it happens. `sfx_density` thins these out.
 

@@ -34,10 +34,14 @@ const PROPS = {
   "pad-grid": { runAt: 0.5 },
   "scan-plane": { scanAt: 2, scanDur: 3, markers: [{ label: "intro", x: 0.02, at: 1.6 }, { label: "logo", x: 0.48, at: 1.8 }, { label: "outro", x: 0.99, at: 2 }] },
   bloom: {},
-  host: { pose: "cheer" }
+  host: { pose: "cheer" },
+  cutout: { view: [100, 100], edge: 0, parts: [{ shape: "circle", x: 50, y: 50, r: 45, fill: "accent" }] },
+  "torn-strip": { text: "TORN", size: 30 },
+  tape: {}
 };
 // Light and groups: a bloom and a burst swell past their rect by design and are not layout parts; a stack draws only its children.
-const EXEMPT = new Set(["bloom", "burst", "stack"]);
+// Paper runs in 3D: a fold's panels turn out of the plane, a limb sways, a pin's line reaches its target.
+const EXEMPT = new Set(["bloom", "burst", "stack", "paper-fold", "paper-sheet", "limb", "callout-pin"]);
 // Kinds without a smallest size, measured at a typical one.
 const TYPICAL = { "pad-grid": { width: 490, height: 430 }, headline: { width: 900, height: 120 }, chip: { width: 320, height: 64 }, waveform: { width: 900, height: 220 }, window: { width: 740, height: 440 }, "card-wall": { width: 900, height: 900 } };
 // Settled, mid-change (an unlock, the scan running) and late; no part is mid-entrance.
