@@ -100,4 +100,14 @@ export function drawChibi(params, colors, options) {
   return drawToon(params, colors, {...options, geometry: chibiBody(params), headScale: HEAD_SCALE, face: 'cute', headPen}, chibiPen);
 }
 
+// The plain figure: the same cute body with no skin tone, a paper-white
+// person like a stick figure's head, told apart by hair and clothes alone.
+const PLAIN = Object.freeze({skin: '#fbf7ef', skinShade: '#ded6c8', skinLight: '#ffffff', blush: '#f2b3a6'});
+
+export function drawChibiPlain(params, colors, options) {
+  return drawChibi(params, {...colors, ...PLAIN}, options);
+}
+
+export const STYLE_PLAIN = {draw: drawChibiPlain, height: chibiHeight, geometry: chibiGeometry, describe: 'the cute family as a neutral figure: the chibi body in paper white with no skin tone, told apart by hair and clothes'};
+
 export const STYLE = {draw: drawChibi, height: chibiHeight, geometry: chibiGeometry, describe: 'the cute family: a very big round head with large glossy eyes on a small soft body, flat fills and one even heavy outline'};

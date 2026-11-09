@@ -252,7 +252,9 @@ export function hairBack(ctx) {
     }
     case 'ponytail': return [hairFill(ctx, `M${rx * 0.4} ${top + 10}C${rx + 60} ${top - 10} ${rx + 56} ${cy + 60} ${rx + 30} ${cy + 140}C${rx + 10} ${cy + 90} ${rx + 6} ${cy + 20} ${rx * 0.5} ${top + 30}Z`)];
     case 'bun': return [P.ellipse(0, top - 18, 42, 38, 'hair')];
-    case 'headscarf': return [P.shape(`M${-rx - 22} ${cy - 20}C${-rx - 30} ${top - 46} ${rx + 30} ${top - 46} ${rx + 22} ${cy - 20}C${rx + 30} ${cy + 70} ${rx + 70} ${cy + 140} ${rx + 76} ${cy + 196}L${-rx - 76} ${cy + 196}C${-rx - 70} ${cy + 140} ${-rx - 30} ${cy + 70} ${-rx - 22} ${cy - 20}Z`, 'hair')];
+    // On the cute head the scarf wraps close under the chin: the long drape would dwarf the small body.
+    case 'headscarf': if (ctx.cute) return [P.shape(`M${-rx - 18} ${cy - 20}C${-rx - 26} ${top - 44} ${rx + 26} ${top - 44} ${rx + 18} ${cy - 20}C${rx + 22} ${cy + 60} ${r1(rx * 0.7)} ${r1(cy + ry + 34)} 0 ${r1(cy + ry + 38)}C${r1(-rx * 0.7)} ${r1(cy + ry + 34)} ${-rx - 22} ${cy + 60} ${-rx - 18} ${cy - 20}Z`, 'hair')];
+      return [P.shape(`M${-rx - 22} ${cy - 20}C${-rx - 30} ${top - 46} ${rx + 30} ${top - 46} ${rx + 22} ${cy - 20}C${rx + 30} ${cy + 70} ${rx + 70} ${cy + 140} ${rx + 76} ${cy + 196}L${-rx - 76} ${cy + 196}C${-rx - 70} ${cy + 140} ${-rx - 30} ${cy + 70} ${-rx - 22} ${cy - 20}Z`, 'hair')];
     default: return newHairBack(ctx) ?? [];
   }
 }
