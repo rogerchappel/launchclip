@@ -11,12 +11,19 @@
 // and scores its five title options, in the same call; the titles are then
 // ordered best first by a deterministic score.
 import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "@launchclip/core/script-formats.mjs";
+import { NARRATED_SCRIPT_VERSION, SCREENPLAY_VERSION } from "@launchclip/core/screenplay.mjs";
 import { skeletonScriptPlan } from "@launchclip/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { TEASERS } from "../publish_manifest.js";
 import { storyScriptSection } from "./concept_story.js";
 
-export const SCRIPT_VERSION = "launchclip.make-script.v1";
+// SCRIPT.json has two versions (kit/core/screenplay.mjs). This narrated script
+// pass writes version 1: a title, one narration string and its beats, whose
+// ids are the script skeleton's (hook, problem, cta, …). Version 2 adds
+// speakers and silent lines on story beats, and reads a version 1 file as
+// all-narrator, so a script written here stays readable.
+export const SCRIPT_VERSION = NARRATED_SCRIPT_VERSION;
+export { SCREENPLAY_VERSION };
 export const WORDS_PER_MINUTE = 150;
 // A take more than this far over the target duration triggers one resize pass. The
 // duration is a ceiling (docs/MAKE_SKILL_PARITY.md, phase 4): a take that runs

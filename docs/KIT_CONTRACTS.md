@@ -4147,6 +4147,129 @@ cost (`SPRITE_IMAGE_USD` per picture).
 screen with a video and with an image, a cameo with a card) through
 `scripts/parity.mjs`.
 
+## Screenplay: SCRIPT.json version 2 (`kit/core/screenplay.mjs`)
+
+`SCRIPT.json` has two versions. Version 1 (`launchclip.make-script.v1`) is a
+narrated script: a title, one `narration` string and `beats: [{beat, text}]`,
+whose beat ids come from the script skeleton (hook, problem, cta, …). `make`
+writes it today. Version 2 (`launchclip.make-script.v2`) is a screenplay: it
+adds speakers and silent lines, for a story told by characters
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §4.1). A narrated
+script is the case where every speaker is the narrator, so a version 1 file
+reads as a version 2 one and nothing written today breaks.
+
+```json
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "She skipped one check",
+  "logline": "Maya's deploy fails again; Sam shows her the one check she skipped.",
+  "premise": { "want": "ship before lunch", "obstacle": "the same failing deploy", "change": "she checks first" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "to ship", "speech": "short, dry" },
+    { "id": "sam", "role": "foil", "want": "to help without gloating", "speech": "warm, unhurried" }
+  ],
+  "beats": [
+    { "beat": "problem", "place": "desk-laptop",
+      "lines": [
+        { "id": "l2", "speaker": "maya", "text": "Third time. Same red build.", "playing": "flat, to herself" },
+        { "id": "l3", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
+        { "id": "l4", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
+      ] }
+  ],
+  "narration": "Third time. Same red build. Did you run the check?",
+  "title_options": ["She skipped one check"]
+}
+```
+
+A full example is `test/fixtures/screenplay/two-characters.json`.
+
+- `characters[]`: `id` (lower-case letters, digits and hyphens, at most 24
+  characters; the same id the cast and the voice use; never `"narrator"`),
+  and free-text `role`, `want` and `speech`. An optional `name` is how
+  actions refer to the character when that is not the id. How a character
+  looks belongs to the show bible, not here.
+- `beats[]`: `beat` is one of `setup`, `problem`, `attempt`, `turn`,
+  `resolution`, `cta` (`NARRATIVE_BEATS` in `kit/core/direction.mjs`);
+  `place` is an optional set name; `lines` is never empty.
+- A **spoken line** is `{id, speaker, text, playing?}`. `speaker` is a
+  character id or `"narrator"`. `playing` is a note for the acting and the
+  voice and is never spoken.
+- A **silent line** is `{id, speaker: null, action, seconds}`: something that
+  happens with nobody speaking. `seconds` is above 0 and at most 3, and
+  silent lines in a row add up to at most 3 between two spoken lines,
+  because the pause a dialogue line carries (`audio.narration.lines[].gap`)
+  is at most 3 s.
+- Line ids are unique across the script; later stages point at lines by id.
+- `narration` is every spoken line's text, in order, joined by single spaces.
+- Other keys (`plan`, `title_scores`, `check`, …) are kept as they are.
+
+### Functions
+
+- `readScreenplay(value)` → the version 2 shape of any SCRIPT.json. A version
+  2 value is returned unchanged. A version 1 value (or an older one with no
+  version) becomes one narrator line per beat (`l1`, `l2`, …), or one line
+  holding the whole narration when it has no beats, with `characters: []`
+  and `source_version` set to what was read. It throws on a version it does
+  not know. `isScreenplay(value)` says whether a value is already in the
+  version 2 shape.
+- `validateScreenplay(value, {duration, wpm, gap, problemLandsSeconds,
+  tolerance})` → `{ok, errors: [{id, message, fix, line?}], warnings,
+  stats}`. Errors:
+
+  | id | rule |
+  |---|---|
+  | `script-shape` | not a script, an unknown version, no beats, no spoken line, a bad or repeated character id, a character called `narrator` |
+  | `beat-name` | a beat that is not a story beat |
+  | `line-id` | a line with no id, or an id used twice |
+  | `line-shape` | a spoken line with no text or with an action or a length; a silent line with no action or with text; a line with no `speaker` field |
+  | `silent-length` | a silent line with no `seconds`, or over 3 s, or a run of silent lines over 3 s between two spoken lines |
+  | `speaker-unknown` | a speaker who is not a listed character or the narrator |
+  | `character-unused` | a listed character who never speaks and whom no action names (by `id` or `name`, as a whole word) |
+  | `narration-mismatch` | `narration` is not the spoken lines joined |
+  | `fits-length` | the estimated length is more than 15% over `duration` at `wpm` (the voice's measured pace; 150 until one is measured) |
+  | `problem-missing` | no `problem` beat |
+  | `problem-lands` | the `problem` beat starts after `problemLandsSeconds` (the profile's `problem_lands_seconds`, 12 s in `story-characters`) |
+
+  Warnings: `no-duration`, `under-length` (more than 15% short),
+  `no-problem-limit`, `edge-silence` (the script opens or ends on a silent
+  line). A version 1 value is validated as all-narrator, without the
+  `beat-name`, `narration-mismatch` and problem rules.
+- `screenplayTiming(script, {wpm, gap})` → estimated times before any take
+  exists: a spoken line runs its words at `wpm`, two spoken lines in a row
+  are `gap` apart (0.3 s), a silent line runs its own `seconds`. Returns
+  `{seconds, spoken_seconds, silent_seconds, words, wpm, lines: [{id,
+  speaker, beat, start, end}], beats: [{beat, start, end}]}`.
+- `screenplayNarration(script)` → `{lines: [{speaker, text, gap?}],
+  lead_seconds, tail_seconds}`. `lines` is `audio.narration.lines`, the
+  dialogue format `src/voice/dialogue.js` voices, with no change to the voice
+  code. A silent line becomes the `gap` of the spoken line before it; a
+  line with no silent line after it has no `gap`, so the story's own gap
+  applies. Silent lines before the first spoken line and after the last
+  cannot be a pause between lines: their lengths come back as
+  `lead_seconds` and `tail_seconds` for the shot list to hold.
+- `spokenLines(script)` → the spoken lines with their character offsets in
+  `screenplayText(script)`, the spoken text joined.
+
+### The check (`src/script_check.js`, `launchclip script check`)
+
+`checkScreenplay({script, duration, wpm, problemLandsSeconds, brief, …})`
+runs `validateScreenplay`, then runs `checkScript` on the spoken text as one
+narration (format `story` unless given), so every spoken line passes the same
+script checks and evidence rules as a narrated script: figures, quotes,
+ratings and deadlines trace to the brief. A finding inside a line carries
+that line's `line` id and `speaker`. A character story may end without a
+call to action, so `cta-missing` is only an error when the script has a
+`cta` beat. The report is the `checkScript` report with `stats.screenplay`
+and `narration` (the derived lines).
+
+`launchclip script check <project>` checks the project's `SCRIPT.json`
+(a file path works too). `--duration` is the target length, `--wpm` the
+voice's measured pace (else the script's `plan.wpm`, else 150), `--profile`
+the cadence profile whose `problem_lands_seconds` p90 is the limit (default
+`story-characters`), `--brief` the prompt and notes the script was written
+from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
+checked exactly as before.
+
 ## World module (`kit/core/catalog-world.mjs`)
 
 Layered environments drawn in code ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)

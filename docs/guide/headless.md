@@ -258,6 +258,15 @@ unless you pass `--format`, `--goal` or `--awareness`. `--brief` takes the promp
 written from (repeat it for several files). It exits 1 when there are errors
 and prints the fix for each one.
 
+A project folder works too: `launchclip script check <project>` checks its
+`SCRIPT.json`. When that file is a screenplay (version 2: speakers and silent
+lines, for a story told by characters), the check first validates the
+contract: every speaker is a listed character or the narrator, every listed
+character speaks or acts, the script fits `--duration` at `--wpm`, and the
+problem lands inside the profile's limit. Then the spoken lines pass the same
+checks as any narration. The format is in
+[KIT_CONTRACTS.md](../KIT_CONTRACTS.md) under "Screenplay".
+
 Errors are kept for rules that are arithmetic, legal or universal:
 
 - **The clock:** more words than the duration can hold at 2.75 words a second.
