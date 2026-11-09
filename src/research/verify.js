@@ -32,6 +32,7 @@ export function verifyClaim(claim, snapshots) {
       supports: result.supports,
       confidence: round2(result.score * (snapshot.primary ? 1 : 0.75)),
       quote: result.quote,
+      ...(result.matched_by ? { matched_by: result.matched_by } : {}),
       ...(result.conflict ? { conflict: result.conflict } : {})
     });
   }
@@ -68,6 +69,8 @@ export function buildLedger({ claims, snapshots, input, entities, now, search, n
       quote: claim.quote ?? null,
       entities: claim.entities ?? [],
       origin: claim.origin ?? "pattern",
+      ...(claim.headline ? { headline: true } : {}),
+      ...(claim.passage ? { passage: claim.passage } : {}),
       ...verdict
     };
   });
@@ -101,6 +104,18 @@ export function matchSnapshot(claim, snapshot) {
     const span = findLoose(text, claim.quote);
     if (span) return { supports: true, score: 0.95, quote: span };
     return null;
+  }
+  // A story's headline (a claim research made from a page's own title) is checked the same way: the page must say it.
+  if (claim.headline) {
+    const span = findLoose(text, claim.text);
+    return span?.start != null ? { supports: true, score: 0.9, quote: span } : null;
+  }
+  // An agent's passage: the words it copied from the source as stating the claim. The source must hold them
+  // word for word, and they must carry every number and date of the claim; then they are the quote span.
+  if (claim.passage && String(claim.passage).trim().length >= 20) {
+    const span = findLoose(text, claim.passage);
+    const anchored = (claim.values ?? []).every((value) => numberAppears(claim.passage, value)) && (claim.dates ?? []).every((date) => dateAppears(claim.passage, date, snapshot));
+    if (span?.start != null && anchored) return { supports: true, score: 0.85, quote: span, matched_by: "passage" };
   }
   const values = claim.values ?? [];
   const keywords = keywordsFor(claim);

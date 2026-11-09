@@ -16,6 +16,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { COVER_PATH } from "./cover.js";
 import { aspectName, coverFrame } from "@launchclip/core/story.mjs";
+import { mediaCredits, mediaLicenceErrors, researchMediaPaths } from "./research/stage_media.js";
 
 export const PUBLISH_VERSION = "launchclip.publish.v1";
 export const PUBLISH_FILE = "publish.json";
@@ -149,9 +150,46 @@ export async function writePublishManifest(projectPath, options = {}) {
   const files = { video: finalVideo ? rel(finalVideo) : null, cover, captions: await findCaptions(project) };
   const manifest = buildPublishManifest({ story, script, files, options });
   if (!files.video) manifest.warnings.push("no rendered video yet: run launchclip finish first");
+  Object.assign(manifest, await researchCredits(project, story, manifest));
   const file = path.join(project, PUBLISH_FILE);
   await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
   return { file, manifest };
+}
+
+/**
+ * Credits for what research brought in: the licence and attribution of every
+ * stock or archive item the storyboard places (research/assets.json), and the
+ * source of every recorded page (its sidecar). The credit lines join the
+ * description, where a CC BY licence wants them. An item placed with no
+ * cleared licence on record is a warning that says to remove it.
+ */
+async function researchCredits(project, story, manifest) {
+  const out = {};
+  if (researchMediaPaths(story).length) {
+    const assets = await readOptional(path.join(project, "research", "assets.json"));
+    const credits = mediaCredits(story, assets);
+    const errors = mediaLicenceErrors(story, assets);
+    if (credits.length) {
+      out.credits = credits;
+      out.description = `${manifest.description}\n\nMedia: ${credits.map((credit) => credit.attribution).join("; ")}`;
+    }
+    if (errors.length) out.warnings = [...manifest.warnings, ...errors.map((error) => `licence: ${error}`)];
+  }
+  const sources = [];
+  const seen = new Set();
+  const visit = async (value) => {
+    if (typeof value === "string") {
+      const match = value.replace(/^\.\//, "").match(/^(assets\/evidence\/[^/]+)\.(?:mp4|webm)$/);
+      if (!match || seen.has(match[1])) return;
+      seen.add(match[1]);
+      const record = await readOptional(path.join(project, `${match[1]}.evidence.json`));
+      if (record) sources.push({ clip: value.replace(/^\.\//, ""), url: record.final_url ?? record.request_url ?? null, title: record.provenance?.source_title ?? record.page_title ?? null, publisher: record.provenance?.publisher ?? null, published_at: record.provenance?.published_at ?? null, captured_at: record.captured_at ?? null });
+    } else if (Array.isArray(value)) for (const item of value) await visit(item);
+    else if (value && typeof value === "object") for (const item of Object.values(value)) await visit(item);
+  };
+  await visit({ scenes: story.scenes, overlays: story.overlays, ending: story.ending });
+  if (sources.length) out.sources = sources;
+  return out;
 }
 
 // A subtitle file the project already has (.srt before .vtt).

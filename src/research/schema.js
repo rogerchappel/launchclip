@@ -6,6 +6,7 @@
 //   research/assets.json          launchclip.research-assets.v1 licence-clear footage, images and portraits
 //   research/social.json          launchclip.research-social.v1 official X posts behind verified claims (social.js)
 //   research/logos.json           launchclip.research-logos.v1  each named organisation's logo (research/logos/<slug>.svg|png)
+//   research/news.json            launchclip.research-news.v1   the stories the keyless news sources led to, kept or not (news.js)
 //
 // The ledger shares its version string with production/evidence.json (the
 // evidence stage's item list) but not its shape: the ledger keys its version
@@ -26,6 +27,7 @@ export const RESEARCH_PATHS = Object.freeze({
   data: "data",
   assets: "assets.json",
   social: "social.json",
+  news: "news.json",
   logos: "logos.json",
   logoFiles: "logos",
   snapshots: "snapshots"

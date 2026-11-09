@@ -1,0 +1,39 @@
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "She skipped one check",
+  "logline": "Maya's deploy fails again; Sam shows her the one check she skipped.",
+  "premise": { "want": "ship before lunch", "obstacle": "the same failing deploy", "change": "she checks first" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "to ship", "speech": "short, dry" },
+    { "id": "sam", "role": "foil", "want": "to help without gloating", "speech": "warm, unhurried" }
+  ],
+  "beats": [
+    { "beat": "setup", "place": "desk-laptop",
+      "lines": [
+        { "id": "l1", "speaker": "narrator", "text": "Maya has shipped this fix three times today." }
+      ] },
+    { "beat": "problem", "place": "desk-laptop",
+      "lines": [
+        { "id": "l2", "speaker": "maya", "text": "Third time. Same red build.", "playing": "flat, to herself" },
+        { "id": "l3", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
+        { "id": "l4", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
+      ] },
+    { "beat": "attempt",
+      "lines": [
+        { "id": "l5", "speaker": "maya", "text": "The check takes a whole minute." },
+        { "id": "l6", "speaker": "sam", "text": "The deploy takes ten." }
+      ] },
+    { "beat": "turn",
+      "lines": [
+        { "id": "l7", "speaker": null, "action": "Maya runs the check. It fails on line one.", "seconds": 1.5 },
+        { "id": "l8", "speaker": "maya", "text": "Oh. It was the config all along." }
+      ] },
+    { "beat": "resolution",
+      "lines": [
+        { "id": "l9", "speaker": "narrator", "text": "One minute of checking saved her the afternoon." },
+        { "id": "l10", "speaker": "sam", "text": "Run the check first. Then ship." }
+      ] }
+  ],
+  "narration": "Maya has shipped this fix three times today. Third time. Same red build. Did you run the check? The check takes a whole minute. The deploy takes ten. Oh. It was the config all along. One minute of checking saved her the afternoon. Run the check first. Then ship.",
+  "title_options": ["She skipped one check"]
+}

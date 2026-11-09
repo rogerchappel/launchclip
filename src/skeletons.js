@@ -98,10 +98,14 @@ export async function openingPixels(video, { measure = frameContent } = {}) {
   return { ok, frame0: Math.round(frame0 * 10) / 10, settled: Math.round(settled * 10) / 10, detail: `frame 0 carries ${Math.round(frame0 / Math.max(settled, 1e-9) * 100)}% of the content at ${OPENING_SETTLED_SECONDS} s${ok ? "" : `: it fades up from an empty background (the opening image must be drawn on frame 0)`}` };
 }
 
-/** SCRIPT.json's beats as story beats {role, spoken}: the beat's own role, else the skeleton's role for its id. */
+/**
+ * SCRIPT.json's beats as story beats {role, spoken}: the beat's own role, else the skeleton's role for its id.
+ * A version 2 beat (speakers and silent lines) is spoken as its spoken lines, joined.
+ */
 export function scriptBeats(script, skeleton = null) {
   if (!Array.isArray(script?.beats)) return [];
-  return script.beats.map((entry) => ({ role: entry.role ?? skeleton?.beats.find((item) => item.id === entry.beat)?.role ?? entry.beat, spoken: entry.text ?? entry.spoken ?? "" }));
+  const spoken = (entry) => entry.text ?? entry.spoken ?? (Array.isArray(entry.lines) ? entry.lines.filter((line) => line?.speaker != null && typeof line.text === "string").map((line) => line.text.trim()).join(" ") : "");
+  return script.beats.map((entry) => ({ role: entry.role ?? skeleton?.beats.find((item) => item.id === entry.beat)?.role ?? entry.beat, spoken: spoken(entry) }));
 }
 
 /** `launchclip skeletons list|show|choose`. */

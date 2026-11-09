@@ -6,7 +6,12 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+// The client names itself and where to read about it; no personal contact details.
 const USER_AGENT = "launchclip-research/1 (+https://github.com/rogerchappel/launchclip)";
+// The name robots.txt rules are matched against.
+const ROBOTS_AGENT = "launchclip-research";
+// The least time between two requests to one host, for services that ask for it.
+const HOST_GAP_MS = { "api.gdeltproject.org": 5000 };
 const MAX_BODY = 4_000_000;
 
 /**
@@ -21,6 +26,9 @@ export function createHttp(options = {}) {
   const log = options.log ?? (() => {});
   const calls = [];
   const memo = new Map();
+  const robots = new Map();
+  const lastCall = new Map();
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
 
   function headersFor(url, extra = {}) {
     const headers = { "user-agent": USER_AGENT, ...extra };
@@ -37,7 +45,18 @@ export function createHttp(options = {}) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        const host = safeHost(url);
+        const wait = (lastCall.get(host) ?? 0) + (HOST_GAP_MS[host] ?? 0) - Date.now();
+        if (wait > 0) await sleep(wait);
+        lastCall.set(host, Date.now());
+        let response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        // A host that paces its users and says "too many": wait its gap once and ask again.
+        if (response.status === 429 && HOST_GAP_MS[host]) {
+          await response.body?.cancel?.().catch?.(() => {});
+          await sleep(HOST_GAP_MS[host]);
+          lastCall.set(host, Date.now());
+          response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        }
         const body = await response.text();
         calls.push({ url: redactUrl(url), status: response.status });
         if (!response.ok) {
@@ -64,13 +83,25 @@ export function createHttp(options = {}) {
       if (!response.ok) return null;
       try { return JSON.parse(response.body); } catch { return null; }
     },
-    async text(url, init) {
-      const response = await request(url, init);
+    /** init.robots: true for a page or feed on someone's site (API calls are not crawling and skip the check). */
+    async text(url, init = {}) {
+      const { robots: check, ...rest } = init;
+      if (check && !(await allowed(url))) return null;
+      const response = await request(url, rest);
       return response.ok ? response.body : null;
+    },
+    allowed,
+    /** Why the last request for a url gave nothing: "403", "robots", "error", or null when it was never asked. */
+    failure(url) {
+      const call = calls.findLast((entry) => entry.url === redactUrl(url));
+      return call && call.status !== 200 ? String(call.status) : null;
     },
     /** → {url, final_url, title, publisher, published_at, fetched_at, sha256, text, lines} or null */
     async snapshot(url, init = {}) {
-      const response = await request(url, init);
+      // A page robots.txt closes to this client is not read, and so never verifies or shows anything.
+      if (!(await allowed(url))) return null;
+      const { title: _title, publisher: _publisher, published_at: _published, published_fallback: _fallback, ...rest } = init;
+      const response = await request(url, rest);
       if (!response.ok || !response.body) return null;
       const type = String(response.headers?.get?.("content-type") ?? "");
       const html = /html/i.test(type) || /^\s*<(?:!doctype|html)/i.test(response.body);
@@ -80,12 +111,34 @@ export function createHttp(options = {}) {
         final_url: response.url,
         title: init.title ?? page.title,
         publisher: init.publisher ?? page.publisher ?? safeHost(response.url ?? url),
-        published_at: init.published_at ?? page.published_at,
+        // The page's own date first; a feed's or index's date for it only when the page gives none.
+        published_at: init.published_at ?? page.published_at ?? init.published_fallback ?? null,
         text: page.text
       }, response.body);
     },
     keep
   };
+
+  /** Whether robots.txt on the url's host lets this client fetch it (fetched once per host). */
+  async function allowed(url) {
+    let target;
+    try { target = new URL(url); } catch { return false; }
+    const origin = target.origin;
+    if (!robots.has(origin)) {
+      robots.set(origin, (async () => {
+        const response = await request(`${origin}/robots.txt`);
+        // No robots.txt (4xx) allows everything; a server error is read as "not now".
+        if (!response.ok) return response.status >= 500 ? [{ allow: false, path: "/" }] : [];
+        return robotsRules(response.body, ROBOTS_AGENT);
+      })());
+    }
+    const ok = robotsAllow(await robots.get(origin), `${target.pathname}${target.search}`);
+    if (!ok) {
+      calls.push({ url: redactUrl(url), status: "robots" });
+      log(`research: robots.txt on ${target.hostname} does not allow ${redactUrl(url)}; skipped`);
+    }
+    return ok;
+  }
 
   /** A snapshot built from API data: hashed (over the raw body), stamped and written like a fetched page. */
   async function keep(fields, body = fields.text) {
@@ -106,7 +159,9 @@ export function htmlToText(html) {
   };
   const title = meta("og:title") ?? (decodeEntities(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? "") || null);
   const timeTag = html.match(/<time[^>]+datetime=["']([^"']+)["']/i)?.[1] ?? null;
-  const published = meta("article:published_time") ?? meta("datePublished") ?? meta("date") ?? timeTag;
+  // JSON-LD carries the date on pages with no meta tag for it.
+  const jsonLd = html.match(/"datePublished"\s*:\s*"([^"]+)"/)?.[1] ?? null;
+  const published = meta("article:published_time") ?? meta("datePublished") ?? meta("date") ?? jsonLd ?? timeTag;
   const text = decodeEntities(html
     .replace(/<(script|style|noscript|svg|template|head)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
@@ -129,6 +184,45 @@ export function decodeEntities(text) {
     .replace(/&rsquo;|&lsquo;/g, "’").replace(/&ldquo;/g, "“").replace(/&rdquo;/g, "”").replace(/&mdash;/g, "—").replace(/&ndash;/g, "–").replace(/&hellip;/g, "…").replace(/&middot;/g, "·")
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+}
+
+/**
+ * robots.txt → the rules for this client: its own group when one names it,
+ * else the * group. → [{allow, path}]
+ */
+export function robotsRules(text, agent) {
+  const groups = [];
+  let current = null;
+  let open = false;
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    const match = line.match(/^(user-agent|allow|disallow)\s*:\s*(.*)$/i);
+    if (!match) continue;
+    const [, key, value] = match;
+    if (key.toLowerCase() === "user-agent") {
+      // Consecutive user-agent lines share one group.
+      if (!open) { current = { agents: [], rules: [] }; groups.push(current); open = true; }
+      current.agents.push(value.toLowerCase());
+      continue;
+    }
+    open = false;
+    if (!current) continue;
+    // An empty Disallow allows everything.
+    if (value) current.rules.push({ allow: key.toLowerCase() === "allow", path: value });
+  }
+  const mine = groups.filter((group) => group.agents.some((name) => name !== "*" && agent.toLowerCase().includes(name)));
+  return (mine.length ? mine : groups.filter((group) => group.agents.includes("*"))).flatMap((group) => group.rules);
+}
+
+/** The longest matching rule decides; Allow wins a tie; no match allows. */
+export function robotsAllow(rules, pathname) {
+  let best = null;
+  for (const rule of rules ?? []) {
+    const pattern = new RegExp(`^${rule.path.replace(/[.+?^{}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\?\$$/, "$")}`);
+    if (!pattern.test(pathname)) continue;
+    if (!best || rule.path.length > best.path.length || (rule.path.length === best.path.length && rule.allow)) best = rule;
+  }
+  return best ? best.allow : true;
 }
 
 export function isoDate(value) {
