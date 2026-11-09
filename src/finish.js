@@ -76,9 +76,14 @@ import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
+import { fitFaceClear } from "./face_clear_fit.js";
+import { fitSceneTimings } from "./timing_fit.js";
 
 // Rounds of hiding captions under cards before the layout check fails the render.
-const CAPTION_FIT_PASSES = 4;
+// Validate's layout repairs (repairLayout) run at most this many times: one
+// repair can expose the next (a timing fixed draws a card that sits on the
+// face; a card moved off the face lands in the caption band).
+const LAYOUT_REPAIR_PASSES = 6;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -1030,7 +1035,16 @@ const STAGES = [
         ctx.subjectGate = { ...ctx.subjectGate, status: "fallback", changes: fallback.changes };
         ctx.warnings.push(...subjectFallbackLines(fallback.changes).map((line) => `subject gate: ${line}`));
       }
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+      let resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+      // An explicit event time the plan set for a longer scene than the real
+      // narration settled moves into the window the module now allows
+      // (fitSceneTimings), instead of failing the run after the paid plan.
+      const timed = fitSceneTimings(ctx.copy, resolved);
+      if (timed.moved.length) {
+        ctx.copy = timed.storyboard;
+        resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+        ctx.warnings.push(timingLine(timed.moved));
+      }
       const second = validateStory(resolved);
       // A scene whose params do not resolve would render as a "Missing
       // module" placeholder, so it fails here as it does in story validate.
@@ -1044,27 +1058,22 @@ const STAGES = [
       const { castGate } = await import("./cast.js");
       ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
-      const { checkLayoutProject } = await import("./layout_check.js");
+      const { checkLayoutProject, subjectInfos } = await import("./layout_check.js");
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
+      const resolveOptions = () => ({ words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
       let layout = await checkLayoutProject(ctx.project, layoutOptions());
-      // A card in the caption band while captions show: the captions dip out
-      // under it, as the planner does. The timings here are the final ones
-      // (the real narration's words, a card's settled window), so a clash the
-      // planner's fit just missed (captions from 0 s, hidden from 0.34 s) is
-      // closed here instead of failing the render.
-      // Repeated: hiding one clash can split a caption window and expose the
-      // next card's, so it runs until nothing new is hidden (at most
-      // CAPTION_FIT_PASSES times).
-      for (let pass = 0; pass < CAPTION_FIT_PASSES && layout.status === "failed"; pass += 1) {
-        const errors = layout.findings.filter((finding) => finding.severity === "error");
-        const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
-        const fitted = errors.every((finding) => finding.rule === "caption-band") ? fitCaptionBand(ctx.copy, lines) : { hidden: [] };
-        if (!fitted.hidden.length) break;
-        ctx.copy = fitted.storyboard;
-        ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+      // Layout errors that only show once the real narration has settled the
+      // timings are repaired here instead of failing the render after the
+      // paid plan (repairLayout). The checks stay strict: a repaired story is
+      // checked again, and anything left fails below.
+      for (let pass = 0; pass < LAYOUT_REPAIR_PASSES && layout.status === "failed"; pass += 1) {
+        const repaired = await repairLayout(ctx, layout, { resolveOptions, infos: () => subjectInfos(ctx.project, ctx.resolved) });
+        if (!repaired.changes.length) break;
+        ctx.copy = repaired.storyboard;
+        ctx.resolved = resolveStory(ctx.copy, resolveOptions());
         ctx.boundaries = deriveBoundaries(ctx.resolved);
         layout = await checkLayoutProject(ctx.project, layoutOptions());
-        ctx.warnings.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
+        ctx.warnings.push(...repaired.changes);
       }
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, rects: layout.rects ?? [], media: layout.media ?? {}, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
@@ -1522,6 +1531,53 @@ async function writeChapters(ctx) {
 
 // --prototype: trim the resolved story to its opening cut. The later stages
 // (sound, render, master, evidence, gates) all work on the trimmed copy.
+function timingLine(moved) {
+  return `layout: tooling moved ${moved.join("; ")} into the scene's settled window`;
+}
+
+/**
+ * One pass of validate's layout repairs, for the errors that only show once
+ * the real narration has settled every scene's window. Each is tooling, the
+ * way the planner's fits are; none loosens a check:
+ *   - an explicit event time a shortened scene no longer allows
+ *     (module-spec with error.timing) moves into the scene's window
+ *     (fitSceneTimings);
+ *   - a card on the presenter's face (subject-face) moves beside, above or
+ *     below the head, or, for a module made to sit behind the presenter
+ *     that the scene put in front, goes back behind (fitFaceClear);
+ *   - a card in the caption band while captions show hides the captions
+ *     under it (fitCaptionBand), whatever other errors there are.
+ * → {storyboard, changes: [warning lines]}; no changes when nothing applied.
+ */
+export async function repairLayout(ctx, layout, { resolveOptions, infos = async () => [] }) {
+  const errors = (layout.findings ?? []).filter((finding) => finding.severity === "error");
+  let storyboard = ctx.copy;
+  const changes = [];
+  if (errors.some((finding) => finding.rule === "module-spec" && finding.timing?.explicit)) {
+    const fitted = fitSceneTimings(storyboard, resolveStory(storyboard, resolveOptions()));
+    if (fitted.moved.length) {
+      storyboard = fitted.storyboard;
+      changes.push(timingLine(fitted.moved));
+    }
+  }
+  const faces = new Set(errors.filter((finding) => finding.rule === "subject-face").flatMap((finding) => finding.ids));
+  if (faces.size) {
+    const cleared = fitFaceClear(storyboard, { ...resolveOptions(), infos: await infos(), behind: true, only: faces });
+    if (cleared.moved.length || cleared.behind.length) {
+      storyboard = cleared.storyboard;
+      if (cleared.moved.length) changes.push(`face: tooling ${cleared.moved.join("; ")}`);
+      changes.push(...cleared.behind.map((entry) => `face: tooling ${entry}`));
+    }
+  }
+  const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
+  const fitted = fitCaptionBand(storyboard, lines);
+  if (fitted.hidden.length) {
+    storyboard = fitted.storyboard;
+    changes.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
+  }
+  return { storyboard, changes };
+}
+
 function applyPrototype(ctx) {
   const cut = prototypeCut(ctx.resolved, ctx.words ?? []);
   if (!cut) {

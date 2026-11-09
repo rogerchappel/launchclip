@@ -77,7 +77,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           textRole: model.textRole ?? "key"
         });
       } catch (error) {
-        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}`, ...(error.timing ? { timing: error.timing } : {}) });
         return [];
       }
     }
@@ -135,7 +135,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           ...(model.layout.fill?.stage ? { fill: { group: model.layout.fill.group ?? scene.id, stage: model.layout.fill.stage } } : {})
         }, ...extras.parts, ...fullFrameMedia(scene, model, media[scene.id], canvas)];
       } catch (error) {
-        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}`, ...(error.timing ? { timing: error.timing } : {}) });
         return [];
       }
     }
@@ -327,15 +327,7 @@ async function subjectView(projectDir, resolved, warnings = []) {
   const base = storyBase(resolved);
   const tracked = Boolean(resolved.resolved?.subjectTrack) && base?.subject.mode !== "off";
   if (!base || (base.subject.mode !== "mattes" && !tracked)) return null;
-  const infos = [];
-  for (const matte of base.subject.mode === "mattes" ? base.subject.mattes : []) {
-    if (!matte.info) {
-      warnings.push(`${matte.src} has no info (its subject.json); the subject checks skip its range`);
-      infos.push(null);
-      continue;
-    }
-    infos.push(JSON.parse(await readFile(path.join(projectDir, matte.info), "utf8")));
-  }
+  const infos = await subjectInfos(projectDir, resolved, warnings);
   const models = new Map();
   for (const scene of resolved.scenes) {
     try { models.set(scene.id, resolveModule(scene, resolved)); } catch { /* reported as module-spec */ }
@@ -356,6 +348,25 @@ async function subjectView(projectDir, resolved, warnings = []) {
     return { head: move(boxes.head), body: move(boxes.body) };
   };
   return { at, models };
+}
+
+/**
+ * The base.subject mattes' subject.json objects, in matte order (null for a
+ * matte with no info, with a warning), as the subject checks read them; []
+ * without mattes. finish hands them to fitFaceClear so its head is this one.
+ */
+export async function subjectInfos(projectDir, resolved, warnings = []) {
+  const base = storyBase(resolved);
+  const infos = [];
+  for (const matte of base?.subject.mode === "mattes" ? base.subject.mattes : []) {
+    if (!matte.info) {
+      warnings.push(`${matte.src} has no info (its subject.json); the subject checks skip its range`);
+      infos.push(null);
+      continue;
+    }
+    infos.push(JSON.parse(await readFile(path.join(projectDir, matte.info), "utf8")));
+  }
+  return infos;
 }
 
 // The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes

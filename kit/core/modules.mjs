@@ -224,7 +224,8 @@ export function resolveModule(scene, story, { track, end } = {}) {
     if (Array.isArray(scene?.zooms) && scene.zooms.length) model.zoomRects = zoomRects(scene, model);
     return model;
   } catch (error) {
-    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}${sectionFitHint(scene, story, { end: finalEnd })}`);
+    // An event time's window (error.timing) rides along for tooling to repair.
+    throw Object.assign(new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}${sectionFitHint(scene, story, { end: finalEnd })}`), error.timing ? { timing: error.timing } : {});
   }
 }
 
@@ -542,7 +543,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     if (track !== undefined) spec.track = track;
     const resolveSpec = (value) => {
       try { return styled ? resolveEditorialModule(value, { grammar }) : resolveEditorialModule(value); }
-      catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
+      catch (error) { throw Object.assign(new Error(`module "${module}" params: ${error.message}`), error.timing ? { timing: error.timing } : {}); }
     };
     let model = resolveSpec(spec);
     // Footage checklist: with a measured presenter and no rect, the card sits
@@ -566,7 +567,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
   try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story) }); }
-  catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
+  catch (error) { throw Object.assign(new Error(`module "${module}" params: ${error.message}`), error.timing ? { timing: error.timing } : {}); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
   plateCuts(finished, story, scene);

@@ -10,7 +10,7 @@ import { runCli } from "../src/cli.js";
 import { runStoryCommand } from "../src/story_cli.js";
 import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
 import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
-import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, runFinish, stageDecision } from "../src/finish.js";
+import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, repairLayout, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
 import { PROMPT, assetsDir, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
@@ -342,6 +342,68 @@ test("a card in a mid-frame caption band from 0 s hides the captions under it in
   } finally {
     await rm(project, { recursive: true, force: true });
   }
+});
+
+test("a line time past a shortened scene and caption-band clashes are both repaired at validate, not failed", async () => {
+  // A plan written for a longer scene: line-diagram line times the scene's
+  // settled window no longer allows (module-spec), next to cards in a
+  // mid-frame caption band. Neither blocks the other: the times move into the
+  // window, the captions dip under the cards, and validate passes.
+  const roof = { title: "Planned roof", points: { a: [0, 30], b: [50, 0], c: [100, 30], d: [100, 60], e: [0, 60] },
+    lines: [{ from: "e", to: "a", weight: "heavy", at: 0.6 }, { from: "d", to: "c", weight: "heavy", at: 0.9 }, { from: "a", to: "b", style: "dashed", label: "planned roof", at: 1.2 }, { from: "b", to: "c", style: "dashed", at: 2.7 }, { from: "e", to: "d", weight: "heavy", label: "deck", at: 2.8 }] };
+  const project = await narratedProject({ mutate: (story) => {
+    story.overlays[0].position = "middle";
+    story.scenes[1] = { id: "s2", module: "line-diagram", start: 3, end: 6, params: roof };
+  } });
+  try {
+    const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    const validate = report.stages.find((stage) => stage.name === "validate");
+    assert.equal(validate.status, "done", JSON.stringify(validate));
+    const moved = report.warnings.find((line) => line.startsWith("layout: tooling moved "));
+    assert.match(moved ?? "", /s2 params\.lines\[2\]\.at 1\.2 → 0\.56 s/, report.warnings.join("\n"));
+    assert.match(moved, /into the scene's settled window$/);
+    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions .* under s1/.test(line)), report.warnings.join("\n"));
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    const lines = resolved.scenes.find((scene) => scene.id === "s2").params.lines;
+    assert.deepEqual(lines.slice(0, 2).map((line) => line.at), [0.6, 0.9], "times already inside the window are kept");
+    const user = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    assert.equal(user.scenes[1].params.lines[2].at, 1.2, "the user's storyboard is not touched");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("repairLayout moves cards off the face and fits the caption band even beside an error it cannot fix", async () => {
+  // The second production failure: cards on the presenter's face once the
+  // real timings exist, next to a caption-band clash and an unrelated error.
+  const HEAD = { x: 0.5, y: 0.255, w: 0.24, h: 0.15 };
+  const track = { source: { width: 1080, height: 1920 }, fps: 10, frames: Array.from({ length: 201 }, (_, i) => ({ t: i / 10, head: HEAD, body: { x: 0.5, y: 0.65, w: 0.6, h: 0.7 } })) };
+  const story = {
+    schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 },
+    base: { src: "assets/recording.mp4" },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } },
+    overlays: [{ id: "captions", type: "captions", style: "word-highlight" }],
+    scenes: [
+      { id: "before-you-build", module: "polaroid", track: 1, start: 0.5, end: 3, params: { caption: "Before", tilt: -6 } },
+      { id: "three-and-a-half-weeks", module: "polaroid", track: 1, start: 5, end: 9.5, params: { caption: "3.5 weeks", tilt: 4 } }
+    ]
+  };
+  const layout = { findings: [
+    { rule: "subject-face", severity: "error", ids: ["before-you-build"], at: 0.5, detail: "before-you-build covers the presenter's face for 1.37 s from 0.5 s" },
+    { rule: "subject-face", severity: "error", ids: ["three-and-a-half-weeks"], at: 5, detail: "three-and-a-half-weeks covers the presenter's face for 4.38 s from 5 s" },
+    { rule: "caption-band", severity: "error", ids: ["three-and-a-half-weeks", "captions"], at: 5, detail: "three-and-a-half-weeks sits in the caption band while captions are visible (5s–9.5s)" },
+    { rule: "collision", severity: "error", ids: ["a", "b"], at: 1, detail: "a and b overlap" }
+  ] };
+  const repaired = await repairLayout({ copy: story }, layout, { resolveOptions: () => ({ track }) });
+  const face = repaired.changes.find((line) => line.startsWith("face: tooling "));
+  assert.match(face ?? "", /before-you-build (resized and )?moved .*three-and-a-half-weeks (resized and )?moved/, repaired.changes.join("\n"));
+  assert.ok(repaired.changes.includes("layout: tooling hid captions 4.98–9.52 s under three-and-a-half-weeks"), repaired.changes.join("\n"));
+  for (const scene of repaired.storyboard.scenes) assert.ok(scene.params.rect, scene.id);
+  assert.deepEqual(repaired.storyboard.overlays[0].hide, [[4.98, 9.52]]);
+  assert.equal(story.scenes[0].params.rect, undefined, "the input is not mutated");
+  // Nothing to repair: no changes, the same storyboard.
+  const none = await repairLayout({ copy: story }, { findings: [layout.findings[3]] }, { resolveOptions: () => ({ track }) });
+  assert.deepEqual(none, { storyboard: story, changes: [] });
 });
 
 test("--music-volume sets the bed's gain over the story's and the energy default", async () => {

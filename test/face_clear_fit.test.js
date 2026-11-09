@@ -138,3 +138,26 @@ test("the planner moves a hook off the face with the head track, and says so", a
   assert.equal(overlaps(drawn(report.storyboard, "hook"), headPx, GAP / 2 - 1), false);
   assert.ok(report.warnings.some((warning) => /^face: tooling hook (resized and )?moved/.test(warning)), report.warnings.join("\n"));
 });
+
+// finish (repairLayout): only the cards the face rule failed move, and a
+// module made to sit behind the presenter that the scene put in front goes
+// back behind, over a real cut-out only.
+test("only the failed cards move, and a front masthead goes back behind over a matte", () => {
+  const name = { id: "name", module: "masthead", layer: "front", track: 1, start: 4, end: 7, params: { word: "Launch" } };
+  const other = { ...hook, id: "other", start: 8, end: 10 };
+  const matted = talkingHead([hook, name, other], { base: { src: "assets/recording.mp4", subject: { mattes: [{ src: "assets/subject/a.webm", in: 0, out: 20 }] } } });
+  const result = fitFaceClear(matted, { track, behind: true, only: new Set(["hook", "name"]) });
+  assert.equal(result.moved.length, 1);
+  assert.match(result.moved[0], /^hook /);
+  assert.deepEqual(result.behind, ["name (masthead) set behind the presenter: it covered the face at 4–7 s and it places itself"]);
+  const byId = Object.fromEntries(result.storyboard.scenes.map((scene) => [scene.id, scene]));
+  assert.equal(byId.name.layer, "behind");
+  assert.equal(byId.other.params.rect, undefined, "a card the face rule did not fail is left alone");
+  assert.equal(matted.scenes[1].layer, "front", "the input is not mutated");
+
+  // A track alone has no cut-out to draw behind: the masthead stays and is reported.
+  const tracked = fitFaceClear(talkingHead([name]), { track, behind: true });
+  assert.deepEqual(tracked.behind, []);
+  assert.equal(tracked.kept.length, 1);
+  assert.equal(tracked.storyboard.scenes[0].layer, "front");
+});

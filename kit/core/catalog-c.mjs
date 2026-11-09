@@ -140,7 +140,7 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (!withinBounds(rel, min, max)) check.fail(value !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${value === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
+    if (!withinBounds(rel, min, max)) check.fail(value !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${value === undefined ? ' — lengthen the scene or set it explicitly' : ''}`, {timing: {path, min, max, got: rel, explicit: value !== undefined}});
     return rt(start + rel);
   };
   const min = {key: Math.ceil(CATALOG_B_STYLE.minKeyText * unit * 100 - 1e-6) / 100, meta: Math.ceil(CATALOG_B_STYLE.minMetaText * unit * 100 - 1e-6) / 100};
