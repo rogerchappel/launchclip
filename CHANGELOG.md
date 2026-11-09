@@ -4,6 +4,18 @@
 
 ### Added
 
+- A missing evidence capture is loud. When a verified claim wanted its
+  source page on screen and none was recorded (no Playwright or Chromium, a
+  paywall, a bot check, a sign-in wall), `make` now lists each claim with
+  the kind of failure and its fix in `MAKE.json` (`captures.status`,
+  `captures.claims_without_capture`), warns once per kind, and holds the
+  `research` gate at `pending`. `launchclip research` says whether this
+  machine can record the requests it wrote, and `launchclip doctor` reports
+  the recorder under `tools.evidence_capture` with the fix.
+- `launchclip research capture [research] [--root .]` records every capture
+  request, writes `research/capture-status.json` and attaches the evidence
+  data, so a run by hand ends with the same files as `make`.
+
 - Current news with no search key. `launchclip research` (and `make` when
   it researches) now finds stories through public sources that need no key:
   a named company's own RSS or Atom feed (and any `--feed <url>`), Hacker

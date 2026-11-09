@@ -248,9 +248,12 @@ claims and their captures:
 | `claim.data.sources` | two or more GitHub PR or commit sources | `[{module, params, token}]`, compact `sourceParams`, in date order |
 
 `runResearch` attaches what it can at once. Post data needs the clip's
-sidecar, so after `launchclip evidence capture` run
-`launchclip research attach research/ [--root .]`, which rewrites the
-ledger and capture requests with the data. `eval/beat-map-dry-run.mjs`
+sidecar, so record the requests with `launchclip research capture research/
+[--root .]`, which records each one, says which could not be recorded and
+why (EVIDENCE_CAPTURE.md, "When a capture is not made"), and then attaches.
+After a single `launchclip evidence capture`, run `launchclip research
+attach research/ [--root .]`; either rewrites the ledger and capture
+requests with the data. `eval/beat-map-dry-run.mjs`
 attaches in memory when it loads a folder.
 
 ## Posts on X: `research/social.json` (`launchclip.research-social.v1`)
@@ -377,7 +380,9 @@ fact as the company's. Flagged brief claims become warnings. After
 the script, `auditScript()` checks the narration: each claim must match a
 verified ledger claim or a primary-source excerpt. Otherwise it is a warning,
 and the `research` gate stays `pending`, so the video is ready for review
-rather than ready.
+rather than ready. The gate also goes to `pending` when a verified claim's
+source page could not be recorded (no recorder, a paywall, a bot check):
+`MAKE.json` `captures` names each claim, the reason and the fix.
 
 ## Fixture
 
