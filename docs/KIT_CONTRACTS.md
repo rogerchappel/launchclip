@@ -3510,7 +3510,7 @@ to a stretch of the recording, not to one scene.
 | `split-left` | reframed into the left 46% (16:9) or 50% (9:16) | the right side |
 | `split-right` | reframed into the right side | the left side |
 | `framed` | inset in a rounded frame with a ring; `side` left/right (16:9, default left) or top/bottom (9:16, default top) | the rest of the canvas |
-| `stacked` | 9:16 only: the bottom half (`side: "top"` for the top) | the other half |
+| `stacked` | 9:16 only: the bottom half (`side: "top"` for the top), or `share` (0.35–0.6) of the height | the rest |
 | `insert` | hidden; the base audio keeps playing | the full canvas |
 
 - The contract lives in `kit/core/story.mjs`, which stays import-free: `validateSections`, `storySections` and `layoutSpans`. `footage-layout.mjs` re-exports them. `validateSections` (called by `validateStory`) checks the following:
@@ -3520,6 +3520,7 @@ to a stretch of the recording, not to one scene.
   - `panel` is a brand role (bg (default), primary, accent, paper or ink) or a `#rrggbb` colour;
   - `ring` is 0–24 px (default 6 for framed, else 0);
   - `room` is keep, dim or replace, and `zoom` is 1–1.6;
+  - `breakout` is a boolean, and true only where the presenter sits under the panel: `framed` with `side: "bottom"`, or `stacked` (bottom);
   - `transition` is `{type: "layout-shift" | "cut", dur ≤ 2}`;
   - sections are in order, without overlap.
 - `resolveStory` resolves section anchors like scene times.
@@ -3567,6 +3568,25 @@ to a stretch of the recording, not to one scene.
   - The face rule follows the reframed head, and sees no head while `insert` holds.
 - **Rooms.** A section's `room` (`dim` → `{dim: 0.55}`, `replace` → `{hide: true}`) becomes a room model for the section window. It needs a matte over every frame of the section; otherwise it's dropped with a plan warning that HyperFrames reports. It mounts the subject like a scene's room, and `plannedSubjectWindows` (so `make`) mattes it.
 - **Module reviews.** A module review (sceneFilter, ModuleReview) has no layout.
+
+### Breakout
+
+A section with `breakout: true` lifts the presenter's head over the top edge of their window, in front of the panel: the partly cut-out talking head.
+
+```json
+{ "id": "steps", "start": 2, "end": 9, "layout": "stacked", "share": 0.45, "breakout": true }
+```
+
+- **Where.** `framed` with `side: "bottom"`, or `stacked` on the bottom (`BREAKOUT_LAYOUTS`). Anything else is a validation error. `storySections` carries `breakout: true` only when it is on, so other stories resolve as before.
+- **The matte.** It needs a matte over the breakout window, like a room treatment. `breakoutWindows(story)` → `[{id, start, end}]`: the section, plus the layout-shift that leaves it unless the next span is an insert or another breakout. Without the matte the plan warns ("the head stays inside the frame") and the section renders as a plain one. `plannedSubjectWindows` includes the windows, so `make` mattes them.
+- **The camera.** The reframe puts the window's top edge `BREAKOUT_EDGE` (0.4) of the way down the head, about eye level, instead of keeping the head at its height in the frame. The head is the measured one, else `DEFAULT_HEAD`. The footage still has to cover the window, so a head the clamp holds lower breaks out less.
+- **The plan.** `layoutPlan(story).breakouts` lists the live windows (absent without one), and each adds a room entry `{sceneId: "layout:<id>:breakout", room: {}}` that mounts the cut-out and leaves the room as it is. A state in a breakout carries `breakout: true`; a shift keeps it into every layout but an insert, where the window closes.
+- **Stacking.** The frame is drawn twice, and so is a panel fill:
+  - `#lc-layout-frame-under` (`LayoutFrame under`, styled by `layoutUnderFrameStyle`) sits under the subject (z-index `subjectZ - 1`) and paints the panel and the ring behind the head.
+  - `#lc-layout-frame` stays above the subject. `layoutFrameStyle` adds a `clipPath`, `breakoutNotch(state, canvas, state.window)`, that cuts it away over the breakout zone (`breakoutZone`: the window's column with its ring, from the top of the canvas to the end of the window's top corners), so the cut-out shows there and is still trimmed at the window's sides and bottom. HyperFrames sets `clipPath` on every op (`"none"` outside a breakout).
+  - With a panel fill, `#lc-layout-fill-under` sits under the subject and `#lc-layout-fill` is wrapped in `#lc-layout-fill-notch`, clipped by `breakoutNotch(state, canvas)` (`LayoutFill notch`).
+  - Front scenes and captions stay above the head.
+- **The panel and captions.** `breakoutRise(story, section, canvas)` is how far the head stands over the edge (px; 0 without a live breakout). `layoutAt` reports it as `breakout` and ends `safe` a gutter above the head (`panelSafeArea`'s `bottom`). Captions at the `seam` sit on top of the head instead of across the face (`captionZone`'s `rise`).
 
 ### Parity
 
