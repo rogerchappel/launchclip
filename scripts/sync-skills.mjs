@@ -24,6 +24,8 @@
 //   skills/launchclip-create-video-remotion/   Remotion (fully generated: SKILL.md,
 //                                              references/, agents/, scripts/,
 //                                              assets/remotion-kit/ and assets/core/)
+//   skills/launchclip-character-design/        the character-design skill, copied
+//                                              from skills-src/character-design/
 //
 // references/storyboard-modules.md, subject-effects.md and direction-map.md are
 // generated from kit/core/planning-prompt.mjs, long-form.md from
@@ -128,6 +130,11 @@ export const SKILLS = [
     remotionKit: true
   }
 ];
+
+// Skills that are the same for every renderer: skill name → its folder in skills-src/.
+export const STANDALONE_SKILLS = Object.freeze({
+  'launchclip-character-design': 'character-design'
+});
 
 const INCLUDE = /^<!-- include: (\S+) -->$/;
 const BLOCK_OPEN = /^<!-- renderer: ([a-z|]+) -->$/;
@@ -268,6 +275,11 @@ export function planOutputs({ root = ROOT } = {}) {
         for (const file of kitCore) files.set(`${dir}/assets/core/${file}`, readFileSync(path.join(root, 'kit/core', file)));
       }
     }
+  }
+  // The renderer-neutral skills (STANDALONE_SKILLS) are copied whole.
+  for (const [name, source] of Object.entries(STANDALONE_SKILLS)) {
+    managedDirs.push(`skills/${name}`);
+    for (const file of listFiles(path.join(srcRoot, source))) files.set(`skills/${name}/${file.split(path.sep).join('/')}`, readFileSync(path.join(srcRoot, source, file)));
   }
   // The CLI reference's "Command usage" section is generated from the usage
   // table behind every `launchclip <command> --help` (src/cli_usage.js).
