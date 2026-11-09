@@ -15,6 +15,7 @@ import { autoResearch } from "./auto.js";
 import { auditScript, researchNotes, runResearch } from "./index.js";
 import { CAPTURE_STATUS_FILE, captureStatus, captureStatusLines, gateWithCaptures } from "./capture_status.js";
 import { RESEARCH_PATHS } from "./schema.js";
+import { researchMediaLines, stageResearchMedia } from "./stage_media.js";
 
 export const RESEARCH_MODES = Object.freeze(["auto", "on", "off"]);
 
@@ -141,3 +142,29 @@ export async function noteCaptures(ctx, result, requests) {
   ctx.researchGate = gateWithCaptures(ctx.researchGate, status);
   return status;
 }
+
+/**
+ * The stock and archive media research found, staged into the project and
+ * described for the planner: what each shows, the claim it supports, its
+ * licence and credit. Only licence-clear items are staged, and only staged
+ * items are listed, so the storyboard cannot place anything else (make's
+ * asset check refuses a path that is not in the manifest).
+ * → [{src, kind, line}] (empty when research is off or found none)
+ */
+export async function stageMakeMedia(ctx) {
+  if (!ctx.researchDecision?.run) return [];
+  const dir = path.join(ctx.project, RESEARCH_PATHS.dir);
+  if (!existsSync(path.join(dir, RESEARCH_PATHS.assets))) return [];
+  const { staged, skipped } = await stageResearchMedia(dir, ctx.project, {}, { fetch: ctx.adapters?.fetch, log: ctx.say }).catch((error) => ({ staged: [], skipped: [{ id: "*", reason: error.message }] }));
+  let manifest = null, ledger = null;
+  try { manifest = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.assets), "utf8")); } catch { return []; }
+  try { ledger = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.ledger), "utf8")); } catch { /* lines without claim links */ }
+  const lines = researchMediaLines(manifest, ledger);
+  if (ctx.report && (staged.length || skipped.length)) {
+    ctx.report.research = { ...ctx.report.research, media: { offered: lines.length, staged: staged.map((asset) => ({ id: asset.id, file: asset.local, licence: asset.licence.name, attribution: asset.attribution, ...(asset.claims?.length ? { claims: asset.claims } : {}) })), skipped } };
+    if (lines.length) ctx.say?.(`research: ${lines.length} licence-clear photo${lines.length === 1 ? "" : "s"} or clip${lines.length === 1 ? "" : "s"} offered to the planner (${MEDIA_NOTE})`);
+  }
+  return lines;
+}
+
+const MEDIA_NOTE = "assets/research; credits go to publish.json";

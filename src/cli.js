@@ -247,7 +247,7 @@ export async function runCli(argv, io = {}) {
     } else if (command === "research" && firstArg === "capture") {
       // launchclip research capture <research-dir> [--root .]: record every capture request, say what could not be recorded, attach.
       const { captureResearch } = await import("./research/record.js");
-      result = await captureResearch(researchCaptureInvocation.target, { root: flags.root, command: flags["capture-cmd"], concurrency: flags["capture-concurrency"] }, { log: (line) => stderr.write(`${line}\n`), ...productionAdapters.researchCapture });
+      result = await captureResearch(researchCaptureInvocation.target, { root: flags.root, command: flags["capture-cmd"], concurrency: flags["capture-concurrency"], media: flags.media }, { log: (line) => stderr.write(`${line}\n`), ...productionAdapters.researchCapture });
     } else if (command === "research") {
       const { runResearch } = await import("./research/index.js");
       result = await runResearch(required(firstArg, "topic or script file"), {
