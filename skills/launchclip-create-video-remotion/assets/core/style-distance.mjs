@@ -121,3 +121,62 @@ export function nearestStyle(pack, styles = []) {
   });
   return best;
 }
+
+// ---------------------------------------------------------------------------
+// How differently two things are drawn: the distance between two
+// drawing-traits blocks (launchclip.drawing-traits.v1, measured by
+// src/drawing_traits.js from a reference or from a render), part by part.
+// `style compare` uses it to say how far a sample render in a drafted style is
+// from the reference the style was drafted from.
+//
+//   drawingDistanceReport(a, b) → {distance, parts: {outline, line_weight, fill,
+//     saturation, contrast, shape, grain, stepping}, unmeasured: [part]}
+//
+// Each part is 0–1, or null when either side could not measure it; the
+// distance is the weighted mean of the parts both sides measured.
+
+export const DRAWING_DISTANCE_WEIGHTS = Object.freeze({ outline: 0.2, line_weight: 0.1, fill: 0.2, saturation: 0.1, contrast: 0.1, shape: 0.1, grain: 0.1, stepping: 0.1 });
+
+const unit = (value) => Math.max(0, Math.min(1, value));
+const gap = (a, b, scale = 1) => unit(Math.abs(a - b) / scale);
+const ratio = (a, b, octaves) => unit(Math.abs(Math.log2(a / b)) / octaves);
+
+function drawingParts(a, b) {
+  const parts = { outline: null, line_weight: null, fill: null, saturation: null, contrast: null, shape: null, grain: null, stepping: null };
+  if (a.outline && b.outline) {
+    parts.outline = 0.6 * gap(a.outline.presence, b.outline.presence) + 0.4 * gap(a.outline.line_share, b.outline.line_share);
+    const wa = a.outline.weight, wb = b.outline.weight;
+    // Two px against eight is as far as the scale goes; lines on one side only too.
+    parts.line_weight = wa > 0 && wb > 0 ? ratio(wa, wb, 2) : wa > 0 || wb > 0 ? 1 : 0;
+  }
+  if (a.fill && b.fill) {
+    const shade = (fill) => Math.max(fill.gradient ?? 0, fill.shaded ?? 0);
+    parts.fill = 0.3 * differs(a.fill.type, b.fill.type) + 0.7 * unit((Math.abs(shade(a.fill) - shade(b.fill)) + Math.abs(a.fill.textured - b.fill.textured) + Math.abs(a.fill.cel - b.fill.cel)) / 0.6);
+  }
+  if (a.palette && b.palette) {
+    parts.saturation = 0.6 * gap(a.palette.saturation, b.palette.saturation, 0.12) + 0.4 * gap(a.palette.saturation_p90, b.palette.saturation_p90, 0.2);
+    parts.contrast = 0.5 * gap(a.palette.contrast, b.palette.contrast, 0.5) + 0.5 * gap(a.palette.lightness, b.palette.lightness, 0.5);
+  }
+  if (a.shape && b.shape) parts.shape = gap(a.shape.roundness, b.shape.roundness);
+  if (a.grain && b.grain) {
+    // "texture" is grain a still could not tell from paper: it differs from neither.
+    const kind = (label) => (label === 'texture' ? null : label);
+    const ka = kind(a.grain.label), kb = kind(b.grain.label);
+    const both = a.grain.label !== 'none' && b.grain.label !== 'none';
+    parts.grain = 0.5 * gap(a.grain.coverage, b.grain.coverage) + 0.3 * (both ? gap(a.grain.amount, b.grain.amount, 6) : differs(a.grain.label === 'none', b.grain.label === 'none')) + 0.2 * (ka && kb ? differs(ka, kb) : differs(a.grain.label === 'none', b.grain.label === 'none'));
+  }
+  if (a.stepping?.drawings_per_second > 0 && b.stepping?.drawings_per_second > 0) parts.stepping = ratio(a.stepping.drawings_per_second, b.stepping.drawings_per_second, 1);
+  return parts;
+}
+
+/** How differently two drawing-traits blocks (or their `traits`) are drawn, part by part. → {distance, parts, unmeasured} */
+export function drawingDistanceReport(a, b) {
+  const parts = drawingParts(a?.traits ?? a ?? {}, b?.traits ?? b ?? {});
+  let sum = 0, weight = 0;
+  for (const [key, value] of Object.entries(parts)) if (value !== null) { sum += DRAWING_DISTANCE_WEIGHTS[key] * value; weight += DRAWING_DISTANCE_WEIGHTS[key]; }
+  return {
+    distance: weight ? round(sum / weight) : null,
+    parts: Object.fromEntries(Object.entries(parts).map(([key, value]) => [key, value === null ? null : round(value)])),
+    unmeasured: Object.keys(parts).filter((key) => parts[key] === null)
+  };
+}
