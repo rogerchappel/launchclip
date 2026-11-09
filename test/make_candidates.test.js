@@ -150,7 +150,7 @@ test("make renders two openings and two transitions, scores them from the frames
   assert.deepEqual({ kind: transition.kind, boundary: transition.boundary_id, selected: transition.selected }, { kind: "transition", boundary: "s2-in", selected: "trans-a" });
   // The second opening was designed without the first: its request never carries the planner's headline or scene.
   const design = fake.seen.find((request) => request.schemaName === "launchclip_make_opening_candidate");
-  assert.ok(!/Payouts never match"|hook-title|storyboard/.test(design.input), design.input);
+  assert.ok(!/Payouts never match your books"|hook-title|storyboard/.test(design.input), design.input);
   assert.match(design.input, /## The opening line \(spoken over this scene\)\n\nPayouts never match/);
   // The winning opening replaced the planner's; the transition the planner chose stood.
   const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
@@ -178,7 +178,7 @@ test("a transition that scores higher replaces the planner's", async (t) => {
   const report = await run();
   assert.equal(report.stages.candidates.status, "done", JSON.stringify(report.candidates));
   const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
-  assert.equal(story.scenes[0].params.title, "Payouts never match", "the planner's opening won");
+  assert.equal(story.scenes[0].params.title, "Payouts never match your books", "the planner's opening won");
   assert.notEqual(story.scenes[1].in.type, "fade");
   assert.match(report.candidates.applied[0], /^transition into s2: fade → /);
 });
@@ -199,5 +199,5 @@ test("candidates are skipped, with the reason, when off or when the model cannot
   assert.equal(report.candidates.notes.length, 2);
   assert.ok(report.warnings.some((warning) => /candidates: none compared .* the planner's opening and transitions stand/.test(warning)));
   const story = JSON.parse(await readFile(path.join(silent.project, "storyboard.json"), "utf8"));
-  assert.equal(story.scenes[0].params.title, "Payouts never match");
+  assert.equal(story.scenes[0].params.title, "Payouts never match your books");
 });
