@@ -20,6 +20,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { storyOutlineSection } from "./concept_story.js";
 import { cleanNarration, LENGTH_CEILING, RESIZE_TOLERANCE, RULES_HEADING, WORDS_PER_MINUTE } from "./script.js";
 
 const run = promisify(execFile);
@@ -101,7 +102,8 @@ function usageCost(result, client, provider, model) {
 }
 
 /**
- * The outline. options: {client, model, provider, prompt, notes, rules, assets, duration}.
+ * The outline. options: {client, model, provider, prompt, notes, rules, assets, duration,
+ * story ({concept, story}: the concept stage's winner; the chapters are derived from its beats)}.
  * → {title, title_options, chapters: [{title, point, facts, seconds}], usage, cost_usd, model}, fitted to the duration.
  */
 export async function writeOutline(options = {}) {
@@ -111,7 +113,9 @@ export async function writeOutline(options = {}) {
   const input = [
     `Outline a video of up to ${Math.round(duration / 60)} minutes (${duration} seconds at most) in about ${count} chapters, each ${CHAPTER_SECONDS.min}–${CHAPTER_SECONDS.max} seconds.`,
     "",
-    ...sharedContext(options)
+    ...sharedContext(options),
+    // The story the concept stage chose and edited: the chapters come from its beats.
+    ...(options.story?.story?.narration?.beats?.length ? ["", ...storyOutlineSection(options.story)] : [])
   ].join("\n");
   const result = await client.runStructured({ instructions: OUTLINE_ROLE, input: `${input}\n`, schema: OUTLINE_SCHEMA, schemaName: "launchclip_long_form_outline", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : null;

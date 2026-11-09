@@ -14,6 +14,7 @@ import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines
 import { skeletonScriptPlan } from "@launchclip/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { TEASERS } from "../publish_manifest.js";
+import { storyScriptSection } from "./concept_story.js";
 
 export const SCRIPT_VERSION = "launchclip.make-script.v1";
 export const WORDS_PER_MINUTE = 150;
@@ -160,7 +161,7 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 
 /**
  * options: {client, model, provider, prompt, notes: [text], rules (a collection's RULES.md text), assets: [line], transcripts: [text],
- *   duration, words (target override), skeleton (a library skeleton: write on its beats), angle (keep this angle: a repair or resize), plan (a chooseScriptPlan() result, or its
+ *   duration, story ({concept, story}: the concept stage's winner; the script is written on it), words (target override), skeleton (a library skeleton: write on its beats), angle (keep this angle: a repair or resize), plan (a chooseScriptPlan() result, or its
  *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
  *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
@@ -190,6 +191,8 @@ export async function writeScript(options = {}) {
   if (notes.length) lines.push("", "## Notes from the assets folder", "", ...notes.map((text) => String(text).trim().slice(0, 6000)));
   if (rules && String(rules).trim()) lines.push("", RULES_HEADING, "", String(rules).trim().slice(0, 8000));
   if (assets.length) lines.push("", "## Assets the video can show", "", ...assets.map((line) => `- ${line}`));
+  // The story the concept stage chose and edited (src/make/concept_story.js): the script is written on it.
+  if (options.story?.story?.narration?.beats?.length) lines.push("", ...storyScriptSection(options.story));
   if (transcripts.length) lines.push("", "## Transcripts of supplied recordings", "", ...transcripts.map((text) => String(text).trim().slice(0, 4000)));
   // A repair or resize keeps the angle the first pass chose.
   if (options.angle?.angles?.length) {
