@@ -1,7 +1,7 @@
 // Critic-driven repair for `launchclip make` (src/make/index.js stageCritic).
 //
 // The headless critic (src/make/critic.js) reviews the render and asks to
-// ship, repair or replan. With rounds left (--critic-repairs, default 1),
+// ship, repair or replan. With rounds left (--critic-repairs, default 3),
 // make turns its findings into known problems for the planner, re-plans
 // (a targeted repair of the scenes named, or one whole new plan), renders
 // again (only the changed scenes when the timeline held) and asks the
@@ -10,7 +10,7 @@
 //
 // The pure parts live here; the stage wiring lives in src/make/index.js.
 
-export const DEFAULT_CRITIC_REPAIRS = 1;
+export const DEFAULT_CRITIC_REPAIRS = 3;
 export const MAX_CRITIC_REPAIRS = 3;
 const MAX_PROBLEMS = 12;
 const SEVERITY_ORDER = { blocking: 0, major: 1, minor: 2 };

@@ -60,8 +60,10 @@ export const MAKE_FLAGS = Object.freeze([
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
-  // Rounds of critic-driven repair after the first render (default 1; 0 ships the critic's verdict as is).
+  // Rounds of critic-driven repair after the first render (default 3; 0 ships the critic's verdict as is).
   ["critic-repairs", { setting: true }],
+  // Exit 0 when the video is needs-repair (a gate failed after the repair rounds); without it the CLI exits 2.
+  ["allow-needs-repair", { boolean: true }],
   ["long-form-visuals", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
   // With --no-subject: still track the presenter's head (local, no subject effects) so cards keep off the face.
