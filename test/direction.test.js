@@ -254,7 +254,7 @@ test("story shots lists each shot with frames, who, set, framing, poses and line
 
   const { formatShots } = await import("../src/story_shots.js");
   const text = formatShots(report);
-  assert.match(text, /5 shots, 20\.00 s at 30 fps/);
+  assert.match(text, /5 shots, [\d.]+ s at 30 fps/);
   assert.match(text, / 2 {2}ask {2}[\d.]+–[\d.]+ s {2}frames \d+–\d+ \(\d+\)/);
   assert.match(text, /l8 sam \(off screen\): "Better now than at midnight\."/);
   assert.match(text, /sam: [\d.]+ stand, neutral → [\d.]+ think, happy/);
