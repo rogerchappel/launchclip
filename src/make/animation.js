@@ -46,6 +46,17 @@ const text = (value) => (typeof value === "string" ? value.replace(/\s+/g, " ").
 const clamp = (value) => Math.max(0, Math.min(10, Number(value) || 0));
 const round2 = (value) => Math.round(value * 100) / 100;
 
+// The pace a voice speaks at before any take is measured, in words a minute at
+// speed 1. Kokoro's is from one measured take (217 wpm at its default speed of
+// 1.2); the others keep the contract's default until make measures the take.
+const VOICE_WPM = Object.freeze({ kokoro: 175 });
+
+/** The pace to write a script for before its take exists: the voice's own, scaled by its speed. */
+export function estimatedPace(provider, speed = 1) {
+  const base = VOICE_WPM[provider];
+  return base ? Math.round(base * (Number(speed) > 0 ? Number(speed) : 1)) : SCREENPLAY_WPM;
+}
+
 /** The spoken words a screenplay of this length holds at a speaking pace. */
 export function animationWordTarget(duration, wpm = SCREENPLAY_WPM) {
   return Math.max(12, Math.round(Number(duration) * SPOKEN_SHARE * wpm / 60));
@@ -419,7 +430,7 @@ export async function writersRoom(options = {}) {
   paid(`${room.loglines.length} loglines judged in a fresh context`);
   const judged = await judgeLoglines({ ...options, loglines: room.loglines });
   calls.push({ stage: "loglines", ...usageOf(judged) });
-  paid(`script, about ${animationWordTarget(options.duration)} spoken words`);
+  paid(`script, about ${animationWordTarget(options.duration, options.wpm)} spoken words`);
   const written = await writeScreenplay({ ...options, premise: room.premise, characters: room.characters, logline: judged.logline });
   calls.push({ stage: "script", ...usageOf(written) });
   const script = {
