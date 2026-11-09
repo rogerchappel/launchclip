@@ -15,6 +15,10 @@ export const BUNDLED_SKILLS = [
   {
     name: "launchclip-cli",
     description: "Operate LaunchClip CLI production and promotion-packet workflows."
+  },
+  {
+    name: "launchclip-character-design",
+    description: "Design an animated character, save it as a character file and check its sheet."
   }
 ];
 
@@ -123,7 +127,7 @@ function selectSkills(selection) {
 
 function assertSkillName(name) {
   if (!BUNDLED_SKILLS.some((skill) => skill.name === name)) {
-    throw new Error(`Unknown bundled skill: ${name}. Use launchclip-create-video, launchclip-create-video-remotion, launchclip-cli, or all.`);
+    throw new Error(`Unknown bundled skill: ${name}. Use ${BUNDLED_SKILLS.map((skill) => skill.name).join(", ")}, or all.`);
   }
 }
 

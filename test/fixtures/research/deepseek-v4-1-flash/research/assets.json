@@ -20,6 +20,14 @@
     {
       "query": "stack of papers",
       "beat": null
+    },
+    {
+      "query": "DeepSeek",
+      "beat": "DeepSeek released DeepSeek-V4.1-Flash-1017 on Hugging Face on October 17, 2026, and the weights are free to download under the MIT License.",
+      "claims": [
+        "c001",
+        "c002"
+      ]
     }
   ],
   "assets": [

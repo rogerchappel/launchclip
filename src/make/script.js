@@ -4,20 +4,30 @@
 // writes the narration against that format's beat skeleton and word budget,
 // from the prompt, the notes, the asset descriptions and any transcripts. One
 // optional repair pass fixes the script checks' errors (src/script_check.js),
-// and one optional resize pass corrects the length once the real take is
+// and one optional resize pass trims the length once the real take is
 // measured. On a library skeleton (kit/core/skeleton-library.mjs) the script
 // is written on its beats. A short video's script pass also finds the angle
 // (the crowded take, the subject inventory, three fresh angles; ANGLE.json)
 // and scores its five title options, in the same call; the titles are then
 // ordered best first by a deterministic score.
 import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "@launchclip/core/script-formats.mjs";
+import { NARRATED_SCRIPT_VERSION, SCREENPLAY_VERSION } from "@launchclip/core/screenplay.mjs";
 import { skeletonScriptPlan } from "@launchclip/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { TEASERS } from "../publish_manifest.js";
+import { storyScriptSection } from "./concept_story.js";
 
-export const SCRIPT_VERSION = "launchclip.make-script.v1";
+// SCRIPT.json has two versions (kit/core/screenplay.mjs). This narrated script
+// pass writes version 1: a title, one narration string and its beats, whose
+// ids are the script skeleton's (hook, problem, cta, …). Version 2 adds
+// speakers and silent lines on story beats, and reads a version 1 file as
+// all-narrator, so a script written here stays readable.
+export const SCRIPT_VERSION = NARRATED_SCRIPT_VERSION;
+export { SCREENPLAY_VERSION };
 export const WORDS_PER_MINUTE = 150;
-// A take more than this far from the target duration triggers one resize pass.
+// A take more than this far over the target duration triggers one resize pass. The
+// duration is a ceiling (docs/MAKE_SKILL_PARITY.md, phase 4): a take that runs
+// short is never resized, because the only way to lengthen it is to pad it.
 export const RESIZE_TOLERANCE = 0.15;
 
 // title and narration are all an older response carries; title_options and
@@ -158,13 +168,16 @@ export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
 
 /**
  * options: {client, model, provider, prompt, notes: [text], rules (a collection's RULES.md text), assets: [line], transcripts: [text],
- *   duration, words (target override), skeleton (a library skeleton: write on its beats), angle (keep this angle: a repair or resize), plan (a chooseScriptPlan() result, or its
+ *   duration, story ({concept, story}: the concept stage's winner; the script is written on it), words (target override), skeleton (a library skeleton: write on its beats), angle (keep this angle: a repair or resize), plan (a chooseScriptPlan() result, or its
  *   {format, goal, awareness, aspect, assets} inputs), resize: {measured_seconds, measured_words, previous},
  *   repair: {previous, errors: [{id, message, fix} | text]}}
  * → {schema_version, title, title_options, narration, beats, plan, word_target, word_count,
  *   usage, cost_usd, model, response_id}
  */
 /** The heading a collection's RULES.md goes under, in the script pass, the brief and the critic. */
+// What every script and chapter pass is told about its length.
+export const LENGTH_CEILING = "The length is a ceiling, not a quota: when the brief has less to say, write fewer words and let the video run shorter. Never pad with recaps, hedges or filler to reach it.";
+
 export const RULES_HEADING = "## Rules (the collection's own rules for every video: audience, tone, claims it may and may not make, words to avoid, things it never shows; keep every one)";
 
 export async function writeScript(options = {}) {
@@ -176,6 +189,7 @@ export async function writeScript(options = {}) {
   const words = plan.word_target;
   const lines = [
     `Write the narration for this video, about ${words} words (it should run about ${duration} seconds read at ${plan.wpm} words a minute), as a ${plan.format} script on the ${plan.skeleton} skeleton.`,
+    LENGTH_CEILING,
     "",
     "## Prompt",
     "",
@@ -184,6 +198,8 @@ export async function writeScript(options = {}) {
   if (notes.length) lines.push("", "## Notes from the assets folder", "", ...notes.map((text) => String(text).trim().slice(0, 6000)));
   if (rules && String(rules).trim()) lines.push("", RULES_HEADING, "", String(rules).trim().slice(0, 8000));
   if (assets.length) lines.push("", "## Assets the video can show", "", ...assets.map((line) => `- ${line}`));
+  // The story the concept stage chose and edited (src/make/concept_story.js): the script is written on it.
+  if (options.story?.story?.narration?.beats?.length) lines.push("", ...storyScriptSection(options.story));
   if (transcripts.length) lines.push("", "## Transcripts of supplied recordings", "", ...transcripts.map((text) => String(text).trim().slice(0, 4000)));
   // A repair or resize keeps the angle the first pass chose.
   if (options.angle?.angles?.length) {
@@ -279,9 +295,14 @@ export function planVoiceSpeed(provider, plan, given) {
   return provider === "elevenlabs" && plan?.voice_speed != null ? plan.voice_speed : undefined;
 }
 
-/** Whether a measured take needs one resize pass. */
+/** Whether a measured take runs far enough over its target for one resize pass. A short take never does: the video runs shorter. */
 export function needsResize(measuredSeconds, targetSeconds, tolerance = RESIZE_TOLERANCE) {
-  return targetSeconds > 0 && Math.abs(measuredSeconds - targetSeconds) / targetSeconds > tolerance;
+  return targetSeconds > 0 && (measuredSeconds - targetSeconds) / targetSeconds > tolerance;
+}
+
+/** Whether a take runs short of its target by more than the tolerance (reported, never padded). */
+export function runsShort(measuredSeconds, targetSeconds, tolerance = RESIZE_TOLERANCE) {
+  return targetSeconds > 0 && (targetSeconds - measuredSeconds) / targetSeconds > tolerance;
 }
 
 function parseText(text) {

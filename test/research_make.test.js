@@ -61,11 +61,49 @@ test("a narration claim the ledger does not back holds the research gate at pend
   assert.ok(ctx.report.warnings[0].includes("do not back"));
 });
 
-test("--research takes on or off, default off", () => {
-  assert.equal(researchMode(undefined), "off");
+test("--research takes auto, on or off, default auto", () => {
+  assert.equal(researchMode(undefined), "auto");
   assert.equal(researchMode(true), "on");
-  assert.throws(() => researchMode("maybe"), /--research must be on or off/);
-  assert.throws(() => validateMakeOptions({ research: "maybe" }), /--research must be on or off/);
+  assert.equal(researchMode(false), "off");
+  assert.equal(researchMode("AUTO"), "auto");
+  assert.throws(() => researchMode("maybe"), /--research must be auto, on or off/);
+  assert.throws(() => validateMakeOptions({ research: "maybe" }), /--research must be auto, on or off/);
+});
+
+test("by default a news brief is researched and a product brief is not, and the report says why", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-research-auto-"));
+  try {
+    const { model } = fakeModel();
+    const researchCalls = [];
+    const research = async (briefFile, options) => {
+      researchCalls.push(briefFile);
+      await mkdir(options.out, { recursive: true });
+      await writeFile(path.join(options.out, "evidence.json"), JSON.stringify(LEDGER));
+      return { summary: LEDGER.summary };
+    };
+    const lines = [];
+    const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), notice: (line) => lines.push(line), research };
+    const product = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "product" }, adapters);
+    assert.equal(researchCalls.length, 0);
+    assert.equal(product.research_decision.mode, "auto");
+    assert.equal(product.research_decision.run, false);
+    assert.match(product.research_decision.reason, /launch video/);
+    assert.equal(product.research, undefined);
+    assert.ok(lines.some((line) => /^research: off \(auto\): the brief asks for a launch video/.test(line)));
+    const news = await runMake("A 6-second video on this week's news: Ledgerly reconciles Stripe payouts automatically", { assets, voice: "test", music: "synth", cwd, out: "news" }, adapters);
+    assert.equal(researchCalls.length, 1);
+    assert.equal(news.research_decision.run, true);
+    assert.match(news.research_decision.reason, /reads as news/);
+    assert.deepEqual(news.research_decision.signals, ["news wording: \"this week's\""]);
+    assert.equal(news.research.ledger, "research/evidence.json");
+    const off = await runMake("A 6-second video on this week's news: Ledgerly reconciles Stripe payouts automatically", { assets, voice: "test", music: "synth", cwd, out: "off", research: "off" }, adapters);
+    assert.equal(researchCalls.length, 1);
+    assert.deepEqual(off.research_decision, { mode: "off", run: false, reason: "--research off", signals: [] });
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
 
 test("research skips the brief's direction sections: they tell the writer how, they claim nothing", async () => {
