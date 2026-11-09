@@ -10,5 +10,6 @@ try { loadCliEnv(argv); } catch (error) { console.error(`warning: could not read
 runCli(argv).catch((error) => {
   console.error(error.message);
   if (error.costs) console.error(`Cost tally:\n${JSON.stringify(error.costs, null, 2)}`);
-  process.exitCode = 1;
+  // launchclip make exits 2 for a rendered video that failed a gate (needs-repair); every other failure is 1.
+  process.exitCode = error.exitCode ?? 1;
 });
