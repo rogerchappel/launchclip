@@ -1,7 +1,9 @@
 // The shot list (docs/ANIMATION_PIPELINE_RFC.md §4.3): a view of
 // storyboard.json and DIRECTION.json for a person or an agent to review, and
-// for a host to plan hand-in from. A shot is a track-0 character scene; there
-// is no shot-list file.
+// for a host to plan hand-in from. A shot is a character scene: on track 0,
+// or above a world plate in the motion lanes, where the cast stands on track 1
+// over the world. In the footage-led lane a character scene above track 0 is
+// an overlay on the presenter, not a shot. There is no shot-list file.
 //
 //   launchclip story shots <project> [--json]
 //
@@ -48,7 +50,7 @@ export function shotList(resolved, { map = null, words = [], script = null } = {
   for (const entry of mapLines) for (let i = Math.max(0, entry.line.words[0]); i <= Math.min(list.length - 1, entry.line.words[1]); i += 1) owner[i] ??= entry;
 
   const scenes = (Array.isArray(resolved?.scenes) ? resolved.scenes : [])
-    .filter((scene) => SPEAKING_MODULES.includes(scene?.module) && (scene.track ?? 0) === 0 && finite(Number(scene.start)) && finite(Number(scene.end)))
+    .filter((scene) => isShot(scene, resolved) && finite(Number(scene.start)) && finite(Number(scene.end)))
     .sort((a, b) => Number(a.start) - Number(b.start));
   const shots = scenes.map((scene, index) => {
     const start = Number(scene.start), end = Number(scene.end);
@@ -120,6 +122,11 @@ export function shotList(resolved, { map = null, words = [], script = null } = {
   return report;
 }
 
+/** Whether a scene is a shot: a character scene on track 0, or on any track outside the footage-led lane. */
+export function isShot(scene, story) {
+  return SPEAKING_MODULES.includes(scene?.module) && ((scene.track ?? 0) === 0 || story?.lane !== "footage-led");
+}
+
 // The pose a character opens the shot in and each change after it. From the
 // resolved module (what both renderers draw); from the scene's params when
 // the module does not resolve.
@@ -157,9 +164,9 @@ export async function storyShotsCommand(target, flags = {}) {
   const warnings = [];
   if (!map) warnings.push("no DIRECTION.json: lines are grouped by speaker, with no script line ids, beats or key actions");
   if (!loaded.words.length) warnings.push("no narration words (NARRATION.json): the shots list no lines");
-  const others = loaded.resolved.scenes.filter((scene) => SPEAKING_MODULES.includes(scene?.module) && (scene.track ?? 0) !== 0).map((scene) => scene.id);
-  if (others.length) warnings.push(`character scenes above track 0 are overlays, not shots: ${others.join(", ")}`);
-  if (!list.shots.length) warnings.push(`no shots: the storyboard has no character scene (${SPEAKING_MODULES.join(", ")}) on track 0`);
+  const others = loaded.resolved.scenes.filter((scene) => SPEAKING_MODULES.includes(scene?.module) && !isShot(scene, loaded.resolved)).map((scene) => scene.id);
+  if (others.length) warnings.push(`character scenes over the presenter (above track 0 in the footage-led lane) are overlays, not shots: ${others.join(", ")}`);
+  if (!list.shots.length) warnings.push(`no shots: the storyboard has no character scene (${SPEAKING_MODULES.join(", ")})`);
   return {
     stage: "story",
     action: "shots",
