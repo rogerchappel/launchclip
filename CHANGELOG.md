@@ -4,6 +4,14 @@
 
 ### Added
 
+- A make-vs-skill parity harness: `npm run eval:make-parity -- <make-project>
+  <skill-project> --kind news` scores two finished projects made from one
+  brief (distinct modules a minute, the typography share, cuts and visual
+  events a minute against the cadence profile, held and repeated cards, the
+  critic's verdict, and hedging, meta-narration and repeated facts in the
+  script) and says whether `make` is within 15% of the skill. It reads the
+  storyboard, the narration and `qa/critic.json`, so it runs offline; with no
+  arguments it runs on a fixture pair. See `docs/MAKE_SKILL_PARITY.md`.
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or

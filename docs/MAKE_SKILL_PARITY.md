@@ -84,6 +84,34 @@ storyboard and the critic sheets:
 `make` is at parity when every metric is within 15% of the skill's on the same
 brief, and its typography share is at most 30% for a news or research video.
 
+### The harness
+
+`npm run eval:make-parity -- <make-project> <skill-project> --kind news`
+(`eval/make-parity.mjs`) computes these from two finished projects and
+prints the comparison. It reads each project's `storyboard.json`,
+`NARRATION.json` (or `SCRIPT.json`, or `SCRIPT.md`) and `qa/critic.json`,
+so it runs offline and renders nothing.
+
+- A metric passes when it is within 15% of the skill's, or on the better side
+  of it: fewer hedges than the skill is not a miss.
+- Both videos are judged against one cadence profile (`--format`, else the
+  one the make video's length and shape imply).
+- A held card is a base scene on screen longer than the profile's longest
+  static run with no state of its own. A repeated card has the module and
+  the words of the card before it.
+- Script rates are per 100 words, so a short and a long script compare. A
+  repeated fact is a figure stated in more than one sentence, or a sentence
+  that says what an earlier one said.
+- `--kind news` or `--kind research` adds the 30% typography ceiling.
+- A project with no critique or no script leaves those rows `n/a`; they do
+  not count for or against parity.
+- `--json` prints both projects' metrics; `--strict` exits 1 when make is
+  not at parity. With one project it prints that project's metrics.
+
+With no arguments it runs on the fixture pair in
+`eval/fixtures/make-parity`. The fixed set of real briefs is not in the repo
+yet: each needs a keyed run through both paths.
+
 ## Non-goals
 
 - Changing the skill. It is the reference.
