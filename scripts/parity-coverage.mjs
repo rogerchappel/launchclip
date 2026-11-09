@@ -21,8 +21,6 @@ const REMOTION_REGISTRY = path.join(ROOT, 'kit', 'remotion', 'modules', 'index.t
  * one.
  */
 export const FIXTURE_ALLOWLIST = Object.freeze({
-  // Footage and media layouts: fixtures need generated test media.
-  // Tactile data modules (catalogue H).
   // Sprite casts are being reworked with the character system; their fixtures belong to that work.
   'sprite-scene': 'owned by the character and sprite work'
 });
