@@ -6,8 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {poseJoints, rigGeometry} from '@launchclip/core/characters/rig.mjs';
 import {starterCharacter} from '@launchclip/core/characters/cast.mjs';
-import {ACTING, ACTING_PROFILES, MOVE, actingOps, blinkTimes, dartTimes, jointTargets, poseChangeOps, poseTravel, shiftTimes} from '@launchclip/core/characters/acting.mjs';
+import {ACTING, ACTING_PROFILES, MOVE, actingOps, blinkTimes, dartTimes, jointTargets, poseChangeOps, poseTravel, shiftTimes, speechChanges, wordVisemes, VISEMES} from '@launchclip/core/characters/acting.mjs';
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
+import {characterLook} from '@launchclip/core/characters/cast.mjs';
+import {drawCharacter, DRAWING_STYLES} from '@launchclip/core/characters/styles.mjs';
+import {characterView} from '@launchclip/core/characters/view.mjs';
 
 const geometry = rigGeometry(starterCharacter('maya').params);
 const targets = pose => jointTargets('c', poseJoints(pose, {geometry}));
@@ -157,4 +160,72 @@ test('life while holding: the eyes dart and return, the chest breathes and the w
   const breath = name => acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, acting: name}).find(op => op.target === 'c-breath' && op.to?.scaleY > 1);
   assert.ok(breath('calm').duration > breath('default').duration && breath('calm').to.scaleY > breath('default').to.scaleY);
   assert.deepEqual([breath('default').duration, breath('default').to.scaleY], [ACTING.breath, 1.012], 'the default breath is unchanged');
+});
+
+test('speech: a word\'s mouth shapes come from its sounds', () => {
+  assert.deepEqual(Object.keys(VISEMES), ['closed', 'small', 'o', 'wide', 'open']);
+  assert.deepEqual(wordVisemes('make'), ['closed', 'open', 'small'], 'lips press on m, drop on a, part open on k; the final e is silent');
+  assert.deepEqual(wordVisemes('you'), ['wide', 'o']);
+  assert.deepEqual(wordVisemes('flow'), ['small', 'o']);
+  assert.deepEqual(wordVisemes('Hmm.'), ['closed'], 'a hum keeps the lips together');
+  assert.deepEqual(wordVisemes('product'), ['closed', 'small', 'o', 'small', 'o', 'small']);
+  assert.deepEqual(wordVisemes('product', 3), ['closed', 'o', 'small'], 'short on time, the vowels and the pressed lips stay');
+  assert.deepEqual(wordVisemes('beautiful', 1).length, 1);
+  assert.deepEqual(wordVisemes('42%'), [], 'nothing to read');
+  for (const word of ['Every', 'launch', 'Maya', 'rebuilds', 'the', 'demo', 'video', 'by', 'hand', 'a', 'I']) {
+    const shapes = wordVisemes(word);
+    assert.ok(shapes.length >= 1 && shapes.every(shape => shape in VISEMES) && shapes.every((shape, i) => shape !== shapes[i - 1]), word);
+  }
+});
+
+test('speech: shapes are timed inside each word; the mouth closes at a pause and flows on between close words', () => {
+  const says = [{from: 1, to: 2.6, words: [[1, 1.3, 'Try'], [1.32, 1.9, 'Pulseboard'], [2.2, 2.6, 'now']]}];
+  const changes = speechChanges(says);
+  assert.deepEqual(changes, speechChanges(says), 'the same every time');
+  assert.ok(changes.every((change, i) => i === 0 || change.time >= changes[i - 1].time));
+  assert.ok(changes.every(change => change.open === (change.shape !== 'closed')));
+  const shapeAt = t => { let shape = 'closed'; for (const change of changes) if (change.time <= t + 1e-9) shape = change.shape; return shape; };
+  assert.equal(shapeAt(0.9), 'closed');
+  assert.equal(shapeAt(1.01), 'small', 'the t of "Try"');
+  assert.equal(shapeAt(1.25), 'wide');
+  assert.equal(shapeAt(1.33), 'closed', 'the p of "Pulseboard" presses the lips, with no close before it');
+  assert.ok(!changes.some(change => change.time === 1.3), '"Try" runs straight into "Pulseboard"');
+  assert.equal(shapeAt(2.0), 'closed', 'closed across the pause');
+  assert.equal(shapeAt(2.7), 'closed', 'and after the last word');
+  assert.ok(new Set(changes.map(change => change.shape)).size >= 4, 'more than open and closed');
+  // No shape is shorter than about two frames.
+  const inWord = changes.filter(change => change.time >= 1.32 && change.time < 1.9);
+  assert.ok(inWord.slice(1).every((change, i) => change.time - inWord[i].time >= 0.069));
+  // Words without text keep the open-and-close rhythm, with varied open shapes.
+  const unread = speechChanges([{from: 0, to: 2, words: [[0, 0.3], [0.4, 0.7], [0.8, 1.1], [1.2, 1.5]]}]);
+  assert.deepEqual(unread.map(change => change.open), [true, false, true, false, true, false, true, false]);
+  assert.ok(new Set(unread.filter(change => change.open).map(change => change.shape)).size >= 3);
+});
+
+test('speech: every face shows the shape as its own open mouth at a size, in every drawing style', () => {
+  const speech = speechChanges([{from: 1, to: 2, words: [[1, 1.5, 'you'], [1.6, 2, 'make']]}]);
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}, {time: 3, pose: 'stand', expression: 'happy'}], {speech});
+  const mouth = (t, name = 'neutral') => ({closed: value(ops, t, `c-mouth-${name}`, 'opacity'), ...frameState(ops, t).get(`c-open-${name}`)});
+  assert.deepEqual(mouth(0.5), {closed: 1, opacity: 0, scaleX: 1, scaleY: 1});
+  assert.deepEqual(mouth(1.1), {closed: 0, opacity: 1, scaleX: VISEMES.wide[0], scaleY: VISEMES.wide[1]});
+  assert.deepEqual(mouth(1.3), {closed: 0, opacity: 1, scaleX: VISEMES.o[0], scaleY: VISEMES.o[1]});
+  assert.deepEqual(mouth(1.3, 'happy'), mouth(1.3), 'every face follows, so a change of expression keeps talking');
+  assert.equal(mouth(1.61).closed, 1, 'the m of "make"');
+  assert.deepEqual([mouth(2.5).closed, mouth(2.5).opacity], [1, 0]);
+  // The view gives each open mouth a pivot at the mouth's centre, so the size change stays in place, in both renderers.
+  const {params} = starterCharacter('maya');
+  for (const style of DRAWING_STYLES) {
+    const look = characterLook(params, {style});
+    const view = characterView(drawCharacter(style, params, look.colors, {id: 'c', joints: poseJoints('stand', {geometry}), expression: 'neutral', expressions: ['neutral', 'happy']}), {id: 'c', x: 0, y: 0, scale: 1});
+    const found = [];
+    const walk = (node, parent) => { if (node && typeof node === 'object') { if (/^c-open-/.test(node.id ?? '')) found.push({node, parent}); (node.children ?? []).forEach(child => walk(child, node)); } };
+    walk(view, null);
+    assert.equal(found.length, 2, style);
+    for (const {node, parent} of found) {
+      assert.equal(node.tag, 'div', `${style}: an HTML div, so both renderers scale it alike`);
+      assert.equal(node.style.transformOrigin, '0px 0px');
+      assert.equal(node.style.opacity, 0);
+      assert.ok(parent.style.top !== 0, `${style}: placed at the mouth`);
+    }
+  }
 });

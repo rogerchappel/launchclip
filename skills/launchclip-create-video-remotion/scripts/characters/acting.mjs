@@ -15,8 +15,9 @@
 //   slow head sway, blinks at uneven intervals (and as a big move starts),
 //   small eye darts and slight weight shifts, each on a schedule seeded from
 //   the character's id.
-// - Expressions crossfade their faces; mouths open and close on the
-//   character's spoken words (open and closed shapes, not lip sync).
+// - Expressions crossfade their faces; mouths take a shape per sound of the
+//   character's spoken words (speechChanges: a small viseme set made from
+//   the closed and open mouths every face draws).
 // - An acting profile (ACTING_PROFILES) scales all of it per character.
 //
 // Every op is an absolute set or from-to tween, so any frame can be drawn
@@ -273,7 +274,7 @@ function gestureOps(ops, cid, j, t0, t1) {
  *           acting?: an acting profile name (ACTING_PROFILES; default: default),
  *           states: [{time, pose, expression}] (first at start),
  *           expressions: every expression drawn,
- *           speech: [{time, open: boolean}] mouth changes}
+ *           speech: [{time, shape, open}] mouth changes (speechChanges)}
  */
 export function actingOps(ops, actor) {
   const {cid, start, end, states} = actor;
@@ -329,13 +330,16 @@ export function actingOps(ops, actor) {
     tw(ops, `${cid}-face-${state.expression}`, rt(state.time), A.faceFade, 'power1.inOut', {opacity: 0}, {opacity: 1});
   });
   // Mouths: closed unless speaking; every face's mouth follows together
-  // (the face's own opacity picks which one shows).
-  const mouthAt = (time, open) => actor.expressions.forEach(name => {
-    set(ops, `${cid}-mouth-${name}`, rt(time), {opacity: open ? 0 : 1});
-    set(ops, `${cid}-open-${name}`, rt(time), {opacity: open ? 1 : 0});
+  // (the face's own opacity picks which one shows). A spoken shape is the
+  // open mouth at that shape's size (VISEMES).
+  const mouthAt = (time, shape) => actor.expressions.forEach(name => {
+    const size = VISEMES[shape] ?? null;
+    set(ops, `${cid}-mouth-${name}`, rt(time), {opacity: size ? 0 : 1});
+    set(ops, `${cid}-open-${name}`, rt(time), size ? {opacity: 1, scaleX: size[0], scaleY: size[1]} : {opacity: 0});
   });
-  mouthAt(start, false);
-  for (const change of actor.speech) if (change.time > start && change.time < end) mouthAt(change.time, change.open);
+  actor.expressions.forEach(name => set(ops, `${cid}-open-${name}`, start, {scaleX: 1, scaleY: 1}));
+  mouthAt(start, 'closed');
+  for (const change of actor.speech) if (change.time > start && change.time < end) mouthAt(change.time, change.shape ?? (change.open ? 'open' : 'closed'));
   // Idle: breathing and a slow head sway for the whole scene.
   const p = phase(cid);
   swing(ops, [`${cid}-breath`], 'scaleY', start, end, rt(A.breath / P.breathRate), 1, rt(1 + A.breathDepth * P.breath));
@@ -453,24 +457,90 @@ export function shiftTimes(seed, start, end, P = ACTING_PROFILES.default) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Speech. The rig draws two mouths per face: closed and open. Speech picks a
+// mouth shape (a viseme) per sound and makes it from those two: `closed` is
+// the closed mouth; the others are the open mouth at a size (view.mjs gives
+// it a pivot at its centre), so every expression keeps its own mouth.
+
+/** Mouth shapes: the open mouth's [scaleX, scaleY] (closed: the closed mouth). */
+export const VISEMES = Object.freeze({closed: null, small: Object.freeze([0.72, 0.6]), o: Object.freeze([0.62, 0.95]), wide: Object.freeze([1.22, 0.7]), open: Object.freeze([1, 1])});
+
+// English spelling → shapes, longest match first. Rough on purpose: the
+// lips press on m, b, p; round on o, u, w; spread on e, i; drop on a; and
+// are part open on every other consonant.
+const SOUNDS = [
+  [/^(oo|ou|ow|oa|au|aw|wh|qu)/, 'o'], [/^(ee|ea|ie|ei|ey|ai|ay)/, 'wide'], [/^(th|sh|ch|ph|ng|ck)/, 'small'],
+  [/^[mbp]/, 'closed'], [/^[ouw]/, 'o'], [/^[eiy]/, 'wide'], [/^a/, 'open'], [/^h/, null], [/^[a-z]/, 'small']
+];
+// The shortest a mouth shape is held, in seconds (about two frames at 30 fps).
+const VISEME_MIN = 0.07;
+
 /**
- * Mouth changes for spoken ranges: open on each word's start, closed after
- * most of a short word (long words get a second flap). ranges: [{from, to,
- * words?: [[start, end]]}] absolute seconds. Without word timings the mouth
- * flaps on a steady 0.24 s rhythm across the range.
+ * A word's mouth shapes from its spelling, at most `max` of them:
+ * ['closed' | 'small' | 'o' | 'wide' | 'open', …] ([] when it has no letters).
+ * With more sounds than fit, the part-open consonants go first, so the
+ * vowels and the pressed lips (the shapes that read) stay.
+ */
+export function wordVisemes(text, max = Infinity) {
+  let rest = String(text ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  // A silent final e ("flow" keeps its w, "make" drops its e).
+  if (rest.length > 3 && /[^aeiou]e$/.test(rest)) rest = rest.slice(0, -1);
+  const out = [];
+  while (rest) {
+    const [pattern, shape] = SOUNDS.find(([one]) => one.test(rest));
+    rest = rest.slice(pattern.exec(rest)[0].length);
+    if (shape && out[out.length - 1] !== shape) out.push(shape);
+  }
+  const merge = list => list.filter((shape, i) => shape !== list[i - 1]);
+  let shapes = out;
+  while (shapes.length > Math.max(1, max)) {
+    // Drop a part-open consonant from the middle first, else the middle shape.
+    const smalls = shapes.map((shape, i) => (shape === 'small' ? i : -1)).filter(i => i >= 0);
+    const middle = (shapes.length - 1) / 2;
+    const drop = smalls.length ? smalls.reduce((best, i) => (Math.abs(i - middle) < Math.abs(best - middle) ? i : best)) : Math.round(middle);
+    const next = merge(shapes.filter((_, i) => i !== drop));
+    shapes = next.length ? next : [shapes[0]];
+  }
+  return shapes;
+}
+
+// Shapes for speech with no text to read, in turn.
+const UNREAD = ['open', 'small', 'wide', 'open', 'o', 'small'];
+
+/**
+ * Mouth changes for spoken ranges: [{time, shape, open}] in time order
+ * (shape: a VISEMES name; open: false for the closed mouth).
+ * ranges: [{from, to, words?: [[start, end, text?]]}] absolute seconds.
+ * - A word with its text takes the shapes of its sounds (wordVisemes),
+ *   spread across the word; the mouth closes when the word ends unless the
+ *   next one follows at once.
+ * - A word without text opens on its start and closes after most of it (a
+ *   long word gets a second flap), cycling through the open shapes.
+ * - A range without word timings flaps on a steady 0.24 s rhythm.
  */
 export function speechChanges(ranges) {
   const out = [];
+  let unread = 0;
   for (const range of ranges) {
     const words = range.words?.length ? range.words : Array.from({length: Math.max(1, Math.floor((range.to - range.from) / 0.24))}, (_, i) => [range.from + i * 0.24, range.from + i * 0.24 + 0.2]);
-    for (const [s, e] of words) {
+    words.forEach(([s, e, text], index) => {
       const d = Math.max(0.08, e - s);
+      const shapes = typeof text === 'string' ? wordVisemes(text, Math.floor(d / VISEME_MIN)) : [];
+      if (shapes.length) {
+        shapes.forEach((shape, i) => out.push({time: rt(s + (d * i) / shapes.length), shape, open: shape !== 'closed'}));
+        const next = words[index + 1];
+        if (!next || next[0] - (s + d) >= VISEME_MIN) out.push({time: rt(s + d), shape: 'closed', open: false});
+        return;
+      }
       const flaps = d > 0.42 ? [[s, d / 2], [s + d / 2, d / 2]] : [[s, d]];
       for (const [t, len] of flaps) {
-        out.push({time: rt(t), open: true});
-        out.push({time: rt(t + Math.max(0.06, Math.min(len * 0.62, 0.2))), open: false});
+        out.push({time: rt(t), shape: UNREAD[unread++ % UNREAD.length], open: true});
+        out.push({time: rt(t + Math.max(0.06, Math.min(len * 0.62, 0.2))), shape: 'closed', open: false});
       }
-    }
+    });
   }
-  return out.sort((a, b) => a.time - b.time || (a.open ? 1 : -1));
+  out.sort((a, b) => a.time - b.time || (a.open ? 1 : -1));
+  // A shape that repeats the one before it changes nothing.
+  return out.filter((change, i) => i === 0 || change.shape !== out[i - 1].shape || change.time === out[i - 1].time);
 }

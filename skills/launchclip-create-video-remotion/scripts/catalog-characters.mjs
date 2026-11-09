@@ -126,8 +126,8 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     const from = clip(check.num(range.from, `${where}.from`, -86400, 86400)), to = clip(check.num(range.to, `${where}.to`, -86400, 86400));
     if (to < from) check.fail(`${where}.to`, 'must not be before from');
     const words = range.words === undefined ? null : check.arr(range.words, `${where}.words`, 0, 400).map((w, k) => {
-      if (!Array.isArray(w) || w.length !== 2 || !w.every(Number.isFinite) || w[1] < w[0]) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds');
-      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1]))];
+      if (!Array.isArray(w) || w.length < 2 || w.length > 3 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || (w.length === 3 && typeof w[2] !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, or [start, end, "word"]');
+      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...(w.length === 3 ? [w[2]] : [])];
     }).filter(([s, e]) => e > s);
     return {from: rt(b.start + from), to: rt(b.start + to), words};
   });
