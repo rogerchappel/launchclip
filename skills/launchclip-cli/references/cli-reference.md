@@ -1663,7 +1663,6 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   ```text
   launchclip research "<topic>" | <script.md> [--out research] [--url <source>]... [--claims claims.json] [--media "<query>"...|none] [--people none] [--news none] [--feed <rss-or-atom-url>]... [--fresh-days <n>|none] [--max-captures 12] [--max-tables 8] [--theme dark|light] # claims → sources → evidence ledger, capture requests, data, licence-clear assets
   launchclip research capture [research] [--root .] [--media none] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request and stage the licence-clear media; says what is missing, why, and the fix
-  launchclip research capture [research] [--root .] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request; says which could not be recorded, why, and the fix
   launchclip research attach [research] [--root .]   # module-ready evidence data once the captures are recorded
   ```
 
