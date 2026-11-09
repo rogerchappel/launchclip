@@ -80,6 +80,11 @@ briefs (see "Measuring parity").
 The model matters most in phases 1 to 3. `make` already takes an Anthropic
 key; a stronger model there is a configuration choice, not a code change.
 
+The critic needs a model that can see. The Anthropic adapter used to send
+text only, so a run with only `ANTHROPIC_API_KEY` never ran the critic and
+ended `ready-for-review`. *Landed:* the adapter sends the contact sheets as
+image blocks, so the critic and its repair rounds run by default there too.
+
 ## Measuring parity
 
 A fixed set of briefs (a news roundup, a product explainer, a research topic;

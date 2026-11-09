@@ -64,7 +64,7 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
-| `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
+| `--no-critic` | critic on with OpenAI, Anthropic and OpenRouter models | Skip the automatic visual review. |
 | `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
 | `--allow-needs-repair` | off | Exit 0 even when the video is `needs-repair` (see [Exit codes](#exit-codes)). |
 | `--layout <name>` | `full` | A talking head's layout for the whole video: `full` (the planner picks footage layouts per section) or `stacked` (9:16: the presenter stays in the lower 45% under a graphics panel that changes every sentence, with close-ups on personal lines and one-word captions on the seam) or `overlay` (one continuous full-frame take, graphics in the free space around the presenter, some behind them, one-word captions at chest height). |
@@ -106,7 +106,8 @@ Useful flags:
    for up to four repairs.
 5. **Finishes the video:** captions, music and sound effects, rendering,
    mastering to −14 LUFS, and quality gates.
-6. **Reviews the frames** with the model when it can see images (OpenAI), and
+6. **Reviews the frames** with the model when it can see images (OpenAI,
+   Anthropic or an OpenRouter route; a local Ollama model needs `--critic`), and
    writes `qa/critic.json`. When the critic asks for a repair, its findings go
    back to the planner (`--critic-repairs`, up to three rounds by default): the scenes
    it named are fixed and rendered again, or the plan is redone when the
