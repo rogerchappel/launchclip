@@ -36,7 +36,7 @@ falls through to typography.
 Each phase is one or two small PRs, measured against the skill on the same
 briefs (see "Measuring parity").
 
-1. **Model-directed long form.** The beat director keeps the clock: clauses,
+1. **Model-directed long form** (landed). The beat director keeps the clock: clauses,
    shots, plates, camera and the cadence gate. One model call per ≤ 180 s
    chunk then picks every clause's card, as the skill's director does: any
    catalogue module and its params, or a hold on the card before. The
@@ -48,13 +48,16 @@ briefs (see "Measuring parity").
    affected scenes re-render, and the critic runs again, at most three passes.
    After three, the result is `needs-repair` and an app must not present it
    as finished.
+   *Landed:* three rounds by default (`--critic-repairs`); long form
+   re-directs the chunks that hold the named scenes; `launchclip make` exits 2
+   for a `needs-repair` video (`--allow-needs-repair` exits 0).
 3. **Concept and story.** Before the script: an angle, five concepts judged in
    a fresh context, the chosen story edited for retention, then the script.
    Long form keeps its chapters, but the outline comes from the story.
 4. **Length is a ceiling.** A chapter shorter than its slot is not padded; the
    video runs shorter, or the outline gives the time to the chapter with more
    material. No resize pass that adds words.
-5. **Primary sources and captures.** Research prefers the source of a claim
+5. **Primary sources and captures** (landed, opt-in with `--research on`). Research prefers the source of a claim
    (the company's announcement, docs or pricing page) over aggregator posts,
    drops a story with no primary source, and never names an aggregator in the
    narration. The pages used are captured, so the director can show them
