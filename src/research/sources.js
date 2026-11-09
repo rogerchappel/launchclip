@@ -130,7 +130,7 @@ async function newsSources(http, entities, options) {
     const age = ageDays(snapshot.published_at, now);
     const stale = windowDays != null && age != null && age > windowDays;
     stories.push({
-      title: headlineOf(snapshot.title ?? lead.title ?? snapshot.url), url: snapshot.url, publisher: snapshot.publisher ?? null, published_at: snapshot.published_at ?? null, age_days: age,
+      title: pageHeadline(snapshot, lead), url: snapshot.url, publisher: snapshot.publisher ?? null, published_at: snapshot.published_at ?? null, age_days: age,
       via: lead.via, source_class: tags.source_class, primary: tags.primary,
       // A story is kept when the party's own page states it and it is as fresh as the brief asks.
       status: stale ? "stale" : tags.primary ? "kept" : "no-primary-source", ...extra
@@ -142,7 +142,8 @@ async function newsSources(http, entities, options) {
     if (!isPublic(lead.url)) continue;
     const snapshot = await http.snapshot(lead.url, { published_fallback: lead.published_at ?? undefined });
     if (!snapshot?.text) { stories.push({ title: lead.title, url: lead.url, publisher: null, published_at: lead.published_at ?? null, age_days: ageDays(lead.published_at, now), via: lead.via, source_class: null, primary: false, status: "not-fetched", reason: notFetched(http.failure?.(lead.url)) }); continue; }
-    const names = [...owners, ...storyOwners(lead.title ?? snapshot.title ?? "")];
+    // Whose story it is: the names the brief gives (and each capitalised word of them: "SpaceX Starship" is SpaceX's), plus the lead's own headline.
+    const names = [...new Set([...owners, ...owners.flatMap(storyOwners), ...storyOwners(lead.title ?? snapshot.title ?? "")])];
     const tags = classifySnapshot(snapshot, names);
     // An old page may still back a claim the brief makes (the ledger then flags it as old news), but it is no story.
     const fresh = record(snapshot, lead, tags);
@@ -162,6 +163,14 @@ async function newsSources(http, entities, options) {
     }
   }
   return { queries, providers, stories };
+}
+
+// The story's headline: the page's own title, else the lead's, whichever the page text states word for word.
+function pageHeadline(snapshot, lead) {
+  const flat = (text) => String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const text = flat(snapshot.text);
+  const candidates = [snapshot.title, lead.title].filter(Boolean).map(headlineOf);
+  return candidates.find((title) => title.split(/\s+/).length >= 4 && text.includes(flat(title))) ?? candidates[0] ?? snapshot.url;
 }
 
 // Why a page gave nothing, in words: a refusal is a finding, never something to work round.
