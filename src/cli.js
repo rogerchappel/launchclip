@@ -245,7 +245,8 @@ export async function runCli(argv, io = {}) {
       const { runResearch } = await import("./research/index.js");
       result = await runResearch(required(firstArg, "topic or script file"), {
         out: flags.out, urls: flags.url, claims: flags.claims, media: flags.media, people: flags.people,
-        maxCaptures: flags["max-captures"], maxTables: flags["max-tables"], theme: flags.theme
+        maxCaptures: flags["max-captures"], maxTables: flags["max-tables"], theme: flags.theme,
+        news: flags.news, feeds: flags.feed, freshDays: flags["fresh-days"]
       }, { log: (line) => stderr.write(`${line}\n`) });
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");

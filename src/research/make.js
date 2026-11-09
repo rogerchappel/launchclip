@@ -80,6 +80,8 @@ export async function researchBrief(ctx, briefNotes = []) {
   const ledger = JSON.parse(await readFile(ledgerFile, "utf8"));
   report.research = { dir: RESEARCH_PATHS.dir, ledger: path.join(RESEARCH_PATHS.dir, RESEARCH_PATHS.ledger), summary: ledger.summary, reused: Boolean(summary.reused) };
   for (const claim of ledger.claims.filter((entry) => entry.status !== "verified")) report.warnings.push(`research: the brief's claim "${claim.text}" is ${claim.status}: ${claim.flag?.message ?? ""}`);
+  // Old news in a brief that asks for the latest (the ledger's freshness window).
+  for (const claim of ledger.claims.filter((entry) => entry.status === "verified" && (entry.stale || entry.undated) && !entry.headline)) report.warnings.push(`research: the brief's claim "${claim.text}" is ${claim.stale ? "old news" : "undated"}: ${claim.flag?.message ?? ""}`);
   return { notes: researchNotes(ledger), ledger };
 }
 

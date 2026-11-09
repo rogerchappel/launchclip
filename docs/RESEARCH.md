@@ -12,13 +12,14 @@ passage, and every other claim is flagged for the script.
 script.md / topic
   └─ claims        src/research/claims.js    checkable sentences: numbers, dates, quotes, entities
   └─ sources       src/research/sources.js   HF, GitHub, arXiv APIs, script links, optional web search
+  └─ news          src/research/news.js      keyless leads: company feeds, Hacker News, GDELT, Wikipedia current events
   └─ verify        src/research/verify.js    ledger: verified / contradicted / unverified + quote span
   └─ captures      src/research/capture.js   launchclip.capture.v1 per on-screen source
   └─ social        src/research/social.js    the entity's own X posts: x-embed capture + social-post card
   └─ data          src/research/data.js      tables → cited chart data
   └─ media         src/research/media.js     licence-clear footage and stills (gap map C4)
   └─ people        src/research/people.js    Wikidata role and affiliation, Commons portrait or none
-  → research/{evidence.json, captures/, data/, assets.json, social.json, snapshots/, RESEARCH.md}
+  → research/{evidence.json, captures/, data/, assets.json, social.json, news.json, snapshots/, RESEARCH.md}
 ```
 
 ## Claims
@@ -43,6 +44,7 @@ Primary sources come first and are called directly:
 | GitHub | `/search/repositories`, `/repos/<o>/<r>`, raw README, releases, `/pulls/<n>`, `/commits/<sha>` | README plus API facts; release notes; PR title, body and merge state; commit message and files |
 | arXiv | `export.arxiv.org/api/query` (id or title search) | title, abstract, authors, date |
 | Links in the script, `--url` | fetched as pages | readable text, title, site name, publish date |
+| Keyless news | company feeds, Hacker News, GDELT, Wikipedia current events (below) | each lead's page, fetched and classified |
 | Web search (optional) | Brave (`BRAVE_API_KEY`), Tavily (`TAVILY_API_KEY`) or Serper (`SERPER_API_KEY`) | classified per page (below); a search that finds no primary source is asked again for the company's own page |
 
 Every source gets a `source_class`. **primary**: the party's own words: a
@@ -56,6 +58,79 @@ companies. **secondary**: anything else. The rule is structural; there is no
 domain allowlist. When a web search returns no primary source, research
 searches again for "<company> <product> announcement", restricted with
 `site:` to the company's domain once a page on it is known.
+
+### News without a key
+
+With no web search key, current stories still come from four public
+sources that need no key or sign-up (`src/research/news.js`; `--news none`
+skips them). Each gives leads only: a URL, a title and a date. The page a
+lead points at is then fetched, hashed and classified like any other source.
+
+| Source | Asked | Its terms |
+| --- | --- | --- |
+| Company and publisher feeds | The RSS or Atom feed a named company's official site advertises (`<link rel="alternate">`; the site comes from Wikidata), and any `--feed <url>` | Feeds the site itself offers; `robots.txt` is honoured |
+| Hacker News | The HN Search API for what the brief names (stories with a link and more than 20 points), or the official API's front page when the brief names nothing | No key. The official API states no rate limit; a run asks the search twice at most |
+| GDELT | The DOC 2.0 article list, once a run | Open for any use with a citation to the [GDELT Project](https://www.gdeltproject.org/); it asks for one request every 5 seconds, which the client enforces |
+| Wikipedia | `Portal:Current_events`, only for a brief that asks for the latest; the source links of matching items are followed | A user agent that names the client; requests in series. Its text is never quoted |
+
+Google News RSS is not used: no official statement permits an application
+to read it. The client sends `launchclip-research/1` with the project's URL as its
+user agent and no personal contact. Before a page or feed on someone's site
+is fetched, the site's `robots.txt` is read (once per host) and obeyed: a
+closed page is not read, so it verifies and shows nothing. API calls are
+not crawling and skip that check.
+
+The rule that a story needs a primary source still holds, and a news index
+is never one:
+
+- A lead's page is classified against the names in the brief plus the names
+  in its own headline, so a company's post on its own domain is primary
+  ("Nimbus Unveils…" on `nimbus.ai`) and a report about it is not.
+- A report that is not primary has its links followed once, to pages on the
+  domain of the company the story names. That is usually where the primary
+  source is.
+- Hacker News, GDELT and Wikipedia are how a story was found, never who said
+  it. They are listed in `research/news.json` and never reach the script
+  notes, the narration or the screen.
+
+For a topic, or a brief that asks for the latest, each kept story's own
+headline becomes a claim (`headline: true`, `origin: "news"`) when the page
+states it word for word, so it is verified against its page and gets a
+capture request like any other claim.
+
+`research/news.json` (`launchclip.research-news.v1`) lists every lead that
+was followed: `{queries, freshness, providers: [{id, name, terms, leads}],
+stories: [{title, url, publisher, published_at, age_days, via, source_class,
+primary, status, reason?, from?, claim}]}`. `status` is `kept`,
+`no-primary-source`, `stale`, `undated` (a window is set and the page
+gives no date), `off-topic` (the page does not mention what the brief asks
+about) or `not-fetched` (with the `reason`: closed by
+`robots.txt`, refused by the site, or a failed request). A refusal is a
+finding: research never works round a block.
+
+### Publish dates and old news
+
+Every claim with a supporting source carries `published_at`, the date its
+best primary source was published (the page's own date; a feed's or index's
+date only when the page gives none). A brief that asks for the latest sets a
+freshness window from its own words, or from `--fresh-days <n>` (`none`
+turns it off):
+
+| The brief says | Window |
+| --- | --- |
+| "today", "breaking", "yesterday", "this morning" | 3 days |
+| "this week", "last week", "just announced" | 10 days |
+| "latest", "recent", "news", "headlines", "what's new" | 14 days |
+| "this month", "last month" | 45 days |
+
+Inside a window, a lead older than it is not followed, a story whose page
+is older is recorded as `stale` and makes no claim, and a claim from the
+brief whose source is older stays `verified` but gets `stale: {published_at,
+age_days, window_days}` and a `date-or-drop` flag. A verified claim whose
+source has no date gets `undated: true` and the same flag. The script notes
+list these under "Old news", apart from the facts the writer may present as
+new. The ledger records the window as `freshness: {days, asked_by}` and
+counts `stale` and `undated` in its summary.
 
 A Hugging Face search keeps the named organisation's upload over re-uploads,
 quantisations and fine-tunes; with no org match, a repo needs 25 likes to
@@ -77,6 +152,7 @@ response body. Remote text is data and is never followed as an instruction.
     "id": "c004", "text": "…", "kind": "number|date|quote|entity|statement", "section": "What changed",
     "values": [{ "raw": "77.0", "value": 77, "unit": null }], "dates": [], "quote": null, "entities": [],
     "status": "verified|contradicted|unverified", "confidence": 0.84, "primary_support": true,
+    "published_at": "ISO",                          // the supporting primary source's publish date, when it gives one
     "sources": [{
       "url", "title", "publisher", "published_at", "fetched_at", "sha256", "kind", "primary": true, "finder",
       "supports": true, "confidence": 0.84,
