@@ -54,7 +54,7 @@ import { EMITTERS as CHARACTER_EMITTERS } from './hyperframes-catalog-characters
 import { EMITTERS as WORLD_EMITTERS } from './hyperframes-catalog-world.mjs';
 import { cameraOverlaps } from './catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from './subject-layer.mjs';
-import { LAYOUT_FRAME, layoutFrameStyle, layoutPlan, withLayoutCameras } from './footage-layout.mjs';
+import { LAYOUT_FRAME, LAYOUT_FRAME_UNDER, breakoutNotch, layoutFrameStyle, layoutPlan, layoutUnderFrameStyle, withLayoutCameras } from './footage-layout.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -510,22 +510,38 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // props change on the frames layoutOps lists. Each layout-shift is a
     // declared boundary for evidence.
     if (layout) {
-      const frameStyle = (state) => layoutFrameStyle(state, layout.canvas);
-      const first = frameStyle(layout.ops[0].state);
-      baseMarkup.push(`<div id="${LAYOUT_FRAME}" class="lc-layout-frame" aria-hidden="true" style="position:absolute;left:${first.left}px;top:${first.top}px;width:${first.width}px;height:${first.height}px;border-radius:${first.borderRadius}px;box-shadow:${first.boxShadow};pointer-events:none;z-index:${subjectNeeded ? subjectZ + 5 : 5}"></div>`);
+      // With a breakout section (footage-layout.mjs) the frame, and a panel
+      // fill, are drawn twice: a copy under the subject paints the panel
+      // behind the head, and the one above it is clipped away over the
+      // breakout zone, where the cut-out shows.
+      const breakout = subjectNeeded && Boolean(layout.breakouts?.length);
+      const frameZ = subjectNeeded ? subjectZ + 5 : 5;
+      const frameStyle = (state) => (breakout ? { clipPath: 'none', ...layoutFrameStyle(state, layout.canvas) } : layoutFrameStyle(state, layout.canvas));
+      const frameCss = (style) => `position:absolute;left:${style.left}px;top:${style.top}px;width:${style.width}px;height:${style.height}px;border-radius:${style.borderRadius}px;box-shadow:${style.boxShadow};${style.clipPath ? `clip-path:${style.clipPath};` : ''}pointer-events:none`;
+      if (breakout) baseMarkup.push(`<div id="${LAYOUT_FRAME_UNDER}" class="lc-layout-frame" aria-hidden="true" style="${frameCss(layoutUnderFrameStyle(layout.ops[0].state, layout.canvas))};z-index:${subjectZ - 1}"></div>`);
+      baseMarkup.push(`<div id="${LAYOUT_FRAME}" class="lc-layout-frame" aria-hidden="true" style="${frameCss(frameStyle(layout.ops[0].state))};z-index:${frameZ}"></div>`);
       for (const entry of layout.boundaries) baseMarkup.push(`<div class="lc-layout-boundary" aria-hidden="true" data-launchclip-transition-type="layout-shift"${boundaryAttrs(entry)} style="display:none"></div>`);
-      motion.push(`// footage layout (${layout.sections.map((section) => `${section.id} ${section.layout}`).join(', ')})`);
+      motion.push(`// footage layout (${layout.sections.map((section) => `${section.id} ${section.layout}${section.breakout ? ' breakout' : ''}`).join(', ')})`);
       motion.push(...layout.ops.map((op) => `tl.set(${js(`#${LAYOUT_FRAME}`)}, ${js(frameStyle(op.state))}, ${num(op.time)});`));
+      if (breakout) motion.push(...layout.ops.map((op) => `tl.set(${js(`#${LAYOUT_FRAME_UNDER}`)}, ${js(layoutUnderFrameStyle(op.state, layout.canvas))}, ${num(op.time)});`));
       // A panel fill (story.panel.fill, kit/core/backgrounds.mjs): the
       // pattern over the panel colour, clipped to the canvas minus the
       // presenter's window on the same frames as the frame element.
       const fillPlan = panelFillPlan(story, { width: W, height: H });
       if (fillPlan) {
-        const html = fillPlan.layers.map((layer) => `<div id="lc-layout-fill-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, 0)}">${layerSvg(layer) ?? ''}</div>`).join('');
         const mask = Object.entries(fieldStyle(fillPlan)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
-        baseMarkup.push(`<div id="lc-layout-fill" class="lc-layout-fill" data-launchclip-background="${fillPlan.kind}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${subjectNeeded ? subjectZ + 5 : 5};clip-path:${attr(layoutFillClip(layout.ops[0].state, layout.canvas))}"><div class="lc-layout-fill-field" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${mask}">${html}</div></div>`);
-        motion.push(...layout.ops.map((op) => `tl.set("#lc-layout-fill", ${js({ clipPath: layoutFillClip(op.state, layout.canvas) })}, ${num(op.time)});`));
-        motion.push(...fillPlan.layers.flatMap((layer) => layerTweens(layer, 0, D).map((tw) => `tl.fromTo(${js(`#lc-layout-fill-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`)));
+        const fill = (suffix, z) => {
+          const html = fillPlan.layers.map((layer) => `<div id="lc-layout-fill${suffix}-${layer.id}" class="lc-bg-layer" style="${layerCss(layer, 0)}">${layerSvg(layer) ?? ''}</div>`).join('');
+          motion.push(...layout.ops.map((op) => `tl.set("#lc-layout-fill${suffix}", ${js({ clipPath: layoutFillClip(op.state, layout.canvas) })}, ${num(op.time)});`));
+          motion.push(...fillPlan.layers.flatMap((layer) => layerTweens(layer, 0, D).map((tw) => `tl.fromTo(${js(`#lc-layout-fill${suffix}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`)));
+          return `<div id="lc-layout-fill${suffix}" class="lc-layout-fill" data-launchclip-background="${fillPlan.kind}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;${z === null ? '' : `z-index:${z};`}clip-path:${attr(layoutFillClip(layout.ops[0].state, layout.canvas))}"><div class="lc-layout-fill-field" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${mask}">${html}</div></div>`;
+        };
+        if (!breakout) baseMarkup.push(fill('', frameZ));
+        else {
+          baseMarkup.push(fill('-under', subjectZ - 1));
+          baseMarkup.push(`<div id="lc-layout-fill-notch" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;pointer-events:none;z-index:${frameZ};clip-path:${breakoutNotch(layout.ops[0].state, layout.canvas)}">${fill('', null)}</div>`);
+          motion.push(...layout.ops.map((op) => `tl.set("#lc-layout-fill-notch", ${js({ clipPath: breakoutNotch(op.state, layout.canvas) })}, ${num(op.time)});`));
+        }
       }
     }
   } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');

@@ -18,6 +18,7 @@ const REQUIRED_PACKAGE_FILES = [
   "motion-engine/schema.js",
   "public/icons/check.svg",
   "remotion/index.jsx",
+  "skills/launchclip-character-design/SKILL.md",
   "skills/launchclip-cli/SKILL.md",
   "skills/launchclip-create-video/SKILL.md",
   "skills/launchclip-create-video-remotion/SKILL.md"
@@ -87,7 +88,7 @@ export async function diagnoseInstallation(options = {}) {
       subscription_agent: {
         available: coreReady,
         requires_api_key: false,
-        skills: ["launchclip-create-video", "launchclip-create-video-remotion", "launchclip-cli"]
+        skills: ["launchclip-create-video", "launchclip-create-video-remotion", "launchclip-cli", "launchclip-character-design"]
       },
       model_directed_cli: {
         available: coreReady && apiCredentialConfigured,
