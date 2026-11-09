@@ -1,0 +1,50 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "story-characters",
+  "sections": [
+    { "id": "setup", "title": "Friday", "beat": "setup", "set": "desk-laptop",
+      "lines": [
+        { "words": [0, 7], "line": "l1", "intent": "hook", "treatment": "insert", "scenes": ["desk"], "set": "desk-laptop",
+          "action": { "verb": "type", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "type", "expression": "focused", "at": "start" }],
+          "why": "meet her about to ship" }
+      ] },
+    { "id": "problem", "title": "Sam asks", "beat": "problem", "set": "standing",
+      "lines": [
+        { "words": [8, 12], "line": "l2", "intent": "problem", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "think", "who": "sam" },
+          "cast": [{ "id": "sam", "pose": "think", "expression": "happy", "at": "word:Did" }] },
+        { "words": [13, 16], "line": "l3", "intent": "claim", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "shrug", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "shrug", "expression": "happy", "at": "word:It" }, { "id": "sam", "pose": "arms-crossed", "expression": "neutral", "at": "word:month." }] }
+      ] },
+    { "id": "attempt", "title": "One quick test", "beat": "attempt", "set": "standing",
+      "lines": [
+        { "words": [17, 20], "line": "l5", "intent": "turn", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "hands-on-hips", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "hands-on-hips", "expression": "frustrated", "at": "word:Fine." }] }
+      ] },
+    { "id": "turn", "title": "It fails", "beat": "turn", "set": "desk-laptop",
+      "lines": [
+        { "words": [21, 23], "line": "l7", "intent": "problem", "treatment": "insert", "scenes": ["test"], "set": "desk-laptop",
+          "action": { "verb": "slump", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "slump", "expression": "surprised", "at": "word:Oh." }] },
+        { "words": [24, 28], "line": "l8", "intent": "claim", "treatment": "insert", "scenes": ["test"], "set": "desk-laptop",
+          "action": { "verb": "think", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "think", "expression": "frustrated", "at": "word:Better" }],
+          "why": "Sam speaks from behind her; we stay on Maya as it sinks in" }
+      ] },
+    { "id": "resolution", "title": "A saved weekend", "beat": "resolution", "set": "standing",
+      "lines": [
+        { "words": [29, 35], "line": "l9", "intent": "proof", "treatment": "insert", "scenes": ["saved"], "set": "standing",
+          "action": { "verb": "cheer", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "cheer", "expression": "delighted", "at": "word:saved" }] }
+      ] },
+    { "id": "cta", "title": "Test, then ship", "beat": "cta",
+      "lines": [
+        { "words": [36, 40], "line": "l10", "intent": "cta", "treatment": "insert", "scenes": ["close"],
+          "action": { "verb": "point", "who": "sam" },
+          "cast": [{ "id": "sam", "pose": "point", "expression": "delighted", "at": "word:Then" }] }
+      ] }
+  ]
+}
