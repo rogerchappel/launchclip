@@ -4016,7 +4016,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (24 characters). Ids are stable and never
+- `cast.mjs`: the starter cast (71 characters: the original set, then a wider cast with a personality each and one accessory at most). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
@@ -4046,6 +4046,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
+  | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head; a headscarf wraps close under the chin |
+  | `chibi-plain` | `style-chibi.mjs` | the chibi figure with no skin tone: skin drawn paper white, hair and clothes in their own colours, for a neutral cast |
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
