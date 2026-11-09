@@ -332,9 +332,12 @@ tournament receipts:
   opinion, and unverified claims explicitly. For a video that states facts
   about the world (a release, a benchmark, a paper, a person), run
   `launchclip research SCRIPT.md --out research` (no model calls) and build it
-  from `research/RESEARCH.md`; fix or cut every flagged claim. See
-  `references/research.md` for the capture requests, cited data and
-  licence-clear media it also writes
+  from `research/RESEARCH.md`; fix or cut every flagged claim. With web tools
+  of your own, find each claim's primary source first and hand it in as
+  `claims.json` (`--claims`); then `launchclip research capture research`
+  records the source pages and stages the media. See
+  `references/research.md` for the `claims.json` shape, the capture
+  requests, cited data and licence-clear media
 - `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
   complete fresh-context scorecard, deterministic winner (`chosen: true`), and
   required improvements
@@ -461,6 +464,45 @@ before writing the storyboard:
 Do this analysis with local tooling from the bundled reference. Never submit
 private footage to an external transcription or vision API without explicit
 permission.
+
+### Describe the handed-in files
+
+You can look at images; the CLI without a vision model can only guess from
+file names. So before planning, open every image and screenshot the user
+handed in, and a contact sheet or a few frames of every clip, and write what
+you see as footage notes: a sidecar `<file>.json` beside each file (for
+`assets/screens/pricing.png`, `assets/screens/pricing.png.json`), or one
+`inventory.json` at the assets root keyed by path.
+
+```json
+{ "shows": "pricing page",
+  "description": "Three plans side by side, the middle one highlighted",
+  "text": ["Starter $9", "Pro $29", "Start free"],
+  "fits": ["the price or offer line", "the call to action"],
+  "orientation": "landscape",
+  "feature": true }
+```
+
+- `shows`: what the file is, in two to four words (pricing page, dashboard,
+  onboarding flow, settings screen, chart, product photo, person on camera,
+  b-roll of a street).
+- `description`: one sentence on what is visibly there. Do not guess what the
+  product does beyond the pixels.
+- `text`: up to eight key words or lines readable on screen, exactly as
+  written. On-screen text you quote in the video must match these.
+- `fits`: one to three story beats it suits (the opening, the problem line,
+  how it works, the proof or number line, the price or offer line, the call to
+  action).
+- `windows` (video only): `[{start, end, note}]` in seconds, the stretches
+  worth showing (the click, the result appearing), not the dead time around
+  them.
+- `feature: true` on a file the user asked for by name or clearly wants shown.
+
+Then plan against the notes: put each file on the line its `fits` names, start
+a clip inside a window, and give every featured file a scene. `launchclip
+make` reads the same sidecars, so a later headless run uses your descriptions
+and makes no description calls of its own. Writing a sidecar sends nothing
+anywhere; the privacy rule above is about external APIs.
 
 ## Design the video
 

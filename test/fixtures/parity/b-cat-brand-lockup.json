@@ -1,0 +1,45 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: brand-lockup, title card",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4.5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "brand-lockup",
+        "start": 0,
+        "end": 4.5,
+        "params": {
+          "mark": "assets/brand/mark.svg",
+          "wordmark": {
+            "src": "assets/brand/wordmark.svg",
+            "ratio": 4
+          },
+          "eyebrow": "Launch analytics",
+          "headline": "Launch analytics for small teams"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

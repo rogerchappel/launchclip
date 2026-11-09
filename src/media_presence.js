@@ -136,7 +136,8 @@ export async function probeFullFrameMedia(project, resolved, adapters = {}) {
   return out;
 }
 
-async function decodeFrames(file, { kind, start, duration, fps }) {
+/** Grey frames of an asset at presenceGrid(), fps a second. → {frames: Buffer, width, height} | null */
+export async function decodeFrames(file, { kind, start, duration, fps }) {
   const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", file]);
   const stream = JSON.parse(stdout).streams?.[0];
   if (!stream) return null;

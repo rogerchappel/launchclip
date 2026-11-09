@@ -1,0 +1,59 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: media-grid, a grid of four",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "media-grid",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "items": [
+            {
+              "media": "assets/shots/boards.svg",
+              "label": "Wash"
+            },
+            {
+              "media": "assets/shots/ridge.svg",
+              "label": "Sand",
+              "at": 0.7
+            },
+            {
+              "media": "assets/shots/boards.svg",
+              "label": "Oil",
+              "at": 1.4
+            },
+            {
+              "media": "assets/shots/blocks-static.mp4",
+              "label": "Seal",
+              "at": 2.1
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

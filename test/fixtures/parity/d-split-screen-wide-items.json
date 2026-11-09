@@ -1,0 +1,56 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: split-screen, list beside a blend",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "split-screen",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "media": "assets/shots/boards.svg",
+          "variant": "right",
+          "divider": "blend",
+          "title": "Three jobs a year",
+          "items": [
+            {
+              "text": "Wash the deck",
+              "at": 0.6
+            },
+            {
+              "text": "Oil the boards",
+              "at": 1.4
+            },
+            {
+              "text": "Seal the ends",
+              "at": 2.2
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

@@ -18,6 +18,7 @@
     "eval:production": "node ./src/production_eval.js",
     "eval:renderers": "node ./src/renderer_eval.js",
     "eval:formats": "node ./eval/formats.mjs",
+    "eval:make-parity": "node ./eval/make-parity.mjs",
     "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke",
     "skills:sync": "node ./scripts/sync-skills.mjs",

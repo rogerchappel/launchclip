@@ -1,0 +1,38 @@
+{
+  "verdict": "repair",
+  "summary": "Mostly centred text over one backdrop.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "blocking",
+      "category": "sparseness",
+      "message": "The round card holds for 17 seconds with nothing changing.",
+      "evidence_ids": [
+        "s3-browser-still"
+      ]
+    },
+    {
+      "id": "f2",
+      "severity": "major",
+      "category": "missed-opportunity",
+      "message": "The funding figure is spoken twice and shown as plain words.",
+      "evidence_ids": [
+        "s4-browser-still"
+      ]
+    },
+    {
+      "id": "f3",
+      "severity": "major",
+      "category": "typography",
+      "message": "Three text cards in a row read as one slide.",
+      "evidence_ids": [
+        "s2-browser-still"
+      ]
+    }
+  ],
+  "evidence_ids_reviewed": [
+    "s2-browser-still",
+    "s3-browser-still",
+    "s4-browser-still"
+  ]
+}

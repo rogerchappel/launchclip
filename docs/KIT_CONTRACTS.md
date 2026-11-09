@@ -1490,7 +1490,72 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
 - `StoryComposition` props may carry `__captions` (filled by
   `calculateMetadata` from the overlay `src` or chunked `audio.words`).
   Custom modules register through `<LaunchclipCompositions customModules={…}/>`
-  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
+  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`
+  (see "Custom modules" below).
+
+### Custom modules (`kit/core/custom-modules.mjs`, `kit/hyperframes/custom-module.mjs`)
+
+A bespoke-tier scene with `"module": "custom"` is drawn by the project's own
+code. It has one form per renderer, and `scene.source` says which exist:
+
+```json
+{ "id": "signal", "module": "custom", "start": 3, "end": 6,
+  "source": { "remotion": "remotion/SignalLabel.tsx", "hyperframes": "hyperframes/signal-label.html" },
+  "params": { "component": "SignalLabel", "text": "Signal locked" } }
+```
+
+`source` may also be one path, as before: that is the Remotion form alone.
+`params.component` names the module, and `params.hidesCaptions: true` hides
+the captions over it in both renderers.
+
+- **Remotion form:** a React component registered under `params.component`
+  through `<LaunchclipCompositions customModules={…}/>` in the project's
+  `remotion/entry.tsx`. It receives `{scene, params, brand, format, model}`
+  and draws from `useCurrentFrame()` alone.
+- **HyperFrames form:** an HTML fragment, not a document:
+
+  ```html
+  <style> .card { position: absolute; left: 80px; top: 600px; background: var(--lc-paper); } </style>
+  <div class="card"><p class="text"></p></div>
+  <script>
+    root.querySelector('.text').textContent = params.text;
+    tl.fromTo(root.querySelector('.card'), {opacity: 0, y: 60},
+      {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: false}, scene.start + 0.2);
+  </script>
+  ```
+
+  The markup goes in a full-canvas element, the scene's root
+  (`#lc-custom-<scene id>`). The `<style>` rules are nested under that root,
+  so they cannot restyle the rest of the story. Each `<script>` runs once
+  when the page loads, with `tl` (the story's paused GSAP timeline, in
+  absolute seconds), `root`, and the values the Remotion form gets as props:
+  `scene` (`{id, start, end, duration}`), `params`, `brand`, `format` and
+  `model` (which also has `fonts`). The root carries the brand as CSS
+  variables: `--lc-bg`, `--lc-primary`, `--lc-accent`, `--lc-ink`,
+  `--lc-paper` (those the brand sets) and `--lc-font-display`,
+  `--lc-font-body`, `--lc-font-meta`. The compiler shows and hides the scene
+  and applies its transition, as for any module.
+- **Pure function of time, in both.** Everything that moves is a function of
+  the frame (Remotion) or a tween on `tl` (HyperFrames). A fragment is
+  refused (`lintCustomFragment`) when it uses `Math.random`, a clock, a timer
+  or animation-frame callback, a network request, dynamic code loading, an
+  external script, an `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>` or
+  `<base>` element, a remote URL, a CSS `@import`, or a CSS animation or
+  transition. This is a lint against mistakes, not a sandbox: a custom
+  module is the project's own code and runs in the render browser.
+- **A missing form is an error, not a placeholder.** `launchclip finish`
+  stops at the render stage, before anything renders, when a custom scene
+  has no form for the chosen renderer, or its fragment is missing or
+  refused. The message names the scene, the module and the renderer, for
+  example: `scene "signal": the custom module "SignalLabel" has no
+  hyperframes form (only a remotion one, remotion/SignalLabel.tsx); add an
+  HTML fragment at source.hyperframes, render with --renderer remotion, or
+  use a catalogue module`. A direct `compileStoryToHyperFrames()` call still
+  draws the labelled placeholder and returns that message as a warning.
+- **Parity is the author's job.** The two forms are separate code. Draw from
+  the same numbers and eases (`@launchclip/core/motion.mjs` `tween` matches
+  GSAP's eases) and compare stills. `test/custom_module.test.js` does this for
+  `test/fixtures/custom-module/`, which is also the worked example.
 
 ### Fonts (`kit/core/fonts.mjs`)
 
@@ -3075,6 +3140,24 @@ The example is `examples/story/footage/`; regenerate its recording with
   burst, arranged stacks, counted headline, light-sweep, push-blur, studio light,
   dot grid, word-chip captions, snap feel). That story sets `motion.blur: false`,
   so a still is one frame on both renderers. Story times snap to whole frames.
+- `node scripts/parity-shard.mjs` renders a slice of the per-module corpus
+  with one shared Remotion bundle: `--shard 2/12` is one of twelve equal
+  parts, `--rotate <n> --every 12` is every twelfth fixture offset by `n`, so
+  twelve consecutive `n` cover the corpus. `--times settle,mid` limits the
+  sample times; `--list` prints the slice. CI uses it twice:
+  - every pull request renders a rotating twelfth at the settle and mid-hold
+    times (the `parity-sample` job; `n` is the run number): 39 fixtures at
+    about 5 s each, a 4-minute job;
+  - the "Parity corpus" workflow (`.github/workflows/parity-full.yml`)
+    renders all of it at every sample time in twelve shards, nightly, on
+    demand, and on a pull request that changes `kit/`, a fixture or the
+    harness: about 14 s a fixture on ubuntu-latest, 9 minutes of rendering a
+    shard. Nightly and on demand it also runs the story, background, camera,
+    footage and caption parity tests.
+- `test/fixtures/parity-known-failures.json` lists, per platform, fixtures
+  that fail there today. The slice runner reports them without failing, and
+  says when one passes again. It is an open bug list: an entry is removed by
+  fixing the renderer, and nothing is added to make a new failure pass.
 
 ## Direction constraints (`src/constraints.js`)
 
@@ -3192,6 +3275,10 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | Field | Type | What uses it |
 | --- | --- | --- |
 | `description` | text ≤ 500 | the manifest line the planner reads; clip matching (`matchScore`) |
+| `shows` | a few words, ≤ 60 | what the file is ("pricing page", "dashboard", "onboarding flow", "product photo", "person on camera"): the manifest line; clip matching (weighted double); which file a prompt's "show the pricing page" means |
+| `text` | up to 12 lines, ≤ 120 each | the key words readable on screen: the manifest line; clip matching |
+| `fits` | up to 6 phrases | the story beats the file suits ("the price or offer line", "how it works"): the manifest line; clip matching |
+| `feature` | true/false | true: the user wants this file in the video (see "Featured files" below); false: never treat it as featured |
 | `subjects`, `tags` | lists of words or phrases | the manifest line; clip matching (weighted double) |
 | `windows` | `[{start, end, quality?, note?}]` seconds into the clip | the manifest line (with how to use them); tooling moves a video scene whose `params.media.sourceStart` (plus its length) is outside every window to the best window's start (`snapMediaWindows`: one long enough first, then quality, then the note's match); the fill's in points |
 | `quality` | 0–1 | the manifest line (below 0.4 it says "use only when nothing better fits"); the media order (higher first); clip choice |
@@ -3200,6 +3287,119 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | `role` | the inventory's roles for the file's kind (`talking-head`, `screen-recording`, `b-roll`; `logo`, `screenshot`, `product-image`; `voiceover`, `music`) | overrides the heuristic (kept in `entry.detected`); a `b-roll` clip is never the base, even with speech on it |
 
 `ASSETS.json` entries carry `notes`; the routing's media items carry them too.
+
+### Described automatically (`src/asset_understanding.js`)
+
+`launchclip make` gives every handed-in image (logos aside) and video these
+notes even when the caller wrote none, so the planner knows what each file
+shows and where it fits. Per file, the first source that applies:
+
+| Source | When | What it costs |
+| --- | --- | --- |
+| `notes` | the caller's sidecar or `inventory.json` already has `shows` or `description` | nothing: no model is called and nothing is computed |
+| `vision` | the run's model can take images (OpenAI, OpenRouter and compatible endpoints) | one PAID call per file: the image scaled to 1024 px, or four frames of a video (at 10, 35, 65 and 90% of its length) with their times |
+| `local` | no model that can see, `--asset-descriptions local`, or the model call failed | nothing: the file name and folder, the inventory's role, the frame's shape, and the words Tesseract reads when `tesseract` is installed |
+
+The caller's own fields always win over a computed one, field by field.
+`windows` are computed for a video only: the model's, or locally the
+stretches of at least 1.5 s where something moves, given only when the clip
+is still for at least 15% of its length (a clip that moves throughout needs no
+windows). A local description says in its text that no model looked at the
+file, and the manifest line tells the planner to trust the narration over it.
+
+Results are cached by the file's SHA-256, one JSON per file, in
+`~/.cache/launchclip/asset-descriptions` (`LAUNCHCLIP_CACHE`, or
+`LAUNCHCLIP_ASSET_DESCRIPTIONS_DIR` for this cache alone; an embedding app's
+`withStateDirs` cache when set). A file is sent to the model once, however
+many projects it is handed to; a cached model description is reused even in a
+run with no model. One run sends at most 24 new files to the model
+(`MAX_VISION_FILES`) and describes the rest locally.
+
+`--asset-descriptions auto|local|off` (default `auto`): `local` never calls a
+model, `off` leaves the inventory as the heuristics and the caller's notes
+made it. Each described `ASSETS.json` entry carries `understanding: {source,
+sha256, cached, model?}`, and `MAKE.json` `assets.descriptions` counts the
+files per source.
+
+### Featured files
+
+A handed-in file the user clearly meant to be in the video must not be left
+out. `featuredAssets()` picks them, each with its reason:
+
+1. its notes say `feature: true`;
+2. the prompt names the file (`pricing-page.png`, or a multi-word file name
+   written with spaces);
+3. the prompt asks to show what it is ("show the pricing page") and it is
+   the only file that is one;
+4. three or fewer showable files were handed in (`FEW_ASSETS`).
+
+Rules 3 and 4 skip a file whose notes give it a `quality` under 0.4, and
+`feature: false` opts a file out of all of them. `media.must_use` files are
+the constraints' to enforce and are not listed again.
+
+The planner's prompt lists the featured files. A storyboard that shows none
+of one gets a repair error (`featured: assets/pricing-page.png (a pricing
+page) is not in the storyboard…`); like the hook and card checks, a plan that
+fails only this still ships when the repairs run out, with the error as a
+warning in `MAKE.json`. `MAKE.json` `assets.featured` lists the files and
+reasons, and `assets.unused_featured` the ones the storyboard left out. For a
+hard rule, use `media.must_use`.
+
+## Short-form checks (`src/short_form_checks.js`)
+
+Rules for every video of 90 s or less (`SHORT_SECONDS`), whether or not any
+footage was supplied. The planner checks the storyboard on every attempt and
+sends failures back as repair errors (`hook: …`, `cards: …`). A storyboard that
+fails only these still ships when the repairs run out, with the errors as
+warnings. `launchclip finish` then gates the opening it is about to deliver
+(the `hook` gate). Every check reads the storyboard and the measured narration,
+never the render, so Remotion and HyperFrames get the same verdict.
+
+| Check | Fails when | Where |
+| --- | --- | --- |
+| text | the opening scene's headline is a bare topic: under 4 words (`MIN_HOOK_WORDS`), or a question under 6 words with no number ("Deck care?"). Skipped when a recording opens the video | planner, `hook` gate |
+| claim | no phrase (2 words or more, `MIN_CLAIM_WORDS`) or number is on screen by `claim_by`. A scene on any track counts; so do the captions once the voice has started by `claim_by` | planner, `hook` gate |
+| logo_open | the opening scene is a `brand-lockup` or `logo-row` with no claim on it (the brand's own name is not a claim). Skipped when a recording opens the video | planner, `hook` gate |
+| entrance | the opening scene's `in` transition runs longer than `entrance_max` | planner, `hook` gate |
+| first_word | the first spoken word starts after `first_word_by` | `hook` gate only: a storyboard repair cannot move the voice |
+| cards | more text or icon cards (`concept-card`, `icon-row`, `icon-grid`, `checklist` and the title cards) than one per 15 s (at least 2), two back to back, or one module more than twice. With a footage library the cap holds at any length | planner |
+
+The opening's limits come from the cadence profile the story is gated against
+(`kit/profiles/`), not from constants in the check (`hookThresholds()`):
+
+| Limit | Source | short-motion | short-talking-head |
+| --- | --- | --- | --- |
+| `claim_by` | `first_visual_seconds` p90 ("when the first designed graphic appears") | 0.5 s | 1.5 s |
+| `entrance_max` | `first_motion_seconds` p90 ("when the first meaningful motion arrives") | 0.35 s | 2 s |
+| `first_word_by` | the later of the two. No profile measures when speech starts, so the voice is held to the window the profile gives the picture and the motion | 0.5 s | 2 s |
+
+A band under 0.35 s (some reels measure 0) is raised to `FIRST_FRAME_SECONDS`,
+the structure gate's "opening image on screen by". A profile without the band
+falls back to the shipped short profile for the lane: `short-talking-head`
+when a recording opens the video, `short-motion` otherwise. `MIN_CLAIM_WORDS`
+is a judgement (one word is a label), not a measured band.
+
+The `hook` gate in `finish.json` and `MAKE.json` is `{status, thresholds:
+{claim_by, entrance_max, first_word_by, profile, sources}, checks: {claim,
+logo_open?, entrance, first_word, text}, findings}`; `sources` says in words
+where each number came from. A failed check makes the run `needs-repair`. The
+structure gate still owns "opens on an image, not a title card, by 0.35 s",
+and the motion gate still measures the render's first motion and hook events.
+
+### Loudness repair (`src/finish.js`)
+
+The master targets −14 LUFS integrated and at most −1 dBTP
+(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+a warning: the master step runs again from the raw render, aimed past the
+target by what the last pass missed by (`repairAim()`: the level moved by the
+miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice
+(`MASTER_REPAIRS`). The master stage's `loudness.repairs` lists each pass
+(`{attempt, missed, aim, output, compliant}`), and `loudness.target` stays the
+delivery target. A repaired master passes the `loudness` gate with `repairs:
+<n>` and a `loudness:` warning that says what the first pass measured. A
+master that still misses fails the gate with the measurement in `errors`, and
+the run is `needs-repair`.
 
 ## Subject layer (`kit/core/subject-layer.mjs`)
 

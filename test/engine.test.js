@@ -34,7 +34,7 @@ const STORY = {
   brand: DEFAULT_BRAND,
   audio: { voice: "assets/audio/narration.wav", words: "NARRATION.json", music: { source: "synth", bpm: 96 }, sfx: "auto" },
   scenes: [
-    { id: "s1", module: "hook-title", start: 0, end: "word:with", energy: 1, params: { headline: "Ship faster today", emphasis: "faster" } },
+    { id: "s1", module: "hook-title", start: 0, end: "word:with", energy: 1, params: { headline: "Ship faster today, with less work", emphasis: "faster" } },
     { id: "s2", module: "cta", start: "word:with", end: 6, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Less work, more shipping", loop: true } }
   ],
   overlays: [{ type: "captions", style: "word-highlight" }],
