@@ -8,6 +8,10 @@
   when a module has no HyperFrames emitter, no Remotion component or no
   per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
   is covered, and CONTRIBUTING.md says how to add a fixture.
+- Parity fixtures for the twelve modules that had none: `brand-lockup`,
+  `photo-scene`, `split-screen`, `landscape-card`, `picture-in-picture`,
+  `media-compare`, `media-stat`, `media-list`, `media-grid`, `drop-grid`,
+  `live-counter` and `live-bars`, with drawn and generated test media.
 
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
@@ -279,6 +283,13 @@
   pick the narration by hand, several stretches at once.
 
 ### Fixed
+
+- HyperFrames drew a video in a media layout (`picture-in-picture`,
+  `landscape-card`, `media-compare`, `media-grid`, `media-list`,
+  `media-stat`, `split-screen`) without its drop shadow, and
+  `picture-in-picture` without its paper ring. Both now match Remotion.
+- `drop-grid` `times` is a list of seconds in the module schema. It read as a
+  single number, so a storyboard that timed each drop failed validation.
 
 - `photo-scene`, `evidence-clip` and `product-demo` honour their typed
   transitions instead of always fading over 0.4 s. A cut into or out of one
