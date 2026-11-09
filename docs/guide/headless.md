@@ -64,7 +64,8 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
-| `--critic-repairs <n>` | `1` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
+| `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
+| `--allow-needs-repair` | off | Exit 0 even when the video is `needs-repair` (see [Exit codes](#exit-codes)). |
 | `--layout <name>` | `full` | A talking head's layout for the whole video: `full` (the planner picks footage layouts per section) or `stacked` (9:16: the presenter stays in the lower 45% under a graphics panel that changes every sentence, with close-ups on personal lines and one-word captions on the seam) or `overlay` (one continuous full-frame take, graphics in the free space around the presenter, some behind them, one-word captions at chest height). |
 | `--base-edited` | off | The talking-head recording or voiceover in `--assets` is already edited by your app: make skips its own edit (bad takes, pauses) and only levels the audio. |
 | `--base-transcript <file>` | local Whisper | Word-timed JSON for that recording or voiceover (Whisper's, or `{words: [{text, start, end}]}`): make uses these words and skips Whisper. |
@@ -98,12 +99,25 @@ Useful flags:
    mastering to −14 LUFS, and quality gates.
 6. **Reviews the frames** with the model when it can see images (OpenAI), and
    writes `qa/critic.json`. When the critic asks for a repair, its findings go
-   back to the planner (`--critic-repairs`, one round by default): the scenes
+   back to the planner (`--critic-repairs`, up to three rounds by default): the scenes
    it named are fixed and rendered again, or the plan is redone when the
    critic asks for a replan or the hook is the problem. The critic then looks
    again. A round that doesn't lower the blocking and major findings is
-   undone, so make never ships a worse cut than the one it had. Each round is
-   in `MAKE.json` `critic_repairs`.
+   undone and the rounds stop, so make never ships a worse cut than the one it
+   had. In a long video, a round re-directs the chunks that hold the scenes
+   the critic named. Each round is in `MAKE.json` `critic_repairs`. A video
+   the critic still won't ship after the rounds is `needs-repair`.
+
+### Exit codes
+
+| Code | `MAKE.json` `status` | Meaning |
+| --- | --- | --- |
+| `0` | `ready`, `ready-for-review` | The video is finished. `ready-for-review` means a review is still pending (for example, no critic ran). |
+| `1` | `failed` | A stage failed; `next_steps` says what to fix. |
+| `2` | `needs-repair` | The video rendered, but a gate still fails after the repair rounds. Don't present it as finished. |
+
+Pass `--allow-needs-repair` to get `0` instead of `2`, which is how `make`
+behaved before. The report and the video are written either way.
 
 ## Record your product with `--repo`
 

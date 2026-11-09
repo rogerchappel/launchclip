@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- `launchclip make` exits 2 when the video rendered but a gate still fails
+  (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
+  finished video (0) and a failed run (1). It used to exit 0.
+  `--allow-needs-repair` keeps the old exit code.
+- `make` gives the critic up to three repair rounds by default
+  (`--critic-repairs`, was one). A round that is no better is still undone and
+  stops the rounds.
+
 ### Added
 
 - A make-vs-skill parity harness: `npm run eval:make-parity -- <make-project>
@@ -282,6 +292,11 @@
   pick the narration by hand, several stretches at once.
 
 ### Fixed
+
+- Critic repair rounds now work on long videos. The long-form storyboard
+  stage returned its cached plan during a round, so every round failed with
+  "the repair changed no scene". A round now re-directs the chunks that hold
+  the scenes the critic named, starting from the cards they had.
 
 - `photo-scene`, `evidence-clip` and `product-demo` honour their typed
   transitions instead of always fading over 0.4 s. A cut into or out of one
