@@ -9,7 +9,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {deriveBoundaries, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {resolveModule} from '@launchclip/core/modules.mjs';
-import {captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, panelSafeArea, storySections, withLayoutCameras} from '@launchclip/core/footage-layout.mjs';
+import {BREAKOUT_EDGE, breakoutNotch, breakoutWindows, captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, layoutUnderFrameStyle, panelSafeArea, storySections, withLayoutCameras} from '@launchclip/core/footage-layout.mjs';
 import {captionPlan, captionZoneIndex} from '@launchclip/core/captions.mjs';
 import {elementsFromStory, profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
@@ -171,7 +171,10 @@ test('Remotion kit: LayoutFrame from the same plan, cameras composed', () => {
   assert.match(source, /const layout = React\.useMemo\(\(\) => \(base \? layoutPlan\(story\) : null\)/);
   assert.match(source, /withLayoutCameras\(models, layout/);
   assert.match(source, /\{layout \? <LayoutFrame plan=\{layout\} \/> : null\}/);
-  assert.ok(source.indexOf('<SubjectLayer base={base}') < source.indexOf('<LayoutFrame'), 'the frame draws over the subject');
+  assert.ok(source.indexOf('<SubjectLayer base={base}') < source.indexOf('<LayoutFrame plan={layout} />'), 'the frame draws over the subject');
+  // A breakout story draws a copy of the frame and the fill under the subject, and notches the fill above it.
+  assert.ok(source.indexOf('{breakout ? <LayoutFrame plan={layout} under /> : null}') < source.indexOf('<SubjectLayer base={base}'), 'the under-frame draws below the subject');
+  assert.match(source, /<LayoutFill layout=\{layout\} plan=\{layoutFill\} notch=\{breakout\} \/>/);
 });
 
 test('captions sit on the presenter side of a split, framed or stacked section', () => {
@@ -258,4 +261,122 @@ test('a fitting error names the section a scene fell outside', async () => {
   const value = resolveStory(story([{id: 's5', start: 2, end: 8, layout: 'split-left'}], {scenes: [{id: 'card', module: 'lower-third', track: 1, start: 0.5, end: 2.5, params: {name: 'Ada'}}]}));
   assert.equal(sectionFitHint(value.scenes[0], value), '; it was placed in the full frame because it falls outside section s5 (split-left, 2–8 s): it starts 1.5 s before it; move it inside s5');
   assert.equal(sectionFitHint({...value.scenes[0], start: 1.9, end: 6}, value), '', 'snapped into the section: no hint');
+});
+
+// Breakout: the head rises over the top edge of the presenter's window.
+const breakoutSections = [
+  {id: 'steps', start: 2, end: 5, layout: 'stacked', share: 0.45, breakout: true},
+  {id: 'proof', start: 5, end: 7.5, layout: 'framed', side: 'bottom', breakout: true}
+];
+async function breakoutStory(sections = breakoutSections) {
+  const {resolved} = await readProjectStory(TALL);
+  return {...structuredClone(resolved), sections};
+}
+
+test('breakout validates: a boolean, only where the presenter sits under the panel', () => {
+  const tall = {width: 1080, height: 1920};
+  assert.equal(errors(story([{id: 'a', start: 1, end: 4, layout: 'stacked', breakout: true}, {id: 'b', start: 4, end: 8, layout: 'framed', side: 'bottom', breakout: true}], tall)), '');
+  assert.match(errors(story([{id: 'a', start: 1, end: 4, layout: 'framed', breakout: true}], tall)), /sections\[0\]\.breakout needs the presenter under the panel/);
+  assert.match(errors(story([{id: 'a', start: 1, end: 4, layout: 'stacked', side: 'top', breakout: true}], tall)), /breakout needs the presenter under the panel/);
+  assert.match(errors(story([{id: 'a', start: 1, end: 4, layout: 'split-left', breakout: true}])), /breakout needs the presenter under the panel/);
+  assert.match(errors(story([{id: 'a', start: 1, end: 4, layout: 'stacked', breakout: 'yes'}], tall)), /breakout must be true or false/);
+  // Off is the same as absent: the resolved section carries no key.
+  const [off] = storySections(resolveStory(story([{id: 'a', start: 1, end: 4, layout: 'stacked', breakout: false}], tall)));
+  assert.equal('breakout' in off, false);
+});
+
+test('breakout: the camera lifts the head over the edge and the plan mounts the cut-out', async () => {
+  const value = await breakoutStory();
+  const plan = layoutPlan(value);
+  assert.deepEqual(plan.warnings, []);
+  // The window runs through the layout-shift that leaves the last breakout.
+  assert.deepEqual(plan.breakouts, [{id: 'steps', start: 2, end: 5}, {id: 'proof', start: 5, end: 8}]);
+  assert.deepEqual(breakoutWindows(value), plan.breakouts);
+  assert.deepEqual(plan.rooms, [{sceneId: 'layout:proof:breakout', start: 5, end: 8, room: {}}, {sceneId: 'layout:steps:breakout', start: 2, end: 5, room: {}}]);
+  assert.deepEqual(plannedSubjectWindows(value), [[2, 8]]);
+  const summary = value.base.subject.mattes[0].summary.head;
+  for (const [t, id] of [[3.5, 'steps'], [6.5, 'proof']]) {
+    const state = layoutStateAt(plan, t);
+    assert.equal(state.breakout, true, id);
+    // The window's top edge crosses the head BREAKOUT_EDGE of the way down it.
+    // The matte summary's head is a centre and a size, as fractions of the source.
+    const top = 960 + state.camera.scale * ((summary.y - summary.h / 2) * 1920 - 960) + state.camera.y;
+    const height = state.camera.scale * summary.h * 1920;
+    assert.ok(Math.abs((state.window.y - top) / height - BREAKOUT_EDGE) < 0.02, `${id}: the edge crosses ${(state.window.y - top) / height} of the way down the head`);
+    const layout = layoutAt(value, t);
+    assert.ok(Math.abs(layout.breakout - (state.window.y - top)) < 1, `${id}: layoutAt reports the rise`);
+    // Panel graphics end a gutter above the head.
+    assert.ok(layout.safe.y + layout.safe.height <= state.window.y - layout.breakout - 43 + 1e-6, `${id}: the panel safe area ends above the head`);
+  }
+  // The head stays out through the shifts between the sections and back to full.
+  assert.equal(layoutStateAt(plan, 5.2).breakout, true);
+  assert.equal(layoutStateAt(plan, 7.6).breakout, true);
+  assert.equal(layoutStateAt(plan, 8).breakout, undefined);
+  assert.equal(layoutStateAt(plan, 1).breakout, undefined);
+  // Into an insert the window closes, so the breakout ends with the section.
+  const closing = layoutPlan(await breakoutStory([...breakoutSections, {id: 'number', start: 7.5, end: 9, layout: 'insert'}]));
+  assert.deepEqual(closing.breakouts[1], {id: 'proof', start: 5, end: 7.5});
+  assert.equal(layoutStateAt(closing, 7.6).breakout, undefined);
+});
+
+test('breakout: the frame above the subject is cut away over the head, its copy below is whole', async () => {
+  const plan = layoutPlan(await breakoutStory());
+  const framed = layoutStateAt(plan, 6.5);
+  assert.deepEqual(framed.window, {x: 43, y: 994, width: 994, height: 883});
+  const under = layoutUnderFrameStyle(framed, plan.canvas);
+  assert.equal('clipPath' in under, false);
+  // The notch: the window's column with its 6 px ring, from the top of the canvas to the end of the top corners (y 994 + 32), in the frame's own box.
+  assert.deepEqual(layoutFrameStyle(framed, plan.canvas), {...under, clipPath: 'polygon(-43px -994px, -6px -994px, -6px 32px, 1000px 32px, 1000px -994px, 1037px -994px, 1037px 926px, -43px 926px)'});
+  assert.equal(breakoutNotch(framed, plan.canvas), 'polygon(0px 0px, 37px 0px, 37px 1026px, 1043px 1026px, 1043px 0px, 1080px 0px, 1080px 1920px, 0px 1920px)');
+  assert.equal(breakoutNotch(layoutStateAt(plan, 1), plan.canvas), 'none');
+  assert.equal(breakoutNotch(layoutStateAt(plan, 8.5), plan.canvas), 'none');
+});
+
+test('breakout: seam captions sit on top of the head, not across the face', async () => {
+  const value = await breakoutStory();
+  value.overlays = [{type: 'captions', preset: 'seam-word', position: 'seam'}];
+  const zones = captionZones(value);
+  const steps = zones.find((zone) => zone.section === 'steps');
+  const rise = layoutAt(value, 3.5).breakout;
+  assert.ok(Math.abs(steps.rect.y + steps.rect.height - (1056 - rise)) < 1e-6, JSON.stringify(steps));
+  // Without the breakout the band is centred on the seam.
+  const plain = captionZones({...value, sections: [{...breakoutSections[0], breakout: false}]})[0];
+  assert.equal(plain.rect.y + plain.rect.height / 2, 1056);
+});
+
+test('breakout without a matte keeps the head inside the frame, with a warning', async () => {
+  const value = await breakoutStory();
+  delete value.base.subject;
+  const plan = layoutPlan(value);
+  assert.equal(plan.breakouts, undefined);
+  assert.deepEqual(plan.rooms, []);
+  assert.match(plan.warnings[0], /section steps: breakout needs a matte over 2–5 s/);
+  assert.equal(layoutStateAt(plan, 3.5).breakout, undefined);
+  assert.equal(layoutAt(value, 3.5).breakout, undefined);
+});
+
+test('HyperFrames: a breakout story stacks under-frame, subject, notched frame, scenes', async () => {
+  const value = await breakoutStory();
+  const {html, warnings} = await compileStoryToHyperFrames(value, {write: false, sourceDir: TALL});
+  assert.deepEqual(warnings.filter((warning) => !/font/.test(warning)), []);
+  const z = (pattern) => Number(html.match(pattern)[1]);
+  const under = z(/<div id="lc-layout-frame-under"[^>]*z-index:(\d+)/);
+  const subject = z(/class="clip lc-subject-media"[^>]*z-index:(\d+)/);
+  const frame = z(/<div id="lc-layout-frame"[^>]*z-index:(\d+)/);
+  const scene = Math.min(...[...html.matchAll(/class="lc-scene[^"]*" data-launchclip-scene="[^"]*"[^>]*style="z-index:(\d+)/g)].map((match) => Number(match[1])));
+  assert.ok(under < subject && subject < frame && frame < scene, `under ${under} < subject ${subject} < frame ${frame} < scenes ${scene}`);
+  const plan = layoutPlan(value);
+  assert.equal((html.match(/tl\.set\("#lc-layout-frame-under"/g) ?? []).length, plan.ops.length);
+  // Every frame op sets the clip, so it clears again outside the breakout.
+  const sets = [...html.matchAll(/tl\.set\("#lc-layout-frame", (\{.*?\}), [\d.]+\);/g)].map((match) => JSON.parse(match[1]));
+  assert.equal(sets.length, plan.ops.length);
+  assert.ok(sets.every((style) => typeof style.clipPath === 'string'));
+  assert.equal(sets[0].clipPath, 'none');
+  assert.ok(sets.some((style) => style.clipPath.startsWith('polygon(')));
+  // The cut-out is mounted over the breakout windows.
+  assert.match(html, /class="clip lc-subject-media"[^>]*data-start="2" data-duration="6"/);
+  // A story without a breakout is compiled as before: no copy, no clip.
+  const {resolved} = await readProjectStory(TALL);
+  const plainHtml = (await compileStoryToHyperFrames(resolved, {write: false, sourceDir: TALL})).html;
+  assert.doesNotMatch(plainHtml, /lc-layout-frame-under|clip-path:none|"clipPath":"none"/);
 });

@@ -1,0 +1,13 @@
+{
+  "project": "examples/story/layouts-tall",
+  "mode": "story",
+  "times": [1.0, 2.1666667, 3.5, 5.2, 6.4, 7.6333333, 9.1666667],
+  "threshold": { "ssim": 0.97 },
+  "patch": {
+    "sections": [
+      { "id": "steps", "start": 2, "end": 5, "layout": "stacked", "share": 0.45, "breakout": true },
+      { "id": "proof", "start": 5, "end": 7.5, "layout": "framed", "side": "bottom", "breakout": true },
+      { "id": "number", "start": 7.5, "end": 9, "layout": "insert", "panel": "paper", "transition": { "type": "layout-shift", "dur": 0.4 } }
+    ]
+  }
+}
