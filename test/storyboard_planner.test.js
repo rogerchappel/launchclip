@@ -30,7 +30,7 @@ function goodStoryboard() {
     brand: DEFAULT_BRAND,
     audio: { ...AUDIO, music: { source: "synth", bpm: 96 }, sfx: "auto" },
     scenes: [
-      { id: "s1", module: "hook-title", start: 0, end: "word:then", energy: 1, params: { headline: "Why does coffee cool fast?", emphasis: "fast" }, hits: [{ at: "word:fast", event: "emphasis-0" }] },
+      { id: "s1", module: "hook-title", start: 0, end: "word:then", energy: 1, params: { headline: "Why does your coffee cool so fast?", emphasis: "fast" }, hits: [{ at: "word:fast", event: "emphasis-0" }] },
       { id: "s2", module: "equation-lockup", start: "word:then", end: "word:the#2", energy: 2, in: { type: "push", dur: 0.4, direction: "left" }, params: { name: "Newton's law of cooling", equation: "dT/dt = −k (T − T_room)", note: "rate follows the gap" }, hits: [{ at: "word:law", event: "lockup" }] },
       { id: "s3", module: "checklist", start: "word:the#2", end: "word:follow", energy: 2, in: { type: "whip", dur: 0.3, direction: "up" }, params: { title: "What sets the pace", statusLabels: { pending: "Next", active: "Now", done: "Covered" }, rows: [{ label: "Big gap: fast", status: "done", at: 0.4 }, { label: "Small gap: slow", status: "done", at: 1.1 }] } },
       { id: "s4", module: "cta", start: "word:follow", end: 12, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Follow for more physics", loop: true } }

@@ -42,7 +42,7 @@ import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
 import { featuredPrompt, unusedFeatured } from "./asset_understanding.js";
 import { bareNotesLine, mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
-import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
+import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSeconds } from "./short_form_checks.js";
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
@@ -380,11 +380,12 @@ export async function planStoryboard(options = {}) {
         const extra = (extraCheck(checked.storyboard) ?? []).map((entry) => `assets: ${entry}`);
         if (extra.length) { checked.errors = [...checked.errors, ...extra]; checked.ok = false; }
       }
-      // The opening and the card mix of a short (src/short_form_checks.js).
+      // The opening and the card mix of every short, footage or not (src/short_form_checks.js).
       if (checked.storyboard) {
         const seconds = storyboardSeconds(checked.storyboard, wordList);
         const footage = Boolean(assets) && lane !== "footage-led";
-        const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
+        const opensOnBase = lane === "footage-led" || Boolean(fixed.base);
+        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage })];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
         // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
         const left = unusedFeatured(checked.storyboard, featured ?? []);
