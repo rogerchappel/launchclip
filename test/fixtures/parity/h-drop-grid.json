@@ -1,0 +1,44 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: drop-grid, ten cards and a counter",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "drop-grid",
+        "start": 0,
+        "end": 5,
+        "params": {
+          "count": 10,
+          "counter": {
+            "suffix": "×",
+            "label": "times a day"
+          },
+          "title": "How often you check"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}
