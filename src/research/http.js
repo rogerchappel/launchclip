@@ -49,7 +49,14 @@ export function createHttp(options = {}) {
         const wait = (lastCall.get(host) ?? 0) + (HOST_GAP_MS[host] ?? 0) - Date.now();
         if (wait > 0) await sleep(wait);
         lastCall.set(host, Date.now());
-        const response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        let response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        // A host that paces its users and says "too many": wait its gap once and ask again.
+        if (response.status === 429 && HOST_GAP_MS[host]) {
+          await response.body?.cancel?.().catch?.(() => {});
+          await sleep(HOST_GAP_MS[host]);
+          lastCall.set(host, Date.now());
+          response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
+        }
         const body = await response.text();
         calls.push({ url: redactUrl(url), status: response.status });
         if (!response.ok) {
