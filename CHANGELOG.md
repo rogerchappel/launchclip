@@ -4,6 +4,24 @@
 
 ### Added
 
+- make understands the files you hand in. Every image and clip in `--assets`
+  gets a short description: what it is (a pricing page, a dashboard, an
+  onboarding flow, a product photo, a person on camera), the key words on
+  screen, the story beats it suits, its orientation and, for a clip, the time
+  ranges worth showing. A model that can take images describes each new file
+  once (PAID, cached by the file's content so it is never sent twice); without
+  one, make guesses from the file name, the kind of file, where a clip moves
+  and the words Tesseract reads when installed. An app or agent that already
+  knows what its files show writes the same fields (`shows`, `text`, `fits`,
+  `feature`) in the notes sidecar and no model is called. The script writer
+  and the director read the descriptions in the asset list.
+  `--asset-descriptions auto|local|off`.
+- A featured file is not left out. When you hand in three files or fewer, name
+  a file in the prompt, ask to show what one file is, or set `feature: true`
+  in its notes, a storyboard that never shows it is repaired; if it is still
+  missing after the repairs, `MAKE.json` lists it under
+  `assets.unused_featured` with a `featured:` warning.
+
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or

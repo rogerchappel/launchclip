@@ -170,6 +170,41 @@ window is moved to the best one. `orientation` overrides the probe, and
 `role: "b-roll"` keeps a clip with wind or chatter on it from becoming the
 base. Field by field: [Footage inventory notes](../KIT_CONTRACTS.md#footage-inventory-notes-srcinventory_notesjs).
 
+Notes can also say what a file is and where it belongs:
+
+```json
+{ "shows": "pricing page",
+  "description": "Three plans side by side, the middle one highlighted",
+  "text": ["Starter $9", "Pro $29", "Start free"],
+  "fits": ["the price or offer line", "the call to action"],
+  "feature": true }
+```
+
+You do not have to write these. make describes every image and clip you hand
+in that has no `shows` or `description` of its own:
+
+- With a model that can take images (an OpenAI or OpenRouter key), it sends
+  each new file once (a PAID call per file: the image, or four frames of a
+  video) and caches the answer by the file's content, so the same file is
+  never sent twice, in this project or any other.
+- Without one, it guesses from the file name and folder
+  (`screens/pricing.png` is a pricing page), the kind of file, where a clip
+  moves, and the words on screen when Tesseract is installed. Name your files
+  for what they show and the guess is usually right.
+
+`--asset-descriptions local` never calls a model; `off` skips the step. Your
+own notes always win, so an app that already knows what its files show writes
+them and pays for no description calls. `ASSETS.json` shows each file's
+description and where it came from.
+
+**Featured files.** If you hand in three files or fewer, name a file in the
+prompt, ask to "show the pricing page" when one file is the pricing page, or
+set `"feature": true` in its notes, make treats the file as one you want in
+the video. A storyboard that leaves it out is sent back for repair; if it is
+still missing when the repairs run out, the video ships and `MAKE.json` says
+so (`assets.unused_featured`, and a `featured:` warning). Use
+`media.must_use` when a missing file should fail the run instead.
+
 **Pronunciation and voice** for a synthesised narration go in the assets
 folder too (app settings, not assets: never inventoried or copied).
 `pronunciation.json` respells terms in the text the voice speaks, and only
