@@ -1,0 +1,17 @@
+{
+  "title": "She skipped the check",
+  "title_options": ["She skipped the check"],
+  "beats": [
+    { "beat": "setup", "place": "desk-laptop", "lines": [
+      { "speaker": "narrator", "text": "Maya has shipped this fix all morning.", "playing": "", "action": "", "seconds": 0 }
+    ] },
+    { "beat": "problem", "place": "desk-laptop", "lines": [
+      { "speaker": "maya", "text": "Again. The same red build.", "playing": "", "action": "", "seconds": 0 },
+      { "speaker": "priya", "text": "It fails for ninety percent of teams.", "playing": "", "action": "", "seconds": 0 },
+      { "speaker": "", "text": "", "playing": "", "action": "Maya stares at the screen.", "seconds": 5 }
+    ] },
+    { "beat": "resolution", "place": "", "lines": [
+      { "speaker": "narrator", "text": "The check found it before the deploy could.", "playing": "", "action": "", "seconds": 0 }
+    ] }
+  ]
+}

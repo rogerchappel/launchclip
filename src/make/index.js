@@ -32,7 +32,7 @@ import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
-import { SCREENPLAY_VERSION, screenplayNarration } from "@launchclip/core/screenplay.mjs";
+import { NARRATOR, SCREENPLAY_VERSION, screenplayNarration } from "@launchclip/core/screenplay.mjs";
 import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "../voice/dialogue.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
@@ -737,11 +737,15 @@ async function prepareAnimation(ctx) {
     }
   }
   const { take, derived } = voiced;
-  script.take = { seconds: take.duration, words: take.words.length, wpm: voiced.wpm, lines: take.lines.length, cached: Boolean(take.cached) };
-  // The final script's check, at the measured pace, is the receipt; errors left after the repair pass warn, they do not stop the run.
-  script.check = measuredCheck();
+  // A rerun that reused the script and its take leaves SCRIPT.json as it is, receipt included.
+  const unchanged = reuse && voiced.reused && script.take && script.check;
+  if (!unchanged) {
+    script.take = { seconds: take.duration, words: take.words.length, wpm: voiced.wpm, lines: take.lines.length, cached: Boolean(take.cached) };
+    // The final script's check, at the measured pace, is the receipt; errors left after the repair pass warn, they do not stop the run.
+    script.check = measuredCheck();
+    await writeJson(path.join(project, MAKE_PATHS.script), script);
+  }
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
-  await writeJson(path.join(project, MAKE_PATHS.script), script);
   state.script = { hash: scriptHash };
   ctx.script = script;
   ctx.words = take.words;
@@ -762,7 +766,7 @@ async function prepareAnimation(ctx) {
     reason: "the animation path stops after the script and the voice; the show bible, the shot list and the render are its later stages (docs/ANIMATION_PIPELINE_RFC.md §9)",
     next: [`Read ${path.join(project, MAKE_PATHS.script)} (launchclip script check ${project}) and ${path.join(project, MAKE_PATHS.words)}. No video is rendered: the animation path's later stages are not built yet. For a finished video today, run launchclip make without --animation.`]
   };
-  return { status: reuse && voiced.reused ? "cached" : "done", ...(reuse && voiced.reused ? { reason: "script and voice inputs unchanged" } : {}) };
+  return unchanged ? { status: "cached", reason: "script and voice inputs unchanged" } : { status: "done" };
 }
 
 // A screenplay's spoken lines voiced as a dialogue (src/voice/dialogue.js): one
@@ -777,7 +781,9 @@ async function voiceScreenplay(ctx, script) {
   const narratorVoice = narrationRequest(voice).voice;
   const cast = standInCast(script.characters, { provider: voiceProvider, narratorVoice });
   const narration = { ...voice, lines: derived.lines };
-  const story = { cast: { characters: cast }, audio: { narration } };
+  // A script the repair pass could not fix may still name a speaker who is not a character: the narrator's voice reads those lines, so the take can be heard.
+  const strangers = [...new Set(derived.lines.map((line) => line.speaker))].filter((speaker) => speaker !== NARRATOR && !cast.some((member) => member.id === speaker));
+  const story = { cast: { characters: [...cast, ...strangers.map((id) => ({ id, voice: null }))] }, audio: { narration } };
   const entries = dialogueRequests(story);
   const gaps = dialogueGaps(story);
   const hash = hashValue({ entries, gaps, v: 1 });
