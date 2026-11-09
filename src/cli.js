@@ -77,7 +77,10 @@ export async function runCli(argv, io = {}) {
   // launchclip research attach [dir] [flags]
   const researchAttachTarget = command === "research" && firstArg === "attach" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const researchAttachInvocation = command === "research" && firstArg === "attach" ? { target: researchAttachTarget ?? "research", flagArgs: researchAttachTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  // launchclip research capture [dir] [flags]
+  const researchCaptureTarget = command === "research" && firstArg === "capture" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
+  const flags = parseFlags(researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -241,13 +244,26 @@ export async function runCli(argv, io = {}) {
       // launchclip research attach <research-dir> [--root .]: evidence data from the captured clips' sidecars.
       const { writeResearchEvidence } = await import("./research/evidence_data.js");
       result = await writeResearchEvidence(researchAttachInvocation.target, { root: flags.root });
+    } else if (command === "research" && firstArg === "capture") {
+      // launchclip research capture <research-dir> [--root .]: record every capture request, say what could not be recorded, attach.
+      const { captureResearch } = await import("./research/record.js");
+      result = await captureResearch(researchCaptureInvocation.target, { root: flags.root, command: flags["capture-cmd"], concurrency: flags["capture-concurrency"] }, { log: (line) => stderr.write(`${line}\n`), ...productionAdapters.researchCapture });
     } else if (command === "research") {
       const { runResearch } = await import("./research/index.js");
       result = await runResearch(required(firstArg, "topic or script file"), {
         out: flags.out, urls: flags.url, claims: flags.claims, media: flags.media, people: flags.people,
         maxCaptures: flags["max-captures"], maxTables: flags["max-tables"], theme: flags.theme,
         news: flags.news, feeds: flags.feed, freshDays: flags["fresh-days"]
-      }, { log: (line) => stderr.write(`${line}\n`) });
+      }, { log: (line) => stderr.write(`${line}\n`), ...productionAdapters.research });
+      // The requests are only requests until recorded: say whether this machine can, and how.
+      if (result.summary.captures) {
+        const { captureRecorderStatus } = await import("./research/capture_status.js");
+        const recorder = await (productionAdapters.captureRecorderStatus ?? captureRecorderStatus)();
+        result.captures = { requests: result.summary.captures, recorded: 0, recorder: { available: recorder.available, reasons: recorder.reasons }, next: `launchclip research capture ${flags.out ?? "research"}` };
+        stderr.write(recorder.available
+          ? `research: ${result.summary.captures} capture request(s) written, none recorded yet; record them with: ${result.captures.next}\n`
+          : `research: ${result.summary.captures} capture request(s) written, and this machine cannot record them. ${recorder.hint}\n`);
+      }
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
       const { makeOptionsFromFlags } = await import("./make/options.js");
