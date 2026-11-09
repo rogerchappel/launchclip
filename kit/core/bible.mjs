@@ -28,6 +28,7 @@
 //   mustKeep(params)                       → what a viewer would notice changing
 //   bibleCast(bible)                       → the bible's cast as story.cast
 //   bibleCharacter(member, extra)          → one bible cast entry
+//   bibleFingerprint(member)               → a character's identity digest
 //   withBible(story, bible, file)          → the story pinned to the bible
 //   bibleRefErrors(ref, path)              → problems with a bible: {file, hash}
 //   bibleCastFindings(story, bible)        → where a story's cast differs
@@ -128,6 +129,9 @@ export function bibleCast(bible) {
   return {...cast, ...(Array.isArray(cast.characters) ? {characters: cast.characters.map(castEntry)} : {})};
 }
 
+/** A character's identity in a bible: a short digest of its rig params and drawing style (rig.mjs rigFingerprint). */
+export const bibleFingerprint = member => sha256Hex(member.fingerprint).slice(0, 16);
+
 /**
  * One bible cast entry from a resolved cast member (resolveStoryCast):
  * its full rig params, so the entry no longer depends on a starter or a
@@ -144,7 +148,7 @@ export function bibleCharacter(member, extra = {}) {
     colors,
     ...(extra.character_file ? {character_file: extra.character_file} : {}),
     ...(extra.sheet ? {sheet: extra.sheet} : {}),
-    fingerprint: member.fingerprint,
+    fingerprint: bibleFingerprint(member),
     must_keep: mustKeep(member.params)
   };
 }
@@ -225,7 +229,7 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
       if (!frozen) return;
       if (entry.sheet === undefined) err(`${path} (${entry.id}) needs its reference sheet (sheet: "${BIBLE_SHEETS}/${entry.id}.png")`);
       else if (insideProject(entry.sheet) && exists && !exists(entry.sheet)) err(`${path}.sheet ${entry.sheet} does not exist; draw it again with launchclip bible freeze`);
-      if (member && entry.fingerprint !== member.fingerprint) err(`${path}.fingerprint does not match ${entry.id}'s rig params and the cast's drawing style; freeze the bible again`);
+      if (member && entry.fingerprint !== bibleFingerprint(member)) err(`${path}.fingerprint does not match ${entry.id}'s rig params and the cast's drawing style; freeze the bible again`);
       if (member && Array.isArray(entry.must_keep)) {
         const missing = mustKeep(member.params).filter(feature => !entry.must_keep.includes(feature));
         if (missing.length) err(`${path}.must_keep leaves out ${missing.map(feature => `"${feature}"`).join(', ')}; it may add features but not drop what the rig params say`);

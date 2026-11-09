@@ -25,6 +25,9 @@ export const CAST_PACK_FILE = "cast-pack.json";
 /** <project>/cast */
 export const projectCastRoot = (projectDir = process.cwd()) => path.join(path.resolve(projectDir), "cast");
 
+/** A project character's file as a show bible names it: cast/<id>.character.json, relative to the project. */
+export const projectCharacterRef = (id) => `cast/${characterFileName(id)}`;
+
 /** ~/.launchclip/cast, or $LAUNCHCLIP_HOME/cast. */
 export function homeCastRoot(options = {}) {
   if (!options.home && pinnedHome("cast")) return pinnedHome("cast");
