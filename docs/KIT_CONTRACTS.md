@@ -3948,6 +3948,15 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
   `resolveStory` turns them into ids), so a storyboard planned before a
   seeded cast exists works with any seed's people.
+- `character.mjs`: the saved character file (`launchclip.character.v1`,
+  below): `normalizeCharacter`, `characterErrors`, `characterCastEntry`,
+  the set paths (`characterPaths()`, `parseSet`, `applyCharacterSets`) and
+  `withSavedCharacters(story, find)`, which fills story cast entries from
+  saved files.
+- `describe.mjs`: `describeCharacter(text, {current})`, a plain description
+  or edit instruction → set paths with no model, matched on the rig's own
+  option lists; `newCharacterDefaults(seed)` and `pickVoice(seed, …)` for
+  what a description leaves out.
 - `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
   joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
   over every pose an actor takes in a scene, each gesture's far swing and a
@@ -3995,6 +4004,80 @@ is an illustrated character: it takes no rig params, acts only in
 `sprite-scene` (a drawn-rig scene refuses it), and its `voice` may be any
 provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
 ElevenLabs), so each character in a dialogue speaks in its own voice.
+
+### Saved characters (`launchclip.character.v1`)
+
+One designed character as a file, used by the CLI, by agents (the
+`launchclip-character-design` skill) and by every storyboard read:
+
+```json
+{ "schema": "launchclip.character.v1", "id": "nova", "name": "Nova",
+  "personality": "calm night-shift lead who jokes under pressure",
+  "style": "paper", "voice": "bf_emma",
+  "params": { "build": "average", "height": "tall", "skin": "deep",
+              "hair": { "style": "locs", "color": "silver" },
+              "outfit": { "top": "blazer", "bottom": "trousers" },
+              "accessories": ["round-glasses"],
+              "colors": { "top": "red", "bottom": "denim", "shoes": "white", "accent": "accent" } } }
+```
+
+- `params` are rig params; `normalizeCharacter` validates them with
+  `normalizeRigParams` and writes the file in canonical form (fixed key
+  order, optional fields only when set), so equal characters are equal
+  files. `id` is a cast id that is not a starter's. `personality` is one
+  line of at most 160 characters. `voice` is any provider's voice id; one
+  shaped like a Kokoro id must be a local Kokoro voice. No other keys are
+  accepted.
+- **Where it lives** (`src/character_store.js`):
+  `<project>/cast/<id>.character.json`, then the user library
+  `~/.launchclip/cast/` (`$LAUNCHCLIP_HOME/cast`; an embedding app's pinned
+  home). The project's file wins.
+- **In a story.** A `story.cast.characters` entry whose id (or `from`) names
+  no starter and that carries no skin and hair of its own is filled from the
+  saved file: `{"id": "nova"}`, or `{"id": "lead", "from": "nova", "colors":
+  {"top": "teal"}}`, where the entry's own fields win as they do over a
+  starter. This runs in the shared storyboard read step
+  (`applyProjectStyle` in `src/story_style.js`, after the style merge), so
+  `story validate`, `layout-check`, `finish`, the renderers and `cast` all
+  see the filled cast; the result reports `characters: [{id, from, source}]`.
+  Entries that name a starter or carry their own params are untouched, and a
+  story with no such entry is returned as the same object. The file's
+  `style` is the style its sheet draws in; in a story `cast.style` decides.
+- **Set paths** are the one edit language: `name`, `personality`, `voice`,
+  `style`, `build`, `height`, `age`, `skin`, `hair.style`, `hair.color`,
+  `outfit.top`, `outfit.bottom`, `outfit.over`, `accessories`, `headwear`,
+  `mobility`, `colors.top|bottom|shoes|accent`. `path=value` sets one;
+  `accessories+=name` and `accessories-=name` add and remove (a new pair of
+  glasses replaces the pair worn); `path=none` clears an optional one.
+  `launchclip cast options [path]` prints each path's values from the rig's,
+  the palette's and the styles' exports, so options added there are settable
+  with no change here.
+- **Commands** (`src/cast_design.js`):
+  - `launchclip cast create <id> [--describe "…"] [--set path=value]…
+    [--from <starter|saved id>] [--to project|library]` builds a character
+    from a description (`describe.mjs`: no model, no key), then the `--name`,
+    `--personality`, `--voice` and `--style` shorthands, then `--set`, each
+    later one winning. Skin, hair and voice nobody named are chosen from the
+    id and reported as `assumed`; words nothing matched as `unmatched`.
+    `--model provider:model` (or `LAUNCHCLIP_CAST_MODEL`) asks a model for
+    the set paths instead (`src/make/models.js` clients); answers naming a
+    path or option the rig lacks are dropped and reported as `rejected`.
+  - `launchclip cast edit <id> [--instruction "…"] [--set path=value]…`
+    applies the same to a saved character and saves it where it was found.
+    A character that fails validation is not written.
+  - Both draw the sheet beside the file as `<id>.sheet.png` (a few poses,
+    every expression, the character's style, the project's brand colours
+    when it has a storyboard); `--no-sheet` skips it and `launchclip cast
+    sheet <id> [--poses …]` redraws it.
+  - `launchclip cast export [ids…] --out <folder|pack.json>` writes a
+    character pack and `launchclip cast import <pack> [--to project|library]
+    [--ids …] [--force]` reads one. A pack (`launchclip.cast-pack.v1`) is a
+    folder with `cast-pack.json` (`{schema, name, characters: [ids]}`) and
+    one character file each, or one `.json` file with the characters inside.
+    Import validates every character and refuses to replace one that exists
+    with different traits unless forced.
+- A reference image maps to traits (the skill has the agent read it and
+  choose options); nothing stores or reproduces a likeness.
 
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
