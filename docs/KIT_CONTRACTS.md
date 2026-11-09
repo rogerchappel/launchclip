@@ -3262,6 +3262,62 @@ warning in `MAKE.json`. `MAKE.json` `assets.featured` lists the files and
 reasons, and `assets.unused_featured` the ones the storyboard left out. For a
 hard rule, use `media.must_use`.
 
+## Short-form checks (`src/short_form_checks.js`)
+
+Rules for every video of 90 s or less (`SHORT_SECONDS`), whether or not any
+footage was supplied. The planner checks the storyboard on every attempt and
+sends failures back as repair errors (`hook: …`, `cards: …`). A storyboard that
+fails only these still ships when the repairs run out, with the errors as
+warnings. `launchclip finish` then gates the opening it is about to deliver
+(the `hook` gate). Every check reads the storyboard and the measured narration,
+never the render, so Remotion and HyperFrames get the same verdict.
+
+| Check | Fails when | Where |
+| --- | --- | --- |
+| text | the opening scene's headline is a bare topic: under 4 words (`MIN_HOOK_WORDS`), or a question under 6 words with no number ("Deck care?"). Skipped when a recording opens the video | planner, `hook` gate |
+| claim | no phrase (2 words or more, `MIN_CLAIM_WORDS`) or number is on screen by `claim_by`. A scene on any track counts; so do the captions once the voice has started by `claim_by` | planner, `hook` gate |
+| logo_open | the opening scene is a `brand-lockup` or `logo-row` with no claim on it (the brand's own name is not a claim). Skipped when a recording opens the video | planner, `hook` gate |
+| entrance | the opening scene's `in` transition runs longer than `entrance_max` | planner, `hook` gate |
+| first_word | the first spoken word starts after `first_word_by` | `hook` gate only: a storyboard repair cannot move the voice |
+| cards | more text or icon cards (`concept-card`, `icon-row`, `icon-grid`, `checklist` and the title cards) than one per 15 s (at least 2), two back to back, or one module more than twice. With a footage library the cap holds at any length | planner |
+
+The opening's limits come from the cadence profile the story is gated against
+(`kit/profiles/`), not from constants in the check (`hookThresholds()`):
+
+| Limit | Source | short-motion | short-talking-head |
+| --- | --- | --- | --- |
+| `claim_by` | `first_visual_seconds` p90 ("when the first designed graphic appears") | 0.5 s | 1.5 s |
+| `entrance_max` | `first_motion_seconds` p90 ("when the first meaningful motion arrives") | 0.35 s | 2 s |
+| `first_word_by` | the later of the two. No profile measures when speech starts, so the voice is held to the window the profile gives the picture and the motion | 0.5 s | 2 s |
+
+A band under 0.35 s (some reels measure 0) is raised to `FIRST_FRAME_SECONDS`,
+the structure gate's "opening image on screen by". A profile without the band
+falls back to the shipped short profile for the lane: `short-talking-head`
+when a recording opens the video, `short-motion` otherwise. `MIN_CLAIM_WORDS`
+is a judgement (one word is a label), not a measured band.
+
+The `hook` gate in `finish.json` and `MAKE.json` is `{status, thresholds:
+{claim_by, entrance_max, first_word_by, profile, sources}, checks: {claim,
+logo_open?, entrance, first_word, text}, findings}`; `sources` says in words
+where each number came from. A failed check makes the run `needs-repair`. The
+structure gate still owns "opens on an image, not a title card, by 0.35 s",
+and the motion gate still measures the render's first motion and hook events.
+
+### Loudness repair (`src/finish.js`)
+
+The master targets −14 LUFS integrated and at most −1 dBTP
+(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+a warning: the master step runs again from the raw render, aimed past the
+target by what the last pass missed by (`repairAim()`: the level moved by the
+miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice
+(`MASTER_REPAIRS`). The master stage's `loudness.repairs` lists each pass
+(`{attempt, missed, aim, output, compliant}`), and `loudness.target` stays the
+delivery target. A repaired master passes the `loudness` gate with `repairs:
+<n>` and a `loudness:` warning that says what the first pass measured. A
+master that still misses fails the gate with the measurement in `errors`, and
+the run is `needs-repair`.
+
 ## Subject layer (`kit/core/subject-layer.mjs`)
 
 Depth against the cut-out presenter in the footage-led lane

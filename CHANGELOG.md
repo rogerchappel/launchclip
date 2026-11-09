@@ -4,6 +4,21 @@
 
 ### Added
 
+- Every short gets the short-form checks. The hook and card rules used to
+  run only when an app supplied a footage library, so a Short made from a
+  prompt alone skipped them. They now run on every video of 90 s or less, and
+  a new `hook` gate in finish checks how it opens: a claim or question
+  readable on screen early (in a scene or in the captions), no logo-only open,
+  an opening scene that arrives quickly, and a first spoken word on time. The
+  limits are the cadence profile's own `first_visual_seconds` and
+  `first_motion_seconds` bands, and the gate says where each number came from.
+  The checks read the storyboard and the narration, so both renderers get the
+  same verdict.
+- A loudness miss is repaired. A master that lands more than 1.5 LU off
+  −14 LUFS, or peaks over −1 dBTP, is run again from the raw render, aimed
+  past the target by the miss, up to twice. It used to ship with a warning;
+  now the `loudness` gate fails only if the repairs miss too.
+
 - make understands the files you hand in. Every image and clip in `--assets`
   gets a short description: what it is (a pricing page, a dashboard, an
   onboarding flow, a product photo, a person on camera), the key words on
