@@ -97,7 +97,7 @@ test("with an Anthropic model, make runs the critic without --critic and the gat
   const model = { ...fake.model, provider: "anthropic", model: "claude-opus-4-8", spec: "anthropic:claude-opus-4-8" };
   const criticCalls = [];
   const critic = async (args) => { criticCalls.push(args); return { status: "written", verdict: "ship", findings: 0, reviewed: 2, unreviewed: 0, warnings: [], model: "claude-opus-4-8", critique: { verdict: "ship", summary: "", findings: [] } }; };
-  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", concepts: "off", cwd, out: "video" }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), critic, notice() {} });
+  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", concepts: "off", candidates: "off", cwd, out: "video" }, { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), critic, notice() {} });
   assert.equal(criticCalls.length, 1);
   assert.equal(criticCalls[0].provider, "anthropic");
   assert.equal(report.model.vision, true);

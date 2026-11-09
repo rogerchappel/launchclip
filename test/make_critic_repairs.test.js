@@ -39,7 +39,7 @@ async function make(t, { critic, criticRepairs } = {}) {
   const criticCalls = [];
   const verdicts = [...critic];
   const criticAdapter = async (args) => { criticCalls.push(args); return verdicts.shift() ?? critiqueResult("ship"); };
-  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "video", ...(criticRepairs !== undefined ? { criticRepairs } : {}) }, { env: {}, client: fake.model, inventory: fakeInventory, finish: fakeFinish(finishCalls), critic: criticAdapter, notice() {} });
+  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", candidates: "off", cwd, out: "video", ...(criticRepairs !== undefined ? { criticRepairs } : {}) }, { env: {}, client: fake.model, inventory: fakeInventory, finish: fakeFinish(finishCalls), critic: criticAdapter, notice() {} });
   const story = JSON.parse(await readFile(path.join(cwd, "video", "storyboard.json"), "utf8"));
   return { report, story, finishCalls, criticCalls, repairs: fake.repairs };
 }
@@ -80,7 +80,7 @@ test("the CLI exits 2 for a needs-repair video, and 0 with --allow-needs-repair"
   const run = (extra) => {
     const out = [];
     const adapters = { env: {}, client: fakeModel({ vision: true }).model, inventory: fakeInventory, finish: fakeFinish([]), critic: async () => critiqueResult("repair", [finding("major")]), notice() {} };
-    const done = runCli(["make", PROMPT, "--assets", assets, "--voice", "test", "--music", "synth", "--out", path.join(cwd, "video"), "--critic-repairs", "0", ...extra], { stdout: { write: (text) => out.push(text) }, stderr: { write() {} }, productionAdapters: { make: adapters } });
+    const done = runCli(["make", PROMPT, "--assets", assets, "--voice", "test", "--music", "synth", "--out", path.join(cwd, "video"), "--critic-repairs", "0", "--candidates", "off", ...extra], { stdout: { write: (text) => out.push(text) }, stderr: { write() {} }, productionAdapters: { make: adapters } });
     return { done, out };
   };
   const refused = run([]);
