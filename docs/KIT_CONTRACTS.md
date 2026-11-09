@@ -206,6 +206,10 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   backdrop plate; see [Backdrop plates](#backdrop-plates-kitcoreplatesmjs).
 - `engine` = `{version?, revision?}` is the stamp of the engine that wrote
   the story; see [Story versions and migrations](#story-versions-and-migrations-kitcorestory-migrationsmjs).
+- `bible` = `{file, hash}` names the show bible a character story was made
+  with (`BIBLE.json` and its hash); see "Show bible". The field is optional
+  and additive: a story without it is unchanged, and `STORY_REVISION` did
+  not move.
 
 Exports:
 
@@ -4073,6 +4077,121 @@ One designed character as a file, used by the CLI, by agents (the
     with different traits unless forced.
 - A reference image maps to traits (the skill has the agent read it and
   choose options); nothing stores or reproduces a likeness.
+
+### Show bible (`launchclip.show-bible.v1`, `kit/core/bible.mjs`, `src/bible.js`)
+
+`BIBLE.json` beside `storyboard.json` pins who is in a character story,
+what each of them looks and sounds like, where it happens and how it is
+drawn (ANIMATION_PIPELINE_RFC.md §4.2):
+
+```json
+{ "schema": "launchclip.show-bible.v1", "frozen": true, "hash": "sha256:…",
+  "cast": { "style": "outlined",
+    "characters": [
+      { "id": "nova", "name": "Nova", "voice": "bf_emma", "position": "left",
+        "build": "slim", "height": "tall", "skin": "deep",
+        "hair": { "style": "locs", "color": "silver" },
+        "outfit": { "top": "blazer", "bottom": "trousers" },
+        "accessories": ["round-glasses"],
+        "colors": { "top": "red", "bottom": "charcoal", "shoes": "black", "accent": "accent" },
+        "character_file": "cast/nova.character.json",
+        "sheet": "bible/sheets/nova.png", "fingerprint": "1acb77987b1a5632",
+        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"] } ] },
+  "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"] },
+  "style": { "pack": "project", "seed": 4821, "drawing_style": "outlined" },
+  "rules": ["Rae never raises his voice."],
+  "inputs": { "script_hash": "sha256:…" } }
+```
+
+- `cast` is the story cast shape with four additions per character:
+  `character_file` (the saved character it came from, inside the project;
+  a starter has none), `sheet`, `fingerprint` and `must_keep`.
+  `bibleCast(bible)` removes the four and is a valid `story.cast`. Every
+  entry carries its full rig params, so the bible does not change when a
+  starter or a saved file does. An `art` (illustrated) entry is refused:
+  the rig draws the animatic and is the fallback for handed-in art.
+- `fingerprint` is the first 16 hex digits of the SHA-256 of the
+  character's `rigFingerprint` (its params and the cast's drawing style).
+- `must_keep` is what a viewer would notice changing, written by
+  `mustKeep(params)`: hair (or the headscarf), skin tone, top, bottom (not
+  under a dress), over-layer, glasses, facial hair other than stubble, a
+  hearing aid, a bindi, headwear, a mobility aid, and age when not an
+  adult. Colours are named as the params name them (`"hoodie in the
+  brand's primary colour"` for a brand role). A file may add features; it
+  may not drop one the params give.
+- `world` is a story world (`storyWorldErrors`) plus `sets`, the sets the
+  story may use (`SETS`). `style` names the project's style pack and seed;
+  its `drawing_style` is the cast's. `rules` are sentences for the planner
+  and the critic. `inputs.script_hash` is the SHA-256 of `SCRIPT.json`'s
+  bytes when the bible was frozen.
+- `hash` is `"sha256:"` and the SHA-256 of the file's content without
+  `hash`, as JSON with sorted keys (`bibleHash`). A draft (`frozen: false`)
+  has the same fields without the hash, sheets, fingerprints and
+  `must_keep`.
+
+```js
+export const BIBLE_SCHEMA, BIBLE_FILE, BIBLE_SHEETS, BIBLE_CHARACTER_FIELDS
+export function validateBible(bible, {script, exists} = {}) // → {ok, errors, warnings}
+// script: SCRIPT.json (each of its `characters` needs an entry and a voice);
+// exists(path): whether a project-relative file is on disk (sheets, character files).
+export function bibleHash(bible)                 // → "sha256:…"
+export function mustKeep(params)                 // → [feature]
+export function bibleFingerprint(member)         // member: a resolved cast member
+export function bibleCharacter(member, {character_file, sheet})  // → a bible cast entry
+export function bibleCast(bible)                 // → story.cast
+export function bibleRef(bible, file)            // → {file, hash}
+export function bibleRefErrors(ref, path)        // also exported by story.mjs
+export function withBible(story, bible, file)    // → the story with the bible's cast and bible: {file, hash}
+export function directionWithBible(map, bible, file)
+export function bibleCastFindings(story, bible)  // → [text]; [] when the casts agree
+```
+
+Validation: the cast passes `storyCastErrors` and `resolveStoryCast`; a
+frozen bible has a voice, a sheet, a matching fingerprint and a complete
+`must_keep` on every character, and a hash that matches its content; every
+character the script lists has an entry and a voice; the world and every
+set exist; two characters sharing a voice is a warning.
+
+Commands (`src/bible.js`):
+
+- `launchclip bible freeze <project> [--characters nova,rae] [--style …]
+  [--position nova=left]… [--world office] [--time day] [--sets a,b]
+  [--rule "…"]… [--pack …] [--seed …] [--chromium <path>] [--no-pin]
+  [--force]` resolves the cast from, in order: `--characters` (saved
+  characters or starters, read as their files are now), the `BIBLE.json`
+  already there (a draft, or a frozen one, whose entries are kept as
+  pinned), `storyboard.json`'s cast, or every character saved in the
+  project. A library character is copied to `<project>/cast/`. The drawing
+  style is `--style`, else the bible's, the storyboard's, else the first
+  saved character's. It draws one sheet per character to
+  `bible/sheets/<id>.png` (`referenceSheet` in `src/cast_design.js`: every
+  pose, and a face close-up of every expression, with the modules' own view
+  tree), then writes the file and its hash. Nothing is written when a sheet
+  cannot be drawn. When `storyboard.json` or `DIRECTION.json` exist they are
+  pinned: the story's cast becomes `bibleCast(bible)` and both get `bible:
+  {file, hash}`. Freezing a frozen bible with different content is refused
+  without `--force`; an edited `SCRIPT.json` alone does not change the hash
+  (a warning says so).
+- `launchclip bible show <project>` prints the bible, its validation
+  against the disk and the script, and the gate's result for the
+  storyboard when there is one. It exits 1 when the bible is not valid.
+
+The story and the direction map: `bible: {file, hash}` is a top-level field
+of `storyboard.json` (`validateStory`) and of `DIRECTION.json`
+(`validateDirection`); both check its shape only.
+
+The gate: `launchclip finish` runs `bibleGate(project, resolved,
+{direction})` in its validate stage, after the cast gate, and reports
+`gates.bible`. It fails when the bible file is missing or a draft, when it
+is not valid (a changed hash, a missing sheet, a script character without
+an entry), when the story or the direction map names another hash, when a
+frozen `BIBLE.json` is in the project and the story does not name it, and
+when the story's cast differs from the bible's: a character added or
+missing, different rig params, voice, position or name, another drawing
+style or colour mapping. The two casts are compared resolved, so a story
+entry that names a starter or a saved character by id matches while that
+character is unchanged. A story that names no bible in a project with no
+frozen bible skips the gate.
 
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 

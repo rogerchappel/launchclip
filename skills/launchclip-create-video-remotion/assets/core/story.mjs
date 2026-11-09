@@ -111,7 +111,7 @@ const EPS = 1e-6;
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
-const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine"]);
+const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -348,6 +348,21 @@ function dotWipeOptionErrors(transition, path, fps) {
   return errors;
 }
 
+/**
+ * Problems with a `bible: {file, hash}` reference, as strings: what a story
+ * and a direction map carry to name the show bible they were made with
+ * (kit/core/bible.mjs).
+ */
+export function bibleRefErrors(ref, path = "bible") {
+  if (!isObject(ref)) return [`${path} must be {file, hash}: the show bible this was made with (BIBLE.json and its hash)`];
+  const errors = [];
+  for (const key of Object.keys(ref)) if (!["file", "hash"].includes(key)) errors.push(`${path}.${key} is not supported (allowed: file, hash)`);
+  const inside = typeof ref.file === "string" && ref.file.trim() && !/^([a-zA-Z]:|[\\/])/.test(ref.file) && !ref.file.includes("\\") && !ref.file.split("/").includes("..");
+  if (!inside) errors.push(`${path}.file must be the bible's path inside the project, like "BIBLE.json"`);
+  if (typeof ref.hash !== "string" || !/^sha256:[0-9a-f]{64}$/.test(ref.hash)) errors.push(`${path}.hash must be the frozen bible's hash ("sha256:" and 64 hex digits)`);
+  return errors;
+}
+
 export function validateStory(story, { modules, moduleParams } = {}) {
   const errors = [];
   const warnings = [];
@@ -373,6 +388,9 @@ export function validateStory(story, { modules, moduleParams } = {}) {
       else if ((engine.revision ?? 0) < STORY_REVISION) err(`engine.revision ${engine.revision ?? 0} is older than this engine's (${STORY_REVISION}); bring the story up to date with migrateStory (kit/core/story-migrations.mjs) first`);
     }
   }
+  // bible: the show bible a character story was made with (kit/core/bible.mjs). Its shape is checked here;
+  // the `bible` gate in finish compares the story's cast with the file (src/bible.js bibleGate).
+  if (story.bible !== undefined) for (const message of bibleRefErrors(story.bible)) err(message);
   if (story.phase !== undefined && story.phase !== 2) err("phase must be 2 when set (the phase-2 cinematic contract)");
   if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
   for (const key of Object.keys(story)) if (!TOP_LEVEL.has(key)) warn(`${key} is not a story.json v1 field and is ignored`);
