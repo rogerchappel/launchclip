@@ -48,9 +48,9 @@ export function createMakeClient(spec, options = {}) {
       return inner.runStructured({ ...request, model: request.model ?? created.model, reasoningEffort: request.reasoningEffort ?? reasoning });
     }
   };
-  // The OpenAI Responses and chat-completions clients send images; the
-  // Anthropic planner adapter sends text only, and Ollama models usually
-  // cannot see (model_provider.js supportsImages).
-  const vision = provider === "openai" || provider === "openrouter" || (provider === "compatible" && inner.supportsImages !== false);
+  // The OpenAI Responses and chat-completions clients and the Anthropic
+  // adapter send images; Ollama models usually cannot see
+  // (model_provider.js supportsImages).
+  const vision = provider === "openai" || provider === "openrouter" || provider === "anthropic" || (provider === "compatible" && inner.supportsImages !== false);
   return { client, provider, model: created.model, reasoning, vision };
 }

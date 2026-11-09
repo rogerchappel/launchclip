@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runMake } from "../src/make/index.js";
 import { changedScenes, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes, sceneAt } from "../src/make/critic_repair.js";
-import { parseFlags } from "../src/cli.js";
+import { MAKE_NEEDS_REPAIR_EXIT, parseFlags, runCli } from "../src/cli.js";
 import { makeOptionsFromFlags } from "../src/make/options.js";
 import { PROMPT, assetsDir, fakeFinish, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
 
@@ -13,7 +13,8 @@ const finding = (severity, category = "typography", extra = {}) => ({ id: `f-${s
 const critiqueResult = (verdict, findings = []) => ({ status: "written", verdict, findings: findings.length, reviewed: 1, unreviewed: 0, warnings: [], model: "gpt-5.6-luna", critique: { verdict, summary: "", findings } });
 
 // The fake model, plus: a storyboard call that carries critic problems gets a
-// board with a new s2 headline (a repair the critic can see).
+// board with a new s2 headline (a repair the critic can see), a different one each round.
+const HEADLINES = ["Every payout, matched", "Every payout, reconciled", "Every payout, in order"];
 function repairingModel() {
   const fake = fakeModel({ vision: true });
   const inner = fake.model.client.runStructured.bind(fake.model.client);
@@ -23,7 +24,7 @@ function repairingModel() {
     if (request.schemaName !== "launchclip_storyboard" || !/critic \(|A reviewer watched the last cut/.test(request.input)) return result;
     repairs.push(request.input);
     const board = JSON.parse(result.value.storyboard_json);
-    board.scenes[1].params.headline = "Every payout, matched";
+    board.scenes[1].params.headline = HEADLINES[(repairs.length - 1) % HEADLINES.length];
     return { ...result, value: { storyboard_json: JSON.stringify(board), direction_json: "" } };
   };
   return { ...fake, repairs };
@@ -38,12 +39,12 @@ async function make(t, { critic, criticRepairs } = {}) {
   const criticCalls = [];
   const verdicts = [...critic];
   const criticAdapter = async (args) => { criticCalls.push(args); return verdicts.shift() ?? critiqueResult("ship"); };
-  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "video", ...(criticRepairs !== undefined ? { criticRepairs } : {}) }, { env: {}, client: fake.model, inventory: fakeInventory, finish: fakeFinish(finishCalls), critic: criticAdapter, notice() {} });
+  const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", candidates: "off", cwd, out: "video", ...(criticRepairs !== undefined ? { criticRepairs } : {}) }, { env: {}, client: fake.model, inventory: fakeInventory, finish: fakeFinish(finishCalls), critic: criticAdapter, notice() {} });
   const story = JSON.parse(await readFile(path.join(cwd, "video", "storyboard.json"), "utf8"));
   return { report, story, finishCalls, criticCalls, repairs: fake.repairs };
 }
 
-test("a critic that asks for a repair gets one round: the planner fixes the scene, only it renders again, and the critic ships", async (t) => {
+test("a critic that asks for a repair gets a round: the planner fixes the scene, only it renders again, and the critic ships", async (t) => {
   const { report, story, finishCalls, criticCalls, repairs } = await make(t, { critic: [critiqueResult("repair", [finding("major")]), critiqueResult("ship")] });
   assert.notEqual(report.status, "failed", JSON.stringify(report.stages));
   assert.equal(criticCalls.length, 2);
@@ -57,7 +58,43 @@ test("a critic that asks for a repair gets one round: the planner fixes the scen
   assert.equal(report.critic_repairs.length, 1);
   assert.deepEqual({ round: report.critic_repairs[0].round, mode: report.critic_repairs[0].mode, kept: report.critic_repairs[0].kept, before: report.critic_repairs[0].verdict_before, after: report.critic_repairs[0].verdict_after, rendered: report.critic_repairs[0].rendered }, { round: 1, mode: "repair", kept: true, before: "repair", after: "ship", rendered: ["s2"] });
   assert.ok(report.costs.items.some((item) => item.stage.startsWith("critic-1-storyboard-repair")));
-  assert.equal(report.options.critic_repairs, 1);
+  assert.equal(report.options.critic_repairs, 3);
+});
+
+test("three rounds by default: each round that helps is kept, and a cut that still does not ship is needs-repair", async (t) => {
+  const major = (n) => Array.from({ length: n }, (_, i) => finding("major", "typography", { id: `m${i}` }));
+  const { report, story, criticCalls, finishCalls } = await make(t, { critic: [critiqueResult("repair", major(4)), critiqueResult("repair", major(3)), critiqueResult("repair", major(2)), critiqueResult("repair", major(1)), critiqueResult("ship")] });
+  assert.equal(criticCalls.length, 4, "the first review and one per round, never a fourth round");
+  assert.equal(finishCalls.length, 4);
+  assert.deepEqual(report.critic_repairs.map((round) => [round.round, round.kept, round.findings_after.major]), [[1, true, 3], [2, true, 2], [3, true, 1]]);
+  assert.equal(story.scenes[1].params.headline, "Every payout, in order");
+  assert.equal(report.critic.verdict, "repair");
+  assert.equal(report.gates.critic.status, "failed");
+  assert.equal(report.status, "needs-repair");
+});
+
+test("the CLI exits 2 for a needs-repair video, and 0 with --allow-needs-repair", async (t) => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-needs-repair-"));
+  t.after(() => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]));
+  const run = (extra) => {
+    const out = [];
+    const adapters = { env: {}, client: fakeModel({ vision: true }).model, inventory: fakeInventory, finish: fakeFinish([]), critic: async () => critiqueResult("repair", [finding("major")]), notice() {} };
+    const done = runCli(["make", PROMPT, "--assets", assets, "--voice", "test", "--music", "synth", "--out", path.join(cwd, "video"), "--critic-repairs", "0", "--candidates", "off", ...extra], { stdout: { write: (text) => out.push(text) }, stderr: { write() {} }, productionAdapters: { make: adapters } });
+    return { done, out };
+  };
+  const refused = run([]);
+  await assert.rejects(refused.done, (error) => {
+    assert.equal(error.exitCode, MAKE_NEEDS_REPAIR_EXIT);
+    assert.equal(MAKE_NEEDS_REPAIR_EXIT, 2);
+    assert.match(error.message, /needs-repair \(critic failed\).*--allow-needs-repair/);
+    assert.equal(error.costs, undefined, "the report already carries the costs");
+    return true;
+  });
+  assert.match(refused.out.join(""), /launchclip make: needs-repair/, "the summary is printed before the exit");
+  const allowed = run(["--allow-needs-repair"]);
+  await allowed.done;
+  assert.match(allowed.out.join(""), /launchclip make: needs-repair/);
 });
 
 test("a repair that does not lower the blocking and major findings is undone and the rounds stop", async (t) => {
@@ -91,11 +128,12 @@ test("a replan verdict plans afresh with the findings in the brief and renders e
 });
 
 test("the round logic: budget, score, progress, scene mapping, routing and changed scenes", () => {
-  assert.equal(criticRepairBudget(undefined), 1);
   assert.equal(criticRepairBudget("0"), 0);
   assert.equal(criticRepairBudget(9), 3);
   assert.throws(() => criticRepairBudget(-1), /--critic-repairs/);
   assert.equal(makeOptionsFromFlags(parseFlags(["--critic-repairs", "2"])).criticRepairs, 2);
+  assert.equal(criticRepairBudget(undefined), 3);
+  assert.equal(parseFlags(["--allow-needs-repair"])["allow-needs-repair"], true);
 
   const before = criticScore({ verdict: "repair", findings: [finding("blocking"), finding("major"), finding("minor")] });
   assert.deepEqual(before, { verdict: "repair", blocking: 1, major: 1, minor: 1, total: 3 });
