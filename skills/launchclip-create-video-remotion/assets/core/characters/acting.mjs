@@ -21,6 +21,33 @@ export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'pow
   // Idle arms (styles whose geometry sets idleArms): a slow swing at the shoulder and a give at the elbow, and a slight sway of the body.
   armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9});
 
+// Acting profiles: how one character moves. Each scales the amplitude and
+// rhythm of the acting around the default (1 = today's feel); none changes
+// the timing contract: a pose change is always at rest ACTING.poseTween
+// seconds after its cue.
+//   pace          share of the pose-change window the move takes (≤ 1; less = quicker, then held)
+//   anticipation  size of the counter-move before a big move
+//   settle        size of the follow-through after it
+//   lag           how far the head, forearms and hands trail the body
+//   blinks, darts, shifts   how often it blinks, its eyes dart, its weight shifts
+//   breath, breathRate      depth and speed of breathing
+const profile = values => Object.freeze({pace: 1, anticipation: 1, settle: 1, lag: 1, blinks: 1, darts: 1, shifts: 1, breath: 1, breathRate: 1, ...values});
+export const ACTING_PROFILES = Object.freeze({
+  default: profile({}),
+  calm: profile({anticipation: 0.5, settle: 0.5, lag: 1.3, blinks: 0.7, darts: 0.5, shifts: 0.6, breath: 1.25, breathRate: 0.85}),
+  bouncy: profile({pace: 0.88, anticipation: 1.7, settle: 1.8, lag: 1.4, blinks: 1.1, shifts: 1.3, breath: 1.5, breathRate: 1.1}),
+  nervous: profile({pace: 0.78, anticipation: 0.8, settle: 1.2, lag: 0.7, blinks: 1.8, darts: 2.4, shifts: 1.8, breath: 1.3, breathRate: 1.35})
+});
+export const ACTING_PROFILE_NAMES = Object.freeze(Object.keys(ACTING_PROFILES));
+
+/** A profile by name (null or undefined: the default). Throws on an unknown name. */
+export function actingProfile(name) {
+  if (name === null || name === undefined) return ACTING_PROFILES.default;
+  const found = Object.hasOwn(ACTING_PROFILES, name) ? ACTING_PROFILES[name] : null;
+  if (!found) throw new Error(`unknown acting profile ${JSON.stringify(name)} (profiles: ${ACTING_PROFILE_NAMES.join(', ')})`);
+  return found;
+}
+
 const rt = value => Math.round(value * 10000) / 10000;
 
 /** Animated targets and props for joint values. */
@@ -142,7 +169,8 @@ function gestureOps(ops, cid, j, t0, t1) {
 
 /**
  * Ops for one actor.
- *   actor: {cid, start, end, geometry, facing, seated, holds,
+ *   actor: {cid, id?, start, end, geometry, facing, seated, holds,
+ *           acting?: an acting profile name (ACTING_PROFILES; default: default),
  *           states: [{time, pose, expression}] (first at start),
  *           expressions: every expression drawn,
  *           speech: [{time, open: boolean}] mouth changes}
@@ -150,6 +178,7 @@ function gestureOps(ops, cid, j, t0, t1) {
 export function actingOps(ops, actor) {
   const {cid, start, end, states} = actor;
   const A = ACTING;
+  const P = actingProfile(actor.acting);
   const jointsAt = state => stateJoints(state, actor);
   // A state's look: its pose, facing and seat (a new look restarts the gesture loop).
   const lookOf = state => `${state.pose}|${state.facing ?? actor.facing}|${state.standing ? 1 : 0}`;

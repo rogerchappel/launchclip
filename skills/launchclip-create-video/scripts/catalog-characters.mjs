@@ -135,7 +135,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
   const geometry = styleGeometry(member.style, member.params);
   return {id: member.id, name: member.name, voice: member.voice, look: member.look, fingerprint: member.fingerprint, params: member.params, colors: member.colors, style: member.style,
     facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light,
-    target: raw.target ?? null, facingSet: raw.facing !== undefined};
+    target: raw.target ?? null, facingSet: raw.facing !== undefined, ...(member.acting ? {acting: member.acting} : {})};
 }
 
 /**

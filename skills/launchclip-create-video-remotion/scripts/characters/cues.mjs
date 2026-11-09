@@ -4,7 +4,7 @@
 // Story cast (story.cast):
 //   {style?: "flat", colors?: {primary?, accent?, paper?, ink?, bg?},
 //    characters: [{id, from?, name?, voice?, build?, height?, age?, skin?, hair?,
-//                  outfit?, accessories?, headwear?, mobility?, colors?}]}
+//                  outfit?, accessories?, headwear?, mobility?, colors?, acting?}]}
 // An entry whose id (or `from`) names a starter character starts from its
 // params; the fields given override them. Any other id needs full params
 // (skin and hair at least). `colors` maps brand roles for the whole cast, so
@@ -25,6 +25,7 @@ import {STARTER_IDS, characterLook, starterCharacter} from './cast.mjs';
 import {BRAND_ROLES, isColorName} from './palette.mjs';
 import {SEATED_SETS, SETS} from './sets.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
+import {ACTING_PROFILE_NAMES} from './acting.mjs';
 
 export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
@@ -36,7 +37,7 @@ const ID = /^[a-z][a-z0-9-]{0,23}$/;
 // An illustrated (sprite) character: art names its sprite folder (kit/core/catalog-sprites.mjs); it
 // takes no rig params and acts only in sprite-scene.
 const SPRITE_KEYS = ['id', 'name', 'voice', 'art', 'position'];
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position', 'acting'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -75,6 +76,7 @@ export function storyCastErrors(cast) {
     seen.add(entry.id);
     if (entry.voice !== undefined && (typeof entry.voice !== 'string' || !entry.voice.trim())) errors.push(`${path}.voice must be a voice id (Kokoro: ${KOKORO_VOICES.slice(0, 4).join(', ')}, …)`);
     if (entry.position !== undefined && !['left', 'centre', 'center', 'right'].includes(entry.position)) errors.push(`${path}.position must be left, centre or right (the side this character takes in every cast scene it shares)`);
+    if (entry.acting !== undefined && !ACTING_PROFILE_NAMES.includes(entry.acting)) errors.push(`${path}.acting must be one of ${ACTING_PROFILE_NAMES.join(', ')} (how the character moves)`);
     if (entry.name !== undefined && (typeof entry.name !== 'string' || !entry.name.trim() || entry.name.length > 40)) errors.push(`${path}.name must be a string of 1–40 characters`);
     if (entry.art !== undefined) {
       if (typeof entry.art !== 'string' || !/^assets\/[a-zA-Z0-9_./ -]+$/.test(entry.art) || entry.art.split('/').includes('..')) errors.push(`${path}.art must be the character's sprite folder, e.g. assets/cast/${entry.id}`);
@@ -125,7 +127,7 @@ export function resolveStoryCast(story) {
     if (entry.art !== undefined) { out.set(entry.id, {id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, starter: false, sprite: true, art: entry.art}); return; }
     const params = castParams(entry, `cast.characters[${i}]`);
     const starter = starterCharacter(entry.from ?? entry.id);
-    out.set(entry.id, {id: entry.id, name: entry.name ?? starter?.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, starter: false, ...characterLook(params, {style, brand: story?.brand, mapping})});
+    out.set(entry.id, {id: entry.id, name: entry.name ?? starter?.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, acting: entry.acting ?? null, starter: false, ...characterLook(params, {style, brand: story?.brand, mapping})});
   });
   return {members: out, style, mapping, listed: out.size > 0, brand: story?.brand ?? null};
 }
