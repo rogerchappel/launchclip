@@ -4297,8 +4297,9 @@ Three structured calls, each with a strict schema, then at most one repair:
   (`SETS`) is dropped. An unknown speaker or beat is kept, so the check can
   name it.
 - The word budget is 80% of the target length at the voice's pace before a
-  take exists (`estimatedPace`: 175 words a minute × the voice speed for
-  Kokoro, from one measured take; 150 otherwise).
+  take exists (`estimatedPace`: 150 words a minute × the voice speed for
+  Kokoro, so 180 at its default 1.2, from one measured dialogue; 150
+  otherwise).
 - `checkScreenplay` runs with the `story-characters` profile's
   `problem_lands_seconds` p90 (`--profile` names another) and the prompt,
   notes and asset lines as the brief.

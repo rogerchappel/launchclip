@@ -272,9 +272,9 @@ test("the room's pure parts: the cast, the judge's scores, the script's shape, t
   assert.deepEqual(standInCast(characters, { provider: "kokoro", narratorVoice: "af_bella" }), [{ id: "maya", voice: "bf_emma" }, { id: "sam", voice: "am_michael" }, { id: "kit", voice: "af_nova" }]);
   assert.deepEqual(standInCast(characters.slice(0, 1), { provider: "elevenlabs", narratorVoice: "abc" }), [{ id: "maya", voice: null }]);
 
-  assert.equal(estimatedPace("kokoro", 1.2), 210);
+  assert.equal(estimatedPace("kokoro", 1.2), 180);
   assert.equal(estimatedPace("elevenlabs", 1), 150);
-  assert.equal(animationWordTarget(30, 210), 84);
+  assert.equal(animationWordTarget(30, 180), 72);
 });
 
 test("under Kokoro each character gets a voice of its own for its lines", async () => {
@@ -288,7 +288,7 @@ test("under Kokoro each character gets a voice of its own for its lines", async 
     const narration = await t.read("NARRATION.json");
     assert.deepEqual([...new Set(narration.lines.map((line) => `${line.speaker}:${line.voice}`))], ["narrator:af_heart", "maya:af_bella", "sam:am_michael"]);
     assert.ok(!report.warnings.some((warning) => /narrator's voice/.test(warning)));
-    assert.match(t.calls[2].input, /about 210 words a minute/, "the script is written for Kokoro's pace");
+    assert.match(t.calls[2].input, /about 180 words a minute/, "the script is written for Kokoro's pace");
   } finally {
     await t.done();
   }

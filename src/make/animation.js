@@ -47,9 +47,11 @@ const clamp = (value) => Math.max(0, Math.min(10, Number(value) || 0));
 const round2 = (value) => Math.round(value * 100) / 100;
 
 // The pace a voice speaks at before any take is measured, in words a minute at
-// speed 1. Kokoro's is from one measured take (217 wpm at its default speed of
-// 1.2); the others keep the contract's default until make measures the take.
-const VOICE_WPM = Object.freeze({ kokoro: 175 });
+// speed 1. Kokoro's is from one measured dialogue: eight short lines ran 177
+// wpm at its default speed of 1.2 (a single long take runs faster, about 217,
+// but a script is voiced a line at a time). The others keep the contract's
+// default until make measures the take.
+const VOICE_WPM = Object.freeze({ kokoro: 150 });
 
 /** The pace to write a script for before its take exists: the voice's own, scaled by its speed. */
 export function estimatedPace(provider, speed = 1) {
