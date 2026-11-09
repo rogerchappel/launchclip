@@ -49,6 +49,9 @@ export const USAGE = Object.freeze([
   ["cast export", "cast export [<id> ...] --out <folder|pack.json> [--name \"…\"] [--project <dir>]"],
   ["cast import", "cast import <folder|pack.json|character.json> [--to project|library] [--ids nova,rae] [--project <dir>] [--force]"],
   ["cast sprites", "cast sprites <project> [--dry-run] [--ids rosa,lou] [--force]"],
+  // The show bible (src/bible.js).
+  ["bible freeze", "bible freeze <project> [--characters nova,rae] [--style outlined] [--position nova=left]... [--world office] [--time day|dusk|night] [--sets desk-laptop,standing] [--rule \"Sam never raises his voice.\"]... [--pack <style>] [--seed <seed>] [--chromium <path>] [--no-pin] [--force]", {comment: "pin a character story's cast, sheets, world and look"}],
+  ["bible show", "bible show <project>", {comment: "the bible, checked against its hash, its sheets and the storyboard"}],
   ["collection new", "collection new <id> [--kind product|channel|client|campaign|course] [--title \"…\"] [--style <name> | --seed <hex>] [--tone <tone>] [--root <dir>]"],
   ["collection show", "collection show <id|dir> [--root <dir>] [--json]", {comment: "recipes, videos and which are stale"}],
   ["recipe new", "recipe new <collection>/<id> [--from-video <project>] [--title \"…\"] [make setting flags] [--root <dir>] [--force]"],
@@ -186,6 +189,10 @@ export const SUMMARIES = Object.freeze({
   "cast export": "Write saved characters (all of them when no id is given) as a character pack: a folder with cast-pack.json and one <id>.character.json each, or a single pack file when --out ends in .json.",
   "cast import": "Validate a character pack (a folder, a pack file or one character file) and save its characters to the project's cast/ folder or the library. A character that already exists with different traits is refused without --force.",
   "cast sprites": "Draw a project's illustrated cast (cast.sprites.json) with an image model: a picture per pose plus mouth-open and eyes-closed versions, cut out to assets/cast/<id>/. --dry-run shows the pictures and the estimated cost.",
+  // The show bible (src/bible.js).
+  bible: "Freeze or show a character story's show bible (BIBLE.json): who is in it, what each of them looks and sounds like, where it happens and how it is drawn, pinned by a hash so every later step draws the same people. A story and its direction map name it as \"bible\": {\"file\", \"hash\"}; finish's bible gate fails when the story's cast differs from it, a sheet is missing or the hash is wrong.",
+  "bible freeze": "Write BIBLE.json for a project: resolve the cast (--characters names saved characters or starters; otherwise the cast of a draft BIBLE.json, of storyboard.json, or every character saved in the project), draw each character's reference sheet (every pose and a face close-up of every expression, in the bible's drawing style) to bible/sheets/<id>.png, derive must_keep from the rig params, and write the hash. storyboard.json and DIRECTION.json are pinned to it when they exist (the story's cast becomes the bible's; --no-pin leaves them). A library character is copied into the project's cast/ folder. Freezing a bible whose content would change needs --force. Sheets are drawn in Chromium (--chromium <path> or LAUNCHCLIP_CHROMIUM names one).",
+  "bible show": "Print a project's show bible with its characters, sheets and must_keep, and check it: the hash matches the content, every sheet is on disk, every character the script lists has an entry and a voice, and the storyboard (when there is one) agrees with it. Exits 1 when the bible is not valid.",
   collection: "Create or show a collection: a product, channel, client or campaign whose videos share a style, voice, brand folder and rules.",
   "collection new": "Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.",
   "collection show": "List a collection's settings, its recipes and its videos, marking the stale ones: made with a recipe or style that has changed since.",
@@ -268,7 +275,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "story", "sfx", "module", "subject", "demo", "evidence", "script", "history"]);
+export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "bible", "story", "sfx", "module", "subject", "demo", "evidence", "script", "history"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 

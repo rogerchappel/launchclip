@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -48,6 +48,9 @@ export async function runCli(argv, io = {}) {
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const castInvocation = command === "cast" ? parseCastInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
+  // launchclip bible freeze|show <project> [flags]
+  const bibleProject = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const bibleInvocation = command === "bible" ? { action: firstArg, project: bibleProject, flagArgs: bibleProject ? rest.slice(1) : rest } : null;
   // launchclip profile list | show <id> | measure <folder> [flags]
   const profileTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const profileInvocation = command === "profile" ? { action: firstArg, target: profileTarget, flagArgs: profileTarget ? rest.slice(1) : rest } : null;
@@ -80,7 +83,7 @@ export async function runCli(argv, io = {}) {
   // launchclip research capture [dir] [flags]
   const researchCaptureTarget = command === "research" && firstArg === "capture" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -117,6 +120,14 @@ export async function runCli(argv, io = {}) {
     } else if (command === "cast") {
       const { runCastCommand } = await import("./cast.js");
       result = await runCastCommand(castInvocation.action, castInvocation.name, castInvocation.action === "export" ? { ...flags, names: castInvocation.names } : flags);
+    } else if (command === "bible") {
+      const { runBibleCommand } = await import("./bible.js");
+      if (!["freeze", "show"].includes(bibleInvocation.action)) throw new Error(`${bibleInvocation.action ? `Unknown bible action: ${bibleInvocation.action}` : "Missing bible action"}; use freeze or show`);
+      result = await runBibleCommand(bibleInvocation.action, bibleInvocation.project, flags, productionAdapters.bible ?? {});
+      if (bibleInvocation.action === "show" && !result.valid) {
+        stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        throw new Error(`launchclip bible show: ${result.errors.length} error(s) in ${result.file}`);
+      }
     } else if (command === "collection" || command === "recipe") {
       const { collectionNewCommand, collectionShowCommand, formatCollectionShow, recipeNewCommand } = await import("./collection_cli.js");
       if (command === "recipe") result = await recipeNewCommand(collectionInvocation.target, flags);
@@ -549,7 +560,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "no-sheet") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "no-sheet" || name === "no-pin") {
       flags[name] = true;
       continue;
     }

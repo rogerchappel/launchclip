@@ -14,7 +14,7 @@
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/direction.mjs.
 
-import { storyBase } from './story.mjs';
+import { bibleRefErrors, storyBase } from './story.mjs';
 import { CAMERA_ONLY_MODULES, isGraphicScene, storyboardMeasures } from './cadence.mjs';
 import { ACTIONS } from './characters/actions.mjs';
 import { POSES } from './characters/rig.mjs';
@@ -127,7 +127,9 @@ export function validateDirection(map, options = {}) {
   const err = (message) => errors.push(message);
   if (!isObject(map)) return { ok: false, errors: ['DIRECTION.json must be a JSON object'], warnings };
   if (map.schema !== DIRECTION_SCHEMA) err(`schema must be "${DIRECTION_SCHEMA}"`);
-  for (const key of Object.keys(map)) if (!['schema', 'profile', 'sections', 'notes', 'cast'].includes(key)) err(`unknown field "${key}"`);
+  for (const key of Object.keys(map)) if (!['schema', 'profile', 'sections', 'notes', 'cast', 'bible'].includes(key)) err(`unknown field "${key}"`);
+  // bible: the show bible the map was planned against (kit/core/bible.mjs).
+  if (map.bible !== undefined) for (const message of bibleRefErrors(map.bible)) err(message);
   if (map.profile !== undefined && !nonEmpty(map.profile)) err('profile must be a cadence profile id');
   const words = narrationWords(options.words);
   const story = options.story ?? null;

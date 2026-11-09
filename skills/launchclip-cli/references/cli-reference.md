@@ -1413,6 +1413,18 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip cast sprites <project> [--dry-run] [--ids rosa,lou] [--force]
   ```
 
+- `bible freeze`: Write BIBLE.json for a project: resolve the cast (--characters names saved characters or starters; otherwise the cast of a draft BIBLE.json, of storyboard.json, or every character saved in the project), draw each character's reference sheet (every pose and a face close-up of every expression, in the bible's drawing style) to bible/sheets/<id>.png, derive must_keep from the rig params, and write the hash. storyboard.json and DIRECTION.json are pinned to it when they exist (the story's cast becomes the bible's; --no-pin leaves them). A library character is copied into the project's cast/ folder. Freezing a bible whose content would change needs --force. Sheets are drawn in Chromium (--chromium <path> or LAUNCHCLIP_CHROMIUM names one).
+
+  ```text
+  launchclip bible freeze <project> [--characters nova,rae] [--style outlined] [--position nova=left]... [--world office] [--time day|dusk|night] [--sets desk-laptop,standing] [--rule "Sam never raises his voice."]... [--pack <style>] [--seed <seed>] [--chromium <path>] [--no-pin] [--force] # pin a character story's cast, sheets, world and look
+  ```
+
+- `bible show`: Print a project's show bible with its characters, sheets and must_keep, and check it: the hash matches the content, every sheet is on disk, every character the script lists has an entry and a voice, and the storyboard (when there is one) agrees with it. Exits 1 when the bible is not valid.
+
+  ```text
+  launchclip bible show <project>                    # the bible, checked against its hash, its sheets and the storyboard
+  ```
+
 - `collection new`: Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.
 
   ```text
