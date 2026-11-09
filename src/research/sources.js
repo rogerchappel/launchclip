@@ -2,12 +2,17 @@
 // commits, papers, official pages), then secondary ones from a configured web
 // search. The public GitHub, Hugging Face and arXiv APIs are called directly;
 // web search is pluggable (Brave, Tavily or Serper, whichever key is set) and
-// simply absent without a key.
+// simply absent without a key. Keyless news leads (news.js: company feeds,
+// Hacker News, GDELT, Wikipedia current events) point at pages that are then
+// fetched and classified here like any other.
 //
 // Each finder returns snapshots ({url, title, publisher, published_at,
 // fetched_at, sha256, text}) tagged with {finder, kind, primary}. verify.js
 // decides which of them support which claim.
+import { assertPublicUrl } from "../evidence/capture.js";
 import { safeHost } from "./http.js";
+import { officialDomain } from "./logos.js";
+import { ageDays, findNewsLeads, headlineOf, newsQueries, outboundLinks, storyOwners } from "./news.js";
 
 // Hosts whose pages are the party's own words about its own work.
 const PRIMARY_HOSTS = ["github.com", "huggingface.co", "arxiv.org", "openreview.net", "proceedings.neurips.cc", "aclanthology.org"];
@@ -15,7 +20,10 @@ const MAX_SEARCH_RESULTS = 5;
 
 /**
  * entities (claims.js entityIndex) + options → snapshots.
- * options: {topic, urls (seen in the script), searches (claim search hints), maxPerEntity, env}
+ * options: {topic, text (the brief or script), urls (seen in the script), searches (claim search hints),
+ *   news (false to skip the keyless news sources), feeds (urls), windowDays (how fresh a story must be),
+ *   now, maxNewsLeads, maxPerEntity, env}
+ * → {sources, search, news: {queries, providers, stories}}
  */
 export async function findSources(http, entities, options = {}) {
   const env = options.env ?? process.env;
@@ -62,6 +70,8 @@ export async function findSources(http, entities, options = {}) {
     const snapshot = await arxivPaper(http, id);
     if (snapshot) keep(snapshot, { finder: "arxiv", kind: "article", primary: true, source_class: "primary" });
   }
+  // Keyless news: stories the public indexes list, each followed to the page itself.
+  const news = options.news === false ? { queries: [], providers: [], stories: [] } : await newsSources(http, entities, { ...options, orgs, owners, keep, found });
   // Web search, when a key is configured: one query per claim hint, else per model or the topic.
   const search = webSearchProvider(env);
   if (search) {
@@ -92,7 +102,78 @@ export async function findSources(http, entities, options = {}) {
       }
     }
   }
-  return { sources: found, search: search?.name ?? null };
+  return { sources: found, search: search?.name ?? null, news };
+}
+
+/**
+ * The keyless news pass. Each lead's page is fetched and classified against
+ * the names the brief gives plus the ones its own headline gives, so a
+ * company's announcement on its own domain is primary and a report about it
+ * is not. A report's links to the company's own page are followed once: that
+ * is where the primary source of a story usually is.
+ * → {queries, providers, stories: [{title, url, publisher, published_at, age_days, via, source_class, primary, status, from?}]}
+ */
+async function newsSources(http, entities, options) {
+  const { owners, orgs, keep, found } = options;
+  const now = options.now ?? new Date().toISOString();
+  const windowDays = options.windowDays ?? null;
+  const queries = newsQueries(options.topic ?? options.text ?? "", entities);
+  // A named company's own feed is the best lead there is; its site comes from Wikidata.
+  const sites = [];
+  for (const org of orgs.slice(0, 3)) {
+    const site = await officialDomain(http, org).catch(() => null);
+    if (site?.website) sites.push({ name: org, website: site.website });
+  }
+  const { leads, providers } = await findNewsLeads(http, { queries, now, windowDays, feeds: options.feeds ?? [], sites, maxLeads: options.maxNewsLeads });
+  const stories = [];
+  const record = (snapshot, lead, tags, extra = {}) => {
+    const age = ageDays(snapshot.published_at, now);
+    const stale = windowDays != null && age != null && age > windowDays;
+    stories.push({
+      title: headlineOf(snapshot.title ?? lead.title ?? snapshot.url), url: snapshot.url, publisher: snapshot.publisher ?? null, published_at: snapshot.published_at ?? null, age_days: age,
+      via: lead.via, source_class: tags.source_class, primary: tags.primary,
+      // A story is kept when the party's own page states it and it is as fresh as the brief asks.
+      status: stale ? "stale" : tags.primary ? "kept" : "no-primary-source", ...extra
+    });
+    return !stale;
+  };
+  for (const lead of leads) {
+    // Public pages only: a feed or an index can list any address.
+    if (!isPublic(lead.url)) continue;
+    const snapshot = await http.snapshot(lead.url, { published_fallback: lead.published_at ?? undefined });
+    if (!snapshot?.text) { stories.push({ title: lead.title, url: lead.url, publisher: null, published_at: lead.published_at ?? null, age_days: ageDays(lead.published_at, now), via: lead.via, source_class: null, primary: false, status: "not-fetched", reason: notFetched(http.failure?.(lead.url)) }); continue; }
+    const names = [...owners, ...storyOwners(lead.title ?? snapshot.title ?? "")];
+    const tags = classifySnapshot(snapshot, names);
+    // An old page may still back a claim the brief makes (the ledger then flags it as old news), but it is no story.
+    const fresh = record(snapshot, lead, tags);
+    keep(snapshot, { finder: `news:${lead.via[0]}`, ...tags, news: true, ...(fresh ? {} : { stale: true }) });
+    if (tags.primary) continue;
+    // A report cites its source: follow links to a page the story's own party owns.
+    const html = await http.text(lead.url);
+    const cited = outboundLinks(html ?? "", snapshot.final_url ?? lead.url).filter((url) => isPublic(url) && !SOCIAL_HOST.test(safeHost(url) ?? "") && classifyUrl(url, names).primary && !PRIMARY_HOSTS.includes(safeHost(url) ?? "")).slice(0, 2);
+    for (const url of cited) {
+      if (found.some((entry) => canonicalUrl(entry.url) === canonicalUrl(url))) continue;
+      const page = await http.snapshot(url);
+      if (!page?.text) continue;
+      const pageTags = classifySnapshot(page, names);
+      if (!pageTags.primary) continue;
+      const pageFresh = record(page, lead, pageTags, { from: snapshot.url });
+      keep(page, { finder: `news:${lead.via[0]}`, ...pageTags, news: true, ...(pageFresh ? {} : { stale: true }) });
+    }
+  }
+  return { queries, providers, stories };
+}
+
+// Why a page gave nothing, in words: a refusal is a finding, never something to work round.
+function notFetched(status) {
+  if (status === "robots") return "its robots.txt does not allow this client";
+  if (status === "401" || status === "403" || status === "429") return `the site refused the request (HTTP ${status}); it may still open in a browser, so pass it with --url after checking it, or pick another source`;
+  if (status === "error") return "the request failed (network or timeout)";
+  return status ? `HTTP ${status}` : "no readable text";
+}
+
+function isPublic(url) {
+  try { assertPublicUrl(url); return true; } catch { return false; }
 }
 
 /**

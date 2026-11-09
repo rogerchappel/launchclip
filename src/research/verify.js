@@ -68,6 +68,7 @@ export function buildLedger({ claims, snapshots, input, entities, now, search, n
       quote: claim.quote ?? null,
       entities: claim.entities ?? [],
       origin: claim.origin ?? "pattern",
+      ...(claim.headline ? { headline: true } : {}),
       ...verdict
     };
   });
@@ -101,6 +102,11 @@ export function matchSnapshot(claim, snapshot) {
     const span = findLoose(text, claim.quote);
     if (span) return { supports: true, score: 0.95, quote: span };
     return null;
+  }
+  // A story's headline (a claim research made from a page's own title) is checked the same way: the page must say it.
+  if (claim.headline) {
+    const span = findLoose(text, claim.text);
+    return span?.start != null ? { supports: true, score: 0.9, quote: span } : null;
   }
   const values = claim.values ?? [];
   const keywords = keywordsFor(claim);

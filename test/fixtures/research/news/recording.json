@@ -1,0 +1,118 @@
+{
+ "recorded_at": "2026-11-10T00:00:00.000Z",
+ "note": "Hand-built in the shape of the live responses (Hacker News Search, GDELT DOC 2.0, Wikipedia parse API, Wikidata, RSS), with fictional companies and pages. The HN entry's url is filled in by the test, since it carries the time window.",
+ "responses": [
+  {
+   "url": "https://www.wikidata.org/w/api.php?action=wbsearchentities&search=Nimbus%20AI&language=en&type=item&limit=5&format=json&origin=*",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"search\": [{\"id\": \"Q900001\", \"label\": \"Nimbus AI\", \"description\": \"artificial intelligence company\"}]}"
+  },
+  {
+   "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q900001&props=claims|descriptions&languages=en&format=json&origin=*",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"entities\": {\"Q900001\": {\"descriptions\": {\"en\": {\"value\": \"artificial intelligence company\"}}, \"claims\": {\"P31\": [{\"mainsnak\": {\"datavalue\": {\"value\": {\"id\": \"Q4830453\"}}}}], \"P856\": [{\"mainsnak\": {\"datavalue\": {\"value\": \"https://nimbus.ai\"}}}]}}}}"
+  },
+  {
+   "url": "https://nimbus.ai",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Nimbus AI</title><link rel=\"alternate\" type=\"application/rss+xml\" title=\"Nimbus AI blog\" href=\"/blog/rss.xml\"><link rel=\"alternate\" type=\"application/rss+xml\" href=\"/blog/comments/feed\"></head><body><h1>Nimbus AI</h1><p>Models that run anywhere.</p></body></html>"
+  },
+  {
+   "url": "https://nimbus.ai/blog/rss.xml",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/rss+xml",
+   "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Nimbus AI blog</title><link>https://nimbus.ai/blog</link>\n<item><title>Nimbus-7B is now generally available</title><link>https://nimbus.ai/blog/nimbus-7b-ga</link><pubDate>Fri, 06 Nov 2026 15:00:00 GMT</pubDate><description><![CDATA[Nimbus-7B leaves preview today.]]></description></item>\n<item><title>Nimbus AI raises $40 million in Series B funding</title><link>https://nimbus.ai/blog/series-b</link><pubDate>Tue, 03 Nov 2026 13:00:00 GMT</pubDate><description>Our Series B.</description></item>\n<item><title>Introducing Nimbus-5B for phones</title><link>https://nimbus.ai/blog/nimbus-5b</link><pubDate>Sat, 01 Aug 2026 13:00:00 GMT</pubDate><description>Nimbus-5B.</description></item>\n</channel></rss>"
+  },
+  {
+   "url": "HN",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"hits\": [{\"title\": \"Nimbus-7B is now generally available\", \"url\": \"https://nimbus.ai/blog/nimbus-7b-ga\", \"author\": \"a\", \"points\": 412, \"num_comments\": 180, \"created_at\": \"2026-11-06T15:20:00Z\", \"created_at_i\": 1794064800, \"objectID\": \"48000001\", \"_tags\": [\"story\"]}, {\"title\": \"Nimbus AI raises $40M\", \"url\": \"https://technewsdesk.example/2026/11/nimbus-series-b\", \"author\": \"b\", \"points\": 96, \"num_comments\": 40, \"created_at\": \"2026-11-03T16:00:00Z\", \"created_at_i\": 1793808000, \"objectID\": \"48000002\", \"_tags\": [\"story\"]}, {\"title\": \"Inside Nimbus AI's quiet year\", \"url\": \"https://paywalled.example/nimbus-quiet-year\", \"author\": \"c\", \"points\": 55, \"num_comments\": 12, \"created_at\": \"2026-11-05T09:00:00Z\", \"created_at_i\": 1793955600, \"objectID\": \"48000003\", \"_tags\": [\"story\"]}, {\"title\": \"Nimbus-5B for phones\", \"url\": \"https://nimbus.ai/blog/nimbus-5b\", \"author\": \"d\", \"points\": 33, \"num_comments\": 4, \"created_at\": \"2026-11-05T10:00:00Z\", \"created_at_i\": 1793959200, \"objectID\": \"48000004\", \"_tags\": [\"story\"]}, {\"title\": \"Ask HN: Anyone running Nimbus AI models in production?\", \"url\": null, \"author\": \"e\", \"points\": 61, \"num_comments\": 70, \"created_at\": \"2026-11-04T10:00:00Z\", \"created_at_i\": 1793872800, \"objectID\": \"48000005\", \"_tags\": [\"story\", \"ask_hn\"]}], \"nbHits\": 5, \"page\": 0, \"nbPages\": 1, \"hitsPerPage\": 8, \"query\": \"Nimbus AI\"}"
+  },
+  {
+   "url": "https://api.gdeltproject.org/api/v2/doc/doc?query=%22Nimbus%20AI%22%20sourcelang%3Aenglish&mode=artlist&format=json&maxrecords=12&sort=datedesc&timespan=10d",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"articles\": [{\"url\": \"https://www.wirepost.example/2026/11/07/nimbus-ai-pauses-eu-rollout\", \"url_mobile\": \"\", \"title\": \"Nimbus AI pauses EU rollout of Nimbus-7B - Wirepost\", \"seendate\": \"20261107T093000Z\", \"socialimage\": \"\", \"domain\": \"wirepost.example\", \"language\": \"English\", \"sourcecountry\": \"United States\"}, {\"url\": \"https://www.youtube.com/watch?v=abc123\", \"url_mobile\": \"\", \"title\": \"Nimbus AI keynote\", \"seendate\": \"20261106T093000Z\", \"socialimage\": \"\", \"domain\": \"youtube.com\", \"language\": \"English\", \"sourcecountry\": \"United States\"}]}"
+  },
+  {
+   "url": "https://en.wikipedia.org/w/api.php?action=parse&page=Portal:Current_events&prop=text&format=json&formatversion=2",
+   "method": "GET",
+   "status": 200,
+   "content_type": "application/json",
+   "body": "{\"parse\": {\"title\": \"Portal:Current events\", \"pageid\": 5776237, \"text\": \"<div class=\\\"current-events\\\"><div role=\\\"region\\\" aria-label=\\\"November 8\\\" class=\\\"current-events-main vevent\\\"><div class=\\\"current-events-heading\\\"><span class=\\\"summary\\\">November 8, 2026 (<span class=\\\"bday dtstart published updated itvstart\\\">2026-11-08</span>)</span></div><div class=\\\"current-events-content description\\\"><p><b>Science and technology</b></p><ul><li><a href=\\\"/wiki/Nimbus_AI\\\" title=\\\"Nimbus AI\\\">Nimbus AI</a> makes its Nimbus-7B model generally available. <a rel=\\\"nofollow\\\" class=\\\"external text\\\" href=\\\"https://roundupweekly.example/this-week-in-ai\\\">(Roundup Weekly)</a></li><li>A storm closes ports in the north. <a rel=\\\"nofollow\\\" class=\\\"external text\\\" href=\\\"https://www.wirepost.example/2026/11/08/storm\\\">(Wirepost)</a></li></ul></div></div></div>\"}}"
+  },
+  {
+   "url": "https://nimbus.ai/blog/nimbus-7b-ga",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Nimbus-7B is now generally available | Nimbus AI</title><meta property=\"og:title\" content=\"Nimbus-7B is now generally available\"><meta property=\"og:site_name\" content=\"Nimbus AI\"><meta property=\"article:published_time\" content=\"2026-11-06T15:00:00Z\"></head><body><article><h1>Nimbus-7B is now generally available</h1><p>Nimbus-7B is now generally available to every developer.</p><p>The model has 7 billion parameters and scores 71.4 on HumanEval.</p><p>Pricing starts at $0.20 per million tokens.</p></article></body></html>"
+  },
+  {
+   "url": "https://nimbus.ai/blog/series-b",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Nimbus AI raises $40 million in Series B funding | Nimbus AI</title><meta property=\"og:title\" content=\"Nimbus AI raises $40 million in Series B funding\"><meta property=\"og:site_name\" content=\"Nimbus AI\"><meta property=\"article:published_time\" content=\"2026-11-03T13:00:00Z\"></head><body><article><h1>Nimbus AI raises $40 million in Series B funding</h1><p>Nimbus AI raises $40 million in Series B funding led by Northwind Capital.</p><p>The round brings total funding to $58 million.</p></article></body></html>"
+  },
+  {
+   "url": "https://nimbus.ai/blog/nimbus-5b",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Introducing Nimbus-5B for phones | Nimbus AI</title><meta property=\"og:title\" content=\"Introducing Nimbus-5B for phones\"><meta property=\"og:site_name\" content=\"Nimbus AI\"><meta property=\"article:published_time\" content=\"2026-08-01T13:00:00Z\"></head><body><article><h1>Introducing Nimbus-5B for phones</h1><p>Introducing Nimbus-5B for phones: a 5 billion parameter model that runs on a handset.</p></article></body></html>"
+  },
+  {
+   "url": "https://nimbus.ai/press/series-b-faq",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Series B: questions and answers | Nimbus AI</title><meta property=\"og:title\" content=\"Series B: questions and answers\"><meta property=\"og:site_name\" content=\"Nimbus AI\"><meta property=\"article:published_time\" content=\"2026-11-03T13:30:00Z\"></head><body><article><h1>Series B: questions and answers</h1><p>Series B: questions and answers for customers and partners.</p><p>Nimbus AI will hire 60 engineers in 2027.</p></article></body></html>"
+  },
+  {
+   "url": "https://technewsdesk.example/2026/11/nimbus-series-b",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Nimbus AI raises $40M to take on bigger labs | Tech News Desk</title><meta property=\"og:title\" content=\"Nimbus AI raises $40M to take on bigger labs\"><meta property=\"og:site_name\" content=\"Tech News Desk\"><meta property=\"article:published_time\" content=\"2026-11-03T16:00:00Z\"></head><body><article><h1>Nimbus AI raises $40M to take on bigger labs</h1><p>Nimbus AI has raised $40 million, the company announced on its blog.</p><p>Analysts expect more rounds this year.</p><p>Read the <a href=\"https://nimbus.ai/press/series-b-faq\">company's FAQ</a> and follow us on <a href=\"https://x.com/technewsdesk\">X</a>. More at <a href=\"/tag/ai\">AI</a>.</p></article></body></html>"
+  },
+  {
+   "url": "https://www.wirepost.example/2026/11/07/nimbus-ai-pauses-eu-rollout",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Nimbus AI pauses EU rollout of Nimbus-7B | Wirepost</title><meta property=\"og:title\" content=\"Nimbus AI pauses EU rollout of Nimbus-7B\"><meta property=\"og:site_name\" content=\"Wirepost\"><meta property=\"article:published_time\" content=\"2026-11-07T09:00:00Z\"></head><body><article><h1>Nimbus AI pauses EU rollout of Nimbus-7B</h1><p>Nimbus AI pauses EU rollout of Nimbus-7B while it answers questions from regulators.</p><p>A spokesperson for Nimbus AI said in a statement that the pause would last 30 days.</p></article></body></html>"
+  },
+  {
+   "url": "https://roundupweekly.example/this-week-in-ai",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>This week in AI: 12 launches you missed | Roundup Weekly</title><meta property=\"og:title\" content=\"This week in AI: 12 launches you missed\"><meta property=\"og:site_name\" content=\"Roundup Weekly\"><meta property=\"article:published_time\" content=\"2026-11-08T08:00:00Z\"></head><body><article><h1>This week in AI: 12 launches you missed</h1><p>Nimbus AI made Nimbus-7B generally available.</p><p>Eleven other launches follow.</p></article></body></html>"
+  },
+  {
+   "url": "https://paywalled.example/robots.txt",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/plain",
+   "body": "User-agent: *\nDisallow: /\n"
+  },
+  {
+   "url": "https://paywalled.example/nimbus-quiet-year",
+   "method": "GET",
+   "status": 200,
+   "content_type": "text/html; charset=utf-8",
+   "body": "<!doctype html><html><head><title>Inside Nimbus AI's quiet year | Paywalled</title><meta property=\"og:title\" content=\"Inside Nimbus AI's quiet year\"><meta property=\"og:site_name\" content=\"Paywalled\"><meta property=\"article:published_time\" content=\"2026-11-05T09:00:00Z\"></head><body><article><h1>Inside Nimbus AI's quiet year</h1><p>Subscribers only.</p></article></body></html>"
+  }
+ ]
+}
