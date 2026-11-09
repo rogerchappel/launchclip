@@ -58,7 +58,7 @@ import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
-import { auditNarration, researchBrief, researchMode } from "../research/make.js";
+import { auditNarration, researchBrief, researchEnabled, researchMode } from "../research/make.js";
 import { packCaptionsFor } from "@launchclip/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
@@ -848,7 +848,7 @@ async function stageLongFormStoryboard(ctx) {
   const { width, height, fps } = ctx.format;
   const visuals = longFormVisuals(options);
   // Research's ledger and the pages recorded from it: the beat director matches clauses to them (evidence first).
-  const ledger = ctx.captures?.length || researchMode(options.research) === "on" ? await readLedger(project) : null;
+  const ledger = ctx.captures?.length || researchEnabled(ctx) ? await readLedger(project) : null;
   const captures = (ctx.captures ?? []).map(({ request, files }) => ({ ...request, out: files.clip }));
   const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}), ...(ledger ? { ledger: hashValue(ledger.claims ?? []), captures: captures.map((entry) => entry.id) } : {}) });
   // A critic repair round (criticRepairs) directs chunks again from the last cut's beat map, so it never takes the cached plan.
@@ -1556,7 +1556,7 @@ function startCaptures(ctx) {
 }
 
 async function settleCaptures(ctx) {
-  if (!ctx.capturing && researchMode(ctx.options.research) === "on") startCaptures(ctx);
+  if (!ctx.capturing && researchEnabled(ctx)) startCaptures(ctx);
   const result = ctx.capturing ? await ctx.capturing : null;
   ctx.captures = [];
   if (!result) { await readResearchExtras(ctx); if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })); return; }

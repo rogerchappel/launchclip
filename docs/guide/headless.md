@@ -62,6 +62,7 @@ Useful flags:
 | `--renderer` | `remotion` | Or `hyperframes`. |
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
+| `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |

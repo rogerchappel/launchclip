@@ -20,6 +20,15 @@
 
 ### Added
 
+- `launchclip make` researches a news brief without being asked.
+  `--research` now defaults to `auto`: research turns on when the brief is
+  news or research shaped (news wording such as "this week" or "just
+  announced", a dated event, a named release, a question of fact) and stays
+  off for a product video, an evergreen topic, or a brief that brings its own
+  script or recording. `on` and `off` still decide it yourself. The run
+  prints the decision, and `MAKE.json` records it with the words that led to
+  it under `research_decision`.
+
 - `make` renders candidates for the opening and one risky transition before
   the draft, as the create-video skill does. It designs a second opening in
   a call that never sees the first, tries a different kind of move at the
