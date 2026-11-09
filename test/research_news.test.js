@@ -171,7 +171,7 @@ test("leads: Hacker News with no subject reads the front page from the official 
 test("small parsers: GDELT dates, current-events items, headlines, owners and citations", () => {
   assert.equal(gdeltDate("20261109T070000Z"), "2026-11-09T07:00:00.000Z");
   assert.equal(gdeltDate("soon"), null);
-  const items = currentEventItems('<div class="current-events-main vevent"><span class="bday dtstart">2026-11-08</span><ul><li>Something <a rel="nofollow" class="external text" href="https://a.example/x?a=1&amp;b=2">(A)</a></li><li>No source here</li></ul></div>');
+  const items = currentEventItems('<div class="current-events-main vevent"><span class="bday dtstart">2026-11-08</span><ul><li>Something <a rel="nofollow" class="external text" href="https://a.example/x?a=1&amp;b=2">(A)</a></li><li>No source here</li><li>Edited <a class="external text" href="https://en.wikipedia.org/w/index.php?title=Portal:Current_events/2026_November_8&amp;action=edit">edit</a></li></ul></div>');
   assert.deepEqual(items, [{ date: "2026-11-08T00:00:00.000Z", text: "Something (A)", links: ["https://a.example/x?a=1&b=2"] }]);
   assert.equal(headlineOf("Nimbus-7B is now generally available | Nimbus AI"), "Nimbus-7B is now generally available");
   assert.equal(headlineOf("Nimbus AI pauses EU rollout of Nimbus-7B - Wirepost"), "Nimbus AI pauses EU rollout of Nimbus-7B");
