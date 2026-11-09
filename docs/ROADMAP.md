@@ -40,7 +40,8 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - **Launch kits:** one run produces the launch video plus cut-downs for every platform (YouTube, Shorts, Reels, TikTok, X, LinkedIn, Product Hunt), thumbnails and captions files.
 - **Brand from your website:** point it at your landing page and it builds your style pack from your real colours, fonts and tone.
 - **Scheduled updates:** re-record the demo and refresh the video automatically when your product changes.
-- **Partial re-rendering for HyperFrames**, once its renderer supports frame ranges (Remotion already has it).
+- **Partial re-rendering for HyperFrames** (Remotion already has it). The installed HyperFrames 0.7.58 has no frame range; 0.9 adds `--start` and `--end`. See DUAL_RENDERER_PLAN.md, "Open renderer gaps".
+- **Videos that follow a zoom or an iris in HyperFrames.** A single-video module can stay in its scene layer and follow every transition; measured in DUAL_RENDERER_PLAN.md, "Open renderer gaps".
 
 ## Ideas we're exploring
 

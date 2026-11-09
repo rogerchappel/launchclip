@@ -293,6 +293,60 @@ Where a custom scene has no form for the chosen renderer, in either
 direction, `finish` now stops before rendering and names the scene, the
 module and the renderer.
 
+### Open renderer gaps (investigated 2026-11-10)
+
+**Partial re-render (`--scene`, `--chapter`) is still Remotion-only.** The
+installed HyperFrames, 0.7.58, cannot render a frame range: `hyperframes
+render --help` has no start, end or frames option, and `hyperframes docs
+rendering` does not mention one. The latest release on npm, 0.9.26, adds
+`--start` and `--end` in seconds (MP4 only, a whole frame rate of 24, 25, 30
+or 60, SDR only). So the code is unchanged. Two routes are open, neither
+proven:
+
+- Upgrade HyperFrames to 0.9 or later and render each segment with
+  `--start`/`--end`. An upgrade moves every pixel of the HyperFrames path, so
+  it needs the whole parity corpus run first.
+- Use the compiler's `window` option (`windowComposition`), which already
+  renders one scene's stretch for `--preview-scene` on 0.7.58.
+
+Either way, the bar before `PARTIAL_RENDERERS` in `src/render_segments.js`
+gains `hyperframes` is a test that stitches segment renders and finds them
+equal, frame for frame (bytes or SSIM), to a whole render of the same story.
+
+**Root media under a zoom or an iris can be fixed for single-video modules.**
+The compiler hoists `<video>` and `<audio>` out of the scene layer to the
+composition root, then replays the layer's transition on the element
+(`mediaLayerTweens`): translation, opacity and blur work, while the layer
+scale of a `zoom` and the clip of an `iris` are reported as unsupported
+("root media does not follow…"). Measured on a 16:9 story with a `clip`
+video entering by zoom and by iris, HyperFrames against Remotion stills:
+
+| Frame | Hoisted (today) | Video kept in the scene layer |
+|---|---|---|
+| zoom, 0.2 s in | 0.861 | 0.996 |
+| zoom, 0.3 s in | 0.891 | 0.997 |
+| iris, 0.2 s in | 0.488 | 0.991 |
+| iris, 0.3 s in | 0.704 | 0.994 |
+| after either (hold) | 0.997 | 0.997 |
+
+A full `hyperframes render` of the kept-in-layer composition matched the
+Remotion stills at 0.981 to 0.986 on the same frames, the same as its
+settled frames (draft-quality MP4 against PNG). It works because HyperFrames
+seeks a timed `<video>` wherever it sits, unless a timed ancestor holds it,
+and draws each frame in the video's own box, so the layer's scale and
+clip-path apply. World plates already rely on this (`inCamera` in
+`kit/hyperframes/story-compiler.mjs`).
+
+This is not changed yet. Keeping the video in the layer is a one-line
+condition for modules whose HTML is the video alone (`clip`,
+`evidence-clip`, `product-demo`, `set-prop`, a video `photo-scene`), but it
+moves those videos in every story, so it needs their fixtures, the stories
+with a push, whip, fade and morph into a video, held and loop clones, and
+the subject layers rendered first. Modules that mix a video with other
+markup (the media layouts, `media-window`, the stage modules) would still
+hoist, and for them the limit stays. Audio always stays on the root; no
+transition applies to it.
+
 ### RFC phase 5 status: storyboard planner (model side)
 
 Done:
