@@ -1,10 +1,13 @@
 name: Parity corpus
 
-# The whole renderer parity corpus: every per-module fixture at every sample
-# time, in eight shards, plus the story, background, footage, caption and
-# camera fixtures. Runs nightly, on demand, and on a pull request that changes
-# the kit, a fixture or the harness. Every pull request also renders a
-# rotating slice (the "parity-sample" job in ci.yml).
+# The whole renderer parity corpus. Every per-module fixture at every sample
+# time, in twelve shards: nightly, on demand, and on a pull request that
+# changes the kit, a fixture or the harness. A fixture takes about 14 s on
+# ubuntu-latest (467 fixtures, 107 minutes in all), so a shard of 39 renders
+# in about 9 minutes and finishes with the media suite in ci.yml. The story,
+# background, camera, footage and caption parity tests run nightly and on
+# demand only. Every pull request also renders a rotating slice (the
+# "parity-sample" job in ci.yml).
 on:
   schedule:
     - cron: "17 15 * * *"
@@ -24,13 +27,13 @@ concurrency:
 
 jobs:
   modules:
-    name: Modules ${{ matrix.shard }}/8
+    name: Modules ${{ matrix.shard }}/12
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,8 +54,8 @@ jobs:
         run: |
           npx hyperframes browser ensure
           npx remotion browser ensure
-      - name: Per-module fixtures, shard ${{ matrix.shard }} of 8
-        run: node scripts/parity-shard.mjs --shard ${{ matrix.shard }}/8 --out qa/parity-shard
+      - name: Per-module fixtures, shard ${{ matrix.shard }} of 12
+        run: node scripts/parity-shard.mjs --shard ${{ matrix.shard }}/12 --out qa/parity-shard
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -68,6 +71,7 @@ jobs:
   # and panels, camera moves, the footage-led fixtures and the caption presets.
   suites:
     name: ${{ matrix.name }}
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
