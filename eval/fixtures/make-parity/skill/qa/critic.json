@@ -1,0 +1,19 @@
+{
+  "verdict": "ship",
+  "summary": "Clear hook, the source on screen, varied cards.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "minor",
+      "category": "timing",
+      "message": "The checklist could land its last item half a second sooner.",
+      "evidence_ids": [
+        "s5-browser-still"
+      ]
+    }
+  ],
+  "evidence_ids_reviewed": [
+    "s1-browser-still",
+    "s5-browser-still"
+  ]
+}

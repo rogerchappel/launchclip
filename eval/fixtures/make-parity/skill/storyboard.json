@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "title": "Orbital raises its round",
+  "lane": "motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 60
+  },
+  "audio": {
+    "words": "NARRATION.json"
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "module": "stat-card",
+      "start": 0,
+      "end": 5,
+      "params": {
+        "value": "$40M",
+        "label": "raised"
+      },
+      "states": [
+        {
+          "at": 2.5
+        }
+      ]
+    },
+    {
+      "id": "source",
+      "module": "excerpt-window",
+      "start": 5,
+      "end": 11,
+      "params": {
+        "title": "Orbital announces its round",
+        "src": "assets/captures/announcement.png"
+      },
+      "states": [
+        {
+          "at": 8
+        }
+      ]
+    },
+    {
+      "id": "investor",
+      "module": "brand-lockup",
+      "start": 11,
+      "end": 15,
+      "params": {
+        "name": "Northwind"
+      }
+    },
+    {
+      "id": "price",
+      "module": "bar-chart",
+      "start": 15,
+      "end": 22,
+      "params": {
+        "items": [
+          {
+            "label": "Before",
+            "value": 29
+          },
+          {
+            "label": "Now",
+            "value": 19
+          }
+        ]
+      },
+      "states": [
+        {
+          "at": 18.5
+        }
+      ]
+    },
+    {
+      "id": "three",
+      "module": "checklist",
+      "start": 22,
+      "end": 30,
+      "params": {
+        "items": [
+          "Price",
+          "Build queue",
+          "Free plan"
+        ]
+      },
+      "states": [
+        {
+          "at": 24.5
+        },
+        {
+          "at": 27
+        }
+      ]
+    },
+    {
+      "id": "builds",
+      "module": "count-up",
+      "start": 30,
+      "end": 36,
+      "params": {
+        "from": 9,
+        "to": 4,
+        "unit": "min"
+      },
+      "states": [
+        {
+          "at": 33
+        }
+      ]
+    },
+    {
+      "id": "product",
+      "module": "media-window",
+      "start": 36,
+      "end": 44,
+      "params": {
+        "title": "Build queue",
+        "media": {
+          "kind": "image",
+          "src": "assets/queue.png"
+        }
+      },
+      "states": [
+        {
+          "at": 40
+        }
+      ]
+    },
+    {
+      "id": "free",
+      "module": "callout",
+      "start": 44,
+      "end": 50,
+      "params": {
+        "title": "200 builds a month",
+        "body": "Every feature"
+      },
+      "states": [
+        {
+          "at": 47
+        }
+      ]
+    },
+    {
+      "id": "bet",
+      "module": "kinetic-words",
+      "start": 50,
+      "end": 55,
+      "params": {
+        "words": [
+          "cheaper",
+          "builds",
+          "bigger",
+          "teams"
+        ]
+      }
+    },
+    {
+      "id": "close",
+      "module": "motion-title",
+      "start": 55,
+      "end": 60,
+      "params": {
+        "title": "Orbital"
+      },
+      "states": [
+        {
+          "at": 57.5
+        }
+      ]
+    }
+  ]
+}
