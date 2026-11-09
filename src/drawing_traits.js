@@ -592,17 +592,23 @@ export function drawingLimits() {
     "Cel shading is read from steps between two tones of one hue, so a tinted shape on a background of the same hue counts too.",
     "Grain is read at the analysis width (960 px), so fine grain in a 4K reference reads weaker than it looks.",
     "Stepping reads the whole frame: a camera move on ones over characters on twos reads as ones or mixed.",
+    "The drawing style is matched on line and shading only, from whatever is in the frame: styles that differ by proportions (stick figures, avatars) are not told apart, and a reference with no figures in it can still match one.",
     "Not measured: character proportions, face design, perspective, lighting direction, line colour variety, brush shape."
   ];
 }
 
-/** Sample rgb24 frames of a reference for the drawing traits (up to DRAWING_WIDTH wide, never upscaled). */
-export async function sampleDrawingFrames(file, { image = false, count = 10 } = {}, run = runBuffer) {
+/**
+ * Sample rgb24 frames of a reference for the drawing traits (up to
+ * DRAWING_WIDTH wide, never upscaled): `count` spread over the video, or over
+ * `window` ([from, to] seconds) of it.
+ */
+export async function sampleDrawingFrames(file, { image = false, count = 10, window = null } = {}, run = runBuffer) {
   const info = await probeVideo(file, run);
   if (!info.width || !info.height) throw new Error(`${file} has no video stream`);
   const width = Math.min(DRAWING_WIDTH, Math.floor(info.width / 2) * 2);
   const height = Math.max(2, Math.round((width * info.height) / info.width / 2) * 2);
-  const times = image || !(info.duration > 0) ? [null] : Array.from({ length: count }, (_, i) => (info.duration * (i + 0.5)) / count);
+  const [from, to] = window ?? [0, info.duration];
+  const times = image || !(info.duration > 0) ? [null] : Array.from({ length: count }, (_, i) => from + ((to - from) * (i + 0.5)) / count);
   const frames = [];
   for (const at of times) {
     const { stdout } = await run("ffmpeg", ["-hide_banner", "-loglevel", "error", ...(at === null ? [] : ["-ss", String(round(at, 3))]), "-i", file, "-frames:v", "1", "-vf", `scale=${width}:${height}:flags=area,format=rgb24`, "-f", "rawvideo", "pipe:1"], { encoding: "buffer" });
@@ -612,8 +618,8 @@ export async function sampleDrawingFrames(file, { image = false, count = 10 } = 
   return frames;
 }
 
-/** Measure one reference file → raw drawing numbers (drawingNumbers). */
-export async function measureDrawing(file, { image = false, count = 10 } = {}, run = runBuffer) {
-  const frames = await sampleDrawingFrames(file, { image, count }, run);
-  return drawingNumbers(frames, image ? null : await measureVideoMotion(file, run));
+/** Measure one reference file → raw drawing numbers (drawingNumbers). With `window`, frames from those seconds only and no motion. */
+export async function measureDrawing(file, { image = false, count = 10, window = null } = {}, run = runBuffer) {
+  const frames = await sampleDrawingFrames(file, { image, count, window }, run);
+  return drawingNumbers(frames, image || window ? null : await measureVideoMotion(file, run));
 }
