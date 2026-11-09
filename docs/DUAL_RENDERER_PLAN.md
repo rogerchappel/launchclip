@@ -259,6 +259,16 @@ five that fail on Linux are listed in
 and `h-social-post-native-portrait` (0.904, the card's glow mid-fade). No
 threshold was changed for them.
 
+The story, background, camera, footage and caption parity tests had never
+run on Linux either. They take about 30 minutes a job there, so they run
+nightly and on demand, not on pull requests. Their first run passed 136 of
+138, and the nightly stays red until these two are fixed:
+
+- `parity: camera story cinematic-transitions-9x16` at t = 3.1 s: SSIM 0.803
+  against its 0.94 threshold (`test/parity_camera.test.js`).
+- `footage parity: s-creative-scrap.json` did not finish inside its 600 s
+  test timeout on the runner. It is a timeout, not a measured mismatch.
+
 Known difference: HyperFrames draws a `<video>`'s frames without the
 element's `box-shadow`, where Remotion draws it. The media layouts put a video
 window's drop shadow and ring on a twin element under the video
