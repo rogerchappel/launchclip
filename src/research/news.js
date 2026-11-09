@@ -236,7 +236,7 @@ export function currentEventItems(html) {
   for (const day of days) {
     const date = isoDate(day.match(/<span class="bday[^"]*">(\d{4}-\d{2}-\d{2})<\/span>/)?.[1] ?? "") ?? null;
     for (const [, body] of day.matchAll(/<li>((?:(?!<li>|<\/li>)[\s\S])*)<\/li>/g)) {
-      const links = [...body.matchAll(/<a[^>]+class="external[^"]*"[^>]+href="([^"]+)"/g), ...body.matchAll(/<a[^>]+href="([^"]+)"[^>]+class="external[^"]*"/g)].map((match) => decodeEntities(match[1])).filter((url) => /^https?:\/\//.test(url));
+      const links = [...body.matchAll(/<a[^>]+class="external[^"]*"[^>]+href="([^"]+)"/g), ...body.matchAll(/<a[^>]+href="([^"]+)"[^>]+class="external[^"]*"/g)].map((match) => decodeEntities(match[1])).filter((url) => /^https?:\/\//.test(url) && !/(^|\.)(?:wikipedia|wikimedia|wikidata)\.org$/.test(safeHost(url) ?? ""));
       if (!links.length) continue;
       items.push({ date, text: decodeEntities(body.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim(), links: [...new Set(links)] });
     }
