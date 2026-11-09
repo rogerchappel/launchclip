@@ -37,7 +37,7 @@ function storeOptions(flags, hooks = {}) {
   return { projectDir: path.resolve(String(flags.project ?? ".")), home: hooks.home };
 }
 
-/** --set values (repeatable; one flag may carry several, separated by spaces only when quoted apart) → [{path, op, value}]. */
+/** --set values (the flag repeats) → [{path, op, value}]. */
 function flagSets(flags) {
   return list(flags.set).map((entry) => parseSet(entry));
 }
