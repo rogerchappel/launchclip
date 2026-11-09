@@ -111,7 +111,9 @@ export function slugify(prompt) {
  *   visualHistoryDir (the series' history index: plan against it, record into it),
  *   visualHistoryLimit (recent entries the planner sees, default 8),
  *   visualSimilarityLimit (the variety lint's limit, default 0.6)}
- * adapters: {env, client ({client, provider, model, vision}), transcribe,
+ * adapters: {env, client ({client, provider, model, vision}), clientOptions
+ * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
+ * (the model check asks a local Ollama for its model list through it), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
@@ -232,7 +234,7 @@ async function stageModel(ctx) {
     ctx.model = { ...adapters.client, spec: adapters.client.spec ?? `${adapters.client.provider}:${adapters.client.model}`, source: "adapter" };
   } else {
     const { spec, source } = selectMakeModel(options.model, env);
-    ctx.model = { ...createMakeClient(spec), spec, source };
+    ctx.model = { ...createMakeClient(spec, adapters.clientOptions ?? {}), spec, source };
   }
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
   // Which roles this run's model can play (text and vision), so an app can

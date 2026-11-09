@@ -1030,7 +1030,7 @@ export function createPlannerClient(modelSpec, options = {}) {
   const provider = separator > 0 ? spec.slice(0, separator).toLowerCase() : "";
   if (provider === "anthropic") {
     const model = spec.slice(separator + 1);
-    return { client: new AnthropicPlannerClient({ model, apiKey: options.apiKey }), provider, model };
+    return { client: new AnthropicPlannerClient({ model, apiKey: options.apiKey, sdk: options.sdk }), provider, model };
   }
   const route = parseModelRoute(spec);
   return { client: (options.createClient ?? createStructuredClient)(route, options), provider: route.provider, model: route.model, reasoning: route.reasoning };
