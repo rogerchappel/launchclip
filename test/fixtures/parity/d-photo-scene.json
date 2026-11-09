@@ -1,0 +1,51 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: photo-scene, a still with lines",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "photo-scene",
+        "start": 0,
+        "end": 5,
+        "params": {
+          "media": "assets/shots/ridge.svg",
+          "move": "push-in",
+          "lines": [
+            {
+              "text": "Dawn on the ridge",
+              "at": 0.6
+            },
+            {
+              "text": "Nobody else for miles",
+              "at": 1.4,
+              "emphasis": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "title": "Orbital raises its round",
+  "lane": "motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 60
+  },
+  "audio": {
+    "words": "NARRATION.json"
+  },
+  "scenes": [
+    {
+      "id": "title",
+      "module": "motion-title",
+      "start": 0,
+      "end": 6,
+      "params": {
+        "title": "Orbital raises its round"
+      }
+    },
+    {
+      "id": "one",
+      "module": "kinetic-words",
+      "start": 6,
+      "end": 14,
+      "params": {
+        "words": [
+          "worth",
+          "watching"
+        ]
+      }
+    },
+    {
+      "id": "two",
+      "module": "concept-card",
+      "start": 14,
+      "end": 31,
+      "params": {
+        "title": "The round",
+        "body": "Forty million dollars"
+      }
+    },
+    {
+      "id": "three",
+      "module": "concept-card",
+      "start": 31,
+      "end": 37,
+      "params": {
+        "title": "The round",
+        "body": "Forty million dollars"
+      }
+    },
+    {
+      "id": "four",
+      "module": "kinetic-words",
+      "start": 37,
+      "end": 44,
+      "params": {
+        "words": [
+          "faster",
+          "in",
+          "some",
+          "cases"
+        ]
+      }
+    },
+    {
+      "id": "five",
+      "module": "stat-card",
+      "start": 44,
+      "end": 52,
+      "params": {
+        "value": "$40M",
+        "label": "raised"
+      }
+    },
+    {
+      "id": "six",
+      "module": "motion-title",
+      "start": 52,
+      "end": 60,
+      "params": {
+        "title": "What happens next"
+      }
+    }
+  ]
+}

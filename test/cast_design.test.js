@@ -290,3 +290,12 @@ test("cast create draws the sheet as a PNG with Chromium", { timeout: 120_000 },
   const again = await runCastCommand("sheet", "nova", { project, out: path.join(project, "qa", "nova.png") });
   assert.ok(existsSync(again.png));
 });
+
+test("a retired starter id stays reserved: no saved character can take it", async () => {
+  const { isStarterId, STARTER_IDS } = await import("@launchclip/core/characters/cast.mjs");
+  assert.ok(isStarterId("fatima") && !STARTER_IDS.includes("fatima"));
+  const file = { schema: CHARACTER_SCHEMA, id: "fatima", name: "Fatima", params: { skin: "tan", hair: { style: "bob", color: "black" } } };
+  let problems;
+  try { problems = characterErrors(file); } catch (error) { problems = [error.message]; }
+  assert.ok(problems.some((line) => /is a starter character/.test(line)), JSON.stringify(problems));
+});

@@ -265,6 +265,13 @@ path) describe what each clip shows (`description`, `subjects`, `tags`), its
 high-quality clips that match the line, and set `params.media.sourceStart` to a
 usable window's start with the scene no longer than the window.
 
+Notes can also say what a file is (`shows`: "pricing page", "dashboard",
+"onboarding flow", "product photo", "person on camera"), the key words
+readable on it (`text`), the story beats it suits (`fits`) and that the user
+wants it in the video (`feature: true`). When the user hands you images or
+clips with no notes, look at each one and write them yourself before
+planning: see "Describe the handed-in files" in [workflow.md](workflow.md).
+
 ## Subject effects
 
 When the recording has one presenter and the treatment calls for depth (the

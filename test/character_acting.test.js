@@ -1,0 +1,278 @@
+// Acting quality (kit/core/characters/acting.mjs): acted pose changes
+// (anticipation, overlap, settle), life while a pose holds, speech shapes and
+// acting profiles. Everything is absolute ops, so every check reads frames
+// through frameState in any order.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {poseJoints, rigGeometry} from '@launchclip/core/characters/rig.mjs';
+import {starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {ACTING, ACTING_PROFILES, MOVE, actingOps, blinkTimes, dartTimes, jointTargets, poseChangeOps, poseTravel, shiftTimes, speechChanges, wordVisemes, VISEMES} from '@launchclip/core/characters/acting.mjs';
+import {frameState} from '@launchclip/core/catalog-b-view.mjs';
+import {characterLook} from '@launchclip/core/characters/cast.mjs';
+import {drawCharacter, DRAWING_STYLES} from '@launchclip/core/characters/styles.mjs';
+import {characterView} from '@launchclip/core/characters/view.mjs';
+
+const geometry = rigGeometry(starterCharacter('maya').params);
+const targets = pose => jointTargets('c', poseJoints(pose, {geometry}));
+const actor = (states, extra = {}) => ({cid: 'c', id: 'maya', start: 0, end: 8, geometry, facing: 'right', seated: false, holds: null, states,
+  expressions: [...new Set(states.map(state => state.expression))], speech: [], ...extra});
+const acted = (states, extra) => { const ops = []; actingOps(ops, actor(states, extra)); return ops; };
+const value = (ops, t, target, prop) => frameState(ops, t).get(target)?.[prop];
+const change = (from, to, profile) => { const ops = []; const strength = poseChangeOps(ops, targets(from), targets(to), 2, profile); return {ops, strength}; };
+
+test('a big pose change is acted: a counter-move, the travel, a follow-through, at rest on the pose when the window ends', () => {
+  const {ops, strength} = change('stand', 'cheer');
+  assert.equal(strength, 1, 'a cheer from standing travels far');
+  const arm = ops.filter(op => op.target === 'c-arm-r');
+  assert.deepEqual(arm.map(op => op.ease), ['sine.inOut', ACTING.poseEase, 'sine.inOut'], 'anticipation, travel (slow, fast, slow), settle');
+  const from = targets('stand')['c-arm-r'].rotation, to = targets('cheer')['c-arm-r'].rotation;
+  const dir = Math.sign(to - from);
+  // Anticipation: the arm first moves against its travel, by a few degrees at most.
+  const back = arm[0].to.rotation;
+  assert.ok((back - from) * dir < 0, 'moves away first');
+  assert.ok(Math.abs(back - from) <= MOVE.cap.rotation + 1e-9);
+  // Follow-through: it passes the pose slightly, then settles onto it.
+  const peak = arm[1].to.rotation;
+  assert.ok((peak - to) * dir > 0 && Math.abs(peak - to) <= MOVE.cap.rotation);
+  assert.equal(arm[2].to.rotation, to);
+  // The whole change lies inside the timing contract's window.
+  for (const op of ops) assert.ok(op.start >= 2 - 1e-9 && op.start + op.duration <= 2 + ACTING.poseTween + 1e-6, `${op.target} ${op.start}+${op.duration}`);
+  const state = frameState(ops, 2 + ACTING.poseTween);
+  for (const [target, props] of Object.entries(targets('cheer'))) for (const [prop, want] of Object.entries(props)) {
+    if (state.get(target)?.[prop] !== undefined) assert.ok(Math.abs(state.get(target)[prop] - want) < 1e-6, `${target}.${prop}`);
+  }
+  // The torso dips before the move (a squash) even though the pose leaves it alone.
+  const torso = ops.filter(op => op.target === 'c-torso');
+  assert.ok(torso[0].to.scaleY < torso[0].from.scaleY);
+  // Finger opacity never leaves 0–1.
+  for (const op of ops.filter(one => /fingerwrap/.test(one.target))) for (const end of [op.from, op.to]) assert.ok(end.opacity >= 0 && end.opacity <= 1);
+});
+
+test('a small pose change stays one plain tween, and an unchanged pose adds nothing', () => {
+  assert.ok(poseTravel(targets('stand'), targets('slump')) < MOVE.small);
+  const {ops, strength} = change('stand', 'slump');
+  assert.equal(strength, 0);
+  assert.ok(ops.length > 0);
+  for (const op of ops) assert.deepEqual([op.start, op.duration, op.ease], [2, ACTING.poseTween, ACTING.poseEase]);
+  assert.equal(new Set(ops.map(op => op.target)).size, ops.length, 'one tween per joint');
+  assert.equal(change('wave', 'wave').ops.length, 0);
+});
+
+test('acting scales with how far the joints travel', () => {
+  const mid = change('stand', 'lean-in'), far = change('stand', 'cheer');
+  assert.ok(mid.strength > 0.35 && mid.strength < far.strength);
+  const dip = ({ops}) => { const [first] = ops.filter(op => op.target === 'c-torso'); return first.from.scaleY - first.to.scaleY; };
+  assert.ok(dip(mid) < dip(far));
+});
+
+test('overlap: the head, forearms and hands start after the body and still land in the window', () => {
+  const {ops} = change('stand', 'cheer');
+  const travel = target => ops.find(op => op.target === target && op.ease === ACTING.poseEase);
+  const body = travel('c-arm-r').start;
+  for (const part of ['c-fore-r', 'c-fore-l', 'c-head']) {
+    const first = ops.filter(op => op.target === part)[0];
+    assert.ok(first, part);
+    assert.ok(first.start > body, `${part} starts at ${first.start}, after the body's ${body}`);
+  }
+  // A pointing finger comes out last.
+  const point = change('stand', 'point').ops;
+  const finger = point.find(op => op.target === 'c-fingerwrap-r'), reach = point.find(op => op.target === 'c-arm-r' && op.ease === ACTING.poseEase);
+  assert.ok(finger.start > reach.start && finger.start + finger.duration <= 2 + ACTING.poseTween);
+  assert.ok(travel('c-head').start < travel('c-fore-r').start, 'the head goes before the forearms');
+  // The head and the hair behind it move as one.
+  const head = ops.filter(op => op.target === 'c-head'), hair = ops.filter(op => op.target === 'c-hb');
+  assert.deepEqual(head.map(op => ({...op, target: 0})), hair.map(op => ({...op, target: 0})));
+  // The look leads: a gaze change is one tween from the cue.
+  const gaze = [];
+  const looking = (x, pose) => jointTargets('c', {...poseJoints(pose, {geometry}), gazeX: x, gazeY: 0, gazeScale: 1});
+  poseChangeOps(gaze, looking(0, 'stand'), looking(30, 'cheer'), 2);
+  assert.deepEqual(gaze.filter(op => op.target === 'c-turn').map(op => op.start), [2]);
+});
+
+test('seek-safe: any frame of an acted scene reads the same in any order, and a held gesture still starts from the pose', () => {
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}, {time: 2, pose: 'wave', expression: 'happy'}, {time: 5, pose: 'stand', expression: 'happy'}]);
+  const times = [0.2, 1.9, 2.05, 2.2, 2.45, 3.3, 5.1, 5.45, 7.5];
+  const read = t => JSON.stringify([...frameState(ops, t)].sort(([a], [b]) => a.localeCompare(b)));
+  const forward = times.map(read);
+  assert.deepEqual([...times].reverse().map(read).reverse(), forward);
+  assert.ok(Math.abs(value(ops, 2 + ACTING.poseTween, 'c-fore-r', 'rotation') - targets('wave')['c-fore-r'].rotation) < 1e-6);
+  assert.ok(Math.abs(value(ops, 5 + ACTING.poseTween, 'c-arm-r', 'rotation') - targets('stand')['c-arm-r'].rotation) < 1e-6);
+  assert.doesNotMatch(JSON.stringify(ops), /NaN|null/);
+});
+
+test('profiles scale the move: bouncy swings wider, calm less, nervous is quicker; all land on the pose in the window', () => {
+  const swing = name => { const {ops} = change('stand', 'cheer', ACTING_PROFILES[name]); const arm = ops.filter(op => op.target === 'c-arm-r'); return {back: Math.abs(arm[0].to.rotation - arm[0].from.rotation), done: Math.max(...ops.map(op => op.start + op.duration)), ops}; };
+  const calm = swing('calm'), plain = swing('default'), bouncy = swing('bouncy'), nervous = swing('nervous');
+  assert.ok(calm.back < plain.back && plain.back < bouncy.back);
+  assert.ok(nervous.done < plain.done - 0.05);
+  assert.ok(Math.abs(plain.done - (2 + ACTING.poseTween)) < 1e-6);
+  for (const one of [calm, bouncy, nervous]) {
+    assert.ok(one.done <= 2 + ACTING.poseTween + 1e-6);
+    assert.ok(Math.abs(frameState(one.ops, 2 + ACTING.poseTween).get('c-arm-r').rotation - targets('cheer')['c-arm-r'].rotation) < 1e-6);
+  }
+});
+
+test('life while holding: blinks come at uneven but repeatable intervals, seeded from the character id', () => {
+  const maya = blinkTimes('maya', 0, 40), again = blinkTimes('maya', 0, 40), theo = blinkTimes('theo', 0, 40);
+  assert.deepEqual(maya, again, 'the same character blinks at the same times on every run');
+  assert.notDeepEqual(maya, theo, 'each character has its own rhythm');
+  const gaps = maya.slice(1).map((t, i) => t - maya[i]);
+  assert.ok(maya.length >= 8 && maya.length <= 22, `${maya.length} blinks in 40 s`);
+  assert.ok(new Set(gaps.map(gap => gap.toFixed(2))).size >= gaps.length * 0.7, 'gaps differ');
+  assert.ok(Math.min(...gaps) >= 0.24 - 1e-9 && Math.max(...gaps) <= ACTING.blinkEvery * 1.5 + 0.31);
+  assert.ok(blinkTimes('maya', 0, 40, ACTING_PROFILES.nervous).length > maya.length && blinkTimes('maya', 0, 40, ACTING_PROFILES.calm).length < maya.length);
+  // A big move brings a blink of its own; one too close to another is dropped.
+  assert.ok(blinkTimes('maya', 0, 40, ACTING_PROFILES.default, [20.5]).includes(20.5) || maya.some(t => Math.abs(t - 20.5) < 0.24));
+  // In a scene: every face's eyes close together and reopen fully.
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}, {time: 3, pose: 'cheer', expression: 'happy'}]);
+  const closes = name => ops.filter(op => op.target === `c-eyes-${name}` && op.to.scaleY < 0.2).map(op => op.start);
+  assert.deepEqual(closes('neutral'), closes('happy'));
+  assert.ok(closes('neutral').some(t => t > 3 && t < 3 + ACTING.poseTween), 'a blink as the cheer starts');
+  for (const t of closes('neutral')) assert.equal(value(ops, t + ACTING.blinkDown + ACTING.blinkUp + 0.01, 'c-eyes-neutral', 'scaleY'), 1);
+});
+
+test('life while holding: the eyes dart and return, the chest breathes and the weight shifts, so a held pose never freezes', () => {
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20});
+  const darts = dartTimes('maya', 0, 20);
+  assert.ok(darts.length >= 2);
+  for (const dart of darts) {
+    assert.ok(Math.abs(dart.x) <= ACTING.dartX && Math.abs(dart.y) <= ACTING.dartY, 'a dart is small');
+    assert.equal(value(ops, dart.time + ACTING.dartOut + dart.hold / 2, 'c-eyes-neutral', 'x'), dart.x, 'held aside');
+    assert.equal(value(ops, dart.time + ACTING.dartOut + dart.hold + ACTING.dartBack + 0.01, 'c-eyes-neutral', 'x'), 0, 'and back');
+  }
+  const shifts = shiftTimes('maya', 0, 20);
+  assert.ok(shifts.length >= 3);
+  assert.ok(shifts.every((shift, i) => i === 0 || Math.sign(shift.rotation) !== Math.sign(shifts[i - 1].rotation)), 'side to side');
+  assert.ok(shifts.every(shift => Math.abs(shift.rotation) <= ACTING.shiftDeg * 1.5));
+  // Something moves in every half second of a 20 s hold.
+  const frame = t => JSON.stringify([...frameState(ops, t)].sort(([a], [b]) => a.localeCompare(b)));
+  for (let t = 0.5; t < 19.5; t += 0.5) assert.notEqual(frame(t), frame(t + 0.25), `frozen at ${t}`);
+  // The body's joints stay on the pose throughout: life runs on its own groups.
+  for (const t of [1, 7.3, 15.9]) assert.equal(value(ops, t, 'c-arm-r', 'rotation'), targets('stand')['c-arm-r'].rotation);
+  // The realistic styles keep their eyes still (the eye group is the whole eye); a stick figure sways on its idle arms instead.
+  const real = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, style: 'lifelike'});
+  assert.ok(!real.some(op => op.target === 'c-eyes-neutral' && op.to?.x !== undefined));
+  const stick = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, geometry: {...geometry, idleArms: true}});
+  assert.ok(stick.some(op => op.target === 'c-armidle-l') && !ops.some(op => op.target === 'c-armidle-l'));
+  assert.ok(stick.filter(op => op.target === 'c-breath' && op.to?.rotation !== undefined).every(op => Math.abs(op.to.rotation) <= ACTING.bodyDeg), 'the stick keeps its own sway, with no weight shifts over it');
+  // Profiles: a nervous character darts and shifts more, a calm one breathes slower and deeper.
+  assert.ok(dartTimes('maya', 0, 20, ACTING_PROFILES.nervous).length > darts.length && shiftTimes('maya', 0, 20, ACTING_PROFILES.nervous).length > shifts.length);
+  const breath = name => acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, acting: name}).find(op => op.target === 'c-breath' && op.to?.scaleY > 1);
+  assert.ok(breath('calm').duration > breath('default').duration && breath('calm').to.scaleY > breath('default').to.scaleY);
+  assert.deepEqual([breath('default').duration, breath('default').to.scaleY], [ACTING.breath, 1.012], 'the default breath is unchanged');
+});
+
+test('speech: a word\'s mouth shapes come from its sounds', () => {
+  assert.deepEqual(Object.keys(VISEMES), ['closed', 'small', 'o', 'wide', 'open']);
+  assert.deepEqual(wordVisemes('make'), ['closed', 'open', 'small'], 'lips press on m, drop on a, part open on k; the final e is silent');
+  assert.deepEqual(wordVisemes('you'), ['wide', 'o']);
+  assert.deepEqual(wordVisemes('flow'), ['small', 'o']);
+  assert.deepEqual(wordVisemes('Hmm.'), ['closed'], 'a hum keeps the lips together');
+  assert.deepEqual(wordVisemes('product'), ['closed', 'small', 'o', 'small', 'o', 'small']);
+  assert.deepEqual(wordVisemes('product', 3), ['closed', 'o', 'small'], 'short on time, the vowels and the pressed lips stay');
+  assert.deepEqual(wordVisemes('beautiful', 1).length, 1);
+  assert.deepEqual(wordVisemes('42%'), [], 'nothing to read');
+  for (const word of ['Every', 'launch', 'Maya', 'rebuilds', 'the', 'demo', 'video', 'by', 'hand', 'a', 'I']) {
+    const shapes = wordVisemes(word);
+    assert.ok(shapes.length >= 1 && shapes.every(shape => shape in VISEMES) && shapes.every((shape, i) => shape !== shapes[i - 1]), word);
+  }
+});
+
+test('speech: shapes are timed inside each word; the mouth closes at a pause and flows on between close words', () => {
+  const says = [{from: 1, to: 2.6, words: [[1, 1.3, 'Try'], [1.32, 1.9, 'Pulseboard'], [2.2, 2.6, 'now']]}];
+  const changes = speechChanges(says);
+  assert.deepEqual(changes, speechChanges(says), 'the same every time');
+  assert.ok(changes.every((change, i) => i === 0 || change.time >= changes[i - 1].time));
+  assert.ok(changes.every(change => change.open === (change.shape !== 'closed')));
+  const shapeAt = t => { let shape = 'closed'; for (const change of changes) if (change.time <= t + 1e-9) shape = change.shape; return shape; };
+  assert.equal(shapeAt(0.9), 'closed');
+  assert.equal(shapeAt(1.01), 'small', 'the t of "Try"');
+  assert.equal(shapeAt(1.25), 'wide');
+  assert.equal(shapeAt(1.33), 'closed', 'the p of "Pulseboard" presses the lips, with no close before it');
+  assert.ok(!changes.some(change => change.time === 1.3), '"Try" runs straight into "Pulseboard"');
+  assert.equal(shapeAt(2.0), 'closed', 'closed across the pause');
+  assert.equal(shapeAt(2.7), 'closed', 'and after the last word');
+  assert.ok(new Set(changes.map(change => change.shape)).size >= 4, 'more than open and closed');
+  // No shape is shorter than about two frames.
+  const inWord = changes.filter(change => change.time >= 1.32 && change.time < 1.9);
+  assert.ok(inWord.slice(1).every((change, i) => change.time - inWord[i].time >= 0.069));
+  // Words without text keep the open-and-close rhythm, with varied open shapes.
+  const unread = speechChanges([{from: 0, to: 2, words: [[0, 0.3], [0.4, 0.7], [0.8, 1.1], [1.2, 1.5]]}]);
+  assert.deepEqual(unread.map(change => change.open), [true, false, true, false, true, false, true, false]);
+  assert.ok(new Set(unread.filter(change => change.open).map(change => change.shape)).size >= 3);
+});
+
+test('speech: every face shows the shape as its own open mouth at a size, in every drawing style', () => {
+  const speech = speechChanges([{from: 1, to: 2, words: [[1, 1.5, 'you'], [1.6, 2, 'make']]}]);
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}, {time: 3, pose: 'stand', expression: 'happy'}], {speech});
+  const mouth = (t, name = 'neutral') => ({closed: value(ops, t, `c-mouth-${name}`, 'opacity'), ...frameState(ops, t).get(`c-open-${name}`)});
+  assert.deepEqual(mouth(0.5), {closed: 1, opacity: 0, scaleX: 1, scaleY: 1});
+  assert.deepEqual(mouth(1.1), {closed: 0, opacity: 1, scaleX: VISEMES.wide[0], scaleY: VISEMES.wide[1]});
+  assert.deepEqual(mouth(1.3), {closed: 0, opacity: 1, scaleX: VISEMES.o[0], scaleY: VISEMES.o[1]});
+  assert.deepEqual(mouth(1.3, 'happy'), mouth(1.3), 'every face follows, so a change of expression keeps talking');
+  assert.equal(mouth(1.61).closed, 1, 'the m of "make"');
+  assert.deepEqual([mouth(2.5).closed, mouth(2.5).opacity], [1, 0]);
+  // The view gives each open mouth a pivot at the mouth's centre, so the size change stays in place, in both renderers.
+  const {params} = starterCharacter('maya');
+  for (const style of DRAWING_STYLES) {
+    const look = characterLook(params, {style});
+    const view = characterView(drawCharacter(style, params, look.colors, {id: 'c', joints: poseJoints('stand', {geometry}), expression: 'neutral', expressions: ['neutral', 'happy']}), {id: 'c', x: 0, y: 0, scale: 1});
+    const found = [];
+    const walk = (node, parent) => { if (node && typeof node === 'object') { if (/^c-open-/.test(node.id ?? '')) found.push({node, parent}); (node.children ?? []).forEach(child => walk(child, node)); } };
+    walk(view, null);
+    assert.equal(found.length, 2, style);
+    for (const {node, parent} of found) {
+      assert.equal(node.tag, 'div', `${style}: an HTML div, so both renderers scale it alike`);
+      assert.equal(node.style.transformOrigin, '0px 0px');
+      assert.equal(node.style.opacity, 0);
+      assert.ok(parent.style.top !== 0, `${style}: placed at the mouth`);
+    }
+  }
+});
+
+test('both renderers: an acted, talking scene with profiles reads the same through GSAP as through frameState, seeking in any order', async () => {
+  const {default: gsap} = await import('gsap');
+  const {runInNewContext} = await import('node:vm');
+  const {charactersTimeline} = await import('@launchclip/core/catalog-characters.mjs');
+  const {EMITTERS} = await import('../kit/hyperframes/catalog-characters.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8},
+    brand: {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}},
+    cast: {characters: [{id: 'maya', acting: 'bouncy'}, {id: 'theo', acting: 'nervous'}]}};
+  const scene = {id: 'talk', module: 'cast-scene', start: 0, end: 7, params: {set: 'phone', cast: [
+    {id: 'maya', cues: [{at: 1.5, pose: 'cheer', expression: 'delighted'}, {at: 4, pose: 'wave', expression: 'happy'}]},
+    {id: 'theo', says: [{from: 0.5, to: 2.4, words: [[0.5, 0.9, 'Try'], [0.95, 1.6, 'Pulseboard'], [1.9, 2.4, 'now']]}], cues: [{at: 3, pose: 'point'}]}]}};
+  const model = resolveModule(scene, story);
+  assert.deepEqual(model.content.actors.map(one => one.acting), ['bouncy', 'nervous']);
+  const ops = charactersTimeline(model);
+  const {motion} = EMITTERS['cast-scene'](model);
+  assert.doesNotMatch(motion, /onUpdate|Math\.random|Date/);
+  const objects = new Map();
+  const real = gsap.timeline({paused: true});
+  const target = selector => { if (!objects.has(selector)) objects.set(selector, {}); return objects.get(selector); };
+  runInNewContext(motion, {tl: {set: (s, v, p) => real.set(target(s), v, p), fromTo: (s, f, t, p) => real.fromTo(target(s), f, t, p)}});
+  let checked = 0;
+  for (const t of [0.3, 0.62, 1.2, 1.56, 1.7, 1.93, 3.1, 3.3, 4.2, 6.9, 5.0, 1.62, 0.97, 0.05]) {
+    real.seek(t, false);
+    for (const [id, props] of frameState(ops, t)) {
+      const object = objects.get(`#${id}`);
+      for (const [key, want] of Object.entries(props)) {
+        if (object?.[key] === undefined) continue;
+        assert.ok(Math.abs(object[key] - want) < 1e-3, `${id}.${key} at ${t}: gsap ${object[key]} vs frameState ${want}`);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 1000, `${checked} values compared`);
+});
+
+test('a saved character takes its acting profile from the story cast entry that uses it; the character file itself has none yet', async () => {
+  const {characterErrors, withSavedCharacters} = await import('@launchclip/core/characters/character.mjs');
+  const {resolveStoryCast} = await import('@launchclip/core/characters/cues.mjs');
+  const saved = {schema: 'launchclip.character.v1', id: 'pip', name: 'Pip', params: {skin: 'tan', hair: {style: 'curly', color: 'brown'}}};
+  assert.deepEqual(characterErrors(saved), []);
+  assert.match(characterErrors({...saved, acting: 'bouncy'}).join(), /acting is not supported/);
+  const {story, used} = withSavedCharacters({cast: {characters: [{id: 'pip', acting: 'bouncy'}]}}, id => (id === 'pip' ? saved : null));
+  assert.deepEqual(used, [{id: 'pip', from: 'pip'}]);
+  assert.equal(resolveStoryCast(story).members.get('pip').acting, 'bouncy');
+});

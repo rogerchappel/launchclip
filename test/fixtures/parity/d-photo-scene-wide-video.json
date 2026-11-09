@@ -1,0 +1,42 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: photo-scene, a video panning",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "photo-scene",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "media": "assets/shots/blocks-static.mp4",
+          "move": "pan-left",
+          "zoom": 0.12,
+          "scrim": "none"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}
