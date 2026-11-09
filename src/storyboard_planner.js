@@ -1040,6 +1040,7 @@ export class AnthropicPlannerClient {
   constructor({ model, apiKey, sdk } = {}) {
     if (!nonEmpty(model)) throw new Error("anthropic planner needs a model id");
     this.provider = "anthropic";
+    this.supportsImages = true;
     this.model = model;
     this.apiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
     if (!this.apiKey && !sdk) throw new Error("ANTHROPIC_API_KEY is not set");
@@ -1055,7 +1056,7 @@ export class AnthropicPlannerClient {
       model: options.model ?? this.model,
       max_tokens: Number(options.maxOutputTokens ?? 16_000),
       system: String(options.instructions ?? ""),
-      messages: [{ role: "user", content: typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {}) }]
+      messages: [{ role: "user", content: anthropicContent(options.input, options.images) }]
     });
     const text = (message?.content ?? []).filter((block) => block?.type === "text").map((block) => block.text).join("");
     const usage = message?.usage ?? {};
@@ -1073,6 +1074,32 @@ export class AnthropicPlannerClient {
       }
     };
   }
+}
+
+const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * The user turn for the Messages API. Text alone stays a string. With images
+ * ([{url}], the shape the other clients take: a base64 data: URL or an
+ * http(s) URL) it is image blocks first, then the text, as the API reference
+ * recommends. `detail` is an OpenAI field and is not sent.
+ */
+export function anthropicContent(input, images = []) {
+  const text = typeof input === "string" ? input : JSON.stringify(input ?? {});
+  if (!images?.length) return text;
+  return [...images.map(anthropicImage), { type: "text", text }];
+}
+
+function anthropicImage(image) {
+  const url = String(image?.url ?? "");
+  const data = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+  if (data) {
+    const mediaType = data[1].toLowerCase();
+    if (!ANTHROPIC_IMAGE_TYPES.has(mediaType)) throw new Error(`anthropic image input must be JPEG, PNG, GIF or WebP (got ${mediaType})`);
+    return { type: "image", source: { type: "base64", media_type: mediaType, data: data[2] } };
+  }
+  if (/^https?:\/\//i.test(url)) return { type: "image", source: { type: "url", url } };
+  throw new Error("anthropic image input needs a base64 data: URL or an http(s) URL");
 }
 
 // ---------------------------------------------------------------------------
