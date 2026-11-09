@@ -1,0 +1,4 @@
+interface:
+  display_name: "LaunchClip Character Design"
+  short_description: "Design and save animated characters"
+  default_prompt: "Use $launchclip-character-design to design a character for my video and show me its sheet."

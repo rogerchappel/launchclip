@@ -1025,7 +1025,7 @@ function firstJsonObject(text) {
 
 /**
  * "provider:model[@reasoning]" → a client with runStructured(). anthropic:<id>
- * uses @anthropic-ai/sdk (ANTHROPIC_API_KEY); openai, openrouter, ollama and
+ * uses @anthropic-ai/sdk (ANTHROPIC_API_KEY; request.images go as image content blocks); openai, openrouter, ollama and
  * compatible use src/model_provider.js (OPENAI_API_KEY, OPENROUTER_API_KEY, …).
  */
 export function createPlannerClient(modelSpec, options = {}) {
@@ -1041,7 +1041,33 @@ export function createPlannerClient(modelSpec, options = {}) {
   return { client: (options.createClient ?? createStructuredClient)(route, options), provider: route.provider, model: route.model, reasoning: route.reasoning };
 }
 
+// Requests asking for more output tokens than this are streamed.
+export const ANTHROPIC_STREAM_ABOVE = 16_000;
+const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * make's images ([{url: a data: URL or an https URL, detail?}]) → Anthropic
+ * image content blocks. A data URL becomes a base64 source, an https URL a
+ * url source; anything else (or a type the API does not take) throws, so a
+ * critic never reviews fewer sheets than it lists.
+ */
+export function anthropicImageBlocks(images) {
+  return (Array.isArray(images) ? images : []).map((image, index) => {
+    const url = String(image?.url ?? "");
+    const data = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+    if (data) {
+      if (!ANTHROPIC_IMAGE_TYPES.has(data[1])) throw new Error(`image ${index + 1} is ${data[1]}; the Anthropic API takes JPEG, PNG, GIF or WebP`);
+      return { type: "image", source: { type: "base64", media_type: data[1], data: data[2].replace(/\s+/g, "") } };
+    }
+    if (/^https:\/\//i.test(url)) return { type: "image", source: { type: "url", url } };
+    throw new Error(`image ${index + 1} is neither a base64 data URL nor an https URL`);
+  });
+}
+
 export class AnthropicPlannerClient {
+  // The Messages API takes images, so the headless critic can run on this client.
+  supportsImages = true;
+
   constructor({ model, apiKey, sdk } = {}) {
     if (!nonEmpty(model)) throw new Error("anthropic planner needs a model id");
     this.provider = "anthropic";
@@ -1056,12 +1082,17 @@ export class AnthropicPlannerClient {
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       this.sdk = new Anthropic({ apiKey: this.apiKey });
     }
-    const message = await this.sdk.messages.create({
+    const text_ = typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {});
+    // Images (the headless critic's contact sheets) go first, as image content blocks; the text follows them.
+    const images = anthropicImageBlocks(options.images);
+    const request = {
       model: options.model ?? this.model,
       max_tokens: Number(options.maxOutputTokens ?? 16_000),
       system: String(options.instructions ?? ""),
-      messages: [{ role: "user", content: typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {}) }]
-    });
+      messages: [{ role: "user", content: images.length ? [...images, { type: "text", text: text_ }] : text_ }]
+    };
+    // A large max_tokens is streamed: the SDK refuses a non-streaming request that could run past its timeout.
+    const message = request.max_tokens > ANTHROPIC_STREAM_ABOVE ? await this.sdk.messages.stream(request).finalMessage() : await this.sdk.messages.create(request);
     const text = (message?.content ?? []).filter((block) => block?.type === "text").map((block) => block.text).join("");
     const usage = message?.usage ?? {};
     return {

@@ -9,6 +9,8 @@ import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 import { DESCRIPTION_MODES } from "../asset_understanding.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
+import { conceptsMode } from "./concept_story.js";
+import { candidatesMode } from "./candidates.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
@@ -58,11 +60,17 @@ export const MAKE_FLAGS = Object.freeze([
   ["concurrency", {}],
   ["out", {}],
   ["replan", { boolean: true }],
+  // Concept and story before the script: on (default) or off (one script pass from the brief).
+  ["concepts", { setting: true }],
+  // Rendered candidates for the opening and one risky transition: on (default, with a model that can see) or off.
+  ["candidates", { setting: true }],
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
-  // Rounds of critic-driven repair after the first render (default 1; 0 ships the critic's verdict as is).
+  // Rounds of critic-driven repair after the first render (default 3; 0 ships the critic's verdict as is).
   ["critic-repairs", { setting: true }],
+  // Exit 0 when the video is needs-repair (a gate failed after the repair rounds); without it the CLI exits 2.
+  ["allow-needs-repair", { boolean: true }],
   ["long-form-visuals", { setting: true }],
   ["no-subject", { boolean: true, setting: true }],
   // With --no-subject: still track the presenter's head (local, no subject effects) so cards keep off the face.
@@ -142,6 +150,8 @@ export function makeOptionsFromFlags(flags = {}) {
     choices: flags.choices,
     out: flags.out,
     replan: Boolean(flags.replan),
+    concepts: flags.concepts,
+    candidates: flags.candidates,
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
     maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
     criticRepairs: flags["critic-repairs"] === undefined ? undefined : Number(flags["critic-repairs"]),
@@ -170,6 +180,8 @@ export function validateMakeOptions(options = {}) {
   const voice = String(options.voice ?? "kokoro").toLowerCase();
   if (!MAKE_VOICES.includes(voice)) throw new Error(`--voice must be kokoro or elevenlabs; got ${options.voice}`);
   researchMode(options.research);
+  conceptsMode(options.concepts);
+  candidatesMode(options.candidates);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);

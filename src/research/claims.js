@@ -189,7 +189,7 @@ export function mergeClaims(base, extra = []) {
     if (!claim?.text) continue;
     const existing = merged.find((entry) => key(entry.text) === key(claim.text));
     if (existing) {
-      for (const field of ["search", "subject", "expect"]) if (claim[field] && !existing[field]) existing[field] = claim[field];
+      for (const field of ["search", "subject", "expect", "passage"]) if (claim[field] && !existing[field]) existing[field] = claim[field];
       continue;
     }
     const parsed = extractClaims(claim.text)[0];
@@ -204,6 +204,7 @@ export function mergeClaims(base, extra = []) {
       entities: parsed?.entities ?? [],
       ...(claim.search ? { search: claim.search } : {}),
       ...(claim.subject ? { subject: claim.subject } : {}),
+      ...(claim.passage ? { passage: String(claim.passage) } : {}),
       origin: claim.origin ?? "model"
     });
   }

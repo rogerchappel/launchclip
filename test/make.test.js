@@ -24,7 +24,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     const finishCalls = [];
     const notices = [];
     const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish(finishCalls), notice: (line) => notices.push(line) };
-    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", cwd }, adapters);
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", concepts: "off", cwd }, adapters);
     const project = path.join(cwd, `launchclip-${slugify(PROMPT)}`);
     assert.equal(report.project, project);
     assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
@@ -58,7 +58,7 @@ test("make runs the motion lane end to end with a fake model, the test voice and
 
     // Rerun: script and storyboard are reused, no model calls.
     const before = calls.length;
-    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", cwd }, adapters);
+    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", musicVolume: "0.2", concepts: "off", cwd }, adapters);
     assert.equal(calls.length, before);
     assert.equal(again.stages.storyboard.status, "cached");
     assert.equal(again.script.reused, true);

@@ -332,9 +332,12 @@ tournament receipts:
   opinion, and unverified claims explicitly. For a video that states facts
   about the world (a release, a benchmark, a paper, a person), run
   `launchclip research SCRIPT.md --out research` (no model calls) and build it
-  from `research/RESEARCH.md`; fix or cut every flagged claim. See
-  `references/research.md` for the capture requests, cited data and
-  licence-clear media it also writes
+  from `research/RESEARCH.md`; fix or cut every flagged claim. With web tools
+  of your own, find each claim's primary source first and hand it in as
+  `claims.json` (`--claims`); then `launchclip research capture research`
+  records the source pages and stages the media. See
+  `references/research.md` for the `claims.json` shape, the capture
+  requests, cited data and licence-clear media
 - `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
   complete fresh-context scorecard, deterministic winner (`chosen: true`), and
   required improvements
@@ -510,6 +513,16 @@ and names the scenes that will show it. Aim the treatments at the story's
 cadence profile ([references/profiles.md](profiles.md)): coverage
 near its target, no undressed run past its limit. Then author the storyboard
 against the map.
+
+### Choose the cast
+
+The cast is `story.cast.characters`: starter characters by id (`launchclip
+cast list`), a style pack's generated cast, or characters designed for this
+video. When the brief describes its own people or supplies a reference image,
+design them first with the `launchclip-character-design` skill (`launchclip
+cast create <id> --describe "…"`, then look at `cast/<id>.sheet.png`) and
+list each by id: `{"id": "<id>"}`. A reference image maps to traits, never to
+a real person's likeness.
 
 ### Direction guardrails
 
