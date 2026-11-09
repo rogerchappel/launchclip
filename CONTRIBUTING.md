@@ -43,6 +43,36 @@ Mark a test as a media test when it takes more than a few seconds because it
 renders, encodes or drives a browser. The full renderer parity corpus is
 separate again: `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js`.
 
+### Add a parity fixture
+
+Every module needs at least one parity fixture: a small story that both
+renderers draw, compared frame by frame. `npm test` fails
+(`test/module_coverage.test.js`) when a module in `knownModules()` has no
+HyperFrames emitter, no Remotion component or no fixture.
+
+1. Write `test/fixtures/parity/<catalogue>-<module>[-<variant>].json` as
+   `{"story": {...}, "sceneId": "<scene id>"}`: a complete `launchclip.story.v1`
+   story with one scene for the module. Copy a neighbour and change the
+   params. Keep it short (3 to 6 seconds) and add a fixture per variant or
+   format only when it draws something the others do not.
+2. Media goes in `test/fixtures/parity/assets/` and must be redistributable:
+   generate it (FFmpeg test sources, drawn SVG) rather than using real
+   footage, and keep it small. A module that sits over a recording belongs in
+   `test/fixtures/parity-footage/` instead, as `{"project", "sceneId"}`
+   pointing at an example story under `examples/story/`.
+3. Run it and look at the side-by-side stills it writes:
+
+   ```bash
+   node scripts/parity.mjs test/fixtures/parity/<name>.json --out qa/parity/<name>
+   node scripts/parity-footage.mjs test/fixtures/parity-footage/<name>.json
+   ```
+
+4. If a sample falls under the 0.97 SSIM threshold, fix the renderer that is
+   wrong. Lower a fixture's `threshold` only when the stills differ
+   invisibly, and say why in its `threshold_note`.
+5. Take the module off `FIXTURE_ALLOWLIST` in `scripts/parity-coverage.mjs`.
+   `node scripts/parity-coverage.mjs` prints what is still uncovered.
+
 ## Pull Requests
 
 - Keep changes small and focused.

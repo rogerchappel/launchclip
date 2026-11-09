@@ -4,6 +4,11 @@
 
 ### Added
 
+- A coverage test in the fast suite (`test/module_coverage.test.js`) fails
+  when a module has no HyperFrames emitter, no Remotion component or no
+  per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
+  is covered, and CONTRIBUTING.md says how to add a fixture.
+
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or
