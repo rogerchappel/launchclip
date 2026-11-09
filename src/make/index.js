@@ -31,7 +31,7 @@ import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
 import { isLongForm, routeLane } from "./routing.js";
-import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
+import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { fallbackPlates, plateMotif } from "@launchclip/core/plates.mjs";
@@ -41,7 +41,7 @@ import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
-import { needsResize, planVoiceSpeed, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
+import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
@@ -605,8 +605,9 @@ async function prepareVoiceover(ctx) {
 
 // Motion: the script pass writes the narration, the script checks run on it
 // (one repair pass on errors), the voice is synthesised (Kokoro by default;
-// cached), and one resize pass runs when the measured take misses the target
-// duration by more than 15%.
+// cached), and one resize pass runs when the measured take runs more than 15%
+// over the target duration. The duration is a ceiling: a take that runs short
+// is kept, and the video is shorter.
 async function prepareMotion(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
@@ -644,7 +645,7 @@ async function prepareMotion(ctx) {
   if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for the narration (cached per text in .launchclip/voice)");
   let take = await synthesize(ctx, script.narration);
   if (!reuse && needsResize(take.duration, target)) {
-    ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+    ctx.say(`script: the take runs ${take.duration}s, over the ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
     const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
@@ -652,8 +653,11 @@ async function prepareMotion(ctx) {
     take = await synthesize(ctx, script.narration);
   }
   script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) };
+  // A take that runs short is not padded (the length is a ceiling): the script is checked at the length it runs.
+  const short = runsShort(take.duration, target);
+  if (short) script.take.short_of_target_seconds = round1(target - take.duration);
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
-  script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  script.check = checkScript({ narration: script.narration, duration: short ? Math.max(1, Math.round(take.duration)) : target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
   auditNarration(ctx, research, script.narration);
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
@@ -664,7 +668,8 @@ async function prepareMotion(ctx) {
   ctx.words = take.words;
   ctx.narrationText = script.narration;
   ctx.format = { ...routing.format, duration: round1(take.duration + 0.8) };
-  if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  if (short) report.notices.push(`the script had ${take.duration}s to say, so the video is ${ctx.format.duration}s (the ${target}s target is a ceiling; nothing is padded to reach it)`);
+  else if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
@@ -674,8 +679,10 @@ async function prepareMotion(ctx) {
 
 // Long form (docs/LONG_FORM_MAKE_RFC.md, src/make/long_form.js): an outline,
 // then each chapter written and voiced in order. The first chapter's take sets
-// the pace every later chapter is written to; a chapter far off its seconds
-// gets one resize pass. Every chapter is cached by its inputs, so a rerun
+// the pace every later chapter is written to. Each chapter's seconds are a
+// ceiling: a chapter far over them gets one resize pass, and one that comes
+// in short is kept short, its unused seconds going to the later chapters
+// with the most facts. Every chapter is cached by its inputs, so a rerun
 // rewrites and revoices only from the first chapter that changed.
 async function prepareLongForm(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
@@ -705,30 +712,36 @@ async function prepareLongForm(ctx) {
   const takes = [];
   let wpm = null;
   let tail = null;
+  // Each chapter's seconds: the outline's, plus what earlier chapters did not use.
+  const slots = outline.chapters.map((chapter) => chapter.seconds);
   await mkdir(path.join(project, MAKE_PATHS.chapterTakes), { recursive: true });
   for (const [index, plan] of outline.chapters.entries()) {
     const id = chapterId(plan.title, index);
-    const words = chapterWords(plan.seconds, wpm);
+    const seconds = slots[index];
+    const words = chapterWords(seconds, wpm);
     const key = hashValue({ outline: outlineHash, index, tail, words, voice });
     let chapter = previous.get(key) ?? null;
     ctx.progress?.({ stage: "prepare", step: "chapter", done: index, total: outline.chapters.length });
     if (!chapter) {
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (chapter ${index + 1}/${outline.chapters.length}, about ${words} words)`);
-      const written = await writeChapter({ ...writer, outline, index, previous: tail, words });
+      const written = await writeChapter({ ...writer, outline, index, previous: tail, words, seconds });
       addCost(report, `chapter-${index + 1}`, ctx.model, written);
-      chapter = { id, title: plan.title, key, seconds: plan.seconds, narration: written.narration, word_target: words, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
+      chapter = { id, title: plan.title, key, seconds, narration: written.narration, word_target: words, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
     }
     ctx.say(`voice: chapter ${index + 1}/${outline.chapters.length} (${voiceProvider})`);
     let take = await synthesizeChapter(ctx, chapter.narration, index, voice);
-    if (!previous.has(key) && chapterNeedsResize(take.duration, plan.seconds)) {
+    if (!previous.has(key) && chapterNeedsResize(take.duration, seconds)) {
       const pace = take.words.length / Math.max(1, take.duration) * 60;
-      const resizedWords = chapterWords(plan.seconds, pace);
-      ctx.say(`script: chapter ${index + 1} runs ${take.duration}s against ${plan.seconds}s; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const resized = await writeChapter({ ...writer, outline, index, previous: tail, words: resizedWords, resize: { previous: chapter.narration, measured_words: take.words.length, measured_seconds: take.duration } });
+      const resizedWords = chapterWords(seconds, pace);
+      ctx.say(`script: chapter ${index + 1} runs ${take.duration}s, over its ${seconds}s; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+      const resized = await writeChapter({ ...writer, outline, index, previous: tail, words: resizedWords, seconds, resize: { previous: chapter.narration, measured_words: take.words.length, measured_seconds: take.duration } });
       addCost(report, `chapter-${index + 1}-resize`, ctx.model, resized);
       chapter = { ...chapter, narration: resized.narration, word_target: resizedWords, passes: [...chapter.passes, { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
       take = await synthesizeChapter(ctx, chapter.narration, index, voice);
     }
+    // A chapter that came in short keeps its length; the later chapters with the most facts may use its spare seconds.
+    const handed = shareSpare(slots, outline.chapters, index, seconds - take.duration);
+    if (handed) ctx.say(`long form: chapter ${index + 1} ran ${round1(seconds - take.duration)}s short; ${handed}s go to later chapters with more material`);
     // The first take's pace sizes every chapter after it.
     if (index === 0) wpm = take.words.length / Math.max(1, take.duration) * 60;
     chapter = { ...chapter, id, take: { seconds: take.duration, words: take.words.length, cached: Boolean(take.cached) } };
@@ -757,7 +770,8 @@ async function prepareLongForm(ctx) {
   ctx.words = joined.words;
   ctx.narrationText = narration;
   ctx.format = { ...routing.format, duration: round1(joined.duration + 0.8) };
-  if (Math.abs(ctx.format.duration - target) / target > 0.1) report.warnings.push(`the narration runs ${joined.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  if ((target - ctx.format.duration) / target > 0.1) report.notices.push(`the chapters had ${joined.duration}s to say, so the video is ${ctx.format.duration}s (the ${target}s target is a ceiling; nothing is padded to reach it)`);
+  else if ((ctx.format.duration - target) / target > 0.1) report.warnings.push(`the narration runs ${joined.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   // The joined take is the voice: finish mounts it as supplied audio rather than synthesising the whole text again.
   ctx.audio = { words: MAKE_PATHS.words, voice: LONG_FORM_VOICE };
   ctx.narration = null;

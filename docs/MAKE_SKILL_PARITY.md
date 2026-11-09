@@ -57,6 +57,10 @@ briefs (see "Measuring parity").
 4. **Length is a ceiling.** A chapter shorter than its slot is not padded; the
    video runs shorter, or the outline gives the time to the chapter with more
    material. No resize pass that adds words.
+   *Landed:* the resize pass only trims a take that runs over; a short take
+   or chapter is kept. Tooling no longer stretches an outline to the
+   duration, a short chapter's spare seconds go to the later chapters with
+   the most facts, and every script and chapter prompt states the ceiling.
 5. **Primary sources and captures** (landed, opt-in with `--research on`). Research prefers the source of a claim
    (the company's announcement, docs or pricing page) over aggregator posts,
    drops a story with no primary source, and never names an aggregator in the

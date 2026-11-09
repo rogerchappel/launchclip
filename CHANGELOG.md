@@ -4,6 +4,12 @@
 
 ### Changed
 
+- `make` treats `--duration` as a ceiling. It still trims a script or a
+  chapter that runs more than 15% over, but it no longer asks the model to
+  add words to one that runs short: the video is shorter instead. In a long
+  video the outline is no longer stretched to the duration, and the seconds
+  a short chapter did not use go to the later chapters with the most facts.
+  `MAKE.json` notes it when a video runs well under its target.
 - `launchclip make` exits 2 when the video rendered but a gate still fails
   (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
   finished video (0) and a failed run (1). It used to exit 0.
