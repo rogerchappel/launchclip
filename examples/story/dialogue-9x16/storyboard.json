@@ -2,7 +2,7 @@
   "schema": "launchclip.story.v1",
   "title": "Test the rollback: a two-character dialogue",
   "lane": "voiceover-motion",
-  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 23.5, "platform": "youtube-shorts"},
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 20.5, "platform": "youtube-shorts"},
   "brand": {
     "colors": {"bg": "#14122b", "primary": "#6d5dfc", "accent": "#ffb547", "ink": "#14122b", "paper": "#f6f3ee"},
     "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
@@ -36,7 +36,7 @@
       "params": {"set": "desk-laptop", "cast": [
         {"id": "maya", "pose": "type", "expression": "focused"}
       ]}},
-    {"id": "ask", "module": "cast-scene", "start": "word:Did-0.25", "end": "word:Oh.-1", "in": {"type": "fade", "dur": 0.3},
+    {"id": "ask", "module": "cast-scene", "start": "word:Did-0.25", "end": "word:Oh.-1",
       "params": {"set": "standing", "cast": [
         {"id": "maya", "pose": "stand", "expression": "neutral", "says": "auto", "cues": [
           {"at": "word:It", "pose": "shrug", "expression": "happy"},
@@ -47,21 +47,21 @@
           {"at": "word:month.", "pose": "arms-crossed", "expression": "neutral"}
         ]}
       ]}},
-    {"id": "test", "module": "cast-scene", "start": "word:Oh.-1", "end": "word:Ten-0.25", "in": {"type": "fade", "dur": 0.3},
+    {"id": "test", "module": "cast-scene", "start": "word:Oh.-1", "end": "word:Ten-0.25",
       "params": {"set": "desk-laptop", "shot": "medium", "cast": [
         {"id": "maya", "pose": "type", "expression": "focused", "says": "auto", "cues": [
           {"at": "word:Oh.", "pose": "slump", "expression": "surprised"},
           {"at": "word:Better", "pose": "think", "expression": "frustrated"}
         ]}
       ]}},
-    {"id": "saved", "module": "cast-scene", "start": "word:Ten-0.25", "end": "word:Test#3-0.25", "in": {"type": "fade", "dur": 0.3},
+    {"id": "saved", "module": "cast-scene", "start": "word:Ten-0.25", "end": "word:Test#3-0.25",
       "params": {"set": "standing", "cast": [
         {"id": "maya", "pose": "stand", "expression": "happy", "cues": [
           {"at": "word:saved", "pose": "cheer", "expression": "delighted"}
         ]},
         {"id": "sam", "pose": "arms-crossed", "expression": "happy"}
       ]}},
-    {"id": "close", "module": "character-cameo", "start": "word:Test#3-0.25", "end": 23.2, "in": {"type": "fade", "dur": 0.3},
+    {"id": "close", "module": "character-cameo", "start": "word:Test#3-0.25", "end": 20.2,
       "params": {"character": "sam", "pose": "stand", "expression": "happy", "side": "left", "says": "auto",
         "card": {"kicker": "Before you ship", "title": "Test the rollback", "body": "Ten minutes now, or midnight later."},
         "cues": [{"at": "word:Then", "pose": "point", "expression": "delighted"}]}}
