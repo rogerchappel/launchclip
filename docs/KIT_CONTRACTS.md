@@ -3192,6 +3192,10 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | Field | Type | What uses it |
 | --- | --- | --- |
 | `description` | text ≤ 500 | the manifest line the planner reads; clip matching (`matchScore`) |
+| `shows` | a few words, ≤ 60 | what the file is ("pricing page", "dashboard", "onboarding flow", "product photo", "person on camera"): the manifest line; clip matching (weighted double); which file a prompt's "show the pricing page" means |
+| `text` | up to 12 lines, ≤ 120 each | the key words readable on screen: the manifest line; clip matching |
+| `fits` | up to 6 phrases | the story beats the file suits ("the price or offer line", "how it works"): the manifest line; clip matching |
+| `feature` | true/false | true: the user wants this file in the video (see "Featured files" below); false: never treat it as featured |
 | `subjects`, `tags` | lists of words or phrases | the manifest line; clip matching (weighted double) |
 | `windows` | `[{start, end, quality?, note?}]` seconds into the clip | the manifest line (with how to use them); tooling moves a video scene whose `params.media.sourceStart` (plus its length) is outside every window to the best window's start (`snapMediaWindows`: one long enough first, then quality, then the note's match); the fill's in points |
 | `quality` | 0–1 | the manifest line (below 0.4 it says "use only when nothing better fits"); the media order (higher first); clip choice |
@@ -3200,6 +3204,63 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | `role` | the inventory's roles for the file's kind (`talking-head`, `screen-recording`, `b-roll`; `logo`, `screenshot`, `product-image`; `voiceover`, `music`) | overrides the heuristic (kept in `entry.detected`); a `b-roll` clip is never the base, even with speech on it |
 
 `ASSETS.json` entries carry `notes`; the routing's media items carry them too.
+
+### Described automatically (`src/asset_understanding.js`)
+
+`launchclip make` gives every handed-in image (logos aside) and video these
+notes even when the caller wrote none, so the planner knows what each file
+shows and where it fits. Per file, the first source that applies:
+
+| Source | When | What it costs |
+| --- | --- | --- |
+| `notes` | the caller's sidecar or `inventory.json` already has `shows` or `description` | nothing: no model is called and nothing is computed |
+| `vision` | the run's model can take images (OpenAI, OpenRouter and compatible endpoints) | one PAID call per file: the image scaled to 1024 px, or four frames of a video (at 10, 35, 65 and 90% of its length) with their times |
+| `local` | no model that can see, `--asset-descriptions local`, or the model call failed | nothing: the file name and folder, the inventory's role, the frame's shape, and the words Tesseract reads when `tesseract` is installed |
+
+The caller's own fields always win over a computed one, field by field.
+`windows` are computed for a video only: the model's, or locally the
+stretches of at least 1.5 s where something moves, given only when the clip
+is still for at least 15% of its length (a clip that moves throughout needs no
+windows). A local description says in its text that no model looked at the
+file, and the manifest line tells the planner to trust the narration over it.
+
+Results are cached by the file's SHA-256, one JSON per file, in
+`~/.cache/launchclip/asset-descriptions` (`LAUNCHCLIP_CACHE`, or
+`LAUNCHCLIP_ASSET_DESCRIPTIONS_DIR` for this cache alone; an embedding app's
+`withStateDirs` cache when set). A file is sent to the model once, however
+many projects it is handed to; a cached model description is reused even in a
+run with no model. One run sends at most 24 new files to the model
+(`MAX_VISION_FILES`) and describes the rest locally.
+
+`--asset-descriptions auto|local|off` (default `auto`): `local` never calls a
+model, `off` leaves the inventory as the heuristics and the caller's notes
+made it. Each described `ASSETS.json` entry carries `understanding: {source,
+sha256, cached, model?}`, and `MAKE.json` `assets.descriptions` counts the
+files per source.
+
+### Featured files
+
+A handed-in file the user clearly meant to be in the video must not be left
+out. `featuredAssets()` picks them, each with its reason:
+
+1. its notes say `feature: true`;
+2. the prompt names the file (`pricing-page.png`, or a multi-word file name
+   written with spaces);
+3. the prompt asks to show what it is ("show the pricing page") and it is
+   the only file that is one;
+4. three or fewer showable files were handed in (`FEW_ASSETS`).
+
+Rules 3 and 4 skip a file whose notes give it a `quality` under 0.4, and
+`feature: false` opts a file out of all of them. `media.must_use` files are
+the constraints' to enforce and are not listed again.
+
+The planner's prompt lists the featured files. A storyboard that shows none
+of one gets a repair error (`featured: assets/pricing-page.png (a pricing
+page) is not in the storyboard…`); like the hook and card checks, a plan that
+fails only this still ships when the repairs run out, with the error as a
+warning in `MAKE.json`. `MAKE.json` `assets.featured` lists the files and
+reasons, and `assets.unused_featured` the ones the storyboard left out. For a
+hard rule, use `media.must_use`.
 
 ## Subject layer (`kit/core/subject-layer.mjs`)
 

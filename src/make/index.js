@@ -30,6 +30,7 @@ import { getVoiceProvider } from "../voice/index.js";
 import { VOICE_SETTINGS, narrationDocument, narrationRequest, normalizeVoiceSettings, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
+import { describeMakeAssets, featuredForMake } from "./describe.js";
 import { validateMakeOptions } from "./options.js";
 import { isLongForm, routeLane } from "./routing.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
@@ -290,11 +291,14 @@ async function stageInventory(ctx) {
     if (missing.length) throw new Error(`constraints: must_use ${missing.map((entry) => entry.src).join(", ")} ${missing.length === 1 ? "is" : "are"} not in --assets ${assetsDir}`);
     report.constraints = { ...report.constraints, excluded: (inventory.excluded ?? []).map((entry) => entry.path) };
   }
+  // What each image and clip shows (src/asset_understanding.js): the caller's notes, the model, or a local guess.
+  const described = await describeMakeAssets(ctx, inventory);
+  for (const result of described.results) addCost(report, "asset-description", ctx.model, result);
   inventory.entries.push(...brand);
   ctx.inventory = inventory;
   state.inventory = inventory.entries.map((entry) => [entry.path, entry.fingerprint]);
   await writeJson(path.join(project, MAKE_PATHS.assets), inventory);
-  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}) };
+  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}), ...(described.described.length ? { descriptions: described.counts } : {}) };
   return { status: "done" };
 }
 
@@ -1035,7 +1039,9 @@ async function stageStoryboard(ctx) {
   const allowed = new Set([...manifest.map((item) => item.src), ...(ctx.base ? [ctx.base.src] : []), ...Object.values(fixedAudio).filter((value) => String(value).startsWith("assets/"))]);
   // The supplied clips and images, with their notes: the planner's
   // deterministic pass places from these and snaps videos into usable windows.
-  const media = routing.media.map((item) => ({ src: `assets/${item.path}`, kind: item.kind, duration: item.duration ?? null, width: item.width, height: item.height, description: item.description, ...(item.notes ? { notes: item.notes } : {}) }));
+  const media = routing.media.map((item) => ({ src: `assets/${item.path}`, kind: item.kind, duration: item.duration ?? null, width: item.width, height: item.height, description: item.description, ...(item.notes ? { notes: item.notes } : {}), ...(item.understanding ? { understanding: item.understanding } : {}) }));
+  // The files the user clearly meant to be in the video: a plan that leaves one out is repaired, then warned about.
+  const featured = featuredForMake(ctx, media);
   for (const entry of constraints?.must_use ?? []) {
     if (media.some((item) => item.src === storySrc(entry.src))) continue;
     const ignored = routing.ignored.find((item) => item.path === entry.src);
@@ -1078,6 +1084,7 @@ async function stageStoryboard(ctx) {
     ...(assets ? { assets, project: ctx.project, minShots, ...(cardBackdrops ? { cardBackdrops } : {}) } : {}),
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
+    ...(featured.length ? { featured } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
     ...(subjectTrack ? { subjectTrack } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
@@ -1088,7 +1095,8 @@ async function stageStoryboard(ctx) {
   if (assets) report.shots = plan.shots ?? [];
   // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
   if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
-  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ") || warning.startsWith("face: ")) report.warnings.push(warning);
+  for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ") || warning.startsWith("face: ") || warning.startsWith("featured: ")) report.warnings.push(warning);
+  if (featured.length && report.assets) report.assets = { ...report.assets, featured: featured.map((item) => ({ src: item.src, reason: item.reason })), unused_featured: (plan.warnings ?? []).filter((warning) => warning.startsWith("featured: ")).map((warning) => warning.slice(10).split(" ")[0]) };
   if (laidOut) report.layout = { name: laidOut, sections: (plan.storyboard?.sections ?? []).map((section) => ({ id: section.id, layout: section.layout, start: section.start, end: section.end })) };
   // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
   if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };

@@ -998,6 +998,26 @@ measured audio plus a short tail.
   over 20 levels); camera footage is noisy and a lit set is soft. Filename
   hints (talk, podcast, presenter / screen, demo, capture) override. No face
   detection.
+
+**Asset descriptions** (`--asset-descriptions auto|local|off`, default
+`auto`): after classifying, make says what each image (logos aside) and clip
+shows, so the script and the storyboard put it on the right line. Each
+`ASSETS.json` entry gets `notes` (`shows`, `description`, `text`, `fits`,
+`orientation`, and `windows` for a clip) and `understanding.source`:
+
+- `notes`: the file's own sidecar (`<file>.json`) or `inventory.json` already
+  has `shows` or `description`. Nothing is computed and no model is called.
+- `vision`: the run's model can take images (OpenAI, OpenRouter, compatible
+  endpoints). One PAID call per new file, cached by the file's SHA-256 in
+  `~/.cache/launchclip/asset-descriptions`, at most 24 new files a run.
+- `local`: no such model, or `--asset-descriptions local`. A guess from the
+  file name and folder, the classified role, where a clip moves, and the words
+  Tesseract reads when it is installed.
+
+A file you clearly meant to feature (three files or fewer handed in, named in
+the prompt, the one file that is what the prompt asks to show, or `feature:
+true` in its notes) that the storyboard never shows is repaired, then reported
+in `MAKE.json` as `assets.unused_featured` with a `featured:` warning.
 - `brand.json` (colour roles and fonts) becomes the storyboard brand; a
   `style.json` becomes the style pack (copied into
   `.launchclip/styles/<name>/` so finish resolves it); `.md`/`.txt` notes join
@@ -1613,7 +1633,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, choose the concept and the story (five concepts judged in a fresh context, the winner written and edited as a story; --concepts off skips it), plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. Exit codes: 0 when the video is ready or ready-for-review, 1 when a stage failed, 2 when the video rendered but a gate still fails after the critic's repair rounds (MAKE.json status needs-repair; --allow-needs-repair exits 0 instead). --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written. --pace sets the narration rate (short-form defaults to fast, about 215 words a minute, and the ElevenLabs voice speed follows); --cta-keyword WORD with --cta-offer "..." ends the script and the post caption on "Comment WORD and I'll send you ..."; --episode with --choices A,B,C makes one episode of a series that ends on a viewer choice. --research auto (the default) checks a news or research brief against primary sources before the script is written (news wording, a dated event, a named release or a question of fact turn it on; a product video or a brief with its own script leaves it off); on and off decide it yourself, and MAKE.json says which and why under research_decision.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--pace calm|standard|fast] [--cta-keyword WORD] [--cta-offer "..."] [--episode "Episode 2" --choices A,B,C] [--style <name|path> | --seed <hex>] [--density <0-1>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--sfx generated|kit|off|earshot] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--concepts on|off] [--candidates on|off] [--critic | --no-critic] [--critic-repairs 3] [--allow-needs-repair] [--max-repairs 4] [--long-form-visuals model|rules] [--no-subject [--face-track]] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--research auto|on|off] [--asset-provider-cmd <command>] [--min-shots <n>] [--card-backdrops off|footage] [--layout full|stacked|overlay] [--capture-cmd <command>] [--capture-concurrency <n>] [--base-edited] [--base-transcript <word-timed.json>] [--constraints <constraints.json>] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--pace calm|standard|fast] [--cta-keyword WORD] [--cta-offer "..."] [--episode "Episode 2" --choices A,B,C] [--style <name|path> | --seed <hex>] [--density <0-1>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--sfx generated|kit|off|earshot] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--concepts on|off] [--candidates on|off] [--critic | --no-critic] [--critic-repairs 3] [--allow-needs-repair] [--max-repairs 4] [--long-form-visuals model|rules] [--no-subject [--face-track]] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--research auto|on|off] [--asset-provider-cmd <command>] [--min-shots <n>] [--card-backdrops off|footage] [--asset-descriptions auto|local|off] [--layout full|stacked|overlay] [--capture-cmd <command>] [--capture-concurrency <n>] [--base-edited] [--base-transcript <word-timed.json>] [--constraints <constraints.json>] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```

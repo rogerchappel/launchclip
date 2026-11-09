@@ -40,7 +40,8 @@ import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
-import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
+import { featuredPrompt, unusedFeatured } from "./asset_understanding.js";
+import { bareNotesLine, mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 
@@ -95,7 +96,7 @@ function bandRepair(band) {
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null, featured = null } = options;
   // constraints: the app's hard rules (src/constraints.js, parsed); media:
   // the supplied clips and images [{src, kind, duration?, width?, height?,
   // notes?, description?}] the deterministic pass may place, whose notes'
@@ -183,7 +184,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -385,6 +386,9 @@ export async function planStoryboard(options = {}) {
         const footage = Boolean(assets) && lane !== "footage-led";
         const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
+        // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
+        const left = unusedFeatured(checked.storyboard, featured ?? []);
+        if (left.length) { checked.errors = [...checked.errors, ...left]; checked.ok = false; }
         if (laidOut) {
           const resolved = resolvedOrNull(checked.storyboard, wordList, beats);
           const laid = layout.check(resolved ?? checked.storyboard, { seconds });
@@ -676,7 +680,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: "];
+const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: "];
 
 // A card's text that only holds its place: dashes, question marks, an
 // ellipsis, "TBD". A model with nothing to say fills a list or a table with
@@ -1148,7 +1152,7 @@ function sceneTimes(storyboard, words, beats) {
 
 // assets-relative src → the notes text the constraints prompt quotes for a must_use file.
 function mediaNoteMap(media) {
-  return new Map(media.filter((item) => item?.notes).map((item) => [String(item.src).replace(/^assets\//, ""), mediaNotesLine(item).replace(/^ Notes from the app: /, "").replace(/\.$/, "")]));
+  return new Map(media.filter((item) => item?.notes).map((item) => [String(item.src).replace(/^assets\//, ""), bareNotesLine(item)]));
 }
 
 function moduleIds(story) {

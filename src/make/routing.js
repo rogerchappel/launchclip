@@ -110,7 +110,7 @@ export function routeLane(inventory, options = {}) {
 }
 
 function mediaItem(entry, kind) {
-  return { path: entry.path, kind, role: entry.role, description: entry.description, width: entry.media?.width ?? null, height: entry.media?.height ?? null, ...(kind === "video" ? { duration: entry.media?.duration ?? null } : {}), ...(entry.notes ? { notes: entry.notes } : {}) };
+  return { path: entry.path, kind, role: entry.role, description: entry.description, width: entry.media?.width ?? null, height: entry.media?.height ?? null, ...(kind === "video" ? { duration: entry.media?.duration ?? null } : {}), ...(entry.notes ? { notes: entry.notes } : {}), ...(entry.understanding ? { understanding: entry.understanding } : {}) };
 }
 
 export function resolveAspect(flag, base) {
