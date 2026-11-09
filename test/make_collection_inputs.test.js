@@ -27,7 +27,7 @@ test("make follows a collection's rules in the script pass, the brief and the cr
     const { calls, model } = fakeModel({ vision: true });
     const criticCalls = [];
     const critic = async (args) => { criticCalls.push(args); return { status: "written", verdict: "ship", findings: 0, reviewed: [], unreviewed: [], warnings: [], model: "gpt-5.6-luna" }; };
-    const report = await runMake(PROMPT, { assets, brandAssets: brand, rules: `\n${RULES}\n`, voice: "test", voiceId: "af_heart", music: "synth", cwd, out: "video" }, { env: {}, client: model, inventory, finish: fakeFinish([]), critic, notice() {} });
+    const report = await runMake(PROMPT, { assets, brandAssets: brand, rules: `\n${RULES}\n`, voice: "test", voiceId: "af_heart", music: "synth", candidates: "off", cwd, out: "video" }, { env: {}, client: model, inventory, finish: fakeFinish([]), critic, notice() {} });
     assert.notEqual(report.status, "failed", JSON.stringify(report.stages));
     const project = path.join(cwd, "video");
 
