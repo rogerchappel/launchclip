@@ -241,6 +241,24 @@ modules `drop-grid`, `live-counter` and `live-bars`. Their media is drawn or
 generated: two SVG stills, a static FFmpeg clip and SVG brand artwork under
 `test/fixtures/parity/assets/`.
 
+In CI the corpus is rendered three ways (KIT_CONTRACTS.md, "Parity
+harness"): the smoke on every pull request, a rotating twelfth of the
+per-module fixtures on every pull request, and the whole corpus nightly and
+on a pull request that changes the kit, a fixture or the harness. The sizes
+come from measured runs on ubuntu-latest: about 5 s a fixture at two sample
+times and 14 s at all of them, so a twelfth is a 4-minute job and a
+whole-corpus shard renders for about 9 minutes.
+
+The first whole-corpus run on Linux (2026-11-09, 467 fixtures at every
+sample time) passed 462. The corpus had only ever run in full on macOS. The
+five that fail on Linux are listed in
+`test/fixtures/parity-known-failures.json` and are open bugs:
+`b-media-window-image` and `b-media-window-video` mid-entrance (0.944 and
+0.928), `h-commit-card-glass-landscape` (0.967),
+`h-diff-view-glass-landscape` (0.952, the code rows sit about a pixel apart)
+and `h-social-post-native-portrait` (0.904, the card's glow mid-fade). No
+threshold was changed for them.
+
 Known difference: HyperFrames draws a `<video>`'s frames without the
 element's `box-shadow`, where Remotion draws it. The media layouts put a video
 window's drop shadow and ring on a twin element under the video
