@@ -324,6 +324,42 @@ in `rejected`. YouTube, streaming services and social video hosts are blocked
 `query` and `beat`. Icons, music and SFX are resolved by the media-use
 skill, not here.
 
+Besides the metaphor queries, research looks for what each verified claim
+is about (the organisation, place or event it names; up to three queries).
+Those items carry `claims: [id]`, so a planner knows which claim a photo
+can sit beside.
+
+**Staging and placing.** `assets.json` holds links. `launchclip research
+capture` (and `make`, when it researches) downloads each item into
+`assets/research/<id>.<ext>` (`src/research/stage_media.js`): a sized
+preview for a Commons image, the medium rendition from NASA's file list,
+the smallest full MP4 of an Internet Archive item, and direct files
+elsewhere; at most 8 items, 15 MB an image and 80 MB a video, public hosts
+only. Each staged entry gains `local`, `bytes`, `sha256` and
+`downloaded_from`; one that cannot be staged gains `not_staged` with the
+reason.
+
+The licence is checked again at this step, not trusted from the file:
+an entry whose licence is missing or not in the clear list, that has no
+author or source page, or that sits on a blocked host is never downloaded.
+Only staged, licence-clear entries are offered to the planner. Each
+inventory line says what the item shows, the claim it supports (or
+"Illustration only: it is not evidence for any claim"), its licence and
+credit, and how to place it (`media-window`, `photo-scene`):
+
+```text
+assets/research/harbour.jpg — image, archive photo "Northside Harbour at dawn" from Wikimedia Commons, 4000×3000, found for "Port Authority". Supports claim c001 ("The Port Authority reopened Northside Harbour."). Licence: CC BY-SA 4.0; credit "“Northside Harbour at dawn” by A. Photographer, CC BY-SA 4.0, via Wikimedia Commons" (publish.json carries it). Use as {"module": "media-window", …} or a full-bleed {"module": "photo-scene", …} on the line it illustrates.
+```
+
+In `make` the storyboard may reference only paths in its asset manifest,
+so nothing unstaged or unclear can be placed. `publish.json` then lists
+`credits` (asset, title, author, licence, licence URL, source page and the
+attribution line) for every research item the storyboard uses and appends
+the attribution lines to the description, lists `sources` (URL, title,
+publisher, dates) for every recorded page shown, and warns
+(`licence: … remove it`) about any `assets/research/` file placed without a
+cleared licence on record.
+
 `logos.json` (`launchclip.research-logos.v1`, `src/research/logos.js`): each
 organisation the research names, resolved to its official domain (Wikidata's
 official website, or `logoDomains`), then its logo fetched at run time from

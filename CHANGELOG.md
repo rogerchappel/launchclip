@@ -4,6 +4,21 @@
 
 ### Added
 
+- The photos and footage research finds can now be placed. Licence-clear
+  stock and archive items (Wikimedia Commons, NASA, Internet Archive,
+  Library of Congress, and Pexels or Pixabay with a key) are downloaded
+  into `assets/research/` and listed in the planner's asset manifest with
+  what each shows, the verified claim it supports, and its licence and
+  credit, for `media-window` and `photo-scene`. Research also looks for
+  media on what each verified claim is about. The licence is checked again
+  before download, and nothing unknown or incompatible is staged or
+  offered.
+- `publish.json` gains `credits` (licence and attribution for every
+  research item the storyboard uses, also appended to the description) and
+  `sources` (every recorded source page shown), and warns about research
+  media placed without a cleared licence.
+- Capture requests list the verified claims they back (`claims`).
+
 - A missing evidence capture is loud. When a verified claim wanted its
   source page on screen and none was recorded (no Playwright or Chromium, a
   paywall, a bot check, a sign-in wall), `make` now lists each claim with
