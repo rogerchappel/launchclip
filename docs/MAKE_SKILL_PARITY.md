@@ -54,6 +54,13 @@ briefs (see "Measuring parity").
 3. **Concept and story.** Before the script: an angle, five concepts judged in
    a fresh context, the chosen story edited for retention, then the script.
    Long form keeps its chapters, but the outline comes from the story.
+   *Landed:* `make` runs the concept tournament and the retention story that
+   `produce` already had (`src/make/concept_story.js`), writes `CONCEPTS.json`
+   and `STORY.json`, and writes the script on the story. A long video's story
+   is a spine of at most three minutes; the outline is derived from its
+   beats. `--concepts off` keeps the one-pass script. The skill also writes
+   `ANGLE.json` before its concepts; `make` still finds the angle in the
+   script pass.
 4. **Length is a ceiling.** A chapter shorter than its slot is not padded; the
    video runs shorter, or the outline gives the time to the chapter with more
    material. No resize pass that adds words.

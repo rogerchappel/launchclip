@@ -20,6 +20,14 @@
 
 ### Added
 
+- `make` chooses a concept and a story before it writes the script, as the
+  create-video skill does: five concepts, a judge that sees only the brief
+  and the concepts, then the winner written as a story and tightened by an
+  editor. `CONCEPTS.json` and `STORY.json` are written beside the script,
+  the script is written on the story, the storyboard planner is given the
+  concept's visual world, and a long video's outline is derived from the
+  story. It adds four model calls before the script. `--concepts off` skips
+  it, and a concept stage that fails is a warning, not a failed video.
 - A make-vs-skill parity harness: `npm run eval:make-parity -- <make-project>
   <skill-project> --kind news` scores two finished projects made from one
   brief (distinct modules a minute, the typography share, cuts and visual
