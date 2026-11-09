@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createHttp, robotsAllow, robotsRules } from "../src/research/http.js";
 import { datedClaims, researchNotes, runResearch } from "../src/research/index.js";
-import { currentEventItems, feedLinks, findNewsLeads, freshDaysOption, freshnessWindow, gdeltDate, headlineOf, newsQueries, outboundLinks, parseFeed, storyOwners } from "../src/research/news.js";
+import { currentEventItems, feedLinks, findNewsLeads, freshDaysOption, freshnessWindow, gdeltDate, headlineOf, newsQueries, onTopic, outboundLinks, parseFeed, storyOwners } from "../src/research/news.js";
 
 const FIXTURE = path.join(import.meta.dirname, "fixtures", "research", "news", "recording.json");
 const NOW = "2026-11-10T00:00:00.000Z";
@@ -176,6 +176,11 @@ test("small parsers: GDELT dates, current-events items, headlines, owners and ci
   assert.equal(headlineOf("Nimbus AI pauses EU rollout of Nimbus-7B - Wirepost"), "Nimbus AI pauses EU rollout of Nimbus-7B");
   assert.equal(headlineOf("Nimbus AI"), "Nimbus AI");
   assert.ok(storyOwners("Nimbus Unveils New Model For Phones").includes("Nimbus"));
+  // A title that is only a site's name names no one: every site owns its own name.
+  assert.deepEqual(storyOwners("Legislation . gov . uk"), []);
+  assert.equal(onTopic("Mozilla ships a new Firefox", ["mozilla"]), true);
+  assert.equal(onTopic("How audio fingerprinting tracks you", ["mozilla"]), false);
+  assert.equal(onTopic("anything", []), true);
   assert.ok(!storyOwners("Tech News Today: Nimbus Unveils").includes("News"));
   assert.deepEqual(outboundLinks('<a href="/local">a</a><a href="https://nimbus.ai/press">b</a><a href="mailto:x@y.z">c</a><a href="#top">d</a>', "https://technewsdesk.example/story"), ["https://nimbus.ai/press"]);
 });

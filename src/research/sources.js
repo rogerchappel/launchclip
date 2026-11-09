@@ -12,7 +12,7 @@
 import { assertPublicUrl } from "../evidence/capture.js";
 import { safeHost } from "./http.js";
 import { officialDomain } from "./logos.js";
-import { ageDays, findNewsLeads, headlineOf, newsQueries, outboundLinks, storyOwners } from "./news.js";
+import { ageDays, findNewsLeads, headlineOf, newsQueries, nameWords, onTopic, outboundLinks, storyOwners } from "./news.js";
 
 // Hosts whose pages are the party's own words about its own work.
 const PRIMARY_HOSTS = ["github.com", "huggingface.co", "arxiv.org", "openreview.net", "proceedings.neurips.cc", "aclanthology.org"];
@@ -142,8 +142,13 @@ async function newsSources(http, entities, options) {
     if (!isPublic(lead.url)) continue;
     const snapshot = await http.snapshot(lead.url, { published_fallback: lead.published_at ?? undefined });
     if (!snapshot?.text) { stories.push({ title: lead.title, url: lead.url, publisher: null, published_at: lead.published_at ?? null, age_days: ageDays(lead.published_at, now), via: lead.via, source_class: null, primary: false, status: "not-fetched", reason: notFetched(http.failure?.(lead.url)) }); continue; }
+    // A page that never mentions what the brief asks about is no story, wherever the lead came from (a company's own feed aside).
+    if (!lead.via.some((via) => via.startsWith("feed:")) && !onTopic(`${lead.title ?? ""} ${snapshot.title ?? ""} ${String(snapshot.text).slice(0, 2000)}`, queries)) {
+      stories.push({ title: headlineOf(snapshot.title ?? lead.title ?? snapshot.url), url: snapshot.url, publisher: snapshot.publisher ?? null, published_at: snapshot.published_at ?? null, age_days: ageDays(snapshot.published_at, now), via: lead.via, source_class: null, primary: false, status: "off-topic" });
+      continue;
+    }
     // Whose story it is: the names the brief gives (and each capitalised word of them: "SpaceX Starship" is SpaceX's), plus the lead's own headline.
-    const names = [...new Set([...owners, ...owners.flatMap(storyOwners), ...storyOwners(lead.title ?? snapshot.title ?? "")])];
+    const names = [...new Set([...owners, ...owners.flatMap(nameWords), ...storyOwners(lead.title ?? snapshot.title ?? "")])];
     const tags = classifySnapshot(snapshot, names);
     // An old page may still back a claim the brief makes (the ledger then flags it as old news), but it is no story.
     const fresh = record(snapshot, lead, tags);
