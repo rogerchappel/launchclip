@@ -76,6 +76,15 @@ briefs (see "Measuring parity").
    logos join the inventory (`logo-row`, `brand-lockup`).
 6. **Candidates.** The opening and one risky boundary render as candidates
    from the pixels, as the skill does, before the draft.
+   *Landed for short motion videos:* a second opening designed in a separate
+   call that never sees the first, and a different kind of move at the
+   riskiest transition in the first 30 seconds. Each candidate is three
+   stills from the project's renderer, scored from the frames on the skill's
+   ten fields; the winner goes into `storyboard.json` and the receipt is the
+   skill's `qa/rendered-candidates.json`. *Not yet:* long form (its
+   storyboard comes from the beat map, which a candidate would have to
+   change) and footage-led videos. Stills show blur at the middle of a move
+   but not the move itself; the skill may use encoded clips.
 
 The model matters most in phases 1 to 3. `make` already takes an Anthropic
 key; a stronger model there is a configuration choice, not a code change.
