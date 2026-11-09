@@ -116,7 +116,7 @@ export async function runCli(argv, io = {}) {
       result = await runSkeletonsCommand(skeletonsInvocation.action, skeletonsInvocation.target, flags);
     } else if (command === "cast") {
       const { runCastCommand } = await import("./cast.js");
-      result = await runCastCommand(castInvocation.action, castInvocation.name, flags);
+      result = await runCastCommand(castInvocation.action, castInvocation.name, castInvocation.action === "export" ? { ...flags, names: castInvocation.names } : flags);
     } else if (command === "collection" || command === "recipe") {
       const { collectionNewCommand, collectionShowCommand, formatCollectionShow, recipeNewCommand } = await import("./collection_cli.js");
       if (command === "recipe") result = await recipeNewCommand(collectionInvocation.target, flags);
@@ -487,10 +487,14 @@ async function runStyleCommand(action, name, flags, names = []) {
 }
 
 function parseCastInvocation(action, rest) {
-  if (!action) throw new Error("Missing cast action; use list, show, sheet or sprites");
-  if (!new Set(["list", "show", "sheet", "sprites"]).has(action)) throw new Error(`Unknown cast action: ${action}; use list, show, sheet or sprites`);
+  const actions = ["list", "show", "sheet", "create", "edit", "options", "export", "import", "sprites"];
+  if (!action) throw new Error(`Missing cast action; use ${actions.slice(0, -1).join(", ")} or sprites`);
+  if (!actions.includes(action)) throw new Error(`Unknown cast action: ${action}; use ${actions.slice(0, -1).join(", ")} or sprites`);
+  // export takes every leading id: launchclip cast export nova rae --out pack
+  const leading = rest.findIndex((token) => token.startsWith("--"));
+  const names = action === "export" ? rest.slice(0, leading < 0 ? rest.length : leading) : [];
   const hasName = rest[0] && !rest[0].startsWith("--");
-  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+  return { action, name: hasName ? rest[0] : null, names, flagArgs: action === "export" ? rest.slice(names.length) : hasName ? rest.slice(1) : rest };
 }
 
 function parseStyleInvocation(action, rest) {
@@ -528,7 +532,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "no-sheet") {
       flags[name] = true;
       continue;
     }

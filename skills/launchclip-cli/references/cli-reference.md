@@ -1190,13 +1190,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `skills path`: Print the path of a bundled skill.
 
   ```text
-  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design]
   ```
 
 - `skills install`: Install the bundled skills for Codex or Claude.
 
   ```text
-  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design|all] [--force]
   ```
 
 - `style create`: Create a style pack from a video, a style directory or reference media.
@@ -1308,22 +1308,53 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1] [--drop measure,…] [--note "…"]
   ```
 
-- `cast list`: List the starter characters, and the story's cast when given a project.
+- `cast list`: List the starter characters, the saved characters (the project's, then the library's), and the story's cast when given a project.
 
   ```text
-  launchclip cast list [project|storyboard.json]
+  launchclip cast list [project|storyboard.json] [--project <dir>]
   ```
 
-- `cast show`: Show one character's rig params, colours and voice.
+- `cast show`: Show one character's rig params, colours and voice: a story's, a starter's or a saved character's.
 
   ```text
-  launchclip cast show <id> [--story storyboard.json]
+  launchclip cast show <id> [--story storyboard.json] [--project <dir>]
   ```
 
-- `cast sheet`: Render every character in every pose and expression the story uses to qa/cast-sheet.png.
+- `cast sheet`: Render every character in every pose and expression the story uses to qa/cast-sheet.png. Given a saved character's id instead, render that character's design sheet (a few poses and every expression, in its drawing style) beside its file as <id>.sheet.png.
 
   ```text
   launchclip cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]
+  launchclip cast sheet <saved-id> [--project <dir>] [--poses stand,wave] [--out sheet.png] # one saved character's design sheet
+  ```
+
+- `cast create`: Design a character and save it as <project>/cast/<id>.character.json (--to library: ~/.launchclip/cast/), then draw its sheet beside it. --describe maps plain words onto the rig's options with no model or key (option names, everyday synonyms, a colour before the thing it colours); --set path=value sets any option exactly and wins over the description; --from starts from a starter or another saved character. What nobody says (skin, hair, voice) is chosen from the id and listed under assumed; words nothing matched are listed under unmatched. --model provider:model (or LAUNCHCLIP_CAST_MODEL) asks a model for the same set paths instead. Describe traits: a real person's name is not turned into a likeness.
+
+  ```text
+  launchclip cast create <id> [--describe "a tall woman with silver locs, round glasses and a red blazer"] [--set hair.style=locs]... [--from <starter|saved id>] [--name "…"] [--personality "…"] [--voice af_nova] [--style flat] [--to project|library] [--project <dir>] [--model provider:model] [--poses stand,wave] [--no-sheet] [--force]
+  ```
+
+- `cast edit`: Change a saved character with --set path=value and/or a plain --instruction ("swap the hoodie for a blazer", "remove the glasses", "taller"), validate it against the rig and redraw its sheet. accessories+=name adds one, accessories-=name removes one, path=none clears headwear, mobility, outfit.over, voice or personality.
+
+  ```text
+  launchclip cast edit <id> [--instruction "swap the hoodie for a blazer, remove the glasses"] [--set accessories+=beard]... [--name "…"] [--personality "…"] [--voice am_adam] [--style paper] [--project <dir>] [--model provider:model] [--poses stand,wave] [--no-sheet]
+  ```
+
+- `cast options`: Print every --set path with the values it takes, the poses and the expressions, read from the character rig as it is now.
+
+  ```text
+  launchclip cast options [path]                     # every --set path and its values, read from the rig
+  ```
+
+- `cast export`: Write saved characters (all of them when no id is given) as a character pack: a folder with cast-pack.json and one <id>.character.json each, or a single pack file when --out ends in .json.
+
+  ```text
+  launchclip cast export [<id> ...] --out <folder|pack.json> [--name "…"] [--project <dir>]
+  ```
+
+- `cast import`: Validate a character pack (a folder, a pack file or one character file) and save its characters to the project's cast/ folder or the library. A character that already exists with different traits is refused without --force.
+
+  ```text
+  launchclip cast import <folder|pack.json|character.json> [--to project|library] [--ids nova,rae] [--project <dir>] [--force]
   ```
 
 - `cast sprites`: Draw a project's illustrated cast (cast.sprites.json) with an image model: a picture per pose plus mouth-open and eyes-closed versions, cut out to assets/cast/<id>/. --dry-run shows the pictures and the estimated cost.
