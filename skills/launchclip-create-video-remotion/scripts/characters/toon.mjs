@@ -365,7 +365,8 @@ export function face(ctx, name) {
   const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + (cute ? CUTE.eyeY : 10), {}, ctx.eyeScale && ctx.eyeScale !== 1 ? [group(eyeParts, {transform: `scale(${k3(ctx.eyeScale)})`})] : eyeParts);
   const kids = [];
   // The cute cheeks keep inside the head's edge when the face turns to look.
-  if (cute) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 61, cy + 50, 15, 9.5, 'blush', {outline: false, opacity: parts.blush ? 0.7 : 0.42}));
+  // (They sit at half the head's width, so a child's smaller head keeps them in too.)
+  if (cute) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * r1(g.head.rx * 0.52), cy + 48, 14, 9, 'blush', {outline: false, opacity: parts.blush ? 0.7 : 0.42}));
   else if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
   kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy, cute));
   const mouthAt = cute ? `translate(0 ${cy + CUTE.mouthY}) scale(${CUTE.mouth})` : `translate(0 ${cy + 47})`;
