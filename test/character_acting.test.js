@@ -265,3 +265,14 @@ test('both renderers: an acted, talking scene with profiles reads the same throu
   }
   assert.ok(checked > 1000, `${checked} values compared`);
 });
+
+test('a saved character takes its acting profile from the story cast entry that uses it; the character file itself has none yet', async () => {
+  const {characterErrors, withSavedCharacters} = await import('@launchclip/core/characters/character.mjs');
+  const {resolveStoryCast} = await import('@launchclip/core/characters/cues.mjs');
+  const saved = {schema: 'launchclip.character.v1', id: 'pip', name: 'Pip', params: {skin: 'tan', hair: {style: 'curly', color: 'brown'}}};
+  assert.deepEqual(characterErrors(saved), []);
+  assert.match(characterErrors({...saved, acting: 'bouncy'}).join(), /acting is not supported/);
+  const {story, used} = withSavedCharacters({cast: {characters: [{id: 'pip', acting: 'bouncy'}]}}, id => (id === 'pip' ? saved : null));
+  assert.deepEqual(used, [{id: 'pip', from: 'pip'}]);
+  assert.equal(resolveStoryCast(story).members.get('pip').acting, 'bouncy');
+});
