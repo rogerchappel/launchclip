@@ -159,6 +159,49 @@ Before the script, make starts your app, seeds it, plans 2–4 flows with the sa
 - **Same guardrails as `demo record`:** local or staging URLs only (`--allow-host <host>` to opt in), seed data or `LAUNCHCLIP_DEMO_*` test accounts only, and secrets redacted.
 - `--demo-plan DEMO-PLAN.json` records your own plan instead of a planned one. `--start` and `--url` override detection, and `--redemo` records again.
 
+## A character story with `--animation`
+
+`--animation` asks for a story told by characters instead of a narrated
+motion video:
+
+```bash
+launchclip make "A 30-second short: Maya keeps shipping a fix that fails, and Sam shows her the check she skipped" --animation --aspect 9:16
+```
+
+**For now it stops after the script and the voice, and renders no video.**
+The stages that design the cast, plan the shots and render are being built
+([ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md)). `MAKE.json`
+ends with status `stopped`, `stopped.after` is `prepare`, and the later
+stages are `skipped`. For a finished video today, leave `--animation` off.
+
+What it does write:
+
+- **`SCRIPT.json`**, a screenplay (version 2): a title, a logline, the
+  premise, the characters, and beats whose lines are spoken (by a character
+  or the narrator) or silent (an action and its length). A narrator carries
+  the story and the characters speak the turns, with two characters unless
+  your prompt names more. The format is in
+  [KIT_CONTRACTS.md](../KIT_CONTRACTS.md) under "Screenplay".
+- **`NARRATION.json`**, the voiced dialogue: one take a line, joined, with a
+  `speaker` on every word and the silent lines as pauses.
+
+The script comes from three small model calls, the writers' room: the
+premise, the cast and three to five loglines; a second call that sees only
+your prompt and the loglines and scores them (the best score is the story);
+then the script. It is checked like `launchclip script check <project>`
+checks it. If it fails, one repair call fixes it. If it passes but the real
+voice runs it more than 15% short of the target, or it fails at the voice's
+real pace, that one repair call is spent then instead. Errors left after the
+repair are warnings in `MAKE.json`.
+
+Under Kokoro each character borrows a voice of its own until the cast is
+designed; with ElevenLabs the narrator's voice reads every line for now. Run
+the same command again and the script and the take are reused: no model
+call, no new take.
+
+`--animation` needs the motion lane, so it refuses an assets folder that
+holds a voiceover or a recording with speech, and a length over 180 seconds.
+
 ## Rules and notes from your app
 
 An app that runs make on its users' footage can set hard rules and describe

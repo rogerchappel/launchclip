@@ -26,7 +26,7 @@
 
 import {ACCESSORIES, AGES, BOTTOMS, BUILDS, GLASSES, HAIR_STYLES, HEADWEAR, HEIGHTS, MOBILITY, OVERS, TOPS, normalizeRigParams} from './rig.mjs';
 import {BRAND_ROLES, HAIR_COLORS, NEUTRALS, SKIN_TONES} from './palette.mjs';
-import {STARTER_IDS} from './cast.mjs';
+import {isStarterId} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
 import {KOKORO_VOICES} from './cues.mjs';
 
@@ -89,7 +89,7 @@ export function normalizeCharacter(file, path = 'character') {
   for (const key of Object.keys(file)) if (!KEYS.includes(key)) throw new Error(`${path}.${key} is not supported (allowed: ${KEYS.join(', ')})`);
   if (file.schema !== CHARACTER_SCHEMA) throw new Error(`${path}.schema must be "${CHARACTER_SCHEMA}"`);
   if (typeof file.id !== 'string' || !ID.test(file.id)) throw new Error(`${path}.id must be a lowercase id (letters, digits, hyphens; ≤ 24)`);
-  if (STARTER_IDS.includes(file.id)) throw new Error(`${path}.id "${file.id}" is a starter character; a saved character needs its own id`);
+  if (isStarterId(file.id)) throw new Error(`${path}.id "${file.id}" is a starter character; a saved character needs its own id`);
   const name = file.name ?? file.id;
   if (typeof name !== 'string' || !name.trim() || name.length > 40) throw new Error(`${path}.name must be a string of 1–40 characters`);
   const personality = file.personality ?? null;
@@ -122,7 +122,7 @@ const entriesOf = cast => (Array.isArray(cast) ? cast : Array.isArray(cast?.char
 function wanted(entry) {
   if (!isObj(entry) || typeof entry.id !== 'string' || entry.art !== undefined) return null;
   const base = entry.from ?? entry.id;
-  if (typeof base !== 'string' || !ID.test(base) || STARTER_IDS.includes(base)) return null;
+  if (typeof base !== 'string' || !ID.test(base) || isStarterId(base)) return null;
   if (entry.from === undefined && entry.skin !== undefined && entry.hair !== undefined) return null;
   return base;
 }

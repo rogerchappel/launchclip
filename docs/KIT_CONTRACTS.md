@@ -4016,7 +4016,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (24 characters). Ids are stable and never
+- `cast.mjs`: the starter cast (71 characters: the original set, then a wider cast with a personality each and one accessory at most). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
@@ -4046,6 +4046,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
+  | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head; a headscarf wraps close under the chin |
+  | `chibi-plain` | `style-chibi.mjs` | the chibi figure with no skin tone: skin drawn paper white, hair and clothes in their own colours, for a neutral cast |
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
@@ -4528,6 +4530,72 @@ the cadence profile whose `problem_lands_seconds` p90 is the limit (default
 `story-characters`), `--brief` the prompt and notes the script was written
 from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
 checked exactly as before.
+
+### The writers' room (`src/make/animation.js`, `launchclip make --animation`)
+
+`make --animation` writes a version 2 `SCRIPT.json` and voices it
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §6.1, phase 5). The
+router marks the run `routing.kind: "animation"` on the `motion` lane
+(`routing.format` is the frame size, so the mark has its own key). Only the
+flag sets it for now: a brief that merely reads as a character story still
+makes a whole narrated video, because the animation path stops after the
+voice until its later stages exist.
+
+Three structured calls, each with a strict schema, then at most one repair:
+
+| Call | `schemaName` | Reads | Returns |
+|---|---|---|---|
+| `writePremise` | `launchclip_animation_premise` | the prompt, the notes, the collection's rules | `premise`, `characters` (with a `voice_type` of `female`, `male` or `either`), 3 to 5 `loglines` |
+| `judgeLoglines` | `launchclip_animation_loglines` | the prompt, the notes, the rules and the loglines only | a score per logline on `hook`, `turn`, `playable`, `brief` (0-10), its own pick, a reason |
+| `writeScreenplay` | `launchclip_animation_script` | the brief, the chosen logline, the premise, the cast, the word budget, a library skeleton's structure lines when one fits | `title`, `title_options`, `beats` |
+
+- The story is the logline with the best mean score; a tie goes to the
+  judge's own pick, then the earlier one (`rankLoglines`).
+- The model returns every line with the same five fields (`speaker`, `text`,
+  `playing`, `action`, `seconds`), because strict schemas have no optional
+  ones. `normalizeScreenplay` turns that into the contract: ids `l1`, `l2`, …
+  in order, a line with no speaker is silent, a `place` that is not a kit set
+  (`SETS`) is dropped. An unknown speaker or beat is kept, so the check can
+  name it.
+- The word budget is 80% of the target length at the voice's pace before a
+  take exists (`estimatedPace`: 150 words a minute × the voice speed for
+  Kokoro, so 180 at its default 1.2, from one measured dialogue; 150
+  otherwise).
+- `checkScreenplay` runs with the `story-characters` profile's
+  `problem_lands_seconds` p90 (`--profile` names another) and the prompt,
+  notes and asset lines as the brief.
+- **One repair pass in all.** It is spent on the first check's errors. If
+  that check passed, it is spent after voicing instead, when the script fails
+  at the measured pace or the take is more than 15% short (`under-length`).
+  Errors left are warnings; the script is still written and voiced.
+
+`SCRIPT.json` then also carries `loglines` (`chosen`, `reason`, and every
+option with its scores), `passes` (`premise`, `loglines`, `write`, and
+`repair` when used), `word_target`, `word_count`, `take` (the measured
+seconds, words and pace) and `check` (the final check, at the measured pace).
+`characters[].voice_type` is the writers' hint for the designer; the show
+bible owns each character's real voice.
+
+**Voice.** `screenplayNarration(script).lines` goes through
+`src/voice/dialogue.js` unchanged, and `NARRATION.json` is the dialogue
+document (`words[].speaker`, `lines`, `gaps`). Until a bible exists the
+characters borrow stand-in voices (`standInCast`): under Kokoro one each, by
+`voice_type`, never the narrator's; under any other provider none, so the
+narrator's voice reads every line and `MAKE.json` warns. The joined take is
+`.launchclip/make/narration.wav`.
+
+**Reuse.** The script is reused while its inputs hash the same (the prompt,
+notes, rules, target length, model, voice, pace, skeleton and profile
+limit), the take while every line's request and every pause is unchanged. A
+rerun that reuses both leaves `SCRIPT.json` and `NARRATION.json` untouched
+and reports `prepare` as `cached`.
+
+**The stop.** `MAKE.json` ends `status: "stopped"` with `stopped: {after:
+"prepare", reason}`; `storyboard`, `subject`, `finish` and `critic` are
+`skipped` with that reason, and `report.script` has `kind: "animation"`,
+the `characters`, `speakers`, line counts and `voices`. A stage ends a run
+by setting `ctx.stop = {after, status, reason, next}` in
+`src/make/index.js`; the later animation stages move or remove this stop.
 
 ## World module (`kit/core/catalog-world.mjs`)
 
