@@ -22,6 +22,7 @@ import {STYLE as stick, STYLE_CLASSIC as stickClassic} from './style-stick.mjs';
 import {STYLE as lifelike} from './style-lifelike.mjs';
 import {STYLE as cinematic} from './style-cinematic.mjs';
 import {STYLE as avatar} from './style-avatar.mjs';
+import {STYLE as chibi} from './style-chibi.mjs';
 
 // In order from the default to the newest; flat stays first.
 const STYLES = {
@@ -34,7 +35,8 @@ const STYLES = {
   'stick-classic': stickClassic,
   lifelike,
   cinematic,
-  avatar
+  avatar,
+  chibi
 };
 
 export const DRAWING_STYLES = Object.freeze(Object.keys(STYLES));

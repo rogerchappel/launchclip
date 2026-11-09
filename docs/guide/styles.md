@@ -131,6 +131,7 @@ launchclip style upgrade my-channel
   - `lifelike`: realistic proportions, detailed faces, hair and hands.
   - `cinematic`: lifelike, lit by the scene with a rim light and a cast shadow.
   - `avatar`: cute avatar proportions: a big head on a short, chunky body, soft shading and pin joints.
+  - `chibi`: the cute family: a very big round head with large glossy eyes on a small soft body, flat fills and a heavy outline.
 
   A generated style also generates its cast from a character set (office team, founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd), so every project gets different people.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.

@@ -3821,6 +3821,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
+  | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head |
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
