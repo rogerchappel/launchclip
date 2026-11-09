@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { durationFromPrompt, isLongForm, routeLane } from "../src/make/routing.js";
+import { animationBrief, durationFromPrompt, isAnimation, isLongForm, routeLane } from "../src/make/routing.js";
 
 const entry = (path, kind, role, extra = {}) => ({ path, kind, role, confidence: 0.9, signals: ["test"], description: `${role} ${path}`, ...extra });
 const head = (path, duration = 40, orientation = "portrait") => entry(path, "video", "talking-head", { media: { kind: "video", duration, orientation, width: 720, height: 1280, mountable: true }, speech: { present: true } });
@@ -78,4 +78,27 @@ test("a motion video over 3 minutes is long form, up to 20; a recording keeps it
   assert.throws(() => route([], { duration: 1500 }), /between 3 and 1200/);
   assert.throws(() => route([head("me.mp4")], { duration: 600 }), /for motion videos \(long form\)/);
   assert.equal(isLongForm(route([head("me.mp4", 400)])), false);
+});
+
+// docs/ANIMATION_PIPELINE_RFC.md §6.1: animation is the motion lane with a cast, not a lane of its own.
+test("--animation marks the motion lane as an animation and gives the reason; nothing else is marked", () => {
+  const result = route([shot("home.png")], { prompt: "Maya ships on a Friday", animation: true });
+  assert.equal(result.lane, "motion");
+  assert.equal(result.kind, "animation");
+  assert.ok(isAnimation(result));
+  assert.ok(result.reasons.some((reason) => /--animation: a character story/.test(reason)));
+  assert.deepEqual([result.format.width, result.format.height, result.format.duration], [1920, 1080, 30], "format stays the frame size");
+  // A brief that reads as a character story is not diverted yet: it still makes a whole video.
+  const worded = route([], { prompt: "An animated story about two characters" });
+  assert.ok(animationBrief("An animated story about two characters"));
+  assert.ok(!animationBrief("A launch video for a podcast app"));
+  assert.equal(worded.kind, undefined);
+  assert.ok(!isAnimation(worded));
+  assert.ok(!("kind" in route([])));
+});
+
+test("--animation refuses assets that already carry the voice, and long form", () => {
+  assert.throws(() => route([voiceover("vo.wav")], { animation: true }), /--animation writes the script and voices it, but vo\.wav already carries the voice \(voiceover-motion\)/);
+  assert.throws(() => route([head("me.mp4")], { animation: true }), /me\.mp4 already carries the voice \(footage-led\)/);
+  assert.throws(() => route([], { animation: true, duration: 300 }), /--animation makes videos of 180 seconds or less; got 300/);
 });

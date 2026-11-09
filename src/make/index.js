@@ -30,7 +30,7 @@ import { VOICE_SETTINGS, narrationDocument, narrationRequest, normalizeVoiceSett
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
-import { isLongForm, routeLane } from "./routing.js";
+import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
@@ -382,7 +382,7 @@ async function brandEntries(ctx, dir) {
 
 async function stageRoute(ctx) {
   const { report, options, text } = ctx;
-  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text });
+  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text, animation: options.animation === true });
   ctx.routing = routing;
   report.routing = routing;
   for (const entry of routing.ignored) report.warnings.push(`${entry.path}: ${entry.reason}`);
@@ -875,7 +875,7 @@ function chooseMakeSkeleton(ctx, target) {
 // What the video is made of, for matching skeletons: a cast story, a product
 // demo or recording, else motion graphics.
 function skeletonMedium(ctx) {
-  if (/\b(characters?|animated|animation|cartoon|cast)\b/i.test(ctx.text ?? "")) return "character";
+  if (isAnimation(ctx.routing) || animationBrief(ctx.text)) return "character";
   if ((ctx.routing?.media ?? []).some((item) => ["screen-recording", "product-demo"].includes(item.role)) || ctx.demo?.length) return "demo";
   return "motion";
 }

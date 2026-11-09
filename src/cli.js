@@ -519,6 +519,11 @@ export function parseFlags(args) {
       flags[name] = true;
       continue;
     }
+    // make --animation is a switch too.
+    if (name === "animation") {
+      flags[name] = true;
+      continue;
+    }
     const value = args[index + 1];
     if (!value || value.startsWith("--")) {
       throw new Error(`Missing value for --${name}`);
