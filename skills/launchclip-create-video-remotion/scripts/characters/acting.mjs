@@ -2,8 +2,12 @@
 // (kit/core/catalog-b-view.mjs op list), so HyperFrames (GSAP) and Remotion
 // (frameState) interpolate every pose change the same way.
 //
-// - Pose changes tween every joint from the old pose to the new one over
-//   POSE_TWEEN seconds with an eased in-out curve.
+// - Pose changes take ACTING.poseTween seconds from the cue and are at rest
+//   on the new pose when it ends. A small change is one eased tween. A big
+//   one is acted (poseChangeOps): a short counter-move (anticipation), the
+//   travel, then a follow-through that settles back onto the pose, each
+//   scaled by how far the joints travel; the head, forearms, shins and
+//   hands start a little after the body (overlap).
 // - A pose with a gesture (a wave, typing, walking, a cheer's bounce, a
 //   head scratch) loops whole cycles while it holds and ends each loop back
 //   on the pose, so the next change always starts from the pose's values.
@@ -11,8 +15,11 @@
 //   and blinks at a steady, per-character rhythm.
 // - Expressions crossfade their faces; mouths open and close on the
 //   character's spoken words (open and closed shapes, not lip sync).
+// - An acting profile (ACTING_PROFILES) scales all of it per character.
 //
-// Times are absolute seconds. Imports only sibling kit/core files.
+// Every op is an absolute set or from-to tween, so any frame can be drawn
+// on its own (seek-safe); nothing is random. Times are absolute seconds.
+// Imports only sibling kit/core files.
 
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
@@ -74,6 +81,80 @@ export function jointTargets(cid, j) {
 }
 
 const same = (a, b) => Object.keys(a).every(key => Math.abs(a[key] - b[key]) < 1e-9);
+
+// Acted pose changes. A change whose joints travel less than `small` degrees
+// is one plain tween; from there the acting grows to full strength at `full`.
+// The window (ACTING.poseTween × the profile's pace) splits into the
+// anticipation, the travel and the settle. `back` and `over` are the shares
+// of a joint's travel it moves against first and past afterwards, capped per
+// prop (degrees, rig units, scale) so nothing swings wide of the pose.
+export const MOVE = Object.freeze({small: 24, full: 140, anticipate: 0.2, settle: 0.22, back: 0.1, over: 0.06,
+  cap: Object.freeze({rotation: 7, x: 6, y: 10, scaleY: 0.03}),
+  // The torso dips before a big move and stretches a touch past it; the head nods as the move lands.
+  squash: 0.018, stretch: 0.01, nod: 5,
+  // Seconds each trailing part starts after the body.
+  lag: Object.freeze({head: 0.035, fore: 0.045, hand: 0.06})});
+
+// A prop's change in degrees-equivalent (offsets and scales weighed in; opacity is not travel).
+const TRAVEL_WEIGHT = {rotation: 1, x: 0.5, y: 0.5, scaleX: 200, scaleY: 200, opacity: 0};
+
+/** How far a pose change travels: its largest joint move (jointTargets values). */
+export function poseTravel(from, to) {
+  let travel = 0;
+  for (const target of Object.keys(to)) for (const prop of Object.keys(to[target])) travel = Math.max(travel, Math.abs(to[target][prop] - (from[target]?.[prop] ?? to[target][prop])) * (TRAVEL_WEIGHT[prop] ?? 0));
+  return travel;
+}
+
+// The parts that trail the body, and the ones that lead it (the look).
+const trails = target => (/-(head|hb)$/.test(target) ? 'head' : /-(fore|shin)-[lr]$/.test(target) ? 'fore' : /-fingerwrap-[lr]$/.test(target) ? 'hand' : null);
+const leads = target => /-(turn|gaze)$/.test(target);
+
+/**
+ * Ops for one pose change at `time`: from and to are jointTargets values.
+ * Everything ends by time + ACTING.poseTween, on the new pose.
+ * → the change's strength: 0 (nothing moved, or a small change: one plain
+ * tween per joint) up to 1 (a full acted move).
+ */
+export function poseChangeOps(ops, from, to, time, P = ACTING_PROFILES.default) {
+  const A = ACTING;
+  const changed = Object.keys(to).filter(target => !same(from[target], to[target]));
+  if (!changed.length) return 0;
+  const travel = poseTravel(from, to);
+  if (travel < MOVE.small) {
+    for (const target of changed) tw(ops, target, rt(time), A.poseTween, A.poseEase, from[target], to[target]);
+    return 0;
+  }
+  const k = 0.35 + 0.65 * Math.min(1, (travel - MOVE.small) / (MOVE.full - MOVE.small));
+  const window = A.poseTween * P.pace, ant = window * MOVE.anticipate, rest = window * MOVE.settle;
+  // A joint's values moved by a share of its travel (capped), along `sign`.
+  const shifted = (target, base, share, scale, sign) => Object.fromEntries(Object.keys(base).map(prop => {
+    const delta = to[target][prop] - from[target][prop];
+    const amount = Math.sign(delta) * Math.min(Math.abs(delta) * share, MOVE.cap[prop] ?? 0) * k * scale;
+    return [prop, rt(base[prop] + sign * amount)];
+  }));
+  const body = Object.keys(to).filter(target => /-torso$/.test(target) || /-(head|hb)$/.test(target));
+  for (const target of new Set([...changed, ...body])) {
+    const a = from[target], b = to[target];
+    if (leads(target)) { tw(ops, target, rt(time), rt(window), A.poseEase, a, b); continue; }
+    const trail = trails(target);
+    const peak = shifted(target, b, MOVE.over * (trail ? 1.5 : 1), P.settle, 1);
+    if (/-torso$/.test(target)) peak.scaleY = rt(peak.scaleY + MOVE.stretch * k * P.settle);
+    if (trail === 'head') peak.y = rt(peak.y + MOVE.nod * k * P.settle);
+    if (!trail) {
+      const back = shifted(target, a, MOVE.back, P.anticipation, -1);
+      if (/-torso$/.test(target)) back.scaleY = rt(back.scaleY - MOVE.squash * k * P.anticipation);
+      if (!same(a, back)) tw(ops, target, rt(time), rt(ant), 'sine.inOut', a, back);
+      tw(ops, target, rt(time + ant), rt(window - ant - rest), A.poseEase, back, peak);
+      if (!same(peak, b)) tw(ops, target, rt(time + window - rest), rt(rest), 'sine.inOut', peak, b);
+      continue;
+    }
+    // A trailing part holds through the anticipation, starts late and settles in what is left.
+    const lag = Math.min(MOVE.lag[trail] * P.lag, rest * 0.6);
+    tw(ops, target, rt(time + ant + lag), rt(window - ant - rest), A.poseEase, a, peak);
+    if (!same(peak, b)) tw(ops, target, rt(time + window - rest + lag), rt(rest - lag), 'sine.inOut', peak, b);
+  }
+  return k;
+}
 
 // A small stable hash, so each character blinks on its own rhythm.
 function phase(id) {
@@ -190,9 +271,8 @@ export function actingOps(ops, actor) {
     const holdEnd = i + 1 < states.length ? states[i + 1].time : end;
     let settle = state.time;
     const from = jointTargets(cid, current), to = jointTargets(cid, next);
-    const changed = i > 0 && Object.keys(to).some(target => !same(from[target], to[target]));
-    if (changed) {
-      for (const target of Object.keys(to)) if (!same(from[target], to[target])) tw(ops, target, rt(state.time), A.poseTween, A.poseEase, from[target], to[target]);
+    if (i > 0 && Object.keys(to).some(target => !same(from[target], to[target]))) {
+      poseChangeOps(ops, from, to, state.time, P);
       settle = rt(state.time + A.poseTween);
     }
     if (i === 0 || lookOf(state) !== lookOf(states[i - 1])) gestureOps(ops, cid, next, settle + (i === 0 ? 0.2 : 0), holdEnd - 0.05);

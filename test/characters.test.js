@@ -102,17 +102,17 @@ test('the drawing: joints become animated divs with stable ids; one face per exp
   assert.doesNotMatch(html, /"tag":"joint"/);
 });
 
-test('acting: pose changes are eased tweens, gestures return to the pose, mouths follow words', () => {
+test('acting: pose changes are eased moves, gestures return to the pose, mouths follow words', () => {
   const {params} = maya();
   const geometry = rigGeometry(params);
   const ops = [];
   actingOps(ops, {cid: 'c', start: 0, end: 6, geometry, facing: 'right', seated: false, holds: null,
     states: [{time: 0, pose: 'stand', expression: 'neutral'}, {time: 2, pose: 'wave', expression: 'happy'}, {time: 4.5, pose: 'slump', expression: 'frustrated'}],
     expressions: ['neutral', 'happy', 'frustrated'], speech: speechChanges([{from: 0.5, to: 1.5, words: [[0.5, 0.8], [0.9, 1.5]]}])});
-  const arm = ops.filter(op => op.target === 'c-arm-r' && op.type === 'tween' && op.start === 2);
-  assert.equal(arm.length, 1);
-  assert.equal(arm[0].ease, ACTING.poseEase);
-  assert.equal(arm[0].duration, ACTING.poseTween);
+  // A big change is acted (test/character_acting.test.js): its travel keeps the pose ease and ends inside the window.
+  const arm = ops.filter(op => op.target === 'c-arm-r' && op.type === 'tween' && op.start >= 2 && op.start < 2 + ACTING.poseTween);
+  assert.ok(arm.some(op => op.ease === ACTING.poseEase));
+  assert.ok(arm.every(op => op.start + op.duration <= 2 + ACTING.poseTween + 1e-6));
   const at = t => frameState(ops, t);
   assert.ok(Math.abs(at(2 + ACTING.poseTween).get('c-arm-r').rotation - 148) < 1e-6, 'settles on the wave');
   assert.ok(Math.abs(at(4.5).get('c-fore-r').rotation - 26) < 1e-6, 'the wave loop ends on the pose before the next change');
