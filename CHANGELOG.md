@@ -17,6 +17,13 @@
   when a module has no HyperFrames emitter, no Remotion component or no
   per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
   is covered, and CONTRIBUTING.md says how to add a fixture.
+- CI renders much more of the renderer parity corpus. Every pull request
+  renders a rotating twelfth of the per-module fixtures (about 4 minutes),
+  and a new "Parity corpus" workflow renders all of it at every sample time
+  in twelve shards, nightly and on a pull request that changes the kit, a
+  fixture or the harness. `node scripts/parity-shard.mjs` renders a shard or
+  a rotation locally. Fixtures that fail on one platform are listed in
+  `test/fixtures/parity-known-failures.json` as open bugs.
 - Parity fixtures for the twelve modules that had none: `brand-lockup`,
   `photo-scene`, `split-screen`, `landscape-card`, `picture-in-picture`,
   `media-compare`, `media-stat`, `media-list`, `media-grid`, `drop-grid`,

@@ -15,8 +15,10 @@
 // --times is passed to the harness (default: every sample time). The
 // Remotion entry is bundled once. Writes summary.md, timings.json and each
 // fixture's report under --out, and exits 1 when a sample is below its
-// threshold.
-import {readdirSync} from 'node:fs';
+// threshold. A fixture listed for this platform in
+// test/fixtures/parity-known-failures.json is reported but does not fail the
+// run.
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +26,28 @@ import {fileURLToPath} from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURES = path.join(ROOT, 'test', 'fixtures', 'parity');
+
+export const KNOWN_FAILURES = path.join(ROOT, 'test', 'fixtures', 'parity-known-failures.json');
+
+/**
+ * Fixtures known to fail on this platform (test/fixtures/parity-known-failures.json):
+ * {<fixture>: note}. They are reported, and do not fail the run. An open bug
+ * list, not a way to accept a difference.
+ */
+export function knownFailures(platform = process.platform, file = KNOWN_FAILURES) {
+  if (!existsSync(file)) return {};
+  const entry = JSON.parse(readFileSync(file, 'utf8'))[platform];
+  return entry && typeof entry === 'object' ? entry : {};
+}
+
+/** Rows → {failed, known, fixed}: new failures, failures on the known list, and listed fixtures that passed. */
+export function triage(rows, known) {
+  return {
+    failed: rows.filter(row => !row.pass && !(row.name in known)),
+    known: rows.filter(row => !row.pass && row.name in known),
+    fixed: rows.filter(row => row.pass && row.name in known)
+  };
+}
 
 /** The corpus: fixture file names, sorted. */
 export function corpus(dir = FIXTURES) {
@@ -99,11 +123,15 @@ async function main(argv) {
     await rm(work, {recursive: true, force: true});
   }
   const total = (Date.now() - started) / 1000;
-  const failed = rows.filter(row => !row.pass);
+  const {failed, known, fixed} = triage(rows, knownFailures());
   const rendering = rows.reduce((sum, row) => sum + row.seconds, 0);
-  const lines = [`${rows.length} of ${corpus().length} fixtures (${label}, times: ${options.times ?? 'all'}): ${rows.length - failed.length} pass, ${failed.length} fail.`,
+  const lines = [`${rows.length} of ${corpus().length} fixtures (${label}, times: ${options.times ?? 'all'}): ${rows.length - failed.length - known.length} pass, ${failed.length} fail${known.length ? `, ${known.length} known to fail on ${process.platform}` : ''}.`,
     `Total ${total.toFixed(1)} s on ${process.platform}-${process.arch}: bundle ${bundleSeconds.toFixed(1)} s, fixtures ${rendering.toFixed(1)} s (${rows.length ? (rendering / rows.length).toFixed(1) : '0'} s each).`];
-  if (failed.length) lines.push('', '| Fixture | Min SSIM | Threshold | Failing samples |', '|---|---|---|---|', ...failed.map(row => `| ${row.name} | ${row.minSsim == null ? 'error' : row.minSsim.toFixed(4)} | ${row.threshold ?? ''} | ${row.failures.join('; ')} |`));
+  const table = (title, list) => ['', title, '', '| Fixture | Min SSIM | Threshold | Failing samples |', '|---|---|---|---|', ...list.map(row => `| ${row.name} | ${row.minSsim == null ? 'error' : row.minSsim.toFixed(4)} | ${row.threshold ?? ''} | ${row.failures.join('; ')} |`)];
+  if (failed.length) lines.push(...table('Failing:', failed));
+  if (known.length) lines.push(...table(`Known to fail on ${process.platform} (test/fixtures/parity-known-failures.json), not counted:`, known));
+  // A two-sample run cannot show a known failure is fixed: only say so when every sample time was rendered.
+  if (fixed.length && !options.times) lines.push('', `Passing again, so remove from test/fixtures/parity-known-failures.json: ${fixed.map(row => row.name).join(', ')}`);
   const summary = lines.join('\n');
   process.stdout.write(`\n${summary}\n`);
   await writeFile(path.join(options.out, 'summary.md'), `${summary}\n`);

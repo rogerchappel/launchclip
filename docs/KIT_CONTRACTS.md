@@ -3140,6 +3140,24 @@ The example is `examples/story/footage/`; regenerate its recording with
   burst, arranged stacks, counted headline, light-sweep, push-blur, studio light,
   dot grid, word-chip captions, snap feel). That story sets `motion.blur: false`,
   so a still is one frame on both renderers. Story times snap to whole frames.
+- `node scripts/parity-shard.mjs` renders a slice of the per-module corpus
+  with one shared Remotion bundle: `--shard 2/12` is one of twelve equal
+  parts, `--rotate <n> --every 12` is every twelfth fixture offset by `n`, so
+  twelve consecutive `n` cover the corpus. `--times settle,mid` limits the
+  sample times; `--list` prints the slice. CI uses it twice:
+  - every pull request renders a rotating twelfth at the settle and mid-hold
+    times (the `parity-sample` job; `n` is the run number): 39 fixtures at
+    about 5 s each, a 4-minute job;
+  - the "Parity corpus" workflow (`.github/workflows/parity-full.yml`)
+    renders all of it at every sample time in twelve shards, nightly, on
+    demand, and on a pull request that changes `kit/`, a fixture or the
+    harness: about 14 s a fixture on ubuntu-latest, 9 minutes of rendering a
+    shard. Nightly and on demand it also runs the story, background, camera,
+    footage and caption parity tests.
+- `test/fixtures/parity-known-failures.json` lists, per platform, fixtures
+  that fail there today. The slice runner reports them without failing, and
+  says when one passes again. It is an open bug list: an entry is removed by
+  fixing the renderer, and nothing is added to make a new failure pass.
 
 ## Direction constraints (`src/constraints.js`)
 
