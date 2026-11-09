@@ -8,7 +8,7 @@
   stock and archive items (Wikimedia Commons, NASA, Internet Archive,
   Library of Congress, and Pexels or Pixabay with a key) are downloaded
   into `assets/research/` and listed in the planner's asset manifest with
-  what each shows, the verified claim it supports, and its licence and
+  what each shows, the verified claim it was found for, and its licence and
   credit, for `media-window` and `photo-scene`. Research also looks for
   media on what each verified claim is about. The licence is checked again
   before download, and nothing unknown or incompatible is staged or
