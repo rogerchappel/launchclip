@@ -1058,6 +1058,11 @@ const STAGES = [
       const { castGate } = await import("./cast.js");
       ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
+      // A story made with a show bible: its cast is the frozen bible's, and
+      // the bible is intact (src/bible.js bibleGate).
+      const { bibleGate } = await import("./bible.js");
+      ctx.bibleGate = await bibleGate(ctx.project, resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
+      if (ctx.bibleGate.status === "failed") throw new Error(`bible check failed:\n- ${ctx.bibleGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject, subjectInfos } = await import("./layout_check.js");
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       const resolveOptions = () => ({ words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
@@ -1079,7 +1084,7 @@ const STAGES = [
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
-      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, bible: ctx.bibleGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -1755,6 +1760,8 @@ async function runGates(ctx) {
   if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
   const castGate = ctx.castGate ?? ctx.state.stages?.validate?.details?.cast;
   if (castGate && castGate.status !== "skipped") gates.cast = castGate;
+  const bibleGate = ctx.bibleGate ?? ctx.state.stages?.validate?.details?.bible;
+  if (bibleGate && bibleGate.status !== "skipped") gates.bible = bibleGate;
   // Direction guardrails (docs/DIRECTION_GUARDRAILS.md), on the resolved story.
   try {
     gates.physics = physicsGate(ctx.resolved);

@@ -102,6 +102,9 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   }
   const filled = withSavedCharacters({ cast: { characters: entries } }, (id) => saved.get(id)?.character ?? null);
   const from = new Map(filled.used.map((use) => [use.id, use.from]));
+  // An entry kept from the bible already there is not read from its saved file again (it is pinned);
+  // it keeps the file it names. --characters reads the saved files as they are now.
+  const keptFile = new Map(named.length ? [] : entriesOf(existing?.cast).filter((entry) => isObj(entry) && typeof entry.character_file === "string").map((entry) => [entry.id, entry.character_file]));
   // A starter speaks in its own voice unless the entry names another.
   const characters = entriesOf(filled.story.cast).map((entry) => {
     if (!isObj(entry) || entry.voice || entry.art !== undefined) return entry;
@@ -124,7 +127,7 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
     characters: [...resolved.members.values()].map((member) => {
       if (member.sprite) throw new Error(`${member.id} is an illustrated character (art); a bible character needs rig params (the rig draws the animatic and is the fallback for handed-in art)`);
       if (!member.voice) throw new Error(`${member.id} has no voice; give it one: launchclip cast edit ${from.get(member.id) ?? member.id} --voice <voice> --project ${projectDir}`);
-      return bibleCharacter(member, { character_file: from.has(member.id) ? projectCharacterRef(from.get(member.id)) : null, sheet: sheetOf(member.id) });
+      return bibleCharacter(member, { character_file: from.has(member.id) ? projectCharacterRef(from.get(member.id)) : keptFile.get(member.id) ?? null, sheet: sheetOf(member.id) });
     })
   };
 
