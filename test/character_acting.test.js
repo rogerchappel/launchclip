@@ -229,3 +229,39 @@ test('speech: every face shows the shape as its own open mouth at a size, in eve
     }
   }
 });
+
+test('both renderers: an acted, talking scene with profiles reads the same through GSAP as through frameState, seeking in any order', async () => {
+  const {default: gsap} = await import('gsap');
+  const {runInNewContext} = await import('node:vm');
+  const {charactersTimeline} = await import('@launchclip/core/catalog-characters.mjs');
+  const {EMITTERS} = await import('../kit/hyperframes/catalog-characters.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8},
+    brand: {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}},
+    cast: {characters: [{id: 'maya', acting: 'bouncy'}, {id: 'theo', acting: 'nervous'}]}};
+  const scene = {id: 'talk', module: 'cast-scene', start: 0, end: 7, params: {set: 'phone', cast: [
+    {id: 'maya', cues: [{at: 1.5, pose: 'cheer', expression: 'delighted'}, {at: 4, pose: 'wave', expression: 'happy'}]},
+    {id: 'theo', says: [{from: 0.5, to: 2.4, words: [[0.5, 0.9, 'Try'], [0.95, 1.6, 'Pulseboard'], [1.9, 2.4, 'now']]}], cues: [{at: 3, pose: 'point'}]}]}};
+  const model = resolveModule(scene, story);
+  assert.deepEqual(model.content.actors.map(one => one.acting), ['bouncy', 'nervous']);
+  const ops = charactersTimeline(model);
+  const {motion} = EMITTERS['cast-scene'](model);
+  assert.doesNotMatch(motion, /onUpdate|Math\.random|Date/);
+  const objects = new Map();
+  const real = gsap.timeline({paused: true});
+  const target = selector => { if (!objects.has(selector)) objects.set(selector, {}); return objects.get(selector); };
+  runInNewContext(motion, {tl: {set: (s, v, p) => real.set(target(s), v, p), fromTo: (s, f, t, p) => real.fromTo(target(s), f, t, p)}});
+  let checked = 0;
+  for (const t of [0.3, 0.62, 1.2, 1.56, 1.7, 1.93, 3.1, 3.3, 4.2, 6.9, 5.0, 1.62, 0.97, 0.05]) {
+    real.seek(t, false);
+    for (const [id, props] of frameState(ops, t)) {
+      const object = objects.get(`#${id}`);
+      for (const [key, want] of Object.entries(props)) {
+        if (object?.[key] === undefined) continue;
+        assert.ok(Math.abs(object[key] - want) < 1e-3, `${id}.${key} at ${t}: gsap ${object[key]} vs frameState ${want}`);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 1000, `${checked} values compared`);
+});
