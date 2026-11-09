@@ -9,6 +9,7 @@ import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 import { conceptsMode } from "./concept_story.js";
+import { candidatesMode } from "./candidates.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
@@ -60,6 +61,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["replan", { boolean: true }],
   // Concept and story before the script: on (default) or off (one script pass from the brief).
   ["concepts", { setting: true }],
+  // Rendered candidates for the opening and one risky transition: on (default, with a model that can see) or off.
+  ["candidates", { setting: true }],
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
@@ -144,6 +147,7 @@ export function makeOptionsFromFlags(flags = {}) {
     out: flags.out,
     replan: Boolean(flags.replan),
     concepts: flags.concepts,
+    candidates: flags.candidates,
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
     maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
     criticRepairs: flags["critic-repairs"] === undefined ? undefined : Number(flags["critic-repairs"]),
@@ -173,6 +177,7 @@ export function validateMakeOptions(options = {}) {
   if (!MAKE_VOICES.includes(voice)) throw new Error(`--voice must be kokoro or elevenlabs; got ${options.voice}`);
   researchMode(options.research);
   conceptsMode(options.concepts);
+  candidatesMode(options.candidates);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);

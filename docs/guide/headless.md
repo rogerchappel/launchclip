@@ -63,6 +63,7 @@ Useful flags:
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
+| `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on with OpenAI, Anthropic and OpenRouter models | Skip the automatic visual review. |
 | `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
@@ -104,9 +105,23 @@ Useful flags:
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
    for up to four repairs.
-5. **Finishes the video:** captions, music and sound effects, rendering,
+5. **Tries a second opening and a second transition** (short motion videos,
+   with a model that can see). The skill does not commit to its first idea
+   for the two moments that decide a video, and neither does `make`. It
+   designs a second opening in a separate call that never sees the first,
+   and tries a different kind of move at the riskiest transition in the
+   first 30 seconds. Each candidate is rendered as three stills at delivery
+   size (no encode, no audio, no paid render). The model scores every
+   candidate 0–10 on ten fields from the frames alone, and the higher mean
+   wins, ties going to the planner's. A winning alternative replaces the
+   planner's in `storyboard.json`. The frames and scores are kept in
+   `qa/rendered-candidates/` and `qa/rendered-candidates.json`, the receipt
+   `cinematic-check` reads, and `MAKE.json` `candidates` says who won and
+   why. Long videos and talking-head videos skip this step for now, and
+   `--candidates off` skips it everywhere.
+6. **Finishes the video:** captions, music and sound effects, rendering,
    mastering to −14 LUFS, and quality gates.
-6. **Reviews the frames** with the model when it can see images (OpenAI,
+7. **Reviews the frames** with the model when it can see images (OpenAI,
    Anthropic or an OpenRouter route; a local Ollama model needs `--critic`), and
    writes `qa/critic.json`. When the critic asks for a repair, its findings go
    back to the planner (`--critic-repairs`, up to three rounds by default): the scenes

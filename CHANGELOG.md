@@ -20,6 +20,15 @@
 
 ### Added
 
+- `make` renders candidates for the opening and one risky transition before
+  the draft, as the create-video skill does. It designs a second opening in
+  a call that never sees the first, tries a different kind of move at the
+  riskiest transition in the first 30 seconds, renders each candidate as
+  three stills, and has a model that can see score them from the frames.
+  The higher mean wins and goes into `storyboard.json`; the frames and
+  scores are kept in `qa/rendered-candidates.json`, which `cinematic-check`
+  reads. For short motion videos; long form and footage-led videos skip it
+  for now, and `--candidates off` skips it everywhere.
 - The headless critic runs with an Anthropic model. `make`'s Anthropic
   adapter now sends the contact sheets as image content blocks, so a run
   with only `ANTHROPIC_API_KEY` gets the critic and its repair rounds by
