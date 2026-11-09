@@ -19,7 +19,7 @@ import { findSources, webSearchProvider } from "./sources.js";
 import { buildLedger, keywordsFor, numberAppears, passagesOf } from "./verify.js";
 import { buildCaptureRequests } from "./capture.js";
 import { extractData } from "./data.js";
-import { findMedia, metaphorQueries } from "./media.js";
+import { claimMediaQueries, findMedia, metaphorQueries } from "./media.js";
 import { findPeople } from "./people.js";
 import { findSocialPosts } from "./social.js";
 import { findLogos, logoManifest, writeLogos } from "./logos.js";
@@ -110,7 +110,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
   // 6. Media, 7. people.
   const sentences = splitSentences(source.text);
   const mediaOff = toList(options.media).includes("none");
-  const queries = mediaOff ? [] : metaphorQueries(sentences, claims, { queries: toList(options.media), max: options.maxMediaQueries });
+  // Metaphor beats (or --media), then what the verified claims are about: those items carry the claim they support.
+  const queries = mediaOff ? [] : [...metaphorQueries(sentences, claims, { queries: toList(options.media), max: options.maxMediaQueries }), ...claimMediaQueries(ledger, { max: options.maxClaimMedia })];
   const media = queries.length ? await findMedia(http, queries, { env, now }) : { assets: [], rejected: [], providers: [] };
   const peopleOff = String(options.people ?? "") === "none";
   const { people, portraits } = peopleOff ? { people: [], portraits: [] } : await findPeople(http, entities, claims, { now });
@@ -127,7 +128,7 @@ export async function runResearch(input, options = {}, adapters = {}) {
       icons_logos_audio: `logos: ${RESEARCH_PATHS.logos}; icons and audio resolve through the media-use skill, not here`
     },
     providers: media.providers,
-    queries,
+    queries: queries.map(({ query, beat, claims: backed }) => ({ query, beat, ...(backed ? { claims: backed } : {}) })),
     assets: [...media.assets, ...portraits],
     people,
     rejected: media.rejected.length
