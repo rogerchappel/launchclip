@@ -54,7 +54,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
   const asked = freshDays === undefined ? freshnessWindow(source.text) : freshDays == null ? null : { days: freshDays, asked_by: "--fresh-days" };
 
   // 1. Claims: the patterns, then the agent's claims.json, then the model pass.
-  let claims = extractClaims(source.text);
+  // "The latest Nimbus news this week" asks for news; it states nothing to check.
+  let claims = extractClaims(source.text).filter((claim) => !(asked && claim.kind === "entity" && freshnessWindow(claim.text))).map((claim, index) => ({ ...claim, id: `c${String(index + 1).padStart(3, "0")}` }));
   const extra = await readClaims(options.claims, cwd);
   if (extra.length) claims = mergeClaims(claims, extra);
   let usage = null;

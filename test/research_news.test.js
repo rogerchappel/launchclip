@@ -78,6 +78,28 @@ test("a keyless run on a news brief finds this week's stories and keeps only the
   } finally { await rm(out, { recursive: true, force: true }); }
 });
 
+test("a request for news is not a claim, a multi-word name names its company, and a paced host is asked again once", async () => {
+  const page = '<html><head><title>Orbital | Flight 9</title><meta property="article:published_time" content="2026-11-08T00:00:00Z"></head><body><h1>Skyhook Flight 9 reaches orbit on its first attempt</h1><p>Skyhook Flight 9 reaches orbit on its first attempt, Orbital said.</p></body></html>';
+  let gdelt = 0;
+  const waits = [];
+  const fetch = async (url) => {
+    if (/^https:\/\/hn\.algolia\.com/.test(url)) return Response.json({ hits: [{ title: "Skyhook Flight 9 reaches orbit on its first attempt", url: "https://www.orbital.example/launches/flight-9", points: 200, created_at: "2026-11-08T01:00:00Z" }] });
+    if (/api\.gdeltproject\.org/.test(url)) { gdelt += 1; return gdelt === 1 ? new Response("Please limit requests to one every 5 seconds", { status: 429 }) : Response.json({ articles: [] }); }
+    if (url === "https://www.orbital.example/launches/flight-9") return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    return new Response("", { status: 404 });
+  };
+  const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-research-news-"));
+  try {
+    await runResearch("The latest Orbital Skyhook news this week", { out, now: NOW, media: "none", people: "none", logos: "none", social: "none" }, { fetch, env: {}, sleep: async (ms) => { waits.push(ms); } });
+    const news = JSON.parse(await readFile(path.join(out, "news.json"), "utf8"));
+    assert.deepEqual(news.stories.map((story) => [story.title, story.status, story.primary]), [["Skyhook Flight 9 reaches orbit on its first attempt", "kept", true]]);
+    const ledger = JSON.parse(await readFile(path.join(out, "evidence.json"), "utf8"));
+    assert.deepEqual(ledger.claims.map((claim) => [claim.id, claim.text, claim.status]), [["c001", "Skyhook Flight 9 reaches orbit on its first attempt", "verified"]]);
+    assert.equal(gdelt, 2);
+    assert.ok(waits.includes(5000));
+  } finally { await rm(out, { recursive: true, force: true }); }
+});
+
 test("--news none skips the keyless news sources", async () => {
   const { fetch, asked } = await replay();
   const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-research-news-"));
