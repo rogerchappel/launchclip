@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Changed
+
+- `make` treats `--duration` as a ceiling. It still trims a script or a
+  chapter that runs more than 15% over, but it no longer asks the model to
+  add words to one that runs short: the video is shorter instead. In a long
+  video the outline is no longer stretched to the duration, and the seconds
+  a short chapter did not use go to the later chapters with the most facts.
+  `MAKE.json` notes it when a video runs well under its target.
+- `launchclip make` exits 2 when the video rendered but a gate still fails
+  (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
+  finished video (0) and a failed run (1). It used to exit 0.
+  `--allow-needs-repair` keeps the old exit code.
+- `make` gives the critic up to three repair rounds by default
+  (`--critic-repairs`, was one). A round that is no better is still undone and
+  stops the rounds.
+
 ### Added
 
 - The photos and footage research finds can now be placed. Licence-clear
@@ -55,6 +71,37 @@
   prints the decision, and `MAKE.json` records it with the words that led to
   it under `research_decision`.
 
+- `make` renders candidates for the opening and one risky transition before
+  the draft, as the create-video skill does. It designs a second opening in
+  a call that never sees the first, tries a different kind of move at the
+  riskiest transition in the first 30 seconds, renders each candidate as
+  three stills, and has a model that can see score them from the frames.
+  The higher mean wins and goes into `storyboard.json`; the frames and
+  scores are kept in `qa/rendered-candidates.json`, which `cinematic-check`
+  reads. For short motion videos; long form and footage-led videos skip it
+  for now, and `--candidates off` skips it everywhere.
+- The headless critic runs with an Anthropic model. `make`'s Anthropic
+  adapter now sends the contact sheets as image content blocks, so a run
+  with only `ANTHROPIC_API_KEY` gets the critic and its repair rounds by
+  default instead of ending `ready-for-review` with the critic pending.
+  The adapter also streams a request that asks for more than 16,000 output
+  tokens, which the SDK refuses to send unstreamed.
+- `make` chooses a concept and a story before it writes the script, as the
+  create-video skill does: five concepts, a judge that sees only the brief
+  and the concepts, then the winner written as a story and tightened by an
+  editor. `CONCEPTS.json` and `STORY.json` are written beside the script,
+  the script is written on the story, the storyboard planner is given the
+  concept's visual world, and a long video's outline is derived from the
+  story. It adds four model calls before the script. `--concepts off` skips
+  it, and a concept stage that fails is a warning, not a failed video.
+- A make-vs-skill parity harness: `npm run eval:make-parity -- <make-project>
+  <skill-project> --kind news` scores two finished projects made from one
+  brief (distinct modules a minute, the typography share, cuts and visual
+  events a minute against the cadence profile, held and repeated cards, the
+  critic's verdict, and hedging, meta-narration and repeated facts in the
+  script) and says whether `make` is within 15% of the skill. It reads the
+  storyboard, the narration and `qa/critic.json`, so it runs offline; with no
+  arguments it runs on a fixture pair. See `docs/MAKE_SKILL_PARITY.md`.
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or
@@ -325,6 +372,11 @@
   pick the narration by hand, several stretches at once.
 
 ### Fixed
+
+- Critic repair rounds now work on long videos. The long-form storyboard
+  stage returned its cached plan during a round, so every round failed with
+  "the repair changed no scene". A round now re-directs the chunks that hold
+  the scenes the critic named, starting from the cards they had.
 
 - `photo-scene`, `evidence-clip` and `product-demo` honour their typed
   transitions instead of always fading over 0.4 s. A cut into or out of one

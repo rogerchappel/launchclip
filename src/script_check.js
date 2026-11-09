@@ -4,6 +4,9 @@
 //
 //   checkScript({narration, duration?, brief?, format?, goal?, awareness?, pace?, cta?, ctaKeyword?, choices?, product?, audience?, limits?})
 //   → {schema_version, ok, errors: [{id, message, fix, span?}], warnings: [...], stats}
+//   checkScreenplay({script, duration?, wpm?, problemLandsSeconds?, brief?, ...})
+//   → the same report for a SCRIPT.json with speakers and silent lines
+//     (kit/core/screenplay.mjs), plus the derived dialogue lines
 //
 // The split follows the research report (reports/"Video scriptwriting methods
 // for LaunchClip.md", "The proposed check list"): hard checks are reserved for
@@ -52,6 +55,7 @@
 // least as large; "4 in 10" is a ratio that a brief percentage within five
 // points supports.
 
+import { readScreenplay, screenplayNarration, spokenLines, validateScreenplay } from "@launchclip/core/screenplay.mjs";
 import { AWARENESS_LEVELS, DEFAULT_PACE, MAX_WORDS_PER_SECOND, PACES, PACE_IDS, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS, SHORT_VIDEO_SECONDS } from "@launchclip/core/script-formats.mjs";
 
 export const SCRIPT_CHECK_VERSION = "launchclip.script-check.v1";
@@ -399,6 +403,41 @@ export function checkScript(input = {}) {
   return { schema_version: SCRIPT_CHECK_VERSION, ok: errors.length === 0, errors, warnings, stats };
 }
 
+/**
+ * Check a screenplay (SCRIPT.json version 2: speakers and silent lines;
+ * kit/core/screenplay.mjs). The contract is validated first (speakers, lines,
+ * beats, the length at the voice's pace, where the problem lands), then the
+ * spoken text is linted as one narration by checkScript, so every spoken line
+ * passes the same checks and the same evidence rules as a narrated script.
+ * Each of those findings names the line it is in (`line`, `speaker`).
+ *
+ * A character story may end without a call to action: cta-missing is only an
+ * error when the script has a `cta` beat.
+ *
+ * input: {script, duration, wpm, problemLandsSeconds, brief, format (default
+ *   "story"), and checkScript's other inputs}
+ * → the checkScript report, plus stats.screenplay and `narration`:
+ *   {lines: [{speaker, text, gap?}], lead_seconds, tail_seconds}, the derived
+ *   audio.narration.lines.
+ */
+export function checkScreenplay(input = {}) {
+  const { script, wpm, problemLandsSeconds, ...rest } = input;
+  const contract = validateScreenplay(script, { duration: rest.duration, wpm, problemLandsSeconds });
+  const play = contract.stats.spoken_lines ? readScreenplay(script) : null;
+  const spoken = play ? spokenLines(play) : [];
+  if (!spoken.length) return { schema_version: SCRIPT_CHECK_VERSION, ok: false, errors: contract.errors, warnings: contract.warnings, stats: { screenplay: contract.stats } };
+  const report = checkScript({ ...rest, format: rest.format ?? "story", narration: spoken.map((line) => line.text).join(" ") });
+  const hasCta = contract.stats.beats.includes("cta");
+  const lineOf = (item) => {
+    const line = item.span ? spoken.find((entry) => item.span.start >= entry.start && item.span.start <= entry.end) : null;
+    return line ? { ...item, line: line.id, speaker: line.speaker } : item;
+  };
+  const errors = [...contract.errors, ...report.errors.filter((item) => hasCta || item.id !== "cta-missing").map(lineOf)];
+  // The contract already reports a missing target length.
+  const warnings = [...contract.warnings, ...report.warnings.filter((item) => item.id !== "no-duration").map(lineOf)];
+  return { schema_version: SCRIPT_CHECK_VERSION, ok: errors.length === 0, errors, warnings, stats: { ...report.stats, screenplay: contract.stats }, narration: screenplayNarration(play) };
+}
+
 /** The errors as a numbered list a model can act on (the make repair pass). */
 export function formatCheckErrors(errors) {
   return errors.map((error, index) => `${index + 1}. [${error.id}] ${error.message} Fix: ${error.fix}${error.span?.text && !error.message.includes(error.span.text) ? ` (in: "${error.span.text}")` : ""}`).join("\n");
@@ -408,16 +447,24 @@ export function formatCheckErrors(errors) {
 export function formatScriptCheck(report, { label = "script" } = {}) {
   const { stats } = report;
   const lines = [`launchclip script check: ${report.ok ? "ok" : "failed"} (${label})`];
+  const play = stats.screenplay;
+  if (play) lines.push(`  screenplay: ${play.spoken_lines ?? 0} spoken and ${play.silent_lines ?? 0} silent lines; speakers ${play.speakers?.join(", ") || "none"}${play.estimated_seconds != null ? `; about ${play.estimated_seconds}s at ${play.wpm} wpm${play.duration ? ` (target ${play.duration}s)` : ""}` : ""}${play.problem_seconds != null ? `; problem at ${play.problem_seconds}s${play.problem_limit_seconds != null ? ` (limit ${play.problem_limit_seconds}s)` : ""}` : ""}`);
+  if (stats.words == null) return `${[...lines, ...findingLines(report)].join("\n")}\n`;
   lines.push(`  ${stats.words} words, ${stats.sentences} sentences${stats.wpm != null ? `, ${stats.wpm} wpm over ${stats.duration}s (ceiling ${stats.word_ceiling} words)` : ""}; format ${stats.format} (${stats.format_source}), audience ${stats.audience}`);
   lines.push(`  hook ${stats.hook_words}/${stats.hook_max} words, mean sentence ${stats.mean_sentence_words} words, grade ${stats.grade}/${stats.grade_max}, ${stats.ctas.length} CTA${stats.ctas.length === 1 ? "" : "s"}`);
+  return `${[...lines, ...findingLines(report)].join("\n")}\n`;
+}
+
+function findingLines(report) {
+  const lines = [];
   for (const [kind, list] of [["error", report.errors], ["warning", report.warnings]]) {
     for (const item of list) {
-      lines.push(`${kind}: [${item.id}] ${item.message}`);
+      lines.push(`${kind}: [${item.id}]${item.line ? ` (line ${item.line})` : ""} ${item.message}`);
       lines.push(`  fix: ${item.fix}`);
     }
   }
   if (!report.errors.length && !report.warnings.length) lines.push("No errors or warnings.");
-  return `${lines.join("\n")}\n`;
+  return lines;
 }
 
 /** prompt + notes + assets + transcripts, or a string, as one text. */

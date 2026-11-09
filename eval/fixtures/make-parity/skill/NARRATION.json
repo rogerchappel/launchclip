@@ -1,0 +1,412 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "text": "Orbital just raised 40 million dollars, and the price of its launch tier dropped the same day. The round was led by Northwind, its first investor. The new tier starts at 19 dollars a month, down from 29. Three things changed: the price, the build queue, and the free plan. Builds that took nine minutes now take four. The free plan keeps every feature, with a cap of 200 builds a month. That is the bet: cheaper builds bring bigger teams.",
+  "duration_seconds": 59.4,
+  "words": [
+    {
+      "text": "Orbital",
+      "start": 0,
+      "end": 0.66
+    },
+    {
+      "text": "just",
+      "start": 0.73,
+      "end": 1.39
+    },
+    {
+      "text": "raised",
+      "start": 1.47,
+      "end": 2.13
+    },
+    {
+      "text": "40",
+      "start": 2.2,
+      "end": 2.86
+    },
+    {
+      "text": "million",
+      "start": 2.93,
+      "end": 3.59
+    },
+    {
+      "text": "dollars,",
+      "start": 3.67,
+      "end": 4.33
+    },
+    {
+      "text": "and",
+      "start": 4.4,
+      "end": 5.06
+    },
+    {
+      "text": "the",
+      "start": 5.13,
+      "end": 5.79
+    },
+    {
+      "text": "price",
+      "start": 5.87,
+      "end": 6.53
+    },
+    {
+      "text": "of",
+      "start": 6.6,
+      "end": 7.26
+    },
+    {
+      "text": "its",
+      "start": 7.33,
+      "end": 7.99
+    },
+    {
+      "text": "launch",
+      "start": 8.07,
+      "end": 8.73
+    },
+    {
+      "text": "tier",
+      "start": 8.8,
+      "end": 9.46
+    },
+    {
+      "text": "dropped",
+      "start": 9.53,
+      "end": 10.19
+    },
+    {
+      "text": "the",
+      "start": 10.27,
+      "end": 10.93
+    },
+    {
+      "text": "same",
+      "start": 11,
+      "end": 11.66
+    },
+    {
+      "text": "day.",
+      "start": 11.73,
+      "end": 12.39
+    },
+    {
+      "text": "The",
+      "start": 12.47,
+      "end": 13.13
+    },
+    {
+      "text": "round",
+      "start": 13.2,
+      "end": 13.86
+    },
+    {
+      "text": "was",
+      "start": 13.93,
+      "end": 14.59
+    },
+    {
+      "text": "led",
+      "start": 14.67,
+      "end": 15.33
+    },
+    {
+      "text": "by",
+      "start": 15.4,
+      "end": 16.06
+    },
+    {
+      "text": "Northwind,",
+      "start": 16.13,
+      "end": 16.79
+    },
+    {
+      "text": "its",
+      "start": 16.87,
+      "end": 17.53
+    },
+    {
+      "text": "first",
+      "start": 17.6,
+      "end": 18.26
+    },
+    {
+      "text": "investor.",
+      "start": 18.33,
+      "end": 18.99
+    },
+    {
+      "text": "The",
+      "start": 19.07,
+      "end": 19.73
+    },
+    {
+      "text": "new",
+      "start": 19.8,
+      "end": 20.46
+    },
+    {
+      "text": "tier",
+      "start": 20.53,
+      "end": 21.19
+    },
+    {
+      "text": "starts",
+      "start": 21.27,
+      "end": 21.93
+    },
+    {
+      "text": "at",
+      "start": 22,
+      "end": 22.66
+    },
+    {
+      "text": "19",
+      "start": 22.73,
+      "end": 23.39
+    },
+    {
+      "text": "dollars",
+      "start": 23.47,
+      "end": 24.13
+    },
+    {
+      "text": "a",
+      "start": 24.2,
+      "end": 24.86
+    },
+    {
+      "text": "month,",
+      "start": 24.93,
+      "end": 25.59
+    },
+    {
+      "text": "down",
+      "start": 25.67,
+      "end": 26.33
+    },
+    {
+      "text": "from",
+      "start": 26.4,
+      "end": 27.06
+    },
+    {
+      "text": "29.",
+      "start": 27.13,
+      "end": 27.79
+    },
+    {
+      "text": "Three",
+      "start": 27.87,
+      "end": 28.53
+    },
+    {
+      "text": "things",
+      "start": 28.6,
+      "end": 29.26
+    },
+    {
+      "text": "changed:",
+      "start": 29.33,
+      "end": 29.99
+    },
+    {
+      "text": "the",
+      "start": 30.07,
+      "end": 30.73
+    },
+    {
+      "text": "price,",
+      "start": 30.8,
+      "end": 31.46
+    },
+    {
+      "text": "the",
+      "start": 31.53,
+      "end": 32.19
+    },
+    {
+      "text": "build",
+      "start": 32.27,
+      "end": 32.93
+    },
+    {
+      "text": "queue,",
+      "start": 33,
+      "end": 33.66
+    },
+    {
+      "text": "and",
+      "start": 33.73,
+      "end": 34.39
+    },
+    {
+      "text": "the",
+      "start": 34.47,
+      "end": 35.13
+    },
+    {
+      "text": "free",
+      "start": 35.2,
+      "end": 35.86
+    },
+    {
+      "text": "plan.",
+      "start": 35.93,
+      "end": 36.59
+    },
+    {
+      "text": "Builds",
+      "start": 36.67,
+      "end": 37.33
+    },
+    {
+      "text": "that",
+      "start": 37.4,
+      "end": 38.06
+    },
+    {
+      "text": "took",
+      "start": 38.13,
+      "end": 38.79
+    },
+    {
+      "text": "nine",
+      "start": 38.87,
+      "end": 39.53
+    },
+    {
+      "text": "minutes",
+      "start": 39.6,
+      "end": 40.26
+    },
+    {
+      "text": "now",
+      "start": 40.33,
+      "end": 40.99
+    },
+    {
+      "text": "take",
+      "start": 41.07,
+      "end": 41.73
+    },
+    {
+      "text": "four.",
+      "start": 41.8,
+      "end": 42.46
+    },
+    {
+      "text": "The",
+      "start": 42.53,
+      "end": 43.19
+    },
+    {
+      "text": "free",
+      "start": 43.27,
+      "end": 43.93
+    },
+    {
+      "text": "plan",
+      "start": 44,
+      "end": 44.66
+    },
+    {
+      "text": "keeps",
+      "start": 44.73,
+      "end": 45.39
+    },
+    {
+      "text": "every",
+      "start": 45.47,
+      "end": 46.13
+    },
+    {
+      "text": "feature,",
+      "start": 46.2,
+      "end": 46.86
+    },
+    {
+      "text": "with",
+      "start": 46.93,
+      "end": 47.59
+    },
+    {
+      "text": "a",
+      "start": 47.67,
+      "end": 48.33
+    },
+    {
+      "text": "cap",
+      "start": 48.4,
+      "end": 49.06
+    },
+    {
+      "text": "of",
+      "start": 49.13,
+      "end": 49.79
+    },
+    {
+      "text": "200",
+      "start": 49.87,
+      "end": 50.53
+    },
+    {
+      "text": "builds",
+      "start": 50.6,
+      "end": 51.26
+    },
+    {
+      "text": "a",
+      "start": 51.33,
+      "end": 51.99
+    },
+    {
+      "text": "month.",
+      "start": 52.07,
+      "end": 52.73
+    },
+    {
+      "text": "That",
+      "start": 52.8,
+      "end": 53.46
+    },
+    {
+      "text": "is",
+      "start": 53.53,
+      "end": 54.19
+    },
+    {
+      "text": "the",
+      "start": 54.27,
+      "end": 54.93
+    },
+    {
+      "text": "bet:",
+      "start": 55,
+      "end": 55.66
+    },
+    {
+      "text": "cheaper",
+      "start": 55.73,
+      "end": 56.39
+    },
+    {
+      "text": "builds",
+      "start": 56.47,
+      "end": 57.13
+    },
+    {
+      "text": "bring",
+      "start": 57.2,
+      "end": 57.86
+    },
+    {
+      "text": "bigger",
+      "start": 57.93,
+      "end": 58.59
+    },
+    {
+      "text": "teams.",
+      "start": 58.67,
+      "end": 59.33
+    }
+  ]
+}

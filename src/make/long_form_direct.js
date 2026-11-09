@@ -70,7 +70,9 @@ export function catalogueText(modules = moduleCatalogue()) {
 /**
  * Direct every chunk not already directed. options: {client, model, provider,
  * map (the beat map: changed in place), notes, assets: [{src, line}], format,
- * brand, done (chunk keys already directed), say}.
+ * brand, done (chunk keys already directed), say, review (a critic repair
+ * round: Map of chunk id → the critic's findings about the last cut; those
+ * chunks are directed again from the cards they have, with the findings)}.
  * → {chunks: [{id, key, reused, directed, kept, held, failed?, cost_usd, usage, model}],
  *    ruled: the rule-made card of every clause the model changed, by state id}
  * A chunk whose call fails keeps every rule-made card and reports failed.
@@ -160,9 +162,10 @@ export function directableStates(map) {
     .filter((state) => state.params && !FIXED_KINDS.has(state.kind))]));
 }
 
-async function askChunk({ client, model = null, provider = null, instructions, chunk, states, map, notes = [], assets = [], say }) {
+async function askChunk({ client, model = null, provider = null, instructions, chunk, states, map, notes = [], assets = [], say, review = null }) {
   if (!client) throw new Error("the direct pass needs a model client");
-  say?.(`model: PAID call to ${provider ?? client.provider} ${model} (visual direction, chunk ${chunk.id}, ${states.length} clauses)`);
+  const findings = review?.get(chunk.id) ?? [];
+  say?.(`model: PAID call to ${provider ?? client.provider} ${model} (visual direction, chunk ${chunk.id}, ${states.length} clauses${findings.length ? `, ${findings.length} critic finding${findings.length === 1 ? "" : "s"}` : ""})`);
   const chapter = (map.chapters ?? []).find((entry) => entry.shots?.some((shot) => chunk.shots.includes(shot.id)));
   const lines = [
     `Video: ${map.title ?? "untitled"}. Chapter: ${chapter?.title ?? "untitled"}.`,
@@ -173,13 +176,15 @@ async function askChunk({ client, model = null, provider = null, instructions, c
     ...states.flatMap((state) => [
       `### ${state.id} (${round(state.end - state.start)} s)`,
       `Narration: ${state.text}`,
-      `Rule pick: ${CARRIED.has(state.change) ? `hold (${state.module})` : `${state.module} ${JSON.stringify(state.params)}`}`,
+      `${findings.length ? "Last cut" : "Rule pick"}: ${CARRIED.has(state.change) ? `hold (${state.module})` : `${state.module} ${JSON.stringify(state.params)}`}`,
       ""
     ]),
     "## Files the video can show",
     "",
     ...(assets.length ? assets.map((asset) => `- ${asset.line}`) : ["None: use no media files."])
   ];
+  // A critic repair round: the cards above are the last cut's, and a reviewer saw these problems in it.
+  if (findings.length) lines.push("", "## A reviewer watched the last cut", "", "Each clause's \"Last cut\" line is the card it had. Fix these, changing the clauses they name and as little else as you can; return every other clause's card as it was:", "", ...findings.map((line) => `- ${line}`));
   if (notes.length) lines.push("", "## Notes", "", ...notes.map((text) => String(text).trim().slice(0, 6000)));
   const result = await client.runStructured({ instructions, input: `${lines.join("\n")}\n`, schema: SCHEMA, schemaName: "launchclip_long_form_direct", model: undefined, maxOutputTokens: 16000 });
   const usage = result?.usage ?? {};
