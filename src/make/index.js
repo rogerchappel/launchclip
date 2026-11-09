@@ -55,7 +55,7 @@ import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
-import { auditNarration, researchBrief, researchEnabled, researchMode } from "../research/make.js";
+import { auditNarration, noteCaptures, researchBrief, researchEnabled, researchMode } from "../research/make.js";
 import { packCaptionsFor } from "@launchclip/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
@@ -1375,6 +1375,8 @@ async function settleCaptures(ctx) {
   }
   ctx.report.captures = { requested: result.recorded.length + result.failed.length, recorded: ctx.captures.length, reused: result.reused, ...(Object.keys(result.usage ?? {}).length ? { usage: result.usage } : {}), failed: result.failed.map((entry) => ({ id: entry.id, url: entry.url, reason: entry.reason })) };
   for (const entry of result.failed) ctx.report.warnings.push(`capture ${entry.id}${entry.url ? ` (${entry.url})` : ""} was not recorded: ${entry.reason}`);
+  // Loud, with the fix, and in the research gate (src/research/capture_status.js).
+  await noteCaptures(ctx, result, [...result.recorded, ...result.failed.map((entry) => ({ id: entry.id, url: entry.url }))]);
   await readResearchExtras(ctx);
   if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
 }

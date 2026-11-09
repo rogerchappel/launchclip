@@ -13,6 +13,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { autoResearch } from "./auto.js";
 import { auditScript, researchNotes, runResearch } from "./index.js";
+import { CAPTURE_STATUS_FILE, captureStatus, captureStatusLines, gateWithCaptures } from "./capture_status.js";
 import { RESEARCH_PATHS } from "./schema.js";
 
 export const RESEARCH_MODES = Object.freeze(["auto", "on", "off"]);
@@ -116,4 +117,27 @@ export function auditNarration(ctx, research, narration) {
   ctx.researchGate = audit.ok
     ? { status: "passed", reason: `every claim in the narration is backed by ${RESEARCH_PATHS.dir}/${RESEARCH_PATHS.ledger}` }
     : { status: "pending", reason: `${unbacked.length} claim(s) in the narration are not backed by a source`, claims: unbacked.map((claim) => claim.text) };
+}
+
+/**
+ * After make's captures settle: which verified claims have no page to show
+ * and why, in the report (captures.status, .missing, .claims_without_capture),
+ * in research/capture-status.json, as warnings with the fix, and in the
+ * research gate (missing captures hold it at pending).
+ * result: recordCaptures' {recorded, failed}; requests: every capture request.
+ */
+export async function noteCaptures(ctx, result, requests) {
+  if (!result) return null;
+  const dir = path.join(ctx.project, RESEARCH_PATHS.dir);
+  let ledger = null;
+  try { ledger = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.ledger), "utf8")); } catch { /* captures without a ledger are still counted */ }
+  const status = captureStatus(ledger, requests, result);
+  ctx.report.captures = { ...ctx.report.captures, status: status.status, missing: status.missing, claims_without_capture: status.claims_without_capture, file: `${RESEARCH_PATHS.dir}/${CAPTURE_STATUS_FILE}` };
+  await writeFile(path.join(dir, CAPTURE_STATUS_FILE), `${JSON.stringify(status, null, 2)}\n`).catch(() => {});
+  for (const line of captureStatusLines(status)) {
+    ctx.report.warnings.push(`captures: ${line}`);
+    ctx.say?.(`captures: ${line}`);
+  }
+  ctx.researchGate = gateWithCaptures(ctx.researchGate, status);
+  return status;
 }
