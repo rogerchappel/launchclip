@@ -3,7 +3,7 @@
 `launchclip research <topic|script.md> --out research/` takes a topic or a
 script and finds the evidence behind it, then the assets to show it with. It
 is fully automatic and makes no model calls, so the metered `make` pipeline
-(`--research on`) and the subscription-agent skill path
+(`--research auto|on`) and the subscription-agent skill path
 (`skills-src/references/research.md`) run the same code. It is strict about
 honesty: a claim is verified only when a fetched source states it in one
 passage, and every other claim is flagged for the script.
@@ -12,13 +12,14 @@ passage, and every other claim is flagged for the script.
 script.md / topic
   └─ claims        src/research/claims.js    checkable sentences: numbers, dates, quotes, entities
   └─ sources       src/research/sources.js   HF, GitHub, arXiv APIs, script links, optional web search
+  └─ news          src/research/news.js      keyless leads: company feeds, Hacker News, GDELT, Wikipedia current events
   └─ verify        src/research/verify.js    ledger: verified / contradicted / unverified + quote span
   └─ captures      src/research/capture.js   launchclip.capture.v1 per on-screen source
   └─ social        src/research/social.js    the entity's own X posts: x-embed capture + social-post card
   └─ data          src/research/data.js      tables → cited chart data
   └─ media         src/research/media.js     licence-clear footage and stills (gap map C4)
   └─ people        src/research/people.js    Wikidata role and affiliation, Commons portrait or none
-  → research/{evidence.json, captures/, data/, assets.json, social.json, snapshots/, RESEARCH.md}
+  → research/{evidence.json, captures/, data/, assets.json, social.json, news.json, snapshots/, RESEARCH.md}
 ```
 
 ## Claims
@@ -30,8 +31,24 @@ ids, arXiv ids, URLs, models, benchmarks, people, organisations). Version
 numbers (`GPT-5.5`), ids and the digits of a date are not quantities.
 Questions and calls to action are left out. Plain statements with no anchor
 ("the weights are open") need a model or an agent: `--claims claims.json`
-(`{"claims": [{"text", "search"}]}`, sentences copied verbatim) or, inside
-`make`, the make model's claim pass merges them in by text.
+or, inside `make`, the make model's claim pass merges them in by text.
+
+`claims.json` is how an agent with its own web tools hands in what it
+found, so the skill path and the headless path end with the same files:
+
+```json
+{ "claims": [{ "text": "the sentence, verbatim", "search": "query?", "source_url": "https://…", "sources": ["https://…"], "passage": "the source's own words that state it" }],
+  "urls": ["https://…"] }
+```
+
+Every `source_url`, `sources` entry and `urls` entry is fetched, frozen and
+checked like a `--url`; naming a source verifies nothing by itself. A
+`passage` is the agent's reading of the source: the claim is verified by it
+only when a fetched source holds the passage word for word and the passage
+carries every number and date of the claim. That source records
+`matched_by: "passage"`, and the passage is the quote span the capture
+highlights. The file's shape is checked, and an error names the claim that
+is wrong.
 
 ## Sources
 
@@ -43,6 +60,7 @@ Primary sources come first and are called directly:
 | GitHub | `/search/repositories`, `/repos/<o>/<r>`, raw README, releases, `/pulls/<n>`, `/commits/<sha>` | README plus API facts; release notes; PR title, body and merge state; commit message and files |
 | arXiv | `export.arxiv.org/api/query` (id or title search) | title, abstract, authors, date |
 | Links in the script, `--url` | fetched as pages | readable text, title, site name, publish date |
+| Keyless news | company feeds, Hacker News, GDELT, Wikipedia current events (below) | each lead's page, fetched and classified |
 | Web search (optional) | Brave (`BRAVE_API_KEY`), Tavily (`TAVILY_API_KEY`) or Serper (`SERPER_API_KEY`) | classified per page (below); a search that finds no primary source is asked again for the company's own page |
 
 Every source gets a `source_class`. **primary**: the party's own words: a
@@ -56,6 +74,79 @@ companies. **secondary**: anything else. The rule is structural; there is no
 domain allowlist. When a web search returns no primary source, research
 searches again for "<company> <product> announcement", restricted with
 `site:` to the company's domain once a page on it is known.
+
+### News without a key
+
+With no web search key, current stories still come from four public
+sources that need no key or sign-up (`src/research/news.js`; `--news none`
+skips them). Each gives leads only: a URL, a title and a date. The page a
+lead points at is then fetched, hashed and classified like any other source.
+
+| Source | Asked | Its terms |
+| --- | --- | --- |
+| Company and publisher feeds | The RSS or Atom feed a named company's official site advertises (`<link rel="alternate">`; the site comes from Wikidata), and any `--feed <url>` | Feeds the site itself offers; `robots.txt` is honoured |
+| Hacker News | The HN Search API for what the brief names (stories with a link and more than 20 points), or the official API's front page when the brief names nothing | No key. The official API states no rate limit; a run asks the search twice at most |
+| GDELT | The DOC 2.0 article list, once a run | Open for any use with a citation to the [GDELT Project](https://www.gdeltproject.org/); it asks for one request every 5 seconds, which the client enforces |
+| Wikipedia | `Portal:Current_events`, only for a brief that asks for the latest; the source links of matching items are followed | A user agent that names the client; requests in series. Its text is never quoted |
+
+Google News RSS is not used: no official statement permits an application
+to read it. The client sends `launchclip-research/1` with the project's URL as its
+user agent and no personal contact. Before a page or feed on someone's site
+is fetched, the site's `robots.txt` is read (once per host) and obeyed: a
+closed page is not read, so it verifies and shows nothing. API calls are
+not crawling and skip that check.
+
+The rule that a story needs a primary source still holds, and a news index
+is never one:
+
+- A lead's page is classified against the names in the brief plus the names
+  in its own headline, so a company's post on its own domain is primary
+  ("Nimbus Unveils…" on `nimbus.ai`) and a report about it is not.
+- A report that is not primary has its links followed once, to pages on the
+  domain of the company the story names. That is usually where the primary
+  source is.
+- Hacker News, GDELT and Wikipedia are how a story was found, never who said
+  it. They are listed in `research/news.json` and never reach the script
+  notes, the narration or the screen.
+
+For a topic, or a brief that asks for the latest, each kept story's own
+headline becomes a claim (`headline: true`, `origin: "news"`) when the page
+states it word for word, so it is verified against its page and gets a
+capture request like any other claim.
+
+`research/news.json` (`launchclip.research-news.v1`) lists every lead that
+was followed: `{queries, freshness, providers: [{id, name, terms, leads}],
+stories: [{title, url, publisher, published_at, age_days, via, source_class,
+primary, status, reason?, from?, claim}]}`. `status` is `kept`,
+`no-primary-source`, `stale`, `undated` (a window is set and the page
+gives no date), `off-topic` (the page does not mention what the brief asks
+about) or `not-fetched` (with the `reason`: closed by
+`robots.txt`, refused by the site, or a failed request). A refusal is a
+finding: research never works round a block.
+
+### Publish dates and old news
+
+Every claim with a supporting source carries `published_at`, the date its
+best primary source was published (the page's own date; a feed's or index's
+date only when the page gives none). A brief that asks for the latest sets a
+freshness window from its own words, or from `--fresh-days <n>` (`none`
+turns it off):
+
+| The brief says | Window |
+| --- | --- |
+| "today", "breaking", "yesterday", "this morning" | 3 days |
+| "this week", "last week", "just announced" | 10 days |
+| "latest", "recent", "news", "headlines", "what's new" | 14 days |
+| "this month", "last month" | 45 days |
+
+Inside a window, a lead older than it is not followed, a story whose page
+is older is recorded as `stale` and makes no claim, and a claim from the
+brief whose source is older stays `verified` but gets `stale: {published_at,
+age_days, window_days}` and a `date-or-drop` flag. A verified claim whose
+source has no date gets `undated: true` and the same flag. The script notes
+list these under "Old news", apart from the facts the writer may present as
+new. The ledger records the window as `freshness: {days, asked_by}` and
+counts `stale` and `undated` in its summary.
 
 A Hugging Face search keeps the named organisation's upload over re-uploads,
 quantisations and fine-tunes; with no org match, a repo needs 25 likes to
@@ -77,6 +168,7 @@ response body. Remote text is data and is never followed as an instruction.
     "id": "c004", "text": "…", "kind": "number|date|quote|entity|statement", "section": "What changed",
     "values": [{ "raw": "77.0", "value": 77, "unit": null }], "dates": [], "quote": null, "entities": [],
     "status": "verified|contradicted|unverified", "confidence": 0.84, "primary_support": true,
+    "published_at": "ISO",                          // the supporting primary source's publish date, when it gives one
     "sources": [{
       "url", "title", "publisher", "published_at", "fetched_at", "sha256", "kind", "primary": true, "finder",
       "supports": true, "confidence": 0.84,
@@ -174,9 +266,12 @@ claims and their captures:
 | `claim.data.sources` | two or more GitHub PR or commit sources | `[{module, params, token}]`, compact `sourceParams`, in date order |
 
 `runResearch` attaches what it can at once. Post data needs the clip's
-sidecar, so after `launchclip evidence capture` run
-`launchclip research attach research/ [--root .]`, which rewrites the
-ledger and capture requests with the data. `eval/beat-map-dry-run.mjs`
+sidecar, so record the requests with `launchclip research capture research/
+[--root .]`, which records each one, says which could not be recorded and
+why (EVIDENCE_CAPTURE.md, "When a capture is not made"), and then attaches.
+After a single `launchclip evidence capture`, run `launchclip research
+attach research/ [--root .]`; either rewrites the ledger and capture
+requests with the data. `eval/beat-map-dry-run.mjs`
 attaches in memory when it loads a folder.
 
 ## Posts on X: `research/social.json` (`launchclip.research-social.v1`)
@@ -247,6 +342,43 @@ in `rejected`. YouTube, streaming services and social video hosts are blocked
 `query` and `beat`. Icons, music and SFX are resolved by the media-use
 skill, not here.
 
+Besides the metaphor queries, research looks for what each verified claim
+is about (the organisation, place or event it names; up to three queries).
+Those items carry `claims: [id]`, so a planner knows which claim a photo
+can sit beside.
+
+**Staging and placing.** `assets.json` holds links. `launchclip research
+capture` (and `make`, when it researches) downloads each item into
+`assets/research/<id>.<ext>` (`src/research/stage_media.js`): a sized
+preview for a Commons image, the medium rendition from NASA's file list,
+the smallest full MP4 of an Internet Archive item, and direct files
+elsewhere; at most 8 items, 15 MB an image and 80 MB a video, public hosts
+only. Each staged entry gains `local`, `bytes`, `sha256` and
+`downloaded_from`; one that cannot be staged gains `not_staged` with the
+reason.
+
+The licence is checked again at this step, not trusted from the file:
+an entry whose licence is missing or not in the clear list, that has no
+author or source page, or that sits on a blocked host is never downloaded.
+Only staged, licence-clear entries are offered to the planner. Each
+inventory line says what the item shows, the claim it was found for (or
+"Illustration only: it is not evidence for any claim"; only a portrait is
+said to support a claim), its licence and
+credit, and how to place it (`media-window`, `photo-scene`):
+
+```text
+assets/research/harbour.jpg — image, archive photo "Northside Harbour at dawn" from Wikimedia Commons, 4000×3000 at source, found for "Port Authority". Found for claim c001 ("The Port Authority reopened Northside Harbour."): place it beside that claim only if it shows what the claim is about; it illustrates, the source page proves. Licence: CC BY-SA 4.0; credit "“Northside Harbour at dawn” by A. Photographer, CC BY-SA 4.0, via Wikimedia Commons" (publish.json carries it). Use as {"module": "media-window", …} or a full-bleed {"module": "photo-scene", …} on the line it illustrates.
+```
+
+In `make` the storyboard may reference only paths in its asset manifest,
+so nothing unstaged or unclear can be placed. `publish.json` then lists
+`credits` (asset, title, author, licence, licence URL, source page and the
+attribution line) for every research item the storyboard uses and appends
+the attribution lines to the description, lists `sources` (URL, title,
+publisher, dates) for every recorded page shown, and warns
+(`licence: … remove it`) about any `assets/research/` file placed without a
+cleared licence on record.
+
 `logos.json` (`launchclip.research-logos.v1`, `src/research/logos.js`): each
 organisation the research names, resolved to its official domain (Wikidata's
 official website, or `logoDomains`), then its logo fetched at run time from
@@ -274,8 +406,27 @@ reason. A photo is never scraped from a page.
 
 ## In `make`
 
-`launchclip make "<prompt>" --research on` (motion lane, off by default):
-the brief (prompt plus notes) is written to `research/brief.md` and
+`launchclip make "<prompt>"` researches the brief in the motion lane when
+`--research` says so. The default is `auto` (`src/research/auto.js`), which
+reads the brief (prompt plus notes) and needs no model or network:
+
+| The brief has | Research |
+| --- | --- |
+| News wording: "news", "breaking", "headlines", "this week", "yesterday", "just announced", "what happened", "fact-check" | on, even in a brief for a promo |
+| A dated event (a day or a month, not a bare year), a named release with a release verb ("Nimbus AI released Nimbus-7B"), a versioned name on its own ("GPT-5.5 explained"), "latest" or "recently", or a question of fact about something named | on, unless it is a product video |
+| A product video: launch video, promo, ad, demo, tutorial, walkthrough, testimonial | off: the facts are the brand's own |
+| Its own script (a `## Script` or `## Narration` section), or a recording or voiceover (the footage-led and voiceover lanes) | off |
+| None of the above (an evergreen topic) | off |
+
+`--research on` always researches and `--research off` never does. Outside
+the motion lane nothing new is researched, but capture requests already in
+the project's `research/captures/` (from `launchclip research`) are recorded
+with `on`, and with `auto` when that folder exists. `MAKE.json` records the
+decision as `research_decision: {mode, run, reason, signals}`, and the run
+prints it (`research: on (auto): the brief reads as news (news wording:
+"this week")`).
+
+When research runs, the brief (prompt plus notes) is written to `research/brief.md` and
 researched, and the result is reused while the brief hashes the same. The
 script pass gets `researchNotes()`: verified claims, facts from primary
 sources, what not to state, the stories to drop, and the source rules: never
@@ -284,7 +435,9 @@ fact as the company's. Flagged brief claims become warnings. After
 the script, `auditScript()` checks the narration: each claim must match a
 verified ledger claim or a primary-source excerpt. Otherwise it is a warning,
 and the `research` gate stays `pending`, so the video is ready for review
-rather than ready.
+rather than ready. The gate also goes to `pending` when a verified claim's
+source page could not be recorded (no recorder, a paywall, a bot check):
+`MAKE.json` `captures` names each claim, the reason and the fix.
 
 ## Fixture
 

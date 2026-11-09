@@ -9,6 +9,7 @@ the same numbers for the CLI lane.
 
 ## Contents
 
+- [Open fast](#open-fast)
 - [Captions are on by default](#captions-are-on-by-default)
 - [Respect the Shorts safe zone](#respect-the-shorts-safe-zone)
 - [Master to the platform loudness target](#master-to-the-platform-loudness-target)
@@ -18,6 +19,32 @@ the same numbers for the CLI lane.
 - [Design the cover](#design-the-cover)
 - [Export settings](#export-settings)
 - [Publish manifest](#publish-manifest)
+
+## Open fast
+
+A Short is decided in its first second. `launchclip finish` checks the opening
+of every video of 90 seconds or less in its `hook` gate, from the storyboard
+and the measured narration (the same verdict in both renderers):
+
+- **A claim or question is readable at once.** A phrase or a number on screen
+  by 0.5 s (1.5 s over a talking head): the opening scene's title or headline,
+  a callout over the opening image, or the captions when the voice has
+  already started. One word is a label, not a claim.
+- **It says why to stay.** The opening text is not a bare topic ("Deck
+  care?"): give the myth, the mistake, the number with its unit or the bold
+  claim, in about 6–8 words.
+- **No logo-only open.** A `brand-lockup` or `logo-row` with no claim on it
+  never opens the video; put the logo on the end card.
+- **The first frame is already moving.** Cut straight into the opening scene,
+  or keep its `in` transition to 0.35 s or less (2 s over a talking head).
+- **The voice starts on time.** The first word is spoken by 0.5 s (2 s over a
+  talking head). Trim the silence before it.
+- **Text and icon cards do not crowd out the rest.** At most one for every
+  15 s (two at least), never two back to back, no card module more than twice.
+
+The limits are the cadence profile's own (`first_visual_seconds` and
+`first_motion_seconds` in [profiles.md](profiles.md)); `gates.hook.thresholds`
+in `finish.json` shows the numbers used and where each came from.
 
 ## Captions are on by default
 

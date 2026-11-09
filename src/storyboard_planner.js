@@ -40,8 +40,9 @@ import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
-import { mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
-import { cardErrors, fitShotCallouts, hookErrors, storyboardSeconds } from "./short_form_checks.js";
+import { featuredPrompt, unusedFeatured } from "./asset_understanding.js";
+import { bareNotesLine, mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
+import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSeconds } from "./short_form_checks.js";
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
@@ -95,7 +96,7 @@ function bandRepair(band) {
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null, profile = null, assets = null, project = null, featured = null } = options;
   // constraints: the app's hard rules (src/constraints.js, parsed); media:
   // the supplied clips and images [{src, kind, duration?, width?, height?,
   // notes?, description?}] the deterministic pass may place, whose notes'
@@ -183,7 +184,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -379,12 +380,16 @@ export async function planStoryboard(options = {}) {
         const extra = (extraCheck(checked.storyboard) ?? []).map((entry) => `assets: ${entry}`);
         if (extra.length) { checked.errors = [...checked.errors, ...extra]; checked.ok = false; }
       }
-      // The opening and the card mix of a short (src/short_form_checks.js).
+      // The opening and the card mix of every short, footage or not (src/short_form_checks.js).
       if (checked.storyboard) {
         const seconds = storyboardSeconds(checked.storyboard, wordList);
         const footage = Boolean(assets) && lane !== "footage-led";
-        const short = [...hookErrors(checked.storyboard, { seconds, footage, base: lane === "footage-led" || Boolean(fixed.base) }), ...cardErrors(checked.storyboard, { seconds, footage })];
+        const opensOnBase = lane === "footage-led" || Boolean(fixed.base);
+        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage })];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
+        // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
+        const left = unusedFeatured(checked.storyboard, featured ?? []);
+        if (left.length) { checked.errors = [...checked.errors, ...left]; checked.ok = false; }
         if (laidOut) {
           const resolved = resolvedOrNull(checked.storyboard, wordList, beats);
           const laid = layout.check(resolved ?? checked.storyboard, { seconds });
@@ -676,7 +681,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: "];
+const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: "];
 
 // A card's text that only holds its place: dashes, question marks, an
 // ellipsis, "TBD". A model with nothing to say fills a list or a table with
@@ -1020,7 +1025,7 @@ function firstJsonObject(text) {
 
 /**
  * "provider:model[@reasoning]" → a client with runStructured(). anthropic:<id>
- * uses @anthropic-ai/sdk (ANTHROPIC_API_KEY); openai, openrouter, ollama and
+ * uses @anthropic-ai/sdk (ANTHROPIC_API_KEY; request.images go as image content blocks); openai, openrouter, ollama and
  * compatible use src/model_provider.js (OPENAI_API_KEY, OPENROUTER_API_KEY, …).
  */
 export function createPlannerClient(modelSpec, options = {}) {
@@ -1036,7 +1041,33 @@ export function createPlannerClient(modelSpec, options = {}) {
   return { client: (options.createClient ?? createStructuredClient)(route, options), provider: route.provider, model: route.model, reasoning: route.reasoning };
 }
 
+// Requests asking for more output tokens than this are streamed.
+export const ANTHROPIC_STREAM_ABOVE = 16_000;
+const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * make's images ([{url: a data: URL or an https URL, detail?}]) → Anthropic
+ * image content blocks. A data URL becomes a base64 source, an https URL a
+ * url source; anything else (or a type the API does not take) throws, so a
+ * critic never reviews fewer sheets than it lists.
+ */
+export function anthropicImageBlocks(images) {
+  return (Array.isArray(images) ? images : []).map((image, index) => {
+    const url = String(image?.url ?? "");
+    const data = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+    if (data) {
+      if (!ANTHROPIC_IMAGE_TYPES.has(data[1])) throw new Error(`image ${index + 1} is ${data[1]}; the Anthropic API takes JPEG, PNG, GIF or WebP`);
+      return { type: "image", source: { type: "base64", media_type: data[1], data: data[2].replace(/\s+/g, "") } };
+    }
+    if (/^https:\/\//i.test(url)) return { type: "image", source: { type: "url", url } };
+    throw new Error(`image ${index + 1} is neither a base64 data URL nor an https URL`);
+  });
+}
+
 export class AnthropicPlannerClient {
+  // The Messages API takes images, so the headless critic can run on this client.
+  supportsImages = true;
+
   constructor({ model, apiKey, sdk } = {}) {
     if (!nonEmpty(model)) throw new Error("anthropic planner needs a model id");
     this.provider = "anthropic";
@@ -1051,12 +1082,17 @@ export class AnthropicPlannerClient {
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       this.sdk = new Anthropic({ apiKey: this.apiKey });
     }
-    const message = await this.sdk.messages.create({
+    const text_ = typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {});
+    // Images (the headless critic's contact sheets) go first, as image content blocks; the text follows them.
+    const images = anthropicImageBlocks(options.images);
+    const request = {
       model: options.model ?? this.model,
       max_tokens: Number(options.maxOutputTokens ?? 16_000),
       system: String(options.instructions ?? ""),
-      messages: [{ role: "user", content: typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {}) }]
-    });
+      messages: [{ role: "user", content: images.length ? [...images, { type: "text", text: text_ }] : text_ }]
+    };
+    // A large max_tokens is streamed: the SDK refuses a non-streaming request that could run past its timeout.
+    const message = request.max_tokens > ANTHROPIC_STREAM_ABOVE ? await this.sdk.messages.stream(request).finalMessage() : await this.sdk.messages.create(request);
     const text = (message?.content ?? []).filter((block) => block?.type === "text").map((block) => block.text).join("");
     const usage = message?.usage ?? {};
     return {
@@ -1117,7 +1153,7 @@ function sceneTimes(storyboard, words, beats) {
 
 // assets-relative src → the notes text the constraints prompt quotes for a must_use file.
 function mediaNoteMap(media) {
-  return new Map(media.filter((item) => item?.notes).map((item) => [String(item.src).replace(/^assets\//, ""), mediaNotesLine(item).replace(/^ Notes from the app: /, "").replace(/\.$/, "")]));
+  return new Map(media.filter((item) => item?.notes).map((item) => [String(item.src).replace(/^assets\//, ""), bareNotesLine(item)]));
 }
 
 function moduleIds(story) {
