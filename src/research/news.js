@@ -120,7 +120,8 @@ export async function findNewsLeads(http, options = {}) {
     if (!runs[id]) continue;
     let found = [];
     try { found = await runs[id](); } catch { found = []; }
-    const fresh = found.filter((lead) => usableLead(lead) && withinWindow(lead.published_at, now, windowDays));
+    // An index matches a word anywhere on a page (a browser's "Mozilla/5.0"); a lead's own title must be about the brief.
+    const fresh = found.filter((lead) => usableLead(lead) && withinWindow(lead.published_at, now, windowDays) && (!lead.title || lead.via.startsWith("feed:") || onTopic(lead.title, queries)));
     for (const lead of fresh.slice(0, options.perProvider ?? NEWS_DEFAULTS.perProvider)) {
       const key = leadKey(lead.url);
       const existing = merged.get(key);
@@ -150,8 +151,22 @@ function withinWindow(published, now, windowDays) {
   return age == null || age <= windowDays;
 }
 
+/**
+ * Whether text is about one of the queries: it holds a telling word of one
+ * (four letters or more; a short query's every word), as a whole word.
+ * "Nimbus-7B is out" is about "Nimbus AI". No query matches everything.
+ */
+export function onTopic(text, queries = []) {
+  if (!queries.length) return true;
+  return queries.some((query) => {
+    const words = query.toLowerCase().split(/[\s/-]+/).filter(Boolean);
+    const telling = words.filter((word) => word.length >= 4);
+    return telling.length ? telling.some((word) => hasWord(text, word)) : words.every((word) => hasWord(text, word));
+  });
+}
+
 /** Whether text holds the word as a whole word ("ai" is not in "said"). */
-function hasWord(text, word) {
+export function hasWord(text, word) {
   return new RegExp(`(?<![a-z0-9])${String(word).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`).test(String(text).toLowerCase());
 }
 
@@ -304,9 +319,15 @@ export function headlineOf(title) {
  */
 export function storyOwners(title) {
   const headline = headlineOf(title);
+  // Only a real headline counts: a title of a word or three is usually the site's own name, and every site owns that.
+  if ((headline.match(/[A-Za-z0-9][A-Za-z0-9'’$.-]*[A-Za-z0-9]/g) ?? []).length < 4) return [];
   const entities = extractEntities(headline).filter((entity) => ["org", "model", "name"].includes(entity.kind)).map((entity) => entity.name);
-  const words = (headline.match(/\b[A-Z][A-Za-z0-9]{3,}\b/g) ?? []).filter((word) => !GENERIC_OWNER.has(word.toLowerCase()));
-  return [...new Set([...entities, ...words])];
+  return [...new Set([...entities, ...nameWords(headline)])];
+}
+
+/** The capitalised words of a name or headline that could be a company's own name: "SpaceX Starship" → SpaceX, Starship. */
+export function nameWords(text) {
+  return (String(text ?? "").match(/\b[A-Z][A-Za-z0-9]{3,}\b/g) ?? []).filter((word) => !GENERIC_OWNER.has(word.toLowerCase()));
 }
 
 /** Links out of a page: the citations a report makes. → absolute http(s) urls on other hosts */

@@ -377,7 +377,7 @@ export function renderDigest({ ledger, requests, data, assets, social = null, lo
   return `${lines.join("\n")}\n`;
 }
 
-const NEWS_STATUS = { kept: "kept", stale: "too old", "no-primary-source": "dropped, no primary source", "not-fetched": "not fetched" };
+const NEWS_STATUS = { kept: "kept", stale: "too old", "no-primary-source": "dropped, no primary source", "not-fetched": "not fetched", "off-topic": "dropped, not about the brief" };
 
 /**
  * Headline claims from the kept stories: the page's own title, when the page
