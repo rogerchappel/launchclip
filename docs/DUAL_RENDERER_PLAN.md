@@ -248,6 +248,23 @@ window's drop shadow and ring on a twin element under the video
 on its video, so that shadow is missing under HyperFrames; its fixture passes
 because the shadow is faint.
 
+### Custom modules in both renderers
+
+Custom modules were Remotion-only: under HyperFrames a `custom` scene drew a
+"Missing module" card, and `finish` reported it after the whole video had
+rendered. Now a custom scene has a form per renderer
+(`source: {remotion, hyperframes}`): the Remotion form is the React
+component it always was, and the HyperFrames form is an HTML fragment with
+its styles and a script that adds tweens to the story's timeline. The story
+contract allowed this, since RFC §4 defines `custom` as a
+renderer-specific source file. A React component cannot be translated to
+HTML and GSAP by the kit, so the author writes both forms and is
+responsible for their parity. See KIT_CONTRACTS.md, "Custom modules".
+
+Where a custom scene has no form for the chosen renderer, in either
+direction, `finish` now stops before rendering and names the scene, the
+module and the renderer.
+
 ### RFC phase 5 status: storyboard planner (model side)
 
 Done:

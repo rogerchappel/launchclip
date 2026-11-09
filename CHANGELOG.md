@@ -4,6 +4,15 @@
 
 ### Added
 
+- Custom modules render in HyperFrames. A `custom` scene may name a form
+  per renderer, `"source": {"remotion": "remotion/Label.tsx", "hyperframes":
+  "hyperframes/label.html"}`: the HyperFrames form is an HTML fragment with
+  its styles and a script that adds tweens to the story's timeline, given the
+  same `scene`, `params`, `brand`, `format` and `model` as the React
+  component. A fragment that reads a clock or a random number, sets a timer,
+  animates with CSS or loads anything remote is refused. One path, as before,
+  is the Remotion form alone. See KIT_CONTRACTS.md, "Custom modules".
+
 - A coverage test in the fast suite (`test/module_coverage.test.js`) fails
   when a module has no HyperFrames emitter, no Remotion component or no
   per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
@@ -281,6 +290,14 @@
   structure gate's first-frame check passes. `--lines 23-28` or
   `--lines 64,71-74,78` (direction-map lines) and `--range 120-150` (seconds)
   pick the narration by hand, several stretches at once.
+
+### Changed
+
+- `launchclip finish` stops at the render stage, before anything renders,
+  when a custom module has no form for the chosen renderer (or its
+  HyperFrames fragment is missing or refused), and names the scene, the
+  module and the renderer. It used to render the whole video with a "Missing
+  module" card in it and fail the placeholder gate afterwards.
 
 ### Fixed
 
