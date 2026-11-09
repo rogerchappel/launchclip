@@ -1,0 +1,43 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: landscape-card, video",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "landscape-card",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "media": "assets/shots/blocks-static.mp4",
+          "kicker": "On the beach",
+          "title": "Drop your tyre pressures first",
+          "caption": "Around 18 psi on soft sand",
+          "chip": "Beach driving"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

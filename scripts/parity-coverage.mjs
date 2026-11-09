@@ -23,14 +23,6 @@ const REMOTION_REGISTRY = path.join(ROOT, 'kit', 'remotion', 'modules', 'index.t
 export const FIXTURE_ALLOWLIST = Object.freeze({
   // Footage and media layouts: fixtures need generated test media.
   'brand-lockup': 'no fixture yet',
-  'photo-scene': 'no fixture yet',
-  'split-screen': 'no fixture yet',
-  'landscape-card': 'no fixture yet',
-  'picture-in-picture': 'no fixture yet',
-  'media-compare': 'no fixture yet',
-  'media-stat': 'no fixture yet',
-  'media-list': 'no fixture yet',
-  'media-grid': 'no fixture yet',
   // Tactile data modules (catalogue H).
   'drop-grid': 'no fixture yet',
   'live-counter': 'no fixture yet',
