@@ -9,15 +9,19 @@
 //       the clock (clauses, shots, camera) → the model directs each clause's
 //       card (long_form_direct.js) → beatMapToStory → finish.
 //
-// Chapter lengths are fitted by tooling, the
-// first chapter's measured pace sets every later word target, and a chapter
-// more than RESIZE_TOLERANCE off its seconds gets one resize pass.
+// Chapter lengths are ceilings (docs/MAKE_SKILL_PARITY.md, phase 4): tooling
+// trims an outline that runs over the duration and never stretches one that
+// runs under, the first chapter's measured pace sets every later word
+// ceiling, a chapter more than RESIZE_TOLERANCE over its seconds gets one
+// resize pass, and a chapter that comes in short is left short: the seconds
+// it did not use go to the later chapters with the most facts (shareSpare).
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { estimateModelUsageCost } from "../cost_tracker.js";
-import { cleanNarration, RESIZE_TOLERANCE, RULES_HEADING, WORDS_PER_MINUTE } from "./script.js";
+import { storyOutlineSection } from "./concept_story.js";
+import { cleanNarration, LENGTH_CEILING, RESIZE_TOLERANCE, RULES_HEADING, WORDS_PER_MINUTE } from "./script.js";
 
 const run = promisify(execFile);
 
@@ -75,7 +79,8 @@ const OUTLINE_ROLE = `You outline long-form explainer videos (3 to 20 minutes) f
 - The first chapter is a cold open under 40 seconds: the most surprising fact and why it matters, then what the video will cover.
 - The last chapter lands the payoff: what it all means and what to watch next.
 - Spread the facts so no chapter is thin; a chapter with nothing concrete to say should not exist.
-- Chapter seconds add up to the target length.
+- Size each chapter by its material: more facts, more seconds. Never stretch a thin chapter to fill time.
+- The target length is a ceiling. Chapter seconds add up to the target when the material fills it, and to less when it does not; never to more.
 Return only the JSON object.`;
 
 const CHAPTER_ROLE = `You write one chapter of a long-form explainer video's narration, following an outline someone else wrote. Continue from where the previous chapter left off, without recapping it or greeting the viewer again, and hand on to the next chapter naturally. Only the last chapter closes the video.
@@ -97,7 +102,8 @@ function usageCost(result, client, provider, model) {
 }
 
 /**
- * The outline. options: {client, model, provider, prompt, notes, rules, assets, duration}.
+ * The outline. options: {client, model, provider, prompt, notes, rules, assets, duration,
+ * story ({concept, story}: the concept stage's winner; the chapters are derived from its beats)}.
  * → {title, title_options, chapters: [{title, point, facts, seconds}], usage, cost_usd, model}, fitted to the duration.
  */
 export async function writeOutline(options = {}) {
@@ -105,9 +111,11 @@ export async function writeOutline(options = {}) {
   if (!client) throw new Error("writeOutline needs a model client");
   const count = chapterCount(duration);
   const input = [
-    `Outline a ${Math.round(duration / 60)}-minute video (${duration} seconds) in about ${count} chapters, each ${CHAPTER_SECONDS.min}–${CHAPTER_SECONDS.max} seconds.`,
+    `Outline a video of up to ${Math.round(duration / 60)} minutes (${duration} seconds at most) in about ${count} chapters, each ${CHAPTER_SECONDS.min}–${CHAPTER_SECONDS.max} seconds.`,
     "",
-    ...sharedContext(options)
+    ...sharedContext(options),
+    // The story the concept stage chose and edited: the chapters come from its beats.
+    ...(options.story?.story?.narration?.beats?.length ? ["", ...storyOutlineSection(options.story)] : [])
   ].join("\n");
   const result = await client.runStructured({ instructions: OUTLINE_ROLE, input: `${input}\n`, schema: OUTLINE_SCHEMA, schemaName: "launchclip_long_form_outline", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : null;
@@ -117,8 +125,9 @@ export async function writeOutline(options = {}) {
 
 /**
  * Tooling's half of the outline: clean titles, drop chapters with no point,
- * and fit the seconds so they add up to the duration with every chapter
- * between CHAPTER_SECONDS.min and .max. Throws only when fewer than two
+ * and fit the seconds under the duration with every chapter between
+ * CHAPTER_SECONDS.min and .max. An outline that runs over is scaled down;
+ * one that runs under is left as it is (the video runs shorter). Throws only when fewer than two
  * chapters are left.
  */
 export function fitOutline(value, duration) {
@@ -133,28 +142,32 @@ export function fitOutline(value, duration) {
     }))
     .filter((entry) => entry.title && entry.point);
   if (chapters.length < 2) throw new Error(`the outline has ${chapters.length} usable chapter(s); a long video needs at least 2`);
-  // Missing seconds share the rest evenly; then every chapter scales to the duration and is clamped.
+  // Missing seconds share the rest evenly; then an outline over the duration scales down, and every chapter is clamped.
   const given = chapters.reduce((sum, entry) => sum + entry.seconds, 0);
   const missing = chapters.filter((entry) => !entry.seconds);
   for (const entry of missing) entry.seconds = Math.max(CHAPTER_SECONDS.min, (duration - given) / missing.length);
   const total = chapters.reduce((sum, entry) => sum + entry.seconds, 0);
-  for (const entry of chapters) entry.seconds = Math.round(Math.max(CHAPTER_SECONDS.min, Math.min(CHAPTER_SECONDS.max, entry.seconds * duration / total)));
+  const scale = Math.min(1, duration / total);
+  for (const entry of chapters) entry.seconds = Math.round(Math.max(CHAPTER_SECONDS.min, Math.min(CHAPTER_SECONDS.max, entry.seconds * scale)));
   return { title, title_options: options.length ? [...new Set([title, ...options])].slice(0, 3) : [title], chapters };
 }
 
 /**
  * One chapter's narration. options: {client, model, provider, prompt, notes,
  * rules, assets, outline, index, previous (the last sentences before this
- * chapter), words (target), resize: {previous, measured_words, measured_seconds}}.
+ * chapter), words (the ceiling), seconds (this chapter's slot when it is not
+ * the outline's), resize: {previous, measured_words, measured_seconds}}.
  * → {narration, word_count, word_target, usage, cost_usd, model}
  */
 export async function writeChapter(options = {}) {
   const { client, model = null, provider = null, outline, index, previous = null, words, resize = null } = options;
   if (!client) throw new Error("writeChapter needs a model client");
   const chapter = outline.chapters[index];
+  const seconds = options.seconds ?? chapter.seconds;
   const last = index === outline.chapters.length - 1;
   const lines = [
-    `Write chapter ${index + 1} of ${outline.chapters.length}, "${chapter.title}", in about ${words} words (about ${chapter.seconds} seconds read aloud).`,
+    `Write chapter ${index + 1} of ${outline.chapters.length}, "${chapter.title}". Its ceiling is about ${words} words (about ${seconds} seconds read aloud): stop when its point is made.`,
+    LENGTH_CEILING,
     "",
     "## This chapter",
     "",
@@ -171,7 +184,7 @@ export async function writeChapter(options = {}) {
     "",
     ...sharedContext(options)
   ];
-  if (resize?.previous) lines.push("", "## Resize", "", `Your previous version (${resize.measured_words} words) ran ${resize.measured_seconds}s when spoken; the chapter should run about ${chapter.seconds}s. Rewrite it to about ${words} words, keeping its facts and its handoff.`, "", resize.previous);
+  if (resize?.previous) lines.push("", "## Resize", "", `Your previous version (${resize.measured_words} words) ran ${resize.measured_seconds}s when spoken; the chapter should run at most about ${seconds}s. Cut it to about ${words} words, keeping its facts and its handoff.`, "", resize.previous);
   const result = await client.runStructured({ instructions: CHAPTER_ROLE, input: `${lines.join("\n")}\n`, schema: CHAPTER_SCHEMA, schemaName: "launchclip_long_form_chapter", model: undefined, maxOutputTokens: 4000 });
   const narration = cleanNarration(result?.value?.narration);
   if (!narration) throw new Error(`the chapter pass returned no narration for chapter ${index + 1} ("${chapter.title}")`);
@@ -187,9 +200,36 @@ export function chapterWords(seconds, wpm = WORDS_PER_MINUTE) {
   return Math.max(40, Math.round(seconds * (wpm || WORDS_PER_MINUTE) / 60));
 }
 
-/** Whether a chapter's take is far enough off its seconds for one resize pass. */
+/** Whether a chapter's take runs far enough over its seconds for one resize pass. A short chapter is never padded. */
 export function chapterNeedsResize(measured, target) {
-  return target > 0 && Math.abs(measured - target) / target > RESIZE_TOLERANCE;
+  return target > 0 && (measured - target) / target > RESIZE_TOLERANCE;
+}
+
+/**
+ * Seconds a chapter did not use, given to the chapters after it that have
+ * the material: shared by their fact counts (a chapter with no facts gets
+ * none), each capped at CHAPTER_SECONDS.max. slots: every chapter's seconds,
+ * changed in place. → the seconds handed on (the rest are dropped: the video
+ * runs shorter).
+ */
+export function shareSpare(slots, chapters, from, spare) {
+  let left = Math.floor(spare);
+  if (!(left > 0)) return 0;
+  const start = left;
+  let open = chapters.map((chapter, index) => index).filter((index) => index > from && chapters[index].facts?.length && slots[index] < CHAPTER_SECONDS.max);
+  while (left > 0 && open.length) {
+    const weight = open.reduce((sum, index) => sum + chapters[index].facts.length, 0);
+    let given = 0;
+    for (const index of open) {
+      const share = Math.min(CHAPTER_SECONDS.max - slots[index], Math.floor(left * chapters[index].facts.length / weight));
+      slots[index] += share;
+      given += share;
+    }
+    if (!given) break;
+    left -= given;
+    open = open.filter((index) => slots[index] < CHAPTER_SECONDS.max);
+  }
+  return start - left;
 }
 
 /** The last two sentences of a narration: the next chapter's handoff. */

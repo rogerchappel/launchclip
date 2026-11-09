@@ -2,7 +2,8 @@
 // of assets to a finished video, headless.
 //
 //   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
-//     → storyboard (planner + repair loop) → subject (matte the planned ranges) → finish → critic → MAKE.json
+//     → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
+//     → subject (matte the planned ranges) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
 // and mtime match, the script and storyboard while their inputs hash the same
@@ -31,7 +32,7 @@ import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { validateMakeOptions } from "./options.js";
 import { isLongForm, routeLane } from "./routing.js";
-import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, wordCount, writeChapter, writeOutline } from "./long_form.js";
+import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { fallbackPlates, plateMotif } from "@launchclip/core/plates.mjs";
@@ -41,7 +42,9 @@ import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
-import { needsResize, planVoiceSpeed, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
+import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
+import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
+import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, WORDS_PER_MINUTE, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
@@ -49,7 +52,7 @@ import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStruct
 import { loadSkeletonLibrary } from "../skeletons.js";
 import { talkingHeadLayout } from "../talking_head_layout.js";
 import { runHeadlessCritic } from "./critic.js";
-import { changedScenes, criticBriefSection, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
+import { changedScenes, criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
@@ -70,6 +73,8 @@ export const MAKE_PATHS = Object.freeze({
   brief: "BRIEF.md",
   script: "SCRIPT.json",
   angle: "ANGLE.json",
+  concepts: "CONCEPTS.json",
+  retention: "STORY.json",
   words: "NARRATION.json",
   story: "storyboard.json",
   direction: "DIRECTION.json",
@@ -152,7 +157,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     costs: { items: [], estimated_usd: 0, complete: true },
     repairs: null,
     gates: null,
-    candidates: { status: "skipped", reason: "make skips cheap candidate renders in headless mode; the rendered-candidates receipt is only required by cinematic-check's phase-2 contract, which make does not declare" },
+    candidates: null,
     critic: null,
     final: null,
     warnings: [],
@@ -171,6 +176,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["route", stageRoute],
     ["prepare", stagePrepare],
     ["storyboard", stageStoryboard],
+    ["candidates", stageCandidates],
     ["subject", stageSubject],
     ["finish", stageFinish],
     ["critic", stageCritic]
@@ -605,8 +611,9 @@ async function prepareVoiceover(ctx) {
 
 // Motion: the script pass writes the narration, the script checks run on it
 // (one repair pass on errors), the voice is synthesised (Kokoro by default;
-// cached), and one resize pass runs when the measured take misses the target
-// duration by more than 15%.
+// cached), and one resize pass runs when the measured take runs more than 15%
+// over the target duration. The duration is a ceiling: a take that runs short
+// is kept, and the video is shorter.
 async function prepareMotion(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
@@ -625,18 +632,20 @@ async function prepareMotion(ctx) {
   const plan = skeleton ? skeletonScriptPlan(planOptions, skeleton) : chooseScriptPlan(planOptions);
   ctx.scriptPlan = plan;
   const planChecks = { format: plan.format, goal: plan.goal, awareness: plan.awareness, pace: plan.pace, ...(plan.cta?.keyword ? { ctaKeyword: plan.cta.keyword } : {}), ...(plan.series?.choices ? { choices: plan.series.choices } : {}) };
-  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness, plan.pace, plan.cta ?? null, plan.series ?? null], skeleton: [plan.skeleton, skeleton?.version ?? null], ...(rules ? { rules } : {}), v: 3 });
+  // Concept and story first (docs/MAKE_SKILL_PARITY.md, phase 3): five concepts judged in a fresh context, the winner written and edited as a story.
+  const conceptStory = await stageConceptStory(ctx, { notes, rules, assets: assetLines, duration: target, wpm: plan.wpm });
+  const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness, plan.pace, plan.cta ?? null, plan.series ?? null], skeleton: [plan.skeleton, skeleton?.version ?? null], ...(rules ? { rules } : {}), ...(conceptStory ? { story: hashValue(conceptStory.story.narration) } : {}), v: 3 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = script && state.script?.hash === scriptHash && script.narration;
   if (!reuse) {
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, ${plan.format}, about ${plan.word_target} words)`);
-    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton });
+    const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, ...(conceptStory ? { story: conceptStory } : {}) });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
     const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, repair: { previous: script.narration, errors: first.errors } });
+      const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, ...(conceptStory ? { story: conceptStory } : {}), repair: { previous: script.narration, errors: first.errors } });
       addCost(report, "script-repair", ctx.model, repaired);
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
@@ -644,7 +653,7 @@ async function prepareMotion(ctx) {
   if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for the narration (cached per text in .launchclip/voice)");
   let take = await synthesize(ctx, script.narration);
   if (!reuse && needsResize(take.duration, target)) {
-    ctx.say(`script: the take runs ${take.duration}s against a ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+    ctx.say(`script: the take runs ${take.duration}s, over the ${target}s target; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
     const measuredWpm = take.words.length / Math.max(1, take.duration) * 60;
     const resized = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, words: Math.max(8, Math.round(target * measuredWpm / 60)), resize: { previous: script.narration, measured_seconds: take.duration, measured_words: take.words.length } });
     addCost(report, "script-resize", ctx.model, resized);
@@ -652,8 +661,11 @@ async function prepareMotion(ctx) {
     take = await synthesize(ctx, script.narration);
   }
   script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) };
+  // A take that runs short is not padded (the length is a ceiling): the script is checked at the length it runs.
+  const short = runsShort(take.duration, target);
+  if (short) script.take.short_of_target_seconds = round1(target - take.duration);
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
-  script.check = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  script.check = checkScript({ narration: script.narration, duration: short ? Math.max(1, Math.round(take.duration)) : target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
   auditNarration(ctx, research, script.narration);
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
@@ -664,7 +676,8 @@ async function prepareMotion(ctx) {
   ctx.words = take.words;
   ctx.narrationText = script.narration;
   ctx.format = { ...routing.format, duration: round1(take.duration + 0.8) };
-  if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  if (short) report.notices.push(`the script had ${take.duration}s to say, so the video is ${ctx.format.duration}s (the ${target}s target is a ceiling; nothing is padded to reach it)`);
+  else if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
@@ -674,8 +687,10 @@ async function prepareMotion(ctx) {
 
 // Long form (docs/LONG_FORM_MAKE_RFC.md, src/make/long_form.js): an outline,
 // then each chapter written and voiced in order. The first chapter's take sets
-// the pace every later chapter is written to; a chapter far off its seconds
-// gets one resize pass. Every chapter is cached by its inputs, so a rerun
+// the pace every later chapter is written to. Each chapter's seconds are a
+// ceiling: a chapter far over them gets one resize pass, and one that comes
+// in short is kept short, its unused seconds going to the later chapters
+// with the most facts. Every chapter is cached by its inputs, so a rerun
 // rewrites and revoices only from the first chapter that changed.
 async function prepareLongForm(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
@@ -689,12 +704,14 @@ async function prepareLongForm(ctx) {
   const writer = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets };
   const voice = narrationVoice(ctx);
   const saved = (await readJson(path.join(project, MAKE_PATHS.script)))?.long_form ?? null;
-  const outlineHash = hashValue({ prompt: ctx.text, notes, assets, target, model: ctx.model.spec, ...(rules ? { rules } : {}), v: 1 });
+  // Concept and story first: a long video's story is a spine of at most three minutes, and the outline is derived from it.
+  const conceptStory = await stageConceptStory(ctx, { notes, rules, assets, duration: storySeconds(target, { longForm: true }), wpm: WORDS_PER_MINUTE });
+  const outlineHash = hashValue({ prompt: ctx.text, notes, assets, target, model: ctx.model.spec, ...(rules ? { rules } : {}), ...(conceptStory ? { story: hashValue(conceptStory.story.narration) } : {}), v: 1 });
   let outline = saved?.outline_hash === outlineHash ? saved.outline : null;
   const passes = [];
   if (!outline) {
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (long-form outline, ${target}s)`);
-    const written = await writeOutline({ ...writer, duration: target });
+    const written = await writeOutline({ ...writer, duration: target, ...(conceptStory ? { story: conceptStory } : {}) });
     addCost(report, "outline", ctx.model, written);
     outline = { title: written.title, title_options: written.title_options, chapters: written.chapters };
     passes.push({ kind: "outline", chapters: outline.chapters.length, cost_usd: written.cost_usd });
@@ -705,30 +722,36 @@ async function prepareLongForm(ctx) {
   const takes = [];
   let wpm = null;
   let tail = null;
+  // Each chapter's seconds: the outline's, plus what earlier chapters did not use.
+  const slots = outline.chapters.map((chapter) => chapter.seconds);
   await mkdir(path.join(project, MAKE_PATHS.chapterTakes), { recursive: true });
   for (const [index, plan] of outline.chapters.entries()) {
     const id = chapterId(plan.title, index);
-    const words = chapterWords(plan.seconds, wpm);
+    const seconds = slots[index];
+    const words = chapterWords(seconds, wpm);
     const key = hashValue({ outline: outlineHash, index, tail, words, voice });
     let chapter = previous.get(key) ?? null;
     ctx.progress?.({ stage: "prepare", step: "chapter", done: index, total: outline.chapters.length });
     if (!chapter) {
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (chapter ${index + 1}/${outline.chapters.length}, about ${words} words)`);
-      const written = await writeChapter({ ...writer, outline, index, previous: tail, words });
+      const written = await writeChapter({ ...writer, outline, index, previous: tail, words, seconds });
       addCost(report, `chapter-${index + 1}`, ctx.model, written);
-      chapter = { id, title: plan.title, key, seconds: plan.seconds, narration: written.narration, word_target: words, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
+      chapter = { id, title: plan.title, key, seconds, narration: written.narration, word_target: words, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
     }
     ctx.say(`voice: chapter ${index + 1}/${outline.chapters.length} (${voiceProvider})`);
     let take = await synthesizeChapter(ctx, chapter.narration, index, voice);
-    if (!previous.has(key) && chapterNeedsResize(take.duration, plan.seconds)) {
+    if (!previous.has(key) && chapterNeedsResize(take.duration, seconds)) {
       const pace = take.words.length / Math.max(1, take.duration) * 60;
-      const resizedWords = chapterWords(plan.seconds, pace);
-      ctx.say(`script: chapter ${index + 1} runs ${take.duration}s against ${plan.seconds}s; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
-      const resized = await writeChapter({ ...writer, outline, index, previous: tail, words: resizedWords, resize: { previous: chapter.narration, measured_words: take.words.length, measured_seconds: take.duration } });
+      const resizedWords = chapterWords(seconds, pace);
+      ctx.say(`script: chapter ${index + 1} runs ${take.duration}s, over its ${seconds}s; one resize pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
+      const resized = await writeChapter({ ...writer, outline, index, previous: tail, words: resizedWords, seconds, resize: { previous: chapter.narration, measured_words: take.words.length, measured_seconds: take.duration } });
       addCost(report, `chapter-${index + 1}-resize`, ctx.model, resized);
       chapter = { ...chapter, narration: resized.narration, word_target: resizedWords, passes: [...chapter.passes, { kind: "resize", words: resized.word_count, measured_seconds: take.duration, cost_usd: resized.cost_usd }] };
       take = await synthesizeChapter(ctx, chapter.narration, index, voice);
     }
+    // A chapter that came in short keeps its length; the later chapters with the most facts may use its spare seconds.
+    const handed = shareSpare(slots, outline.chapters, index, seconds - take.duration);
+    if (handed) ctx.say(`long form: chapter ${index + 1} ran ${round1(seconds - take.duration)}s short; ${handed}s go to later chapters with more material`);
     // The first take's pace sizes every chapter after it.
     if (index === 0) wpm = take.words.length / Math.max(1, take.duration) * 60;
     chapter = { ...chapter, id, take: { seconds: take.duration, words: take.words.length, cached: Boolean(take.cached) } };
@@ -757,13 +780,46 @@ async function prepareLongForm(ctx) {
   ctx.words = joined.words;
   ctx.narrationText = narration;
   ctx.format = { ...routing.format, duration: round1(joined.duration + 0.8) };
-  if (Math.abs(ctx.format.duration - target) / target > 0.1) report.warnings.push(`the narration runs ${joined.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  if ((target - ctx.format.duration) / target > 0.1) report.notices.push(`the chapters had ${joined.duration}s to say, so the video is ${ctx.format.duration}s (the ${target}s target is a ceiling; nothing is padded to reach it)`);
+  else if ((ctx.format.duration - target) / target > 0.1) report.warnings.push(`the narration runs ${joined.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   // The joined take is the voice: finish mounts it as supplied audio rather than synthesising the whole text again.
   ctx.audio = { words: MAKE_PATHS.words, voice: LONG_FORM_VOICE };
   ctx.narration = null;
-  ctx.longForm = { chapters: joined.chapters, notes, assets: assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })) };
+  ctx.longForm = { chapters: joined.chapters, notes: conceptStory ? [...notes, ["The concept the video is built on (the visuals follow it):", ...conceptLookLines(conceptStory)].join("\n")] : notes, assets: assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line })) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, long_form: { chapters: chapters.map((chapter) => ({ id: chapter.id, title: chapter.title, target_seconds: chapter.seconds, seconds: chapter.take.seconds, words: wordCount(chapter.narration), passes: chapter.passes.length, reused: previous.has(chapter.key) })), pace_wpm: script.long_form.pace_wpm }, take: script.take };
   return { status: "done" };
+}
+
+// Concept and story before the script (src/make/concept_story.js): reused
+// while its inputs hash the same, skipped with --concepts off, and never
+// fatal: a stage that fails is a warning and the script is written from the
+// brief. → {tournament, concept, story} or null.
+async function stageConceptStory(ctx, { notes, rules, assets, duration, wpm }) {
+  const { project, report, state, options } = ctx;
+  ctx.conceptStory = null;
+  if (conceptsMode(options.concepts) === "off") { report.concept = { status: "off", reason: "--concepts off" }; return null; }
+  const format = { width: ctx.routing.format.width, height: ctx.routing.format.height };
+  const hash = hashValue({ prompt: ctx.text, notes, rules, assets, duration, wpm, format, model: ctx.model.spec, v: 1 });
+  let result = state.concept?.hash === hash ? await readConceptStory(project) : null;
+  const reused = Boolean(result);
+  if (!result) {
+    try {
+      result = await (ctx.adapters.conceptStory ?? planConceptStory)({ project, client: ctx.model.client, model: { provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning }, prompt: ctx.text, notes, rules, assets, format, duration, wpm, say: ctx.say });
+    } catch (error) {
+      for (const call of error?.calls ?? []) addCost(report, call.stage, ctx.model, call);
+      const reason = String(error?.message ?? error).split("\n")[0];
+      report.concept = { status: "failed", reason };
+      report.warnings.push(`the concept and story stage failed (${reason}); the script is written from the brief in one pass`);
+      delete state.concept;
+      return null;
+    }
+    for (const call of result.calls ?? []) addCost(report, call.stage, ctx.model, call);
+    state.concept = { hash };
+  }
+  report.concept = { status: reused ? "reused" : "done", ...(await conceptSummary(project, result)) };
+  ctx.say(`concept: "${result.concept.title}" won of ${report.concept.candidates}; the story has ${report.concept.story_beats} beats${reused ? " (reused)" : ""}`);
+  ctx.conceptStory = result;
+  return result;
 }
 
 async function synthesizeChapter(ctx, text, index, voice) {
@@ -795,16 +851,22 @@ async function stageLongFormStoryboard(ctx) {
   const ledger = ctx.captures?.length || researchEnabled(ctx) ? await readLedger(project) : null;
   const captures = (ctx.captures ?? []).map(({ request, files }) => ({ ...request, out: files.clip }));
   const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}), ...(ledger ? { ledger: hashValue(ledger.claims ?? []), captures: captures.map((entry) => entry.id) } : {}) });
-  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
-  const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
+  // A critic repair round (criticRepairs) directs chunks again from the last cut's beat map, so it never takes the cached plan.
+  const round = ctx.criticRound ?? null;
+  if (!round && !options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
+  const previous = options.replan && !round ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
   const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height }, ...(ledger ? { ledger, captures } : {}) }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
   ctx.say(beatMapReportText(map).split("\n")[0]);
   // The direct pass (docs/MAKE_SKILL_PARITY.md): the model picks every clause's card, as the skill's director does; chunks directed before (same key) are kept.
   let direct = null;
   if (visuals === "model") {
     const directed = new Set((previous?.chunks ?? []).filter((chunk) => chunk.directed).map((chunk) => chunk.key));
-    direct = await directLongFormVisuals({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, assets: ctx.longForm.assets ?? [], format: { width, height }, brand, done: directed, say: ctx.say });
-    for (const chunk of direct.chunks) if (!chunk.reused && chunk.usage) addCost(report, `direct-${chunk.id}`, ctx.model, chunk);
+    // The round's chunks (the ones its findings name; every chunk on a replan) are directed again, with the findings.
+    const review = round ? criticChunks(map, round) : null;
+    if (round && !review.size) throw new Error("the critic's findings name no scene the model directed");
+    for (const chunk of map.chunks) if (review?.has(chunk.id)) directed.delete(chunk.key);
+    direct = await directLongFormVisuals({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, assets: ctx.longForm.assets ?? [], format: { width, height }, brand, done: directed, say: ctx.say, ...(review ? { review } : {}) });
+    for (const chunk of direct.chunks) if (!chunk.reused && chunk.usage) addCost(report, `${round ? `critic-${round.round}-` : ""}direct-${chunk.id}`, ctx.model, chunk);
     for (const chunk of direct.chunks) if (chunk.failed) report.warnings.push(`visual direction for chunk ${chunk.id} failed (${chunk.failed}); it keeps the rule-made cards`);
   }
   // The copy pass: the model rewrites the on-screen words of chunks it did not direct; chunks rewritten before (same key) are kept.
@@ -837,6 +899,31 @@ async function stageLongFormStoryboard(ctx) {
   report.repairs = null;
   state.plan = { hash: planHash, long_form: true };
   return { status: "done" };
+}
+
+/**
+ * The chunks a long-form critic round directs again: chunk id → the findings
+ * to fix there. A repair takes the chunks that hold a scene a finding names
+ * (each with its own findings, plus the ones that name no scene); a replan,
+ * or findings that name no scene at all, takes every chunk with every finding.
+ */
+export function criticChunks(map, round) {
+  const stateChunk = new Map();
+  const byShot = new Map((map.chapters ?? []).flatMap((chapter) => chapter.shots ?? []).map((shot) => [shot.id, shot]));
+  for (const chunk of map.chunks ?? []) for (const id of chunk.shots ?? []) for (const state of byShot.get(id)?.states ?? []) stateChunk.set(state.id, chunk.id);
+  const findings = round.findings ?? [];
+  const lines = round.problems ?? [];
+  const out = new Map();
+  if (round.mode === "repair") {
+    for (const [index, finding] of findings.entries()) for (const scene of finding.scenes ?? []) {
+      const chunk = stateChunk.get(scene);
+      if (chunk && lines[index]) out.set(chunk, [...(out.get(chunk) ?? []), lines[index]]);
+    }
+    const loose = lines.filter((line, index) => !(findings[index]?.scenes ?? []).some((scene) => stateChunk.has(scene)));
+    for (const [chunk, own] of out) out.set(chunk, [...new Set([...own, ...loose])]);
+  }
+  if (!out.size && lines.length) for (const chunk of map.chunks ?? []) out.set(chunk.id, lines);
+  return out;
 }
 
 /** --long-form-visuals: "model" (default; the model directs every card) or "rules" (the beat director alone, the model rewrites words). */
@@ -1020,6 +1107,11 @@ async function stageStoryboard(ctx) {
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
   const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+  // The same checks, for a storyboard with one scene changed (the candidates stage).
+  ctx.storyCheck = (candidate) => {
+    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+    return [...(checked.ok ? [] : checked.errors), ...assetErrors(candidate, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(candidate, ctx.skeleton)];
+  };
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
@@ -1128,6 +1220,103 @@ export function worldLook(story, prompt = "") {
   return added;
 }
 
+// Rendered candidates (src/make/candidates.js): the opening and one risky
+// transition, two candidates each, as stills scored from the pixels; a
+// winning alternative replaces the planner's in storyboard.json. Never fatal:
+// a comparison that cannot be made is reported and the planner's cut stands.
+async function stageCandidates(ctx) {
+  const { project, report, state, options } = ctx;
+  const skip = (reason) => { report.candidates = { status: "skipped", reason }; return { status: "skipped", reason }; };
+  if (candidatesMode(options.candidates) === "off") return skip("--candidates off");
+  if (ctx.routing.lane === "footage-led") return skip("footage-led: the opening is the recording itself");
+  if (ctx.longForm) return skip("long form: its storyboard comes from the beat map, which candidates do not change yet");
+  if (!ctx.model.vision) return skip(`${ctx.model.spec} cannot take images, so nothing can score candidates from their frames`);
+  const storyFile = path.join(project, MAKE_PATHS.story);
+  let raw = await readJson(storyFile);
+  if (state.candidates?.story === hashValue(raw)) { report.candidates = { ...state.candidates.report, status: "reused" }; return { status: "cached", reason: "the storyboard is the one the candidates chose" }; }
+  if (!ctx.storyCheck) return skip("the storyboard was reused from an earlier run; pass --replan to plan again with candidates");
+  const notes = [];
+  const comparisons = [];
+  const applied = [];
+  try {
+    let resolved = (await readProjectStory(project)).resolved;
+    const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+    const still = ctx.adapters.candidateStill ?? await rendererStill({ project, renderer: ctx.renderer });
+    const judge = async (kind, entries, context) => {
+      ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (${kind} candidates scored from ${entries.reduce((sum, entry) => sum + entry.frames.length, 0)} rendered frames)`);
+      try {
+        const judged = await judgeCandidates({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, kind, candidates: entries, project, context });
+        addCost(report, `candidate-judge-${kind}`, ctx.model, judged.cost);
+        return judged;
+      } catch (error) { if (error.cost) addCost(report, `candidate-judge-${kind}`, ctx.model, error.cost); throw error; }
+    };
+    // The opening: the planner's scene against one designed without seeing it.
+    const opening = openingScene(resolved);
+    if (opening) {
+      try {
+        ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (a second opening, designed without the first)`);
+        const line = (ctx.words ?? []).filter((word) => word.start >= opening.start - 0.05 && word.start < opening.end).map((word) => word.text).join(" ");
+        let design;
+        try { design = await designOpening({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, line, seconds: opening.end - opening.start, format: ctx.format, assets: assetManifestLines(ctx).filter((item) => item.src), notes: await notesText(ctx) }); }
+        catch (error) { if (error.cost) addCost(report, "candidate-opening", ctx.model, error.cost); throw error; }
+        addCost(report, "candidate-opening", ctx.model, design.cost);
+        if (design.module === opening.module && JSON.stringify(design.params) === JSON.stringify(opening.params)) throw new Error("the second opening is the same card as the first");
+        const variantRaw = storyWith(raw, opening.id, design);
+        const errors = ctx.storyCheck(variantRaw);
+        const variant = storyWith(resolved, opening.id, design);
+        if (errors.length || !sceneResolves(variant, opening.id)) throw new Error(`the second opening does not pass the storyboard checks (${errors[0] ?? "its module does not resolve"})`);
+        const times = sceneTimes(opening);
+        const a = { ...(await renderCandidate({ project, id: "open-a", story: resolved, times, fps, still })), source: `the planner's opening (${opening.module})` };
+        const b = { ...(await renderCandidate({ project, id: "open-b", story: variant, times, fps, still })), source: `a separately designed opening (${design.module})` };
+        const judged = await judge("opening", [a, b], "The opening line is: " + (line || "(no narration)"));
+        const selected = selectCandidate(["open-a", "open-b"], judged.scores);
+        if (!selected) throw new Error("the judge found no admissible opening");
+        comparisons.push(comparisonEntry({ id: "opening", kind: "opening", candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
+        if (selected === "open-b") { raw = variantRaw; resolved = variant; applied.push(`opening: ${opening.module} → ${design.module}`); }
+      } catch (error) { notes.push(`opening: ${String(error?.message ?? error).split("\n")[0]}`); }
+    } else notes.push("opening: the storyboard has no base scene");
+    // One risky transition: the planner's move against a different kind of move.
+    const boundary = riskyBoundary(resolved);
+    if (boundary) {
+      try {
+        const scene = boundary.scene;
+        const move = alternativeTransition(scene, resolved);
+        const variantRaw = storyWith(raw, scene.id, { in: move });
+        const errors = ctx.storyCheck(variantRaw);
+        if (errors.length) throw new Error(`a ${move.type} there does not pass the storyboard checks (${errors[0]})`);
+        const variant = storyWith(resolved, scene.id, { in: move });
+        const duration = Number(resolved.resolved?.duration ?? resolved.format?.duration);
+        const times = transitionTimes(scene, { dur: Math.max(Number(scene.in?.dur) || 0, move.dur) }, duration);
+        const a = { ...(await renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), source: `the planner's ${scene.in?.type ?? "cut"}` };
+        const b = { ...(await renderCandidate({ project, id: "trans-b", story: variant, times, fps, still })), source: `a ${move.type}` };
+        const judged = await judge("transition", [a, b], `It joins scene ${boundary.boundary_id.replace(/-in$/, "")} to the scene before it.`);
+        const selected = selectCandidate(["trans-a", "trans-b"], judged.scores);
+        if (!selected) throw new Error("the judge found no admissible transition");
+        comparisons.push(comparisonEntry({ id: `transition-${scene.id}`, kind: "transition", boundary: boundary.boundary_id, candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
+        if (selected === "trans-b") { raw = variantRaw; applied.push(`transition into ${scene.id}: ${scene.in?.type ?? "cut"} → ${move.type}`); }
+      } catch (error) { notes.push(`transition: ${String(error?.message ?? error).split("\n")[0]}`); }
+    } else notes.push("transition: the storyboard has no second scene in its opening stretch");
+  } catch (error) {
+    notes.push(String(error?.message ?? error).split("\n")[0]);
+  }
+  if (!comparisons.length) {
+    report.candidates = { status: "skipped", reason: notes.join("; ") || "no comparison could be made", notes };
+    report.warnings.push(`candidates: none compared (${report.candidates.reason}); the planner's opening and transitions stand`);
+    return { status: "skipped", reason: report.candidates.reason };
+  }
+  const receipt = await writeReceipt(project, comparisons, { boundaryIds: comparisons.filter((entry) => entry.boundary_id).map((entry) => entry.boundary_id) });
+  if (applied.length) await writeJson(storyFile, raw);
+  report.candidates = {
+    status: "done", receipt: receipt.file, receipt_ok: receipt.ok, ...(receipt.ok ? {} : { receipt_errors: receipt.errors.slice(0, 6) }),
+    comparisons: comparisons.map((entry) => ({ id: entry.id, kind: entry.kind, ...(entry.boundary_id ? { boundary_id: entry.boundary_id } : {}), selected: entry.selected_candidate_id, rationale: entry.selection_rationale, candidates: entry.candidates.map((candidate) => ({ id: candidate.id, source: candidate.source, mean: meanScore(candidate.scores), admissible: candidate.admissible })) })),
+    applied, notes
+  };
+  for (const note of notes) report.warnings.push(`candidates: ${note}`);
+  for (const change of applied) ctx.say(`candidates: ${change} (scored higher from the rendered frames)`);
+  state.candidates = { story: hashValue(raw), report: report.candidates };
+  return { status: "done" };
+}
+
 // Matte exactly the source ranges the planned subject scenes cover (padded),
 // filed in the project so base.subject "auto" picks them up. A failed matte
 // is a warning: its scenes render, without the presenter in front.
@@ -1213,7 +1402,7 @@ async function stageCritic(ctx) {
   const { options } = ctx;
   const wanted = options.critic === true || (options.critic !== false && ctx.model.vision);
   if (options.critic === false) return criticPending(ctx, "--no-critic");
-  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
+  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make`);
   if (!ctx.model.vision) return criticPending(ctx, `${ctx.model.spec} cannot take images`);
   const result = await runCritic(ctx);
   if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
@@ -1250,7 +1439,7 @@ async function critiqueOf(ctx, result) {
 }
 
 // The files a critic round may overwrite, and the report fields it may change.
-const CRITIC_ROUND_FILES = ["storyboard.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
+const CRITIC_ROUND_FILES = ["storyboard.json", "BEATMAP.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
 const CRITIC_ROUND_FIELDS = ["critic", "gates", "final", "finish", "publish", "repairs", "shots", "shot_counts", "direction", "card_backdrops", "clip_led", "layout"];
 
 async function snapshotRound(ctx) {
@@ -1292,6 +1481,11 @@ async function criticRepairs(ctx, first) {
   const budget = criticRepairBudget(options.criticRepairs);
   if (!budget) return;
   report.critic_repairs = [];
+  // Long form on the rule-made cards has no model direction for a round to change.
+  if (ctx.longForm && longFormVisuals(options) === "rules") {
+    if (first?.verdict !== "ship") report.warnings.push("critic repairs skipped: --long-form-visuals rules keeps the beat director's cards, so there is no model direction to repair");
+    return;
+  }
   let critique = await critiqueOf(ctx, first);
   for (let round = 1; round <= budget; round += 1) {
     if (critique.verdict === "ship") break;
@@ -1309,7 +1503,7 @@ async function criticRepairs(ctx, first) {
     const snapshot = await snapshotRound(ctx);
     const repairs = report.repairs;
     try {
-      ctx.criticRound = { round, mode, problems, storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
+      ctx.criticRound = { round, mode, problems, findings: criticFindings(findings), storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
       await stageStoryboard(ctx);
       const after = await readProjectStory(project);
       ctx.finishScenes = mode === "repair" ? changedScenes(loaded.resolved, after.resolved) : null;
@@ -1459,6 +1653,7 @@ async function composeBrief(ctx, manifest) {
   if (lane === "motion" && ctx.script?.title_scores?.length) lines.push("## Titles (best first; the cover echoes the first)", "", ...ctx.script.title_options.map((title, index) => `${index + 1}. ${title}`), "");
   const angle = ctx.script?.angle;
   if (lane === "motion" && angle) lines.push("## Angle (the script is written on it; the visuals follow it, never the crowded take)", "", `- Crowded take to avoid: ${angle.crowded}`, `- Angle: ${angle.angles[angle.chosen]?.angle ?? angle.angles[0].angle}`, ...(angle.inventory.length ? [`- What only this subject has (build scenes from these): ${angle.inventory.join("; ")}`] : []), "");
+  if (lane === "motion" && ctx.conceptStory) lines.push("## Concept (five were judged and this one won; the visuals follow its world, never a slideshow of its lines)", "", ...conceptLookLines(ctx.conceptStory), "");
   if (ctx.skeleton) lines.push(`## Skeleton: ${ctx.skeleton.title} (build every scene on it; the structure gate checks the opening image and the key shot)`, "", ...skeletonPlanLines(ctx.skeleton).map((line) => `- ${line}`), "");
   if (lane === "voiceover-motion") lines.push("## Voiceover transcript (the supplied voiceover; time scenes to its words)", "", ctx.narrationText, "");
   if (lane === "footage-led") lines.push("## Recording transcript (the edited base recording; its words are the narration)", "", ctx.narrationText, "", "Dress the recording: overlays and inserts on the strong lines only (10–40% of the runtime); gaps show the speaker.", "");
