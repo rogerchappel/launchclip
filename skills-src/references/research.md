@@ -147,7 +147,7 @@ ledger: each claim, its status and its source URL.
   `source_url`, plus `people` (role, affiliation, Wikidata id, and a Commons
   portrait only when its licence is clear). `launchclip research capture`
   downloads them to `assets/research/` and prints an inventory line for
-  each: what it shows, the claim it supports (or "Illustration only"), its
+  each: what it shows, the claim it was found for (or "Illustration only"), its
   licence and credit, and the `media-window` or `photo-scene` params to
   place it. Place only files that have an inventory line: an entry with
   `not_staged`, or with no clear licence, must not be used. `publish.json`

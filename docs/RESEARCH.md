@@ -361,12 +361,13 @@ The licence is checked again at this step, not trusted from the file:
 an entry whose licence is missing or not in the clear list, that has no
 author or source page, or that sits on a blocked host is never downloaded.
 Only staged, licence-clear entries are offered to the planner. Each
-inventory line says what the item shows, the claim it supports (or
-"Illustration only: it is not evidence for any claim"), its licence and
+inventory line says what the item shows, the claim it was found for (or
+"Illustration only: it is not evidence for any claim"; only a portrait is
+said to support a claim), its licence and
 credit, and how to place it (`media-window`, `photo-scene`):
 
 ```text
-assets/research/harbour.jpg — image, archive photo "Northside Harbour at dawn" from Wikimedia Commons, 4000×3000, found for "Port Authority". Supports claim c001 ("The Port Authority reopened Northside Harbour."). Licence: CC BY-SA 4.0; credit "“Northside Harbour at dawn” by A. Photographer, CC BY-SA 4.0, via Wikimedia Commons" (publish.json carries it). Use as {"module": "media-window", …} or a full-bleed {"module": "photo-scene", …} on the line it illustrates.
+assets/research/harbour.jpg — image, archive photo "Northside Harbour at dawn" from Wikimedia Commons, 4000×3000 at source, found for "Port Authority". Found for claim c001 ("The Port Authority reopened Northside Harbour."): place it beside that claim only if it shows what the claim is about; it illustrates, the source page proves. Licence: CC BY-SA 4.0; credit "“Northside Harbour at dawn” by A. Photographer, CC BY-SA 4.0, via Wikimedia Commons" (publish.json carries it). Use as {"module": "media-window", …} or a full-bleed {"module": "photo-scene", …} on the line it illustrates.
 ```
 
 In `make` the storyboard may reference only paths in its asset manifest,

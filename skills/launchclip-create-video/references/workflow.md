@@ -475,6 +475,16 @@ cadence profile ([references/profiles.md](profiles.md)): coverage
 near its target, no undressed run past its limit. Then author the storyboard
 against the map.
 
+### Choose the cast
+
+The cast is `story.cast.characters`: starter characters by id (`launchclip
+cast list`), a style pack's generated cast, or characters designed for this
+video. When the brief describes its own people or supplies a reference image,
+design them first with the `launchclip-character-design` skill (`launchclip
+cast create <id> --describe "…"`, then look at `cast/<id>.sheet.png`) and
+list each by id: `{"id": "<id>"}`. A reference image maps to traits, never to
+a real person's likeness.
+
 ### Direction guardrails
 
 The finish gates fail these, so plan for them from the first draft (design:

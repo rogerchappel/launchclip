@@ -84,7 +84,7 @@ test("the planner inventory says what each item shows, the claim it supports, an
     const manifest = JSON.parse(await readFile(path.join(root, "research", "assets.json"), "utf8"));
     const lines = researchMediaLines(manifest, LEDGER);
     assert.deepEqual(lines.map((item) => [item.src, item.kind]), [["assets/research/harbour.jpg", "image"], ["assets/research/launch.mp4", "video"], ["assets/research/film.mp4", "video"]]);
-    assert.match(lines[0].line, /^assets\/research\/harbour\.jpg — image, archive photo "Title harbour" from Wikimedia Commons, 4000×3000, found for "harbour"\. Supports claim c001 \("The harbour reopened on November 6, 2026\."\)\. Licence: CC BY-SA 4\.0; credit "“Title harbour” by A\. Photographer, CC BY-SA 4\.0, via Wikimedia Commons" \(publish\.json carries it\)\. Use as \{"module": "media-window"/);
+    assert.match(lines[0].line, /^assets\/research\/harbour\.jpg — image, archive photo "Title harbour" from Wikimedia Commons, 4000×3000 at source, found for "harbour"\. Found for claim c001 \("The harbour reopened on November 6, 2026\."\): place it beside that claim only if it shows what the claim is about; it illustrates, the source page proves\. Licence: CC BY-SA 4\.0; credit "“Title harbour” by A\. Photographer, CC BY-SA 4\.0, via Wikimedia Commons" \(publish\.json carries it\)\. Use as \{"module": "media-window"/);
     assert.match(lines[0].line, /"module": "photo-scene", "params": \{"media": \{"kind": "image", "src": "assets\/research\/harbour\.jpg"\}/);
     assert.match(lines[1].line, /archive footage "Title launch" from NASA Image and Video Library.*Illustration only: it is not evidence for any claim\./);
     // An entry that is not staged, or whose licence is not clear, is never offered.
@@ -156,7 +156,7 @@ test("make stages research's media and lists it for the planner; nothing unclear
     assert.ok(existsSync(path.join(report.project, "assets", "research", "harbour.jpg")));
     const planned = calls.filter((call) => String(call.input).includes("assets/research/harbour.jpg"));
     assert.ok(planned.length, "the storyboard pass sees the staged photo in its asset manifest");
-    assert.match(String(planned[0].input), /assets\/research\/harbour\.jpg — image, archive photo "Title harbour" from Wikimedia Commons.*Supports claim c001/);
+    assert.match(String(planned[0].input), /assets\/research\/harbour\.jpg — image, archive photo "Title harbour" from Wikimedia Commons.*Found for claim c001/);
     assert.ok(!calls.some((call) => String(call.input).includes("assets/research/nc")));
   } finally {
     await rm(assets, { recursive: true, force: true });

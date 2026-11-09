@@ -122,9 +122,13 @@ export function researchMediaLines(manifest, ledger = null) {
     const person = people.find((entry) => entry.portrait === asset.id);
     const backed = [...(asset.claims ?? []), ...(person?.claims ?? [])].map((id) => claims.get(id)).filter((claim) => claim?.status === "verified");
     const shows = person ? `portrait of ${person.name}${person.role ? ` (${person.role})` : ""}` : `${kind === "video" ? "archive footage" : "archive photo"} "${String(asset.title ?? "untitled").slice(0, 70)}"`;
-    const size = asset.width && asset.height ? `, ${asset.width}×${asset.height}` : "";
+    // The provider's size is the original's; a staged preview is smaller, so it is given as the source's size.
+    const size = asset.width && asset.height ? `, ${asset.width}×${asset.height} at source` : "";
     const found = asset.beat ? `, found for the line "${String(asset.beat).slice(0, 80)}"` : asset.query ? `, found for "${asset.query}"` : "";
-    const supports = backed.length ? ` Supports ${backed.map((claim) => `claim ${claim.id} ("${String(claim.text).slice(0, 70)}")`).join(" and ")}.` : " Illustration only: it is not evidence for any claim.";
+    // A portrait is of the person the claim names. Anything else was found by searching for what the claim is about, which is a lead, not proof.
+    const supports = !backed.length ? " Illustration only: it is not evidence for any claim."
+      : person ? ` Supports ${backed.map((claim) => `claim ${claim.id} ("${String(claim.text).slice(0, 70)}")`).join(" and ")}.`
+      : ` Found for ${backed.map((claim) => `claim ${claim.id} ("${String(claim.text).slice(0, 70)}")`).join(" and ")}: place it beside that claim only if it shows what the claim is about; it illustrates, the source page proves.`;
     const media = `{"kind": "${kind}", "src": "${asset.local}"}`;
     const use = `Use as {"module": "media-window", "params": {"title": "…", "media": ${media}}} or a full-bleed {"module": "photo-scene", "params": {"media": ${media}, "lines"?: ["…"]}} on the line it illustrates`;
     out.push({ src: asset.local, kind, licence: asset.licence.id, line: `${asset.local} — ${kind}, ${shows} from ${asset.provider_name ?? asset.provider}${size}${found}.${supports} Licence: ${asset.licence.name}; credit "${asset.attribution}" (publish.json carries it). ${use}.` });
