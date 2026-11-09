@@ -52,7 +52,7 @@ Useful flags:
 | --- | --- | --- |
 | `--assets <dir>` | none | Logos, screenshots, screen recordings, a talking-head clip, a voiceover, `brand.json`, a `style.json`, notes (`.md`/`.txt`). |
 | `--aspect` | the recording's shape, else `16:9` | `16:9`, `9:16` or `1:1`. |
-| `--duration` | from the prompt, else 30 | Target length in seconds. The video is sized to the real narration. |
+| `--duration` | from the prompt, else 30 | The longest the video should run, in seconds. It is a ceiling: a script that runs over is trimmed once, and one with less to say makes a shorter video. Nothing is padded to reach it. |
 | `--format` | from the prompt | The kind of script: `short-form`, `long-form`, `explainer`, `data-explainer`, `story` or `promo`. See [Script formats](prompts.md#script-formats-goal-and-awareness). |
 | `--goal` | `convert` for a promo, else `reach` | `reach` (views and watch time) or `convert` (an action: sign-ups, sales). |
 | `--awareness` | depends on the format | What the viewer already knows: `unaware`, `problem`, `solution`, `product` or `most`. It decides the opening line. |
