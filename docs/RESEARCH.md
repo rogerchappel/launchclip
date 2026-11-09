@@ -102,8 +102,9 @@ capture request like any other claim.
 was followed: `{queries, freshness, providers: [{id, name, terms, leads}],
 stories: [{title, url, publisher, published_at, age_days, via, source_class,
 primary, status, reason?, from?, claim}]}`. `status` is `kept`,
-`no-primary-source`, `stale`, `off-topic` (the page does not mention what
-the brief asks about) or `not-fetched` (with the `reason`: closed by
+`no-primary-source`, `stale`, `undated` (a window is set and the page
+gives no date), `off-topic` (the page does not mention what the brief asks
+about) or `not-fetched` (with the `reason`: closed by
 `robots.txt`, refused by the site, or a failed request). A refusal is a
 finding: research never works round a block.
 

@@ -145,6 +145,7 @@ test("news queries are what the brief names, else its subject, never its format 
   assert.deepEqual(newsQueries("Why Nimbus AI released Nimbus-7B", entities), ["Nimbus-7B", "Nimbus AI"]);
   assert.deepEqual(newsQueries("# Brief\n\nA 60-second video on the latest in quantum computing", []), ["quantum computing"]);
   assert.deepEqual(newsQueries("today's top news", []), []);
+  assert.deepEqual(newsQueries("This week's top world news", []), []);
 });
 
 test("feeds: the site's advertised feed is found, and RSS and Atom both parse newest first", () => {
