@@ -49,7 +49,7 @@ import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStruct
 import { loadSkeletonLibrary } from "../skeletons.js";
 import { talkingHeadLayout } from "../talking_head_layout.js";
 import { runHeadlessCritic } from "./critic.js";
-import { changedScenes, criticBriefSection, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
+import { changedScenes, criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
@@ -795,16 +795,22 @@ async function stageLongFormStoryboard(ctx) {
   const ledger = ctx.captures?.length || researchMode(options.research) === "on" ? await readLedger(project) : null;
   const captures = (ctx.captures ?? []).map(({ request, files }) => ({ ...request, out: files.clip }));
   const planHash = hashValue({ words: hashValue(ctx.words), chapters: ctx.longForm.chapters, format: ctx.format, brand, style: style?.name ?? null, title: ctx.script.title, v: 1, ...(visuals === "model" ? { visuals, model: ctx.model.spec } : {}), ...(ledger ? { ledger: hashValue(ledger.claims ?? []), captures: captures.map((entry) => entry.id) } : {}) });
-  if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
-  const previous = options.replan ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
+  // A critic repair round (criticRepairs) directs chunks again from the last cut's beat map, so it never takes the cached plan.
+  const round = ctx.criticRound ?? null;
+  if (!round && !options.replan && state.plan?.hash === planHash && existsSync(storyFile)) return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
+  const previous = options.replan && !round ? null : await readJson(path.join(project, MAKE_PATHS.beatMap));
   const map = directLongForm({ words: ctx.words, chapters: ctx.longForm.chapters, title: ctx.script.title, format: { width, height }, ...(ledger ? { ledger, captures } : {}) }, { ...(brand ? { brand } : {}), ...(previous ? { previous } : {}) });
   ctx.say(beatMapReportText(map).split("\n")[0]);
   // The direct pass (docs/MAKE_SKILL_PARITY.md): the model picks every clause's card, as the skill's director does; chunks directed before (same key) are kept.
   let direct = null;
   if (visuals === "model") {
     const directed = new Set((previous?.chunks ?? []).filter((chunk) => chunk.directed).map((chunk) => chunk.key));
-    direct = await directLongFormVisuals({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, assets: ctx.longForm.assets ?? [], format: { width, height }, brand, done: directed, say: ctx.say });
-    for (const chunk of direct.chunks) if (!chunk.reused && chunk.usage) addCost(report, `direct-${chunk.id}`, ctx.model, chunk);
+    // The round's chunks (the ones its findings name; every chunk on a replan) are directed again, with the findings.
+    const review = round ? criticChunks(map, round) : null;
+    if (round && !review.size) throw new Error("the critic's findings name no scene the model directed");
+    for (const chunk of map.chunks) if (review?.has(chunk.id)) directed.delete(chunk.key);
+    direct = await directLongFormVisuals({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, map, notes: ctx.longForm.notes, assets: ctx.longForm.assets ?? [], format: { width, height }, brand, done: directed, say: ctx.say, ...(review ? { review } : {}) });
+    for (const chunk of direct.chunks) if (!chunk.reused && chunk.usage) addCost(report, `${round ? `critic-${round.round}-` : ""}direct-${chunk.id}`, ctx.model, chunk);
     for (const chunk of direct.chunks) if (chunk.failed) report.warnings.push(`visual direction for chunk ${chunk.id} failed (${chunk.failed}); it keeps the rule-made cards`);
   }
   // The copy pass: the model rewrites the on-screen words of chunks it did not direct; chunks rewritten before (same key) are kept.
@@ -837,6 +843,31 @@ async function stageLongFormStoryboard(ctx) {
   report.repairs = null;
   state.plan = { hash: planHash, long_form: true };
   return { status: "done" };
+}
+
+/**
+ * The chunks a long-form critic round directs again: chunk id → the findings
+ * to fix there. A repair takes the chunks that hold a scene a finding names
+ * (each with its own findings, plus the ones that name no scene); a replan,
+ * or findings that name no scene at all, takes every chunk with every finding.
+ */
+export function criticChunks(map, round) {
+  const stateChunk = new Map();
+  const byShot = new Map((map.chapters ?? []).flatMap((chapter) => chapter.shots ?? []).map((shot) => [shot.id, shot]));
+  for (const chunk of map.chunks ?? []) for (const id of chunk.shots ?? []) for (const state of byShot.get(id)?.states ?? []) stateChunk.set(state.id, chunk.id);
+  const findings = round.findings ?? [];
+  const lines = round.problems ?? [];
+  const out = new Map();
+  if (round.mode === "repair") {
+    for (const [index, finding] of findings.entries()) for (const scene of finding.scenes ?? []) {
+      const chunk = stateChunk.get(scene);
+      if (chunk && lines[index]) out.set(chunk, [...(out.get(chunk) ?? []), lines[index]]);
+    }
+    const loose = lines.filter((line, index) => !(findings[index]?.scenes ?? []).some((scene) => stateChunk.has(scene)));
+    for (const [chunk, own] of out) out.set(chunk, [...new Set([...own, ...loose])]);
+  }
+  if (!out.size && lines.length) for (const chunk of map.chunks ?? []) out.set(chunk.id, lines);
+  return out;
 }
 
 /** --long-form-visuals: "model" (default; the model directs every card) or "rules" (the beat director alone, the model rewrites words). */
@@ -1250,7 +1281,7 @@ async function critiqueOf(ctx, result) {
 }
 
 // The files a critic round may overwrite, and the report fields it may change.
-const CRITIC_ROUND_FILES = ["storyboard.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
+const CRITIC_ROUND_FILES = ["storyboard.json", "BEATMAP.json", "DIRECTION.json", "BRIEF.md", "finish.json", "publish.json", "qa", "renders", ".launchclip/finish", ".launchclip/storyboard-plan.json"];
 const CRITIC_ROUND_FIELDS = ["critic", "gates", "final", "finish", "publish", "repairs", "shots", "shot_counts", "direction", "card_backdrops", "clip_led", "layout"];
 
 async function snapshotRound(ctx) {
@@ -1292,6 +1323,11 @@ async function criticRepairs(ctx, first) {
   const budget = criticRepairBudget(options.criticRepairs);
   if (!budget) return;
   report.critic_repairs = [];
+  // Long form on the rule-made cards has no model direction for a round to change.
+  if (ctx.longForm && longFormVisuals(options) === "rules") {
+    if (first?.verdict !== "ship") report.warnings.push("critic repairs skipped: --long-form-visuals rules keeps the beat director's cards, so there is no model direction to repair");
+    return;
+  }
   let critique = await critiqueOf(ctx, first);
   for (let round = 1; round <= budget; round += 1) {
     if (critique.verdict === "ship") break;
@@ -1309,7 +1345,7 @@ async function criticRepairs(ctx, first) {
     const snapshot = await snapshotRound(ctx);
     const repairs = report.repairs;
     try {
-      ctx.criticRound = { round, mode, problems, storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
+      ctx.criticRound = { round, mode, problems, findings: criticFindings(findings), storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
       await stageStoryboard(ctx);
       const after = await readProjectStory(project);
       ctx.finishScenes = mode === "repair" ? changedScenes(loaded.resolved, after.resolved) : null;

@@ -73,11 +73,16 @@ export function criticRepairRoute(critique, findings, openingSceneId) {
   return hookProblem ? "replan" : "repair";
 }
 
-/** Findings → the planner's known problems, worst first, prefixed "critic". */
-export function criticProblems(findings) {
+/** The findings a round acts on: worst first, at most MAX_PROBLEMS. */
+export function criticFindings(findings) {
   return [...(findings ?? [])]
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
-    .slice(0, MAX_PROBLEMS)
+    .slice(0, MAX_PROBLEMS);
+}
+
+/** Findings → the planner's known problems, worst first, prefixed "critic" (one line per criticFindings entry). */
+export function criticProblems(findings) {
+  return criticFindings(findings)
     .map((finding) => `critic (${finding.severity} ${finding.category}${finding.scenes?.length ? `, scene${finding.scenes.length === 1 ? "" : "s"} ${finding.scenes.join(", ")}` : ""}): ${String(finding.message ?? "").trim()}`);
 }
 
