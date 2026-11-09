@@ -20,6 +20,12 @@
 
 ### Added
 
+- The headless critic runs with an Anthropic model. `make`'s Anthropic
+  adapter now sends the contact sheets as image content blocks, so a run
+  with only `ANTHROPIC_API_KEY` gets the critic and its repair rounds by
+  default instead of ending `ready-for-review` with the critic pending.
+  The adapter also streams a request that asks for more than 16,000 output
+  tokens, which the SDK refuses to send unstreamed.
 - `make` chooses a concept and a story before it writes the script, as the
   create-video skill does: five concepts, a judge that sees only the brief
   and the concepts, then the winner written as a story and tightened by an
