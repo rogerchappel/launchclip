@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ACCESSORIES, BUILDS, EXPRESSIONS, EXPRESSION_TABLE, HAIR_STYLES, POSES, POSE_TABLE, TOPS, normalizeRigParams, poseJoints, rigFingerprint, rigGeometry} from '@launchclip/core/characters/rig.mjs';
-import {STARTER_CAST, STARTER_IDS, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
+import {RETIRED_IDS, STARTER_CAST, STARTER_IDS, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
 import {SKIN_TONES, castRoles, characterColors} from '@launchclip/core/characters/palette.mjs';
 import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
 import {characterView} from '@launchclip/core/characters/view.mjs';
@@ -31,10 +31,12 @@ test('rig params normalise to a fixed shape and reject unknown parts', () => {
 });
 
 test('the starter cast: about two dozen valid characters with stable, unique ids and a varied mix', () => {
-  assert.ok(STARTER_CAST.length >= 24);
+  assert.ok(STARTER_CAST.length >= 70, 'dozens of characters, so casts differ from video to video');
   assert.equal(new Set(STARTER_IDS).size, STARTER_IDS.length);
   for (const id of STARTER_IDS) assert.match(id, /^[a-z][a-z0-9-]*$/);
-  const all = STARTER_IDS.slice(0, 24).map(id => starterCharacter(id).params);
+  // The 24 that first shipped (one since retired, still drawn by id).
+  const shipped = [...STARTER_IDS.slice(0, 4), 'fatima', ...STARTER_IDS.slice(4, 23)];
+  const all = shipped.map(id => starterCharacter(id).params);
   const kinds = key => new Set(all.map(p => (typeof p[key] === 'object' ? JSON.stringify(p[key].style ?? p[key].top) : p[key])));
   assert.ok(kinds('skin').size >= 7, 'skin tones across the range');
   assert.equal(kinds('build').size, 5, 'every original build');
@@ -44,8 +46,14 @@ test('the starter cast: about two dozen valid characters with stable, unique ids
   assert.ok(all.some(p => p.hair.style === 'headscarf'));
   assert.ok(all.some(p => ['grey', 'silver'].includes(p.hair.color)), 'older characters');
   for (const entry of STARTER_CAST) assert.ok(!/\b(he|she|him|her|his|hers)\b/i.test(entry.summary), `${entry.id}: summaries stay neutral`);
-  // The first ids are part of the contract: they never change.
-  assert.deepEqual(STARTER_IDS.slice(0, 6), ['maya', 'theo', 'amara', 'kenji', 'fatima', 'diego']);
+  // The first ids are part of the contract: they never change. A retired
+  // character leaves the list but keeps its id, so stories that name it still draw.
+  assert.deepEqual(STARTER_IDS.slice(0, 6), ['maya', 'theo', 'amara', 'kenji', 'diego', 'grace']);
+  assert.deepEqual(RETIRED_IDS, ['fatima']);
+  assert.ok(!STARTER_IDS.includes('fatima') && starterCharacter('fatima').params.hair.style === 'headscarf');
+  assert.equal(castMember(resolveStoryCast({}), 'fatima').name, 'Fatima');
+  // The wider cast stays simple: one accessory at most.
+  for (const entry of STARTER_CAST.slice(STARTER_IDS.indexOf('juno'))) assert.ok(starterCharacter(entry.id).params.accessories.length <= 1, `${entry.id} keeps to one accessory`);
   assert.ok(Object.keys(SKIN_TONES).length >= 16 && HAIR_STYLES.length >= 26 && ACCESSORIES.length >= 20 && BUILDS.length >= 8 && TOPS.length >= 17);
 });
 

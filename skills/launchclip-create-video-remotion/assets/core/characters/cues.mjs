@@ -21,7 +21,7 @@
 // Imports only sibling kit/core files.
 
 import {EXPRESSIONS, HAIR_STYLES, POSES, normalizeRigParams, rigFingerprint} from './rig.mjs';
-import {STARTER_IDS, characterLook, starterCharacter} from './cast.mjs';
+import {STARTER_IDS, characterLook, isStarterId, starterCharacter} from './cast.mjs';
 import {BRAND_ROLES, isColorName} from './palette.mjs';
 import {SEATED_SETS, SETS} from './sets.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
@@ -87,8 +87,8 @@ export function storyCastErrors(cast) {
 }
 
 function castParams(entry, path) {
-  const baseId = entry.from ?? (STARTER_IDS.includes(entry.id) ? entry.id : null);
-  if (entry.from !== undefined && !STARTER_IDS.includes(entry.from)) throw new Error(`${path}.from "${entry.from}" is not a starter character (${STARTER_IDS.join(', ')})`);
+  const baseId = entry.from ?? (isStarterId(entry.id) ? entry.id : null);
+  if (entry.from !== undefined && !isStarterId(entry.from)) throw new Error(`${path}.from "${entry.from}" is not a starter character (${STARTER_IDS.join(', ')})`);
   const base = baseId ? starterCharacter(baseId).params : null;
   if (!base && (entry.skin === undefined || entry.hair === undefined)) throw new Error(`${path} (${entry.id}) is not a starter character, so it needs its own skin and hair (or from: a starter id)`);
   const merged = {

@@ -22,8 +22,8 @@ const FLAT_SNAPSHOT = '0bf60bd3effcc7b0';
 test('flat draws exactly as it did before the drawing styles', () => {
   const trees = [];
   // The 24 characters that shipped with flat.
-  for (const entry of STARTER_CAST.slice(0, 24)) {
-    const {params} = starterCharacter(entry.id);
+  for (const id of [...STARTER_CAST.slice(0, 4).map(entry => entry.id), 'fatima', ...STARTER_CAST.slice(4, 23).map(entry => entry.id)]) {
+    const {params} = starterCharacter(id);
     const {colors} = characterLook(params, {});
     const geometry = rigGeometry(params);
     // The poses that shipped with flat (look and stretch came later).
@@ -160,7 +160,7 @@ test('a floor shadow is not part of a character\'s reach, and the mark never rea
     // The body's own width bounds the reach: the soft-shade ground ellipse (±190) is wider than a standing body.
     const b = drawingBounds(drawing);
     // (The avatar's head is 1.7 times the rig's, so its hair alone is wider.)
-    assert.ok(b.right - b.left < ({avatar: 460, chibi: 560}[style] ?? 400), `${style} reach ${Math.round(b.right - b.left)} wide`);
+    assert.ok(b.right - b.left < ({avatar: 460, chibi: 560, 'chibi-plain': 560}[style] ?? 400), `${style} reach ${Math.round(b.right - b.left)} wide`);
   }
   // A soft-shade pair standing at rest in a 9:16 phone set stays inside the safe zone.
   const scene = {id: 's', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast: [{id: 'maya'}, {id: 'theo'}]}};
@@ -185,5 +185,16 @@ test('chibi: about two heads tall, the cute face, and the same parts as every to
     assert.deepEqual(ids(chibi), ids(flat));
     // No nose: the plain face draws one in the skin's shade.
     assert.ok(!chibi.includes('Q7 '), 'no nose line');
+  }
+});
+
+test('chibi-plain: the chibi figure with no skin tone', () => {
+  for (const id of ['maya', 'theo', 'kwame']) {
+    const {params} = starterCharacter(id);
+    const {colors} = characterLook(params, {style: 'chibi-plain'});
+    const options = {id: 'c', joints: poseJoints('stand', {geometry: styleGeometry('chibi-plain', params)}), expression: 'happy', expressions: ['happy'], static: true};
+    const plain = JSON.stringify(drawCharacter('chibi-plain', params, colors, options));
+    assert.ok(!plain.includes(colors.skin) && plain.includes('#fbf7ef'), `${id}: paper white, not ${colors.skin}`);
+    assert.ok(plain.includes(colors.hair) && plain.includes(colors.top), 'hair and clothes keep their colours');
   }
 });
