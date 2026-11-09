@@ -65,7 +65,9 @@ export function mapDrawingTraits(block, { profiles, styles } = {}) {
 
   // Drawing style.
   const match = outline && fill ? matchDrawingStyle(traits, { profiles, styles }) : null;
-  if (!match) unmatched.push({ trait: "drawing style", measured: null, reason: "the outline or the fill could not be measured, so no drawing style is compared" });
+  const known = styles ?? DRAWING_STYLES, table = profiles ?? DRAWING_STYLE_PROFILES;
+  if (!match && outline && fill) unmatched.push({ trait: "drawing style", measured: null, reason: `none of the drawing styles has a measured profile to compare with (${known.filter((name) => !table[name]?.outline || !table[name]?.fill).join(", ")}): run node scripts/measure-drawing-styles.mjs` });
+  else if (!match) unmatched.push({ trait: "drawing style", measured: null, reason: "the outline or the fill could not be measured, so no drawing style is compared" });
   else if (!drawn) unmatched.push({ trait: "drawing style", measured: `nearest ${match.name} (distance ${match.distance})`, reason: "the frames are mostly footage or texture, not drawn shapes: no drawing style is set" });
   else if (weak(outline) || weak(fill)) unmatched.push({ trait: "drawing style", measured: `nearest ${match.name} (distance ${match.distance})`, reason: `the outline (confidence ${outline.confidence}) or the fill (${fill.confidence}) is too uncertain to choose a style from` });
   else if (match.distance > DRAWING_STYLE_MATCH) unmatched.push({ trait: "drawing style", measured: `nearest ${match.name} (distance ${match.distance})`, reason: `no drawing style comes within ${DRAWING_STYLE_MATCH} of the reference: it is drawn in a way the kit does not have` });

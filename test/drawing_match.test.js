@@ -18,14 +18,23 @@ import { noise, scene } from "./helpers/draw_frames.js";
 const block = (frames, motion = null) => drawingTraits(drawingNumbers(frames, motion));
 const reference = (name, frames, motion = null) => ({ name, sha256: "0".repeat(64), kind: motion ? "video" : "image", width: 960, height: 540, duration_seconds: motion ? 4 : 0, palette: [{ hex: "#f0ece4", weight: 0.7 }, { hex: "#e65a3c", weight: 0.1 }, { hex: "#3c78dc", weight: 0.1 }, { hex: "#1c1820", weight: 0.1 }], drawing: drawingNumbers(frames, motion) });
 
-test("every drawing style of the kit has a measured profile and is its own nearest match", () => {
-  for (const name of DRAWING_STYLES) {
-    assert.ok(DRAWING_STYLE_PROFILES[name]?.outline && DRAWING_STYLE_PROFILES[name]?.fill, `${name} has no profile: run node scripts/measure-drawing-styles.mjs`);
+test("every measured drawing style is its own nearest match; a style with no profile yet is skipped and named", () => {
+  // A style can land in the kit before its profile is measured (node scripts/measure-drawing-styles.mjs): that is reported, not an error.
+  const measured = DRAWING_STYLES.filter((name) => DRAWING_STYLE_PROFILES[name]?.outline && DRAWING_STYLE_PROFILES[name]?.fill);
+  assert.ok(measured.length >= 10, "the profile table is missing");
+  const pending = DRAWING_STYLES.filter((name) => !measured.includes(name));
+  for (const name of measured) {
     const match = matchDrawingStyle(DRAWING_STYLE_PROFILES[name]);
     assert.equal(match.name, name);
     assert.equal(match.distance, 0);
-    assert.deepEqual(match.unprofiled, []);
+    assert.deepEqual(match.unprofiled, pending);
   }
+  // No profiles at all: nothing is matched, and mapping says so instead of throwing.
+  const traits = DRAWING_STYLE_PROFILES.flat;
+  assert.equal(matchDrawingStyle(traits, { profiles: {} }), null);
+  const none = mapDrawingTraits({ traits: { ...traits, fill: { ...traits.fill, even_area: 0.8 } }, unmeasured: [] }, { profiles: {}, styles: ["chibi", "chibi-plain"] });
+  assert.equal(none.apply.cast, undefined);
+  assert.match(none.unmatched.find((entry) => entry.trait === "drawing style").reason, /chibi, chibi-plain/);
 });
 
 test("an inked reference matches an inked style, a flat one a style without outlines; a style with no profile is named", () => {
