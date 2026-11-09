@@ -24,7 +24,7 @@ import { starterCharacter } from "@launchclip/core/characters/cast.mjs";
 import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/core/characters/cues.mjs";
 import { DIRECTION_FILE } from "@launchclip/core/direction.mjs";
 import { storyStyleRequest } from "@launchclip/core/style.mjs";
-import { listCharacters, loadCharacter, projectCharacterRef, saveCharacter } from "./character_store.js";
+import { applySavedCharacters, listCharacters, loadCharacter, projectCharacterRef, saveCharacter } from "./character_store.js";
 
 const STORY_FILE = "storyboard.json";
 const SCRIPT_FILE = "SCRIPT.json";
@@ -212,20 +212,26 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
 const summary = (bible) => entriesOf(bible?.cast).filter(isObj).map((entry) => ({ id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, character_file: entry.character_file ?? null, sheet: entry.sheet ?? null, must_keep: entry.must_keep ?? [] }));
 
 /** A project's bible, read and checked against the disk and the script. → {bible, file, check} | null when there is none. */
-export async function readBible(projectDir, { file = BIBLE_FILE } = {}) {
+export async function readBible(projectDir, { file = BIBLE_FILE, home } = {}) {
   const project = path.resolve(String(projectDir ?? "."));
   const target = path.join(project, file);
   const bible = await readJsonIf(target);
   if (bible === null) return null;
   const script = await readJsonIf(path.join(project, SCRIPT_FILE)).catch(() => null);
-  const check = validateBible(bible, { script, exists: (relative) => existsSync(path.join(project, relative)) });
+  // A draft may name saved characters by id alone; they are filled before it is checked, as freeze fills them.
+  let checked = bible;
+  if (isObj(bible) && bible.frozen !== true && isObj(bible.cast)) {
+    const filled = await applySavedCharacters({ cast: bibleCast(bible) }, { projectDir: project, home });
+    if (filled.used.length) checked = { ...bible, cast: filled.story.cast };
+  }
+  const check = validateBible(checked, { script, exists: (relative) => existsSync(path.join(project, relative)) });
   return { bible, file: target, check };
 }
 
 /** `bible show <project>`: the bible, whether it is valid, and whether the storyboard agrees with it. */
-export async function showBible(projectDir) {
+export async function showBible(projectDir, hooks = {}) {
   const project = path.resolve(String(projectDir ?? "."));
-  const read = await readBible(project);
+  const read = await readBible(project, { home: hooks.home });
   if (!read) throw new Error(`${path.join(project, BIBLE_FILE)} does not exist; make one with launchclip bible freeze ${projectDir} --characters <id>,<id>`);
   const { bible, file, check } = read;
   let story = null;
@@ -258,7 +264,7 @@ export async function runBibleCommand(action, project, flags = {}, hooks = {}) {
       rule: flags.rule, pack: flags.pack, seed: flags.seed, chromium: flags.chromium, force: Boolean(flags.force), pin: !flags["no-pin"]
     }, hooks);
   }
-  if (action === "show") return showBible(project ?? flags.project ?? ".");
+  if (action === "show") return showBible(project ?? flags.project ?? ".", hooks);
   throw new Error(`Unknown bible action: ${action ?? "(none)"}; use freeze or show`);
 }
 

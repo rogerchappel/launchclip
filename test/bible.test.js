@@ -202,6 +202,15 @@ test("validateBible checks the cast, the script's characters, the sheets, the wo
   const draft = { schema: BIBLE_SCHEMA, frozen: false, cast: { style: STYLE, characters: [{ id: "maya" }, { id: "theo" }] }, world: { kind: "office" } };
   assert.deepEqual(validateBible(draft), { ok: true, errors: [], warnings: [] });
   assert.match(errors({ ...draft, hash: bible.hash }, {}), /a draft bible \(frozen: false\) carries no hash/);
+  // On disk a draft may name saved characters by id; show fills them, and freeze makes it a bible.
+  const drafted = await workspace(t);
+  await write(path.join(drafted.project, BIBLE_FILE), { schema: BIBLE_SCHEMA, frozen: false, cast: { style: "flat", characters: [{ id: "nova", position: "left" }, { id: "maya" }] }, world: { kind: "cafe", sets: ["standing"] }, rules: ["Nova never runs."] });
+  const shownDraft = await showBible(drafted.project, drafted.hooks);
+  assert.deepEqual([shownDraft.valid, shownDraft.frozen, shownDraft.errors], [true, false, []]);
+  const fromDraft = await freezeBible(drafted.project, {}, drafted.hooks);
+  assert.deepEqual(fromDraft.characters.map((row) => [row.id, row.position, row.voice]), [["nova", "left", "bf_emma"], ["maya", null, "af_heart"]]);
+  assert.deepEqual([fromDraft.style, fromDraft.world], ["flat", { kind: "cafe", sets: ["standing"] }]);
+  assert.deepEqual(json(path.join(drafted.project, BIBLE_FILE)).rules, ["Nova never runs."]);
   assert.match(errors({ ...draft, cast: { characters: [] } }, {}), /at least one character/);
   assert.throws(() => withBible(story(), draft), /freeze it first/);
 });
