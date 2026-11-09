@@ -42,7 +42,8 @@ export async function createStyleFromReferences(name, flags = {}, { root, cwd = 
       layout_mix: pack.reference_stats.layout_mix ?? null,
       layouts: pack.layouts,
       caption_treatment: pack.reference_stats.captions ?? null,
-      profile: pack.profile ?? null
+      profile: pack.profile ?? null,
+      drawing: inferred.drawing ? { traits: Object.fromEntries(Object.entries(inferred.drawing.traits).map(([trait, value]) => [trait, { label: value.label ?? value.type ?? value.theme, confidence: value.confidence }])), set: inferred.drawing.matched.map((entry) => ({ field: entry.field, value: entry.value })), unmatched: inferred.drawing.unmatched.map((entry) => entry.trait) } : null
     },
     report: path.join(written.path, "reference-report.md"),
     warnings: written.warnings

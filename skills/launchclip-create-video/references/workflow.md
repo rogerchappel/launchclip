@@ -220,6 +220,23 @@ bundled font families. It writes `style.json` and `reference-report.md`, with a
 confidence for every value. Read the report, fix low-confidence values by hand
 (fonts and accent colours are the usual ones), then render with the pack and run
 `launchclip style check <project> --against my-channel` to measure drift.
+
+It also measures how the reference is drawn (`reference_stats.drawing`):
+outline presence and line weight, fill type (flat, cel-shaded, gradient,
+textured), saturation and contrast, rounded or angular shapes, paper or grain,
+and frame stepping (ones, twos, threes), each with a confidence. From those it
+sets the nearest drawing style (`cast.drawing_style`), the backdrop
+(`background.kind`), `vocabulary.illustration` and `layouts.panel.radius`, and
+lists under "Not matched" in the report what has no dial (line weight, held
+frames, grain over the drawings). Do not paper over that list: tell the user
+what LaunchClip cannot match yet. Only measured traits are matched; never copy
+a reference's characters or designs.
+
+To iterate, run `launchclip style compare my-channel [--out qa/style-compare.json]`:
+it renders a short sample in the pack, measures it the same way and reports
+the distance to the reference per trait with the field to change. Edit
+`style.json`, compare again, and stop when the traits that have a dial are
+within 0.25.
 `launchclip finish` runs the same check as its `style` gate whenever the
 storyboard names a style (palette, caption preset, cadence inside the style's
 profile band, brand frame; `qa/style-check.json`).

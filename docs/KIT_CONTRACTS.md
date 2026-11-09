@@ -1165,7 +1165,12 @@ type (0.15: display, body, case), motion (0.2: grammar, ease family, tempo,
 camera mode, whip, blur, zoom cadence), backdrops (0.15: background kind,
 plate set, panel treatment, radius, panel fill) and variants (0.2: the share
 of catalogue modules drawn with a different variant). `styleTraits(pack)`
-precomputes a pack's side for many comparisons; packs without a feel read
+precomputes a pack's side for many comparisons; `drawingDistanceReport(a, b)`
+(`{distance, parts, unmeasured}`) compares two drawing-traits blocks
+(`launchclip.drawing-traits.v1`, measured from a reference or a render by
+`src/drawing_traits.js`) over outline (0.2), line weight (0.1), fill (0.2),
+saturation (0.1), contrast (0.1), shape (0.1), grain (0.1) and stepping (0.1),
+leaving out the parts either side could not measure; packs without a feel read
 their grammar preset. Below `NEAR_DUPLICATE` (0.2) two styles read as one
 brand; `avoid: [packs]` keeps a result at least `MIN_AVOID_DISTANCE` (0.35)
 from each, stepping through up to `MAX_AVOID_STEPS` derived seeds and keeping

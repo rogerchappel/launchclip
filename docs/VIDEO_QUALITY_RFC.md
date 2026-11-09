@@ -420,7 +420,13 @@ previous videos. It grows to also produce:
 
 - a cadence profile measured from those videos;
 - the layout mix, estimated from persistent panel regions;
-- the caption treatment, estimated from text bands and case.
+- the caption treatment, estimated from text bands and case;
+- how the reference is drawn (`reference_stats.drawing`,
+  `launchclip.drawing-traits.v1`): outline and line weight, fill type,
+  saturation and contrast, shape language, grain and frame stepping, each with
+  a confidence, mapped to the nearest drawing style and the dials that exist,
+  with the rest reported as not matched. `launchclip style compare` renders a
+  sample in the drafted style and reports the distance per trait.
 
 This is a starting point that the user reviews, not a copy: only measurements
 and colour clusters are kept.

@@ -464,6 +464,10 @@ async function runStyleCommand(action, name, flags, names = []) {
     return createStyleFromReferences(required(name, "style name"), flags, { root });
   }
   if (action === "upgrade") return upgradeStylePack(required(name, "style name"), { root });
+  if (action === "compare") {
+    const { compareStyleCommand } = await import("./style_compare.js");
+    return compareStyleCommand(required(name, "style name or path"), flags, { root });
+  }
   if (["generate", "reroll", "keep", "pin", "preview", "distance"].includes(action)) {
     const { styleDistanceCommand, styleGenerateCommand, styleKeepCommand, stylePinCommand, stylePreviewCommand, styleRerollCommand } = await import("./style_seed_store.js");
     if (action === "generate") return styleGenerateCommand(flags);
@@ -511,8 +515,8 @@ function parseCastInvocation(action, rest) {
 }
 
 function parseStyleInvocation(action, rest) {
-  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade, check, generate, reroll, keep, pin, preview or distance");
-  if (!new Set(["create", "save", "list", "show", "upgrade", "check", "generate", "reroll", "keep", "pin", "preview", "distance"]).has(action)) throw new Error(`Unknown style action: ${action}`);
+  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade, check, compare, generate, reroll, keep, pin, preview or distance");
+  if (!new Set(["create", "save", "list", "show", "upgrade", "check", "compare", "generate", "reroll", "keep", "pin", "preview", "distance"]).has(action)) throw new Error(`Unknown style action: ${action}`);
   const takesName = action !== "list" && action !== "generate";
   // distance takes every leading style: launchclip style distance a b c
   const leading = rest.findIndex((token) => token.startsWith("--"));

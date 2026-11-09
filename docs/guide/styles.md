@@ -65,6 +65,16 @@ You get `.launchclip/styles/my-channel/style.json` plus a short report explainin
 launchclip style check ./my-video --against my-channel
 ```
 
+The same command also measures how the reference is **drawn**, not only how it is paced: whether shapes have outlines and how heavy the line is, whether fills are flat, cel-shaded, graded or textured, how saturated and contrasty the colours are, whether shapes are rounded or angular, whether there is paper or grain, and whether the animation moves on every frame or holds each drawing for two or three. Each measurement has a confidence. LaunchClip then sets what it can already draw: the closest of its character drawing styles, the backdrop (flat, gradient or paper), the illustration treatment and how round panel corners are. The report's Drawing section lists what was set, and just as plainly what has no dial yet (line weight and held frames, for example). It matches these measurements only: it never copies a reference's characters or designs.
+
+To see how close the draft gets, render a short sample in the style and measure it the same way:
+
+```bash
+launchclip style compare my-channel
+```
+
+It prints the distance from the reference for each drawing trait, and for a trait that is far off, the setting to change. Edit the style, run it again, and watch the numbers.
+
 When a video names a style, `launchclip finish` runs this check for you and won't call the video ready until it passes: the colours, the caption look, the pacing within your style's range and the brand frame all have to match. The pacing is counted from your storyboard (every graphic that appears or leaves, every camera move and layout change), not guessed from the pixels. The report is in `qa/style-check.json`.
 
 ### 3. Write your own
