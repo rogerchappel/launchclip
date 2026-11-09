@@ -62,7 +62,8 @@ export function claimMediaQueries(ledger, options = {}) {
   const max = Number(options.max ?? 3);
   const out = [];
   for (const claim of (ledger?.claims ?? []).filter((entry) => entry.status === "verified" && !entry.stale)) {
-    const subject = (claim.entities ?? []).find((entity) => (entity.kind === "name" && /\s/.test(entity.name)) || entity.kind === "org");
+    // A headline's capitalised run is its opening words, not a thing to picture: only an organisation it names counts there.
+    const subject = (claim.entities ?? []).find((entity) => entity.kind === "org" || (!claim.headline && entity.kind === "name" && /\s/.test(entity.name)));
     if (!subject) continue;
     const existing = out.find((entry) => entry.query === subject.name);
     if (existing) { existing.claims.push(claim.id); continue; }
