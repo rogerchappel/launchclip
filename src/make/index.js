@@ -2,7 +2,8 @@
 // of assets to a finished video, headless.
 //
 //   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
-//     → storyboard (planner + repair loop) → subject (matte the planned ranges) → finish → critic → MAKE.json
+//     → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
+//     → subject (matte the planned ranges) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
 // and mtime match, the script and storyboard while their inputs hash the same
@@ -41,6 +42,7 @@ import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
+import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, WORDS_PER_MINUTE, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
@@ -155,7 +157,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     costs: { items: [], estimated_usd: 0, complete: true },
     repairs: null,
     gates: null,
-    candidates: { status: "skipped", reason: "make skips cheap candidate renders in headless mode; the rendered-candidates receipt is only required by cinematic-check's phase-2 contract, which make does not declare" },
+    candidates: null,
     critic: null,
     final: null,
     warnings: [],
@@ -174,6 +176,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["route", stageRoute],
     ["prepare", stagePrepare],
     ["storyboard", stageStoryboard],
+    ["candidates", stageCandidates],
     ["subject", stageSubject],
     ["finish", stageFinish],
     ["critic", stageCritic]
@@ -1104,6 +1107,11 @@ async function stageStoryboard(ctx) {
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
   const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+  // The same checks, for a storyboard with one scene changed (the candidates stage).
+  ctx.storyCheck = (candidate) => {
+    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+    return [...(checked.ok ? [] : checked.errors), ...assetErrors(candidate, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(candidate, ctx.skeleton)];
+  };
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
@@ -1210,6 +1218,103 @@ export function worldLook(story, prompt = "") {
     added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"} (${motif ? `${motif} plates` : "neutral plates"}${plates.some((entry) => entry.kind === "video" || entry.kind === "image") ? " and project footage" : ""})`);
   }
   return added;
+}
+
+// Rendered candidates (src/make/candidates.js): the opening and one risky
+// transition, two candidates each, as stills scored from the pixels; a
+// winning alternative replaces the planner's in storyboard.json. Never fatal:
+// a comparison that cannot be made is reported and the planner's cut stands.
+async function stageCandidates(ctx) {
+  const { project, report, state, options } = ctx;
+  const skip = (reason) => { report.candidates = { status: "skipped", reason }; return { status: "skipped", reason }; };
+  if (candidatesMode(options.candidates) === "off") return skip("--candidates off");
+  if (ctx.routing.lane === "footage-led") return skip("footage-led: the opening is the recording itself");
+  if (ctx.longForm) return skip("long form: its storyboard comes from the beat map, which candidates do not change yet");
+  if (!ctx.model.vision) return skip(`${ctx.model.spec} cannot take images, so nothing can score candidates from their frames`);
+  const storyFile = path.join(project, MAKE_PATHS.story);
+  let raw = await readJson(storyFile);
+  if (state.candidates?.story === hashValue(raw)) { report.candidates = { ...state.candidates.report, status: "reused" }; return { status: "cached", reason: "the storyboard is the one the candidates chose" }; }
+  if (!ctx.storyCheck) return skip("the storyboard was reused from an earlier run; pass --replan to plan again with candidates");
+  const notes = [];
+  const comparisons = [];
+  const applied = [];
+  try {
+    let resolved = (await readProjectStory(project)).resolved;
+    const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+    const still = ctx.adapters.candidateStill ?? await rendererStill({ project, renderer: ctx.renderer });
+    const judge = async (kind, entries, context) => {
+      ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (${kind} candidates scored from ${entries.reduce((sum, entry) => sum + entry.frames.length, 0)} rendered frames)`);
+      try {
+        const judged = await judgeCandidates({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, kind, candidates: entries, project, context });
+        addCost(report, `candidate-judge-${kind}`, ctx.model, judged.cost);
+        return judged;
+      } catch (error) { if (error.cost) addCost(report, `candidate-judge-${kind}`, ctx.model, error.cost); throw error; }
+    };
+    // The opening: the planner's scene against one designed without seeing it.
+    const opening = openingScene(resolved);
+    if (opening) {
+      try {
+        ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (a second opening, designed without the first)`);
+        const line = (ctx.words ?? []).filter((word) => word.start >= opening.start - 0.05 && word.start < opening.end).map((word) => word.text).join(" ");
+        let design;
+        try { design = await designOpening({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, line, seconds: opening.end - opening.start, format: ctx.format, assets: assetManifestLines(ctx).filter((item) => item.src), notes: await notesText(ctx) }); }
+        catch (error) { if (error.cost) addCost(report, "candidate-opening", ctx.model, error.cost); throw error; }
+        addCost(report, "candidate-opening", ctx.model, design.cost);
+        if (design.module === opening.module && JSON.stringify(design.params) === JSON.stringify(opening.params)) throw new Error("the second opening is the same card as the first");
+        const variantRaw = storyWith(raw, opening.id, design);
+        const errors = ctx.storyCheck(variantRaw);
+        const variant = storyWith(resolved, opening.id, design);
+        if (errors.length || !sceneResolves(variant, opening.id)) throw new Error(`the second opening does not pass the storyboard checks (${errors[0] ?? "its module does not resolve"})`);
+        const times = sceneTimes(opening);
+        const a = { ...(await renderCandidate({ project, id: "open-a", story: resolved, times, fps, still })), source: `the planner's opening (${opening.module})` };
+        const b = { ...(await renderCandidate({ project, id: "open-b", story: variant, times, fps, still })), source: `a separately designed opening (${design.module})` };
+        const judged = await judge("opening", [a, b], "The opening line is: " + (line || "(no narration)"));
+        const selected = selectCandidate(["open-a", "open-b"], judged.scores);
+        if (!selected) throw new Error("the judge found no admissible opening");
+        comparisons.push(comparisonEntry({ id: "opening", kind: "opening", candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
+        if (selected === "open-b") { raw = variantRaw; resolved = variant; applied.push(`opening: ${opening.module} → ${design.module}`); }
+      } catch (error) { notes.push(`opening: ${String(error?.message ?? error).split("\n")[0]}`); }
+    } else notes.push("opening: the storyboard has no base scene");
+    // One risky transition: the planner's move against a different kind of move.
+    const boundary = riskyBoundary(resolved);
+    if (boundary) {
+      try {
+        const scene = boundary.scene;
+        const move = alternativeTransition(scene, resolved);
+        const variantRaw = storyWith(raw, scene.id, { in: move });
+        const errors = ctx.storyCheck(variantRaw);
+        if (errors.length) throw new Error(`a ${move.type} there does not pass the storyboard checks (${errors[0]})`);
+        const variant = storyWith(resolved, scene.id, { in: move });
+        const duration = Number(resolved.resolved?.duration ?? resolved.format?.duration);
+        const times = transitionTimes(scene, { dur: Math.max(Number(scene.in?.dur) || 0, move.dur) }, duration);
+        const a = { ...(await renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), source: `the planner's ${scene.in?.type ?? "cut"}` };
+        const b = { ...(await renderCandidate({ project, id: "trans-b", story: variant, times, fps, still })), source: `a ${move.type}` };
+        const judged = await judge("transition", [a, b], `It joins scene ${boundary.boundary_id.replace(/-in$/, "")} to the scene before it.`);
+        const selected = selectCandidate(["trans-a", "trans-b"], judged.scores);
+        if (!selected) throw new Error("the judge found no admissible transition");
+        comparisons.push(comparisonEntry({ id: `transition-${scene.id}`, kind: "transition", boundary: boundary.boundary_id, candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
+        if (selected === "trans-b") { raw = variantRaw; applied.push(`transition into ${scene.id}: ${scene.in?.type ?? "cut"} → ${move.type}`); }
+      } catch (error) { notes.push(`transition: ${String(error?.message ?? error).split("\n")[0]}`); }
+    } else notes.push("transition: the storyboard has no second scene in its opening stretch");
+  } catch (error) {
+    notes.push(String(error?.message ?? error).split("\n")[0]);
+  }
+  if (!comparisons.length) {
+    report.candidates = { status: "skipped", reason: notes.join("; ") || "no comparison could be made", notes };
+    report.warnings.push(`candidates: none compared (${report.candidates.reason}); the planner's opening and transitions stand`);
+    return { status: "skipped", reason: report.candidates.reason };
+  }
+  const receipt = await writeReceipt(project, comparisons, { boundaryIds: comparisons.filter((entry) => entry.boundary_id).map((entry) => entry.boundary_id) });
+  if (applied.length) await writeJson(storyFile, raw);
+  report.candidates = {
+    status: "done", receipt: receipt.file, receipt_ok: receipt.ok, ...(receipt.ok ? {} : { receipt_errors: receipt.errors.slice(0, 6) }),
+    comparisons: comparisons.map((entry) => ({ id: entry.id, kind: entry.kind, ...(entry.boundary_id ? { boundary_id: entry.boundary_id } : {}), selected: entry.selected_candidate_id, rationale: entry.selection_rationale, candidates: entry.candidates.map((candidate) => ({ id: candidate.id, source: candidate.source, mean: meanScore(candidate.scores), admissible: candidate.admissible })) })),
+    applied, notes
+  };
+  for (const note of notes) report.warnings.push(`candidates: ${note}`);
+  for (const change of applied) ctx.say(`candidates: ${change} (scored higher from the rendered frames)`);
+  state.candidates = { story: hashValue(raw), report: report.candidates };
+  return { status: "done" };
 }
 
 // Matte exactly the source ranges the planned subject scenes cover (padded),
