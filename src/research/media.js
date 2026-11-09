@@ -52,6 +52,26 @@ export function metaphorQueries(sentences, claims, options = {}) {
   return out;
 }
 
+/**
+ * Queries for what verified claims are about: the place, event, organisation
+ * or thing a claim names (people get portraits, models have no photo), so a
+ * found photo or clip is tied to the claim it can sit beside.
+ * → [{query, beat: the claim's text, claims: [id]}]
+ */
+export function claimMediaQueries(ledger, options = {}) {
+  const max = Number(options.max ?? 3);
+  const out = [];
+  for (const claim of (ledger?.claims ?? []).filter((entry) => entry.status === "verified" && !entry.stale)) {
+    // A headline's capitalised run is its opening words, not a thing to picture: only an organisation it names counts there.
+    const subject = (claim.entities ?? []).find((entity) => entity.kind === "org" || (!claim.headline && entity.kind === "name" && /\s/.test(entity.name)));
+    if (!subject) continue;
+    const existing = out.find((entry) => entry.query === subject.name);
+    if (existing) { existing.claims.push(claim.id); continue; }
+    if (out.length < max) out.push({ query: subject.name, beat: claim.text, claims: [claim.id] });
+  }
+  return out;
+}
+
 /** Each query against every provider → licence-clear assets, a few per query. */
 export async function findMedia(http, queries, options = {}) {
   const env = options.env ?? process.env;
@@ -59,13 +79,13 @@ export async function findMedia(http, queries, options = {}) {
   const providers = mediaProviders(env, options.providers);
   const assets = [];
   const rejected = [];
-  for (const { query, beat } of queries) {
+  for (const { query, beat, claims } of queries) {
     const found = [];
     for (const provider of providers) {
       let results = [];
       try { results = await provider.search(http, query); } catch { results = []; }
       for (const result of results) {
-        const asset = { ...result, provider: provider.id, provider_name: provider.name, query, beat };
+        const asset = { ...result, provider: provider.id, provider_name: provider.name, query, beat, ...(claims?.length ? { claims } : {}) };
         const reason = rejectReason(asset);
         if (reason) { rejected.push({ provider: provider.id, source_url: asset.source_url, reason }); continue; }
         found.push(asset);

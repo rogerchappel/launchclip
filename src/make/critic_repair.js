@@ -1,7 +1,7 @@
 // Critic-driven repair for `launchclip make` (src/make/index.js stageCritic).
 //
 // The headless critic (src/make/critic.js) reviews the render and asks to
-// ship, repair or replan. With rounds left (--critic-repairs, default 1),
+// ship, repair or replan. With rounds left (--critic-repairs, default 3),
 // make turns its findings into known problems for the planner, re-plans
 // (a targeted repair of the scenes named, or one whole new plan), renders
 // again (only the changed scenes when the timeline held) and asks the
@@ -10,7 +10,7 @@
 //
 // The pure parts live here; the stage wiring lives in src/make/index.js.
 
-export const DEFAULT_CRITIC_REPAIRS = 1;
+export const DEFAULT_CRITIC_REPAIRS = 3;
 export const MAX_CRITIC_REPAIRS = 3;
 const MAX_PROBLEMS = 12;
 const SEVERITY_ORDER = { blocking: 0, major: 1, minor: 2 };
@@ -73,11 +73,16 @@ export function criticRepairRoute(critique, findings, openingSceneId) {
   return hookProblem ? "replan" : "repair";
 }
 
-/** Findings → the planner's known problems, worst first, prefixed "critic". */
-export function criticProblems(findings) {
+/** The findings a round acts on: worst first, at most MAX_PROBLEMS. */
+export function criticFindings(findings) {
   return [...(findings ?? [])]
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
-    .slice(0, MAX_PROBLEMS)
+    .slice(0, MAX_PROBLEMS);
+}
+
+/** Findings → the planner's known problems, worst first, prefixed "critic" (one line per criticFindings entry). */
+export function criticProblems(findings) {
+  return criticFindings(findings)
     .map((finding) => `critic (${finding.severity} ${finding.category}${finding.scenes?.length ? `, scene${finding.scenes.length === 1 ? "" : "s"} ${finding.scenes.join(", ")}` : ""}): ${String(finding.message ?? "").trim()}`);
 }
 

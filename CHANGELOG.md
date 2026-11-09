@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Changed
+
+- `make` treats `--duration` as a ceiling. It still trims a script or a
+  chapter that runs more than 15% over, but it no longer asks the model to
+  add words to one that runs short: the video is shorter instead. In a long
+  video the outline is no longer stretched to the duration, and the seconds
+  a short chapter did not use go to the later chapters with the most facts.
+  `MAKE.json` notes it when a video runs well under its target.
+- `launchclip make` exits 2 when the video rendered but a gate still fails
+  (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
+  finished video (0) and a failed run (1). It used to exit 0.
+  `--allow-needs-repair` keeps the old exit code.
+- `make` gives the critic up to three repair rounds by default
+  (`--critic-repairs`, was one). A round that is no better is still undone and
+  stops the rounds.
+
 ### Added
 
 - A coverage test in the fast suite (`test/module_coverage.test.js`) fails
@@ -13,6 +29,131 @@
   `media-compare`, `media-stat`, `media-list`, `media-grid`, `drop-grid`,
   `live-counter` and `live-bars`, with drawn and generated test media.
 
+- Every short gets the short-form checks. The hook and card rules used to
+  run only when an app supplied a footage library, so a Short made from a
+  prompt alone skipped them. They now run on every video of 90 s or less, and
+  a new `hook` gate in finish checks how it opens: a claim or question
+  readable on screen early (in a scene or in the captions), no logo-only open,
+  an opening scene that arrives quickly, and a first spoken word on time. The
+  limits are the cadence profile's own `first_visual_seconds` and
+  `first_motion_seconds` bands, and the gate says where each number came from.
+  The checks read the storyboard and the narration, so both renderers get the
+  same verdict.
+- A loudness miss is repaired. A master that lands more than 1.5 LU off
+  −14 LUFS, or peaks over −1 dBTP, is run again from the raw render, aimed
+  past the target by the miss, up to twice. It used to ship with a warning;
+  now the `loudness` gate fails only if the repairs miss too.
+
+- make understands the files you hand in. Every image and clip in `--assets`
+  gets a short description: what it is (a pricing page, a dashboard, an
+  onboarding flow, a product photo, a person on camera), the key words on
+  screen, the story beats it suits, its orientation and, for a clip, the time
+  ranges worth showing. A model that can take images describes each new file
+  once (PAID, cached by the file's content so it is never sent twice); without
+  one, make guesses from the file name, the kind of file, where a clip moves
+  and the words Tesseract reads when installed. An app or agent that already
+  knows what its files show writes the same fields (`shows`, `text`, `fits`,
+  `feature`) in the notes sidecar and no model is called. The script writer
+  and the director read the descriptions in the asset list.
+  `--asset-descriptions auto|local|off`.
+- A featured file is not left out. When you hand in three files or fewer, name
+  a file in the prompt, ask to show what one file is, or set `feature: true`
+  in its notes, a storyboard that never shows it is repaired; if it is still
+  missing after the repairs, `MAKE.json` lists it under
+  `assets.unused_featured` with a `featured:` warning.
+
+- The skill path gathers evidence the same way the headless path does.
+  `claims.json` (`--claims`) can now name each claim's primary source
+  (`source_url`, `sources`, and `urls` for the file) and the source's own
+  words that state it (`passage`). Research fetches, freezes and checks
+  every named source, and a passage verifies a claim only when the page
+  holds it word for word with the claim's numbers and dates. The file's
+  shape is checked. The research skill reference now tells an agent with
+  web tools to find primary sources itself, write `claims.json`, and run
+  `launchclip research` and `launchclip research capture`.
+
+- The photos and footage research finds can now be placed. Licence-clear
+  stock and archive items (Wikimedia Commons, NASA, Internet Archive,
+  Library of Congress, and Pexels or Pixabay with a key) are downloaded
+  into `assets/research/` and listed in the planner's asset manifest with
+  what each shows, the verified claim it was found for, and its licence and
+  credit, for `media-window` and `photo-scene`. Research also looks for
+  media on what each verified claim is about. The licence is checked again
+  before download, and nothing unknown or incompatible is staged or
+  offered.
+- `publish.json` gains `credits` (licence and attribution for every
+  research item the storyboard uses, also appended to the description) and
+  `sources` (every recorded source page shown), and warns about research
+  media placed without a cleared licence.
+- Capture requests list the verified claims they back (`claims`).
+
+- A missing evidence capture is loud. When a verified claim wanted its
+  source page on screen and none was recorded (no Playwright or Chromium, a
+  paywall, a bot check, a sign-in wall), `make` now lists each claim with
+  the kind of failure and its fix in `MAKE.json` (`captures.status`,
+  `captures.claims_without_capture`), warns once per kind, and holds the
+  `research` gate at `pending`. `launchclip research` says whether this
+  machine can record the requests it wrote, and `launchclip doctor` reports
+  the recorder under `tools.evidence_capture` with the fix.
+- `launchclip research capture [research] [--root .]` records every capture
+  request, writes `research/capture-status.json` and attaches the evidence
+  data, so a run by hand ends with the same files as `make`.
+
+- Current news with no search key. `launchclip research` (and `make` when
+  it researches) now finds stories through public sources that need no key:
+  a named company's own RSS or Atom feed (and any `--feed <url>`), Hacker
+  News, the GDELT article list and Wikipedia's current events. Each is only
+  a lead: the page is fetched and checked as before, a story is kept only
+  when a primary source states it, and no index is ever named in the
+  script. `research/news.json` lists every story found, kept or dropped,
+  with the reason. `--news none` turns these sources off.
+- Publish dates and old news. Every claim records its source's publish
+  date. A brief that asks for the latest ("today", "this week", "latest") or
+  `--fresh-days <n>` sets a freshness window: older stories are dropped,
+  and a claim whose source is older or undated is flagged for the script.
+- Research reads `robots.txt` before it fetches a page or feed and skips
+  what a site closes to it.
+
+- `launchclip make` researches a news brief without being asked.
+  `--research` now defaults to `auto`: research turns on when the brief is
+  news or research shaped (news wording such as "this week" or "just
+  announced", a dated event, a named release, a question of fact) and stays
+  off for a product video, an evergreen topic, or a brief that brings its own
+  script or recording. `on` and `off` still decide it yourself. The run
+  prints the decision, and `MAKE.json` records it with the words that led to
+  it under `research_decision`.
+
+- `make` renders candidates for the opening and one risky transition before
+  the draft, as the create-video skill does. It designs a second opening in
+  a call that never sees the first, tries a different kind of move at the
+  riskiest transition in the first 30 seconds, renders each candidate as
+  three stills, and has a model that can see score them from the frames.
+  The higher mean wins and goes into `storyboard.json`; the frames and
+  scores are kept in `qa/rendered-candidates.json`, which `cinematic-check`
+  reads. For short motion videos; long form and footage-led videos skip it
+  for now, and `--candidates off` skips it everywhere.
+- The headless critic runs with an Anthropic model. `make`'s Anthropic
+  adapter now sends the contact sheets as image content blocks, so a run
+  with only `ANTHROPIC_API_KEY` gets the critic and its repair rounds by
+  default instead of ending `ready-for-review` with the critic pending.
+  The adapter also streams a request that asks for more than 16,000 output
+  tokens, which the SDK refuses to send unstreamed.
+- `make` chooses a concept and a story before it writes the script, as the
+  create-video skill does: five concepts, a judge that sees only the brief
+  and the concepts, then the winner written as a story and tightened by an
+  editor. `CONCEPTS.json` and `STORY.json` are written beside the script,
+  the script is written on the story, the storyboard planner is given the
+  concept's visual world, and a long video's outline is derived from the
+  story. It adds four model calls before the script. `--concepts off` skips
+  it, and a concept stage that fails is a warning, not a failed video.
+- A make-vs-skill parity harness: `npm run eval:make-parity -- <make-project>
+  <skill-project> --kind news` scores two finished projects made from one
+  brief (distinct modules a minute, the typography share, cuts and visual
+  events a minute against the cadence profile, held and repeated cards, the
+  critic's verdict, and hedging, meta-narration and repeated facts in the
+  script) and says whether `make` is within 15% of the skill. It reads the
+  storyboard, the narration and `qa/critic.json`, so it runs offline; with no
+  arguments it runs on a fixture pair. See `docs/MAKE_SKILL_PARITY.md`.
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or
@@ -290,6 +431,11 @@
   `picture-in-picture` without its paper ring. Both now match Remotion.
 - `drop-grid` `times` is a list of seconds in the module schema. It read as a
   single number, so a storyboard that timed each drop failed validation.
+
+- Critic repair rounds now work on long videos. The long-form storyboard
+  stage returned its cached plan during a round, so every round failed with
+  "the repair changed no scene". A round now re-directs the chunks that hold
+  the scenes the critic named, starting from the cards they had.
 
 - `photo-scene`, `evidence-clip` and `product-demo` honour their typed
   transitions instead of always fading over 0.4 s. A cut into or out of one

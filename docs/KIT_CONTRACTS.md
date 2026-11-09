@@ -3192,6 +3192,10 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | Field | Type | What uses it |
 | --- | --- | --- |
 | `description` | text ≤ 500 | the manifest line the planner reads; clip matching (`matchScore`) |
+| `shows` | a few words, ≤ 60 | what the file is ("pricing page", "dashboard", "onboarding flow", "product photo", "person on camera"): the manifest line; clip matching (weighted double); which file a prompt's "show the pricing page" means |
+| `text` | up to 12 lines, ≤ 120 each | the key words readable on screen: the manifest line; clip matching |
+| `fits` | up to 6 phrases | the story beats the file suits ("the price or offer line", "how it works"): the manifest line; clip matching |
+| `feature` | true/false | true: the user wants this file in the video (see "Featured files" below); false: never treat it as featured |
 | `subjects`, `tags` | lists of words or phrases | the manifest line; clip matching (weighted double) |
 | `windows` | `[{start, end, quality?, note?}]` seconds into the clip | the manifest line (with how to use them); tooling moves a video scene whose `params.media.sourceStart` (plus its length) is outside every window to the best window's start (`snapMediaWindows`: one long enough first, then quality, then the note's match); the fill's in points |
 | `quality` | 0–1 | the manifest line (below 0.4 it says "use only when nothing better fits"); the media order (higher first); clip choice |
@@ -3200,6 +3204,119 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | `role` | the inventory's roles for the file's kind (`talking-head`, `screen-recording`, `b-roll`; `logo`, `screenshot`, `product-image`; `voiceover`, `music`) | overrides the heuristic (kept in `entry.detected`); a `b-roll` clip is never the base, even with speech on it |
 
 `ASSETS.json` entries carry `notes`; the routing's media items carry them too.
+
+### Described automatically (`src/asset_understanding.js`)
+
+`launchclip make` gives every handed-in image (logos aside) and video these
+notes even when the caller wrote none, so the planner knows what each file
+shows and where it fits. Per file, the first source that applies:
+
+| Source | When | What it costs |
+| --- | --- | --- |
+| `notes` | the caller's sidecar or `inventory.json` already has `shows` or `description` | nothing: no model is called and nothing is computed |
+| `vision` | the run's model can take images (OpenAI, OpenRouter and compatible endpoints) | one PAID call per file: the image scaled to 1024 px, or four frames of a video (at 10, 35, 65 and 90% of its length) with their times |
+| `local` | no model that can see, `--asset-descriptions local`, or the model call failed | nothing: the file name and folder, the inventory's role, the frame's shape, and the words Tesseract reads when `tesseract` is installed |
+
+The caller's own fields always win over a computed one, field by field.
+`windows` are computed for a video only: the model's, or locally the
+stretches of at least 1.5 s where something moves, given only when the clip
+is still for at least 15% of its length (a clip that moves throughout needs no
+windows). A local description says in its text that no model looked at the
+file, and the manifest line tells the planner to trust the narration over it.
+
+Results are cached by the file's SHA-256, one JSON per file, in
+`~/.cache/launchclip/asset-descriptions` (`LAUNCHCLIP_CACHE`, or
+`LAUNCHCLIP_ASSET_DESCRIPTIONS_DIR` for this cache alone; an embedding app's
+`withStateDirs` cache when set). A file is sent to the model once, however
+many projects it is handed to; a cached model description is reused even in a
+run with no model. One run sends at most 24 new files to the model
+(`MAX_VISION_FILES`) and describes the rest locally.
+
+`--asset-descriptions auto|local|off` (default `auto`): `local` never calls a
+model, `off` leaves the inventory as the heuristics and the caller's notes
+made it. Each described `ASSETS.json` entry carries `understanding: {source,
+sha256, cached, model?}`, and `MAKE.json` `assets.descriptions` counts the
+files per source.
+
+### Featured files
+
+A handed-in file the user clearly meant to be in the video must not be left
+out. `featuredAssets()` picks them, each with its reason:
+
+1. its notes say `feature: true`;
+2. the prompt names the file (`pricing-page.png`, or a multi-word file name
+   written with spaces);
+3. the prompt asks to show what it is ("show the pricing page") and it is
+   the only file that is one;
+4. three or fewer showable files were handed in (`FEW_ASSETS`).
+
+Rules 3 and 4 skip a file whose notes give it a `quality` under 0.4, and
+`feature: false` opts a file out of all of them. `media.must_use` files are
+the constraints' to enforce and are not listed again.
+
+The planner's prompt lists the featured files. A storyboard that shows none
+of one gets a repair error (`featured: assets/pricing-page.png (a pricing
+page) is not in the storyboard…`); like the hook and card checks, a plan that
+fails only this still ships when the repairs run out, with the error as a
+warning in `MAKE.json`. `MAKE.json` `assets.featured` lists the files and
+reasons, and `assets.unused_featured` the ones the storyboard left out. For a
+hard rule, use `media.must_use`.
+
+## Short-form checks (`src/short_form_checks.js`)
+
+Rules for every video of 90 s or less (`SHORT_SECONDS`), whether or not any
+footage was supplied. The planner checks the storyboard on every attempt and
+sends failures back as repair errors (`hook: …`, `cards: …`). A storyboard that
+fails only these still ships when the repairs run out, with the errors as
+warnings. `launchclip finish` then gates the opening it is about to deliver
+(the `hook` gate). Every check reads the storyboard and the measured narration,
+never the render, so Remotion and HyperFrames get the same verdict.
+
+| Check | Fails when | Where |
+| --- | --- | --- |
+| text | the opening scene's headline is a bare topic: under 4 words (`MIN_HOOK_WORDS`), or a question under 6 words with no number ("Deck care?"). Skipped when a recording opens the video | planner, `hook` gate |
+| claim | no phrase (2 words or more, `MIN_CLAIM_WORDS`) or number is on screen by `claim_by`. A scene on any track counts; so do the captions once the voice has started by `claim_by` | planner, `hook` gate |
+| logo_open | the opening scene is a `brand-lockup` or `logo-row` with no claim on it (the brand's own name is not a claim). Skipped when a recording opens the video | planner, `hook` gate |
+| entrance | the opening scene's `in` transition runs longer than `entrance_max` | planner, `hook` gate |
+| first_word | the first spoken word starts after `first_word_by` | `hook` gate only: a storyboard repair cannot move the voice |
+| cards | more text or icon cards (`concept-card`, `icon-row`, `icon-grid`, `checklist` and the title cards) than one per 15 s (at least 2), two back to back, or one module more than twice. With a footage library the cap holds at any length | planner |
+
+The opening's limits come from the cadence profile the story is gated against
+(`kit/profiles/`), not from constants in the check (`hookThresholds()`):
+
+| Limit | Source | short-motion | short-talking-head |
+| --- | --- | --- | --- |
+| `claim_by` | `first_visual_seconds` p90 ("when the first designed graphic appears") | 0.5 s | 1.5 s |
+| `entrance_max` | `first_motion_seconds` p90 ("when the first meaningful motion arrives") | 0.35 s | 2 s |
+| `first_word_by` | the later of the two. No profile measures when speech starts, so the voice is held to the window the profile gives the picture and the motion | 0.5 s | 2 s |
+
+A band under 0.35 s (some reels measure 0) is raised to `FIRST_FRAME_SECONDS`,
+the structure gate's "opening image on screen by". A profile without the band
+falls back to the shipped short profile for the lane: `short-talking-head`
+when a recording opens the video, `short-motion` otherwise. `MIN_CLAIM_WORDS`
+is a judgement (one word is a label), not a measured band.
+
+The `hook` gate in `finish.json` and `MAKE.json` is `{status, thresholds:
+{claim_by, entrance_max, first_word_by, profile, sources}, checks: {claim,
+logo_open?, entrance, first_word, text}, findings}`; `sources` says in words
+where each number came from. A failed check makes the run `needs-repair`. The
+structure gate still owns "opens on an image, not a title card, by 0.35 s",
+and the motion gate still measures the render's first motion and hook events.
+
+### Loudness repair (`src/finish.js`)
+
+The master targets −14 LUFS integrated and at most −1 dBTP
+(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+a warning: the master step runs again from the raw render, aimed past the
+target by what the last pass missed by (`repairAim()`: the level moved by the
+miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice
+(`MASTER_REPAIRS`). The master stage's `loudness.repairs` lists each pass
+(`{attempt, missed, aim, output, compliant}`), and `loudness.target` stays the
+delivery target. A repaired master passes the `loudness` gate with `repairs:
+<n>` and a `loudness:` warning that says what the first pass measured. A
+master that still misses fails the gate with the measurement in `errors`, and
+the run is `needs-repair`.
 
 ## Subject layer (`kit/core/subject-layer.mjs`)
 
@@ -3943,6 +4060,15 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
   `resolveStory` turns them into ids), so a storyboard planned before a
   seeded cast exists works with any seed's people.
+- `character.mjs`: the saved character file (`launchclip.character.v1`,
+  below): `normalizeCharacter`, `characterErrors`, `characterCastEntry`,
+  the set paths (`characterPaths()`, `parseSet`, `applyCharacterSets`) and
+  `withSavedCharacters(story, find)`, which fills story cast entries from
+  saved files.
+- `describe.mjs`: `describeCharacter(text, {current})`, a plain description
+  or edit instruction → set paths with no model, matched on the rig's own
+  option lists; `newCharacterDefaults(seed)` and `pickVoice(seed, …)` for
+  what a description leaves out.
 - `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
   joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
   over every pose an actor takes in a scene, each gesture's far swing and a
@@ -3990,6 +4116,80 @@ is an illustrated character: it takes no rig params, acts only in
 `sprite-scene` (a drawn-rig scene refuses it), and its `voice` may be any
 provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
 ElevenLabs), so each character in a dialogue speaks in its own voice.
+
+### Saved characters (`launchclip.character.v1`)
+
+One designed character as a file, used by the CLI, by agents (the
+`launchclip-character-design` skill) and by every storyboard read:
+
+```json
+{ "schema": "launchclip.character.v1", "id": "nova", "name": "Nova",
+  "personality": "calm night-shift lead who jokes under pressure",
+  "style": "paper", "voice": "bf_emma",
+  "params": { "build": "average", "height": "tall", "skin": "deep",
+              "hair": { "style": "locs", "color": "silver" },
+              "outfit": { "top": "blazer", "bottom": "trousers" },
+              "accessories": ["round-glasses"],
+              "colors": { "top": "red", "bottom": "denim", "shoes": "white", "accent": "accent" } } }
+```
+
+- `params` are rig params; `normalizeCharacter` validates them with
+  `normalizeRigParams` and writes the file in canonical form (fixed key
+  order, optional fields only when set), so equal characters are equal
+  files. `id` is a cast id that is not a starter's. `personality` is one
+  line of at most 160 characters. `voice` is any provider's voice id; one
+  shaped like a Kokoro id must be a local Kokoro voice. No other keys are
+  accepted.
+- **Where it lives** (`src/character_store.js`):
+  `<project>/cast/<id>.character.json`, then the user library
+  `~/.launchclip/cast/` (`$LAUNCHCLIP_HOME/cast`; an embedding app's pinned
+  home). The project's file wins.
+- **In a story.** A `story.cast.characters` entry whose id (or `from`) names
+  no starter and that carries no skin and hair of its own is filled from the
+  saved file: `{"id": "nova"}`, or `{"id": "lead", "from": "nova", "colors":
+  {"top": "teal"}}`, where the entry's own fields win as they do over a
+  starter. This runs in the shared storyboard read step
+  (`applyProjectStyle` in `src/story_style.js`, after the style merge), so
+  `story validate`, `layout-check`, `finish`, the renderers and `cast` all
+  see the filled cast; the result reports `characters: [{id, from, source}]`.
+  Entries that name a starter or carry their own params are untouched, and a
+  story with no such entry is returned as the same object. The file's
+  `style` is the style its sheet draws in; in a story `cast.style` decides.
+- **Set paths** are the one edit language: `name`, `personality`, `voice`,
+  `style`, `build`, `height`, `age`, `skin`, `hair.style`, `hair.color`,
+  `outfit.top`, `outfit.bottom`, `outfit.over`, `accessories`, `headwear`,
+  `mobility`, `colors.top|bottom|shoes|accent`. `path=value` sets one;
+  `accessories+=name` and `accessories-=name` add and remove (a new pair of
+  glasses replaces the pair worn); `path=none` clears an optional one.
+  `launchclip cast options [path]` prints each path's values from the rig's,
+  the palette's and the styles' exports, so options added there are settable
+  with no change here.
+- **Commands** (`src/cast_design.js`):
+  - `launchclip cast create <id> [--describe "…"] [--set path=value]…
+    [--from <starter|saved id>] [--to project|library]` builds a character
+    from a description (`describe.mjs`: no model, no key), then the `--name`,
+    `--personality`, `--voice` and `--style` shorthands, then `--set`, each
+    later one winning. Skin, hair and voice nobody named are chosen from the
+    id and reported as `assumed`; words nothing matched as `unmatched`.
+    `--model provider:model` (or `LAUNCHCLIP_CAST_MODEL`) asks a model for
+    the set paths instead (`src/make/models.js` clients); answers naming a
+    path or option the rig lacks are dropped and reported as `rejected`.
+  - `launchclip cast edit <id> [--instruction "…"] [--set path=value]…`
+    applies the same to a saved character and saves it where it was found.
+    A character that fails validation is not written.
+  - Both draw the sheet beside the file as `<id>.sheet.png` (a few poses,
+    every expression, the character's style, the project's brand colours
+    when it has a storyboard); `--no-sheet` skips it and `launchclip cast
+    sheet <id> [--poses …]` redraws it.
+  - `launchclip cast export [ids…] --out <folder|pack.json>` writes a
+    character pack and `launchclip cast import <pack> [--to project|library]
+    [--ids …] [--force]` reads one. A pack (`launchclip.cast-pack.v1`) is a
+    folder with `cast-pack.json` (`{schema, name, characters: [ids]}`) and
+    one character file each, or one `.json` file with the characters inside.
+    Import validates every character and refuses to replace one that exists
+    with different traits unless forced.
+- A reference image maps to traits (the skill has the agent read it and
+  choose options); nothing stores or reproduces a likeness.
 
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
@@ -4063,6 +4263,129 @@ cost (`SPRITE_IMAGE_USD` per picture).
 `test/fixtures/parity/characters-*.json` (every set, both orientations, a
 screen with a video and with an image, a cameo with a card) through
 `scripts/parity.mjs`.
+
+## Screenplay: SCRIPT.json version 2 (`kit/core/screenplay.mjs`)
+
+`SCRIPT.json` has two versions. Version 1 (`launchclip.make-script.v1`) is a
+narrated script: a title, one `narration` string and `beats: [{beat, text}]`,
+whose beat ids come from the script skeleton (hook, problem, cta, …). `make`
+writes it today. Version 2 (`launchclip.make-script.v2`) is a screenplay: it
+adds speakers and silent lines, for a story told by characters
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §4.1). A narrated
+script is the case where every speaker is the narrator, so a version 1 file
+reads as a version 2 one and nothing written today breaks.
+
+```json
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "She skipped one check",
+  "logline": "Maya's deploy fails again; Sam shows her the one check she skipped.",
+  "premise": { "want": "ship before lunch", "obstacle": "the same failing deploy", "change": "she checks first" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "to ship", "speech": "short, dry" },
+    { "id": "sam", "role": "foil", "want": "to help without gloating", "speech": "warm, unhurried" }
+  ],
+  "beats": [
+    { "beat": "problem", "place": "desk-laptop",
+      "lines": [
+        { "id": "l2", "speaker": "maya", "text": "Third time. Same red build.", "playing": "flat, to herself" },
+        { "id": "l3", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
+        { "id": "l4", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
+      ] }
+  ],
+  "narration": "Third time. Same red build. Did you run the check?",
+  "title_options": ["She skipped one check"]
+}
+```
+
+A full example is `test/fixtures/screenplay/two-characters.json`.
+
+- `characters[]`: `id` (lower-case letters, digits and hyphens, at most 24
+  characters; the same id the cast and the voice use; never `"narrator"`),
+  and free-text `role`, `want` and `speech`. An optional `name` is how
+  actions refer to the character when that is not the id. How a character
+  looks belongs to the show bible, not here.
+- `beats[]`: `beat` is one of `setup`, `problem`, `attempt`, `turn`,
+  `resolution`, `cta` (`NARRATIVE_BEATS` in `kit/core/direction.mjs`);
+  `place` is an optional set name; `lines` is never empty.
+- A **spoken line** is `{id, speaker, text, playing?}`. `speaker` is a
+  character id or `"narrator"`. `playing` is a note for the acting and the
+  voice and is never spoken.
+- A **silent line** is `{id, speaker: null, action, seconds}`: something that
+  happens with nobody speaking. `seconds` is above 0 and at most 3, and
+  silent lines in a row add up to at most 3 between two spoken lines,
+  because the pause a dialogue line carries (`audio.narration.lines[].gap`)
+  is at most 3 s.
+- Line ids are unique across the script; later stages point at lines by id.
+- `narration` is every spoken line's text, in order, joined by single spaces.
+- Other keys (`plan`, `title_scores`, `check`, …) are kept as they are.
+
+### Functions
+
+- `readScreenplay(value)` → the version 2 shape of any SCRIPT.json. A version
+  2 value is returned unchanged. A version 1 value (or an older one with no
+  version) becomes one narrator line per beat (`l1`, `l2`, …), or one line
+  holding the whole narration when it has no beats, with `characters: []`
+  and `source_version` set to what was read. It throws on a version it does
+  not know. `isScreenplay(value)` says whether a value is already in the
+  version 2 shape.
+- `validateScreenplay(value, {duration, wpm, gap, problemLandsSeconds,
+  tolerance})` → `{ok, errors: [{id, message, fix, line?}], warnings,
+  stats}`. Errors:
+
+  | id | rule |
+  |---|---|
+  | `script-shape` | not a script, an unknown version, no beats, no spoken line, a bad or repeated character id, a character called `narrator` |
+  | `beat-name` | a beat that is not a story beat |
+  | `line-id` | a line with no id, or an id used twice |
+  | `line-shape` | a spoken line with no text or with an action or a length; a silent line with no action or with text; a line with no `speaker` field |
+  | `silent-length` | a silent line with no `seconds`, or over 3 s, or a run of silent lines over 3 s between two spoken lines |
+  | `speaker-unknown` | a speaker who is not a listed character or the narrator |
+  | `character-unused` | a listed character who never speaks and whom no action names (by `id` or `name`, as a whole word) |
+  | `narration-mismatch` | `narration` is not the spoken lines joined |
+  | `fits-length` | the estimated length is more than 15% over `duration` at `wpm` (the voice's measured pace; 150 until one is measured) |
+  | `problem-missing` | no `problem` beat |
+  | `problem-lands` | the `problem` beat starts after `problemLandsSeconds` (the profile's `problem_lands_seconds`, 12 s in `story-characters`) |
+
+  Warnings: `no-duration`, `under-length` (more than 15% short),
+  `no-problem-limit`, `edge-silence` (the script opens or ends on a silent
+  line). A version 1 value is validated as all-narrator, without the
+  `beat-name`, `narration-mismatch` and problem rules.
+- `screenplayTiming(script, {wpm, gap})` → estimated times before any take
+  exists: a spoken line runs its words at `wpm`, two spoken lines in a row
+  are `gap` apart (0.3 s), a silent line runs its own `seconds`. Returns
+  `{seconds, spoken_seconds, silent_seconds, words, wpm, lines: [{id,
+  speaker, beat, start, end}], beats: [{beat, start, end}]}`.
+- `screenplayNarration(script)` → `{lines: [{speaker, text, gap?}],
+  lead_seconds, tail_seconds}`. `lines` is `audio.narration.lines`, the
+  dialogue format `src/voice/dialogue.js` voices, with no change to the voice
+  code. A silent line becomes the `gap` of the spoken line before it; a
+  line with no silent line after it has no `gap`, so the story's own gap
+  applies. Silent lines before the first spoken line and after the last
+  cannot be a pause between lines: their lengths come back as
+  `lead_seconds` and `tail_seconds` for the shot list to hold.
+- `spokenLines(script)` → the spoken lines with their character offsets in
+  `screenplayText(script)`, the spoken text joined.
+
+### The check (`src/script_check.js`, `launchclip script check`)
+
+`checkScreenplay({script, duration, wpm, problemLandsSeconds, brief, …})`
+runs `validateScreenplay`, then runs `checkScript` on the spoken text as one
+narration (format `story` unless given), so every spoken line passes the same
+script checks and evidence rules as a narrated script: figures, quotes,
+ratings and deadlines trace to the brief. A finding inside a line carries
+that line's `line` id and `speaker`. A character story may end without a
+call to action, so `cta-missing` is only an error when the script has a
+`cta` beat. The report is the `checkScript` report with `stats.screenplay`
+and `narration` (the derived lines).
+
+`launchclip script check <project>` checks the project's `SCRIPT.json`
+(a file path works too). `--duration` is the target length, `--wpm` the
+voice's measured pace (else the script's `plan.wpm`, else 150), `--profile`
+the cadence profile whose `problem_lands_seconds` p90 is the limit (default
+`story-characters`), `--brief` the prompt and notes the script was written
+from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
+checked exactly as before.
 
 ## World module (`kit/core/catalog-world.mjs`)
 

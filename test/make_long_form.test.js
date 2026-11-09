@@ -114,12 +114,12 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
     const joinVoice = async (files, out) => { joins.push(files); await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
     const lines = [];
     const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice: (line) => lines.push(line) };
-    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, adapters);
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", concepts: "off", cwd, out: "october", longFormVisuals: "rules" }, adapters);
     const project = path.join(cwd, "october");
     assert.equal(report.status, "ready", JSON.stringify(report.stages));
     // Progress lines: each stage starts and ends, and each chapter is counted.
     const events = lines.map(parseProgressLine).filter(Boolean);
-    assert.deepEqual(events.filter((event) => event.done !== undefined && !event.step).map((event) => event.stage), ["model", "inventory", "demo", "route", "prepare", "storyboard", "subject", "finish", "critic"]);
+    assert.deepEqual(events.filter((event) => event.done !== undefined && !event.step).map((event) => event.stage), ["model", "inventory", "demo", "route", "prepare", "storyboard", "candidates", "subject", "finish", "critic"]);
     assert.deepEqual(events.filter((event) => event.step === "chapter").map((event) => `${event.done}/${event.total}`), ["0/4", "1/4", "2/4", "3/4"]);
     assert.ok(events.some((event) => event.stage === "finish" && event.status === "done" && Number.isFinite(event.seconds)));
     assert.ok(lines.some((line) => line.startsWith("machine: ")), "the finish notice names the machine");
@@ -148,7 +148,7 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
 
     // A rerun reuses the outline, every chapter and the plan: no model calls.
     const before = calls.length;
-    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, adapters);
+    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", concepts: "off", cwd, out: "october", longFormVisuals: "rules" }, adapters);
     assert.equal(again.status, "ready");
     assert.equal(calls.length, before);
     assert.equal(again.stages.storyboard.status, "cached");
@@ -188,7 +188,7 @@ test("by default the model directs every long-form card on the beat director's c
     };
     const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
     const adapters = { env: {}, client: model, inventory: emptyInventory, finish, joinVoice, notice: () => {} };
-    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", concepts: "off", cwd, out: "october" }, adapters);
     assert.equal(report.status, "ready", JSON.stringify(report.stages));
     const project = path.join(cwd, "october");
     const map = JSON.parse(await readFile(path.join(project, "BEATMAP.json"), "utf8"));
@@ -217,7 +217,7 @@ test("by default the model directs every long-form card on the beat director's c
 
     // A rerun reuses every directed chunk: no model calls.
     const before = calls.length;
-    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october" }, adapters);
+    const again = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", concepts: "off", cwd, out: "october" }, adapters);
     assert.equal(again.stages.storyboard.status, "cached");
     assert.equal(calls.length, before);
   } finally {
@@ -317,7 +317,7 @@ test("with research on, make records the source pages while it writes, and the d
       await writeFile(path.join(root, `assets/evidence/${request.id}.evidence.json`), JSON.stringify({ schema: "launchclip.evidence.v1", id: request.id, video: `${request.id}.mp4`, duration: 6, viewport: request.viewport, final_url: request.url, provenance: { source_title: "Atlas 2 is here", publisher: "Atlas", published_at: "2026-10-06T09:00:00Z" } }));
     };
     const adapters = { env: {}, client, inventory: emptyInventory, finish, joinVoice, research, capture, notice: () => {} };
-    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", research: "on" }, adapters);
+    const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", concepts: "off", cwd, out: "october", research: "on" }, adapters);
     // The fake narration says things the one-claim ledger does not back, so the research gate holds it for review.
     assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
     assert.deepEqual(recorded, ["atlas-2-post"]);

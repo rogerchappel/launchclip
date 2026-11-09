@@ -702,9 +702,9 @@ finished video. It runs these stages in order and stops at the first failure
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
 | `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, resolves the music (see [Music](#music)): the procedural bed from scene `energy`, an ElevenLabs track generated (or reused from the cache) for the story, or a supplied file; analyses its beats, applies beat sync, and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` (or `--music none`) turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json`, `BEATS.json`, `qa/beat-sync.json`, `assets/audio/music.mp3` (ElevenLabs) |
 | `render` | Renders the filled copy through the renderer adapter and the segment cache (see the iteration loop below): unchanged segments are reused and the summary reports how many were reused, rendered and the time saved. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4`, `.launchclip/finish/segments/` |
-| `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
+| `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. A master that misses (more than 1.5 LU off, or a peak over −1 dBTP) is run again from the raw render, aimed past the target by the miss, at most twice; if it still misses, the `loudness` gate fails. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
-| `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
+| `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. A video of 90 s or less also gets the `hook` gate: a claim or question readable on screen early (in a scene, or in the captions of a voice that has started), no logo-only open, an opening scene that arrives quickly, and a first spoken word on time. Its limits come from the cadence profile (0.5 s for the claim and the voice and 0.35 s for the entrance on `short-motion`; 1.5 s, 2 s and 2 s on `short-talking-head`), and `gates.hook.thresholds.sources` says where each came from. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
 
 The user's `storyboard.json` is never rewritten: the voice, words, captions and
 mix are set on the copy in `.launchclip/finish/`. Each stage records the hashes
@@ -923,7 +923,7 @@ launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration
   [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] \
   [--music synth|elevenlabs|none] [--sfx generated|kit|off] [--layout full|stacked|overlay] \
   [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] \
-  [--critic | --no-critic] [--critic-repairs 1] [--max-repairs 4] [--json]
+  [--critic | --no-critic] [--critic-repairs 3] [--allow-needs-repair] [--max-repairs 4] [--json]
 ```
 
 The full option list is in [Command usage](#command-usage) below. The ones
@@ -937,7 +937,16 @@ that shape the story and the finish:
 | `--sfx generated\|kit\|off` | Sound effects. Unset: `generated` (described per event, ElevenLabs, paid) with `ELEVENLABS_API_KEY`, else `kit`. |
 | `--layout full\|stacked\|overlay` | A talking head's layout for the whole video (footage-led only). `full` (default): the planner picks footage layouts per section. `stacked`: the presenter low, a graphics panel above. `overlay`: one full-frame take with graphics around the presenter and captions at the chest. |
 | `--no-subject`, `--face-track` | `--no-subject` turns off the presenter cut-out effects and, with them, the head track. Add `--face-track` to keep just the head track, so cards are still moved off the presenter's face and the face gate can check it. |
-| `--critic-repairs <0-3>` | Rounds of critic-driven repair after the first render (default 1). A round that comes out no better is undone; `0` ships the critic's verdict as is. |
+| `--concepts on\|off` | Concept and story before the script (default `on`): five concepts, a judge in a fresh context, the winner written and edited as a story. `off` writes the script from the brief in one pass. |
+| `--candidates on\|off` | Rendered candidates before the draft (default `on`; short motion videos with a model that can see): a second opening designed without seeing the first, and a different move at the riskiest transition in the first 30 s, each rendered as three stills and scored from the frames. `off` keeps the planner's. |
+| `--critic-repairs <0-3>` | Rounds of critic-driven repair after the first render (default 3). A round that comes out no better is undone and the rounds stop; `0` ships the critic's verdict as is. Long form re-directs the chunks that hold the scenes the findings name. |
+| `--allow-needs-repair` | Exit 0 when the video is `needs-repair`. Without it `make` exits 2 for a video that rendered but still fails a gate (see exit codes below). |
+
+**Exit codes.** `0`: the video is `ready` or `ready-for-review`. `1`: a stage
+failed (`MAKE.json` `status: "failed"`). `2`: the video rendered but a gate
+still fails after the critic's repair rounds (`status: "needs-repair"`); it is
+not a finished video and a host application must not present it as one.
+`--allow-needs-repair` turns that `2` into `0`.
 
 `make` is the headless equivalent of the create-video skills: one command from
 a prompt and an optional folder of assets to a finished, mastered video. An
@@ -950,10 +959,11 @@ deterministic tooling. The project lands in `--out` (default
 | `model` | `--model`, else `LAUNCHCLIP_MAKE_MODEL`, else `openai:gpt-5.6-luna` when `OPENAI_API_KEY` is set, else `anthropic:claude-opus-4-8` when `ANTHROPIC_API_KEY` is set (the IDs the cost table prices). Reasoning defaults to `medium` (`provider:model@high` overrides). | |
 | `inventory` | Classifies every file in `--assets` (below), probes durations and dimensions, transcribes speech with local Whisper, and links the files into `assets/`. Entries are reused while a file's size and mtime match. | `ASSETS.json`, `.launchclip/make/transcripts/` |
 | `route` | Picks the lane deterministically (below). | `MAKE.json` `routing` |
-| `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. When the edit's QA asks for a semantic review (ambiguous joins, no detected defect), make uses the rendered candidate and reports a pending `base_edit_qa` gate with the issues; a QA failure falls back to the unedited recording. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the script pass (narration sized to the duration at the pace's rate, `--pace` above), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take misses the target by more than 15%. | `SCRIPT.json`, `NARRATION.json` |
+| `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. When the edit's QA asks for a semantic review (ambiguous joins, no detected defect), make uses the rendered candidate and reports a pending `base_edit_qa` gate with the issues; a QA failure falls back to the unedited recording. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the concept and story stage (five concepts and a judge from `src/concept_tournament.js`, then the story and its edit from `src/retention_story.js`, each a separate call; reused while the brief is unchanged; a failure is a warning and the script is written from the brief; a long video gets a spine of at most 180 s that its outline is derived from), then the script pass (narration sized to the duration at the pace's rate, `--pace` above), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take runs more than 15% over the target. The duration is a ceiling: a take that runs short is kept and the video is shorter, never padded. Long form does the same per chapter. | `CONCEPTS.json`, `STORY.json`, `SCRIPT.json`, `NARRATION.json` |
 | `storyboard` | `story plan`'s planner and repair loop (at most `--max-repairs`, default 4 here: a module reports its first param error, so each repair can surface the next one) with the brief, the narration, the word anchors, the style pack, and an asset manifest: the model may reference only the listed files, and any other `assets/` path is sent back as a repair error. Reused while its inputs hash the same; `--replan` forces a new one. | `storyboard.json`, `BRIEF.md`, `.launchclip/storyboard-plan.json` |
+| `candidates` | Two candidates for the opening and two for one risky transition (`src/make/candidates.js`). Each is three stills from the project's renderer; a vision model scores them 0–10 on the skill's ten fields and the higher mean wins, ties to the planner's. A winning alternative replaces the planner's scene or transition in `storyboard.json`. Skipped, with the reason in `MAKE.json` `candidates`, for long form, footage-led videos, a model that cannot take images, `--candidates off`, or a storyboard reused from a run made before candidates. A comparison that cannot be made (the second opening fails the storyboard checks, a still fails to render, the judge returns no scores) is a warning and the planner's cut stands. | `qa/rendered-candidates/`, `qa/rendered-candidates.json` |
 | `finish` | `launchclip finish` (voice, captions, sound, render, master, evidence, gates). Music: `--music`, else a music file in the assets, else (finish's default) ElevenLabs when `ELEVENLABS_API_KEY` is set (paid, locked and cached), else the synth bed. | `renders/draft.mp4` or `renders/final.mp4`, `finish.json`, `qa/` |
-| `critic` | With a vision-capable model (OpenAI or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With a `repair` or `replan` verdict and `--critic-repairs` rounds left, it re-plans with the findings and renders again, keeping the better cut. With the Anthropic adapter (text only) or `--no-critic`, the critic gate stays `pending` with the next step. | `qa/critic.json` |
+| `critic` | With a vision-capable model (OpenAI, Anthropic or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With a `repair` or `replan` verdict and `--critic-repairs` rounds left, it re-plans with the findings and renders again, keeping the better cut. With `--no-critic`, or a model that cannot take images, the critic gate stays `pending` with the next step. | `qa/critic.json` |
 
 **Lane routing** (STORYBOARD_ENGINE_RFC.md §3; the model never chooses):
 
@@ -988,6 +998,26 @@ measured audio plus a short tail.
   over 20 levels); camera footage is noisy and a lit set is soft. Filename
   hints (talk, podcast, presenter / screen, demo, capture) override. No face
   detection.
+
+**Asset descriptions** (`--asset-descriptions auto|local|off`, default
+`auto`): after classifying, make says what each image (logos aside) and clip
+shows, so the script and the storyboard put it on the right line. Each
+`ASSETS.json` entry gets `notes` (`shows`, `description`, `text`, `fits`,
+`orientation`, and `windows` for a clip) and `understanding.source`:
+
+- `notes`: the file's own sidecar (`<file>.json`) or `inventory.json` already
+  has `shows` or `description`. Nothing is computed and no model is called.
+- `vision`: the run's model can take images (OpenAI, OpenRouter, compatible
+  endpoints). One PAID call per new file, cached by the file's SHA-256 in
+  `~/.cache/launchclip/asset-descriptions`, at most 24 new files a run.
+- `local`: no such model, or `--asset-descriptions local`. A guess from the
+  file name and folder, the classified role, where a clip moves, and the words
+  Tesseract reads when it is installed.
+
+A file you clearly meant to feature (three files or fewer handed in, named in
+the prompt, the one file that is what the prompt asks to show, or `feature:
+true` in its notes) that the storyboard never shows is repaired, then reported
+in `MAKE.json` as `assets.unused_featured` with a `featured:` warning.
 - `brand.json` (colour roles and fonts) becomes the storyboard brand; a
   `style.json` becomes the style pack (copied into
   `.launchclip/styles/<name>/` so finish resolves it); `.md`/`.txt` notes join
@@ -1190,13 +1220,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `skills path`: Print the path of a bundled skill.
 
   ```text
-  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design]
   ```
 
 - `skills install`: Install the bundled skills for Codex or Claude.
 
   ```text
-  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design|all] [--force]
   ```
 
 - `style create`: Create a style pack from a video, a style directory or reference media.
@@ -1308,22 +1338,53 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1] [--drop measure,…] [--note "…"]
   ```
 
-- `cast list`: List the starter characters, and the story's cast when given a project.
+- `cast list`: List the starter characters, the saved characters (the project's, then the library's), and the story's cast when given a project.
 
   ```text
-  launchclip cast list [project|storyboard.json]
+  launchclip cast list [project|storyboard.json] [--project <dir>]
   ```
 
-- `cast show`: Show one character's rig params, colours and voice.
+- `cast show`: Show one character's rig params, colours and voice: a story's, a starter's or a saved character's.
 
   ```text
-  launchclip cast show <id> [--story storyboard.json]
+  launchclip cast show <id> [--story storyboard.json] [--project <dir>]
   ```
 
-- `cast sheet`: Render every character in every pose and expression the story uses to qa/cast-sheet.png.
+- `cast sheet`: Render every character in every pose and expression the story uses to qa/cast-sheet.png. Given a saved character's id instead, render that character's design sheet (a few poses and every expression, in its drawing style) beside its file as <id>.sheet.png.
 
   ```text
   launchclip cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]
+  launchclip cast sheet <saved-id> [--project <dir>] [--poses stand,wave] [--out sheet.png] # one saved character's design sheet
+  ```
+
+- `cast create`: Design a character and save it as <project>/cast/<id>.character.json (--to library: ~/.launchclip/cast/), then draw its sheet beside it. --describe maps plain words onto the rig's options with no model or key (option names, everyday synonyms, a colour before the thing it colours); --set path=value sets any option exactly and wins over the description; --from starts from a starter or another saved character. What nobody says (skin, hair, voice) is chosen from the id and listed under assumed; words nothing matched are listed under unmatched. --model provider:model (or LAUNCHCLIP_CAST_MODEL) asks a model for the same set paths instead. Describe traits: a real person's name is not turned into a likeness.
+
+  ```text
+  launchclip cast create <id> [--describe "a tall woman with silver locs, round glasses and a red blazer"] [--set hair.style=locs]... [--from <starter|saved id>] [--name "…"] [--personality "…"] [--voice af_nova] [--style flat] [--to project|library] [--project <dir>] [--model provider:model] [--poses stand,wave] [--no-sheet] [--force]
+  ```
+
+- `cast edit`: Change a saved character with --set path=value and/or a plain --instruction ("swap the hoodie for a blazer", "remove the glasses", "taller"), validate it against the rig and redraw its sheet. accessories+=name adds one, accessories-=name removes one, path=none clears headwear, mobility, outfit.over, voice or personality.
+
+  ```text
+  launchclip cast edit <id> [--instruction "swap the hoodie for a blazer, remove the glasses"] [--set accessories+=beard]... [--name "…"] [--personality "…"] [--voice am_adam] [--style paper] [--project <dir>] [--model provider:model] [--poses stand,wave] [--no-sheet]
+  ```
+
+- `cast options`: Print every --set path with the values it takes, the poses and the expressions, read from the character rig as it is now.
+
+  ```text
+  launchclip cast options [path]                     # every --set path and its values, read from the rig
+  ```
+
+- `cast export`: Write saved characters (all of them when no id is given) as a character pack: a folder with cast-pack.json and one <id>.character.json each, or a single pack file when --out ends in .json.
+
+  ```text
+  launchclip cast export [<id> ...] --out <folder|pack.json> [--name "…"] [--project <dir>]
+  ```
+
+- `cast import`: Validate a character pack (a folder, a pack file or one character file) and save its characters to the project's cast/ folder or the library. A character that already exists with different traits is refused without --force.
+
+  ```text
+  launchclip cast import <folder|pack.json|character.json> [--to project|library] [--ids nova,rae] [--project <dir>] [--force]
   ```
 
 - `cast sprites`: Draw a project's illustrated cast (cast.sprites.json) with an image model: a picture per pose plus mouth-open and eyes-closed versions, cut out to assets/cast/<id>/. --dry-run shows the pictures and the estimated cost.
@@ -1569,18 +1630,20 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip publish-manifest <project> [--link <url>] [--utm <campaign>|auto] [--platforms app_store,product_hunt] # publish.json: titles, description, hashtags, CTA and platform fit
   ```
 
-- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written. --pace sets the narration rate (short-form defaults to fast, about 215 words a minute, and the ElevenLabs voice speed follows); --cta-keyword WORD with --cta-offer "..." ends the script and the post caption on "Comment WORD and I'll send you ..."; --episode with --choices A,B,C makes one episode of a series that ends on a viewer choice.
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, choose the concept and the story (five concepts judged in a fresh context, the winner written and edited as a story; --concepts off skips it), plan the script (format, goal and viewer awareness from --format/--goal/--awareness, else from the brief), write the script against that format's beats and the storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. Exit codes: 0 when the video is ready or ready-for-review, 1 when a stage failed, 2 when the video rendered but a gate still fails after the critic's repair rounds (MAKE.json status needs-repair; --allow-needs-repair exits 0 instead). --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes. --collection makes the video inside a collection: settings resolve collection → recipe (--recipe) → the flags given, are written to .launchclip/resolved.json, and video.json records the recipe and style versions. Inside a library (launchclip.library.json here or above, --library or LAUNCHCLIP_LIBRARY) the project goes under storage.projects unless --out, and the drive is checked (mounted, writable, storage.min_free_gb free) before anything is written. --pace sets the narration rate (short-form defaults to fast, about 215 words a minute, and the ElevenLabs voice speed follows); --cta-keyword WORD with --cta-offer "..." ends the script and the post caption on "Comment WORD and I'll send you ..."; --episode with --choices A,B,C makes one episode of a series that ends on a viewer choice. --research auto (the default) checks a news or research brief against primary sources before the script is written (news wording, a dated event, a named release or a question of fact turn it on; a product video or a brief with its own script leaves it off); on and off decide it yourself, and MAKE.json says which and why under research_decision.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--pace calm|standard|fast] [--cta-keyword WORD] [--cta-offer "..."] [--episode "Episode 2" --choices A,B,C] [--style <name|path> | --seed <hex>] [--density <0-1>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--sfx generated|kit|off|earshot] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--critic | --no-critic] [--critic-repairs 1] [--max-repairs 4] [--long-form-visuals model|rules] [--no-subject [--face-track]] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--research on|off] [--asset-provider-cmd <command>] [--min-shots <n>] [--card-backdrops off|footage] [--layout full|stacked|overlay] [--capture-cmd <command>] [--capture-concurrency <n>] [--base-edited] [--base-transcript <word-timed.json>] [--constraints <constraints.json>] [--max-cost-usd 50|none] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--pace calm|standard|fast] [--cta-keyword WORD] [--cta-offer "..."] [--episode "Episode 2" --choices A,B,C] [--style <name|path> | --seed <hex>] [--density <0-1>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--sfx generated|kit|off|earshot] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--concepts on|off] [--candidates on|off] [--critic | --no-critic] [--critic-repairs 3] [--allow-needs-repair] [--max-repairs 4] [--long-form-visuals model|rules] [--no-subject [--face-track]] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--research auto|on|off] [--asset-provider-cmd <command>] [--min-shots <n>] [--card-backdrops off|footage] [--asset-descriptions auto|local|off] [--layout full|stacked|overlay] [--capture-cmd <command>] [--capture-concurrency <n>] [--base-edited] [--base-transcript <word-timed.json>] [--constraints <constraints.json>] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 
-- `research`: Evidence and asset gathering, no model needed: every checkable claim in a topic or script (numbers, dates, quotes, named entities; --claims adds an agent's or model's list), checked against primary sources first (Hugging Face, GitHub and arXiv APIs, links in the script, --url) and then a web search when BRAVE_API_KEY, TAVILY_API_KEY or SERPER_API_KEY is set. Writes research/evidence.json (launchclip.evidence.v1: claim → sources with quote span and snapshot hash → verified, contradicted or unverified, the last two flagged for the script), captures/<id>.json (launchclip.capture.v1 for each source to show), data/<id>.json (tables lifted with the source cited), assets.json (licence-clear footage, stills and portraits from Wikimedia Commons, NASA, Internet Archive, Library of Congress, and Pexels or Pixabay with PEXELS_API_KEY or PIXABAY_API_KEY) and RESEARCH.md.
+- `research`: Evidence and asset gathering, no model needed: every checkable claim in a topic or script (numbers, dates, quotes, named entities; --claims claims.json adds an agent's list: {claims: [{text, source_url?, sources?, passage?, search?}], urls?}, where each named source is fetched and checked like --url and a passage must be on the page word for word), checked against primary sources first (Hugging Face, GitHub and arXiv APIs, links in the script, --url) then the keyless news sources (a named company's own RSS or Atom feed and any --feed, Hacker News, the GDELT article list, Wikipedia's current events; --news none skips them), and then a web search when BRAVE_API_KEY, TAVILY_API_KEY or SERPER_API_KEY is set. A news source only points at a page: the page is fetched, robots.txt is honoured, and a story is kept only when a primary source states it. Every claim carries its source's publish date, and a brief that asks for the latest ("this week", "latest"; or --fresh-days <n>) flags claims and drops stories older than that. Writes news.json (the stories found, kept or dropped, and why), research/evidence.json (launchclip.evidence.v1: claim → sources with quote span and snapshot hash → verified, contradicted or unverified, the last two flagged for the script), captures/<id>.json (launchclip.capture.v1 for each source to show), data/<id>.json (tables lifted with the source cited), assets.json (licence-clear footage, stills and portraits from Wikimedia Commons, NASA, Internet Archive, Library of Congress, and Pexels or Pixabay with PEXELS_API_KEY or PIXABAY_API_KEY) and RESEARCH.md. The capture requests are only requests until recorded: research capture records them all into <root>/assets/evidence (the recorder needs the optional playwright dependency, a Chromium and ffmpeg; launchclip doctor says whether this machine has them), writes capture-status.json (each request recorded or missing, with the kind of failure and its fix: no recorder, paywall, bot check, sign-in wall, page did not load, words not found) and attaches the evidence data. It also downloads the licence-clear stock and archive media in assets.json into <root>/assets/research (--media none skips this; the licence is checked again first, and anything unknown or not clear is never downloaded) and prints an inventory line for each: what it shows, the claim it was found for, its licence and credit, and how to place it. publish.json carries the credits of what a storyboard uses. A blocked page is a finding and is never worked round.
 
   ```text
-  launchclip research "<topic>" | <script.md> [--out research] [--url <source>]... [--claims claims.json] [--media "<query>"...|none] [--people none] [--max-captures 12] [--max-tables 8] [--theme dark|light] # claims → sources → evidence ledger, capture requests, data, licence-clear assets
+  launchclip research "<topic>" | <script.md> [--out research] [--url <source>]... [--claims claims.json] [--media "<query>"...|none] [--people none] [--news none] [--feed <rss-or-atom-url>]... [--fresh-days <n>|none] [--max-captures 12] [--max-tables 8] [--theme dark|light] # claims → sources → evidence ledger, capture requests, data, licence-clear assets
+  launchclip research capture [research] [--root .] [--media none] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request and stage the licence-clear media; says what is missing, why, and the fix
+  launchclip research capture [research] [--root .] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request; says which could not be recorded, why, and the fix
   launchclip research attach [research] [--root .]   # module-ready evidence data once the captures are recorded
   ```
 
@@ -1596,10 +1659,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
   ```
 
-- `script check`: Lint a voiceover script before anything renders. Errors (exit 1): more words than the duration can hold (2.75 a second), a number, quote, rating, user count or deadline that is not in the --brief, a greeting or filler opener or a hook over budget, no call to action or more than one, a call to action before the final quarter, a sentence over 25 words. Warnings: sentence length, reading grade, additive transitions, brand in the first sentence for cold audiences, unbacked superlatives, numbers per sentence and precision, an unanswered hook question, narration rate outside the format's band.
+- `script check`: Lint a voiceover script before anything renders. Errors (exit 1): more words than the duration can hold (2.75 a second), a number, quote, rating, user count or deadline that is not in the --brief, a greeting or filler opener or a hook over budget, no call to action or more than one, a call to action before the final quarter, a sentence over 25 words. Warnings: sentence length, reading grade, additive transitions, brand in the first sentence for cold audiences, unbacked superlatives, numbers per sentence and precision, an unanswered hook question, narration rate outside the format's band. A project folder means its SCRIPT.json. A SCRIPT.json with speakers and silent lines (version 2) is checked as a screenplay first: every speaker is a listed character or the narrator, every listed character speaks or is named in an action, a silent line has an action and a length (a run of them at most 3 s), beats are story beats (setup, problem, attempt, turn, resolution, cta), narration is the spoken lines joined, the script fits --duration at --wpm (default 150), and the problem beat starts within the profile's problem_lands_seconds (--profile, default story-characters). Its spoken lines then pass the checks above as one narration; a call to action is only required when the script has a cta beat. --json adds the derived audio.narration.lines.
 
   ```text
-  launchclip script check <script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]... [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--product <name>] [--cta "..."] [--audience consumer|b2b] [--json]
+  launchclip script check <project|script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]... [--wpm <words a minute>] [--profile <id|profile.json>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--product <name>] [--cta "..."] [--audience consumer|b2b] [--json]
   ```
 
 - `history check`: Compare every pair of videos in a history dir (its launchclip-history.json, plus any project folder inside it with a storyboard.json) and flag pairs whose hooks or structure (module sequence) are too close, or that are too alike overall (hook, opening, modules, background, captions, cover, palette). Exits 1 when a pair is flagged; --json for agents.
