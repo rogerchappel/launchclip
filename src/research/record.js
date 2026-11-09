@@ -10,6 +10,7 @@ import { recordCaptures } from "../make/captures.js";
 import { CAPTURE_STATUS_FILE, captureStatus, captureStatusLines } from "./capture_status.js";
 import { writeResearchEvidence } from "./evidence_data.js";
 import { RESEARCH_PATHS } from "./schema.js";
+import { researchMediaLines, stageResearchMedia } from "./stage_media.js";
 
 /**
  * options: {root (the project the clips go under; default: the research dir's parent), command (--capture-cmd),
@@ -35,7 +36,10 @@ export async function captureResearch(dir = RESEARCH_PATHS.dir, options = {}, ad
   for (const line of lines) log(`captures: ${line}`);
   // Post cards and PR cards read the recorded clips' sidecars.
   const attached = status.recorded ? await (adapters.attach ?? writeResearchEvidence)(researchDir, { root }).catch((error) => ({ error: error.message })) : null;
-  return { stage: "research-capture", status: status.status, dir: researchDir, root, requested: status.requested, recorded: status.recorded, reused: result.reused ?? 0, missing: status.missing, captures: status.captures, claims_without_capture: status.claims_without_capture, lines, file, ...(attached ? { evidence_data: attached.report ?? attached } : {}) };
+  // The stock and archive media: licence-clear items into assets/research, then what a planner may place.
+  const media = String(options.media ?? "") === "none" ? null : await stageResearchMedia(researchDir, root, {}, { fetch: adapters.fetch, log });
+  const offered = media ? researchMediaLines(JSON.parse(await readFile(path.join(researchDir, RESEARCH_PATHS.assets), "utf8").catch(() => "{}")), ledger) : [];
+  return { stage: "research-capture", ...(media ? { media: { staged: media.staged.map((asset) => ({ id: asset.id, file: asset.local, licence: asset.licence.name, attribution: asset.attribution })), skipped: media.skipped, inventory: offered.map((item) => item.line) } } : {}), status: status.status, dir: researchDir, root, requested: status.requested, recorded: status.recorded, reused: result.reused ?? 0, missing: status.missing, captures: status.captures, claims_without_capture: status.claims_without_capture, lines, file, ...(attached ? { evidence_data: attached.report ?? attached } : {}) };
 }
 
 async function readRequests(dir) {

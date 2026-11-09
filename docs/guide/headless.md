@@ -327,7 +327,10 @@ Every finished video also gets `publish.json`: the title and title options
 from the script, a description, hashtags, the CTA, the aspect, duration, video,
 cover and any `.srt`/`.vtt` captions, and whether the video fits YouTube
 Shorts (vertical, at most 180 s), TikTok, Reels, YouTube, LinkedIn (which
-recommends 15–30 s) and X. Write it again with a tracking link:
+recommends 15–30 s) and X. When research brought in photos or footage, it
+also lists `credits` (the licence and attribution of each item used, added
+to the description too) and `sources` (each source page shown on screen).
+Write it again with a tracking link:
 
 ```bash
 launchclip publish-manifest launchclip-ledgerly --link https://ledgerly.dev --utm spring-launch

@@ -241,3 +241,7 @@ Where it is said:
   says.
 - A blocked page is a finding, not something to work round: pick another
   public source, or rebuild the claim as a card that cites it.
+- A capture request lists the verified claims it backs (`claims`), and
+  `publish.json` lists the source of every recorded page the video shows
+  (`sources`), beside the credits of any stock or archive media
+  (RESEARCH.md, "Assets").

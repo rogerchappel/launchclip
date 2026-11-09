@@ -58,7 +58,7 @@ import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
 import { describeSource, runSubjectMatte, runSubjectProbe, runSubjectTrack } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
-import { auditNarration, noteCaptures, researchBrief, researchEnabled, researchMode } from "../research/make.js";
+import { auditNarration, noteCaptures, researchBrief, researchEnabled, researchMode, stageMakeMedia } from "../research/make.js";
 import { packCaptionsFor } from "@launchclip/core/style.mjs";
 import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
@@ -1578,6 +1578,8 @@ async function settleCaptures(ctx) {
 /** Research's official posts and logos; each logo file is copied to the assets/ path its entry names, where modules can load it. */
 async function readResearchExtras(ctx) {
   ctx.posts = await readPosts(ctx.project);
+  // Research's stock and archive media, staged under assets/research with licence and credit (src/research/stage_media.js).
+  ctx.researchMedia = await stageMakeMedia(ctx);
   ctx.researchLogos = [];
   const dir = path.join(ctx.project, RESEARCH_PATHS.dir);
   let manifest;
@@ -1627,12 +1629,13 @@ export function assetManifestLines(ctx) {
   for (const { request, files, record } of ctx.captures ?? []) {
     const params = evidenceClipParams(record, { src: files.clip });
     const title = record.provenance?.source_title ?? request.provenance?.source_title ?? record.final_url ?? request.url;
-    out.push({ src: files.clip, kind: "video", line: `${files.clip} — screen recording of the source page "${String(title).slice(0, 80)}" (${request.url}), ${record.duration ?? "?"} s, ${request.kind ?? "page"}${request.claim ? `, backs claim ${request.claim}` : ""}. Use as {"module": "evidence-clip", "params": ${JSON.stringify(params)}} on the clause that states what the page shows.` });
+    out.push({ src: files.clip, kind: "video", line: `${files.clip} — screen recording of the source page "${String(title).slice(0, 80)}" (${request.url}), ${record.duration ?? "?"} s, ${request.kind ?? "page"}${request.claims?.length ? `, backs claim${request.claims.length === 1 ? "" : "s"} ${request.claims.join(", ")}` : request.claim ? `, backs claim ${request.claim}` : ""}. Use as {"module": "evidence-clip", "params": ${JSON.stringify(params)}} on the clause that states what the page shows.` });
   }
   // The companies' own posts on X: a designed social-post card (the recording of the post, when there is one, is listed above).
   for (const post of ctx.posts ?? []) {
     out.push({ src: null, kind: "card", line: `Post by @${post.handle} (${post.name}${post.published_at ? `, ${String(post.published_at).slice(0, 10)}` : ""}): "${String(post.card.params.text).slice(0, 140)}". Use as {"module": "social-post", "params": ${JSON.stringify(post.card.params)}} on the clause that reports it.` });
   }
+  out.push(...(ctx.researchMedia ?? []));
   // The named companies' logos (research/logos.json), ready params per module; a logo-row shows 2–6 of them together.
   for (const logo of ctx.researchLogos ?? []) {
     const uses = Object.entries(logo.params ?? {}).map(([module, params]) => `${module} ${JSON.stringify(params)}`).join("; ");
