@@ -87,7 +87,9 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   try { picked = profileForStory(resolved ?? story, { direction: map, style }); profileDoc = picked.profile; }
   catch (error) { errors.push(`direction: ${error.message}`); }
   // Narrative lines' cast and set cues: the character kit's check (kit/core/characters/cues.mjs).
-  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null, validateCast: validateCastCues, ...(style?.segments ? { segments: style.segments } : {}) });
+  // SCRIPT.json beside the storyboard: a map line's `line` names one of its lines.
+  const script = await readScriptBeside(storyDir);
+  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null, validateCast: validateCastCues, ...(script ? { script } : {}), ...(style?.segments ? { segments: style.segments } : {}) });
   errors.push(...check.errors.map((entry) => `direction: ${entry}`));
   warnings.push(...check.warnings.map((entry) => `direction: ${entry}`));
   if (!words) warnings.push("direction: no narration words, so the map's lines were not checked against them");
@@ -442,6 +444,11 @@ async function loadWords(flag, story, storyDir) {
   const list = Array.isArray(data) ? data : Array.isArray(data?.words) ? data.words : null;
   if (!list) throw new Error(`${file} has no words array`);
   return { file, list };
+}
+
+/** The project's SCRIPT.json, or null when there is none or it does not parse (launchclip script check reports that). */
+export async function readScriptBeside(dir) {
+  try { return JSON.parse(await readFile(path.join(dir, "SCRIPT.json"), "utf8")); } catch { return null; }
 }
 
 function usesAnchors(story) {
