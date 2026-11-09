@@ -56,7 +56,9 @@ export function buildCaptureRequests(ledger, options = {}) {
       theme: options.theme ?? "dark",
       beats,
       out: `assets/evidence/${id}.mp4`,
-      provenance: { source_title: source.title ?? source.url, fetched_at: source.fetched_at, publisher: source.publisher ?? safeHost(source.url), published_at: source.published_at ?? null }
+      provenance: { source_title: source.title ?? source.url, fetched_at: source.fetched_at, publisher: source.publisher ?? safeHost(source.url), published_at: source.published_at ?? null },
+      // The verified claims this page is shown for, so a planner knows what the clip proves.
+      claims: claims.map(({ claim }) => claim.id)
     });
   }
   return { requests, byClaim };

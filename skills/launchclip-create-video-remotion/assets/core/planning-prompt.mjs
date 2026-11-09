@@ -653,7 +653,7 @@ function moduleLines(tier, modules = moduleCatalogue()) {
     if (module.variants) lines.push(`variants: ${module.variants.map((name, i) => (i ? name : `${name} (default)`)).join(', ')}`);
     lines.push('');
   }
-  if (tier === 'bespoke') lines.push('### custom (bespoke tier only)', 'A project module at scene.source (project-relative path, no params schema). Pure function of absolute time; must obey the safe zone; falls back to the nearest catalogue module when it fails a gate.', '');
+  if (tier === 'bespoke') lines.push('### custom (bespoke tier only)', 'A project module at scene.source (no params schema): a project-relative path to its Remotion component, or {"remotion": "<component>.tsx", "hyperframes": "<fragment>.html"} with a form for each renderer the video will be rendered with. A renderer with no form for the scene refuses to render it. Pure function of absolute time; must obey the safe zone; falls back to the nearest catalogue module when it fails a gate.', '');
   return lines;
 }
 

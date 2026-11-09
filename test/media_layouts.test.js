@@ -187,6 +187,27 @@ test('media layouts: HyperFrames hoists each video window; stills stay in the sc
   }
 });
 
+test('media layouts: a video window\'s shadow and ring are drawn by a twin under it in HyperFrames', () => {
+  // HyperFrames draws a video's frames without its box-shadow (Remotion draws
+  // it), so the emitter moves the shadow to a <div> that follows the same ops.
+  const pip = resolve(SCENES[3]);
+  const out = EMITTERS['picture-in-picture'](pip);
+  const video = out.html.match(/<video\b[^>]*>/)[0];
+  assert.doesNotMatch(video, /box-shadow/);
+  const twin = out.html.match(/<div id="m3-win-0-shadow"[^>]*>/)?.[0];
+  assert.ok(twin, 'the twin is in the scene layer');
+  assert.match(twin, /box-shadow:[^"]*#00000066, 0 0 0 \d+(\.\d+)?px #f2eee6/);
+  assert.doesNotMatch(twin, /background|object-fit/);
+  assert.ok(out.html.indexOf(twin) < out.html.indexOf(video), 'under the video');
+  for (const key of ['left', 'top', 'width', 'height', 'border-radius']) assert.equal(new RegExp(`${key}:([^;"]+)`).exec(twin)?.[1], new RegExp(`[;"]${key}:([^;"]+)`).exec(video)?.[1], key);
+  const moves = id => out.motion.split('\n').filter(line => line.includes(`"#${id}"`)).map(line => line.replace(`"#${id}"`, ''));
+  assert.ok(moves('m3-win-0').length > 0);
+  assert.deepEqual(moves('m3-win-0-shadow'), moves('m3-win-0'));
+  // A still keeps its shadow on its own frame, and a full-frame video has none to move.
+  assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[6])).html, /-shadow"/);
+  assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[7])).html, /-shadow"/);
+});
+
 test('media layouts: a scene may ask the library for a shot in each footage slot', async () => {
   const shot = (shows, type = 'any') => ({kind: 'shot', shows, type});
   const board = story([

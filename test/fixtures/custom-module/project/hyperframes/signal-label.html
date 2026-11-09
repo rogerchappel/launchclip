@@ -1,0 +1,12 @@
+<!-- The HyperFrames form of SignalLabel (remotion/SignalLabel.tsx draws the same card). -->
+<style>
+  .card { position: absolute; left: 80px; top: 600px; width: 920px; height: 360px; border-radius: 32px; background: var(--lc-paper); opacity: 0; }
+  .text { position: absolute; left: 48px; top: 56px; margin: 0; font-family: var(--lc-font-display); font-size: 96px; line-height: 1.1; color: var(--lc-ink); white-space: nowrap; }
+  .bar { position: absolute; left: 48px; top: 280px; width: 824px; height: 24px; border-radius: 12px; background: var(--lc-primary); transform-origin: 0 50%; }
+</style>
+<div class="card"><p class="text"></p><div class="bar"></div></div>
+<script>
+  root.querySelector('.text').textContent = params.text;
+  tl.fromTo(root.querySelector('.card'), {opacity: 0, y: 60}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: false}, scene.start + 0.2);
+  tl.fromTo(root.querySelector('.bar'), {scaleX: 0}, {scaleX: 1, duration: scene.duration, ease: 'none', immediateRender: false}, scene.start);
+</script>

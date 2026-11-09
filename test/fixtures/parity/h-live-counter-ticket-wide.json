@@ -1,0 +1,44 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: live-counter, ticket face",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "live-counter",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "variant": "ticket",
+          "from": 900,
+          "to": 1500,
+          "pace": "ease",
+          "label": "Orders",
+          "tone": "accent"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

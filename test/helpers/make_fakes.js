@@ -22,7 +22,7 @@ export function storyboard({ duration, media = "assets/ui.mp4", width = 1920, he
     audio: { words: "NARRATION.json" },
     scenes: [
       // A short video opens on an image of the hook's subject, never a title card (the structure gate).
-      { id: "s1", module: "media-window", start: 0, end: "word:ledgerly", energy: 1, params: { title: "Payouts never match", media: { kind: "video", src: media } } },
+      { id: "s1", module: "media-window", start: 0, end: "word:ledgerly", energy: 1, params: { title: "Payouts never match your books", media: { kind: "video", src: media } } },
       { id: "s2", module: "hook-title", start: "word:ledgerly", end: "word:try", energy: 2, in: { type: "fade", dur: 0.3 }, params: { headline: "Ledgerly matches every payout", emphasis: "every" } },
       { id: "s3", module: "cta", start: "word:try", end: duration, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Try Ledgerly free" } }
     ],

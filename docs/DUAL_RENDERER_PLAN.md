@@ -219,6 +219,134 @@ Known renderer difference: HyperFrames muxes its AAC sidecar without an edit
 list, so its audio starts 1024 samples (21.3 ms) late; the 25 ms offset limit
 allows exactly that.
 
+### Parity coverage
+
+Checked on 2026-11-10: all 145 modules in `knownModules()` (14 editorial kinds
+and 131 catalogue modules) have a HyperFrames emitter and a Remotion
+component. `test/module_coverage.test.js` keeps it that way in the fast
+`npm test` run: it fails for a module missing from either renderer, for a
+renderer that registers a module the core does not know, and for a module
+with no per-module parity fixture unless it is on the commented allowlist in
+`scripts/parity-coverage.mjs`. A per-module fixture is one in
+`test/fixtures/parity/` or a module-mode one in
+`test/fixtures/parity-footage/`. `node scripts/parity-coverage.mjs` prints
+the counts.
+
+144 of the 145 have a fixture. The allowlist holds one module,
+`sprite-scene`, whose fixtures belong to the character and sprite work. The
+last twelve to gain fixtures were `brand-lockup`, `photo-scene`, the seven
+media layouts (`split-screen`, `landscape-card`, `picture-in-picture`,
+`media-compare`, `media-stat`, `media-list`, `media-grid`) and the tactile
+modules `drop-grid`, `live-counter` and `live-bars`. Their media is drawn or
+generated: two SVG stills, a static FFmpeg clip and SVG brand artwork under
+`test/fixtures/parity/assets/`.
+
+In CI the corpus is rendered three ways (KIT_CONTRACTS.md, "Parity
+harness"): the smoke on every pull request, a rotating twelfth of the
+per-module fixtures on every pull request, and the whole corpus nightly and
+on a pull request that changes the kit, a fixture or the harness. The sizes
+come from measured runs on ubuntu-latest: about 5 s a fixture at two sample
+times and 14 s at all of them, so a twelfth is a 4-minute job and a
+whole-corpus shard renders for about 9 minutes.
+
+The first whole-corpus run on Linux (2026-11-09, 467 fixtures at every
+sample time) passed 462. The corpus had only ever run in full on macOS. The
+five that fail on Linux are listed in
+`test/fixtures/parity-known-failures.json` and are open bugs:
+`b-media-window-image` and `b-media-window-video` mid-entrance (0.944 and
+0.928), `h-commit-card-glass-landscape` (0.967),
+`h-diff-view-glass-landscape` (0.952, the code rows sit about a pixel apart)
+and `h-social-post-native-portrait` (0.904, the card's glow mid-fade). No
+threshold was changed for them.
+
+The story, background, camera, footage and caption parity tests had never
+run on Linux either. They take about 30 minutes a job there, so they run
+nightly and on demand, not on pull requests. Their first run passed 136 of
+138, and the nightly stays red until these two are fixed:
+
+- `parity: camera story cinematic-transitions-9x16` at t = 3.1 s: SSIM 0.803
+  against its 0.94 threshold (`test/parity_camera.test.js`).
+- `footage parity: s-creative-scrap.json` did not finish inside its 600 s
+  test timeout on the runner. It is a timeout, not a measured mismatch.
+
+Known difference: HyperFrames draws a `<video>`'s frames without the
+element's `box-shadow`, where Remotion draws it. The media layouts put a video
+window's drop shadow and ring on a twin element under the video
+(`kit/hyperframes/catalog-d.mjs`). `product-demo` still sets a drop shadow
+on its video, so that shadow is missing under HyperFrames; its fixture passes
+because the shadow is faint.
+
+### Custom modules in both renderers
+
+Custom modules were Remotion-only: under HyperFrames a `custom` scene drew a
+"Missing module" card, and `finish` reported it after the whole video had
+rendered. Now a custom scene has a form per renderer
+(`source: {remotion, hyperframes}`): the Remotion form is the React
+component it always was, and the HyperFrames form is an HTML fragment with
+its styles and a script that adds tweens to the story's timeline. The story
+contract allowed this, since RFC §4 defines `custom` as a
+renderer-specific source file. A React component cannot be translated to
+HTML and GSAP by the kit, so the author writes both forms and is
+responsible for their parity. See KIT_CONTRACTS.md, "Custom modules".
+
+Where a custom scene has no form for the chosen renderer, in either
+direction, `finish` now stops before rendering and names the scene, the
+module and the renderer.
+
+### Open renderer gaps (investigated 2026-11-10)
+
+**Partial re-render (`--scene`, `--chapter`) is still Remotion-only.** The
+installed HyperFrames, 0.7.58, cannot render a frame range: `hyperframes
+render --help` has no start, end or frames option, and `hyperframes docs
+rendering` does not mention one. The latest release on npm, 0.9.26, adds
+`--start` and `--end` in seconds (MP4 only, a whole frame rate of 24, 25, 30
+or 60, SDR only). So the code is unchanged. Two routes are open, neither
+proven:
+
+- Upgrade HyperFrames to 0.9 or later and render each segment with
+  `--start`/`--end`. An upgrade moves every pixel of the HyperFrames path, so
+  it needs the whole parity corpus run first.
+- Use the compiler's `window` option (`windowComposition`), which already
+  renders one scene's stretch for `--preview-scene` on 0.7.58.
+
+Either way, the bar before `PARTIAL_RENDERERS` in `src/render_segments.js`
+gains `hyperframes` is a test that stitches segment renders and finds them
+equal, frame for frame (bytes or SSIM), to a whole render of the same story.
+
+**Root media under a zoom or an iris can be fixed for single-video modules.**
+The compiler hoists `<video>` and `<audio>` out of the scene layer to the
+composition root, then replays the layer's transition on the element
+(`mediaLayerTweens`): translation, opacity and blur work, while the layer
+scale of a `zoom` and the clip of an `iris` are reported as unsupported
+("root media does not follow…"). Measured on a 16:9 story with a `clip`
+video entering by zoom and by iris, HyperFrames against Remotion stills:
+
+| Frame | Hoisted (today) | Video kept in the scene layer |
+|---|---|---|
+| zoom, 0.2 s in | 0.861 | 0.996 |
+| zoom, 0.3 s in | 0.891 | 0.997 |
+| iris, 0.2 s in | 0.488 | 0.991 |
+| iris, 0.3 s in | 0.704 | 0.994 |
+| after either (hold) | 0.997 | 0.997 |
+
+A full `hyperframes render` of the kept-in-layer composition matched the
+Remotion stills at 0.981 to 0.986 on the same frames, the same as its
+settled frames (draft-quality MP4 against PNG). It works because HyperFrames
+seeks a timed `<video>` wherever it sits, unless a timed ancestor holds it,
+and draws each frame in the video's own box, so the layer's scale and
+clip-path apply. World plates already rely on this (`inCamera` in
+`kit/hyperframes/story-compiler.mjs`).
+
+This is not changed yet. Keeping the video in the layer is a one-line
+condition for modules whose HTML is the video alone (`clip`,
+`evidence-clip`, `product-demo`, `set-prop`, a video `photo-scene`), but it
+moves those videos in every story, so it needs their fixtures, the stories
+with a push, whip, fade and morph into a video, held and loop clones, and
+the subject layers rendered first. Modules that mix a video with other
+markup (the media layouts, `media-window`, the stage modules) would still
+hoist, and for them the limit stays. Audio always stays on the root; no
+transition applies to it.
+
 ### RFC phase 5 status: storyboard planner (model side)
 
 Done:

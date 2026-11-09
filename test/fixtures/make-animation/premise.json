@@ -1,0 +1,12 @@
+{
+  "premise": { "want": "to ship the fix before lunch", "obstacle": "the same failing deploy, again", "change": "she runs the check first" },
+  "characters": [
+    { "id": "maya", "name": "Maya", "role": "lead", "want": "to ship", "speech": "short, dry", "voice_type": "female" },
+    { "id": "Sam", "name": "Sam", "role": "foil", "want": "to help without gloating", "speech": "warm, unhurried", "voice_type": "male" }
+  ],
+  "loglines": [
+    { "logline": "Maya's deploy fails all morning until Sam asks the question she has been avoiding.", "differs": "Opens on the failure and lets Sam drive the turn." },
+    { "logline": "Sam watches Maya ship the same broken fix again and again, and bets her lunch that the check would catch it.", "differs": "A bet gives it a clock." },
+    { "logline": "A build server narrates the worst morning of its life.", "differs": "The machine tells the story." }
+  ]
+}
