@@ -55,7 +55,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
 
   // 1. Claims: the patterns, then the agent's claims.json, then the model pass.
   let claims = extractClaims(source.text);
-  const extra = await readClaims(options.claims, cwd);
+  const handed = await readClaims(options.claims, cwd);
+  const extra = handed.claims;
   if (extra.length) claims = mergeClaims(claims, extra);
   let usage = null;
   if (adapters.client?.client) {
@@ -69,7 +70,8 @@ export async function runResearch(input, options = {}, adapters = {}) {
   log(`research: ${claims.length} claim(s), ${entities.length} entit${entities.length === 1 ? "y" : "ies"}`);
 
   // 2. Sources.
-  const urls = [...new Set([...toList(options.urls), ...entities.filter((entity) => entity.kind === "url").map((entity) => entity.name)])];
+  // --url, the sources an agent's claims.json names (fetched and checked like any other; its word is never taken), and links in the script.
+  const urls = [...new Set([...toList(options.urls), ...handed.urls, ...entities.filter((entity) => entity.kind === "url").map((entity) => entity.name)])];
   const searches = claims.map((claim) => claim.search).filter(Boolean);
   const { sources: snapshots, search, news } = await findSources(http, entities, { topic: source.kind === "topic" ? source.text : null, text: source.text, urls, searches, env, now, news: String(options.news ?? "") === "none" ? false : undefined, feeds: toList(options.feeds), windowDays: asked?.days ?? null, maxNewsLeads: options.maxNewsLeads });
   log(`research: ${snapshots.length} source(s) fetched (${snapshots.filter((entry) => entry.primary).length} primary)`);
@@ -436,12 +438,39 @@ async function readInput(input, cwd) {
   return { kind: "topic", text: value };
 }
 
-async function readClaims(value, cwd) {
-  if (!value) return [];
-  if (Array.isArray(value) && typeof value[0] === "object") return value;
-  const file = path.resolve(cwd, String(Array.isArray(value) ? value[0] : value));
-  const parsed = JSON.parse(await readFile(file, "utf8"));
-  return (Array.isArray(parsed) ? parsed : parsed.claims ?? []).map((claim) => ({ ...claim, origin: claim.origin ?? "agent" }));
+/**
+ * An agent's or a model's claims: an array, or a claims.json path.
+ *
+ *   {"claims": [{"text": "sentence, verbatim", "search"?: "query", "source_url"?: "https://…" | "sources"?: ["https://…"]}],
+ *    "urls"?: ["https://…"]}
+ *
+ * A claim's sources and the file's urls are fetched, frozen and checked like
+ * any --url: naming a source never verifies a claim by itself.
+ * → {claims, urls}
+ */
+export async function readClaims(value, cwd = process.cwd()) {
+  if (!value) return { claims: [], urls: [] };
+  let parsed;
+  if (Array.isArray(value) && typeof value[0] === "object") parsed = value;
+  else {
+    const file = path.resolve(cwd, String(Array.isArray(value) ? value[0] : value));
+    if (!existsSync(file)) throw new Error(`--claims: no such file ${file}`);
+    try { parsed = JSON.parse(await readFile(file, "utf8")); } catch (error) { throw new Error(`--claims: ${file} is not JSON (${error.message})`); }
+  }
+  const list = Array.isArray(parsed) ? parsed : parsed?.claims;
+  if (!Array.isArray(list)) throw new Error("--claims: expected {\"claims\": [{\"text\": \"…\"}]} or an array of claims");
+  const http = (url) => typeof url === "string" && /^https?:\/\//.test(url);
+  const urls = Array.isArray(parsed?.urls) ? parsed.urls.filter(http) : [];
+  const claims = [];
+  list.forEach((claim, index) => {
+    if (typeof claim?.text !== "string" || !claim.text.trim()) throw new Error(`--claims: claim ${index + 1} has no "text" (copy the sentence verbatim from the script)`);
+    const sources = [claim.source_url, ...(Array.isArray(claim.sources) ? claim.sources : [])].filter(Boolean);
+    const bad = sources.find((url) => !http(url));
+    if (bad) throw new Error(`--claims: claim ${index + 1} names a source that is not an http(s) URL: ${JSON.stringify(bad)}`);
+    urls.push(...sources);
+    claims.push({ ...claim, text: claim.text.trim(), origin: claim.origin ?? "agent" });
+  });
+  return { claims, urls: [...new Set(urls)] };
 }
 
 function mergeEntities(index, seeds) {
