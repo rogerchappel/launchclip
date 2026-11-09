@@ -10,7 +10,7 @@ import { runCli } from "../src/cli.js";
 import { runStoryCommand } from "../src/story_cli.js";
 import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
 import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
-import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, repairLayout, runFinish, stageDecision } from "../src/finish.js";
+import { PATHS, bindCues, buildFinishCopy, chooseBed, customModuleErrors, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, repairLayout, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
 import { PROMPT, assetsDir, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
@@ -531,11 +531,46 @@ test("no scene ships as a Missing module placeholder", async () => {
 test("placeholderScenes covers custom modules in HyperFrames and compiler fallbacks", async () => {
   const story = (await runStoryCommand("resolve", path.join(MINIMAL, "storyboard.json"), { narration: path.join(MINIMAL, "NARRATION.json") })).story_resolved;
   assert.deepEqual(placeholderScenes(story, { renderer: "hyperframes" }), []);
-  const custom = { ...story, scenes: [{ ...story.scenes[0], module: "custom", params: { component: "Hero" } }, ...story.scenes.slice(1)] };
+  const custom = { ...story, scenes: [{ ...story.scenes[0], module: "custom", source: "remotion/Hero.tsx", params: { component: "Hero" } }, ...story.scenes.slice(1)] };
   assert.deepEqual(placeholderScenes(custom, { renderer: "remotion" }), []);
   assert.deepEqual(placeholderScenes(custom, { renderer: "hyperframes" }).map((entry) => entry.id), ["s1"]);
+  assert.match(placeholderScenes(custom, { renderer: "hyperframes" })[0].reason, /the custom module "Hero" has no hyperframes form \(only a remotion one, remotion\/Hero\.tsx\)/);
+  // With a form for each renderer, neither ships a placeholder.
+  const both = { ...custom, scenes: [{ ...custom.scenes[0], source: { remotion: "remotion/Hero.tsx", hyperframes: "hyperframes/hero.html" } }, ...story.scenes.slice(1)] };
+  assert.deepEqual(placeholderScenes(both, { renderer: "hyperframes" }), []);
   const fallback = placeholderScenes(story, { renderer: "hyperframes", compileWarnings: [`s2: HyperFrames emitter for "${story.scenes[1].module}" failed (boom); rendering a placeholder`] });
   assert.deepEqual(fallback, [{ id: "s2", module: story.scenes[1].module, reason: `HyperFrames emitter for "${story.scenes[1].module}" failed (boom)` }]);
+});
+
+test("a custom module with no form for the renderer stops the run before anything renders", async () => {
+  const custom = (source) => (story) => { story.scenes[1] = { id: story.scenes[1].id, module: "custom", source, start: story.scenes[1].start, end: story.scenes[1].end, params: { component: "Hero" } }; };
+  const project = await narratedProject({ mutate: custom("remotion/Hero.tsx") });
+  try {
+    const adapters = fakeAdapters();
+    const report = await runFinish(project, { renderer: "hyperframes" }, adapters);
+    assert.equal(report.status, "failed");
+    const render = report.stages.find((stage) => stage.name === "render");
+    assert.equal(render.status, "failed");
+    assert.match(render.error, /^a custom module cannot render in hyperframes: scene "s2": the custom module "Hero" has no hyperframes form \(only a remotion one, remotion\/Hero\.tsx\); add an HTML fragment at source\.hyperframes, render with --renderer remotion, or use a catalogue module$/);
+    assert.equal(adapters.calls.compile, undefined);
+    assert.equal(adapters.calls["render:hyperframes"], undefined);
+    // The same story renders in Remotion, the renderer its module was written for.
+    const remotion = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    assert.notEqual(remotion.stages.find((stage) => stage.name === "render").status, "failed");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+  // A fragment that is named but missing is refused too, and so is the reverse gap.
+  const missing = await narratedProject({ mutate: custom({ remotion: "remotion/Hero.tsx", hyperframes: "hyperframes/hero.html" }) });
+  try {
+    assert.match((await runFinish(missing, { renderer: "hyperframes" }, fakeAdapters())).stages.find((stage) => stage.name === "render").error, /the hyperframes form of its custom module \(hyperframes\/hero\.html\) was not found in the project/);
+    await mkdir(path.join(missing, "hyperframes"), { recursive: true });
+    await writeFile(path.join(missing, "hyperframes/hero.html"), "<p>Hero</p>");
+    assert.notEqual((await runFinish(missing, { renderer: "hyperframes" }, fakeAdapters())).stages.find((stage) => stage.name === "render").status, "failed");
+  } finally {
+    await rm(missing, { recursive: true, force: true });
+  }
+  assert.match((await customModuleErrors({ scenes: [{ id: "s1", module: "custom", source: { hyperframes: "hyperframes/hero.html" }, params: {} }] }, { renderer: "remotion", project: "." }))[0].reason, /has no remotion form \(only a hyperframes one/);
 });
 
 test("a failing stage blocks the rest, is reported, and the CLI exits non-zero", async () => {
