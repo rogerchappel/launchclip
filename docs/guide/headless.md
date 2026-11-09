@@ -63,6 +63,7 @@ Useful flags:
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--replan` | off | Plan a new storyboard on a rerun. |
+| `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
 | `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
 | `--allow-needs-repair` | off | Exit 0 even when the video is `needs-repair` (see [Exit codes](#exit-codes)). |
@@ -86,9 +87,17 @@ Useful flags:
 
    Screenshots and screen recordings are shown in product windows in every
    type.
-3. **Plans and writes the script** (motion videos only). It first decides
-   what kind of video this is (format, goal and viewer awareness), then
-   writes to that format's beats, sized to your duration. It checks the
+3. **Chooses a concept, then writes the script** (motion videos only). It
+   first decides what kind of video this is (format, goal and viewer
+   awareness). Then it drafts five concepts, has a separate model call judge
+   them with only the brief and the concepts in front of it, writes the
+   winner as a story and has an editor tighten it. `CONCEPTS.json` keeps all
+   five with their scores and `STORY.json` the edited story. The script is
+   written on that story, to the format's beats, at most as long as your
+   duration. A long video's story is a spine of up to three minutes, and its
+   chapter outline is derived from it. `--concepts off` skips the concepts
+   and writes the script from the brief in one pass; so does a concept stage
+   that fails, with a warning. It checks the
    script (see [Check a script](#check-a-script)) and asks the model for one
    rewrite if a check fails, then records the voice. `SCRIPT.json` keeps the
    plan, the beats, three title options and the check report.
@@ -355,7 +364,10 @@ close. It exits 1 when it finds one; `--json` gives the full report.
   script pass, maybe one repair and one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
   A critic repair round adds a storyboard repair, the re-render and a second
-  critic pass.
+  critic pass. The concept and story stage adds four calls before the script
+  (five concepts, the judge, the story and its edit); the figures here were
+  measured before it existed, so check `MAKE.json` for what a run costs now,
+  or pass `--concepts off`.
   In testing, a 45 s motion video cost about $0.12 and a 17 s footage-led
   video about $0.08.
 - Kokoro voice, the synth music bed, Whisper transcription, rendering and
