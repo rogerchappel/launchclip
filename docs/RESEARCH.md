@@ -31,8 +31,24 @@ ids, arXiv ids, URLs, models, benchmarks, people, organisations). Version
 numbers (`GPT-5.5`), ids and the digits of a date are not quantities.
 Questions and calls to action are left out. Plain statements with no anchor
 ("the weights are open") need a model or an agent: `--claims claims.json`
-(`{"claims": [{"text", "search"}]}`, sentences copied verbatim) or, inside
-`make`, the make model's claim pass merges them in by text.
+or, inside `make`, the make model's claim pass merges them in by text.
+
+`claims.json` is how an agent with its own web tools hands in what it
+found, so the skill path and the headless path end with the same files:
+
+```json
+{ "claims": [{ "text": "the sentence, verbatim", "search": "query?", "source_url": "https://…", "sources": ["https://…"], "passage": "the source's own words that state it" }],
+  "urls": ["https://…"] }
+```
+
+Every `source_url`, `sources` entry and `urls` entry is fetched, frozen and
+checked like a `--url`; naming a source verifies nothing by itself. A
+`passage` is the agent's reading of the source: the claim is verified by it
+only when a fetched source holds the passage word for word and the passage
+carries every number and date of the claim. That source records
+`matched_by: "passage"`, and the passage is the quote span the capture
+highlights. The file's shape is checked, and an error names the claim that
+is wrong.
 
 ## Sources
 

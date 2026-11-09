@@ -340,9 +340,12 @@ tournament receipts:
   opinion, and unverified claims explicitly. For a video that states facts
   about the world (a release, a benchmark, a paper, a person), run
   `launchclip research SCRIPT.md --out research` (no model calls) and build it
-  from `research/RESEARCH.md`; fix or cut every flagged claim. See
-  `references/research.md` for the capture requests, cited data and
-  licence-clear media it also writes
+  from `research/RESEARCH.md`; fix or cut every flagged claim. With web tools
+  of your own, find each claim's primary source first and hand it in as
+  `claims.json` (`--claims`); then `launchclip research capture research`
+  records the source pages and stages the media. See
+  `references/research.md` for the `claims.json` shape, the capture
+  requests, cited data and licence-clear media
 - `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
   complete fresh-context scorecard, deterministic winner (`chosen: true`), and
   required improvements
