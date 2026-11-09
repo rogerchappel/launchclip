@@ -221,7 +221,8 @@ claim into fact.
 For claims about the world (releases, benchmarks, papers, people),
 `launchclip research` checks each claim against primary sources and writes
 the claim ledger, capture requests, cited chart data and licence-clear media
-under `research/`; `make --research on` runs it before the script pass and
+under `research/`; `make` runs it before the script pass for a news or research brief
+(`--research auto`, the default; `on` forces it) and
 audits the narration after it. See [RESEARCH.md](RESEARCH.md).
 
 ### 3. Cinematic Concept, Story, and Narration

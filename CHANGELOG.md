@@ -4,6 +4,15 @@
 
 ### Added
 
+- `launchclip make` researches a news brief without being asked.
+  `--research` now defaults to `auto`: research turns on when the brief is
+  news or research shaped (news wording such as "this week" or "just
+  announced", a dated event, a named release, a question of fact) and stays
+  off for a product video, an evergreen topic, or a brief that brings its own
+  script or recording. `on` and `off` still decide it yourself. The run
+  prints the decision, and `MAKE.json` records it with the words that led to
+  it under `research_decision`.
+
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or

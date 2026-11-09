@@ -3,7 +3,7 @@
 `launchclip research <topic|script.md> --out research/` takes a topic or a
 script and finds the evidence behind it, then the assets to show it with. It
 is fully automatic and makes no model calls, so the metered `make` pipeline
-(`--research on`) and the subscription-agent skill path
+(`--research auto|on`) and the subscription-agent skill path
 (`skills-src/references/research.md`) run the same code. It is strict about
 honesty: a claim is verified only when a fetched source states it in one
 passage, and every other claim is flagged for the script.
@@ -274,8 +274,27 @@ reason. A photo is never scraped from a page.
 
 ## In `make`
 
-`launchclip make "<prompt>" --research on` (motion lane, off by default):
-the brief (prompt plus notes) is written to `research/brief.md` and
+`launchclip make "<prompt>"` researches the brief in the motion lane when
+`--research` says so. The default is `auto` (`src/research/auto.js`), which
+reads the brief (prompt plus notes) and needs no model or network:
+
+| The brief has | Research |
+| --- | --- |
+| News wording: "news", "breaking", "headlines", "this week", "yesterday", "just announced", "what happened", "fact-check" | on, even in a brief for a promo |
+| A dated event (a day or a month, not a bare year), a named release with a release verb ("Nimbus AI released Nimbus-7B"), a versioned name on its own ("GPT-5.5 explained"), "latest" or "recently", or a question of fact about something named | on, unless it is a product video |
+| A product video: launch video, promo, ad, demo, tutorial, walkthrough, testimonial | off: the facts are the brand's own |
+| Its own script (a `## Script` or `## Narration` section), or a recording or voiceover (the footage-led and voiceover lanes) | off |
+| None of the above (an evergreen topic) | off |
+
+`--research on` always researches and `--research off` never does. Outside
+the motion lane nothing new is researched, but capture requests already in
+the project's `research/captures/` (from `launchclip research`) are recorded
+with `on`, and with `auto` when that folder exists. `MAKE.json` records the
+decision as `research_decision: {mode, run, reason, signals}`, and the run
+prints it (`research: on (auto): the brief reads as news (news wording:
+"this week")`).
+
+When research runs, the brief (prompt plus notes) is written to `research/brief.md` and
 researched, and the result is reused while the brief hashes the same. The
 script pass gets `researchNotes()`: verified claims, facts from primary
 sources, what not to state, the stories to drop, and the source rules: never

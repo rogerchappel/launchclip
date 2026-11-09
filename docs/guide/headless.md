@@ -62,6 +62,7 @@ Useful flags:
 | `--renderer` | `remotion` | Or `hyperframes`. |
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
+| `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--no-critic` | critic on with OpenAI models | Skip the automatic visual review. |
 | `--critic-repairs <n>` | `1` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
