@@ -43,6 +43,19 @@ Mark a test as a media test when it takes more than a few seconds because it
 renders, encodes or drives a browser. The full renderer parity corpus is
 separate again: `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js`.
 
+CI renders the parity corpus in three places. Every pull request runs the
+smoke (`npm run parity:ci`) and a rotating twelfth of the per-module
+fixtures. A pull request that changes `kit/`, a parity fixture or the
+harness also runs the "Parity corpus" workflow: every fixture at every
+sample time, in twelve shards. That workflow runs nightly too, with the
+story, background, camera, footage and caption parity tests. To render one
+slice yourself:
+
+```bash
+node scripts/parity-shard.mjs --shard 3/12            # what one CI shard renders
+node scripts/parity-shard.mjs --rotate 7 --every 12 --times settle,mid
+```
+
 ### Add a parity fixture
 
 Every module needs at least one parity fixture: a small story that both
