@@ -1297,7 +1297,7 @@ async function stageCritic(ctx) {
   const { options } = ctx;
   const wanted = options.critic === true || (options.critic !== false && ctx.model.vision);
   if (options.critic === false) return criticPending(ctx, "--no-critic");
-  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
+  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make`);
   if (!ctx.model.vision) return criticPending(ctx, `${ctx.model.spec} cannot take images`);
   const result = await runCritic(ctx);
   if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
