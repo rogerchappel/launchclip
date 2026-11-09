@@ -144,11 +144,13 @@ export async function checkStoryConstraints({ story, resolved = null, words = nu
 }
 
 // launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
+// launchclip story shots <project> [--json] (src/story_shots.js)
 // launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
 export async function runStoryCommand(action, storyPath, flags = {}, adapters = {}) {
-  if (!new Set(["validate", "resolve", "compile", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile, plan or long-form`);
+  if (!new Set(["validate", "resolve", "compile", "plan", "long-form", "shots"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile, shots, plan or long-form`);
   if (action === "compile") return compileStoryCommand(storyPath, flags);
+  if (action === "shots") return (await import("./story_shots.js")).storyShotsCommand(storyPath, flags);
   if (action === "long-form") return (await import("./long_form.js")).runLongFormCommand(storyPath, flags);
   if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
