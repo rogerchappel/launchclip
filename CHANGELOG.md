@@ -20,6 +20,16 @@
 
 ### Added
 
+- The skill path gathers evidence the same way the headless path does.
+  `claims.json` (`--claims`) can now name each claim's primary source
+  (`source_url`, `sources`, and `urls` for the file) and the source's own
+  words that state it (`passage`). Research fetches, freezes and checks
+  every named source, and a passage verifies a claim only when the page
+  holds it word for word with the claim's numbers and dates. The file's
+  shape is checked. The research skill reference now tells an agent with
+  web tools to find primary sources itself, write `claims.json`, and run
+  `launchclip research` and `launchclip research capture`.
+
 - The photos and footage research finds can now be placed. Licence-clear
   stock and archive items (Wikimedia Commons, NASA, Internet Archive,
   Library of Congress, and Pexels or Pixabay with a key) are downloaded
