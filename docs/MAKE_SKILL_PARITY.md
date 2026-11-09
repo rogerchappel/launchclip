@@ -83,8 +83,8 @@ briefs (see "Measuring parity").
    ten fields; the winner goes into `storyboard.json` and the receipt is the
    skill's `qa/rendered-candidates.json`. *Not yet:* long form (its
    storyboard comes from the beat map, which a candidate would have to
-   change) and footage-led videos. Stills show blur at the middle of a move
-   but not the move itself; the skill may use encoded clips.
+   change) and footage-led videos. Stills show a move at three points inside it
+   but not the motion itself; the skill may use encoded clips.
 
 The model matters most in phases 1 to 3. `make` already takes an Anthropic
 key; a stronger model there is a configuration choice, not a code change.

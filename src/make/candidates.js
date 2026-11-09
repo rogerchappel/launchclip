@@ -15,7 +15,7 @@
 //               A: the planner's transition. B: a different kind of move.
 //
 // Each candidate is three stills at delivery size (entry, peak and settle of
-// the scene; departure, peak and settle of the transition), rendered by the
+// the scene; early, middle and late in the transition's move), rendered by the
 // project's renderer from the story with only that one thing changed. They
 // are cheap: no encode, no audio and no paid call. A model that can see then
 // scores every candidate 0–10 on the skill's ten fields from the frames
@@ -103,12 +103,17 @@ export function sceneTimes(scene) {
   return SCENE_SHARES.map((share) => round(start + (end - start) * share));
 }
 
-/** The three times (s) a transition's stills are taken at: just before it, at its middle, just after it settles. */
+// Where in a move its three stills are taken (early, peak, late). The frames
+// before and after a move are the same whichever move it is, and the receipt
+// refuses two candidates that share a frame, so all three are inside it.
+const MOVE_SHARES = Object.freeze([0.2, 0.5, 0.8]);
+
+/** The three times (s) a transition's stills are taken at: early in the move, at its middle and late in it. */
 export function transitionTimes(scene, transition, duration) {
   const at = Number(scene.start);
   const dur = Number(transition?.dur) > 0 ? Number(transition.dur) : DEFAULT_TRANSITION_SECONDS;
   const clamp = (value) => round(Math.max(0, Math.min(value, Math.max(0, duration - 0.05), Number(scene.end) - 0.05)));
-  return [clamp(at - 0.15), clamp(at + dur / 2), clamp(at + dur + 0.3)];
+  return MOVE_SHARES.map((share) => clamp(at + dur * share));
 }
 
 /** A copy of a story with one scene changed. change: {module, params} (a new card, its own states dropped) or {in}. */
@@ -221,7 +226,7 @@ const JUDGE_SCHEMA = Object.freeze({
 
 const JUDGE_ROLE = `You are a fresh-context motion-design judge. You are shown rendered frames of candidates for one moment of a video, at delivery size. Judge the pixels only: you have not seen how either was made, and neither is the default.
 
-Each candidate has three frames in time order. For an opening they are its entry, peak and settle. For a transition they are the departure, the middle of the move and the settle.
+Each candidate has three frames in time order. For an opening they are its entry, peak and settle. For a transition all three are inside the move: early in it, at its middle and late in it.
 
 Score every candidate from 0 to 10 on:
 - scroll_stop: would this stop a thumb.
@@ -232,7 +237,7 @@ Score every candidate from 0 to 10 on:
 - temporal_development: do the three frames differ in a way that builds.
 - continuity: does the picture carry from one frame to the next (for a transition: does something carry across the move).
 - velocity_blur_shape: at the middle frame, is the motion readable as motion (blur at speed, not a smear or a freeze).
-- crisp_settle: is the last frame sharp and composed.
+- crisp_settle: is the last frame sharp and composed (for a transition: is the picture resolving cleanly as the move ends).
 - implementation_feasibility: does it look finished, with no broken layout, missing media or placeholder.
 
 Mark a candidate inadmissible only when it is blank, broken, unreadable or clipped. Give each candidate's main weakness in one sentence. Return only the JSON object.`;

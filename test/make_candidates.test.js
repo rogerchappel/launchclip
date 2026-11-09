@@ -29,8 +29,8 @@ test("the opening is the first base scene, and the risky boundary is the hardest
   assert.deepEqual(alternativeTransition(scene("x", 4, 9, { in: { type: "push", dur: 0.5 } }), story), { type: "whip-pan", dur: 0.5 });
   assert.deepEqual(alternativeTransition(scene("x", 4, 9), { camera: { mode: "cuts" } }), { type: "push-blur", dur: 0.5 }, "a cut gets a move with a default length");
   assert.deepEqual(sceneTimes(story.scenes[1]), [0.6, 2, 3.6]);
-  assert.deepEqual(transitionTimes(story.scenes[2], { dur: 0.6 }, 60), [3.85, 4.3, 4.9]);
-  assert.deepEqual(transitionTimes(scene("end", 9.8, 10), { dur: 0.6 }, 10), [9.65, 9.95, 9.95], "times stay inside the scene and the video");
+  assert.deepEqual(transitionTimes(story.scenes[2], { dur: 0.6 }, 60), [4.12, 4.3, 4.48], "all three inside the move, where two candidates differ");
+  assert.deepEqual(transitionTimes(scene("end", 9.8, 10), { dur: 0.6 }, 10), [9.92, 9.95, 9.95], "times stay inside the scene and the video");
   assert.equal(candidatesMode(undefined), "on");
   assert.equal(candidatesMode("off"), "off");
   assert.throws(() => candidatesMode("two"), /--candidates must be on or off/);
