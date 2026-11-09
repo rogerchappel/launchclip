@@ -1490,7 +1490,72 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
 - `StoryComposition` props may carry `__captions` (filled by
   `calculateMetadata` from the overlay `src` or chunked `audio.words`).
   Custom modules register through `<LaunchclipCompositions customModules={…}/>`
-  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
+  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`
+  (see "Custom modules" below).
+
+### Custom modules (`kit/core/custom-modules.mjs`, `kit/hyperframes/custom-module.mjs`)
+
+A bespoke-tier scene with `"module": "custom"` is drawn by the project's own
+code. It has one form per renderer, and `scene.source` says which exist:
+
+```json
+{ "id": "signal", "module": "custom", "start": 3, "end": 6,
+  "source": { "remotion": "remotion/SignalLabel.tsx", "hyperframes": "hyperframes/signal-label.html" },
+  "params": { "component": "SignalLabel", "text": "Signal locked" } }
+```
+
+`source` may also be one path, as before: that is the Remotion form alone.
+`params.component` names the module, and `params.hidesCaptions: true` hides
+the captions over it in both renderers.
+
+- **Remotion form:** a React component registered under `params.component`
+  through `<LaunchclipCompositions customModules={…}/>` in the project's
+  `remotion/entry.tsx`. It receives `{scene, params, brand, format, model}`
+  and draws from `useCurrentFrame()` alone.
+- **HyperFrames form:** an HTML fragment, not a document:
+
+  ```html
+  <style> .card { position: absolute; left: 80px; top: 600px; background: var(--lc-paper); } </style>
+  <div class="card"><p class="text"></p></div>
+  <script>
+    root.querySelector('.text').textContent = params.text;
+    tl.fromTo(root.querySelector('.card'), {opacity: 0, y: 60},
+      {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: false}, scene.start + 0.2);
+  </script>
+  ```
+
+  The markup goes in a full-canvas element, the scene's root
+  (`#lc-custom-<scene id>`). The `<style>` rules are nested under that root,
+  so they cannot restyle the rest of the story. Each `<script>` runs once
+  when the page loads, with `tl` (the story's paused GSAP timeline, in
+  absolute seconds), `root`, and the values the Remotion form gets as props:
+  `scene` (`{id, start, end, duration}`), `params`, `brand`, `format` and
+  `model` (which also has `fonts`). The root carries the brand as CSS
+  variables: `--lc-bg`, `--lc-primary`, `--lc-accent`, `--lc-ink`,
+  `--lc-paper` (those the brand sets) and `--lc-font-display`,
+  `--lc-font-body`, `--lc-font-meta`. The compiler shows and hides the scene
+  and applies its transition, as for any module.
+- **Pure function of time, in both.** Everything that moves is a function of
+  the frame (Remotion) or a tween on `tl` (HyperFrames). A fragment is
+  refused (`lintCustomFragment`) when it uses `Math.random`, a clock, a timer
+  or animation-frame callback, a network request, dynamic code loading, an
+  external script, an `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>` or
+  `<base>` element, a remote URL, a CSS `@import`, or a CSS animation or
+  transition. This is a lint against mistakes, not a sandbox: a custom
+  module is the project's own code and runs in the render browser.
+- **A missing form is an error, not a placeholder.** `launchclip finish`
+  stops at the render stage, before anything renders, when a custom scene
+  has no form for the chosen renderer, or its fragment is missing or
+  refused. The message names the scene, the module and the renderer, for
+  example: `scene "signal": the custom module "SignalLabel" has no
+  hyperframes form (only a remotion one, remotion/SignalLabel.tsx); add an
+  HTML fragment at source.hyperframes, render with --renderer remotion, or
+  use a catalogue module`. A direct `compileStoryToHyperFrames()` call still
+  draws the labelled placeholder and returns that message as a warning.
+- **Parity is the author's job.** The two forms are separate code. Draw from
+  the same numbers and eases (`@launchclip/core/motion.mjs` `tween` matches
+  GSAP's eases) and compare stills. `test/custom_module.test.js` does this for
+  `test/fixtures/custom-module/`, which is also the worked example.
 
 ### Fonts (`kit/core/fonts.mjs`)
 

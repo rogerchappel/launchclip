@@ -568,8 +568,19 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     else ids.set(scene.id, index);
 
     if (scene.module === "custom") {
-      if (scene.source === undefined) err(`${path}.source is required for a custom module (a project-relative path)`);
-      else if (projectPath(scene.source, `${path}.source`, err)) warn(`${label} uses a custom module (${scene.source}); custom modules are bespoke-tier only and must stay a pure function of time`);
+      // source: one path (the Remotion component) or one per renderer (kit/core/custom-modules.mjs).
+      if (scene.source === undefined) err(`${path}.source is required for a custom module (a project-relative path, or {remotion, hyperframes} with a path per renderer)`);
+      else if (isObject(scene.source)) {
+        const keys = Object.keys(scene.source);
+        const unknown = keys.filter((key) => !CUSTOM_RENDERERS.includes(key));
+        if (unknown.length) err(`${path}.source has unknown key${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}; use ${CUSTOM_RENDERERS.join(" and ")}`);
+        else if (!keys.length) err(`${path}.source needs a path for ${CUSTOM_RENDERERS.join(" or ")}`);
+        else {
+          const paths = keys.map((key) => projectPath(scene.source[key], `${path}.source.${key}`, err));
+          if (typeof scene.source.hyperframes === "string" && !/\.html?$/i.test(scene.source.hyperframes)) err(`${path}.source.hyperframes must be an .html fragment (markup, <style> and a <script> that adds tweens to tl); got ${JSON.stringify(scene.source.hyperframes)}`);
+          else if (paths.every(Boolean)) warn(`${label} uses a custom module (${keys.map((key) => `${key}: ${scene.source[key]}`).join(", ")}); custom modules are bespoke-tier only and must stay a pure function of time`);
+        }
+      } else if (projectPath(scene.source, `${path}.source`, err)) warn(`${label} uses a custom module (${scene.source}); custom modules are bespoke-tier only and must stay a pure function of time`);
     } else if (typeof scene.module !== "string" || !MODULE_ID.test(scene.module)) err(`${path}.module must be a catalogue module id like "metric"`);
     else {
       if (known && !known.has(scene.module)) err(`${path}.module "${scene.module}" is not a known module`);
@@ -1840,6 +1851,9 @@ export function aspectName(width, height) {
 
 // ---------------------------------------------------------------------------
 // Helpers
+
+// The renderers a custom module can have a form for (kit/core/custom-modules.mjs CUSTOM_RENDERERS).
+const CUSTOM_RENDERERS = ["remotion", "hyperframes"];
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

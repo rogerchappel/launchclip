@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
+import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
 import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
@@ -1665,7 +1667,19 @@ export function chapterWindow(resolved, id) {
   return { id: chapter.id, title: chapter.title, start: chapter.start, end: chapter.end, frames: [Math.round(chapter.start * fps), Math.round(chapter.end * fps)] };
 }
 
+/**
+ * Custom modules: a custom scene with no form for this renderer, or whose
+ * HyperFrames fragment is missing or breaks the rules, stops the run before
+ * anything renders, naming the scene and the renderer, instead of shipping a
+ * "Missing module" card. → [{id, module: "custom", reason}]
+ */
+export async function customModuleErrors(resolved, { renderer, project }) {
+  return renderer === "hyperframes" ? customModuleProblems(resolved, { sourceDir: project }) : customModuleGaps(resolved, renderer);
+}
+
 async function runRender(ctx) {
+  const custom = await customModuleErrors(ctx.resolved, { renderer: ctx.rendererName, project: ctx.project });
+  if (custom.length) throw new Error(`${custom.length === 1 ? "a custom module" : `${custom.length} custom modules`} cannot render in ${ctx.rendererName}: ${custom.map((entry) => entry.reason).join("; ")}`);
   const adapter = ctx.adapters.renderer(ctx.rendererName);
   const tools = ctx.adapters.segmentTools;
   if (ctx.options.previewScene) {
@@ -1933,16 +1947,18 @@ async function runGates(ctx) {
 /**
  * Placeholders: no scene may ship as a labelled "Missing module" card. A
  * scene renders as one when its module is unknown to the kit, when its params
- * do not resolve, when it is a custom module under HyperFrames (custom
- * modules are Remotion-only), or when the HyperFrames compiler reported
- * falling back for it (an emitter failure).
+ * do not resolve, when it is a custom module with no form for the renderer
+ * (kit/core/custom-modules.mjs; the render stage refuses those first), or
+ * when the HyperFrames compiler reported falling back for it (an emitter
+ * failure).
  */
 export function placeholderScenes(resolved, { renderer, compileWarnings = [] } = {}) {
   const known = new Set(knownModules());
   const scenes = [];
   for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
     if (scene?.module === "custom") {
-      if (renderer === "hyperframes") scenes.push({ id: scene.id, module: scene.module, reason: "custom modules render only in Remotion" });
+      const [gap] = customModuleGaps({ scenes: [scene] }, renderer);
+      if (gap) scenes.push({ id: scene.id, module: scene.module, reason: gap.reason });
       continue;
     }
     if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, reason: `module "${scene?.module}" is not a known module` }); continue; }
