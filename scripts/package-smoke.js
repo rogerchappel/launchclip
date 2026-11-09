@@ -32,6 +32,8 @@ try {
     "motion-engine/schema.js",
     "public/icons/check.svg",
     "remotion/index.jsx",
+    "skills/launchclip-character-design/SKILL.md",
+    "skills/launchclip-character-design/agents/openai.yaml",
     "skills/launchclip-cli/SKILL.md",
     "skills/launchclip-cli/agents/openai.yaml",
     "skills/launchclip-cli/references/cli-reference.md",
