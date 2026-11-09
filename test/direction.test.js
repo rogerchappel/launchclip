@@ -236,10 +236,10 @@ test("story shots lists each shot with frames, who, set, framing, poses and line
     { line: "l5", speaker: "maya", on_screen: true, text: "Fine. One quick test." }
   ]);
   assert.equal(ask.lines[0].playing, "light, as if in passing");
-  assert.deepEqual(ask.poses.maya.map(({ pose, expression }) => [pose, expression]), [["stand", "neutral"], ["shrug", "happy"], ["facepalm", "frustrated"]]);
-  assert.deepEqual(ask.poses.sam.map(({ pose }) => pose), ["stand", "lean-in", "arms-crossed"]);
+  assert.deepEqual(ask.poses.maya.map(({ pose, expression }) => [pose, expression]), [["stand", "neutral"], ["shrug", "happy"], ["hands-on-hips", "frustrated"]]);
+  assert.deepEqual(ask.poses.sam.map(({ pose }) => pose), ["stand", "think", "arms-crossed"]);
   assert.equal(ask.poses.maya[1].frame, Math.round(ask.poses.maya[1].at * report.fps));
-  assert.deepEqual(ask.actions, [{ verb: "lean-in", who: "sam", line: "l2" }, { verb: "shrug", who: "maya", line: "l3" }, { verb: "facepalm", who: "maya", line: "l5" }]);
+  assert.deepEqual(ask.actions, [{ verb: "think", who: "sam", line: "l2" }, { verb: "shrug", who: "maya", line: "l3" }, { verb: "hands-on-hips", who: "maya", line: "l5" }]);
   // The reaction shot: Sam's line is listed, off screen, with the map's why.
   const off = report.shots[2].lines.find((line) => line.line === "l8");
   assert.deepEqual({ speaker: off.speaker, on_screen: off.on_screen }, { speaker: "sam", on_screen: false });
@@ -254,7 +254,7 @@ test("story shots lists each shot with frames, who, set, framing, poses and line
   assert.match(text, /5 shots, 23\.50 s at 30 fps/);
   assert.match(text, / 2 {2}ask {2}3\.38–10\.91 s {2}frames 101–326 \(226\)/);
   assert.match(text, /l8 sam \(off screen\): "Better now than at midnight\."/);
-  assert.match(text, /sam: 3\.38 stand, neutral → 3\.63 lean-in, happy/);
+  assert.match(text, /sam: 3\.38 stand, neutral → 3\.63 think, happy/);
   assert.match(text, /Script lines no map line plays \(2 of 10\)/);
 });
 
