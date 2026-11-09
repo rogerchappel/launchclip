@@ -68,17 +68,21 @@ export function presenterHeadLocator(resolved, { infos = [] } = {}) {
 /**
  * A copy of a talking-head storyboard with every front-layer card moved off
  * the presenter's face, and what changed. options: {words, beats, track (the
- * whole-video track resolveStory takes), infos, drop (drop a card no room
- * fits; else keep it and say so)}.
+ * whole-video track resolveStory takes), edl and subject (finish's base.edl
+ * and filed mattes, as resolveStory takes them), infos, drop (drop a card no
+ * room fits; else keep it and say so), behind (a card no room fits whose
+ * module is made to sit behind the presenter, but which the scene put in
+ * front, goes back behind: only over a real cut-out, base.subject mattes),
+ * only (scene ids: just these cards, the ones the face rule failed)}.
  * → {storyboard, moved: ["hook moved below the presenter's face (0.5–3 s)"],
- *    dropped: [..], kept: [..], source: "track" | "matte" | "default" | null}
+ *    dropped: [..], behind: [..], kept: [..], source: "track" | "matte" | "default" | null}
  */
-export function fitFaceClear(storyboard, { words = [], beats = null, track = null, infos = [], drop = false } = {}) {
-  const none = { storyboard, moved: [], dropped: [], kept: [], source: null };
+export function fitFaceClear(storyboard, { words = [], beats = null, track = null, edl = null, subject = null, infos = [], drop = false, behind = false, only = null } = {}) {
+  const none = { storyboard, moved: [], dropped: [], behind: [], kept: [], source: null };
   if (!storyboard || storyboard.lane !== "footage-led" || !Array.isArray(storyboard.scenes)) return none;
   const story = { ...storyboard, brand: storyboard.brand ?? DEFAULT_BRAND };
   let resolved;
-  try { resolved = resolveStory(structuredClone(story), { words, beats, track }); } catch { return none; }
+  try { resolved = resolveStory(structuredClone(story), { words, beats, track, ...(edl ? { edl } : {}), ...(subject ? { subject } : {}) }); } catch { return none; }
   const locator = presenterHeadLocator(resolved, { infos });
   if (!locator) return none;
   const canvas = { width: Number(resolved.format.width), height: Number(resolved.format.height) };
@@ -87,11 +91,12 @@ export function fitFaceClear(storyboard, { words = [], beats = null, track = nul
   const covered = (t) => inserts.some((scene) => t >= Number(scene.start) && t < Number(scene.end));
   const copy = structuredClone(storyboard);
   const byId = new Map(copy.scenes.map((scene) => [scene?.id, scene]));
-  const moved = [], dropped = [], kept = [];
+  const moved = [], dropped = [], kept = [], sentBehind = [];
+  const cutOut = storyBase(resolved)?.subject.mode === "mattes";
   const drops = new Set();
   for (const scene of resolved.scenes ?? []) {
     const target = byId.get(scene.id);
-    if (!target || !movable(scene, resolved)) continue;
+    if (!target || (only && !only.has(scene.id)) || !movable(scene, resolved)) continue;
     const start = Number(scene.start), end = Number(scene.end);
     const head = headExtent(locator.at, start, end, covered);
     if (!head) continue;
@@ -106,14 +111,19 @@ export function fitFaceClear(storyboard, { words = [], beats = null, track = nul
       continue;
     }
     const why = placeable(scene) ? "no room beside, above or below the head fits it" : "it places itself";
+    if (behind && cutOut && madeForBehind(scene)) {
+      target.layer = "behind";
+      sentBehind.push(`${scene.id} (${scene.module}) set behind the presenter: it covered the face at ${span} and ${why}`);
+      continue;
+    }
     if (drop) {
       drops.add(scene.id);
       dropped.push(`${scene.id} (${scene.module}) dropped: it covered the presenter's face at ${span} and ${why} (${scene.module === "polaroid" || !placeable(scene) ? "plan it smaller or elsewhere" : "plan it beside the presenter"}${note})`);
     } else kept.push(`${scene.id} (${scene.module}) covers the presenter's face at ${span}; ${why}${note}`);
   }
   if (drops.size) copy.scenes = copy.scenes.filter((scene) => !drops.has(scene?.id));
-  const changed = moved.length || dropped.length;
-  return { storyboard: changed ? copy : storyboard, moved, dropped, kept, source: locator.source };
+  const changed = moved.length || dropped.length || sentBehind.length;
+  return { storyboard: changed ? copy : storyboard, moved, dropped, behind: sentBehind, kept, source: locator.source };
 }
 
 const ZONE_WORDS = { above: "above the presenter's head", below: "below the presenter's face", left: "to the left of the presenter's face", right: "to the right of the presenter's face" };
@@ -138,6 +148,13 @@ function placeable(scene) {
   const definition = catalogModules()[scene.module];
   if (!definition || definition.needs?.includes("subject")) return false;
   return Object.hasOwn(definition.params ?? {}, "rect");
+}
+
+// A module made to sit behind the presenter (its definition's default layer
+// is behind or split) that the scene put in front.
+function madeForBehind(scene) {
+  const layer = catalogModules()[scene.module]?.layer;
+  return scene.layer === "front" && (layer === "behind" || layer === "split");
 }
 
 // The union of the head boxes while the card is up and the face shows.

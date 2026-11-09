@@ -218,7 +218,9 @@ export const alphaHex = (hex, alpha) => `${hex}${Math.round(alpha * 255).toStrin
 // Validation helpers (path-prefixed messages)
 
 export function makeCheck(prefix) {
-  const fail = (path, message) => { throw new Error(`${prefix}${path} ${message}`); };
+  // data: structured facts tooling may repair from (an event time's window:
+  // {timing: {path, min, max, got, explicit}}), carried on the error.
+  const fail = (path, message, data) => { throw Object.assign(new Error(`${prefix}${path} ${message}`), data ?? {}); };
   const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
   return {
     fail,
@@ -436,7 +438,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
+    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`, {timing: {path, min, max, got: rel, explicit: at !== undefined}});
     return rt(start + rel);
   };
 

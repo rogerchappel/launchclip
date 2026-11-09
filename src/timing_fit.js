@@ -4,6 +4,14 @@
 // after the scene start; got 0.28 s") is moved to the nearest edge of that
 // window by tooling, instead of spending a model repair on a number. The
 // modules stay strict; this only rewrites the storyboard the planner returned.
+//
+// fitSceneTimings is the same repair at finish, once the real narration has
+// settled each scene's window: an explicit time the planner set for a longer
+// scene ("params.lines[6].at must fall between 0.41 s and 4.28 s ...; got
+// 4.97 s") moves into the window the module now allows. It reads the window
+// from the module's own error (error.timing), not from the message.
+
+import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 
 const TIMING_ERROR = /scenes\[(\d+)\][^]*?\b(params(?:\.[A-Za-z_]\w*|\[\d+\])+) must fall between (-?[\d.]+) s and (-?[\d.]+) s after the scene start; got (-?[\d.]+) s/;
 
@@ -77,4 +85,61 @@ export function fitTimings(storyboard, errors) {
     moved.push(`${target.id ?? `scenes[${scene}]`} ${path} ${value} → ${next} s`);
   }
   return { storyboard: moved.length ? copy : storyboard, moved };
+}
+
+// Each scene's times are fixed one at a time (the module stops at its first
+// bad time), so a scene gets at most this many.
+const SCENE_TIMING_PASSES = 32;
+
+/**
+ * A copy of the storyboard with each explicit event time a resolved scene's
+ * module rejects moved into the window the module allows, and what moved:
+ * {storyboard, moved: ["hardwood-detail params.lines[6].at 4.97 → 4.27 s"]}.
+ * resolved: resolveStory(storyboard, ...) with the final timings. A default
+ * time (the module's own) or an empty window (the scene is too short) is
+ * left for the checks to report. resolve(scene, resolved) throws a module's
+ * error; by default the module is resolved both ways the checks do: to the
+ * scene's end (layout check) and to its render end (story validate).
+ */
+export function fitSceneTimings(storyboard, resolved, { resolve = resolveBothEnds } = {}) {
+  if (!Array.isArray(storyboard?.scenes) || !Array.isArray(resolved?.scenes)) return { storyboard, moved: [] };
+  const copy = structuredClone(storyboard);
+  const live = structuredClone(resolved);
+  const byId = new Map(copy.scenes.map((scene) => [scene?.id, scene]));
+  const moved = [];
+  for (const scene of live.scenes) {
+    const target = byId.get(scene?.id);
+    if (!target?.module) continue;
+    for (let pass = 0; pass < SCENE_TIMING_PASSES; pass += 1) {
+      let timing = null;
+      try { resolve(scene, live); break; } catch (error) { timing = error?.timing ?? null; }
+      if (!timing?.explicit || !(Number(timing.min) <= Number(timing.max)) || typeof timing.path !== "string") break;
+      const mine = slot(target, timing.path);
+      const theirs = slot(scene, timing.path);
+      if (!mine || typeof mine.value !== "number") break;
+      const min = Number(timing.min), max = Number(timing.max);
+      const inside = max - min < 0.02 ? (min + max) / 2 : Math.min(max - 0.01, Math.max(min + 0.01, mine.value));
+      const next = Math.round(inside * 100) / 100;
+      if (next === mine.value) break;
+      moved.push(`${target.id} ${timing.path} ${mine.value} → ${next} s`);
+      mine.set(next);
+      theirs?.set(next);
+    }
+  }
+  return { storyboard: moved.length ? copy : storyboard, moved };
+}
+
+function resolveBothEnds(scene, resolved) {
+  resolveModule(scene, resolved);
+  resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) });
+}
+
+// The holder of a dotted path ("params.lines[6].at") in a scene: {value, set}.
+function slot(scene, path) {
+  const keys = path.replace(/\[(\d+)\]/g, ".$1").split(".");
+  let holder = scene;
+  for (const key of keys.slice(0, -1)) holder = holder?.[key];
+  if (!holder || typeof holder !== "object") return null;
+  const last = keys.at(-1);
+  return { value: holder[last], set: (value) => { holder[last] = value; } };
 }
