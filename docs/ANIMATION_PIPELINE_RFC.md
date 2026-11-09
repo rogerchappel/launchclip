@@ -1,33 +1,47 @@
 # RFC: Animation from one prompt
 
-Status: draft, open for review
+Status: draft, open for review (revised 2026-11-10: generation cut, hand-in added)
 Date: 2026-11-10
 Builds on: [VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) (§6.3 narrative maps, §10.5 character narratives),
 [STORYBOARD_ENGINE_RFC.md](STORYBOARD_ENGINE_RFC.md) (the storyboard contract),
 [MAKE_SKILL_PARITY.md](MAKE_SKILL_PARITY.md) (one quality bar for both paths),
 [LONG_FORM_MAKE_RFC.md](LONG_FORM_MAKE_RFC.md) (resumable stages),
 [DUAL_RENDERER_PLAN.md](DUAL_RENDERER_PLAN.md) (two renderers, one contract),
-[COLLECTIONS_RFC.md](COLLECTIONS_RFC.md) (§5 capacity and the machine queue),
-[KIT_CONTRACTS.md](KIT_CONTRACTS.md) ("Character modules")
+[COLLECTIONS_RFC.md](COLLECTIONS_RFC.md) (collections and series),
+[KIT_CONTRACTS.md](KIT_CONTRACTS.md) ("Character modules", "Saved characters")
 
 ## 1. Summary
 
 The goal is a character animation people want to watch, made from one prompt:
-a 30–60 second Short first, full animations later. It must work two ways: led
+a 30–60 second Short first, longer pieces later. It must work two ways: led
 by an agent on the user's own AI subscription (the create-video skill), and
-fully built in (`launchclip make`). It must run on one Mac, and use a bigger
-machine or a hosted model only when the Mac cannot do the work.
+fully built in (`launchclip make`).
+
+**The scope rule.** LaunchClip's own pictures are drawn in code. It does not
+generate images or video, and it does not call a service that does. Footage,
+background plates and character art made elsewhere are bring-your-own: the
+user or the app that runs LaunchClip makes them and hands them in as assets.
+Hosting, scale, servers and job APIs belong to that app, not to LaunchClip.
+
+So there is **one render path, the code-drawn rig**, and a **hand-in
+contract** for art made elsewhere. AI still does the creative work: a model
+is the writer, the cast and world designer, the director and the critic, on
+both routes.
 
 Most of the parts exist. What is missing is the pipeline that joins them.
 
 What exists today:
 
-- A code-drawn character kit: one rig, 30 starter characters, generated
-  casts, ten drawing styles, named poses, expressions and acting cues,
-  thirteen sets, and two modules, `cast-scene` and `character-cameo`
-  (`kit/core/characters/`, `kit/core/catalog-characters.mjs`).
-- Illustrated characters: `sprite-scene` plays pose sprites drawn once by an
-  image model (`kit/core/catalog-sprites.mjs`, `src/sprite_cast.js`).
+- A code-drawn character kit: one rig, a starter cast, generated casts,
+  drawing styles, named poses, expressions and acting cues, sets, and two
+  modules, `cast-scene` and `character-cameo` (`kit/core/characters/`,
+  `kit/core/catalog-characters.mjs`).
+- Saved characters: `launchclip cast create` and `cast edit` write one
+  designed character to a file, `launchclip.character.v1`
+  (`kit/core/characters/character.mjs`, `src/cast_design.js`,
+  `src/character_store.js`).
+- Illustrated characters: `sprite-scene` plays a folder of pose sprites over
+  a painted plate (`kit/core/catalog-sprites.mjs`).
 - Narrative direction maps: story beats, cast cues and a key action per line
   (`kit/core/direction.mjs`).
 - Dialogue in several voices, with every word tagged with its speaker
@@ -37,8 +51,8 @@ What exists today:
   `src/movement_guardrails.js`, all run by `src/finish.js`).
 - A critic that sends its findings back to the planner and re-renders only
   the scenes that changed (`src/make/critic_repair.js`).
-- A machine queue with slots sized to the hardware (`src/queue.js`,
-  `src/capacity.js`).
+- A hook that lets an app supply real media for a scene, with a clean "no
+  shot" answer (`src/asset_provider.js`, `src/asset_provider_cmd.js`).
 
 What is missing:
 
@@ -47,35 +61,30 @@ What is missing:
 - **Nothing freezes the cast, world and style before shots are planned.** The
   planner binds a cast while it plans (`src/cast_fit.js`), so a replan can
   change who is in the story.
-- **There is one way to draw a shot.** No interface lets an image or video
-  model draw it, and nothing reports which models this machine or account can
-  reach.
-- **Nothing checks a generated character against its design.** The cast gate
-  checks rig parameters, which only works for shots the rig drew.
+- **Nothing checks handed-in art against the story's characters.** The cast
+  gate checks rig parameters, which only works for shots the rig drew.
+- **With only an Anthropic key, `make` has no critic.** Its Anthropic
+  adapter sends text only (`src/make/models.js`).
 
-This RFC adds one pipeline with fixed file contracts, three render lanes
-behind one provider interface, a capability check, and a delivery plan that
-starts with a vertical slice on the code-drawn lane.
-
-**Two things are unproven and this RFC does not claim them:** a generated
-character that stays the same person from shot to shot, and lip sync on
-generated shots. The plan is ordered so the first slice needs neither, and a
-measured spike (phase 9) comes before any generative code is built.
+This RFC adds one pipeline with fixed file contracts, the hand-in contract,
+a check of which model roles this machine or account can play, and a
+delivery plan that starts with a vertical slice.
 
 ## 2. Goals and non-goals
 
 Goals:
 
-- One prompt to a finished 30-second Short with two characters who talk, on
-  the code-drawn lane, with the critic loop. No key beyond a language model.
+- One prompt to a finished 30-second Short with two characters who talk,
+  drawn in code, with the critic loop. No key beyond a language model.
 - One set of contracts for both routes. The routes differ only in who plays
   each role.
-- A shot can be drawn by the rig, by a model guided by the rig, or by a model
-  alone, behind one interface. The story file does not change with the lane.
-- The pipeline never fails because a lane is missing. It falls back, and the
-  report says which lane drew each shot and why.
-- Every stage resumes. A failed or rejected shot costs one shot.
-- Cost and time are estimated before spending and capped while spending.
+- Art made elsewhere can replace a plate, a character's drawing or a whole
+  shot. It is validated and checked against the show bible first.
+- A missing or rejected asset never fails the video. The code-drawn version
+  plays, and the report says so.
+- Every stage resumes. A rejected shot costs one shot.
+- Easy to drive from another program: files in, files out, clear exit
+  codes, progress on stderr, and no server.
 
 Non-goals are in §12.
 
@@ -83,26 +92,25 @@ Non-goals are in §12.
 
 | # | Stage | Writes | Model work | Exists today |
 |---|---|---|---|---|
-| 1 | Writers' room | `SCREENPLAY.json` | premise, loglines, screenplay | no (narration only) |
-| 2 | Show bible | `BIBLE.json`, `bible/sheets/` | cast and world choices | parts: `story.cast`, `cast sheet` |
+| 1 | Writers' room | `SCRIPT.json` | premise, loglines, script | narration only |
+| 2 | Show bible | `BIBLE.json`, `bible/sheets/` | cast and world design | parts: saved characters, `story.cast`, sheets |
 | 3 | Voice | `NARRATION.json` | none (local voices) | yes |
 | 4 | Shot list | `DIRECTION.json`, `storyboard.json` | direction map, then storyboard | yes, extended here |
-| 5 | Animatic | `renders/animatic.mp4`, `ANIMATIC.json` | none | yes (it is a draft `finish`) |
-| 6 | Shot production | `shots/<id>/SHOT.json`, a clip per shot | image or video models | no |
-| 7 | Sound and conform | `AUDIO-MANIFEST.json`, `renders/draft.mp4` | none by default | yes |
+| 5 | Animatic | `renders/animatic.mp4`, `ANIMATIC.json` | a staging review | yes (it is a draft `finish`) |
+| 6 | Hand-in (optional) | `qa/hand-in.json` | a vision check | no |
+| 7 | Sound and finish | `AUDIO-MANIFEST.json`, `renders/draft.mp4` | none | yes |
 | 8 | Critic and retakes | `qa/critic.json`, `qa/retakes.json` | a vision model | yes, extended here |
 
 Three rules hold the pipeline together:
 
 1. **The bible is frozen before the shot list.** Later stages read it and
-   never write it. A change to the bible is a new bible, and every shot made
-   from the old one is stale.
-2. **The animatic locks the timing.** Every shot is first drawn by the rig,
-   at its real length, against the real voice. A lane may change how a shot
+   never write it. A change to the bible is a new bible.
+2. **The animatic locks the timing.** Every shot is drawn by the rig, at its
+   real length, against the real voice. Handed-in art may change how a shot
    looks. It may not change how long it runs.
-3. **The storyboard always describes the rig's version of every shot.** So
-   the fallback is always renderable, and the code-drawn lane is never a
-   special case.
+3. **The storyboard always describes the code-drawn version of every shot.**
+   So the fallback is always renderable, and with nothing handed in, the
+   animatic at delivery quality is the video.
 
 Voice comes before the shot list, as it does today, because scenes and cues
 are anchored to measured words (`word:<text>` anchors, resolved in
@@ -115,11 +123,17 @@ writer and one validator, and each records the hash of what it was made from,
 so a rerun reuses it while its inputs are unchanged. This is how `make`
 resumes today (the header of `src/make/index.js`).
 
-### 4.1 Story and script: `SCREENPLAY.json`
+### 4.1 Story and script: `SCRIPT.json`, grown
+
+`make` already writes `SCRIPT.json` (`launchclip.make-script.v1`: a title,
+one `narration` string and its `beats`; `src/make/script.js`). The proposal
+is to grow that file, not to add a second one beside it. The new version
+adds speakers and silent lines:
 
 ```json
 {
-  "schema": "launchclip.screenplay.v1",
+  "schema_version": "launchclip.make-script.v2",
+  "title": "She skipped one check",
   "logline": "Maya's deploy fails again; Sam shows her the one check she skipped.",
   "premise": { "want": "ship before lunch", "obstacle": "the same failing deploy", "change": "she checks first" },
   "characters": [
@@ -129,31 +143,40 @@ resumes today (the header of `src/make/index.js`).
   "beats": [
     { "beat": "setup", "place": "desk-laptop",
       "lines": [
-        { "id": "l1", "speaker": "maya", "text": "Third time today.", "playing": "flat, to herself" },
-        { "id": "l2", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
-        { "id": "l3", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
+        { "id": "l1", "speaker": "narrator", "text": "Maya has shipped this fix three times today." },
+        { "id": "l2", "speaker": "maya", "text": "Third time.", "playing": "flat, to herself" },
+        { "id": "l3", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
+        { "id": "l4", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
       ] }
   ],
-  "titles": ["She skipped one check"],
-  "inputs": { "prompt_hash": "…", "skeleton": "pov" }
+  "narration": "Maya has shipped this fix three times today. Third time. Did you run the check?",
+  "title_options": ["She skipped one check"]
 }
 ```
 
+- A line is spoken (`speaker` is a character id or `"narrator"`) or silent
+  (`speaker: null` with an `action` and a length). Silent lines are where
+  acting happens.
+- **A narrated script is the case where every speaker is the narrator.** A
+  v1 file reads as that, so nothing written today breaks. `narration` stays
+  as the spoken text joined in order.
 - `beats[].beat` is one of the narrative beats the direction map already
   uses: `setup`, `problem`, `attempt`, `turn`, `resolution`, `cta`
   (`NARRATIVE_BEATS` in `kit/core/direction.mjs`).
-- A line is spoken (`speaker` is a character id or `"narrator"`) or silent
-  (`speaker: null` with an `action` and a length). Silent lines are where
-  acting happens, and a narration has no place for them.
 - `playing` is a note for the acting and the voice. It is never spoken.
-- `characters` here are roles, wants and ways of speaking. How a character
-  looks belongs to the bible.
+- `characters` are roles, wants and ways of speaking. How a character looks
+  belongs to the bible.
+- **Default shape: a narrator with dialogue.** The narrator carries the
+  story and the characters speak the turns. Pure dialogue is allowed, and
+  the brief can ask for it.
 
 **Writer.** The writers' room. Three steps, each small: a premise from the
 prompt; three to five loglines judged in a fresh context, as the skill
 judges concepts today (step 2 of `skills/launchclip-create-video/SKILL.md`);
-then the screenplay on a skeleton. Two library skeletons are already
-character stories, `last-time` and `pov` (`kit/core/skeleton-library.mjs`).
+then the script on a skeleton. Two library skeletons are already character
+stories, `last-time` and `pov` (`kit/core/skeleton-library.mjs`). On the
+skill path the agent writes the same JSON, and tooling renders `SCRIPT.md`
+from it for reading.
 
 **Validator.** A new `kit/core/screenplay.mjs`:
 
@@ -180,49 +203,54 @@ voices. Silent lines become gaps of their length. No voice code changes.
   "cast": {
     "style": "outlined",
     "characters": [
-      { "id": "maya", "from": "maya", "voice": "af_heart", "position": "left",
+      { "id": "maya", "voice": "af_heart", "position": "left",
         "character_file": "cast/maya.character.json",
         "sheet": "bible/sheets/maya.png", "fingerprint": "…",
-        "identity": { "must_keep": ["curly dark hair", "teal hoodie", "round glasses"] } }
+        "must_keep": ["curly dark hair", "teal hoodie", "round glasses"] }
     ]
   },
   "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"] },
-  "style": { "pack": "styles/project.json", "seed": 4821, "drawing_style": "outlined",
-             "references": ["bible/style/frame-1.png"] },
+  "style": { "pack": "styles/project.json", "seed": 4821, "drawing_style": "outlined" },
   "rules": ["Sam never raises his voice."],
-  "inputs": { "screenplay_hash": "…" }
+  "inputs": { "script_hash": "…" }
 }
 ```
 
 - `cast` is exactly the `story.cast` shape ("Story cast" in
   KIT_CONTRACTS.md), with four additions per character: the saved character
   file it came from, its reference sheet, its fingerprint, and `must_keep`.
+- **Every character has rig parameters**, even when art for it will be
+  handed in. The rig draws the animatic and is the fallback.
 - `must_keep` is the short list of features a viewer would notice changing.
   Tooling writes it from the rig parameters (hair, skin tone, outfit,
-  glasses, headwear, mobility aid). The identity check reads it (§5.4).
+  glasses, headwear, mobility aid). The hand-in check reads it (§5.4).
 - `world` names a world and the sets the story may use
   (`kit/core/catalog-world.mjs`, `kit/core/characters/sets.mjs`).
 - `style` points at the project's style pack and seed
-  ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)), plus still frames that show
-  the look, for lanes that need a picture of it.
+  ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)).
 
-**Reference sheets.** One PNG per character: a turnaround, every pose and
-expression the screenplay could call for, and a face close-up. It is drawn
-with the modules' own view tree, as `launchclip cast sheet` draws the story
-sheet today (`castSheet` in `src/cast.js`). So the sheet is the character,
-not a description of it. For an illustrated character the sheet is its
-anchor sprite and poses (`src/sprite_cast.js`).
+**Reference sheets.** One PNG per character: every pose and expression the
+script could call for, and a face close-up, in the bible's drawing style. It
+is drawn with the modules' own view tree, as `launchclip cast sheet` draws
+the story sheet (`castSheet` in `src/cast.js`) and `cast create` draws a
+saved character's sheet (`src/cast_design.js`). So the sheet is the
+character, not a description of it.
 
-**Writer.** The bible stage. It picks or builds each character from the
-screenplay's roles: a saved character file, a starter, or a generated cast
-(`generateCast` in `kit/core/characters/generate.mjs`). It gives each
-speaking character a different voice, picks the world and sets, and renders
-the sheets.
+**Writer.** The bible stage, with the model as cast and world designer:
+
+- For each role in the script it picks a saved character, a starter, or
+  designs a new one. A new design goes through the same door as `cast
+  create`: the model answers with set paths, and the answer is validated
+  against the rig's own options, so it can only choose what the rig can draw
+  (`src/cast_design.js`).
+- It gives each speaking character a different voice.
+- It picks the world, the sets and the drawing style.
+- Tooling then renders the sheets and writes the hash.
 
 **Validator.** A new `kit/core/bible.mjs`:
 
 - `storyCastErrors` and `resolveStoryCast` pass (`kit/core/characters/cues.mjs`);
-- every screenplay character has an entry, a voice and a sheet on disk;
+- every script character has an entry, a voice and a sheet on disk;
 - every set and world exists;
 - the hash matches the content.
 
@@ -231,10 +259,18 @@ and reset if a model changes it. The planner already pins a bound cast this
 way (`fixed.cast` in `src/storyboard_planner.js`). A new `bible` gate in
 `finish` fails when `story.cast` and the bible disagree.
 
-**Inputs from parallel work.** The saved character file (`cast create`,
-`cast edit`) and the drawing-style traits read from references are being
-built in other sessions. The bible points at their files by path and hash.
-It does not define their shape.
+**Reference images map to traits, never to a likeness.** A user may give
+pictures to steer a character or a style. They are read for traits (a
+silver bob, round glasses, a line style) that the rig and the style can
+express. A real person's name or photo is never turned into a likeness; the
+character designer already refuses that and asks for traits
+(`kit/core/characters/describe.mjs`).
+
+**Inputs from other work.** Saved characters and `cast create` / `cast
+edit` are on `main`. Local branches add acting profiles, more drawing styles
+(`chibi`, `chibi-plain`), a larger starter cast, and drawing-trait analysis
+in `style create --from-reference`. The bible uses whatever the kit offers
+when it runs, by id. It does not depend on any of those landing.
 
 ### 4.3 The shot list: `DIRECTION.json` and `storyboard.json`
 
@@ -247,7 +283,7 @@ grow by small, additive fields.
 - `bible: {file, hash}` at the top level. `validateDirection` rejects
   unknown top-level fields today (`kit/core/direction.mjs`), so this is a
   small code change.
-- A line may carry `line: "l2"`, the screenplay line it plays. The word range
+- A line may carry `line: "l3"`, the script line it plays. The word range
   stays the source of truth for timing.
 - New validation for a narrative map: while a character speaks, a scene with
   that character is on screen, unless the line says why not (`why: "we stay
@@ -261,39 +297,24 @@ Everything else a shot needs is already in the map: the beat on the section,
 
 - `bible: {file, hash}` at the top level. It is a new key in `TOP_LEVEL` and
   a bump of `STORY_REVISION` (`kit/core/story.mjs`).
-- A character scene may carry a `production` block:
+- Nothing else. A scene does not say whether art will be handed in for it;
+  the hand-in file does (§5).
 
-```json
-{ "id": "s3", "module": "cast-scene", "start": "word:check", "end": "word:oh#1",
-  "params": { "set": "desk-laptop", "shot": "medium", "cast": [ … ] },
-  "production": {
-    "lane": "guided",
-    "describe": "Maya slumps at her desk; Sam leans in from the right, patient.",
-    "continuity": { "after": "s2" },
-    "allow_fallback": true
-  } }
-```
+**Writer.** The model as director: the planner in `make`, the agent in the
+skill, in the order both paths already use: the direction map first, then
+the storyboard against it (quality RFC §6.4).
 
-`lane` is `rig`, `guided` or `generative`; without a block a scene is `rig`.
-`describe` is one sentence a person or a model can draw from. The word
-`shot` already means framing (`params.shot`: wide, medium or close) and a
-media request (`{kind: "shot"}` in `src/asset_provider.js`), so the block is
-called `production`.
-
-**Writer.** The planner or the agent, in the order both paths already use:
-the direction map first, then the storyboard against it (quality RFC §6.4).
-
-**Validator.** `launchclip story validate`: the checks it runs today, the
-bible reference, and the `production` block's shape. A new `launchclip story
-shots <project>` prints the shot list (id, time, who, set, framing, lane,
-the line it plays) for a person or an agent to review. It is a view of the
-two files, and nothing reads it back.
+**Validator.** `launchclip story validate`: the checks it runs today plus
+the bible reference. A new `launchclip story shots <project> [--json]`
+prints the shot list: id, time, frames, who, set, framing, the lines spoken,
+and the poses each character takes. It is a view of the two files, for a
+person or an agent to review and for a host to plan hand-in from (§5.3).
 
 ### 4.4 The animatic: `ANIMATIC.json`
 
 The animatic is the whole story drawn by the rig at draft quality, with the
-real voice and captions. It is `launchclip finish` with every shot on the
-`rig` lane, written to `renders/animatic.mp4`.
+real voice and captions. It is `launchclip finish` on the storyboard,
+written to `renders/animatic.mp4`.
 
 ```json
 {
@@ -306,43 +327,17 @@ real voice and captions. It is `launchclip finish` with every shot on the
 ```
 
 **Writer.** `finish`. **Validator.** Its own gates. Every blocking gate must
-pass on the animatic before a single generative call is paid for. The critic
-reviews the animatic for story, staging and acting only, which are cheap to
-fix here and costly later.
+pass on the animatic. The critic reviews it for story, staging and acting
+only, which are cheap to fix here.
 
-On the code-drawn lane the animatic, rendered at delivery quality, is the
-video. Stage 6 does nothing.
+With nothing handed in, the animatic rendered at delivery quality is the
+video, and stage 6 does nothing.
 
-### 4.5 Shot production: `shots/<id>/SHOT.json`
+### 4.5 Hand-in: `HANDIN.json` and `qa/hand-in.json`
 
-```json
-{
-  "schema": "launchclip.shot.v1",
-  "shot": "s3", "lane_asked": "guided", "lane_used": "guided",
-  "provider": { "name": "comfy-local", "model": "…", "version": "…", "placement": "local" },
-  "inputs": { "hash": "…", "seed": 71, "prompt": "…",
-              "control": { "pose": "…", "line": "…", "matte": "…", "depth": "…" },
-              "sheets": ["bible/sheets/maya.png", "bible/sheets/sam.png"] },
-  "output": { "clip": "assets/shots/s3.mp4", "frames": 111, "fps": 30, "width": 1080, "height": 1920 },
-  "identity": { "status": "passed", "checks": { "palette": 0.94, "silhouette": 0.88, "judge": "same" } },
-  "attempts": [ { "seed": 70, "result": "identity-failed", "seconds": 212, "usd": 0 } ],
-  "cost_usd": 0, "seconds": 431,
-  "fallback": null
-}
-```
-
-**Writer.** The shot stage, once per shot. **Validator.** A new `conform`
-gate (the clip has exactly the animatic's frame count, rate and size) and
-the `identity` gate (§5.4). A rig shot writes a short record too, with
-`lane_used: "rig"` and no provider, so the report can list every shot the
-same way.
-
-The clip lands in `assets/shots/`, the folder the asset-provider hook
-already uses (`SHOTS_DIR` in `src/asset_provider.js`). The user's
-`storyboard.json` is not rewritten. `finish` never rewrites it today; it
-renders a resolved copy (`src/finish.js`). In that copy, a shot with a
-passing record plays its clip in the scene's window. Captions, cards, the
-brand frame and any real screen capture are still drawn in code on top.
+`HANDIN.json` is written by whoever hands art in: the user, the agent, or
+the app running LaunchClip. `qa/hand-in.json` is LaunchClip's answer: what
+was used, what was rejected and why. Both are specified in §5.
 
 ### 4.6 Sound
 
@@ -356,15 +351,17 @@ No new contract. The existing ones cover it:
 
 Two additions:
 
-- **Mouth shapes.** The rig opens and closes mouths on word timings
-  (`kit/core/characters/acting.mjs`). Kokoro already reports a duration for
-  every phoneme, which `src/voice/kokoro.js` folds into word times. Keeping
-  those phonemes in `NARRATION.json` would give the rig real mouth shapes at
-  no cost. This is the cheapest lip sync available, and it is in the first
-  slice's follow-ups (phase 8).
+- **Mouth shapes from phonemes.** The rig opens and closes mouths on word
+  timings (`kit/core/characters/acting.mjs`). Kokoro already reports a
+  duration for every phoneme, which `src/voice/kokoro.js` folds into word
+  times. Keeping those phonemes in `NARRATION.json` gives the rig real mouth
+  shapes at no cost. The recommendation is that this is enough to ship
+  (§11).
 - **Sound follows retakes.** The score is planned from the storyboard, so a
-  retake that changes a scene's cues re-plans that scene's sounds. A retake
-  that only regenerates pixels changes no sound.
+  retake that changes a scene's cues re-plans that scene's sounds.
+
+A handed-in clip's own audio is never used. The story's voice and score
+play over it.
 
 ### 4.7 Critic verdicts and retakes: `qa/critic.json`, `qa/retakes.json`
 
@@ -382,16 +379,18 @@ Changes to the review:
 - A new category, `lip-sync`, for a mouth that does not match its line.
 
 `qa/retakes.json` (`launchclip.retakes.v1`) records each round: the
-findings, the shots they name, what was tried, what it cost, and whether the
-round was kept. **A retake fixes the smallest failing shot**, by the
-cheapest step that could work:
+findings, the shots they name, what was tried, and whether the round was
+kept. **A retake fixes the smallest failing shot**, by the cheapest step
+that could work:
 
-| Step | What changes | Costs | Applies to |
-|---|---|---|---|
-| 1. Regenerate | a new seed, same inputs | one generation | guided, generative |
-| 2. Redirect | that scene's cues, framing or `describe` | a planner repair and one shot | all lanes |
-| 3. Drop a lane | that shot falls back (§6.3) | one render | guided, generative |
-| 4. Replan the beat | the scenes of one story beat | a planner call and its shots | all lanes |
+| Step | What changes | Costs |
+|---|---|---|
+| 1. Redirect | that scene's cues, framing or set | a planner repair and one scene's render |
+| 2. Drop the hand-in | that shot's handed-in art, if the finding is about it (§5.5) | one scene's render |
+| 3. Replan the beat | the scenes of one story beat | a planner call and those scenes' renders |
+
+LaunchClip cannot remake handed-in art. A finding about it is reported in
+`qa/hand-in.json` with the shot, so whoever made the art can make it again.
 
 A round that does not lower the blocking and major findings is undone, as
 today (`criticImproved`, `snapshotRound` and `restoreRound` in
@@ -399,283 +398,212 @@ today (`criticImproved`, `snapshotRound` and `restoreRound` in
 "at most three passes" in the skill). After three, the result is
 `needs-repair`, and it is reported, not delivered as finished.
 
-## 5. Render lanes and the provider interface
+## 5. One render path, and the hand-in contract
 
-### 5.1 The lanes
+### 5.1 The render path
 
-| Lane | Draws the shot | Needs | Identity | Timing |
-|---|---|---|---|---|
-| `rig` | the code-drawn kit, in either renderer | nothing beyond today's install | exact, by construction | exact |
-| `guided` | an image or video model, steered by the rig's control passes and the character sheets | an image or video model, local or hosted | checked (§5.4) | exact: the rig's frames set it |
-| `generative` | a video model, from the sheets and the shot's description | a video model | checked (§5.4) | fitted: trimmed or retimed to the shot |
+Every shot is drawn by the code-drawn kit, in either renderer. A character
+cannot drift on this path: scenes name characters by id and never carry
+parameters, and `castConsistency` checks it (`kit/core/characters/cues.mjs`).
+Timing is exact, acting follows the cues exactly, and the render is cached
+by segment (`src/render_segments.js`).
 
-`sprite-scene` is a form of the `rig` lane, not a fourth lane: an image
-model draws the art once, and code animates it. It needs only an image
-model, and it already shows one way to keep a generated character
-consistent: every picture is an edit of one anchor picture
-(`src/sprite_cast.js`). It is the cheapest step up from code-drawn art, and
-the capability check reports it separately (§6.2).
+Captions, cards, the brand frame and any real screen capture are always
+drawn in code, with or without hand-in. A set's screen plays the user's own
+capture and never an invented UI (`kit/core/characters/sets.mjs`).
 
-Inputs and outputs per lane:
+### 5.2 What can be handed in
 
-| | `rig` | `guided` | `generative` |
+| Kind | Replaces | Already in the kit | Cast still acts in code |
 |---|---|---|---|
-| In | the resolved scene, the bible | the control passes (§5.3), the rig's own render of the shot, the sheets, the style frames, `describe`, a seed | the sheets, the style frames, `describe`, the previous shot's last frame (optional), a seed |
-| Out | a render segment (`src/render_segments.js`) | a clip with the animatic's exact frame count | a clip of about the shot's length, conformed by tooling |
-| Still drawn in code | everything | captions, cards, brand frame, real screen captures | captions, cards, brand frame |
-| Acting | the cues, exactly | the cues, as far as the model follows the pose pass | whatever the model does with `describe` |
+| **Plate** | the code-drawn room or world behind the cast, for one place | a cast scene rides any track-0 plate, a photo among them ("Riding a plate" in KIT_CONTRACTS.md) | yes |
+| **Sprite cast** | how the characters are drawn, for the whole video | `sprite-scene` and its sprite folders (`kit/core/catalog-sprites.mjs`) | pose swaps, talk and blink only |
+| **Whole shot** | the picture of one shot | the `clip` module; `assets/shots/` (`SHOTS_DIR` in `src/asset_provider.js`) | no: the clip is the acting |
 
-Two rules for the generative lanes:
+Sprite casts stay their own form and are the main hand-in path for
+character art. They keep the most of what LaunchClip is good at: code still
+times the poses, the mouths and the blinks to the voice.
 
-- **A real capture is never regenerated.** A set's screen plays the user's
-  own capture and never an invented UI (`kit/core/characters/sets.mjs`). In
-  a guided shot the screen area is masked out and the real capture is
-  composited back.
-- **Text is never generated.** Captions and on-screen words stay in code,
-  where the layout and contrast checks can measure them.
+What hand-in is not: LaunchClip does not ask a model to make these assets,
+does not export control passes for a model to follow, and does not know or
+care how they were made.
 
-### 5.2 The provider interface
+### 5.3 How assets are handed in
 
-What exists to extend:
+**When.** After the animatic. By then the shots, their exact lengths, the
+poses each character takes and the lines spoken in each shot are fixed.
 
-- **Engine adapters.** Every model and provider call goes through a named
-  adapter: `llm`, `tts`, `music`, `transcribe`, `matting`, `assets`,
-  `renderer`, `notice` (`ADAPTER_KEYS` in `src/engine/adapters.js`).
-- **The asset-provider hook.** `findShot(request) → shot | null`; a missing
-  shot becomes a repair note, never a failure (`src/asset_provider.js`). An
-  app can also supply it as its own command, speaking one JSON line per
-  request (`--asset-provider-cmd`, `src/asset_provider_cmd.js`).
-- **The image adapter for sprites.** `generate({prompt, references, size})
-  → {buffer} | {file}` (`openaiImageAdapter` in `src/sprite_cast.js`).
-- **Voice and music registries**, each with a deterministic or local default
-  and a paid upgrade (`src/voice/index.js`, `src/music/index.js`).
+**What the maker needs.** `launchclip story shots <project> --json` (§4.3)
+plus the bible and its sheets is the whole brief. For each shot it gives
+the frame count, rate and size, who is in it and where, the place, the
+poses used, and the spoken lines with their word times, so a mouth can be
+matched to the voice elsewhere. `ANIMATIC.json` names each shot's rendered
+segment as a timing reference.
 
-The new adapter, `shots`, follows the same pattern:
+**The manifest.** Files go under `assets/`, and `HANDIN.json` says what
+each is for:
 
-```
-provider: {
-  name,
-  lanes: ["guided"] | ["generative"] | both,
-  placement: "local" | "remote" | "hosted",
-  capabilities() → { available, reason?, models: [...], max_seconds, sizes, control: ["pose","line","matte","depth"], paid }
-  estimate(request) → { usd, seconds }
-  submit(request, { outDir, signal }) → { job_id }
-  poll(job_id) → { status, progress?, result? }
+```json
+{
+  "schema": "launchclip.hand-in.v1",
+  "bible_hash": "sha256:…",
+  "cast": [
+    { "character": "maya", "art": "assets/cast/maya",
+      "source": { "made_with": "…", "licence": "…", "generated": true } }
+  ],
+  "places": [
+    { "place": "desk-laptop", "plate": "assets/plates/office.png",
+      "floor": 0.82, "light": { "dir": 125 }, "source": { "made_with": "…", "licence": "…" } }
+  ],
+  "shots": [
+    { "shot": "s3", "clip": "assets/shots/s3.mp4", "source_start": 0,
+      "source": { "made_with": "…", "licence": "…", "generated": true } }
+  ]
 }
-request: { id, shot, lane, describe, seed, fps, frames, width, height,
-           control: { pose?, line?, matte?, depth?, reference }   (file paths)
-           sheets: [...], style_frames: [...], previous_frame?,
-           must_keep: { <character>: [...] }, brief }
-result:  { clip: file, frames, source: { provider, model, version, licence, generated: true }, cost_usd, seconds }
 ```
 
-- `submit` and `poll` are separate so a job outlives the process. The job id
-  is saved before waiting. The language-model clients do the same thing
-  (`onSubmitted` and `resumeStructured` in `src/model_provider.js`).
-- A provider that cannot do the work returns `available: false` with a
-  reason. It never throws for a missing key.
-- **A `test` provider is built in**, as the voice registry has one. It
-  returns the rig's own render as the "generated" clip, so the whole
-  generative path runs offline and in CI with no model.
-- **A command provider** (`--shot-provider-cmd`) speaks the same JSON over
-  stdin and stdout as the asset provider's. This is how the community plugs
-  in any model, and how an agent on the skill path offers an image or video
-  tool it has, without that model's code living in this repo.
+- A sprite folder follows the existing layout: `<pose>.png`, `<pose>-talk.png`
+  and `<pose>-blink.png`, transparent, all the same size and framing
+  ("Sprite casts" in KIT_CONTRACTS.md). Pose names are the rig's pose names,
+  so the code-drawn scene and its sprite form line up.
+- A plate is per place, not per shot, so one room looks the same in every
+  shot. `floor` is where the ground sits, as a share of the height, and
+  `light` is where the light comes from, so the cast stands on the floor and
+  is lit from the right side (`params.light` on `cast-scene`).
+- A whole shot names the shot it replaces. `source_start` picks where in a
+  longer clip it begins.
+- `source` is the provenance: what made it, under what licence, and whether
+  it was generated. It is required.
 
-Selection mirrors the language model's (`selectMakeModel` in
-`src/make/models.js`): the `--shot-provider` flag, then
-`LAUNCHCLIP_SHOT_PROVIDER`, then the best available provider for the lane
-from the capability check. No provider is ever chosen silently if it costs
-money (§5.6).
+**Two ways to deliver it:**
 
-### 5.3 Control passes
+1. **Files.** Write the assets and `HANDIN.json` into the project and run
+   `launchclip finish` (or `make` again; it resumes).
+2. **The asset-provider hook.** An app already answers shot requests through
+   `findShot(request) → shot | null`, in code or as its own command speaking
+   one JSON line per request (`--asset-provider-cmd`,
+   `src/asset_provider_cmd.js`). Character shots and plates are asked for
+   through the same hook, with the fields above added to the request. `null`
+   means "draw it in code", exactly as it means "design it without a shot"
+   today.
 
-The guided lane works only if the rig can describe a shot in the forms
-image and video models take as control. The rig can do this because it is a
-tree of shapes with stable part ids and joints, and every value is a pure
-function of time (`kit/core/characters/view.mjs`; "Part ids" in
-KIT_CONTRACTS.md).
+**Stories planned for sprites from the start** keep working as they do now:
+a cast with `art` entries and `sprite-scene` scenes in the storyboard. The
+hand-in contract adds validation and the bible check to them.
 
-| Pass | What it is | How it is made |
-|---|---|---|
-| `reference` | the rig's own render of the shot, with no captions or cards | the shot's segment, with overlays off |
-| `pose` | a skeleton per character per frame, as an image sequence and as keypoints in `pose.json` | the joint pivots of each actor, read from the op list at each frame |
-| `line` | clean line art, white on black | the shot drawn in the `line` drawing style (`kit/core/characters/style-line.mjs`), with no plate |
-| `matte` | one flat colour per character; also the front furniture, the screen area and the caption band | each actor's shapes filled flat, by character id; rects the layout check already knows |
-| `depth` | near-to-far order as a grey image | layer order: the set's back layer, each character by its slot, the front layer (`kit/core/characters/sets.mjs`) |
+**How a sprite cast is applied.** A new compile step turns each code-drawn
+cast scene into its `sprite-scene` form in the resolved copy of the story:
+the same characters, sides, pose cues and spoken ranges, over the place's
+plate. The user's `storyboard.json` is not rewritten. `finish` never
+rewrites it; it renders a resolved copy (`src/finish.js`).
 
-Notes:
+### 5.4 Validation and the bible check
 
-- Passes are extra renders of the same frames with a different pen. They are
-  exact and frame-aligned, with no pose estimator or segmenter in the loop.
-- **Depth is the weak pass.** The rig is 2D, so its depth is an order of
-  layers, not distance. Whether a depth-guided model accepts it is unproven.
-  The fallback is to estimate depth from the `reference` pass with a local
-  monocular depth model. The spike measures both.
-- Passes are written to `shots/<id>/control/<pass>/`, hashed, and cached
-  with the shot.
-- Remotion renders by frame range and writes PNG stills
-  (`src/renderers/remotion_segments.js`), so passes ship on Remotion first.
-  HyperFrames' CLI has no frame range (the header of
-  `src/render_segments.js`), so on HyperFrames a pass is a whole-video
-  render, cached by the timeline's hash.
+`launchclip handin check <project> [--json]` runs both. `finish` runs the
+same code before it renders. Nothing is rendered from an asset that fails.
 
-### 5.4 Checking identity after generation
+**Validation: measured, no model.**
 
-On the rig lane a character cannot drift: scenes name characters by id and
-never carry parameters, and `castConsistency` checks it
-(`kit/core/characters/cues.mjs`). A generated shot has no parameters to
-compare, so its pixels are checked against the sheet. There are three
-layers, cheapest first, and a shot must pass all that can run:
+| Kind | Checks |
+|---|---|
+| All | the file exists, is under `assets/`, decodes, and has its `source`; the manifest's `bible_hash` is the frozen bible's |
+| Plate | fits the story's size and aspect; holds still enough and is dark or light enough for captions to read, measured as backdrop footage is today (`measureFootage` in `src/asset_provider.js`); `floor` is inside the frame |
+| Sprite cast | a sprite for every pose the storyboard uses, with its talk and blink versions; all one size; a transparent background; the figure the same height and on the same foot line in every pose; a talk or blink sprite differs from its pose only around the mouth or eyes |
+| Whole shot | the story's size and rate; at least the shot's frame count from `source_start`; not a frozen picture |
 
-1. **Measured, no model.** Inside each character's matte (known exactly on
-   the guided lane), the character's own hair, skin and clothing colours
-   are present within a tolerance (`kit/core/oklch.mjs` has the colour
-   maths). On the guided lane the generated silhouette must overlap the
-   rig's matte. This catches a wrong outfit, a wrong skin tone, a missing
-   or extra person, and a pose the model ignored.
-2. **Embedding distance (optional, local).** Crops of the character from
-   sampled frames are compared with crops from its sheet, using an image
-   embedding model run through `onnxruntime-node`, which is already a
-   dependency for matting (`src/subject/models.js`). The threshold is set
-   from fixtures, not guessed.
-3. **A vision judge.** The critic's model is shown the sheet and a strip of
-   frames, and answers a structured checklist built from `must_keep`: same
-   hair, same skin tone, same glasses, same headwear, same mobility aid,
-   same outfit, anyone extra in frame.
+**The bible check.**
 
-A failure is a retake of that shot (a new seed, at most three attempts),
-then a fallback (§6.3). The result goes in `SHOT.json` and the `identity`
-gate. When no layer can run, the gate is `not-checked` with a reason, never
-`passed`. The face gate behaves the same way with no face data (quality RFC
-§11.2).
+1. **Measured.** The character's own hair, skin and clothing colours are
+   present in its sprites (`kit/core/oklch.mjs` has the colour maths). For a
+   whole shot the same test runs over the frame, which is weaker, because
+   LaunchClip does not know where the character is in someone else's clip.
+2. **A vision judge.** The critic's model is shown the character's sheet
+   beside the sprites or a strip of the clip's frames, and answers a
+   structured checklist built from `must_keep`: same hair, same skin tone,
+   same glasses, same headwear, same mobility aid, same outfit, anyone
+   extra in frame. For a plate: it is the bible's place, nobody is in it,
+   and it has no lettering baked in.
 
-Two honest limits:
+Results go to `qa/hand-in.json` and a `hand-in` gate:
 
-- **Passing this check does not prove the character reads as the same
-  person to a viewer.** It catches gross failures. The critic's
-  `character-consistency` category and the human review remain the real
-  test.
+```json
+{ "schema": "launchclip.hand-in-report.v1",
+  "look": "code-drawn",
+  "assets": [
+    { "kind": "sprite-cast", "character": "sam", "status": "rejected",
+      "reason": "no sprite for pose \"lean-in\"; the story uses it in s4" },
+    { "kind": "plate", "place": "desk-laptop", "status": "used" } ] }
+```
+
+Three honest limits:
+
+- **Passing the check does not prove a character reads as the same person
+  to a viewer.** It catches gross failures. The critic's
+  `character-consistency` category and human review remain the real test.
+- **Without a vision model the judge cannot run.** The measured checks still
+  do. The asset is used, the judge is recorded as `not-checked` with a
+  reason, never as `passed`, and the video is `ready-for-review`. The face
+  gate behaves the same way with no face data (quality RFC §11.2).
 - **`must_keep` protects what must not be erased.** The generated casts
   include faith headwear, mobility aids and the whole range of skin tones on
-  purpose (`kit/core/characters/generate.mjs`). A model that drops a
-  headscarf or lightens a skin tone fails the check. This is a hard rule
-  and no retake budget overrides it.
+  purpose (`kit/core/characters/generate.mjs`). Art that drops a headscarf
+  or lightens a skin tone is rejected, with no override.
 
-### 5.5 Caching and resume per shot
+### 5.5 Fallback, and one look per video
 
-A shot's hash covers everything that can change its pixels:
+- **A missing or rejected asset falls back to the code-drawn version.** The
+  storyboard already describes it and the animatic already rendered it, so
+  the fallback costs one render and no planning.
+- **A video has one look.** A Short that cuts between two ways of drawing
+  the same person looks broken. So:
+  - a sprite cast is used only when every character in the story has one
+    that passes; otherwise every character is drawn by the rig;
+  - whole shots are used only when every character shot has one that
+    passes; otherwise every shot is code-drawn;
+  - a place uses its plate in every shot or in none.
+  `--look mixed` allows per-shot fallback for people who want it.
+- **The report names the look and every asset's fate**, and `handin check`
+  exits non-zero when anything was rejected, so a host can decide whether
+  to remake the art or accept the code-drawn video.
+- **Caching.** A handed-in file's content hash joins the hash of the
+  segments that show it, as every referenced asset's does already
+  (`src/render_segments.js`). Replacing one sprite re-renders the scenes
+  that use that character. Editing a caption re-renders nothing handed in.
 
-- the bible entries of the characters in it, and the style frames;
-- the scene's segment hash (`kit/core/render-segments.mjs`), which already
-  covers the scene, its window, its assets and the kit's sources;
-- the control passes;
-- the lane, provider, model, model version and seed;
-- `describe` and the prompt built from it.
+### 5.6 What is unproven
 
-Clips are cached by that hash under `.launchclip/shots/<provider>/<hash>/`,
-as render segments are under `.launchclip/finish/segments/<renderer>/`
-(`src/render_segments.js`). Consequences:
-
-- Editing one shot regenerates one shot.
-- Editing a caption or a card regenerates nothing, because those are drawn
-  in code on top.
-- A crash during a hosted job resumes by polling the saved job id. It does
-  not pay twice.
-- A rerun after a failure starts at the first shot without a passing record.
-
-Writes go to a temporary name, then a rename, the rule the shared caches
-already follow (COLLECTIONS_RFC.md §5.4).
-
-### 5.6 Cost and time budgets
-
-- **Estimate first.** The shot stage sums `estimate()` over the shots and
-  prints it before any paid call. `--dry-run` stops there. `launchclip cast
-  sprites --dry-run` works this way today (`spriteCastCost` in
-  `src/sprite_cast.js`).
-- **One cap.** Shot costs join the same tracker as model calls, under the
-  existing limit: `--max-cost-usd` or `LAUNCHCLIP_MAX_COST_USD`, default $50
-  (`src/cost_tracker.js`). A lower cap for shots alone, `--max-shot-usd`,
-  defaults to $0: **nothing paid is generated unless the user sets it.**
-- **Every paid call is announced**, as `make` announces its model calls.
-- **Attempts are capped**: three per shot, then the fallback.
-- **Time.** Each provider reports seconds per shot. The stage prints an
-  estimate and, when a deadline is set (`--max-shot-minutes`), stops
-  starting new generations and sends the remaining shots down a lane.
-
-No figures are given here for the generative lanes, because none have been
-measured in this repo. The only measured number is the rig lane's: `finish`
-takes 4–5 minutes for 45 seconds on a CPU worker (LONG_FORM_MAKE_RFC.md §1).
-Phase 9 measures the rest and records them in `benchmarks/`, and quotes must
-come from that file.
-
-### 5.7 Model options (examples only)
-
-These are examples of what could sit behind the interface. None is chosen,
-and the field moves faster than this document. The spike picks from
-whatever is strongest when it runs.
-
-| Role | Local | Hosted |
-|---|---|---|
-| Guided video from pose, line and depth | an open video model with control inputs (the Wan family with VACE; AnimateDiff with ControlNet), run through ComfyUI | Runway's reference and performance tools, Kling, Luma |
-| Key frames from a rig still and a sheet | an open image-editing model (FLUX Kontext, Qwen-Image-Edit) with a reference adapter | `gpt-image-1` (already used for sprites), Gemini's image model |
-| Video from a sheet and a description | Wan, LTX-Video | Veo, Sora, Kling, Runway |
-| In-between frames for key-frame shots | RIFE, FILM | n/a |
-| Lip sync on a finished clip | MuseTalk, LatentSync, Wav2Lip | Sync, Hedra |
-| Depth from a still | Depth Anything | n/a |
-
-Aggregators such as fal and Replicate can front most of the hosted column
-with one key. Licences vary by model and by weight file; a model is added
-only after its licence is checked, the rule the matting models already
-follow (`src/subject/models.js`).
-
-### 5.8 What is unproven
-
-Said plainly, so nobody plans around it:
-
-- **Shot-to-shot consistency.** No test in this repo shows a generated
-  character holding its identity across the six to twelve shots of a Short,
-  let alone across episodes. Reference images help. Control passes help
-  with pose and layout but not with faces. It may need per-character
-  fine-tuning, which is a non-goal for now (§12).
-- **Lip sync.** The rig flaps mouths on word timings. That is not lip sync
-  and the code says so (`kit/core/characters/acting.mjs`). On generated
-  shots, mouths either follow the pose pass loosely or need a lip-sync model
-  run over the clip, and those models are trained mostly on real faces.
-  Whether they work on drawn characters is unknown.
-- **Style match.** A generated shot must look like the bible's style frames.
-  Nothing measures that today for generated footage. The style gate
-  measures palette and layout mix (`src/style_adherence.js`), which is a
-  start.
-- **Temporal stability**: flicker, hands, and props that change between
-  frames.
-- **Running any of this on a Mac in acceptable time.**
-
-The plan answers these with a spike before building (phase 9). If the spike
-shows the guided lane is not better than the rig lane, the generative
-phases stop there and the rig lane keeps improving.
+- **Lip sync on a handed-in whole shot.** LaunchClip gives the maker the
+  word times and checks nothing about the result beyond the critic's eye.
+- **Acting in sprite form.** `sprite-scene` swaps poses; it does not turn a
+  head toward a target or walk a character across a floor. The acting gate
+  can check that a pose happened, not that it reads. Stories that lean on
+  looks and walks will be weaker in sprite form.
+- **Standing drawn characters on a painted plate.** `floor` and `light` are
+  two numbers. Whether that is enough for the cast to look like it belongs
+  in the picture needs a prototype (phase 10).
+- **The measured colour check on whole shots.** It may reject good art or
+  pass bad art. Its thresholds must come from fixtures, not guesses.
 
 ## 6. Two routes, one set of contracts
 
 ### 6.1 Who plays each role
 
-| Stage | Skill path: the agent | `make`: the stage and what it calls |
-|---|---|---|
-| Capability check | runs `launchclip doctor --lanes --json` and tells the user which lanes are live | `stageModel`, then a new `stageCapabilities` (`src/capabilities.js`) |
-| Writers' room | writes the premise; judges loglines in a fresh context; writes `SCREENPLAY.json`; runs `launchclip screenplay check` | new `prepareAnimation` in `stagePrepare`: three structured calls and one repair pass, on the client from `createMakeClient` |
-| Show bible | picks or creates characters (`launchclip cast create`), writes `BIBLE.json`, runs `launchclip bible freeze`, looks at the sheets | new `stageBible`: one structured call for cast and world choices, then tooling |
-| Voice | `launchclip voice <project>` | `synthesizeNarration` through the dialogue module, as today |
-| Shot list | writes `DIRECTION.json`, then `storyboard.json`; `launchclip story validate`; `launchclip story shots` | `stageStoryboard`: `planDirection`, then `planStoryboard`, with the bible pinned (`src/storyboard_planner.js`) |
-| Animatic | `launchclip finish <project> --animatic`; reviews it | new `stageAnimatic`: `runFinish` at draft quality, then the critic on staging |
-| Shot production | `launchclip shots <project> [--scene <id>]`; reviews each record | new `stageShots` (`src/shots/`) |
-| Sound and conform | `launchclip finish <project>` | `stageFinish`, unchanged |
-| Critic and retakes | a fresh-context critic writes `qa/critic.json`; the agent repairs the smallest shot, three passes at most; `launchclip cinematic-check` | `stageCritic` and `criticRepairs`, with the retake ladder of §4.7 |
+| Stage | Role | Skill path: the agent | `make`: the stage and what it calls |
+|---|---|---|---|
+| Model check | | runs `launchclip doctor --models --json` | `stageModel` (`src/make/index.js`) |
+| Writers' room | writer | writes the premise; judges loglines in a fresh context; writes `SCRIPT.json`; runs `launchclip script check` | new `prepareAnimation` in `stagePrepare`: three structured calls and one repair pass, on the client from `createMakeClient` |
+| Show bible | cast and world designer | designs characters with `launchclip cast create` / `cast edit`; writes `BIBLE.json`; runs `launchclip bible freeze`; looks at the sheets | new `stageBible`: one structured call for cast and world, then tooling |
+| Voice | | `launchclip voice <project>` | `synthesizeNarration` through the dialogue module, as today |
+| Shot list | director | writes `DIRECTION.json`, then `storyboard.json`; `launchclip story validate`; `launchclip story shots` | `stageStoryboard`: `planDirection`, then `planStoryboard`, with the bible pinned (`src/storyboard_planner.js`) |
+| Animatic | critic (staging) | `launchclip finish <project> --animatic`; reviews it | new `stageAnimatic`: `runFinish` at draft quality, then the critic on staging |
+| Hand-in | critic (judge) | `launchclip handin check <project>` | the asset-provider hook, then the same check, inside `stageFinish` |
+| Sound and finish | | `launchclip finish <project>` | `stageFinish`, unchanged |
+| Critic and retakes | critic | a fresh-context critic writes `qa/critic.json`; the agent repairs the smallest shot, three passes at most; `launchclip cinematic-check` | `stageCritic` and `criticRepairs`, with the retake steps of §4.7 |
 
 Today's `make` stages are `model`, `inventory`, `demo`, `route`, `prepare`,
 `storyboard`, `subject`, `finish` and `critic` (`runMake` in
-`src/make/index.js`). The animation path adds `capabilities`, `bible`,
-`animatic` and `shots`, and skips `demo` and `subject` unless assets call
-for them.
+`src/make/index.js`). The animation path adds `bible` and `animatic`, and
+skips `demo` and `subject` unless assets call for them.
 
 **Routing.** Animation is not a new lane. It is the `motion` lane with a
 cast, which is how the `story-characters` profile already matches
@@ -689,39 +617,35 @@ reason, as it does for every route.
 **The skill stays the reference.** The agent directs and judges with its
 own model, and LaunchClip's metered stages are not run (the cost boundary
 in `skills/launchclip-create-video/references/workflow.md`). Every command
-in the skill column is local tooling with no model call, except shot
-production on a paid provider, which needs the user's opt-in like any paid
-provider today.
+in the skill column is local tooling with no model call. The character
+design skill that shipped with saved characters
+(`skills/launchclip-character-design/`) is the designer's reference.
 
 **One source for prompts and vocabulary.** The beat names, intents, poses,
 actions and sets both paths may use come from the kit (`NARRATIVE_BEATS`,
 `ACTION_VERBS`, `kitCapabilities()`). The skills' references are generated
 from the same registry and checked for drift (`npm run skills:check`). The
-screenplay and bible references are generated the same way.
+script and bible references are generated the same way.
 
-### 6.2 The capability check
+### 6.2 The model check
 
-`launchclip doctor --lanes [--json]` answers: on this machine, with these
-keys, what can draw a shot?
+`launchclip doctor --models [--json]` answers: with these keys and this
+machine, which roles can a model play?
 
 ```json
 {
-  "schema": "launchclip.capabilities.v1",
-  "language": { "available": true, "source": "OPENAI_API_KEY", "vision": true },
-  "image": { "available": true, "providers": ["openai"] },
-  "video": { "available": false, "reason": "no video provider is configured and no local runtime was found" },
-  "machine": { "cores": 10, "ram_gb": 24, "gpu": { "name": "Apple M-series", "memory": "unified" } },
-  "lanes": {
-    "rig": { "available": true },
-    "sprite": { "available": true, "paid": true },
-    "guided": { "available": false, "reason": "needs a video or image provider with control inputs" },
-    "generative": { "available": false, "reason": "needs a video provider" }
-  },
-  "fallback_order": ["rig"]
+  "schema": "launchclip.model-access.v1",
+  "text": { "available": true, "source": "ANTHROPIC_API_KEY", "provider": "anthropic", "local": false },
+  "vision": { "available": false, "reason": "the Anthropic adapter sends text only" },
+  "roles": {
+    "writer": "available", "designer": "available", "director": "available",
+    "critic": "pending: no vision model", "hand-in judge": "pending: no vision model"
+  }
 }
 ```
 
-It extends what the code already detects:
+It reports model access, text and vision. It does not report generation,
+because LaunchClip does none. It extends what the code already detects:
 
 - **Keys** come from the environment and `.env` files only (`loadCliEnv` in
   `src/env.js`). `doctor` already reports `OPENAI_API_KEY`,
@@ -729,129 +653,76 @@ It extends what the code already detects:
   language-model routes also read `OPENROUTER_API_KEY`,
   `OPENAI_COMPATIBLE_API_KEY` with its base URL, and `OLLAMA_BASE_URL`
   (`src/model_provider.js`).
-- **Vision** is known per client: `createMakeClient` returns `vision`, and
-  it is false for the Anthropic adapter, which sends text only, and for
-  Ollama (`src/make/models.js`, `src/model_provider.js`). So with only an
-  Anthropic key, `make` has no critic today. That gap matters more for
-  animation, and §11 asks what to do about it.
-- **Local models** are detected two ways: a local Ollama by its address
-  (`OllamaStructuredClient`), and ONNX weights by file and checksum under
-  `$LAUNCHCLIP_HOME/models` (`modelStatus` in `src/subject/models.js`).
-  A local shot runtime is detected the same two ways: an address that
-  answers, or weights on disk.
-- **The machine** comes from `measureMachine` and `detectGpu`
-  (`src/capacity.js`).
-- **Shot providers** are asked directly: each registered provider's
-  `capabilities()`.
+- **Vision** is known per client: `createMakeClient` returns `vision`. It is
+  false for the Anthropic adapter and for Ollama, whose client builds its
+  messages without images (`src/make/models.js`, `src/model_provider.js`).
+- **A local model** is an Ollama address that answers
+  (`OllamaStructuredClient` in `src/model_provider.js`).
 
-The check never downloads anything and never makes a paid call. `doctor`
-already holds to that for the matting model (`subjectStatus` in
-`src/doctor.js`).
+The check makes no paid call. On the skill path the agent is the text and
+vision model, so `--agent` reports every role as the agent's.
 
-**Most subscriptions give a language model and a vision model, and no video
-model.** On the skill path the agent is the language and vision model, so
-`language` reads `"source": "agent"` when the check is run with `--agent`.
-The `rig` lane is then fully available, and the others depend on keys and
-local runtimes exactly as in `make`.
+**Vision for the Anthropic adapter.** The recommendation is to add image
+input to the existing Anthropic planner client
+(`AnthropicPlannerClient` in `src/storyboard_planner.js`), so one Anthropic
+key gives the critic and the hand-in judge, and no second key is needed.
 
-`make` writes the result into `MAKE.json` as `lanes`, so an app can show
-what a run will use before it starts.
+`make` writes the result into `MAKE.json` as `model_access`, so an app can
+show what a run will and will not check before it starts.
 
-### 6.3 Fallback order
+### 6.3 Stopping for approval
 
-For each shot: the lane asked for, then `guided`, then `rig`. `rig` is
-always available.
+The bible and the animatic are the two cheap places to change your mind:
+before any shot is planned, and before the delivery render.
 
-- A lane that is not available is skipped before any work, with one line
-  saying so.
-- A shot that fails its attempts falls to the next lane. Its `SHOT.json`
-  records `fallback: {from, reason}`.
-- **A video is one look by default.** A Short that cuts between generated
-  and code-drawn shots looks broken. So the default policy is `uniform`:
-  when more than a set share of shots fall back, the whole video drops to
-  the lower lane. The animatic already exists, so this costs nothing extra.
-  `--lane-policy mixed` allows per-shot fallback for people who want it.
-  The share is an open question (§11).
-- The pipeline never fails for want of a lane. The beat director holds the
-  same line for long form: it is the fallback that keeps a video from
-  failing (MAKE_SKILL_PARITY.md).
+- **Attended** (a terminal): `make` stops after each, shows what to look at
+  (the sheets; the animatic), and asks. The demo stage already works this
+  way: a yes on a TTY, or a flag (`src/make/demo.js`).
+- **Headless**: `make` continues on the critic's word. `--stop-after bible`
+  or `--stop-after animatic` makes it stop instead, with status
+  `awaiting-approval` and the review as the next step. Running again with
+  `--approve bible` (or `animatic`) resumes from there; every earlier stage
+  is reused.
+- **The skill path**: the agent shows the user the sheets and the animatic
+  at the same two points.
 
-## 7. Local-first operation
+## 7. Running locally and from a host
 
-### 7.1 What runs on a Mac
+**Everything in this pipeline runs on one machine.** Planning can run on a
+local model through Ollama. Voice is Kokoro, local. Rendering, sound, the
+mix, the master and every gate need no model. The one gap is the critic and
+the hand-in judge, which need a vision model: with none, those gates are
+`pending` with a reason and the video is `ready-for-review`, as `make`
+reports today (`criticPending` in `src/make/index.js`).
 
-| Work | On a Mac today | Notes |
-|---|---|---|
-| Planning (screenplay, bible, direction, storyboard) | yes, with Ollama | takes a `local-model` slot (`src/model_provider.js`); quality on small models is the storyboard RFC's "structured tier" question |
-| Voice | yes | Kokoro, local, about 1–2× real time on CPU (LONG_FORM_MAKE_RFC.md §5.1) |
-| Rig render, control passes | yes | Chromium frames; a `render` slot |
-| Sound score, mix, master, gates | yes | no model |
-| Critic and identity judge | not yet | the Ollama client sends no images (`OllamaStructuredClient` builds its messages without them); a local vision critic is new work |
-| Identity: colour, silhouette, embedding | yes | no model, or a small ONNX model |
-| Guided and generative shots | unproven | unified memory helps; time per shot is unmeasured |
+Nothing new is added for scale. Running many videos, queues across
+machines, servers and job APIs are the host application's work.
 
-So the first slice runs fully locally except the critic. With no vision
-model, the critic gate is `pending` with a reason and the video is
-`ready-for-review`, exactly as `make` reports today (`criticPending` in
-`src/make/index.js`).
+**What a host relies on, all of it existing unless marked new:**
 
-### 7.2 Offload by capacity
+| Need | How |
+|---|---|
+| Start a run | `launchclip make "<prompt>" --out <dir> --json`, or `createEngine()` from `@launchclip/engine` with its own adapters (`src/engine/index.js`) |
+| Use its own models | the `llm` adapter, or `--model provider:model`; `compatible:` routes reach any OpenAI-compatible endpoint (`src/model_provider.js`) |
+| Follow progress | one `launchclip:progress {…}` line per event on stderr (`src/progress.js`) |
+| Read the result | `MAKE.json`: status, stages, gates, costs, next steps (`src/make/index.js`) |
+| Hand art in | `HANDIN.json` and files, or the asset-provider hook (§5.3) (new) |
+| Know what was used | `qa/hand-in.json` (new) |
+| Resume | run the same command again; every stage reuses what has not changed |
+| Run in a container | CPU only, no GPU, no network needed for rendering; cgroup CPU and memory limits are respected (`src/capacity.js`); `npm run smoke:container` proves it ([CONTAINER_SMOKE.md](CONTAINER_SMOKE.md)) |
 
-Each shot job has a placement, chosen in this order:
-
-1. **Local**, when a local provider reports the lane available and its
-   estimate fits the deadline.
-2. **The user's own remote node**, when one is configured: another machine
-   running LaunchClip, usually one with a bigger GPU.
-3. **A hosted provider**, when a key is set and the paid cap allows it.
-4. **The next lane down** (§6.3).
-
-Sending work off the machine sends the sheets, the control passes and the
-shot description with it. Placement 3 is therefore opt-in and announced,
-and the report lists what left the machine.
-
-The remote node is the north star's "content node": the same engine, the
-same contracts, reached over the network, so a phone or a laptop can point
-at either. Its protocol is not designed here (§11). The provider interface
-is shaped so a remote node is just another provider with `placement:
-"remote"`.
-
-### 7.3 The job queue
-
-Two existing pieces, used as they are:
-
-- **The machine queue** (`src/queue.js`): one per machine, shared by every
-  `launchclip` process. A job takes a slot by holding a lock file, and a
-  job that cannot get one waits and says so. Slot kinds are `plan`,
-  `local-model`, `render` and `io`, sized from cores and RAM
-  (`SLOT_KINDS` and `recommendSlots` in `src/capacity.js`).
-- **The project job store** (`src/job_store.js`, `launchclip.jobs.v1`):
-  jobs with dependencies and the states `pending`, `submitted`, `running`,
-  `succeeded`, `failed`, `stale` and `awaiting_approval`, plus a `remote`
-  record for work running elsewhere.
-
-What this RFC adds:
-
-- **A `generate` slot kind** for local shot generation. It is sized from
-  GPU memory, defaults to 1, and can be overridden like the others
-  (`LAUNCHCLIP_SLOTS=generate:2`). Local generation and a local language
-  model compete for the same memory, so on a small machine `generate` and
-  `local-model` share one slot.
-- **One job per shot** in the job store, depending on the bible and the
-  animatic. A hosted or remote job is `submitted` with its remote id, so a
-  restart polls it. A bible change marks its shots `stale`.
-- **Hosted jobs take a `plan` slot** (network-bound), not a `generate`
-  slot, so a Mac can wait on eight hosted shots while it renders.
-- **Progress lines name the shot** (`shot 4/9: guided, attempt 2`), as long
-  form names the chapter, so an app can show real progress
-  (`src/progress.js`).
+**Exit codes.** Today `make` exits 1 only when a stage fails; `needs-repair`
+and `ready-for-review` exit 0 and the host must read `MAKE.json`
+(`src/cli.js`). The proposal is an opt-in `--exit-status`: 0 `ready`, 1
+`failed`, 2 `needs-repair`, 3 `awaiting-approval`, 4 `ready-for-review`.
+Without the flag nothing changes, so no existing caller breaks. `handin
+check` and `script check` exit 0 when clean and 1 when anything fails.
 
 ## 8. Gates and measurement
 
 ### 8.1 Gates that already cover character stories
 
-These run in `finish` today (`src/finish.js`) and apply unchanged to the
-animatic and to any rig shot:
+These run in `finish` today (`src/finish.js`):
 
 | Gate | Checks | Source |
 |---|---|---|
@@ -872,24 +743,18 @@ already holds `character_screen_time`, `expression_changes_per_min` and
 
 - measure it from a real reference set with `launchclip profile measure`,
   under the provenance rules of the quality RFC (§5.4);
-- add what dialogue needs: speaker turns per minute, seconds per line,
-  the share of time on a listener's reaction, and the longest stretch on
-  one framing;
+- add what dialogue needs: speaker turns per minute, seconds per line, the
+  share of time on a listener's reaction, and the longest stretch on one
+  framing;
 - a 9:16 Shorts variant, since character Shorts cut faster than a
   three-minute story.
 
-**Layout.** The layout check works from the modules' own rectangles, which
-a generated shot does not have. Two cases:
-
-- *Guided.* The rig's rectangles still describe the shot, because the model
-  was steered by them. The silhouette check in §5.4 confirms the model
-  stayed inside them. Layout results then carry over from the animatic.
-- *Generative.* The shot is treated as footage. The footage lane already
-  tracks faces and keeps cards and captions off them (`src/face_clear_fit.js`,
-  the `face` gate in `src/quality_gates.js`), and `finish` measures caption
-  legibility on the rendered frames. Whether the face tracker finds drawn
-  faces is unproven. Where it cannot, the gate is `not-checked` with a
-  reason.
+**Layout.** Code-drawn and sprite shots keep the layout check as it is: the
+modules know their rectangles. A handed-in whole shot has none, so it is
+treated as footage: `finish` already measures caption legibility on the
+rendered frames and plates the lines that do not read. Whether the footage
+lane's face tracking finds drawn faces is unproven; where it cannot, the
+gate is `not-checked` with a reason.
 
 **Critic.** The same rubric and receipts, with the reference sheets beside
 the frames, and the `acting`, `character-consistency` and `lip-sync`
@@ -898,26 +763,22 @@ story, staging and acting.
 
 **New gates.**
 
-| Gate | Fails when | Applies to |
-|---|---|---|
-| `screenplay` | a speaker is unknown; a character never speaks or acts; the script is over its length; the problem lands late | all |
-| `bible` | the story's cast differs from the frozen bible; a sheet is missing; the hash is wrong | all |
-| `conform` | a produced clip differs from the animatic in frames, rate or size | guided, generative |
-| `identity` | a character fails its sheet check (§5.4) | guided, generative |
-| `continuity` | adjacent shots in one place disagree on who is where, or their colours drift apart | guided, generative |
-| `lip-sync` | mouth movement inside a speaker's matte does not follow the speech; `not-checked` where it cannot be measured | all |
-| `provenance` | a generated clip has no record of provider, model, version, seed and licence | guided, generative |
+| Gate | Fails when |
+|---|---|
+| `script` | a speaker is unknown; a character never speaks or acts; the script is over its length; the problem lands late |
+| `bible` | the story's cast differs from the frozen bible; a sheet is missing; the hash is wrong |
+| `hand-in` | an asset in use fails validation or the bible check; an asset has no provenance; the video mixes looks without `--look mixed` |
+| `lip-sync` | a rig or sprite mouth is open with no speech under it, or closed through a spoken line; `not-checked` for a handed-in whole shot |
 
-Every gate reads only the project and calls no model, except the identity
-judge, which is recorded as a paid call when it is one. Repairs fix the
-shot and never the gate.
+Every gate reads only the project and calls no model, except the hand-in
+judge. Repairs fix the shot and never the gate.
 
 ### 8.3 Measuring parity for animation
 
 The method is MAKE_SKILL_PARITY.md's: a fixed set of briefs through both
 paths, compared from the files they leave.
 
-**Briefs.** Six, each a 30–45 second 9:16 Short on the `rig` lane:
+**Briefs.** Six, each a 30–45 second 9:16 Short:
 
 1. two characters, a problem and a fix (a product story);
 2. `pov`: one character caught in the viewer's situation;
@@ -928,10 +789,11 @@ paths, compared from the files they leave.
 
 **Metrics, per video:**
 
-- contracts: each of the files in §4 validates, and how many repair passes
-  it took;
+- contracts: each file in §4 validates, and how many repair passes it took;
 - story: lines per character, the share of silent lines, when the problem
   lands;
+- design: distinct characters, and whether each role's `must_keep` list
+  differs from the others';
 - direction: actions per minute, distinct poses and expressions used, the
   share of lines played on a reaction, framings used;
 - cadence: every measure in the profile;
@@ -948,85 +810,99 @@ gates pass, and the critic's verdict is no worse.
 - A contract test, modelled on `test/direction_paths.test.js` and
   `test/subject_paths.test.js`: one fixture goes through headless planning
   with recorded model responses and through the skill's documented steps,
-  and both must produce a valid screenplay, a frozen bible and a direction
-  map that use the same vocabulary.
+  and both must produce a valid script, a frozen bible and a direction map
+  that use the same vocabulary.
 - The format scorecard (`npm run eval:formats`, `eval/formats.mjs`) gains
   the animation briefs.
 
-The generative lanes are measured separately, by shot: identity pass rate
-on the first attempt, attempts per shot, fallbacks, seconds and dollars per
-finished second. Those numbers decide whether a lane is worth its cost.
+Hand-in is the same on both routes by construction: one check, one report.
+Its own test set is fixtures of good and deliberately wrong art (§9, phase
+9).
 
 ## 9. Delivery plan
 
 Small PRs, each green on its own, stacked in order. Phases 1–8 are the
-vertical slice: **one prompt to a 30-second Short with two characters on
-the code-drawn lane, with the critic loop.** Phases 9–15 add the guided
-lane behind the provider interface. Phase 16 is everything after.
+vertical slice: **one prompt to a 30-second Short with two characters,
+drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
+12–13 are series bibles and longer forms.
 
 ### The vertical slice
 
-**Phase 1. The screenplay contract.**
-- Scope: the schema, validation, and the conversion to
-  `audio.narration.lines`. `launchclip screenplay check <project>`.
-- Files: `kit/core/screenplay.mjs` (new), `src/screenplay_cli.js` (new),
-  `src/cli.js`, `src/cli_usage.js`, `test/screenplay.test.js`,
-  `docs/KIT_CONTRACTS.md`.
-- Done when: a hand-written two-character screenplay validates; each rule in
-  §4.1 has a failing fixture; `launchclip voice` voices the derived lines in
-  two voices with speakers on every word.
+**Phase 1. The script contract.**
+- Scope: `SCRIPT.json` v2 with speakers and silent lines, a reader that
+  takes v1 as all-narrator, validation, the conversion to
+  `audio.narration.lines`, `launchclip script check <project>`.
+- Files: `kit/core/screenplay.mjs` (new), `src/make/script.js`
+  (`SCRIPT_VERSION`), `src/script_check.js`, `src/script_check_cli.js`,
+  `src/cli_usage.js`, `test/screenplay.test.js`, `docs/KIT_CONTRACTS.md`.
+- Done when: a hand-written two-character script validates; each rule in
+  §4.1 has a failing fixture; a v1 script still reads; `launchclip voice`
+  voices the derived lines in three voices with a speaker on every word.
 
 **Phase 2. The show bible.**
 - Scope: the schema, validation, `launchclip bible freeze | show`, a sheet
   per character, `must_keep` derived from rig parameters, the `bible` key on
   the story and the direction map, the `bible` gate.
-- Files: `kit/core/bible.mjs` (new), `src/bible.js` (new), `src/cast.js`
-  (per-character sheets), `kit/core/story.mjs` (`TOP_LEVEL`,
-  `STORY_REVISION`), `kit/core/direction.mjs`, `src/finish.js`,
-  `test/bible.test.js`.
-- Done when: freezing a bible writes sheets and a hash; a story whose cast
-  differs from its bible fails the gate; an old story with no bible still
-  validates.
-- Depends on the saved character file from the cast-designer work. Until it
-  lands, the bible takes starter and generated characters only.
+- Files: `kit/core/bible.mjs` (new), `src/bible.js` (new),
+  `src/cast_design.js` (the sheet), `src/character_store.js`,
+  `kit/core/story.mjs` (`TOP_LEVEL`, `STORY_REVISION`),
+  `kit/core/direction.mjs`, `src/finish.js`, `test/bible.test.js`.
+- Done when: freezing a bible from two saved characters writes sheets and a
+  hash; a story whose cast differs from its bible fails the gate; a story
+  with no bible still validates.
 
 **Phase 3. Shot fields.**
-- Scope: the `production` block, `line` on map lines, the "speaker is on
-  screen" rule, `launchclip story shots`.
-- Files: `kit/core/story.mjs`, `kit/core/module-schemas.mjs`,
-  `kit/core/direction.mjs`, `src/story_cli.js`, `test/direction.test.js`,
-  `examples/story/` (a two-character dialogue example).
+- Scope: `line` on map lines, the "speaker is on screen" rule, `launchclip
+  story shots [--json]`.
+- Files: `kit/core/direction.mjs`, `src/story_cli.js`,
+  `test/direction.test.js`, `examples/story/` (a two-character dialogue
+  example).
 - Done when: the example validates and renders in both renderers within
-  parity; `story shots` lists its shots; a line spoken off screen with no
-  `why` fails.
+  parity; `story shots` lists its shots with frames, poses and lines; a line
+  spoken off screen with no `why` fails.
 
-**Phase 4. Writers' room in `make`.**
+**Phase 4. The model check and vision for Anthropic.**
+- Scope: `doctor --models`, `model_access` in `MAKE.json`, image input on
+  the Anthropic client.
+- Files: `src/doctor.js`, `src/make/models.js`,
+  `src/storyboard_planner.js` (`AnthropicPlannerClient`), `src/make/index.js`
+  (`stageModel`), `test/model_access.test.js`.
+- Done when: the check is right for each combination of keys in the tests
+  and makes no paid call; with only an Anthropic key, `make --critic`
+  writes `qa/critic.json`.
+- Independent of phases 1–3; it also helps every other kind of video.
+
+**Phase 5. Writers' room in `make`.**
 - Scope: `format: "animation"` in routing, `--animation`, and the three
-  writing calls with one repair pass. Stops after the screenplay and voice.
+  writing calls with one repair pass. Stops after the script and voice.
 - Files: `src/make/routing.js`, `src/make/options.js`,
   `src/make/animation.js` (new), `src/make/index.js` (`stagePrepare`),
   `test/make_animation.test.js`.
 - Done when: with recorded model responses, `make "<prompt>" --animation`
-  writes a valid `SCREENPLAY.json` and a `NARRATION.json` with two speakers,
-  and a rerun reuses both.
+  writes a valid `SCRIPT.json` and a `NARRATION.json` with a narrator and
+  two characters, and a rerun reuses both.
 
-**Phase 5. Bible and planning in `make`.**
-- Scope: `stageBible`, then the existing direction and storyboard planning
-  with the bible pinned and the screenplay in the brief.
+**Phase 6. Bible and planning in `make`.**
+- Scope: `stageBible` (the model designs the cast through the `cast create`
+  set paths and picks the world), then the existing direction and
+  storyboard planning with the bible pinned and the script in the brief;
+  `--stop-after bible` and `--approve`.
 - Files: `src/make/index.js`, `src/make/animation.js`,
   `src/storyboard_planner.js` (the brief, the pinned cast), `src/cast_fit.js`
-  (never rename a bible's cast).
+  (never rename a bible's cast), `src/make/options.js`.
 - Done when: the fixture plans a storyboard that passes `story validate`,
-  the `cast` gate and the `bible` gate, and a replan cannot change who is in
-  the story.
+  the `cast` gate and the `bible` gate; a replan cannot change who is in
+  the story; a headless run with `--stop-after bible` ends
+  `awaiting-approval` and resumes with `--approve bible`.
 
-**Phase 6. The animatic and the critic loop.**
+**Phase 7. The animatic and the critic loop.**
 - Scope: `finish --animatic`, `ANIMATIC.json`, the staging review, the
   sheets in the critic's evidence, the new finding categories,
-  `qa/retakes.json`, and retake steps 2 and 4 from §4.7.
+  `qa/retakes.json`, retake steps 1 and 3 of §4.7, `--stop-after animatic`,
+  `--exit-status`.
 - Files: `src/finish.js`, `src/make/index.js` (`stageAnimatic`,
   `criticRepairs`), `src/make/critic.js`, `src/make/critic_repair.js`,
-  `skills-src/references/cinematic-production.md`,
+  `src/cli.js`, `skills-src/references/cinematic-production.md`,
   `test/make_critic_repairs.test.js`.
 - Done when: one prompt produces a 30-second Short with two characters and
   dialogue; the report is `ready` on a `ship` verdict or `needs-repair`
@@ -1034,194 +910,179 @@ lane behind the provider interface. Phase 16 is everything after.
   only that shot.
 - **This is the end-to-end slice.**
 
-**Phase 7. The skill path.**
-- Scope: an animation branch in the quick path, a generated
-  `references/animation.md` (the screenplay, the bible, the shot list), and
-  the parity contract test.
-- Files: `skills-src/`, `scripts/sync-skills.mjs`, both create-video skills
-  (generated), `test/animation_paths.test.js`.
-- Done when: `npm run skills:check` is green; an agent given only the skill
-  and a new brief produces the same contracts and a finished Short; the
-  contract test passes.
+**Phase 8. The skill path, measurement and mouths.** Three PRs.
+- *Skill:* an animation branch in the quick path, a generated
+  `references/animation.md` (the script, the bible, the shot list, the two
+  approval points), and the parity contract test. Files: `skills-src/`,
+  `scripts/sync-skills.mjs`, both create-video skills (generated),
+  `test/animation_paths.test.js`. Done when `npm run skills:check` is green
+  and an agent given only the skill and a new brief produces the same
+  contracts and a finished Short.
+- *Measurement:* the six briefs in the scorecard; the `story-characters`
+  profile measured from references, with the dialogue measures; the
+  `script` gate. Files: `eval/formats.mjs`, `eval/formats.json`,
+  `eval/fixtures/`, `kit/profiles/story-characters.json`,
+  `kit/profiles/PROVENANCE.md`, `kit/core/cadence.mjs`. Done when both
+  paths run the six briefs and the parity table is in `benchmarks/`.
+- *Mouths:* phonemes kept in `NARRATION.json`, mouth shapes on the rig, the
+  `lip-sync` gate. Files: `src/voice/kokoro.js`, `src/voice/dialogue.js`,
+  `kit/core/characters/acting.mjs`, `src/quality_gates.js`. Done when a rig
+  character's mouth shapes follow its phonemes in both renderers within
+  parity. This touches the acting code, so it is agreed with the acting
+  work first.
 
-**Phase 8. Measurement and mouths.**
-- Scope: the six briefs and their metrics in the scorecard; the
-  `story-characters` profile measured from references, with the dialogue
-  measures; phonemes kept in `NARRATION.json` and mouth shapes on the rig;
-  the `screenplay` and `lip-sync` gates.
-- Files: `eval/formats.mjs`, `eval/formats.json`, `eval/fixtures/`,
-  `kit/profiles/story-characters.json`, `kit/profiles/PROVENANCE.md`,
-  `kit/core/cadence.mjs`, `src/voice/kokoro.js`, `src/voice/dialogue.js`,
-  `kit/core/characters/acting.mjs`.
-- Done when: both paths run the six briefs and the parity table is
-  published in `benchmarks/`; the profile lists its references; a rig
-  character's mouth shapes follow its phonemes in both renderers.
-- Mouth shapes touch the acting code, so this part is agreed with the
-  acting-quality work first.
+### Hand-in
 
-### The guided lane
+**Phase 9. The hand-in contract and check.**
+- Scope: `HANDIN.json`, validation for all three kinds, the measured bible
+  check, the vision judge, `qa/hand-in.json`, the `hand-in` gate,
+  `launchclip handin check`. No rendering change yet.
+- Files: `kit/core/hand-in.mjs` (new), `src/hand_in.js` (new),
+  `src/sprite_cast.js` (its sprite-folder checks, shared), `src/make/critic.js`
+  (the judge), `src/cli.js`, `test/hand_in.test.js`,
+  `test/fixtures/hand-in/`.
+- Done when: fixtures with a missing pose, mismatched sprite sizes, an
+  opaque background, a short clip, a wrong outfit, a wrong skin tone, a
+  dropped headscarf and an extra person are each rejected with a reason
+  that names the fix; good art passes; with no vision model the judge is
+  `not-checked`.
 
-**Phase 9. The spike. No product code.**
-- Scope: by hand, take three shots from the phase 6 Short. Export the
-  control passes with a script. Run each through two local and two hosted
-  options. Then do the same for a six-shot sequence with both characters.
-- Measure: identity across shots (by eye, and with the §5.4 checks), pose
-  adherence, flicker, style match, lip sync with and without a lip-sync
-  pass, seconds and dollars per finished second, and memory on a Mac.
-- Files: `benchmarks/animation-lanes/` (results and the scripts used).
-- Done when: the results are written up with a go or no-go for the guided
-  lane, the provider to build first, and the Mac it needs. **The owner
-  decides here whether phases 10–15 proceed.**
+**Phase 10. Plates and sprite casts in the render.**
+- Scope: a prototype first (one cast scene on a handed-in plate, and its
+  sprite form, reviewed before the rest is built); then the plate under a
+  cast scene with `floor` and `light`; the compile from a cast scene to its
+  `sprite-scene` form; the one-look rule; fallback.
+- Files: `kit/core/catalog-characters.mjs`, `kit/core/catalog-sprites.mjs`,
+  `kit/core/story.mjs` (the resolved copy), `src/finish.js`,
+  `src/render_segments.js`, `test/fixtures/parity/characters-plate-*.json`,
+  `test/fixtures/parity/sprite-form-*.json`.
+- Done when: the phase 7 Short renders with a handed-in plate and with a
+  handed-in sprite cast, in both renderers within parity; removing one
+  character's sprites drops the whole video to code-drawn and the report
+  says why; replacing one sprite re-renders only that character's scenes.
 
-**Phase 10. The capability check.**
-- Files: `src/capabilities.js` (new), `src/doctor.js`, `src/cli.js`,
-  `src/make/index.js` (`stageCapabilities`, `MAKE.json` `lanes`),
-  `test/capabilities.test.js`.
-- Done when: `doctor --lanes --json` is correct for each combination of
-  keys and runtimes in the tests, makes no paid call, and `make` prints the
-  lanes before planning.
+**Phase 11. Whole shots, the hook, and driving from a host.**
+- Scope: a handed-in clip in a shot's window under code-drawn captions and
+  cards; character shots and plates asked for through the asset-provider
+  hook; the footage checks on handed-in shots; retake step 2; a container
+  smoke run of the animation path with hand-in.
+- Files: `src/asset_provider.js`, `src/asset_provider_cmd.js`,
+  `src/finish.js`, `src/make/critic_repair.js`, `src/engine/adapters.js`,
+  `packages/engine/README.md`, `scripts/container-smoke/`,
+  `docs/CONTAINER_SMOKE.md`.
+- Done when: a stub provider command that answers some shots and returns
+  `null` for others gives a code-drawn video under the one-look rule and a
+  fully handed-in video when it answers all; the container smoke passes
+  with no network; each `--exit-status` code is covered by a test.
 
-**Phase 11. The provider interface.**
-- Scope: the `shots` adapter key, the registry, the `test` provider, the
-  command provider, `SHOT.json`, the per-shot cache, the `conform` and
-  `provenance` gates, `launchclip shots`, `stageShots`, and clip playback in
-  the resolved story.
-- Files: `src/shots/index.js`, `src/shots/test_provider.js`,
-  `src/shots/command_provider.js`, `src/shots/record.js` (all new),
-  `src/engine/adapters.js`, `src/finish.js`, `src/render_segments.js`,
-  `src/make/index.js`, `packages/engine/README.md`.
-- Done when: `make --lane guided --shot-provider test` produces a video
-  identical to the rig lane's, with a record per shot; a second run
-  generates nothing; killing the run mid-shot and rerunning resumes it.
+### Series and longer forms
 
-**Phase 12. Control passes.**
-- Scope: `reference`, `pose`, `line`, `matte` and `depth` on Remotion, then
-  the whole-video form on HyperFrames. `launchclip shots passes <project>
-  --scene <id>`.
-- Files: `kit/core/characters/passes.mjs` (new), `kit/remotion/`,
-  `kit/hyperframes/`, `src/shots/passes.js` (new),
-  `test/fixtures/parity/characters-pass-*.json`.
-- Done when: every pass for the example shot matches its golden stills; the
-  matte's silhouette equals the rig's drawing bounds
-  (`kit/core/characters/bounds.mjs`); passes are frame-aligned with the
-  animatic.
+**Phase 12. Series bibles.**
+- Scope: a bible that lives in a collection (`src/collection.js`), so every
+  episode shares its cast, voices, world and style; an episode's bible
+  extends it with guests; the bible's hash in the video's provenance, so a
+  changed series bible marks its episodes stale as a changed style does
+  today.
+- Files: `src/collection.js`, `src/collection_cli.js`, `src/bible.js`,
+  `kit/core/bible.mjs`, `docs/COLLECTIONS_RFC.md`.
+- Done when: two episodes made from one collection have identical
+  characters and voices; adding a guest to one episode does not change the
+  other.
 
-**Phase 13. The identity check.**
-- Scope: the measured layer, the judge, the `identity` and `continuity`
-  gates; the embedding layer only if the spike showed it adds signal.
-- Files: `src/shots/identity.js` (new), `src/quality_gates.js`,
-  `src/make/critic.js`, `test/shot_identity.test.js`, fixtures with
-  deliberately wrong characters.
-- Done when: fixtures with a wrong outfit, a wrong skin tone, a dropped
-  headscarf and an extra person all fail; the rig's own render passes; a
-  missing vision model gives `not-checked` with a reason.
-
-**Phase 14. The first real providers.**
-- Scope: the one local and the one hosted provider the spike chose, opt-in,
-  with estimates; the `generate` slot; shot jobs in the job store; resume
-  of submitted jobs; the budgets of §5.6.
-- Files: `src/shots/<provider>.js` (new), `src/capacity.js`,
-  `src/queue.js`, `src/job_store.js`, `src/cost_tracker.js`,
-  `benchmarks/animation-lanes/`.
-- Done when: the phase 6 Short renders on the guided lane on the reference
-  Mac and through the hosted provider; nothing is spent without the flag;
-  the estimate is within 25% of the bill.
-
-**Phase 15. Retakes, fallback and the guided parity run.**
-- Scope: retake steps 1 and 3, the `uniform` and `mixed` policies, the
-  deadline, and the per-shot metrics of §8.3.
-- Files: `src/make/critic_repair.js`, `src/shots/index.js`,
-  `src/make/index.js`, `eval/formats.mjs`.
-- Done when: a shot that fails identity three times falls back and the
-  report says so; a run with no provider finishes on the rig lane; the six
-  briefs have guided-lane numbers beside the rig lane's.
-
-### After
-
-**Phase 16**, each its own RFC or PR series, ordered by what the spike and
-the parity runs show: the generative lane; a lip-sync pass on generated
-clips; the remote node; a local vision critic; series bibles shared across
-a collection; animation longer than three minutes, by chapter, on the
-long-form plan.
+**Phase 13. Longer forms.**
+- Scope: animation past three minutes on the long-form plan: a script in
+  chapters, a voice per chapter, a shot list per chapter, a render that
+  resumes by chapter (LONG_FORM_MAKE_RFC.md), and Shorts cut from it.
+- Files: `src/make/long_form.js`, `src/make/animation.js`,
+  `kit/core/long-form.mjs`, `kit/core/beat-director.mjs`.
+- Done when: a five-minute animated story with three characters renders by
+  chapter, a failed chapter resumes alone, and a Short cut from it passes
+  the Shorts profile.
+- Its own RFC first, once the parity runs show Shorts are good.
 
 ### Dependencies
 
-- Phases 1, 2 and 3 can run side by side.
-- Phase 4 needs 1. Phase 5 needs 2, 3 and 4. Phase 6 needs 5.
-- Phases 7 and 8 need 6 and can run side by side.
-- Phase 9 needs 6. Phase 10 can start any time.
-- Phases 11 and 12 need the go from 9 and can run side by side.
-- Phase 13 needs 12. Phase 14 needs 11, 12 and 13. Phase 15 needs 14.
+- Phases 1, 2, 3 and 4 can run side by side.
+- Phase 5 needs 1. Phase 6 needs 2, 3 and 5. Phase 7 needs 6 and 4.
+- Phase 8's three PRs need 7 and can run side by side.
+- Phase 9 needs 2 and 4 and can start before 7. Phase 10 needs 9 and 7.
+  Phase 11 needs 10.
+- Phase 12 needs 2. Phase 13 needs 8.
 
 ## 10. Risks
 
 | Risk | What this RFC does about it |
 |---|---|
-| The generated lanes never hold a character | The slice ships without them; the spike decides before anything is built; the rig lane is always the fallback |
-| Small local models write weak screenplays | Each writing step is small and validated; the skeleton carries structure; the parity run measures it per model tier |
-| Costs run away on retakes | Estimates first, a cap that defaults to zero, three attempts per shot, a deadline |
-| A video mixes two looks | The `uniform` policy |
-| A model erases a headscarf or changes a skin tone | `must_keep` is a hard failure with no override |
-| Contracts multiply and drift apart | Two new files and additive fields only; one validator each; skills generated from the same registry |
-| Three parallel sessions change the cast, acting and style code underneath | The bible points at their files and never defines their shape; phases 2 and 8 name the dependency |
+| Code-drawn characters are not engaging enough on their own | The slice measures it first, with a critic and six briefs; acting, styles and families are improving in parallel work; hand-in is there for those who want another look |
+| Small local models write weak scripts | Each writing step is small and validated; the skeleton carries structure; the parity run measures it per model tier |
+| Handed-in art does not match the characters | Validation, the bible check, one look per video, and a code-drawn fallback that is already rendered |
+| Art that erases a headscarf or changes a skin tone | `must_keep` is a hard rejection with no override |
+| Contracts multiply and drift apart | One new story file (the bible), one hand-in file, and additive fields elsewhere; one validator each; skills generated from the same registry |
+| Parallel work changes the cast, acting and style code underneath | The bible names characters, styles and sets by id and never defines their shape |
 
 ## 11. Open questions
 
-For the owner:
+Each has a recommended answer. **None is confirmed by the owner yet.** The
+body of this RFC is written to the recommendations.
 
-1. **Screenplay file.** A new `SCREENPLAY.json` beside `SCRIPT.json`, as
-   proposed, or one script file that grows speakers and silent lines?
-2. **One look per video.** Is `uniform` the right default, and at what share
-   of fallen-back shots does the whole video drop a lane?
-3. **Review stops.** Should an attended run stop for approval after the
-   bible and after the animatic (a `--stop-after bible | animatic`), and
-   should an unattended `make` continue on the critic's word alone?
-4. **Spending.** Is a $0 default cap for generated shots right, so that
-   every paid shot needs a flag?
-5. **What leaves the machine.** Is per-run opt-in enough before sheets and
-   control passes go to a hosted provider, or should it be a setting on the
-   library?
-6. **The local bar.** Which Mac is the reference machine for the guided
-   lane, and how long may a 30-second Short take on it?
-7. **First local runtime.** A ComfyUI server over HTTP (large community,
-   every model, an extra install) or a native runtime LaunchClip manages
-   (one install, far fewer models)?
-8. **Guided compositing.** Restyle the whole frame, or generate characters
-   only and keep the world code-drawn under them?
-9. **Lip sync for the first release.** Are mouth shapes from phonemes on the
-   rig enough to ship, with generated-shot lip sync left as research?
-10. **A critic with only an Anthropic key.** `make`'s Anthropic adapter
-    sends no images, so there is no critic and no identity judge. Add vision
-    to it, or require a second key?
-11. **The sprite lane.** Keep it as its own form, or fold it into the guided
-    lane's key frames once that exists?
-12. **Per-character fine-tuning.** If the spike shows references are not
-    enough, is training a small adapter per character acceptable, given the
-    time and the files it adds to a project?
-13. **Narrator.** Do character Shorts default to pure dialogue, or a
-    narrator with dialogue?
-14. **Series.** Should a bible live in a collection so every episode shares
-    its cast and voices?
-15. **The remote node.** In scope for this line of work, or its own RFC?
-16. **Real people and children.** The quality RFC allows a character based
-    on a real person only at that person's request. Do generated lanes need
-    a stricter rule, and are there limits for stories with child characters?
+1. **Script file.** A new file beside `SCRIPT.json`, or grow `SCRIPT.json`?
+   *Recommended: grow `SCRIPT.json` with speakers and silent lines (§4.1).*
+2. **Looks.** May a video mix code-drawn and handed-in shots?
+   *Recommended: one look per video, with `--look mixed` as the exception
+   (§5.5).*
+3. **Review stops.** Should a run stop for approval?
+   *Recommended: attended runs stop after the bible and after the animatic;
+   headless runs continue unless `--stop-after` is given (§6.3).*
+4. **Lip sync.** What is the bar for the first release?
+   *Recommended: mouth shapes from phonemes on the rig are enough to ship
+   (§4.6).*
+5. **A critic with only an Anthropic key.**
+   *Recommended: add vision to the existing Anthropic adapter (§6.2).*
+6. **The sprite form.** Its own form, or folded into something else?
+   *Recommended: keep it as its own form, as the hand-in path for character
+   art (§5.2).*
+7. **Narrator.** Pure dialogue, or a narrator with dialogue?
+   *Recommended: character Shorts default to a narrator with dialogue
+   (§4.1).*
+8. **Series.** Where does a bible live?
+   *Recommended: a bible can live in a collection, shared by its episodes
+   (phase 12).*
+9. **Reference images and real people.**
+   *Recommended: reference images map to traits and never to a real
+   person's likeness (§4.2).*
+
+Raised by this revision, with no recommendation from the owner yet:
+
+10. **`launchclip cast sprites` draws sprites with an image model today**
+    (`openaiImageAdapter` in `src/sprite_cast.js`). That is generation
+    inside LaunchClip, which the scope rule excludes. Should the command
+    keep its built-in adapter, take only an adapter a host passes in, or
+    become a checker for sprites made elsewhere? Its file layout is the
+    hand-in format either way.
+11. **Exit codes.** Is an opt-in `--exit-status` right, or should the
+    animation path return distinct codes by default (§7)?
+12. **A hand-in with no vision model.** Use the asset with the judge marked
+    `not-checked`, as proposed, or refuse it until something can look at it
+    (§5.4)?
+13. **Stories with child characters.** The kit draws children and teens.
+    Are there limits on the stories `make` will write for them, beyond the
+    evidence and honesty rules that apply to every story?
 
 ## 12. Non-goals
 
-- **Training or fine-tuning models.** Open question 12 may reopen it.
-- **Shipping model weights in the npm package.** Models are downloaded on
-  request or reached over an address, like the matting models.
-- **Choosing a model.** §5.7 lists examples; the interface is the decision.
+- **Generating images or video**, in LaunchClip or through a service it
+  calls. That includes model providers for pictures, control passes for
+  steering a model, generation budgets, and training or fine-tuning.
+- **Hosting.** No server, remote worker, job API or queue across machines.
+  A host application owns those.
+- **Naming or depending on any host application.**
 - **A timeline or shot editor.** Editing stays in chat, the storyboard and
   the NLE exports.
-- **Photoreal people, or anyone's likeness.**
+- **Anyone's likeness.**
 - **Replacing the renderers or the storyboard contract.** Every addition is
-  a field, a file, a gate or an adapter.
-- **Animation over three minutes** in this plan. It follows on the long-form
-  chapters once Shorts are good.
+  a field, a file or a gate.
 - **Changing the skill for other kinds of video.** The animation branch is
   additive.
 - **The character kit itself.** New character families, livelier acting,
-  `cast create` and `cast edit`, and style analysis from references are
-  separate work. This RFC consumes them.
+  drawing styles and style analysis from references are separate work.
+  This RFC uses them.
