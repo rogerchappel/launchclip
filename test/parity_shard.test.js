@@ -2,7 +2,7 @@
 // shards split it, and consecutive rotations cover it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {corpus, parseShard, selectFixtures} from '../scripts/parity-shard.mjs';
+import {corpus, knownFailures, parseShard, selectFixtures, triage} from '../scripts/parity-shard.mjs';
 
 const files = corpus();
 
@@ -37,4 +37,17 @@ test('bad slices are refused', () => {
   assert.throws(() => selectFixtures(files, {rotate: 3}), /--every/);
   assert.throws(() => selectFixtures(files, {shard: {index: 1, total: 2}, rotate: 1, every: 2}), /not both/);
   assert.deepEqual(selectFixtures(files), files);
+});
+
+test('known failures are named per platform, exist in the corpus, and only excuse themselves', () => {
+  const linux = knownFailures('linux');
+  assert.ok(Object.keys(linux).length <= 5, 'the list only shrinks: fix the renderer instead of adding to it');
+  for (const [name, note] of Object.entries(linux)) {
+    assert.ok(files.includes(name), `${name} is not a fixture`);
+    assert.ok(typeof note === 'string' && /\d/.test(note), `${name} needs a note with its measured score`);
+  }
+  assert.deepEqual(knownFailures('no-such-platform'), {});
+  const rows = [{name: 'a.json', pass: false}, {name: 'b.json', pass: false}, {name: 'c.json', pass: true}, {name: 'd.json', pass: true}];
+  const sorted = triage(rows, {'b.json': 'x', 'c.json': 'y'});
+  assert.deepEqual([sorted.failed, sorted.known, sorted.fixed].map(list => list.map(row => row.name)), [['a.json'], ['b.json'], ['c.json']]);
 });
