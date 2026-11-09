@@ -7,7 +7,7 @@ import {STARTER_CAST, STARTER_IDS, characterLook, starterCharacter} from '@launc
 import {SKIN_TONES, castRoles, characterColors} from '@launchclip/core/characters/palette.mjs';
 import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
 import {characterView} from '@launchclip/core/characters/view.mjs';
-import {ACTING, actingOps, jointTargets, speechChanges} from '@launchclip/core/characters/acting.mjs';
+import {ACTING, ACTING_PROFILES, ACTING_PROFILE_NAMES, actingOps, actingProfile, jointTargets, speechChanges} from '@launchclip/core/characters/acting.mjs';
 import {castConsistency, castMember, cueWordIndex, resolveCastCues, resolveStoryCast, sceneCastCues, storyCastErrors, validateCastCues} from '@launchclip/core/characters/cues.mjs';
 import {SETS, layoutSet} from '@launchclip/core/characters/sets.mjs';
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
@@ -102,17 +102,17 @@ test('the drawing: joints become animated divs with stable ids; one face per exp
   assert.doesNotMatch(html, /"tag":"joint"/);
 });
 
-test('acting: pose changes are eased tweens, gestures return to the pose, mouths follow words', () => {
+test('acting: pose changes are eased moves, gestures return to the pose, mouths follow words', () => {
   const {params} = maya();
   const geometry = rigGeometry(params);
   const ops = [];
   actingOps(ops, {cid: 'c', start: 0, end: 6, geometry, facing: 'right', seated: false, holds: null,
     states: [{time: 0, pose: 'stand', expression: 'neutral'}, {time: 2, pose: 'wave', expression: 'happy'}, {time: 4.5, pose: 'slump', expression: 'frustrated'}],
     expressions: ['neutral', 'happy', 'frustrated'], speech: speechChanges([{from: 0.5, to: 1.5, words: [[0.5, 0.8], [0.9, 1.5]]}])});
-  const arm = ops.filter(op => op.target === 'c-arm-r' && op.type === 'tween' && op.start === 2);
-  assert.equal(arm.length, 1);
-  assert.equal(arm[0].ease, ACTING.poseEase);
-  assert.equal(arm[0].duration, ACTING.poseTween);
+  // A big change is acted (test/character_acting.test.js): its travel keeps the pose ease and ends inside the window.
+  const arm = ops.filter(op => op.target === 'c-arm-r' && op.type === 'tween' && op.start >= 2 && op.start < 2 + ACTING.poseTween);
+  assert.ok(arm.some(op => op.ease === ACTING.poseEase));
+  assert.ok(arm.every(op => op.start + op.duration <= 2 + ACTING.poseTween + 1e-6));
   const at = t => frameState(ops, t);
   assert.ok(Math.abs(at(2 + ACTING.poseTween).get('c-arm-r').rotation - 148) < 1e-6, 'settles on the wave');
   assert.ok(Math.abs(at(4.5).get('c-fore-r').rotation - 26) < 1e-6, 'the wave loop ends on the pose before the next change');
@@ -191,4 +191,19 @@ test('sets lay out every count in both orientations, inside the frame', () => {
       }
     }
   }
+});
+
+test('acting profiles: named, validated on the story cast, carried to the actor; the default is today\'s feel', () => {
+  assert.deepEqual(ACTING_PROFILE_NAMES, ['default', 'calm', 'bouncy', 'nervous']);
+  assert.equal(actingProfile(undefined), ACTING_PROFILES.default);
+  for (const value of Object.values(ACTING_PROFILES.default)) assert.equal(value, 1);
+  // No profile stretches a pose change past the timing contract's window.
+  for (const name of ACTING_PROFILE_NAMES) assert.ok(ACTING_PROFILES[name].pace > 0.5 && ACTING_PROFILES[name].pace <= 1, name);
+  assert.throws(() => actingProfile('wild'), /unknown acting profile "wild" \(profiles: default, calm, bouncy, nervous\)/);
+  assert.match(storyCastErrors({characters: [{id: 'maya', acting: 'wild'}]}).join(), /acting must be one of default, calm, bouncy, nervous/);
+  assert.deepEqual(storyCastErrors({characters: [{id: 'maya', acting: 'bouncy'}]}), []);
+  const cast = resolveStoryCast({brand, cast: {characters: [{id: 'maya', acting: 'bouncy'}, {id: 'theo'}]}});
+  assert.equal(cast.members.get('maya').acting, 'bouncy');
+  assert.equal(cast.members.get('theo').acting, null);
+  assert.equal(cast.members.get('maya').fingerprint, resolveStoryCast({brand, cast: {characters: [{id: 'maya'}]}}).members.get('maya').fingerprint, 'a profile is how a character moves, not who it is');
 });

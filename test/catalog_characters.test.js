@@ -148,9 +148,11 @@ test('story: cast is a story field; word anchors in cues and lines resolve to sc
   const resolved = resolveStory(s, {words});
   const actor = resolved.scenes[0].params.cast[0];
   assert.equal(actor.cues[0].at, 2, '"again" starts 2 s after the scene start');
-  assert.deepEqual(actor.says[0], {from: 1, to: 2.4, words: [[1, 1.4], [1.5, 1.9], [2, 2.4]]});
+  assert.deepEqual(actor.says[0], {from: 1, to: 2.4, words: [[1, 1.4, 'It'], [1.5, 1.9, 'broke'], [2, 2.4, 'again']]}, 'each spoken word carries its text, so the mouth shapes its sounds');
   const model = resolveModule(resolved.scenes[0], resolved);
   assert.equal(model.content.actors[0].states[1].time, 2.5);
+  assert.deepEqual(model.content.actors[0].speech.slice(0, 2).map(change => change.shape), ['wide', 'small'], '"It": a spread vowel, then the t');
+  assert.throws(() => resolveModule({...resolved.scenes[0], params: {set: 'desk-laptop', cast: [{id: 'maya', says: [{from: 1, to: 2, words: [[1, 1.4, 7]]}]}]}}, resolved), /words\[0\] must be \[start, end\] seconds, or \[start, end, "word"\]/);
 });
 
 const phone = (cast, extra = {}) => ({id: 'talk', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast}, ...extra});

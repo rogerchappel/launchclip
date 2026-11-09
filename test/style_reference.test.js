@@ -111,6 +111,21 @@ test("drafts a pack from synthetic reference videos: palette, pacing, report, no
     assert.equal(pack.reference_stats.layout_mix.full, 1, "flat synthetic shots with boxes are full-frame");
     assert.equal(fastResult.inferred.profile.id, "fast-cuts-references");
     assert.match(report, /confidence/);
+    // How it is drawn: flat boxes with no outline, measured from the file and kept beside the other stats.
+    assert.equal(pack.reference_stats.drawing.schema, "launchclip.drawing-traits.v1");
+    assert.equal(pack.reference_stats.drawing.traits.outline.label, "none");
+    assert.equal(pack.reference_stats.drawing.traits.fill.type, "flat");
+    assert.equal(pack.reference_stats.drawing.traits.shape.label, "angular");
+    assert.ok(fastResult.inferred.drawing.unmatched.length >= 0 && fastResult.inferred.drawing.traits.outline.confidence > 0.5);
+    assert.match(report, /## Drawing/);
+
+    // style compare: the reference itself as the sample is the same drawing.
+    const { compareStyleCommand } = await import("../src/style_compare.js");
+    const compared = await compareStyleCommand(path.join(fastResult.path, "style.json"), { video: fast, out: "qa/compare.json" }, { cwd: dir });
+    assert.equal(compared.status, "close", JSON.stringify(compared.traits.map((entry) => [entry.trait, entry.distance])));
+    assert.ok(compared.distance < 0.02 && compared.palette.distance < 0.02);
+    assert.equal(compared.sample.rendered, false);
+    assert.equal(JSON.parse(await readFile(path.join(dir, "qa", "compare.json"), "utf8")).action, "compare");
 
     const slowResult = await createStyleFromReferences("slow-cuts", { "from-reference": slow }, { root: path.join(dir, "styles"), cwd: dir });
     const slowPack = JSON.parse(await readFile(path.join(slowResult.path, "style.json"), "utf8"));

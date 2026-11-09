@@ -176,6 +176,7 @@ launchclip style show bold-creator          # the resolved v2 pack
 launchclip style upgrade ai-news            # v1 (frame.md) → style.json v2, keeps style.v1.json
 launchclip style create my-channel --from-reference old-1.mp4 old-2.mp4 [--from-images thumb.png] [--font-hint "Bebas Neue, Inter"] [--force]
 launchclip style check <project> --against my-channel [--video renders/final.mp4] [--out qa/style-check.json]
+launchclip style compare my-channel [--video sample.mp4 | --images a.png ...] [--out qa/style-compare.json]
 ```
 
 `style create --from-reference` measures the references locally (no model
@@ -187,6 +188,19 @@ value with a confidence). Reference media is never copied into the pack. `style
 check` measures a render the same way and reports drift (palette distance,
 median shot, cut rate, activity, loudness) against the pack's
 `reference_stats`, or against its palette and grammar when it has none.
+
+`--from-reference` also measures how the references are drawn and stores it at
+`reference_stats.drawing` (`launchclip.drawing-traits.v1`): outline presence
+and line weight, fill type (flat, cel-shaded, gradient, textured), saturation
+and contrast, shape language (rounded or angular), grain or paper, and frame
+stepping (ones, twos, threes; videos only), each with a confidence. It sets
+the nearest drawing style (`cast.drawing_style`), `background.kind`,
+`vocabulary.illustration` and `layouts.panel.radius` from them, and the
+report's "Not matched" list names what has no dial (line weight, held frames,
+grain over the drawings). `style compare` renders a short sample in the pack
+(or takes `--video` / `--images`), measures it the same way and reports the
+distance to the reference per trait (0–1; over 0.25 is `apart`) with the field
+to change, so the pack can be edited and compared again.
 
 ## Model-directed production
 
@@ -1264,6 +1278,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
+  ```
+
+- `style compare`: For a style drafted with --from-reference: render a short sample in the style (or take --video / --images), measure how it is drawn the same way the reference was, and report the distance to the reference per drawing trait, with the field to change where one exists.
+
+  ```text
+  launchclip style compare <name|path> [--video sample.mp4 | --images a.png ...] [--renderer hyperframes|remotion] [--quality draft|standard|high] [--work <dir>] [--out qa/style-compare.json] [--root .launchclip/styles]
   ```
 
 - `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints, conditioned on a brand's colours, logo, fonts, tone and industry when given; --avoid keeps it clear of other styles.

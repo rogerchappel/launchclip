@@ -1165,7 +1165,12 @@ type (0.15: display, body, case), motion (0.2: grammar, ease family, tempo,
 camera mode, whip, blur, zoom cadence), backdrops (0.15: background kind,
 plate set, panel treatment, radius, panel fill) and variants (0.2: the share
 of catalogue modules drawn with a different variant). `styleTraits(pack)`
-precomputes a pack's side for many comparisons; packs without a feel read
+precomputes a pack's side for many comparisons; `drawingDistanceReport(a, b)`
+(`{distance, parts, unmeasured}`) compares two drawing-traits blocks
+(`launchclip.drawing-traits.v1`, measured from a reference or a render by
+`src/drawing_traits.js`) over outline (0.2), line weight (0.1), fill (0.2),
+saturation (0.1), contrast (0.1), shape (0.1), grain (0.1) and stepping (0.1),
+leaving out the parts either side could not measure; packs without a feel read
 their grammar preset. Below `NEAR_DUPLICATE` (0.2) two styles read as one
 brand; `avoid: [packs]` keeps a result at least `MIN_AVOID_DISTANCE` (0.35)
 from each, stepping through up to `MAX_AVOID_STEPS` derived seeds and keeping
@@ -3982,7 +3987,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `shot?` wide/medium/close, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. At medium or close its head sits at the top of its area and its body runs off the frame's bottom edge (no floor needed). `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 | `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
@@ -4066,11 +4071,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   div places the pivot, an inner div with the joint's id carries the CSS
   transform about `0px 0px`); runs of shapes become overflow-visible SVGs in
   drawing order.
-- `acting.mjs`: one actor's states → ops. A pose change tweens every joint
-  over 0.45 s (`power2.inOut`); gestures loop whole cycles while a pose holds
-  and end on the pose; breathing, a head sway and blinks run on their own
-  groups; expressions crossfade over 0.16 s; mouths open on spoken words (two
-  flaps on a long word, a steady rhythm when a range has no word timings).
+- `acting.mjs`: one actor's states → ops. Every op is an absolute `set` or
+  from-to tween, so any frame draws on its own (seek-safe) and both
+  renderers read the same list; nothing is random. See "Acting" below.
 - `sets.mjs`: the room, furniture and slots for each set (left to right; a
   slot faces the middle of the frame): desk-laptop, phone, meeting, screen,
   kitchen-counter, sofa, podium, stage, car, park-bench, video-call and
@@ -4134,10 +4137,63 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   bending the elbow, stops the fingertip before 46 % of the gap to another
   character (two people pointing at each other never cross arms) and inside
   the safe zone; the state carries `aim: {side, arm, fore, tip}`.
-- **Idle life.** A style whose geometry sets `idleArms` (stick) also swings
-  each arm at the shoulder and the elbow (`armidle-*`, `foreidle-*`
-  wrappers inside the posed joints) and sways the body a little, on
-  absolute tweens, so a figure drawn in lines never holds still.
+- **Acting** (`acting.mjs`). What turns cues into a performance:
+  - **Pose changes.** A cue's change takes `ACTING.poseTween` (0.45 s) and
+    is at rest on the new pose when that ends; `CHARACTER_TIMING`, the cue
+    spacing rule and each cue event's `endTime` rest on this, and nothing
+    below changes it. `poseTravel(from, to)` is the largest joint move in
+    degrees (offsets and scales weighed in). Under `MOVE.small` (24) the
+    change is one `power2.inOut` tween per joint. Above it the change is
+    acted (`poseChangeOps`), at a strength that grows to full at `MOVE.full`
+    (140): the first 20 % of the window is anticipation (each joint moves
+    against its travel by up to 10 % of it, capped at 7°, and the torso
+    squashes a little), then the travel (`power2.inOut`), then the last 22 %
+    settles from a small follow-through (up to 6 % past the pose) back onto
+    it. Finger opacity never leaves 0–1.
+  - **Overlap.** The head and the hair behind it (35 ms), the forearms and
+    shins (45 ms) and the fingers (60 ms) start after the body, hold through
+    the anticipation, and settle in what is left of the window; the head
+    nods as the move lands. A change of gaze (`C-turn`, `C-gaze`) leads: one
+    tween from the cue.
+  - **Gestures** loop whole cycles while a pose holds and end on the pose,
+    starting when the change window ends.
+  - **Life while a pose holds**, each on its own group so a pose change
+    never fights it, each schedule drawn from `seededRandom` seeded with
+    the character's id (the part id when an actor has none): blinks
+    (`blinkTimes`: gaps of half to one and a half times `ACTING.blinkEvery`,
+    one in five doubled, plus one as each big move starts) on
+    `C-eyes-<expression>` scaleY; eye darts (`dartTimes`: a quick glance of
+    up to 5 rig units aside, a hold, and back) on the same group's x and y,
+    not for `lifelike` or `cinematic`, whose eye group carries the lids;
+    weight shifts (`shiftTimes`: the upper body eases up to about 1° to one
+    side, holds, then to the other) on `C-breath` rotation. Breathing
+    (`C-breath` scaleY) and the head sway (`C-headidle`, `C-hbidle`) run to
+    the scene's last frame. A style whose geometry sets `idleArms` (stick)
+    swings each arm at the shoulder and the elbow (`armidle-*`,
+    `foreidle-*` wrappers inside the posed joints) and sways the body
+    instead of shifting its weight.
+  - **Speech.** `speechChanges(ranges)` → `[{time, shape, open}]`. A spoken
+    word with its text (`words: [[start, end, "word"]]`; the story resolver
+    adds the text for word anchors and `says: "auto"`) takes a mouth shape
+    per sound from its spelling (`wordVisemes`): `closed` on m, b, p; `o`
+    on o, u, w; `wide` on e, i, y; `open` on a; `small` on other
+    consonants. The shapes spread across the word (none shorter than
+    0.07 s; with more sounds than fit, the part-open consonants go first),
+    and the mouth closes when the word ends unless the next follows within
+    0.07 s. A word without text opens and closes as before (two flaps on a
+    long word), cycling through the open shapes; a range without word
+    timings flaps every 0.24 s. The rig draws two mouths per face, so
+    `closed` is the closed mouth and every other shape is that face's open
+    mouth at a size (`VISEMES`: scaleX, scaleY on `C-open-<expression>`,
+    which `view.mjs` makes a pivot div at the mouth's centre). Sprite scenes
+    read only `open`.
+  - **Expressions** crossfade over 0.16 s.
+  - **Profiles.** A story cast entry's `acting` (`ACTING_PROFILES`: `default`,
+    `calm`, `bouncy`, `nervous`) scales the above per character: `pace` (the
+    share of the change window the move takes, never more than 1, so a
+    nervous character lands early and holds), `anticipation`, `settle`,
+    `lag`, the rates of `blinks`, `darts` and `shifts`, and `breath` and
+    `breathRate`. Every value of `default` is 1.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
@@ -4172,15 +4228,16 @@ them.
 Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
 `C-breath`, `C-head`/`C-hb` (head and the hair behind it), `C-headidle`,
 `C-arm-l|r`, `C-fore-l|r`, `C-fingerwrap-l|r`, `C-leg-l|r`, `C-shin-l|r`,
-`C-face-<expression>`, `C-eyes-<expression>`, `C-mouth-<expression>`,
-`C-open-<expression>`.
+`C-face-<expression>`, `C-eyes-<expression>` (blinks: scaleY; darts: x, y),
+`C-mouth-<expression>`, `C-open-<expression>` (the open mouth: opacity, and
+scaleX and scaleY for its speech shape).
 
 ### Story cast (`story.cast`)
 
 ```json
 { "style": "flat", "colors": { "primary": "teal" },
   "characters": [ { "id": "maya", "voice": "af_heart", "position": "left" },
-                  { "id": "sam", "from": "theo", "hair": { "style": "curly" } },
+                  { "id": "sam", "from": "theo", "hair": { "style": "curly" }, "acting": "bouncy" },
                   { "id": "riley", "skin": "deep", "hair": { "style": "locs", "color": "black" } } ] }
 ```
 
@@ -4188,7 +4245,9 @@ An id (or `from`) naming a starter starts from its params; the fields given
 override them. Other ids need their own skin and hair. When the cast lists
 characters, scenes may only use those; without a cast, scenes may use any
 starter. `position` (left, centre or right) is the side the character
-takes in every cast scene it shares, unless a scene says otherwise. Scenes
+takes in every cast scene it shares, unless a scene says otherwise. `acting`
+(default, calm, bouncy or nervous) is how the character moves in every scene
+(see "Acting"); it is not part of the character's identity. Scenes
 name characters by id and never carry params, so a
 character cannot change inside a story. `storyCastErrors(cast)` and
 `resolveStoryCast(story)` validate it; a style pack's cast mapping reaches
