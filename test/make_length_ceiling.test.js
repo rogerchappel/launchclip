@@ -102,7 +102,7 @@ test("long form: chapters that come in short are not rewritten longer", async (t
   };
   const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
   const lines = [];
-  const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, { env: {}, client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false }, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, notice: (line) => lines.push(line) });
+  const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", research: "off", cwd, out: "october", longFormVisuals: "rules" }, { env: {}, client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false }, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, notice: (line) => lines.push(line) });
   assert.notEqual(report.status, "failed", JSON.stringify(report.stages));
   assert.equal(chapterInputs.length, 3, "one call per chapter: no resize pass");
   assert.ok(!chapterInputs.some((input) => /## Resize/.test(input)));
