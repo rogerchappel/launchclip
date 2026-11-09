@@ -38,10 +38,7 @@
       "lines": [
         { "words": [29, 35], "line": "l9", "intent": "proof", "treatment": "insert", "scenes": ["saved"], "set": "standing",
           "action": { "verb": "cheer", "who": "maya" },
-          "cast": [{ "id": "maya", "pose": "cheer", "expression": "delighted", "at": "word:saved" }] }
-      ] },
-    { "id": "cta", "title": "Test, then ship", "beat": "cta",
-      "lines": [
+          "cast": [{ "id": "maya", "pose": "cheer", "expression": "delighted", "at": "word:saved" }] },
         { "words": [36, 40], "line": "l10", "intent": "cta", "treatment": "insert", "scenes": ["close"],
           "action": { "verb": "point", "who": "sam" },
           "cast": [{ "id": "sam", "pose": "point", "expression": "delighted", "at": "word:Then" }] }

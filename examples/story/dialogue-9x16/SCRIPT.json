@@ -30,11 +30,8 @@
       ] },
     { "beat": "resolution", "place": "standing",
       "lines": [
-        { "id": "l9", "speaker": "narrator", "text": "Ten minutes of testing saved her weekend." }
-      ] },
-    { "beat": "cta",
-      "lines": [
-        { "id": "l10", "speaker": "sam", "text": "Test the rollback. Then ship." }
+        { "id": "l9", "speaker": "narrator", "text": "Ten minutes of testing saved her weekend." },
+        { "id": "l10", "speaker": "sam", "text": "Test the rollback. Then ship.", "playing": "to us, the moral" }
       ] }
   ],
   "narration": "Maya is about to ship on a Friday. Did you test the rollback? It worked last month. Fine. One quick test. Oh. It's broken. Better now than at midnight. Ten minutes of testing saved her weekend. Test the rollback. Then ship.",

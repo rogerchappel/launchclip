@@ -8,7 +8,7 @@ list the two files make.
 
 ![Frames from the five shots (HyperFrames)](render.sheet.jpg)
 
-- **`SCRIPT.json`** (`launchclip.make-script.v2`): ten lines in six beats.
+- **`SCRIPT.json`** (`launchclip.make-script.v2`): ten lines in five beats.
   Eight are spoken, by the narrator, `maya` and `sam`; two are silent
   (`"speaker": null`, an `action` and its `seconds`).
 - **`storyboard.json`**: the eight spoken lines are `audio.narration.lines`,
