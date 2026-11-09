@@ -232,6 +232,22 @@ with no per-module parity fixture unless it is on the commented allowlist in
 `test/fixtures/parity-footage/`. `node scripts/parity-coverage.mjs` prints
 the counts.
 
+144 of the 145 have a fixture. The allowlist holds one module,
+`sprite-scene`, whose fixtures belong to the character and sprite work. The
+last twelve to gain fixtures were `brand-lockup`, `photo-scene`, the seven
+media layouts (`split-screen`, `landscape-card`, `picture-in-picture`,
+`media-compare`, `media-stat`, `media-list`, `media-grid`) and the tactile
+modules `drop-grid`, `live-counter` and `live-bars`. Their media is drawn or
+generated: two SVG stills, a static FFmpeg clip and SVG brand artwork under
+`test/fixtures/parity/assets/`.
+
+Known difference: HyperFrames draws a `<video>`'s frames without the
+element's `box-shadow`, where Remotion draws it. The media layouts put a video
+window's drop shadow and ring on a twin element under the video
+(`kit/hyperframes/catalog-d.mjs`). `product-demo` still sets a drop shadow
+on its video, so that shadow is missing under HyperFrames; its fixture passes
+because the shadow is faint.
+
 ### RFC phase 5 status: storyboard planner (model side)
 
 Done:

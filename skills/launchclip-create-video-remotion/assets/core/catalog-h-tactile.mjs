@@ -199,7 +199,7 @@ export const dropGrid = {
   id: 'drop-grid',
   describe: 'Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.',
   params: {count: `1–${DROP_MAX} items (or items)`, items: `[label ≤ 16 | {label?, image? (assets/… photo)}] 1–${DROP_MAX} (or count)`, columns: 'columns 1–10 (optional; default the layout with the biggest items)',
-    times: 'seconds from scene start, one per item, rising: each drop on its word (optional)', cadence: 'seconds between drops 0.05–1.5 (optional, when times is not set; default fits the scene)',
+    times: `[number] 1–${DROP_MAX}, seconds from scene start, one per item, rising: each drop on its word (optional)`, cadence: 'seconds between drops 0.05–1.5 (optional, when times is not set; default fits the scene)',
     counter: 'true | {prefix? ≤ 4, suffix? ≤ 8 ("×"), label? ≤ 30, from?} a big count above the grid that climbs with each landing (optional)', title: 'string ≤ 60 (optional)', source: 'string ≤ 80 (optional)',
     tone: `item colour (${tone}; default primary for coins, accent otherwise)`, slots: 'faint empty slots that the items fill (default true)', at: `first drop when times is not set: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['build', 'land-N', 'filled'], variants: DROP_VARIANTS,

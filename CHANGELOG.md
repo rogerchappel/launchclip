@@ -24,6 +24,10 @@
   when a module has no HyperFrames emitter, no Remotion component or no
   per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
   is covered, and CONTRIBUTING.md says how to add a fixture.
+- Parity fixtures for the twelve modules that had none: `brand-lockup`,
+  `photo-scene`, `split-screen`, `landscape-card`, `picture-in-picture`,
+  `media-compare`, `media-stat`, `media-list`, `media-grid`, `drop-grid`,
+  `live-counter` and `live-bars`, with drawn and generated test media.
 
 - Every short gets the short-form checks. The hook and card rules used to
   run only when an app supplied a footage library, so a Short made from a
@@ -420,6 +424,13 @@
   pick the narration by hand, several stretches at once.
 
 ### Fixed
+
+- HyperFrames drew a video in a media layout (`picture-in-picture`,
+  `landscape-card`, `media-compare`, `media-grid`, `media-list`,
+  `media-stat`, `split-screen`) without its drop shadow, and
+  `picture-in-picture` without its paper ring. Both now match Remotion.
+- `drop-grid` `times` is a list of seconds in the module schema. It read as a
+  single number, so a storyboard that timed each drop failed validation.
 
 - Critic repair rounds now work on long videos. The long-form storyboard
   stage returned its cached plan during a round, so every round failed with
