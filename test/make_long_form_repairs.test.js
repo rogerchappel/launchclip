@@ -63,7 +63,7 @@ async function make(t, { critic, options = {} }) {
   const verdicts = [...critic];
   const criticCalls = [];
   const criticAdapter = async (args) => { criticCalls.push(args); return verdicts.shift() ?? critiqueResult("ship"); };
-  const report = await runMake("The biggest AI stories of October", { duration: 240, voice: "test", music: "synth", cwd, out: "october", ...options }, { env: {}, client: fake.model, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, critic: criticAdapter, notice() {} });
+  const report = await runMake("The biggest AI stories of October", { duration: 240, voice: "test", music: "synth", research: "off", cwd, out: "october", ...options }, { env: {}, client: fake.model, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, critic: criticAdapter, notice() {} });
   const project = path.join(cwd, "october");
   const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
   return { report, story, project, finishCalls, criticCalls, direct: fake.direct };
