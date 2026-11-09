@@ -55,6 +55,7 @@ test("a clip's useful ranges are where something moves, and none when it moves t
   assert.deepEqual(movingWindows(null, 12), []);
   const clip = localDescription(video("onboarding-demo.mp4"), { motion: { moving_spans: [[2, 6]], duration: 12 } });
   assert.equal(clip.shows, "onboarding flow");
+  assert.match(clip.description, /^A clip that looks like an onboarding flow /);
   assert.deepEqual(clip.windows, [{ start: 2, end: 6, note: "something moves on screen" }]);
   assert.equal(clip.orientation, "portrait");
 });

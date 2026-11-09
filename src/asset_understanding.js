@@ -33,7 +33,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { LOW_QUALITY, normalizeNotes } from "./inventory_notes.js";
+import { LOW_QUALITY, normalizeNotes, withArticle } from "./inventory_notes.js";
 import { MEDIA_PRESENCE, decodeFrames, mediaPresenceFacts } from "./media_presence.js";
 import { pinnedCache } from "./state_dirs.js";
 
@@ -235,7 +235,7 @@ export function localDescription(entry, { motion = null, text = null } = {}) {
   const basis = named ? "its file name" : readable ? "the words on it" : "its shape and sound";
   const raw = {
     shows,
-    description: `${entry?.kind === "video" ? "A clip" : "An image"} that looks like a ${shows} (from ${basis}; not looked at by a model)`,
+    description: `${entry?.kind === "video" ? "A clip" : "An image"} that looks like ${withArticle(shows)} (from ${basis}; not looked at by a model)`,
     ...(lines.length ? { text: lines } : {}),
     fits: FITS[shows] ?? [],
     ...(orientation ? { orientation } : {}),
@@ -434,11 +434,11 @@ export function storyboardSources(storyboard) {
 export function unusedFeatured(storyboard, featured = []) {
   if (!featured?.length || !Array.isArray(storyboard?.scenes)) return [];
   const used = storyboardSources(storyboard);
-  return featured.filter((item) => !used.has(item.src)).map((item) => `featured: ${item.src}${item.shows ? ` (a ${item.shows})` : ""} is not in the storyboard, and ${item.reason}. Give it a scene on the line it fits best, used the way the asset list says to use it.`);
+  return featured.filter((item) => !used.has(item.src)).map((item) => `featured: ${item.src}${item.shows ? ` (${withArticle(item.shows)})` : ""} is not in the storyboard, and ${item.reason}. Give it a scene on the line it fits best, used the way the asset list says to use it.`);
 }
 
 /** The planner's prompt section naming the featured files. */
 export function featuredPrompt(featured = []) {
   if (!featured?.length) return "";
-  return ["## Files the user wants in the video", "", "Each of these must appear in at least one scene, on the line it fits best:", "", ...featured.map((item) => `- ${item.src}${item.shows ? ` (a ${item.shows})` : ""}: ${item.reason}.`)].join("\n");
+  return ["## Files the user wants in the video", "", "Each of these must appear in at least one scene, on the line it fits best:", "", ...featured.map((item) => `- ${item.src}${item.shows ? ` (${withArticle(item.shows)})` : ""}: ${item.reason}.`)].join("\n");
 }

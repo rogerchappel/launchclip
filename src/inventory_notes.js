@@ -222,12 +222,17 @@ export function bareNotesLine(item) {
   return mediaNotesLine(item).replace(NOTES_LEAD_PATTERN, "").replace(/\.$/, "");
 }
 
+/** "pricing page" → "a pricing page"; "onboarding flow" → "an onboarding flow". */
+export function withArticle(phrase) {
+  return `${/^[aeiou]/i.test(String(phrase)) ? "an" : "a"} ${phrase}`;
+}
+
 /** The notes as manifest text for the planner: what the asset shows, the words on it, where it fits, its quality and its usable windows. */
 export function mediaNotesLine(item) {
   const notes = item?.notes;
   if (!notes) return "";
   const parts = [];
-  if (notes.shows) parts.push(`a ${notes.shows}`);
+  if (notes.shows) parts.push(withArticle(notes.shows));
   if (notes.description) parts.push(notes.description.replace(/[.\s]+$/, ""));
   if (notes.text?.length) parts.push(`on-screen text ${notes.text.map((line) => `"${line}"`).join(", ")}`);
   if (notes.fits?.length) parts.push(`fits ${notes.fits.join("; ")}`);
