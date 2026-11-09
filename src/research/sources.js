@@ -129,13 +129,15 @@ async function newsSources(http, entities, options) {
   const record = (snapshot, lead, tags, extra = {}) => {
     const age = ageDays(snapshot.published_at, now);
     const stale = windowDays != null && age != null && age > windowDays;
+    // News has a date: with a window set, a page that gives none (a help page, an about page) cannot be shown to be new.
+    const undated = windowDays != null && age == null;
     stories.push({
       title: pageHeadline(snapshot, lead), url: snapshot.url, publisher: snapshot.publisher ?? null, published_at: snapshot.published_at ?? null, age_days: age,
       via: lead.via, source_class: tags.source_class, primary: tags.primary,
       // A story is kept when the party's own page states it and it is as fresh as the brief asks.
-      status: stale ? "stale" : tags.primary ? "kept" : "no-primary-source", ...extra
+      status: stale ? "stale" : undated ? "undated" : tags.primary ? "kept" : "no-primary-source", ...extra
     });
-    return !stale;
+    return !stale && !undated;
   };
   for (const lead of leads) {
     // Public pages only: a feed or an index can list any address.
