@@ -1,21 +1,34 @@
-// `launchclip script check <file> [--duration N] [--brief file]... [flags]`:
+// `launchclip script check <file|project> [--duration N] [--brief file]... [flags]`:
 // read a script (plain text, or the narration inside storyboard.json,
-// NARRATION.json or make's SCRIPT.json) and a brief, then run checkScript.
+// NARRATION.json or make's SCRIPT.json) and a brief, then run checkScript. A
+// project folder means its SCRIPT.json. A SCRIPT.json with speakers and silent
+// lines (version 2, kit/core/screenplay.mjs) is checked as a screenplay: the
+// contract first, then the same script checks on its spoken lines.
+import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { checkScript } from "./script_check.js";
+import { isScreenplay } from "@launchclip/core/screenplay.mjs";
+import { resolveProfile } from "./profile_store.js";
+import { checkScreenplay, checkScript } from "./script_check.js";
 
-/** → the checkScript report plus {source, input, brief_files}. */
+/** The profile whose problem_lands_seconds a screenplay is held to, unless --profile names another. */
+export const SCREENPLAY_PROFILE = "story-characters";
+
+/** → the checkScript (or checkScreenplay) report plus {source, input, brief_files}. */
 export async function runScriptCheck(file, flags = {}) {
-  if (!file) throw new Error("launchclip script check needs a script: launchclip script check <script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]");
-  const source = path.resolve(String(file));
+  if (!file) throw new Error("launchclip script check needs a script: launchclip script check <project|script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]");
+  let source = path.resolve(String(file));
+  if (existsSync(source) && statSync(source).isDirectory()) {
+    source = path.join(source, "SCRIPT.json");
+    if (!existsSync(source)) throw new Error(`launchclip script check: ${file} has no SCRIPT.json (pass a project that has one, or a script file)`);
+  }
   const input = parseScriptFile(source, await readText(source, "script"));
   const duration = flags.duration != null ? Number(flags.duration) : input.duration;
   if (flags.duration != null && !(duration > 0)) throw new Error(`--duration must be a positive number of seconds; got ${flags.duration}`);
+  if (flags.wpm != null && !(Number(flags.wpm) > 0)) throw new Error(`--wpm must be a positive number of words a minute; got ${flags.wpm}`);
   const briefFiles = [flags.brief].flat().filter(Boolean).map(String);
   const brief = briefFiles.length ? await readBriefs(briefFiles) : null;
-  const report = checkScript({
-    narration: input.narration,
+  const options = {
     duration,
     brief,
     // make's SCRIPT.json records the plan it wrote against; flags override it.
@@ -28,7 +41,16 @@ export async function runScriptCheck(file, flags = {}) {
     product: flags.product,
     cta: flags.cta,
     audience: flags.audience
-  });
+  };
+  if (input.kind === "screenplay") {
+    // The pace: --wpm (the voice's measured pace), else the plan's, else 150.
+    const wpm = flags.wpm != null ? Number(flags.wpm) : input.wpm ?? undefined;
+    const { profile } = resolveProfile(flags.profile ?? SCREENPLAY_PROFILE, { projectDir: path.dirname(source) });
+    const problemLandsSeconds = profile?.measures?.problem_lands_seconds?.p90 ?? null;
+    const report = checkScreenplay({ ...options, script: input.script, wpm, problemLandsSeconds });
+    return { ...report, source: String(file), input: input.kind, brief_files: briefFiles, profile: profile?.id ?? null };
+  }
+  const report = checkScript({ ...options, narration: input.narration });
   return { ...report, source: String(file), input: input.kind, brief_files: briefFiles };
 }
 
@@ -41,6 +63,11 @@ export function parseScriptFile(file, text) {
   if (narration && (narration.text || Array.isArray(narration.lines))) {
     const spoken = narration.text ?? narration.lines.map((line) => line.text).join(" ");
     return { kind: "storyboard", narration: spoken, duration: positive(value.format?.duration) };
+  }
+  if (isScreenplay(value)) {
+    const plan = value.plan && typeof value.plan === "object" ? value.plan : null;
+    const wpm = positive(plan?.wpm);
+    return { kind: "screenplay", script: value, narration: typeof value.narration === "string" ? value.narration : null, duration: positive(value.duration ?? plan?.duration), ...(wpm ? { wpm } : {}), ...(plan ? { plan } : {}) };
   }
   if (typeof value?.narration === "string") {
     const plan = value.plan && typeof value.plan === "object" ? { format: value.plan.format, goal: value.plan.goal, awareness: value.plan.awareness, ...(value.plan.pace ? { pace: value.plan.pace } : {}), ...(value.plan.cta ? { cta: value.plan.cta } : {}), ...(value.plan.series ? { series: value.plan.series } : {}) } : null;

@@ -64,6 +64,7 @@ import { applyEarshotSounds, findEarshot } from "./sfx/earshot.js";
 import { SCORE_FAMILIES, planScore } from "./sfx/score.js";
 import { applyScoreSounds } from "./sfx/score_sounds.js";
 import { structureGate } from "./skeletons.js";
+import { hookGate } from "./short_form_checks.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
@@ -108,6 +109,12 @@ export const FINISH_STATE_VERSION = "launchclip.finish-state.v1";
 export const FINISH_REPORT_VERSION = "launchclip.finish.v1";
 export const DEFAULT_VOICE_PROVIDER = "kokoro";
 export const LOUDNESS_TARGET = Object.freeze({ lufs: -14, tp: -1 });
+// A master within this many LU of the level target complies (the mastering script's own tolerance).
+export const LOUDNESS_TOLERANCE_LU = 1.5;
+// A master that misses the target is run again at most this many times.
+export const MASTER_REPAIRS = 2;
+// How far under the measured overshoot a repair sets the peak ceiling (the script's own retry margin).
+const MASTER_PEAK_MARGIN_DB = 0.2;
 
 export const PATHS = Object.freeze({
   state: ".launchclip/finish-state.json",
@@ -1495,10 +1502,46 @@ async function masterDelivery(ctx) {
   }
   // Master to a temporary file so a failed pass never leaves a half-written deliverable.
   const temporary = path.join(path.dirname(ctx.out), `.${path.basename(ctx.out, path.extname(ctx.out))}.mastering${path.extname(ctx.out) || ".mp4"}`);
-  const result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
+  const target = { integrated_lufs: LOUDNESS_TARGET.lufs, true_peak_dbtp: LOUDNESS_TARGET.tp };
+  let result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
+  // An adapter that reports no measurement keeps its own verdict.
+  const meets = (pass) => (Number.isFinite(Number(pass.output?.integrated_lufs)) ? loudnessCompliant(pass.output) : Boolean(pass.compliant));
+  let compliant = meets(result);
+  // A miss is repaired, not shipped: the master runs again from the raw
+  // render, aimed past the target by what the last pass missed by.
+  const repairs = [];
+  let aim = { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp };
+  while (!compliant && repairs.length < MASTER_REPAIRS) {
+    const miss = { ...result.output };
+    aim = repairAim(aim, miss);
+    result = await ctx.adapters.master(ctx.raw, temporary, aim);
+    compliant = meets(result);
+    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant });
+  }
   await rename(temporary, ctx.out);
-  if (!result.compliant) ctx.warnings.push(`mastered loudness is ${result.output?.integrated_lufs} LUFS / ${result.output?.true_peak_dbtp} dBTP; target ${LOUDNESS_TARGET.lufs} LUFS, ≤ ${LOUDNESS_TARGET.tp} dBTP`);
-  return { mastered: true, output: rel(ctx.project, ctx.out), loudness: result };
+  const read = (output) => `${output?.integrated_lufs} LUFS / ${output?.true_peak_dbtp} dBTP`;
+  const goal = `target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`;
+  if (repairs.length && compliant) ctx.warnings.push(`loudness: the first master measured ${read(repairs[0].missed)} (${goal}); re-mastered ${repairs.length === 1 ? "once" : `${repairs.length} times`}, now ${read(result.output)}`);
+  if (!compliant) ctx.warnings.push(`loudness: the master is ${read(result.output)} after ${repairs.length} repair${repairs.length === 1 ? "" : "s"}; ${goal}. The loudness gate fails: check the mix (a very quiet or very peaky voice or music track) and run finish again`);
+  return { mastered: true, output: rel(ctx.project, ctx.out), loudness: { ...result, target: { ...result.target, ...target }, compliant, ...(repairs.length ? { repairs } : {}) } };
+}
+
+/** Whether a measured master meets LOUDNESS_TARGET: within LOUDNESS_TOLERANCE_LU of the level, at or under the peak ceiling. */
+export function loudnessCompliant(output) {
+  const level = Number(output?.integrated_lufs), peak = Number(output?.true_peak_dbtp);
+  return Number.isFinite(level) && Math.abs(level - LOUDNESS_TARGET.lufs) <= LOUDNESS_TOLERANCE_LU && !(peak > LOUDNESS_TARGET.tp);
+}
+
+/** The next master's aim after a miss: the level moved by what was missed, the ceiling lowered by the overshoot plus a margin. */
+export function repairAim(aim, missed) {
+  const level = Number(missed?.integrated_lufs), peak = Number(missed?.true_peak_dbtp);
+  const round1 = (value) => Math.round(value * 10) / 10;
+  const off = Number.isFinite(level) && Math.abs(level - LOUDNESS_TARGET.lufs) > LOUDNESS_TOLERANCE_LU ? LOUDNESS_TARGET.lufs - level : 0;
+  // loudnorm takes I from -70 to -5 and TP from -9 to 0.
+  return {
+    lufs: round1(Math.max(-24, Math.min(-9, aim.lufs + off))),
+    tp: round1(Math.max(-6, peak > LOUDNESS_TARGET.tp ? aim.tp - (peak - LOUDNESS_TARGET.tp) - MASTER_PEAK_MARGIN_DB : aim.tp))
+  };
 }
 
 /** The story's chapters for delivery ([] for a prototype, a candidate or a preview). */
@@ -1799,7 +1842,7 @@ async function runGates(ctx) {
     ? { status: "skipped", reason: "master did not run" }
     : master.mastered === false
       ? { status: "skipped", reason: master.reason }
-      : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output };
+      : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output, ...(master.loudness?.repairs?.length ? { repairs: master.loudness.repairs.length } : {}), ...(master.loudness?.compliant ? {} : { errors: [`the master is ${master.loudness?.output?.integrated_lufs} LUFS / ${master.loudness?.output?.true_peak_dbtp} dBTP${master.loudness?.repairs?.length ? ` after ${master.loudness.repairs.length} re-master${master.loudness.repairs.length === 1 ? "" : "s"}` : ""}; target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`] }) };
 
   try {
     // The motion floors are the cadence profile's bands (a locked-off talking
@@ -1886,6 +1929,9 @@ async function runGates(ctx) {
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
     const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
     if (structure.status !== "skipped") gates.structure = structure;
+    // Hook (src/short_form_checks.js): how a short opens, from the storyboard and the measured narration.
+    const hook = hookGate({ story: ctx.resolved, words: scope.words, profile, duration: Number(ctx.resolved?.resolved?.duration) || null });
+    if (hook.status !== "skipped") gates.hook = hook;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }

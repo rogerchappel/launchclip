@@ -187,7 +187,8 @@
             "end": 5479
           }
         }
-      ]
+      ],
+      "published_at": "2026-10-17T02:40:38.000Z"
     },
     {
       "id": "c002",
@@ -232,6 +233,7 @@
           }
         }
       ],
+      "published_at": "2026-10-17T02:40:38.000Z",
       "capture": "hf-deepseek-v4-1-flash-1017",
       "data": {
         "text": "delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks.",
@@ -320,6 +322,7 @@
           }
         }
       ],
+      "published_at": "2026-10-17T02:40:38.000Z",
       "capture": "hf-deepseek-v4-1-flash-1017",
       "tables": [
         "hf-deepseek-v4-1-flash-1017-benchmark-1"
@@ -602,6 +605,7 @@
           }
         }
       ],
+      "published_at": "2026-10-17T02:40:38.000Z",
       "capture": "hf-deepseek-v4-1-flash-1017",
       "tables": [
         "hf-deepseek-v4-1-flash-1017-benchmark-1"
@@ -984,6 +988,7 @@
           }
         }
       ],
+      "published_at": "2026-10-17T02:40:38.000Z",
       "capture": "hf-deepseek-v4-1-flash-1017-2",
       "tables": [
         "hf-deepseek-v4-1-flash-1017-table-2",

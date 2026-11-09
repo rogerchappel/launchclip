@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { BUNDLED_SKILLS } from "../src/skill_install.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,6 +33,8 @@ try {
     "motion-engine/schema.js",
     "public/icons/check.svg",
     "remotion/index.jsx",
+    "skills/launchclip-character-design/SKILL.md",
+    "skills/launchclip-character-design/agents/openai.yaml",
     "skills/launchclip-cli/SKILL.md",
     "skills/launchclip-cli/agents/openai.yaml",
     "skills/launchclip-cli/references/cli-reference.md",
@@ -86,8 +89,12 @@ try {
   const doctor = JSON.parse((await run(bin, ["doctor"], consumer)).stdout);
   if (!doctor.package?.complete) throw new Error(`Installed CLI doctor is missing: ${doctor.package?.missing?.join(", ")}`);
   const skills = JSON.parse((await run(bin, ["skills", "list"], consumer)).stdout);
-  if (skills.skills?.length !== 3 || !skills.skills.some((skill) => skill.name === "launchclip-create-video") || !skills.skills.some((skill) => skill.name === "launchclip-create-video-remotion")) {
-    throw new Error("Installed CLI did not expose its bundled skills.");
+  // The installed CLI must list exactly the skills this source bundles, so a
+  // new skill never needs this check edited.
+  const expectedSkills = BUNDLED_SKILLS.map((skill) => skill.name).sort();
+  const listedSkills = (skills.skills ?? []).map((skill) => skill.name).sort();
+  if (listedSkills.join(",") !== expectedSkills.join(",")) {
+    throw new Error(`Installed CLI did not expose its bundled skills: expected ${expectedSkills.join(", ")}; got ${listedSkills.join(", ") || "none"}.`);
   }
   const subscriptionSkill = JSON.parse((await run(bin, ["skills", "path", "launchclip-create-video"], consumer)).stdout);
   await access(path.join(subscriptionSkill.path, "SKILL.md"));

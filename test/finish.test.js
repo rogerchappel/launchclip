@@ -10,7 +10,7 @@ import { runCli } from "../src/cli.js";
 import { runStoryCommand } from "../src/story_cli.js";
 import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
 import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
-import { PATHS, bindCues, buildFinishCopy, chooseBed, customModuleErrors, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, repairLayout, runFinish, stageDecision } from "../src/finish.js";
+import { MASTER_REPAIRS, PATHS, loudnessCompliant, repairAim, bindCues, buildFinishCopy, chooseBed, customModuleErrors, defaultCueFor, formatFinishSummary, kitCue, musicSpec, placeholderScenes, repairLayout, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 import { mediaSkip } from "./helpers/media.js";
 import { PROMPT, assetsDir, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
@@ -253,7 +253,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "critic"]);
     assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");
@@ -1537,4 +1537,99 @@ test("with musicFallback, ElevenLabs music with no key or a failed generation pl
   } finally {
     await rm(project, { recursive: true, force: true });
   }
+});
+
+test("the hook gate reads the storyboard and the narration, so both renderers get the same verdict", async () => {
+  const verdicts = [];
+  for (const renderer of ["remotion", "hyperframes"]) {
+    const project = await narratedProject();
+    try {
+      const report = await runFinish(project, { renderer }, fakeAdapters());
+      assert.equal(report.renderer, renderer);
+      verdicts.push(report.gates.hook);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  }
+  assert.deepEqual(verdicts[0], verdicts[1]);
+  assert.ok(["passed", "failed"].includes(verdicts[0].status));
+  assert.equal(verdicts[0].thresholds.profile, "short-motion");
+  assert.deepEqual([verdicts[0].thresholds.claim_by, verdicts[0].thresholds.entrance_max], [0.5, 0.35]);
+  assert.deepEqual(Object.keys(verdicts[0].checks), ["claim", "logo_open", "entrance", "first_word", "text"]);
+});
+
+test("a short whose opening fades in slowly with nothing to read fails the hook gate", async () => {
+  const project = await narratedProject({ mutate: (story) => {
+    // A one-word label on the opening, a 0.9 s fade in, and no captions to carry the spoken hook.
+    story.scenes[0] = { ...story.scenes[0], in: { type: "fade", dur: 0.9 }, params: { ...story.scenes[0].params, title: "Builds" } };
+    story.overlays = (story.overlays ?? []).filter((overlay) => overlay.type !== "captions");
+  } });
+  try {
+    const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    assert.equal(report.gates?.hook?.status, "failed", JSON.stringify([report.status, report.stages, report.gates?.direction]).slice(0, 1500));
+    assert.deepEqual(report.gates.hook.findings.map((entry) => entry.split(":")[0]), ["claim", "entrance", "text"]);
+    assert.match(report.gates.hook.checks.entrance.detail, /takes 0\.9 s to arrive/);
+    assert.equal(report.status, "needs-repair");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("a loudness miss re-runs the master aimed past the target, and passes when the repair lands", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    const aims = [];
+    const measured = [{ integrated_lufs: -17.2, true_peak_dbtp: -0.4 }, { integrated_lufs: -14.3, true_peak_dbtp: -1.3 }];
+    adapters.master = async (input, output, target) => {
+      aims.push(target);
+      await writeFile(output, `mastered ${aims.length}`);
+      return { target: { integrated_lufs: target.lufs, true_peak_dbtp: target.tp }, output: measured[Math.min(aims.length, measured.length) - 1], compliant: false };
+    };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    // -17.2 is 3.2 LU low and the peak 0.6 dB over: the repair aims 3.2 LU higher with the ceiling 0.8 dB lower.
+    assert.deepEqual(aims, [{ lufs: -14, tp: -1 }, { lufs: -10.8, tp: -1.8 }]);
+    const master = report.stages.find((stage) => stage.name === "master").details;
+    assert.equal(master.loudness.compliant, true);
+    assert.deepEqual(master.loudness.target, { integrated_lufs: -14, true_peak_dbtp: -1 }, "the target on record is the delivery target, not the repair's aim");
+    assert.equal(master.loudness.repairs.length, 1);
+    assert.deepEqual(report.gates.loudness, { status: "passed", target: { integrated_lufs: -14, true_peak_dbtp: -1 }, output: measured[1], repairs: 1 });
+    assert.match(report.warnings.join("\n"), /loudness: the first master measured -17\.2 LUFS \/ -0\.4 dBTP .*re-mastered once, now -14\.3 LUFS \/ -1\.3 dBTP/);
+    assert.equal(await readFile(report.final, "utf8"), "mastered 2");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("a master that still misses after the repairs fails the loudness gate", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    let runs = 0;
+    adapters.master = async (input, output, target) => {
+      runs += 1;
+      await writeFile(output, `mastered ${runs}`);
+      return { target: { integrated_lufs: target.lufs, true_peak_dbtp: target.tp }, output: { integrated_lufs: -19, true_peak_dbtp: -1.5 }, compliant: false };
+    };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(runs, 1 + MASTER_REPAIRS);
+    assert.equal(report.gates.loudness.status, "failed");
+    assert.equal(report.gates.loudness.repairs, MASTER_REPAIRS);
+    assert.match(report.gates.loudness.errors[0], /the master is -19 LUFS \/ -1\.5 dBTP after 2 re-masters; target -14 LUFS \(within 1\.5 LU\), ≤ -1 dBTP/);
+    assert.equal(report.status, "needs-repair");
+    assert.match(report.warnings.join("\n"), /loudness: the master is -19 LUFS .* The loudness gate fails/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("repairAim moves the level by the miss and lowers the ceiling by the overshoot; loudnessCompliant holds the target", () => {
+  assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -17.2, true_peak_dbtp: -0.4 }), { lufs: -10.8, tp: -1.8 });
+  // Inside the tolerance the level stays; only the peak is repaired.
+  assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -13.2, true_peak_dbtp: -0.9 }), { lufs: -14, tp: -1.3 });
+  assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -40, true_peak_dbtp: -20 }), { lufs: -9, tp: -1 }, "the aim stays inside what loudnorm accepts");
+  assert.equal(loudnessCompliant({ integrated_lufs: -15.5, true_peak_dbtp: -1 }), true);
+  assert.equal(loudnessCompliant({ integrated_lufs: -15.6, true_peak_dbtp: -3 }), false);
+  assert.equal(loudnessCompliant({ integrated_lufs: -14, true_peak_dbtp: -0.9 }), false);
+  assert.equal(loudnessCompliant({}), false);
 });
