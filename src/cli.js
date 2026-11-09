@@ -84,7 +84,9 @@ export async function runCli(argv, io = {}) {
   try {
     let result;
     // doctor and queue take only flags, so their first argument is one of them.
-    const doctorFlags = command === "doctor" || command === "queue" ? parseFlags(commandArgs) : null;
+    // doctor's --agent is a switch (elsewhere --agent names one), so it is read apart.
+    const doctorAgent = command === "doctor" && commandArgs.includes("--agent");
+    const doctorFlags = command === "doctor" || command === "queue" ? parseFlags(commandArgs.filter((arg) => !(doctorAgent && arg === "--agent"))) : null;
     if (command === "queue") {
       const { readQueue, formatQueue } = await import("./queue.js");
       const report = await readQueue();
@@ -95,6 +97,12 @@ export async function runCli(argv, io = {}) {
       const { diagnoseCapacity, formatCapacity } = await import("./capacity.js");
       const report = await (productionAdapters.capacity ?? diagnoseCapacity)();
       stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatCapacity(report));
+      return;
+    } else if (doctorFlags?.models) {
+      const { diagnoseModels } = await import("./doctor.js");
+      const { formatModelAccess } = await import("./make/models.js");
+      const report = await (productionAdapters.models ?? diagnoseModels)({ model: typeof doctorFlags.model === "string" ? doctorFlags.model : undefined, agent: doctorAgent });
+      stdout.write(doctorFlags.json ? `${JSON.stringify(report, null, 2)}\n` : formatModelAccess(report));
       return;
     } else if (command === "doctor") {
       result = await doctor();
@@ -515,7 +523,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "no-sheet") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "models" || name === "still" || name === "no-sheet") {
       flags[name] = true;
       continue;
     }

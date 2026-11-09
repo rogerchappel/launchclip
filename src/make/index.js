@@ -40,7 +40,7 @@ import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
-import { createMakeClient, selectMakeModel } from "./models.js";
+import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, SCRIPT_VERSION, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
@@ -146,6 +146,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     assets_dir: assetsDir,
     options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
+    model_access: null,
     routing: null,
     stages: {},
     timings: {},
@@ -234,6 +235,9 @@ async function stageModel(ctx) {
     ctx.model = { ...createMakeClient(spec), spec, source };
   }
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
+  // Which roles this run's model can play (text and vision), so an app can
+  // show what the run will and will not check. No paid call (models.js).
+  report.model_access = await checkModelAccess({ env, selected: ctx.model, fetch: adapters.fetch });
   return { status: "done" };
 }
 
@@ -1211,10 +1215,11 @@ function machineLine(concurrency) {
 
 async function stageCritic(ctx) {
   const { options } = ctx;
-  const wanted = options.critic === true || (options.critic !== false && ctx.model.vision);
   if (options.critic === false) return criticPending(ctx, "--no-critic");
-  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make (the Anthropic adapter sends text only)`);
-  if (!ctx.model.vision) return criticPending(ctx, `${ctx.model.spec} cannot take images`);
+  if (!ctx.model.vision) {
+    const why = ctx.report.model_access?.vision?.reason;
+    return criticPending(ctx, `${ctx.model.spec} cannot take images${why ? ` (${why})` : ""}`);
+  }
   const result = await runCritic(ctx);
   if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
   await criticRepairs(ctx, result);
