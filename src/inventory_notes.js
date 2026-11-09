@@ -25,7 +25,7 @@ export const NOTE_ROLES = Object.freeze({
   image: Object.freeze(["logo", "screenshot", "product-image"]),
   audio: Object.freeze(["voiceover", "music"])
 });
-const NOTE_KEYS = new Set(["src", "description", "subjects", "tags", "windows", "quality", "orientation", "people", "faces", "role"]);
+const NOTE_KEYS = new Set(["src", "description", "shows", "text", "fits", "feature", "subjects", "tags", "windows", "quality", "orientation", "people", "faces", "role"]);
 const MEDIA_EXT = /\.(png|jpe?g|webp|gif|svg|mp4|mov|m4v|webm|mkv|wav|mp3|m4a|aac|flac|ogg|opus)$/i;
 const ROLE_LABELS = Object.freeze({ "talking-head": "Talking-head recording", "screen-recording": "Screen recording", "b-roll": "B-roll footage", logo: "Logo image", screenshot: "Screenshot", "product-image": "Product image", voiceover: "Voiceover", music: "Music track" });
 // A clip below this quality is offered as a last resort.
@@ -48,11 +48,21 @@ export function normalizeNotes(raw, where = "notes") {
     if (typeof raw.description === "string" && raw.description.trim()) notes.description = raw.description.trim().replace(/\s+/g, " ").slice(0, 500);
     else warnings.push(`${where}.description must be text; ignored`);
   }
-  for (const key of ["subjects", "tags"]) {
+  // What the asset is, in a few words: "pricing page", "dashboard", "person on camera".
+  if (raw.shows !== undefined) {
+    if (typeof raw.shows === "string" && raw.shows.trim()) notes.shows = raw.shows.trim().replace(/\s+/g, " ").toLowerCase().slice(0, 60);
+    else warnings.push(`${where}.shows must be a few words saying what the asset is (for example "pricing page"); ignored`);
+  }
+  // text: the key words readable on screen; fits: the story beats it suits.
+  for (const [key, max, each] of [["subjects", 20, 60], ["tags", 40, 60], ["text", 12, 120], ["fits", 6, 80]]) {
     if (raw[key] === undefined) continue;
-    const list = Array.isArray(raw[key]) ? raw[key].filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim().slice(0, 60)) : null;
+    const list = Array.isArray(raw[key]) ? raw[key].filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim().replace(/\s+/g, " ").slice(0, each)) : null;
     if (!list) warnings.push(`${where}.${key} must be a list of words or phrases; ignored`);
-    else if (list.length) notes[key] = [...new Set(list)].slice(0, key === "tags" ? 40 : 20);
+    else if (list.length) notes[key] = [...new Set(list)].slice(0, max);
+  }
+  if (raw.feature !== undefined) {
+    if (typeof raw.feature === "boolean") notes.feature = raw.feature;
+    else warnings.push(`${where}.feature must be true or false; ignored`);
   }
   if (raw.quality !== undefined) {
     if (finite(raw.quality) && raw.quality >= 0 && raw.quality <= 1) notes.quality = round2(raw.quality);
@@ -198,12 +208,30 @@ export function applyNotes(entry, notes) {
   return out;
 }
 
-/** The notes as manifest text for the planner: what the clip shows, its quality and its usable windows. */
+// How the notes are introduced to the planner, by where they came from
+// (item.understanding.source, src/asset_understanding.js; none: the app's).
+export const NOTES_LEADS = Object.freeze({
+  notes: "Notes from the app",
+  vision: "What it shows (a vision model looked at it)",
+  local: "What it likely shows (guessed from the file name and frames; trust the narration over this)"
+});
+const NOTES_LEAD_PATTERN = new RegExp(`^ (?:${Object.values(NOTES_LEADS).map((lead) => lead.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}): `);
+
+/** mediaNotesLine() without its lead and full stop, for a prompt that quotes the notes inline. */
+export function bareNotesLine(item) {
+  return mediaNotesLine(item).replace(NOTES_LEAD_PATTERN, "").replace(/\.$/, "");
+}
+
+/** The notes as manifest text for the planner: what the asset shows, the words on it, where it fits, its quality and its usable windows. */
 export function mediaNotesLine(item) {
   const notes = item?.notes;
   if (!notes) return "";
   const parts = [];
+  if (notes.shows) parts.push(`a ${notes.shows}`);
   if (notes.description) parts.push(notes.description.replace(/[.\s]+$/, ""));
+  if (notes.text?.length) parts.push(`on-screen text ${notes.text.map((line) => `"${line}"`).join(", ")}`);
+  if (notes.fits?.length) parts.push(`fits ${notes.fits.join("; ")}`);
+  if (notes.feature) parts.push("the user wants this one in the video");
   if (notes.subjects?.length) parts.push(`shows ${notes.subjects.join(", ")}`);
   if (notes.tags?.length) parts.push(`tags ${notes.tags.join(", ")}`);
   if (notes.quality !== undefined) parts.push(`quality ${notes.quality}${notes.quality < LOW_QUALITY ? " (low: use only when nothing better fits the line)" : ""}`);
@@ -216,7 +244,8 @@ export function mediaNotesLine(item) {
   if (notes.windows?.length) {
     parts.push(`usable windows ${notes.windows.map((window) => `${window.start}–${window.end} s${window.quality !== undefined ? ` (quality ${window.quality})` : ""}${window.note ? ` "${window.note}"` : ""}`).join(", ")}: set params.media.sourceStart to a window's start and keep the scene no longer than the window, preferring the higher-quality window that matches the line`);
   }
-  return parts.filter(Boolean).length ? ` Notes from the app: ${parts.filter(Boolean).join("; ")}.` : "";
+  const lead = NOTES_LEADS[item?.understanding?.source] ?? NOTES_LEADS.notes;
+  return parts.filter(Boolean).length ? ` ${lead}: ${parts.filter(Boolean).join("; ")}.` : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -236,8 +265,8 @@ export function matchScore(item, text, window = null) {
   const line = new Set(tokens(text));
   if (!line.size) return 0;
   const notes = item?.notes ?? {};
-  const strong = new Set(tokens([...(notes.subjects ?? []), ...(notes.tags ?? [])].join(" ")));
-  const weak = new Set(tokens([notes.description ?? "", item?.description ?? "", window?.note ?? "", String(item?.src ?? item?.path ?? "").split("/").pop().replace(/\.[^.]+$/, "")].join(" ")));
+  const strong = new Set(tokens([notes.shows ?? "", ...(notes.subjects ?? []), ...(notes.tags ?? [])].join(" ")));
+  const weak = new Set(tokens([notes.description ?? "", ...(notes.text ?? []), ...(notes.fits ?? []), item?.description ?? "", window?.note ?? "", String(item?.src ?? item?.path ?? "").split("/").pop().replace(/\.[^.]+$/, "")].join(" ")));
   let score = 0;
   for (const word of line) score += strong.has(word) ? 2 : weak.has(word) ? 1 : 0;
   return score;
