@@ -152,7 +152,7 @@ test("long form: the story is a spine of at most three minutes and the outline i
     return { status: "done", seconds: 1, stages: [], gates: {}, final: path.join(project, "renders/draft.mp4"), warnings: [] };
   };
   const joinVoice = async (files, out) => { await mkdir(path.dirname(out), { recursive: true }); await writeFile(out, "wav"); return out; };
-  const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", cwd, out: "october", longFormVisuals: "rules" }, { env: {}, client: model, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, notice() {} });
+  const report = await runMake("The biggest AI stories of October", { duration: 420, voice: "test", music: "synth", research: "off", cwd, out: "october", longFormVisuals: "rules" }, { env: {}, client: model, inventory: async (dir) => ({ schema_version: "launchclip.make-assets.v1", dir, entries: [] }), finish, joinVoice, notice() {} });
   assert.notEqual(report.status, "failed", JSON.stringify(report.stages));
   assert.deepEqual(seen.slice(0, 5).map((request) => request.schemaName), [...CONCEPT_SCHEMAS, "launchclip_long_form_outline"]);
   assert.equal(JSON.parse(seen[2].input).format.duration_seconds, 180, "a 7-minute video's story is a 3-minute spine");
