@@ -1190,13 +1190,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `skills path`: Print the path of a bundled skill.
 
   ```text
-  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design]
   ```
 
 - `skills install`: Install the bundled skills for Codex or Claude.
 
   ```text
-  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|launchclip-character-design|all] [--force]
   ```
 
 - `style create`: Create a style pack from a video, a style directory or reference media.
