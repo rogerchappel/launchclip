@@ -3510,7 +3510,7 @@ to a stretch of the recording, not to one scene.
 | `split-left` | reframed into the left 46% (16:9) or 50% (9:16) | the right side |
 | `split-right` | reframed into the right side | the left side |
 | `framed` | inset in a rounded frame with a ring; `side` left/right (16:9, default left) or top/bottom (9:16, default top) | the rest of the canvas |
-| `stacked` | 9:16 only: the bottom half (`side: "top"` for the top) | the other half |
+| `stacked` | 9:16 only: the bottom half (`side: "top"` for the top), or `share` (0.35–0.6) of the height | the rest |
 | `insert` | hidden; the base audio keeps playing | the full canvas |
 
 - The contract lives in `kit/core/story.mjs`, which stays import-free: `validateSections`, `storySections` and `layoutSpans`. `footage-layout.mjs` re-exports them. `validateSections` (called by `validateStory`) checks the following:
@@ -3520,6 +3520,7 @@ to a stretch of the recording, not to one scene.
   - `panel` is a brand role (bg (default), primary, accent, paper or ink) or a `#rrggbb` colour;
   - `ring` is 0–24 px (default 6 for framed, else 0);
   - `room` is keep, dim or replace, and `zoom` is 1–1.6;
+  - `breakout` is a boolean, and true only where the presenter sits under the panel: `framed` with `side: "bottom"`, or `stacked` (bottom);
   - `transition` is `{type: "layout-shift" | "cut", dur ≤ 2}`;
   - sections are in order, without overlap.
 - `resolveStory` resolves section anchors like scene times.
@@ -3567,6 +3568,25 @@ to a stretch of the recording, not to one scene.
   - The face rule follows the reframed head, and sees no head while `insert` holds.
 - **Rooms.** A section's `room` (`dim` → `{dim: 0.55}`, `replace` → `{hide: true}`) becomes a room model for the section window. It needs a matte over every frame of the section; otherwise it's dropped with a plan warning that HyperFrames reports. It mounts the subject like a scene's room, and `plannedSubjectWindows` (so `make`) mattes it.
 - **Module reviews.** A module review (sceneFilter, ModuleReview) has no layout.
+
+### Breakout
+
+A section with `breakout: true` lifts the presenter's head over the top edge of their window, in front of the panel: the partly cut-out talking head.
+
+```json
+{ "id": "steps", "start": 2, "end": 9, "layout": "stacked", "share": 0.45, "breakout": true }
+```
+
+- **Where.** `framed` with `side: "bottom"`, or `stacked` on the bottom (`BREAKOUT_LAYOUTS`). Anything else is a validation error. `storySections` carries `breakout: true` only when it is on, so other stories resolve as before.
+- **The matte.** It needs a matte over the breakout window, like a room treatment. `breakoutWindows(story)` → `[{id, start, end}]`: the section, plus the layout-shift that leaves it unless the next span is an insert or another breakout. Without the matte the plan warns ("the head stays inside the frame") and the section renders as a plain one. `plannedSubjectWindows` includes the windows, so `make` mattes them.
+- **The camera.** The reframe puts the window's top edge `BREAKOUT_EDGE` (0.4) of the way down the head, about eye level, instead of keeping the head at its height in the frame. The head is the measured one, else `DEFAULT_HEAD`. The footage still has to cover the window, so a head the clamp holds lower breaks out less.
+- **The plan.** `layoutPlan(story).breakouts` lists the live windows (absent without one), and each adds a room entry `{sceneId: "layout:<id>:breakout", room: {}}` that mounts the cut-out and leaves the room as it is. A state in a breakout carries `breakout: true`; a shift keeps it into every layout but an insert, where the window closes.
+- **Stacking.** The frame is drawn twice, and so is a panel fill:
+  - `#lc-layout-frame-under` (`LayoutFrame under`, styled by `layoutUnderFrameStyle`) sits under the subject (z-index `subjectZ - 1`) and paints the panel and the ring behind the head.
+  - `#lc-layout-frame` stays above the subject. `layoutFrameStyle` adds a `clipPath`, `breakoutNotch(state, canvas, state.window)`, that cuts it away over the breakout zone (`breakoutZone`: the window's column with its ring, from the top of the canvas to the end of the window's top corners), so the cut-out shows there and is still trimmed at the window's sides and bottom. HyperFrames sets `clipPath` on every op (`"none"` outside a breakout).
+  - With a panel fill, `#lc-layout-fill-under` sits under the subject and `#lc-layout-fill` is wrapped in `#lc-layout-fill-notch`, clipped by `breakoutNotch(state, canvas)` (`LayoutFill notch`).
+  - Front scenes and captions stay above the head.
+- **The panel and captions.** `breakoutRise(story, section, canvas)` is how far the head stands over the edge (px; 0 without a live breakout). `layoutAt` reports it as `breakout` and ends `safe` a gutter above the head (`panelSafeArea`'s `bottom`). Captions at the `seam` sit on top of the head instead of across the face (`captionZone`'s `rise`).
 
 ### Parity
 
@@ -3925,6 +3945,15 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
   `resolveStory` turns them into ids), so a storyboard planned before a
   seeded cast exists works with any seed's people.
+- `character.mjs`: the saved character file (`launchclip.character.v1`,
+  below): `normalizeCharacter`, `characterErrors`, `characterCastEntry`,
+  the set paths (`characterPaths()`, `parseSet`, `applyCharacterSets`) and
+  `withSavedCharacters(story, find)`, which fills story cast entries from
+  saved files.
+- `describe.mjs`: `describeCharacter(text, {current})`, a plain description
+  or edit instruction → set paths with no model, matched on the rig's own
+  option lists; `newCharacterDefaults(seed)` and `pickVoice(seed, …)` for
+  what a description leaves out.
 - `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
   joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
   over every pose an actor takes in a scene, each gesture's far swing and a
@@ -3972,6 +4001,80 @@ is an illustrated character: it takes no rig params, acts only in
 `sprite-scene` (a drawn-rig scene refuses it), and its `voice` may be any
 provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
 ElevenLabs), so each character in a dialogue speaks in its own voice.
+
+### Saved characters (`launchclip.character.v1`)
+
+One designed character as a file, used by the CLI, by agents (the
+`launchclip-character-design` skill) and by every storyboard read:
+
+```json
+{ "schema": "launchclip.character.v1", "id": "nova", "name": "Nova",
+  "personality": "calm night-shift lead who jokes under pressure",
+  "style": "paper", "voice": "bf_emma",
+  "params": { "build": "average", "height": "tall", "skin": "deep",
+              "hair": { "style": "locs", "color": "silver" },
+              "outfit": { "top": "blazer", "bottom": "trousers" },
+              "accessories": ["round-glasses"],
+              "colors": { "top": "red", "bottom": "denim", "shoes": "white", "accent": "accent" } } }
+```
+
+- `params` are rig params; `normalizeCharacter` validates them with
+  `normalizeRigParams` and writes the file in canonical form (fixed key
+  order, optional fields only when set), so equal characters are equal
+  files. `id` is a cast id that is not a starter's. `personality` is one
+  line of at most 160 characters. `voice` is any provider's voice id; one
+  shaped like a Kokoro id must be a local Kokoro voice. No other keys are
+  accepted.
+- **Where it lives** (`src/character_store.js`):
+  `<project>/cast/<id>.character.json`, then the user library
+  `~/.launchclip/cast/` (`$LAUNCHCLIP_HOME/cast`; an embedding app's pinned
+  home). The project's file wins.
+- **In a story.** A `story.cast.characters` entry whose id (or `from`) names
+  no starter and that carries no skin and hair of its own is filled from the
+  saved file: `{"id": "nova"}`, or `{"id": "lead", "from": "nova", "colors":
+  {"top": "teal"}}`, where the entry's own fields win as they do over a
+  starter. This runs in the shared storyboard read step
+  (`applyProjectStyle` in `src/story_style.js`, after the style merge), so
+  `story validate`, `layout-check`, `finish`, the renderers and `cast` all
+  see the filled cast; the result reports `characters: [{id, from, source}]`.
+  Entries that name a starter or carry their own params are untouched, and a
+  story with no such entry is returned as the same object. The file's
+  `style` is the style its sheet draws in; in a story `cast.style` decides.
+- **Set paths** are the one edit language: `name`, `personality`, `voice`,
+  `style`, `build`, `height`, `age`, `skin`, `hair.style`, `hair.color`,
+  `outfit.top`, `outfit.bottom`, `outfit.over`, `accessories`, `headwear`,
+  `mobility`, `colors.top|bottom|shoes|accent`. `path=value` sets one;
+  `accessories+=name` and `accessories-=name` add and remove (a new pair of
+  glasses replaces the pair worn); `path=none` clears an optional one.
+  `launchclip cast options [path]` prints each path's values from the rig's,
+  the palette's and the styles' exports, so options added there are settable
+  with no change here.
+- **Commands** (`src/cast_design.js`):
+  - `launchclip cast create <id> [--describe "…"] [--set path=value]…
+    [--from <starter|saved id>] [--to project|library]` builds a character
+    from a description (`describe.mjs`: no model, no key), then the `--name`,
+    `--personality`, `--voice` and `--style` shorthands, then `--set`, each
+    later one winning. Skin, hair and voice nobody named are chosen from the
+    id and reported as `assumed`; words nothing matched as `unmatched`.
+    `--model provider:model` (or `LAUNCHCLIP_CAST_MODEL`) asks a model for
+    the set paths instead (`src/make/models.js` clients); answers naming a
+    path or option the rig lacks are dropped and reported as `rejected`.
+  - `launchclip cast edit <id> [--instruction "…"] [--set path=value]…`
+    applies the same to a saved character and saves it where it was found.
+    A character that fails validation is not written.
+  - Both draw the sheet beside the file as `<id>.sheet.png` (a few poses,
+    every expression, the character's style, the project's brand colours
+    when it has a storyboard); `--no-sheet` skips it and `launchclip cast
+    sheet <id> [--poses …]` redraws it.
+  - `launchclip cast export [ids…] --out <folder|pack.json>` writes a
+    character pack and `launchclip cast import <pack> [--to project|library]
+    [--ids …] [--force]` reads one. A pack (`launchclip.cast-pack.v1`) is a
+    folder with `cast-pack.json` (`{schema, name, characters: [ids]}`) and
+    one character file each, or one `.json` file with the characters inside.
+    Import validates every character and refuses to replace one that exists
+    with different traits unless forced.
+- A reference image maps to traits (the skill has the agent read it and
+  choose options); nothing stores or reproduces a likeness.
 
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 

@@ -5,11 +5,15 @@
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { layoutFrameStyle, layoutStateAt } from "@launchclip/core/footage-layout.mjs";
+import { layoutFrameStyle, layoutStateAt, layoutUnderFrameStyle } from "@launchclip/core/footage-layout.mjs";
 
-export const LayoutFrame: React.FC<{ plan: any }> = ({ plan }) => {
+// under: the frame's copy beneath the subject in a story with a breakout
+// section (#lc-layout-frame-under); the frame above the subject is then
+// clipped away over the breakout zone (layoutFrameStyle's clipPath).
+export const LayoutFrame: React.FC<{ plan: any; under?: boolean }> = ({ plan, under = false }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const style = layoutFrameStyle(layoutStateAt(plan, frame / fps), plan.canvas);
+  const state = layoutStateAt(plan, frame / fps);
+  const style = under ? layoutUnderFrameStyle(state, plan.canvas) : layoutFrameStyle(state, plan.canvas);
   return <div aria-hidden style={{ position: "absolute", pointerEvents: "none", ...style }} />;
 };

@@ -1032,13 +1032,14 @@ export function layoutLines({ format } = {}) {
   const portrait = format ? Number(format.height) > Number(format.width) : null;
   const rows = LAYOUT_ROWS.filter(([name]) => !(name === 'stacked' && portrait === false));
   return [
-    'A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section\'s scenes in its panel.',
+    'A footage-led story may hold top-level `sections: [{id, start, end, layout, side?, panel?, room?, breakout?, transition?}]`: one layout for a stretch of the recording, and the scenes inside render within it. Times are seconds or word anchors; sections may not overlap; time outside every section is `full`. Plan the layout per section of the direction map, then place the section\'s scenes in its panel.',
     '',
     '| Layout | Presenter | Use it when the section… |',
     '| --- | --- | --- |',
     ...rows.map(([name, presenter, when]) => `| \`${name}\` | ${presenter} | ${when} |`),
     '',
     '- The panel is a brand colour (`panel`: bg (default), primary, accent, paper, ink or #rrggbb). `room`: "dim" or "replace" darkens or removes the recording behind the cut-out presenter (needs a matte over the section; `make` mattes it).',
+    '- `breakout: true` on a `stacked` section, or a `framed` one with `side: "bottom"`, lifts the presenter\'s head over the top edge of their window, in front of the panel (needs a matte over the section; `make` mattes it). Keep panel content clear of the bottom of the panel there. Use it for a whole section, not for one line.',
     '- Changing layout is a `layout-shift` transition (0.5 s; `transition: {type: "layout-shift" | "cut", dur?}`). Hold a layout for a whole section (about 4 s or more); do not flip layouts line by line.',
     '- In a section with a panel, a checklist without `rect` fits the panel\'s safe area; give other modules a `rect` inside the panel, clear of the presenter\'s side.'
   ];

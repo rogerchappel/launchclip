@@ -1,11 +1,16 @@
 // Character casts: `launchclip cast list / show / sheet`, and the cast
 // consistency gate `launchclip finish` runs (docs/VIDEO_QUALITY_RFC.md §10.5).
 //
-//   cast list [project|storyboard.json]   the starter cast, plus a story's cast
+//   cast list [project|storyboard.json]   the starter cast, the saved
+//                                          characters, plus a story's cast
 //   cast show <id> [--story <file>]        one character's params, colours, voice
 //   cast sheet <project|storyboard.json>   every character in every pose and
 //                                          expression the story uses, rendered
 //                                          once to qa/cast-sheet.png (+ .json)
+//   cast sheet <saved id>                  one saved character's design sheet
+//
+// Designing characters (create, edit, options, export, import) is
+// src/cast_design.js; saved characters live in src/character_store.js.
 //
 // The sheet draws characters with the same view tree the modules render
 // (kit/core/characters/), in Chromium, so what the sheet shows is what the
@@ -25,6 +30,8 @@ import { CAST_MODULES } from "@launchclip/core/story.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { renderNode } from "../kit/hyperframes/catalog-b.mjs";
 import { applyProjectStyle } from "./story_style.js";
+import { characterCastEntry } from "@launchclip/core/characters/character.mjs";
+import { listCharacters, loadCharacter } from "./character_store.js";
 
 export const CAST_SHEET = Object.freeze({ png: "qa/cast-sheet.png", json: "qa/cast-sheet.json" });
 
@@ -75,23 +82,31 @@ export function castUsage(story, direction = null) {
   return usage;
 }
 
-/** `cast list`: the starter cast and, with a story, its cast. */
-export async function castList(target) {
-  const { story } = await loadStoryFile(target);
+/** `cast list`: the starter cast, the saved characters (the project's, then the library's) and, with a story, its cast. */
+export async function castList(target, { project, home } = {}) {
+  const { story, project: storyProject } = await loadStoryFile(target);
+  const saved = await listCharacters({ projectDir: project ?? storyProject ?? process.cwd(), home });
   const rows = STARTER_CAST.map((entry) => ({ id: entry.id, name: entry.name, summary: entry.summary, voice: entry.voice, source: "starter" }));
   let storyRows = [];
   if (story?.cast) {
     const resolved = resolveStoryCast(story);
     storyRows = [...resolved.members.values()].map((member) => ({ id: member.id, name: member.name, voice: member.voice, build: member.params?.build ?? null, hair: member.params?.hair?.style ?? null, ...(member.sprite ? { art: member.art } : {}), source: "story" }));
   }
-  return { stage: "cast", action: "list", status: "ready", starter: rows, story: storyRows };
+  return { stage: "cast", action: "list", status: "ready", starter: rows, saved, story: storyRows };
 }
 
 /** `cast show <id>`: params, resolved colours and voice. */
-export async function castShow(id, { story: storyPath } = {}) {
+export async function castShow(id, { story: storyPath, project, home } = {}) {
   if (!id) throw new Error("cast show needs a character id (see launchclip cast list)");
-  const { story } = await loadStoryFile(storyPath);
-  const member = castMember(resolveStoryCast(story ?? {}), id);
+  const { story, project: storyProject } = await loadStoryFile(storyPath);
+  const resolved = resolveStoryCast(story ?? {});
+  // A saved character outside a story's cast: its own file, drawn in its own style.
+  const saved = resolved.members.has(id) || resolved.listed ? null : await loadCharacter(id, { projectDir: project ?? storyProject ?? process.cwd(), home });
+  if (saved) {
+    const member = castMember(resolveStoryCast({ brand: story?.brand, cast: { style: saved.character.style, characters: [characterCastEntry(saved.character)] } }), id);
+    return { stage: "cast", action: "show", status: "ready", id: member.id, name: member.name, personality: saved.character.personality ?? null, voice: member.voice, style: member.style, starter: false, saved: saved.source, file: saved.file, params: member.params, colors: member.colors, fingerprint: member.fingerprint };
+  }
+  const member = castMember(resolved, id);
   return { stage: "cast", action: "show", status: "ready", id: member.id, name: member.name, voice: member.voice, style: member.style, starter: member.starter, params: member.params, colors: member.colors, fingerprint: member.fingerprint };
 }
 
@@ -167,7 +182,7 @@ export async function castSheet(target, { out, report: reportPath, ids, chromium
   return { stage: "cast", action: "sheet", status: "ready", png: pngPath, json: jsonPath, characters: rows.map((row) => ({ id: row.id, poses: row.poses, expressions: row.expressions })) };
 }
 
-async function screenshotHtml(html, file, { chromium } = {}) {
+export async function screenshotHtml(html, file, { chromium } = {}) {
   const { findChromium, loadPlaywright } = await import("./demo/record.js");
   const playwrightChromium = await loadPlaywright();
   if (!playwrightChromium) throw new Error("cast sheet needs Playwright (npm i playwright)");
@@ -183,15 +198,27 @@ async function screenshotHtml(html, file, { chromium } = {}) {
 }
 
 export async function runCastCommand(action, name, flags = {}) {
-  if (action === "list") return castList(name ?? flags.story);
-  if (action === "show") return castShow(name, { story: flags.story });
-  if (action === "sheet") return castSheet(name ?? flags.story, { out: flags.out, report: flags.report, ids: flags.ids });
+  if (action === "list") return castList(name ?? flags.story, { project: flags.project });
+  if (action === "show") return castShow(name, { story: flags.story, project: flags.project });
+  if (action === "sheet") {
+    // A saved character's id (not a path on disk) draws that character's design sheet.
+    if (name && !existsSync(name) && /^[a-z][a-z0-9-]{0,23}$/.test(name)) return (await import("./cast_design.js")).castCharacterSheet(name, flags);
+    return castSheet(name ?? flags.story, { out: flags.out, report: flags.report, ids: flags.ids });
+  }
+  if (["create", "edit", "options", "export", "import"].includes(action)) {
+    const design = await import("./cast_design.js");
+    if (action === "create") return design.castCreate(name, flags);
+    if (action === "edit") return design.castEdit(name, flags);
+    if (action === "options") return design.castOptions(name);
+    if (action === "export") return design.castExport(Array.isArray(flags.names) ? flags.names : name ? [name] : [], flags);
+    return design.castImport(name, flags);
+  }
   if (action === "sprites") {
     const { makeSpriteCast } = await import("./sprite_cast.js");
     const only = typeof flags.ids === "string" ? flags.ids.split(",").map((id) => id.trim()).filter(Boolean) : null;
     return makeSpriteCast(name ?? flags.story ?? ".", { dryRun: Boolean(flags["dry-run"]), force: Boolean(flags.force), only, say: (line) => process.stderr.write(`${line}\n`) });
   }
-  throw new Error(`Unknown cast action: ${action ?? "(none)"}; use list, show, sheet or sprites`);
+  throw new Error(`Unknown cast action: ${action ?? "(none)"}; use list, show, sheet, create, edit, options, export, import or sprites`);
 }
 
 // ---------------------------------------------------------------------------
