@@ -29,6 +29,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["goal", { setting: true }],
   ["awareness", { setting: true }],
   ["skeleton", { setting: true }],
+  // A character story: the writers' room writes a script with speakers (src/make/animation.js).
+  ["animation", { boolean: true, setting: true }],
   // The narration's rate: calm (~135 wpm), standard (~150) or fast (~215; short-form's default).
   ["pace", { setting: true }],
   // A comment-keyword call to action ("Comment WORD and I'll send you <offer>"), said at the end and in the post caption.
@@ -143,6 +145,7 @@ export function makeOptionsFromFlags(flags = {}) {
     format: flags.format,
     awareness: flags.awareness,
     skeleton: flags.skeleton,
+    ...(flags.animation ? { animation: true } : {}),
     pace: flags.pace,
     ctaKeyword: flags["cta-keyword"],
     ctaOffer: flags["cta-offer"],
@@ -202,6 +205,7 @@ export function validateMakeOptions(options = {}) {
   if (options.assetDescriptions != null && !DESCRIPTION_MODES.includes(String(options.assetDescriptions).toLowerCase())) throw new Error(`--asset-descriptions must be ${DESCRIPTION_MODES.join(", ")}; got ${options.assetDescriptions}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  if (options.animation != null && typeof options.animation !== "boolean") throw new Error(`--animation takes no value; got ${options.animation}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   ctaPlanOptions(options);
@@ -232,6 +236,7 @@ export function settingsFromMakeReport(report) {
   set("cta-offer", options.cta_offer);
   // The skeleton the video was built on, so a recipe makes more of the same series.
   set("skeleton", report?.skeleton?.library ? report.skeleton.id : options.skeleton && options.skeleton !== "auto" ? options.skeleton : undefined);
+  if (report?.routing?.kind === "animation") flags.animation = true;
   set("voice", options.voice);
   set("voice-id", options.voice_id);
   set("music", options.music);

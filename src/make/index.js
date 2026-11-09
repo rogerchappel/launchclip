@@ -23,7 +23,7 @@ import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constrai
 import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
-import { profileForStory } from "../profile_store.js";
+import { profileForStory, resolveProfile } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
@@ -32,7 +32,10 @@ import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
 import { validateMakeOptions } from "./options.js";
-import { isLongForm, routeLane } from "./routing.js";
+import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
+import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
+import { NARRATOR, SCREENPLAY_VERSION, screenplayNarration } from "@launchclip/core/screenplay.mjs";
+import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "../voice/dialogue.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
@@ -183,6 +186,11 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["critic", stageCritic]
   ];
   for (const [index, [name, fn]] of stages.entries()) {
+    // A stage that set ctx.stop ends the run there: the later stages are skipped, with its reason.
+    if (ctx.stop) {
+      report.stages[name] = { status: "skipped", reason: ctx.stop.reason };
+      continue;
+    }
     const t0 = now();
     progress({ stage: name, done: index, total: stages.length });
     try {
@@ -205,7 +213,11 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   report.timings.total = round1((now() - started) / 1000);
   report.costs.estimated_usd = round4(report.costs.items.reduce((sum, item) => sum + (item.estimated_usd ?? 0), 0));
   report.costs.complete = report.costs.items.every((item) => item.estimated_usd != null);
-  if (report.status !== "failed") {
+  if (ctx.stop && report.status !== "failed") {
+    report.status = ctx.stop.status;
+    report.stopped = { after: ctx.stop.after, reason: ctx.stop.reason };
+    report.next_steps.push(...ctx.stop.next);
+  } else if (report.status !== "failed") {
     const statuses = Object.values(report.gates ?? {}).map((gate) => gate.status);
     report.status = statuses.includes("failed") ? "needs-repair" : statuses.includes("pending") ? "ready-for-review" : "ready";
   }
@@ -392,7 +404,7 @@ async function brandEntries(ctx, dir) {
 
 async function stageRoute(ctx) {
   const { report, options, text } = ctx;
-  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text });
+  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text, animation: options.animation === true });
   ctx.routing = routing;
   report.routing = routing;
   for (const entry of routing.ignored) report.warnings.push(`${entry.path}: ${entry.reason}`);
@@ -403,6 +415,7 @@ async function stagePrepare(ctx) {
   const lane = ctx.routing.lane;
   if (lane === "footage-led") return prepareFootage(ctx);
   if (lane === "voiceover-motion") return prepareVoiceover(ctx);
+  if (isAnimation(ctx.routing)) return prepareAnimation(ctx);
   if (isLongForm(ctx.routing)) return prepareLongForm(ctx);
   return prepareMotion(ctx);
 }
@@ -689,6 +702,132 @@ async function prepareMotion(ctx) {
   return { status: "done" };
 }
 
+// Animation (docs/ANIMATION_PIPELINE_RFC.md §4.1, §6.1): the writers' room
+// (src/make/animation.js: premise and loglines, a judge, the script) writes
+// SCRIPT.json version 2, a script with speakers and silent lines; the script
+// checks run on it, and its spoken lines are voiced as a dialogue, one voice a
+// speaker. One repair pass in all: on the first check's errors, else on the
+// check against the measured take (its errors, or a take over 15% short).
+// The run stops here: the show bible, the shot list and the render are the
+// animation path's later stages.
+async function prepareAnimation(ctx) {
+  const { project, routing, report, state, options, voiceProvider } = ctx;
+  const target = routing.format.duration;
+  const notes = await notesText(ctx);
+  const rules = rulesText(ctx);
+  const assetLines = assetManifestLines(ctx).map((item) => item.line);
+  if (researchMode(options.research) === "on") report.warnings.push("--research is not used by --animation: the writers' room writes from the brief and the notes only");
+  const skeleton = chooseMakeSkeleton(ctx, target);
+  // Where the problem must land: the character-story profile's limit (--profile names another).
+  const { profile } = resolveProfile(options.profile ?? ANIMATION_PROFILE, { projectDir: project });
+  const problemLandsSeconds = profile?.measures?.problem_lands_seconds?.p90 ?? null;
+  const room = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, wpm: estimatedPace(voiceProvider, narrationRequest(narrationVoice(ctx)).speed), skeleton, structure: skeleton ? skeletonPlanLines(skeleton) : null, problemLandsSeconds, say: ctx.say };
+  const spend = (calls) => { for (const call of calls) addCost(report, call.stage, ctx.model, call); };
+  const scriptHash = hashValue({ kind: "animation", prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, pace: room.wpm, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), skeleton: [skeleton?.id ?? null, skeleton?.version ?? null], profile: [profile?.id ?? null, problemLandsSeconds], ...(rules ? { rules } : {}), v: 1 });
+  let script = await readJson(path.join(project, MAKE_PATHS.script));
+  const reuse = Boolean(script && state.script?.hash === scriptHash && script.schema_version === SCREENPLAY_VERSION && script.narration);
+  let repairs = 1;
+  if (!reuse) {
+    const first = await writersRoom(room);
+    spend(first.calls);
+    script = first.script;
+    if (!first.check.ok) {
+      repairs -= 1;
+      const repaired = await repairScreenplay({ ...room, script, errors: first.check.errors });
+      spend(repaired.calls);
+      script = repaired.script;
+    }
+  }
+  if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for each line (cached per line in .launchclip/voice)");
+  let voiced = await voiceScreenplay(ctx, script);
+  const brief = { prompt: ctx.text, notes, assets: assetLines };
+  const measuredCheck = () => checkAnimationScript(script, { duration: target, wpm: voiced.wpm, problemLandsSeconds, brief });
+  if (!reuse && repairs > 0) {
+    // The estimate passed; now the real take is measured. A script that fails at the voice's pace, or runs well short, gets the repair.
+    const check = measuredCheck();
+    const problems = [...check.errors, ...check.warnings.filter((warning) => warning.id === "under-length")];
+    if (problems.length) {
+      const repaired = await repairScreenplay({ ...room, script, errors: problems, measured: { seconds: voiced.take.duration, wpm: voiced.wpm } });
+      spend(repaired.calls);
+      script = repaired.script;
+      voiced = await voiceScreenplay(ctx, script);
+    }
+  }
+  const { take, derived } = voiced;
+  // A rerun that reused the script and its take leaves SCRIPT.json as it is, receipt included.
+  const unchanged = reuse && voiced.reused && script.take && script.check;
+  if (!unchanged) {
+    script.take = { seconds: take.duration, words: take.words.length, wpm: voiced.wpm, lines: take.lines.length, cached: Boolean(take.cached) };
+    // The final script's check, at the measured pace, is the receipt; errors left after the repair pass warn, they do not stop the run.
+    script.check = measuredCheck();
+    await writeJson(path.join(project, MAKE_PATHS.script), script);
+  }
+  if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
+  state.script = { hash: scriptHash };
+  ctx.script = script;
+  ctx.words = take.words;
+  ctx.narrationText = script.narration;
+  // Silent lines before the first spoken line and after the last are held by the picture, so they add to the length.
+  ctx.format = { ...routing.format, duration: round1(derived.lead_seconds + take.duration + derived.tail_seconds + 0.8) };
+  if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the dialogue runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
+  ctx.audio = { words: MAKE_PATHS.words };
+  ctx.narration = voiced.narration;
+  ctx.cast = voiced.cast;
+  const stats = script.check.stats.screenplay ?? {};
+  report.script = { source: "model", kind: "animation", file: MAKE_PATHS.script, version: SCREENPLAY_VERSION, title: script.title, logline: script.logline, characters: script.characters.map((character) => character.id), speakers: stats.speakers ?? [], lines: { spoken: stats.spoken_lines ?? 0, silent: stats.silent_lines ?? 0 }, words: script.word_count, target_words: script.word_target, plan: { format: "story", skeleton: skeleton?.id ?? null }, passes: script.passes?.length ?? 0, reused: reuse, take: script.take, voices: voiced.voices, voice_reused: voiced.reused, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
+  if (voiced.cast.length && voiced.cast.every((member) => !member.voice)) report.warnings.push(`every character speaks in the narrator's voice: the ${voiceProvider} voice has no stand-in voices, and the show bible that gives each character its own is not built yet`);
+  if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
+  ctx.stop = {
+    after: "prepare",
+    status: "stopped",
+    reason: "the animation path stops after the script and the voice; the show bible, the shot list and the render are its later stages (docs/ANIMATION_PIPELINE_RFC.md §9)",
+    next: [`Read ${path.join(project, MAKE_PATHS.script)} (launchclip script check ${project}) and ${path.join(project, MAKE_PATHS.words)}. No video is rendered: the animation path's later stages are not built yet. For a finished video today, run launchclip make without --animation.`]
+  };
+  return unchanged ? { status: "cached", reason: "script and voice inputs unchanged" } : { status: "done" };
+}
+
+// A screenplay's spoken lines voiced as a dialogue (src/voice/dialogue.js): one
+// take a line, each in its speaker's voice, joined with the silent lines as
+// pauses, and NARRATION.json with a speaker on every word. The characters
+// borrow stand-in voices until the show bible gives each its own. The joined
+// take is reused while every line's request and every pause is unchanged.
+async function voiceScreenplay(ctx, script) {
+  const { project, adapters, state, voiceProvider } = ctx;
+  const derived = screenplayNarration(script);
+  const voice = narrationVoice(ctx);
+  const narratorVoice = narrationRequest(voice).voice;
+  const cast = standInCast(script.characters, { provider: voiceProvider, narratorVoice });
+  const narration = { ...voice, lines: derived.lines };
+  // A script the repair pass could not fix may still name a speaker who is not a character: the narrator's voice reads those lines, so the take can be heard.
+  const strangers = [...new Set(derived.lines.map((line) => line.speaker))].filter((speaker) => speaker !== NARRATOR && !cast.some((member) => member.id === speaker));
+  const story = { cast: { characters: [...cast, ...strangers.map((id) => ({ id, voice: null }))] }, audio: { narration } };
+  const entries = dialogueRequests(story);
+  const gaps = dialogueGaps(story);
+  const hash = hashValue({ entries, gaps, v: 1 });
+  const doc = path.join(project, MAKE_PATHS.words);
+  const file = path.join(project, MAKE_PATHS.take);
+  const previous = await readJson(doc);
+  const reused = Boolean(state.dialogue?.hash === hash && previous?.words?.length && previous?.lines?.length && existsSync(file));
+  let take;
+  if (reused) take = { words: previous.words, duration: previous.duration_seconds, lines: previous.lines, gaps: previous.gaps, cached: true };
+  else {
+    take = await (adapters.synthesizeDialogue ?? synthesizeDialogue)(entries, {
+      outFile: file,
+      cacheDir: voiceCacheDir(project),
+      voiceProvider: adapters.voiceProvider ?? ((name, providerOptions) => getVoiceProvider(name, providerOptions)),
+      normalizeVoice: adapters.normalizeVoice ?? (async (input, output) => (await import("../voice/supplied.js")).normalizeLoudness(input, output)),
+      gap: gaps
+    });
+    await writeJson(doc, dialogueDocument(story, entries, take));
+    state.dialogue = { hash };
+  }
+  // The pace of the speech itself: the words over the lines' own lengths, pauses left out.
+  const spoken = take.lines.reduce((sum, line) => sum + Math.max(0, line.end - line.start), 0);
+  const wpm = Math.round(take.words.length / Math.max(0.1, spoken) * 60);
+  const voices = Object.fromEntries(entries.map((entry) => [entry.speaker, entry.request.voice ?? null]));
+  return { take, derived, narration, cast, voices, wpm, reused };
+}
+
 // Long form (docs/LONG_FORM_MAKE_RFC.md, src/make/long_form.js): an outline,
 // then each chapter written and voiced in order. The first chapter's take sets
 // the pace every later chapter is written to. Each chapter's seconds are a
@@ -966,7 +1105,7 @@ function chooseMakeSkeleton(ctx, target) {
 // What the video is made of, for matching skeletons: a cast story, a product
 // demo or recording, else motion graphics.
 function skeletonMedium(ctx) {
-  if (/\b(characters?|animated|animation|cartoon|cast)\b/i.test(ctx.text ?? "")) return "character";
+  if (isAnimation(ctx.routing) || animationBrief(ctx.text)) return "character";
   if ((ctx.routing?.media ?? []).some((item) => ["screen-recording", "product-demo"].includes(item.role)) || ctx.demo?.length) return "demo";
   return "motion";
 }

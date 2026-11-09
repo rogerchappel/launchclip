@@ -1655,6 +1655,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   ```text
   launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--skeleton <id>|auto|none] [--pace calm|standard|fast] [--cta-keyword WORD] [--cta-offer "..."] [--episode "Episode 2" --choices A,B,C] [--style <name|path> | --seed <hex>] [--density <0-1>] [--profile <id|profile.json>] [--model provider:model] [--voice kokoro|elevenlabs] [--voice-id <id>] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--sfx generated|kit|off|earshot] [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--out <project-dir>] [--library <path>] [--replan] [--concepts on|off] [--candidates on|off] [--critic | --no-critic] [--critic-repairs 3] [--allow-needs-repair] [--max-repairs 4] [--long-form-visuals model|rules] [--no-subject [--face-track]] [--visual-history-dir <dir>] [--visual-history-limit 8] [--visual-similarity-limit 0.6] [--research auto|on|off] [--asset-provider-cmd <command>] [--min-shots <n>] [--card-backdrops off|footage] [--asset-descriptions auto|local|off] [--layout full|stacked|overlay] [--capture-cmd <command>] [--capture-concurrency <n>] [--base-edited] [--base-transcript <word-timed.json>] [--constraints <constraints.json>] [--max-cost-usd 50|none] [--json]
   launchclip make "<prompt>" --collection <dir> [--recipe <id>] [make flags] # inside a collection: its style, voice, brand, rules and the recipe's settings
+  launchclip make "<prompt>" --animation [make flags] # a character story: the writers' room writes SCRIPT.json with speakers and voices it, then stops (the later stages are not built yet)
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 
@@ -1663,7 +1664,6 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   ```text
   launchclip research "<topic>" | <script.md> [--out research] [--url <source>]... [--claims claims.json] [--media "<query>"...|none] [--people none] [--news none] [--feed <rss-or-atom-url>]... [--fresh-days <n>|none] [--max-captures 12] [--max-tables 8] [--theme dark|light] # claims → sources → evidence ledger, capture requests, data, licence-clear assets
   launchclip research capture [research] [--root .] [--media none] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request and stage the licence-clear media; says what is missing, why, and the fix
-  launchclip research capture [research] [--root .] [--capture-cmd <command>] [--capture-concurrency <n>] # record every capture request; says which could not be recorded, why, and the fix
   launchclip research attach [research] [--root .]   # module-ready evidence data once the captures are recorded
   ```
 

@@ -1,0 +1,9 @@
+{
+  "scores": [
+    { "index": 1, "hook": 7, "turn": 8, "playable": 9, "brief": 9 },
+    { "index": 2, "hook": 8, "turn": 6, "playable": 7, "brief": 6 },
+    { "index": 3, "hook": 6, "turn": 3, "playable": 2, "brief": 4 }
+  ],
+  "chosen": 2,
+  "reason": "The bet is the stronger hook, but the first one earns its turn and two characters can play it at a desk."
+}

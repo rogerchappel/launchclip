@@ -16,6 +16,13 @@
 // --duration, else a "45-second" style phrase in the prompt, else the base or
 // voiceover length, else 30 s. A motion video longer than 180 s is long form
 // (docs/LONG_FORM_MAKE_RFC.md): written and planned in chapters, up to 20 min.
+//
+// Animation (docs/ANIMATION_PIPELINE_RFC.md §6.1) is not a lane: it is the
+// motion lane with a cast, marked `kind: "animation"` (`format` already holds
+// the frame size, so the mark has its own key). --animation sets it. A brief
+// that reads as a character story (animationBrief) does not set it yet: the
+// animation path stops after the script and the voice until its later stages
+// land, and a brief that makes a whole video today must keep making one.
 
 export const MAKE_ROUTING_VERSION = "launchclip.make-routing.v1";
 export const ASPECTS = Object.freeze({ "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] });
@@ -26,14 +33,28 @@ export const DEFAULT_DURATION = 30;
 export const SHORT_MAX_SECONDS = 180;
 export const LONG_FORM_MAX_SECONDS = 1200;
 
+export const ANIMATION_KIND = "animation";
+// The words that make a brief a character story (also how make picks a skeleton's medium).
+const ANIMATION_WORDS = /\b(characters?|animated|animation|cartoon|cast)\b/i;
+
+/** Whether a brief reads as a character story. */
+export function animationBrief(prompt) {
+  return ANIMATION_WORDS.test(String(prompt ?? ""));
+}
+
+/** A routed video on the animation path: written by the writers' room, with a cast. */
+export function isAnimation(routing) {
+  return routing?.kind === ANIMATION_KIND;
+}
+
 /** A routed motion video too long to plan at once: written, voiced and planned in chapters. */
 export function isLongForm(routing) {
   return routing?.lane === "motion" && Number(routing?.format?.duration) > SHORT_MAX_SECONDS;
 }
 
 /**
- * Route an inventory. options: {aspect, duration (seconds), prompt}.
- * → {schema_version, lane, reasons: [..], base, voiceover, media: [..], logos,
+ * Route an inventory. options: {aspect, duration (seconds), prompt, animation (--animation)}.
+ * → {schema_version, lane, kind? ("animation"), reasons: [..], base, voiceover, media: [..], logos,
  *    music, brand, style, notes, ignored: [{path, reason}], format, duration_source}
  */
 export function routeLane(inventory, options = {}) {
@@ -89,10 +110,16 @@ export function routeLane(inventory, options = {}) {
   const aspect = resolveAspect(options.aspect, base);
   const [width, height] = ASPECTS[aspect.value];
   const duration = resolveDuration(options, { lane, base, voiceover });
+  // Animation writes its own script and voices it, so it needs the motion lane, and a length planned at once.
+  const animation = options.animation === true;
+  if (animation && lane !== "motion") throw new Error(`--animation writes the script and voices it, but ${(base ?? voiceover).path} already carries the voice (${lane}); remove it from --assets, or drop --animation`);
+  if (animation && duration.value > SHORT_MAX_SECONDS) throw new Error(`--animation makes videos of ${SHORT_MAX_SECONDS} seconds or less; got ${duration.value}`);
+  if (animation) reasons.push("--animation: a character story (the motion lane with a cast); the writers' room writes the script with speakers");
   reasons.push(`format ${width}×${height} (${aspect.reason}); duration ${duration.value}s (${duration.reason})`);
   return {
     schema_version: MAKE_ROUTING_VERSION,
     lane,
+    ...(animation ? { kind: ANIMATION_KIND } : {}),
     reasons,
     base: base ? { path: base.path, role: base.role, duration: base.media?.duration ?? null, orientation: base.media?.orientation ?? null } : null,
     voiceover: voiceover ? { path: voiceover.path, duration: voiceover.media?.duration ?? null } : null,
