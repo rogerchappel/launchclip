@@ -1,6 +1,6 @@
 # RFC: Animation from one prompt
 
-Status: draft, open for review (revised 2026-11-10: generation cut, hand-in added)
+Status: draft for review; scope and decisions settled by the owner (2026-11-10)
 Date: 2026-11-10
 Builds on: [VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) (§6.3 narrative maps, §10.5 character narratives),
 [STORYBOARD_ENGINE_RFC.md](STORYBOARD_ENGINE_RFC.md) (the storyboard contract),
@@ -41,7 +41,10 @@ What exists today:
   (`kit/core/characters/character.mjs`, `src/cast_design.js`,
   `src/character_store.js`).
 - Illustrated characters: `sprite-scene` plays a folder of pose sprites over
-  a painted plate (`kit/core/catalog-sprites.mjs`).
+  a painted plate (`kit/core/catalog-sprites.mjs`). Today `launchclip cast
+  sprites` can draw those sprites with a built-in image adapter
+  (`openaiImageAdapter` in `src/sprite_cast.js`); under the scope rule that
+  adapter goes, and the command takes one from the host (phase 10).
 - Narrative direction maps: story beats, cast cues and a key action per line
   (`kit/core/direction.mjs`).
 - Dialogue in several voices, with every word tagged with its speaker
@@ -126,9 +129,9 @@ resumes today (the header of `src/make/index.js`).
 ### 4.1 Story and script: `SCRIPT.json`, grown
 
 `make` already writes `SCRIPT.json` (`launchclip.make-script.v1`: a title,
-one `narration` string and its `beats`; `src/make/script.js`). The proposal
-is to grow that file, not to add a second one beside it. The new version
-adds speakers and silent lines:
+one `narration` string and its `beats`; `src/make/script.js`). That file
+grows; no second file is added beside it. The new version adds speakers and
+silent lines:
 
 ```json
 {
@@ -355,8 +358,7 @@ Two additions:
   timings (`kit/core/characters/acting.mjs`). Kokoro already reports a
   duration for every phoneme, which `src/voice/kokoro.js` folds into word
   times. Keeping those phonemes in `NARRATION.json` gives the rig real mouth
-  shapes at no cost. The recommendation is that this is enough to ship
-  (§11).
+  shapes at no cost. That is the lip-sync bar for the first release.
 - **Sound follows retakes.** The score is planned from the storyboard, so a
   retake that changes a scene's cues re-plans that scene's sounds.
 
@@ -580,7 +582,7 @@ Three honest limits:
   looks and walks will be weaker in sprite form.
 - **Standing drawn characters on a painted plate.** `floor` and `light` are
   two numbers. Whether that is enough for the cast to look like it belongs
-  in the picture needs a prototype (phase 10).
+  in the picture needs a prototype (phase 11).
 - **The measured colour check on whole shots.** It may reject good art or
   pass bad art. Its thresholds must come from fixtures, not guesses.
 
@@ -662,8 +664,8 @@ because LaunchClip does none. It extends what the code already detects:
 The check makes no paid call. On the skill path the agent is the text and
 vision model, so `--agent` reports every role as the agent's.
 
-**Vision for the Anthropic adapter.** The recommendation is to add image
-input to the existing Anthropic planner client
+**Vision for the Anthropic adapter.** Image input is added to the existing
+Anthropic planner client
 (`AnthropicPlannerClient` in `src/storyboard_planner.js`), so one Anthropic
 key gives the critic and the hand-in judge, and no second key is needed.
 
@@ -713,10 +715,11 @@ machines, servers and job APIs are the host application's work.
 
 **Exit codes.** Today `make` exits 1 only when a stage fails; `needs-repair`
 and `ready-for-review` exit 0 and the host must read `MAKE.json`
-(`src/cli.js`). The proposal is an opt-in `--exit-status`: 0 `ready`, 1
-`failed`, 2 `needs-repair`, 3 `awaiting-approval`, 4 `ready-for-review`.
-Without the flag nothing changes, so no existing caller breaks. `handin
-check` and `script check` exit 0 when clean and 1 when anything fails.
+(`src/cli.js`). **The animation path returns distinct codes by default:** 0
+`ready`, 1 `failed`, 2 `needs-repair`, 3 `awaiting-approval`, 4
+`ready-for-review`. Other kinds of video keep today's codes, so no existing
+caller breaks. `handin check` and `script check` exit 0 when clean and 1
+when anything fails.
 
 ## 8. Gates and measurement
 
@@ -823,8 +826,8 @@ Its own test set is fixtures of good and deliberately wrong art (§9, phase
 
 Small PRs, each green on its own, stacked in order. Phases 1–8 are the
 vertical slice: **one prompt to a 30-second Short with two characters,
-drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
-12–13 are series bibles and longer forms.
+drawn in code, with the critic loop.** Phases 9–12 are hand-in. Phases
+13–14 are series bibles and longer forms.
 
 ### The vertical slice
 
@@ -899,7 +902,7 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
 - Scope: `finish --animatic`, `ANIMATIC.json`, the staging review, the
   sheets in the critic's evidence, the new finding categories,
   `qa/retakes.json`, retake steps 1 and 3 of §4.7, `--stop-after animatic`,
-  `--exit-status`.
+  the animation path's exit codes (§7).
 - Files: `src/finish.js`, `src/make/index.js` (`stageAnimatic`,
   `criticRepairs`), `src/make/critic.js`, `src/make/critic_repair.js`,
   `src/cli.js`, `skills-src/references/cinematic-production.md`,
@@ -947,7 +950,25 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
   that names the fix; good art passes; with no vision model the judge is
   `not-checked`.
 
-**Phase 10. Plates and sprite casts in the render.**
+**Phase 10. `cast sprites` without built-in generation.**
+- Scope: remove the built-in image adapter and its key and model settings.
+  `launchclip cast sprites` and `makeSpriteCast` draw only through an image
+  adapter the host passes in (`generate({prompt, references, size})`, the
+  shape it takes today). With none, the command lists the pictures a cast
+  needs (`--dry-run` does this now) and checks sprites already in the
+  folder with phase 9's checks. Nothing in LaunchClip calls an image
+  service after this.
+- Files: `src/sprite_cast.js` (`openaiImageAdapter`, `SPRITE_IMAGE_USD`,
+  `LAUNCHCLIP_SPRITE_MODEL`), `src/cast.js`, `src/engine/adapters.js` (an
+  `image` adapter key), `src/cli_usage.js`, `packages/engine/README.md`,
+  `docs/KIT_CONTRACTS.md` ("Sprite casts"), the sprite-cast tests.
+- Done when: no file under `src/` calls an image API; with a stub adapter
+  the command writes the same folder layout as before; with no adapter it
+  exits 0 after listing and checking, and says how to hand sprites in.
+- A breaking change for anyone who used the built-in adapter; the release
+  notes say so.
+
+**Phase 11. Plates and sprite casts in the render.**
 - Scope: a prototype first (one cast scene on a handed-in plate, and its
   sprite form, reviewed before the rest is built); then the plate under a
   cast scene with `floor` and `light`; the compile from a cast scene to its
@@ -961,7 +982,7 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
   character's sprites drops the whole video to code-drawn and the report
   says why; replacing one sprite re-renders only that character's scenes.
 
-**Phase 11. Whole shots, the hook, and driving from a host.**
+**Phase 12. Whole shots, the hook, and driving from a host.**
 - Scope: a handed-in clip in a shot's window under code-drawn captions and
   cards; character shots and plates asked for through the asset-provider
   hook; the footage checks on handed-in shots; retake step 2; a container
@@ -973,11 +994,11 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
 - Done when: a stub provider command that answers some shots and returns
   `null` for others gives a code-drawn video under the one-look rule and a
   fully handed-in video when it answers all; the container smoke passes
-  with no network; each `--exit-status` code is covered by a test.
+  with no network; each exit code of §7 is covered by a test.
 
 ### Series and longer forms
 
-**Phase 12. Series bibles.**
+**Phase 13. Series bibles.**
 - Scope: a bible that lives in a collection (`src/collection.js`), so every
   episode shares its cast, voices, world and style; an episode's bible
   extends it with guests; the bible's hash in the video's provenance, so a
@@ -989,7 +1010,7 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
   characters and voices; adding a guest to one episode does not change the
   other.
 
-**Phase 13. Longer forms.**
+**Phase 14. Longer forms.**
 - Scope: animation past three minutes on the long-form plan: a script in
   chapters, a voice per chapter, a shot list per chapter, a render that
   resumes by chapter (LONG_FORM_MAKE_RFC.md), and Shorts cut from it.
@@ -1005,9 +1026,9 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
 - Phases 1, 2, 3 and 4 can run side by side.
 - Phase 5 needs 1. Phase 6 needs 2, 3 and 5. Phase 7 needs 6 and 4.
 - Phase 8's three PRs need 7 and can run side by side.
-- Phase 9 needs 2 and 4 and can start before 7. Phase 10 needs 9 and 7.
-  Phase 11 needs 10.
-- Phase 12 needs 2. Phase 13 needs 8.
+- Phase 9 needs 2 and 4 and can start before 7. Phase 10 needs 9.
+  Phase 11 needs 9 and 7. Phase 12 needs 11.
+- Phase 13 needs 2. Phase 14 needs 8.
 
 ## 10. Risks
 
@@ -1020,53 +1041,37 @@ drawn in code, with the critic loop.** Phases 9–11 are hand-in. Phases
 | Contracts multiply and drift apart | One new story file (the bible), one hand-in file, and additive fields elsewhere; one validator each; skills generated from the same registry |
 | Parallel work changes the cast, acting and style code underneath | The bible names characters, styles and sets by id and never defines their shape |
 
-## 11. Open questions
+## 11. Decisions
 
-Each has a recommended answer. **None is confirmed by the owner yet.** The
-body of this RFC is written to the recommendations.
+Settled by the owner on 2026-11-10. The body of this RFC is written to them.
 
-1. **Script file.** A new file beside `SCRIPT.json`, or grow `SCRIPT.json`?
-   *Recommended: grow `SCRIPT.json` with speakers and silent lines (§4.1).*
-2. **Looks.** May a video mix code-drawn and handed-in shots?
-   *Recommended: one look per video, with `--look mixed` as the exception
-   (§5.5).*
-3. **Review stops.** Should a run stop for approval?
-   *Recommended: attended runs stop after the bible and after the animatic;
-   headless runs continue unless `--stop-after` is given (§6.3).*
-4. **Lip sync.** What is the bar for the first release?
-   *Recommended: mouth shapes from phonemes on the rig are enough to ship
-   (§4.6).*
-5. **A critic with only an Anthropic key.**
-   *Recommended: add vision to the existing Anthropic adapter (§6.2).*
-6. **The sprite form.** Its own form, or folded into something else?
-   *Recommended: keep it as its own form, as the hand-in path for character
-   art (§5.2).*
-7. **Narrator.** Pure dialogue, or a narrator with dialogue?
-   *Recommended: character Shorts default to a narrator with dialogue
-   (§4.1).*
-8. **Series.** Where does a bible live?
-   *Recommended: a bible can live in a collection, shared by its episodes
-   (phase 12).*
-9. **Reference images and real people.**
-   *Recommended: reference images map to traits and never to a real
-   person's likeness (§4.2).*
-
-Raised by this revision, with no recommendation from the owner yet:
-
-10. **`launchclip cast sprites` draws sprites with an image model today**
-    (`openaiImageAdapter` in `src/sprite_cast.js`). That is generation
-    inside LaunchClip, which the scope rule excludes. Should the command
-    keep its built-in adapter, take only an adapter a host passes in, or
-    become a checker for sprites made elsewhere? Its file layout is the
-    hand-in format either way.
-11. **Exit codes.** Is an opt-in `--exit-status` right, or should the
-    animation path return distinct codes by default (§7)?
-12. **A hand-in with no vision model.** Use the asset with the judge marked
-    `not-checked`, as proposed, or refuse it until something can look at it
-    (§5.4)?
-13. **Stories with child characters.** The kit draws children and teens.
-    Are there limits on the stories `make` will write for them, beyond the
-    evidence and honesty rules that apply to every story?
+1. **Script file.** `SCRIPT.json` grows speakers and silent lines. No new
+   file (§4.1).
+2. **Looks.** One look per video. `--look mixed` is the exception (§5.5).
+3. **Review stops.** Attended runs stop for approval after the bible and
+   after the animatic. Headless runs continue unless `--stop-after` is
+   given (§6.3).
+4. **Lip sync.** Mouth shapes from phonemes on the rig are the bar for the
+   first release (§4.6).
+5. **A critic with only an Anthropic key.** The existing Anthropic adapter
+   gains vision (§6.2, phase 4).
+6. **The sprite form** stays its own form, and is the hand-in path for
+   character art (§5.2).
+7. **Narrator.** Character Shorts default to a narrator with dialogue
+   (§4.1).
+8. **Series.** A bible can live in a collection, shared by its episodes
+   (phase 13).
+9. **Reference images** map to traits, never to a real person's likeness
+   (§4.2).
+10. **`launchclip cast sprites`** takes an image adapter supplied by the
+    host and has no built-in generation. The code change is phase 10; this
+    RFC changes no code.
+11. **Exit codes.** The animation path returns distinct exit codes by
+    default (§7).
+12. **A hand-in with no vision model** is used, with the judge marked
+    `not-checked` (§5.4).
+13. **Stories with child characters** have no extra limits for now, beyond
+    the evidence and honesty rules every story follows.
 
 ## 12. Non-goals
 
