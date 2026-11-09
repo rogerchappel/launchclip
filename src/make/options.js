@@ -7,6 +7,7 @@ import { ctaPlanOptions, scriptPlanOptions, seriesPlanOptions } from "@launchcli
 import { MUSIC_FLAG_VALUES, parseMusicDuck, parseMusicPrompt, parseMusicVolume } from "../music/index.js";
 import { resolveAspect, resolveDuration } from "./routing.js";
 import { researchMode } from "../research/make.js";
+import { DESCRIPTION_MODES } from "../asset_understanding.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
@@ -75,6 +76,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
   ["card-backdrops", {}],
+  // How handed-in images and clips are described (src/asset_understanding.js): auto (the model when it can see, else local), local or off.
+  ["asset-descriptions", {}],
   // A talking head's layout for the whole video (src/talking_head_layout.js): full (default) or stacked.
   ["layout", { setting: true }],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
@@ -117,6 +120,7 @@ export function makeOptionsFromFlags(flags = {}) {
     assetProviderCmd: flags["asset-provider-cmd"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
+    assetDescriptions: flags["asset-descriptions"],
     layout: flags.layout,
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
@@ -183,6 +187,7 @@ export function validateMakeOptions(options = {}) {
   if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
   if (options.layout != null && talkingHeadLayoutError(options.layout)) throw new Error(talkingHeadLayoutError(options.layout));
   if (options.cardBackdrops != null && !CARD_BACKDROPS.includes(String(options.cardBackdrops).toLowerCase())) throw new Error(`--card-backdrops must be ${CARD_BACKDROPS.join(" or ")}; got ${options.cardBackdrops}`);
+  if (options.assetDescriptions != null && !DESCRIPTION_MODES.includes(String(options.assetDescriptions).toLowerCase())) throw new Error(`--asset-descriptions must be ${DESCRIPTION_MODES.join(", ")}; got ${options.assetDescriptions}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
