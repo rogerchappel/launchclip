@@ -139,7 +139,7 @@ function resolveSpriteScene(params, ctx) {
       // A line may run past the cut: its words stop at the scene's end.
       const from = check.num(range.from, `${where}.from`, 0, duration);
       const to = Math.min(duration, check.num(range.to, `${where}.to`, from, duration + 30));
-      const words = Array.isArray(range.words) ? range.words.filter(w => Array.isArray(w) && w.length === 2 && Number(w[0]) < duration).map(([s, e]) => [start + Number(s), start + Math.min(duration, Number(e))]) : undefined;
+      const words = Array.isArray(range.words) ? range.words.filter(w => Array.isArray(w) && w.length >= 2 && Number(w[0]) < duration).map(([s, e]) => [start + Number(s), start + Math.min(duration, Number(e))]) : undefined;
       return {from: start + from, to: start + to, ...(words ? {words} : {})};
     });
     const speech = speechChanges(says);

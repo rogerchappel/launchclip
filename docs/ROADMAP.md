@@ -25,6 +25,11 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
   - Every line of the story gets a visual decision, and footage gets split-screen layouts and a much larger visual vocabulary.
   - Styles carry your brand frame and a few simple dials, and a draft that's sparse or off-style fails its checks before you see it.
   - Fully animated stories get the same treatment once the animated characters below arrive: a cast directed line by line, inside the same checks.
+- **Animation from one prompt** ([RFC](ANIMATION_PIPELINE_RFC.md)): describe a story and get a character animation back, a Short first and longer pieces later.
+  - A writers' room turns the prompt into a script with dialogue, and a show bible fixes the cast, world and style before any shot is planned.
+  - Every shot is drawn in code, so a character looks the same in every shot and the acting is timed to the voice. You can approve the cast and a rough cut before the final render.
+  - Made your own backgrounds, character art or finished shots somewhere else? Hand them in. They are checked against each character's reference sheet, and anything missing or off falls back to the code-drawn version.
+  - It works through your AI agent's subscription or headless: the model writes, designs the cast, directs and reviews.
 - **Viral formats, results built in** ([RFC](VIRAL_FORMATS_RFC.md)): proven short-form structures ("$1 a second", "the last time", "X vs Y") as first-class formats, each with its hook, beats, key shot, share moment, voice tier and packaging. The planner picks a format and a fresh angle before the concepts, offers only formats the kit can actually render, and the finish gates check the first frame, the key shot and the share beat, all at no extra cost.
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
@@ -40,7 +45,8 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - **Launch kits:** one run produces the launch video plus cut-downs for every platform (YouTube, Shorts, Reels, TikTok, X, LinkedIn, Product Hunt), thumbnails and captions files.
 - **Brand from your website:** point it at your landing page and it builds your style pack from your real colours, fonts and tone.
 - **Scheduled updates:** re-record the demo and refresh the video automatically when your product changes.
-- **Partial re-rendering for HyperFrames**, once its renderer supports frame ranges (Remotion already has it).
+- **Partial re-rendering for HyperFrames** (Remotion already has it). The installed HyperFrames 0.7.58 has no frame range; 0.9 adds `--start` and `--end`. See DUAL_RENDERER_PLAN.md, "Open renderer gaps".
+- **Videos that follow a zoom or an iris in HyperFrames.** A single-video module can stay in its scene layer and follow every transition; measured in DUAL_RENDERER_PLAN.md, "Open renderer gaps".
 
 ## Ideas we're exploring
 

@@ -2325,7 +2325,7 @@ params:
 - count: 1–40 items (or items)
 - items: [label ≤ 16 | {label?, image? (assets/… photo)}] 1–40 (or count)
 - columns: columns 1–10 (optional; default the layout with the biggest items)
-- times: seconds from scene start, one per item, rising: each drop on its word (optional)
+- times: [number] 1–40, seconds from scene start, one per item, rising: each drop on its word (optional)
 - cadence: seconds between drops 0.05–1.5 (optional, when times is not set; default fits the scene)
 - counter: true | {prefix? ≤ 4, suffix? ≤ 8 ("×"), label? ≤ 30, from?} a big count above the grid that climbs with each landing (optional)
 - title: string ≤ 60 (optional)

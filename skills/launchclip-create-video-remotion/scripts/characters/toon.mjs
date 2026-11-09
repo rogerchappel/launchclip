@@ -252,7 +252,9 @@ export function hairBack(ctx) {
     }
     case 'ponytail': return [hairFill(ctx, `M${rx * 0.4} ${top + 10}C${rx + 60} ${top - 10} ${rx + 56} ${cy + 60} ${rx + 30} ${cy + 140}C${rx + 10} ${cy + 90} ${rx + 6} ${cy + 20} ${rx * 0.5} ${top + 30}Z`)];
     case 'bun': return [P.ellipse(0, top - 18, 42, 38, 'hair')];
-    case 'headscarf': return [P.shape(`M${-rx - 22} ${cy - 20}C${-rx - 30} ${top - 46} ${rx + 30} ${top - 46} ${rx + 22} ${cy - 20}C${rx + 30} ${cy + 70} ${rx + 70} ${cy + 140} ${rx + 76} ${cy + 196}L${-rx - 76} ${cy + 196}C${-rx - 70} ${cy + 140} ${-rx - 30} ${cy + 70} ${-rx - 22} ${cy - 20}Z`, 'hair')];
+    // On the cute head the scarf wraps close under the chin: the long drape would dwarf the small body.
+    case 'headscarf': if (ctx.cute) return [P.shape(`M${-rx - 18} ${cy - 20}C${-rx - 26} ${top - 44} ${rx + 26} ${top - 44} ${rx + 18} ${cy - 20}C${rx + 22} ${cy + 60} ${r1(rx * 0.7)} ${r1(cy + ry + 34)} 0 ${r1(cy + ry + 38)}C${r1(-rx * 0.7)} ${r1(cy + ry + 34)} ${-rx - 22} ${cy + 60} ${-rx - 18} ${cy - 20}Z`, 'hair')];
+      return [P.shape(`M${-rx - 22} ${cy - 20}C${-rx - 30} ${top - 46} ${rx + 30} ${top - 46} ${rx + 22} ${cy - 20}C${rx + 30} ${cy + 70} ${rx + 70} ${cy + 140} ${rx + 76} ${cy + 196}L${-rx - 76} ${cy + 196}C${-rx - 70} ${cy + 140} ${-rx - 30} ${cy + 70} ${-rx - 22} ${cy - 20}Z`, 'hair')];
     default: return newHairBack(ctx) ?? [];
   }
 }
@@ -310,11 +312,31 @@ function eyes(kind, P) {
   return out;
 }
 
-function brows(spec, P, browColor, cy) {
+// The cute face (ctx.cute): large glossy eyes set wide and low on the head,
+// no nose, a small mouth and cheeks that always blush. The same eye kinds
+// and part ids as the plain face, so expressions, blinks and speech act alike.
+const CUTE = Object.freeze({eyeX: 40, eyeY: 26, browY: -6, mouthY: 54, mouth: 0.8, glasses: 1.28});
+
+function cuteEyes(kind, P) {
+  const out = [];
+  for (const sx of [-1, 1]) {
+    const x = sx * CUTE.eyeX;
+    const shine = (dy = 0) => [P.ellipse(x + 5, -8 + dy, 5.6, 6.4, '#ffffff', {outline: false}), P.ellipse(x - 5, 8 + dy, 2.6, 2.6, '#ffffff', {outline: false, opacity: 0.85})];
+    if (kind === 'dot') out.push(P.ellipse(x, 0, 15, 19, 'outline', {outline: false}), ...shine());
+    else if (kind === 'wide') out.push(P.ellipse(x, -1, 18.5, 22.5, 'outline', {outline: false}), ...shine(-2), P.ellipse(x - 1, 12, 9, 4.5, 'eyeWhite', {outline: false, opacity: 0.22}));
+    else if (kind === 'happy') out.push(P.line(`M${x - 16} 7Q${x} -15 ${x + 16} 7`, 'outline', 7.5));
+    else if (kind === 'narrow') out.push(P.ellipse(x, 5, 15, 12, 'outline', {outline: false}), P.ellipse(x + 5, 1, 4, 4, '#ffffff', {outline: false}), P.line(`M${x - 19} ${sx < 0 ? -11 : -3}L${x + 19} ${sx < 0 ? -3 : -11}`, 'outline', 7));
+    else if (kind === 'squint') out.push(P.ellipse(x, 3, 14, 14, 'outline', {outline: false}), P.ellipse(x + 5, -2, 4.4, 4.4, '#ffffff', {outline: false}), P.line(`M${x - 18} -9L${x + 18} -9`, 'outline', 6.5));
+  }
+  return out;
+}
+
+function brows(spec, P, browColor, cy, cute = false) {
+  const x = cute ? CUTE.eyeX : EYE_X, y = cute ? CUTE.browY : -22;
   return spec.map((brow, i) => {
     const sx = i === 0 ? -1 : 1;
     const tilt = brow.tilt * (sx < 0 ? 1 : -1);
-    return group([P.line('M-13 3Q0 -4 13 3', browColor, 7.5)], {transform: `translate(${sx * EYE_X} ${r1(cy - 22 - brow.lift)}) rotate(${tilt})`});
+    return group([P.line('M-13 3Q0 -4 13 3', browColor, 7.5)], {transform: `translate(${sx * x} ${r1(cy + y - brow.lift)}) rotate(${tilt})`});
   });
 }
 
@@ -340,14 +362,18 @@ export function face(ctx, name) {
   const {cy} = g.head;
   const parts = expressionParts(name);
   const browColor = p.hair.style === 'headscarf' ? 'browDark' : GREY_HAIR.includes(p.hair.color) ? 'hairShade' : 'mixBrow';
-  const eyeParts = eyes(parts.eyes, P);
-  const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + 10, {}, ctx.eyeScale && ctx.eyeScale !== 1 ? [group(eyeParts, {transform: `scale(${k3(ctx.eyeScale)})`})] : eyeParts);
+  const cute = Boolean(ctx.cute);
+  const eyeParts = cute ? cuteEyes(parts.eyes, P) : eyes(parts.eyes, P);
+  const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + (cute ? CUTE.eyeY : 10), {}, ctx.eyeScale && ctx.eyeScale !== 1 ? [group(eyeParts, {transform: `scale(${k3(ctx.eyeScale)})`})] : eyeParts);
   const kids = [];
-  if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
-  kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy));
-  const mouthY = cy + 47;
-  const closed = group(mouthShape(parts.mouth.closed, P), {transform: `translate(0 ${mouthY})`});
-  const open = group(mouthShape(parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open, P), {transform: `translate(0 ${mouthY})`});
+  // The cute cheeks keep inside the head's edge when the face turns to look.
+  // (They sit at half the head's width, so a child's smaller head keeps them in too.)
+  if (cute) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * r1(g.head.rx * 0.52), cy + 48, 14, 9, 'blush', {outline: false, opacity: parts.blush ? 0.7 : 0.42}));
+  else if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
+  kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy, cute));
+  const mouthAt = cute ? `translate(0 ${cy + CUTE.mouthY}) scale(${CUTE.mouth})` : `translate(0 ${cy + 47})`;
+  const closed = group(mouthShape(parts.mouth.closed, P), {transform: mouthAt});
+  const open = group(mouthShape(parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open, P), {transform: mouthAt});
   const show = ctx.expression === name ? 1 : 0;
   if (ctx.static) return show ? group([...kids, closed]) : null;
   return el('g', `${ctx.id}-face-${name}`, {opacity: show}, [
@@ -376,7 +402,7 @@ export function facial(ctx, {jaw: part} = {}) {
   if (jawHair && p.accessories.includes('stubble')) out.push(P.shape(`${jaw(46, 0, 42)}${hole}`, 'stubble', {outline: false, rule: 'evenodd', opacity: 0.55}));
   if (!marks) return out;
   if (p.accessories.includes('moustache')) out.push(P.shape(`M-27 ${cy + 40}Q-13 ${cy + 27} 0 ${cy + 34}Q13 ${cy + 27} 27 ${cy + 40}Q13 ${cy + 45} 0 ${cy + 40}Q-13 ${cy + 45} -27 ${cy + 40}Z`, 'hair', {width: 5}));
-  out.push(P.line(`M-3 ${cy + 14}Q7 ${cy + 26} -4 ${cy + 30}`, 'skinShade', 5.5));
+  if (!ctx.cute) out.push(P.line(`M-3 ${cy + 14}Q7 ${cy + 26} -4 ${cy + 30}`, 'skinShade', 5.5));
   return out;
 }
 
@@ -396,6 +422,14 @@ export function glasses(ctx) {
     return [P.ellipse(-EYE_X, cy, 21, 20, '#ffffff', {width: 5.5, fillOpacity: 0.18}), P.ellipse(EYE_X, cy, 21, 20, '#ffffff', {width: 5.5, fillOpacity: 0.18}), P.line(`M-10 ${cy - 4}Q0 ${cy - 10} 10 ${cy - 4}`, 'outline', 5)];
   }
   return [];
+}
+
+/** Glasses over the cute face: enlarged about the plain eye line and moved down to the cute eyes. */
+function cuteGlasses(ctx) {
+  const parts = glasses(ctx);
+  if (!parts.length) return parts;
+  const line = ctx.g.head.cy + 10;
+  return [group(parts, {transform: `translate(0 ${r1(ctx.g.head.cy + CUTE.eyeY - CUTE.glasses * line)}) scale(${CUTE.glasses})`})];
 }
 
 // ---------------------------------------------------------------------------
@@ -423,30 +457,35 @@ export function toonColors(colors) {
  *                       the neck (hair, face and headwear with it)
  *   options.pins        true: a pin at each shoulder, elbow and knee
  *   options.eyeScale    the eyes drawn this many times their size (about each eye pair's centre)
+ *   options.face        'cute': large glossy eyes set low, no nose, a small mouth, blushing cheeks
+ *   options.headPen     (pen) → pen: the pen for everything drawn on the head
+ *                       (a scaled head restates its line weights with it)
  *   makePen     (colors, {id}) → pen
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false, geometry = null, headScale = 1, pins = false, eyeScale = 1}, makePen) {
+export function drawToon(params, colors, {id, joints, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false, geometry = null, headScale = 1, pins = false, eyeScale = 1, face: faceKind = null, headPen = null}, makePen) {
   const g = geometry ?? rigGeometry(params);
   const c = toonColors(colors);
   const P = makePen(c, {id, light});
   const ctx = {id, g, c, p: params, j: joints, expression, static: isStatic, props, P, facing, pins, eyeScale};
+  // The head's own context: the same character with the head's pen and face.
+  const head = headPen || faceKind ? {...ctx, P: headPen ? headPen(P) : P, cute: faceKind === 'cute'} : ctx;
   const sized = parts => (headScale === 1 ? parts : [group(parts, {transform: `scale(${k3(headScale)})`})]);
-  const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
-  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
+  const faceNodes = [...new Set([expression, ...expressions])].map(name => face(head, name)).filter(Boolean);
+  const {jaw, features} = faceParts(head, gaze, () => [...faceNodes, ...(head.cute ? cuteGlasses(head) : glasses(head))]);
   const headKids = [
-    ...ears(ctx),
+    ...ears(head),
     ...turnJoint(ctx, joints, gaze, [
-      asHead(P.shape(headShape(g), 'skin')),
+      asHead(head.P.shape(headShape(g), 'skin')),
       ...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, joints, gaze, features)]),
-      ...(covers(params) ? [] : hairFront(ctx)),
-      ...backView(ctx, turns, () => backOfHead(ctx)),
-      ...headwear(ctx)
+      ...(covers(params) ? [] : hairFront(head)),
+      ...backView(ctx, turns, () => backOfHead(head)),
+      ...headwear(head)
     ])
   ];
   const tilt = {rotation: joints.head, y: joints.headY};
   const headIdle = joint(ctx, 'headidle', 0, 0, {}, sized(headKids));
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, sized(params.headwear === 'turban' ? [] : hairBack(ctx)));
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, sized(params.headwear === 'turban' ? [] : hairBack(head)));
   const neckTop = g.neckY;
   const torsoKids = [
     joint(ctx, 'hb', 0, neckTop, tilt, [backIdle]),

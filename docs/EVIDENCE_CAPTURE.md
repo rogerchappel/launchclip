@@ -202,6 +202,38 @@ launchclip evidence scene assets/evidence/pr-39217.evidence.json
 prints `{module: "evidence-clip", params: {media, viewport, source}}`. Copy
 them unchanged; add `focus` or `cursor` only on boxes the sidecar lists.
 
+## When a capture is not made
+
+A source page research wanted on screen and did not get is never passed
+over quietly. `src/research/capture_status.js` sorts each failure into a
+kind and gives its fix:
+
+| Kind | What happened | The fix |
+| --- | --- | --- |
+| `no-recorder` | The optional `playwright` dependency, a Chromium or `ffmpeg` is missing | `npm install playwright && npx playwright install chromium`, `ffmpeg` on `PATH`, or `--capture-cmd` |
+| `paywall`, `bot-check`, `sign-in` | The page is closed to an automated browser | Another public source (`--url`), or the claim as a card that cites it. A block is never worked round |
+| `http-error` | The page did not load | Check the URL, or give another source |
+| `target-missing` | The quoted words are not on the page as rendered | Check the page still says it, or edit the request's beat targets |
+| `timeout` | The recorder gave no answer in time | Run again, or lower `--capture-concurrency` |
+
+Where it is said:
+
+- **`launchclip make`:** `MAKE.json` `captures` has `status` (`recorded`,
+  `partial` or `missing`), `missing`, and `claims_without_capture` (each
+  verified claim left without its page, with the kind, reason and fix).
+  Each kind is a warning, and the `research` gate goes to `pending` with
+  the count, so the video is ready for review rather than ready.
+- **`launchclip research`:** the report's `captures` says how many requests
+  were written, that none is recorded yet, and whether this machine can
+  record them; the same goes to the terminal.
+- **`launchclip research capture [research] [--root .]`:** records every
+  request with the recorder `make` uses, writes
+  `research/capture-status.json` (`launchclip.research-captures.v1`: every
+  request `recorded` or `missing` with its kind, reason and fix), prints
+  what is missing, and attaches the evidence data (`research attach`).
+- **`launchclip doctor`:** `tools.evidence_capture` says whether the
+  recorder is available, and `notes` carries the fix when it is not.
+
 ## Rules for evidence
 
 - Real third-party pages and logos appear only as that party's real
@@ -209,3 +241,7 @@ them unchanged; add `focus` or `cursor` only on boxes the sidecar lists.
   says.
 - A blocked page is a finding, not something to work round: pick another
   public source, or rebuild the claim as a card that cites it.
+- A capture request lists the verified claims it backs (`claims`), and
+  `publish.json` lists the source of every recorded page the video shows
+  (`sources`), beside the credits of any stock or archive media
+  (RESEARCH.md, "Assets").

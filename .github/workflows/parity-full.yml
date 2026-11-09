@@ -1,0 +1,117 @@
+name: Parity corpus
+
+# The whole renderer parity corpus. Every per-module fixture at every sample
+# time, in twelve shards: nightly, on demand, and on a pull request that
+# changes the kit, a fixture or the harness. A fixture takes about 14 s on
+# ubuntu-latest (467 fixtures, 107 minutes in all), so a shard of 39 renders
+# in about 9 minutes and finishes with the media suite in ci.yml. The story,
+# background, camera, footage and caption parity tests run nightly and on
+# demand only. Every pull request also renders a rotating slice (the
+# "parity-sample" job in ci.yml).
+on:
+  schedule:
+    - cron: "17 15 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "kit/**"
+      - "test/fixtures/parity/**"
+      - "test/fixtures/parity-footage/**"
+      - "test/fixtures/parity-backgrounds/**"
+      - "scripts/parity*.mjs"
+      - ".github/workflows/parity-full.yml"
+
+concurrency:
+  group: parity-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  modules:
+    name: Modules ${{ matrix.shard }}/12
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install FFmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: Cache headless Chrome builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            node_modules/.remotion
+          key: parity-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Ensure headless Chrome for both renderers
+        run: |
+          npx hyperframes browser ensure
+          npx remotion browser ensure
+      - name: Per-module fixtures, shard ${{ matrix.shard }} of 12
+        run: node scripts/parity-shard.mjs --shard ${{ matrix.shard }}/12 --out qa/parity-shard
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-modules-${{ matrix.shard }}
+          path: |
+            qa/parity-shard/summary.md
+            qa/parity-shard/timings.json
+            qa/parity-shard/**/report.json
+            qa/parity-shard/**/*.side-by-side.png
+          if-no-files-found: ignore
+
+  # The parity tests outside the per-module corpus: whole stories, backgrounds
+  # and panels, camera moves, the footage-led fixtures and the caption presets.
+  suites:
+    name: ${{ matrix.name }}
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Stories, backgrounds and cameras
+            files: test/parity.test.js test/parity_camera.test.js
+          - name: Footage and captions
+            files: test/footage_lane.test.js test/caption_presets.test.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install FFmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: Cache headless Chrome builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            node_modules/.remotion
+          key: parity-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Ensure headless Chrome for both renderers
+        run: |
+          npx hyperframes browser ensure
+          npx remotion browser ensure
+      - name: ${{ matrix.name }}
+        run: node scripts/test.mjs ${{ matrix.files }}
+        env:
+          LAUNCHCLIP_PARITY: "1"
+          LAUNCHCLIP_PARITY_MODULES: "0"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-suite-${{ strategy.job-index }}
+          path: |
+            qa/parity/**/report.json
+            qa/parity-footage/**/report.json
+          if-no-files-found: ignore

@@ -1,0 +1,51 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: brand-lockup, end card",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4.5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "brand-lockup",
+        "start": 0,
+        "end": 4.5,
+        "params": {
+          "variant": "end",
+          "mark": "assets/brand/mark.svg",
+          "wordmark": {
+            "src": "assets/brand/wordmark.svg",
+            "ratio": 4
+          },
+          "tint": "paper",
+          "headline": "Start free today",
+          "badge": {
+            "src": "assets/brand/badge.svg",
+            "ratio": 3
+          },
+          "url": "example.com/start"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

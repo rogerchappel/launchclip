@@ -95,7 +95,7 @@ test("launchclip make passes --goal, --format and --awareness to the script pass
   const make = { env: {}, client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false }, inventory: async (dir) => ({ dir, entries: [], counts: {}, summary: [] }) };
   try {
     await assert.rejects(
-      runCli(["make", "A 20-second launch video for Ledgerly", "--goal", "convert", "--format", "data-explainer", "--awareness", "most", "--voice", "test", "--out", out], { stdout: { write() {} }, stderr: { write() {} }, productionAdapters: { make } }),
+      runCli(["make", "A 20-second launch video for Ledgerly", "--goal", "convert", "--format", "data-explainer", "--awareness", "most", "--concepts", "off", "--voice", "test", "--out", out], { stdout: { write() {} }, stderr: { write() {} }, productionAdapters: { make } }),
       /launchclip make failed at the prepare stage/
     );
     assert.equal(requests.length, 1);

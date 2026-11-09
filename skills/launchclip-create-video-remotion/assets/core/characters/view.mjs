@@ -11,14 +11,28 @@
 // become one overflow-visible <svg> each, in drawing order, so layering is
 // kept: shapes before a joint draw under it, shapes after it draw over it.
 // A group that holds a joint (a face, a finger) becomes a div too, keeping
-// its id and opacity.
+// its id and opacity. An open mouth becomes a pivot div at the mouth's
+// centre, so speech can shape it.
 //
 // Imports only sibling kit/core files.
 
 import {abs, el, transformString} from '../catalog-b-view.mjs';
 
 const ORIGIN = '0px 0px';
-const hasJoint = node => node && typeof node === 'object' && (node.tag === 'joint' || (node.children ?? []).some(hasJoint));
+
+// An open mouth (C-open-<expression>: a group holding one group moved to the
+// mouth's centre) becomes a pivot like a joint, so the op list can shape it
+// (scaleX, scaleY about the mouth's centre) for speech. → {x, y} | null
+const PIVOT_ID = /-open-[a-z-]+$/;
+const PIVOT_MOVE = /^translate\((-?[\d.]+)[\s,]+(-?[\d.]+)\)$/;
+function pivotOf(node) {
+  if (node?.tag !== 'g' || typeof node.id !== 'string' || !PIVOT_ID.test(node.id) || node.children?.length !== 1) return null;
+  const [inner] = node.children;
+  const move = inner?.tag === 'g' && !inner.id ? PIVOT_MOVE.exec(String(inner.attrs?.transform ?? '').trim()) : null;
+  return move ? {x: Number(move[1]), y: Number(move[2])} : null;
+}
+
+const hasJoint = node => node && typeof node === 'object' && (node.tag === 'joint' || pivotOf(node) !== null || (node.children ?? []).some(hasJoint));
 
 function staticTransform(attr) {
   if (!attr) return null;
@@ -56,6 +70,11 @@ function convert(node) {
     const {pivot} = node;
     const inner = el('div', node.id, {...abs(0, 0, 0, 0), transform: transformString(node.transform), transformOrigin: ORIGIN}, convertList(node.children));
     return el('div', null, {...abs(pivot.x, pivot.y, 0, 0), ...(pivot.mirror ? {transform: 'scale(-1, 1)', transformOrigin: ORIGIN} : {})}, [inner]);
+  }
+  const pivot = pivotOf(node);
+  if (pivot) {
+    const inner = el('div', node.id, {...abs(0, 0, 0, 0), ...(node.style?.opacity !== undefined ? {opacity: node.style.opacity} : {}), transform: transformString({}), transformOrigin: ORIGIN}, convertList(node.children[0].children));
+    return el('div', null, abs(pivot.x, pivot.y, 0, 0), [inner]);
   }
   // A group holding a joint: a div with the group's id, opacity and static transform.
   const style = {...abs(0, 0, 0, 0)};

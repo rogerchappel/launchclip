@@ -1,0 +1,26 @@
+{
+  "title": "She skipped the check",
+  "title_options": ["She skipped the check", "The check Maya never ran", "Run the check first"],
+  "beats": [
+    { "beat": "setup", "place": "desk-laptop", "lines": [
+      { "speaker": "narrator", "text": "Maya has shipped this fix all morning.", "playing": "", "action": "", "seconds": 0 }
+    ] },
+    { "beat": "problem", "place": "desk-laptop", "lines": [
+      { "speaker": "maya", "text": "Again. The same red build.", "playing": "flat, to herself", "action": "", "seconds": 0 },
+      { "speaker": "Sam", "text": "Did you run the check?", "playing": "gentle", "action": "", "seconds": 0 },
+      { "speaker": "", "text": "", "playing": "", "action": "Maya turns to look at Sam.", "seconds": 1.2 }
+    ] },
+    { "beat": "attempt", "place": "an open-plan office", "lines": [
+      { "speaker": "maya", "text": "The check is slow.", "playing": "", "action": "", "seconds": 0 },
+      { "speaker": "sam", "text": "Slower than shipping it again?", "playing": "", "action": "", "seconds": 0 }
+    ] },
+    { "beat": "turn", "place": "", "lines": [
+      { "speaker": "", "text": "", "playing": "", "action": "Maya runs the check. It fails on the first line.", "seconds": 1.5 },
+      { "speaker": "maya", "text": "Oh. It was the config all along.", "playing": "quiet", "action": "", "seconds": 0 }
+    ] },
+    { "beat": "resolution", "place": "", "lines": [
+      { "speaker": "narrator", "text": "The check found it before the deploy could.", "playing": "", "action": "", "seconds": 0 },
+      { "speaker": "sam", "text": "sam: Run the check first. Then ship.", "playing": "", "action": "", "seconds": 0 }
+    ] }
+  ]
+}

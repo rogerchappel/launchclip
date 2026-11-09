@@ -36,7 +36,7 @@ falls through to typography.
 Each phase is one or two small PRs, measured against the skill on the same
 briefs (see "Measuring parity").
 
-1. **Model-directed long form.** The beat director keeps the clock: clauses,
+1. **Model-directed long form** (landed). The beat director keeps the clock: clauses,
    shots, plates, camera and the cadence gate. One model call per ≤ 180 s
    chunk then picks every clause's card, as the skill's director does: any
    catalogue module and its params, or a hold on the card before. The
@@ -48,13 +48,27 @@ briefs (see "Measuring parity").
    affected scenes re-render, and the critic runs again, at most three passes.
    After three, the result is `needs-repair` and an app must not present it
    as finished.
+   *Landed:* three rounds by default (`--critic-repairs`); long form
+   re-directs the chunks that hold the named scenes; `launchclip make` exits 2
+   for a `needs-repair` video (`--allow-needs-repair` exits 0).
 3. **Concept and story.** Before the script: an angle, five concepts judged in
    a fresh context, the chosen story edited for retention, then the script.
    Long form keeps its chapters, but the outline comes from the story.
+   *Landed:* `make` runs the concept tournament and the retention story that
+   `produce` already had (`src/make/concept_story.js`), writes `CONCEPTS.json`
+   and `STORY.json`, and writes the script on the story. A long video's story
+   is a spine of at most three minutes; the outline is derived from its
+   beats. `--concepts off` keeps the one-pass script. The skill also writes
+   `ANGLE.json` before its concepts; `make` still finds the angle in the
+   script pass.
 4. **Length is a ceiling.** A chapter shorter than its slot is not padded; the
    video runs shorter, or the outline gives the time to the chapter with more
    material. No resize pass that adds words.
-5. **Primary sources and captures.** Research prefers the source of a claim
+   *Landed:* the resize pass only trims a take that runs over; a short take
+   or chapter is kept. Tooling no longer stretches an outline to the
+   duration, a short chapter's spare seconds go to the later chapters with
+   the most facts, and every script and chapter prompt states the ceiling.
+5. **Primary sources and captures** (landed, opt-in with `--research on`). Research prefers the source of a claim
    (the company's announcement, docs or pricing page) over aggregator posts,
    drops a story with no primary source, and never names an aggregator in the
    narration. The pages used are captured, so the director can show them
@@ -62,9 +76,23 @@ briefs (see "Measuring parity").
    logos join the inventory (`logo-row`, `brand-lockup`).
 6. **Candidates.** The opening and one risky boundary render as candidates
    from the pixels, as the skill does, before the draft.
+   *Landed for short motion videos:* a second opening designed in a separate
+   call that never sees the first, and a different kind of move at the
+   riskiest transition in the first 30 seconds. Each candidate is three
+   stills from the project's renderer, scored from the frames on the skill's
+   ten fields; the winner goes into `storyboard.json` and the receipt is the
+   skill's `qa/rendered-candidates.json`. *Not yet:* long form (its
+   storyboard comes from the beat map, which a candidate would have to
+   change) and footage-led videos. Stills show a move at three points inside it
+   but not the motion itself; the skill may use encoded clips.
 
 The model matters most in phases 1 to 3. `make` already takes an Anthropic
 key; a stronger model there is a configuration choice, not a code change.
+
+The critic needs a model that can see. The Anthropic adapter used to send
+text only, so a run with only `ANTHROPIC_API_KEY` never ran the critic and
+ended `ready-for-review`. *Landed:* the adapter sends the contact sheets as
+image blocks, so the critic and its repair rounds run by default there too.
 
 ## Measuring parity
 
@@ -83,6 +111,34 @@ storyboard and the critic sheets:
 
 `make` is at parity when every metric is within 15% of the skill's on the same
 brief, and its typography share is at most 30% for a news or research video.
+
+### The harness
+
+`npm run eval:make-parity -- <make-project> <skill-project> --kind news`
+(`eval/make-parity.mjs`) computes these from two finished projects and
+prints the comparison. It reads each project's `storyboard.json`,
+`NARRATION.json` (or `SCRIPT.json`, or `SCRIPT.md`) and `qa/critic.json`,
+so it runs offline and renders nothing.
+
+- A metric passes when it is within 15% of the skill's, or on the better side
+  of it: fewer hedges than the skill is not a miss.
+- Both videos are judged against one cadence profile (`--format`, else the
+  one the make video's length and shape imply).
+- A held card is a base scene on screen longer than the profile's longest
+  static run with no state of its own. A repeated card has the module and
+  the words of the card before it.
+- Script rates are per 100 words, so a short and a long script compare. A
+  repeated fact is a figure stated in more than one sentence, or a sentence
+  that says what an earlier one said.
+- `--kind news` or `--kind research` adds the 30% typography ceiling.
+- A project with no critique or no script leaves those rows `n/a`; they do
+  not count for or against parity.
+- `--json` prints both projects' metrics; `--strict` exits 1 when make is
+  not at parity. With one project it prints that project's metrics.
+
+With no arguments it runs on the fixture pair in
+`eval/fixtures/make-parity`. The fixed set of real briefs is not in the repo
+yet: each needs a keyed run through both paths.
 
 ## Non-goals
 

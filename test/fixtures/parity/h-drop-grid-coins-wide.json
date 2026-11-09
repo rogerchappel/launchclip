@@ -1,0 +1,54 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: drop-grid, labelled coins",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4.5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "drop-grid",
+        "start": 0,
+        "end": 4.5,
+        "params": {
+          "variant": "coins",
+          "items": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+          ],
+          "times": [
+            0.5,
+            0.9,
+            1.3,
+            1.7,
+            2.1
+          ],
+          "source": "One post a day"
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

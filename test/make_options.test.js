@@ -99,3 +99,12 @@ test("--pace, --cta-keyword/--cta-offer and --episode/--choices reach runMake an
   const { flags } = settingsFromMakeReport({ options: { pace: "calm", cta_keyword: "DECK", cta_offer: "our checklist" } });
   assert.deepEqual([flags.pace, flags["cta-keyword"], flags["cta-offer"]], ["calm", "DECK", "our checklist"]);
 });
+
+test("--animation is a switch a recipe may save, and a made animation saves it", () => {
+  assert.equal(makeOptionsFromFlags({ animation: true }).animation, true);
+  assert.ok(!("animation" in makeOptionsFromFlags({})));
+  assert.ok(MAKE_SETTING_FLAGS.includes("animation"));
+  assert.throws(() => validateMakeOptions({ animation: "yes" }), /--animation takes no value/);
+  assert.equal(settingsFromMakeReport({ routing: { kind: "animation", aspect: "9:16" } }).flags.animation, true);
+  assert.ok(!("animation" in settingsFromMakeReport({ routing: { aspect: "9:16" } }).flags));
+});
