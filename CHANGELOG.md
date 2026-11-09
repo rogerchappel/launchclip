@@ -20,6 +20,11 @@
 
 ### Added
 
+- A coverage test in the fast suite (`test/module_coverage.test.js`) fails
+  when a module has no HyperFrames emitter, no Remotion component or no
+  per-module parity fixture. `node scripts/parity-coverage.mjs` prints what
+  is covered, and CONTRIBUTING.md says how to add a fixture.
+
 - Every short gets the short-form checks. The hook and card rules used to
   run only when an app supplied a footage library, so a Short made from a
   prompt alone skipped them. They now run on every video of 90 s or less, and

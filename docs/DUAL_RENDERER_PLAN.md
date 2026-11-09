@@ -219,6 +219,19 @@ Known renderer difference: HyperFrames muxes its AAC sidecar without an edit
 list, so its audio starts 1024 samples (21.3 ms) late; the 25 ms offset limit
 allows exactly that.
 
+### Parity coverage
+
+Checked on 2026-11-10: all 145 modules in `knownModules()` (14 editorial kinds
+and 131 catalogue modules) have a HyperFrames emitter and a Remotion
+component. `test/module_coverage.test.js` keeps it that way in the fast
+`npm test` run: it fails for a module missing from either renderer, for a
+renderer that registers a module the core does not know, and for a module
+with no per-module parity fixture unless it is on the commented allowlist in
+`scripts/parity-coverage.mjs`. A per-module fixture is one in
+`test/fixtures/parity/` or a module-mode one in
+`test/fixtures/parity-footage/`. `node scripts/parity-coverage.mjs` prints
+the counts.
+
 ### RFC phase 5 status: storyboard planner (model side)
 
 Done:
