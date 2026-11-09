@@ -86,7 +86,7 @@ import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCamera
 // @ts-ignore plain ESM from kit/core
 import { propsToStyle } from "@launchclip/core/catalog-b-view.mjs";
 // @ts-ignore plain ESM from kit/core
-import { layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
+import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "@launchclip/core/medium.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -215,15 +215,20 @@ export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({
 // A footage-layout panel fill (story.panel.fill): the pattern clipped to the
 // canvas minus the presenter's window, per frame from the layout plan's
 // state. Matches the HyperFrames #lc-layout-fill.
-export const LayoutFill: React.FC<{ layout: any; plan: any }> = ({ layout, plan }) => {
+// notch: the fill above the subject in a story with a breakout section,
+// clipped away over the breakout zone (#lc-layout-fill-notch); its copy
+// under the subject is drawn without it.
+export const LayoutFill: React.FC<{ layout: any; plan: any; notch?: boolean }> = ({ layout, plan, notch = false }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
-  return (
-    <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", clipPath: layoutFillClip(layoutStateAt(layout, t), layout.canvas) }} aria-hidden>
+  const state = layoutStateAt(layout, t);
+  const fill = (
+    <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", clipPath: layoutFillClip(state, layout.canvas) }} aria-hidden>
       <BackgroundField plan={plan} t={t} />
     </AbsoluteFill>
   );
+  return notch ? <AbsoluteFill style={{ pointerEvents: "none", clipPath: breakoutNotch(state, layout.canvas) }} aria-hidden>{fill}</AbsoluteFill> : fill;
 };
 
 // World mode: the field as one continuous backdrop in the depth layer, each
@@ -605,6 +610,8 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     return plate ? zoomOps(shotZooms(story, plate.entry, plate.model?.zoomRects).keys, { width: story.format.width, height: story.format.height }) : undefined;
   };
   const subject = React.useMemo(() => subjectPlan(story, base, layers, layout), [story, base, layers, layout]);
+  // A breakout section (footage-layout.mjs): the frame and fill are drawn under the subject too.
+  const breakout = subject.needed && Boolean(layout?.breakouts?.length);
   const medium = React.useMemo(() => mediumPlan(story), [story]);
   if (plan) {
     const world = plan.mode === "world";
@@ -681,9 +688,11 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       {feelWrap(<>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
+      {breakout ? <LayoutFrame plan={layout} under /> : null}
+      {breakout && layoutFill ? <LayoutFill layout={layout} plan={layoutFill} /> : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} styles={subject.styles} /> : null}
       {layout ? <LayoutFrame plan={layout} /> : null}
-      {layout && layoutFill ? <LayoutFill layout={layout} plan={layoutFill} /> : null}
+      {layout && layoutFill ? <LayoutFill layout={layout} plan={layoutFill} notch={breakout} /> : null}
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>

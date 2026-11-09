@@ -1880,8 +1880,11 @@ export const SECTION_ROOMS = Object.freeze({ dim: Object.freeze({ dim: 0.55 }), 
 // A stacked section's presenter window as a share of the canvas height
 // (`share`): half by default; a stacked talking head gives the panel more.
 export const STACKED_SHARE = Object.freeze({ default: 0.5, min: 0.35, max: 0.6 });
+// A section's `breakout`: the presenter's head rises over the top edge of
+// their window, in front of the panel. Only where the panel is above them.
+export const BREAKOUT_LAYOUTS = Object.freeze(["framed", "stacked"]);
 
-const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "share", "transition"]);
+const SECTION_KEYS = new Set(["id", "start", "end", "layout", "side", "panel", "ring", "room", "zoom", "share", "breakout", "transition"]);
 const SECTION_HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 /**
@@ -1917,6 +1920,10 @@ export function validateSections(story, { err, warn = () => {} } = {}) {
     if (section.share !== undefined) {
       if (section.layout !== "stacked") err(`${path}.share applies only to stacked`);
       else if (!(typeof section.share === "number" && section.share >= STACKED_SHARE.min && section.share <= STACKED_SHARE.max)) err(`${path}.share must be ${STACKED_SHARE.min}–${STACKED_SHARE.max} (the presenter's share of the height)`);
+    }
+    if (section.breakout !== undefined) {
+      if (typeof section.breakout !== "boolean") err(`${path}.breakout must be true or false`);
+      else if (section.breakout && !(BREAKOUT_LAYOUTS.includes(section.layout) && (section.side ?? defaultSide(section.layout, story)) === "bottom")) err(`${path}.breakout needs the presenter under the panel: framed with side "bottom", or stacked (bottom)`);
     }
     if (section.transition !== undefined) {
       const transition = section.transition;
@@ -1964,7 +1971,7 @@ export function sceneSection(sections, start, end = start) {
   return best && (most >= span / 2 - EPS || (start >= best.start - EPS && start < best.end - EPS)) ? best : null;
 }
 
-/** Resolved sections, sorted and frame-snapped: [{id, start, end, layout, side, panel (#hex), ring, room, zoom, transition: {type, dur}}]. */
+/** Resolved sections, sorted and frame-snapped: [{id, start, end, layout, side, panel (#hex), ring, room, zoom, share, breakout? (only when true), transition: {type, dur}}]. */
 export function storySections(story) {
   const list = Array.isArray(story?.sections) ? story.sections : [];
   const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
@@ -1985,6 +1992,7 @@ export function storySections(story) {
       room: section.room ?? "keep",
       zoom: typeof section.zoom === "number" ? section.zoom : 1,
       share: section.layout === "stacked" && typeof section.share === "number" ? section.share : STACKED_SHARE.default,
+      ...(section.breakout === true && BREAKOUT_LAYOUTS.includes(section.layout) && (section.side ?? defaultSide(section.layout, story)) === "bottom" ? { breakout: true } : {}),
       transition: { type: section.transition?.type ?? "layout-shift", dur: Number(section.transition?.dur ?? LAYOUT_SHIFT) }
     }))
     .filter((section) => section.end > section.start + EPS)
@@ -2021,7 +2029,7 @@ export function layoutSpans(story) {
   }
   if (clock < duration - EPS) spans.push({ ...full, start: clock, end: duration });
   // A full span with a close-up (zoom) is a layout of its own.
-  const key = (span) => (span.layout === "full" && !(span.zoom > 1) ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom, span.share]));
+  const key = (span) => (span.layout === "full" && !(span.zoom > 1) ? "full" : JSON.stringify([span.layout, span.side, span.panel, span.ring, span.zoom, span.share, ...(span.breakout ? ["breakout"] : [])]));
   const boundaries = [];
   spans.forEach((span, index) => {
     span.shift = null;
