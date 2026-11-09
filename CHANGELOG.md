@@ -4,6 +4,18 @@
 
 ### Added
 
+- `launchclip doctor --models` reports what your keys cover before you
+  spend anything: whether you have a model that can write (script, cast,
+  storyboard) and one that can see (the critic), and what to set if not. It
+  reads the environment and a local Ollama's model list and makes no paid
+  call. `--json` for scripts, `--model provider:model` to check another
+  model, `--agent` for the skill path. `make` records the same report in
+  `MAKE.json` as `model_access`.
+- The critic now runs with an Anthropic key. The Anthropic client sends the
+  contact sheets as images, so `make` with only `ANTHROPIC_API_KEY` writes
+  `qa/critic.json` instead of leaving the critic pending. This adds one
+  paid call per critic pass to those runs; `--no-critic` skips it.
+
 - `set-prop` (catalogue D) puts one story object in the world a cast stands
   in: a drawn prop from the world kit, or a project image or video from
   `assets/`. It stands on the floor, against the back wall, on the counter or
