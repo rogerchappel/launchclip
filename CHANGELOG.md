@@ -4,6 +4,21 @@
 
 ### Added
 
+- Current news with no search key. `launchclip research` (and `make` when
+  it researches) now finds stories through public sources that need no key:
+  a named company's own RSS or Atom feed (and any `--feed <url>`), Hacker
+  News, the GDELT article list and Wikipedia's current events. Each is only
+  a lead: the page is fetched and checked as before, a story is kept only
+  when a primary source states it, and no index is ever named in the
+  script. `research/news.json` lists every story found, kept or dropped,
+  with the reason. `--news none` turns these sources off.
+- Publish dates and old news. Every claim records its source's publish
+  date. A brief that asks for the latest ("today", "this week", "latest") or
+  `--fresh-days <n>` sets a freshness window: older stories are dropped,
+  and a claim whose source is older or undated is flagged for the script.
+- Research reads `robots.txt` before it fetches a page or feed and skips
+  what a site closes to it.
+
 - `launchclip make` researches a news brief without being asked.
   `--research` now defaults to `auto`: research turns on when the brief is
   news or research shaped (news wording such as "this week" or "just
