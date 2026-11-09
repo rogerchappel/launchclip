@@ -134,6 +134,23 @@ test("describeInventory falls back to a local guess when the model fails, and pa
   }
 });
 
+test("describeInventory stops asking a model that keeps failing", async () => {
+  const dir = await folder({ "a.png": "1", "b.png": "2", "c.png": "3", "d.png": "4" });
+  try {
+    const inventory = { dir, entries: ["a.png", "b.png", "c.png", "d.png"].map((file) => image(file)) };
+    let calls = 0;
+    const client = { async runStructured() { calls += 1; throw new Error("401 Incorrect API key"); } };
+    const result = await describeInventory(inventory, { client, vision: true, cacheDir: path.join(dir, ".cache"), adapters: { ...quiet, images: async () => ({ images: [{ url: "data:image/jpeg;base64,AA==" }], times: [0] }) } });
+    assert.equal(calls, 2, "two failures in a row and the rest are not sent");
+    assert.deepEqual(result.counts, { notes: 0, vision: 0, local: 4 });
+    assert.equal(result.warnings.length, 2);
+    assert.match(result.warnings[0], /could not describe a\.png \(401 Incorrect API key\)/);
+    assert.match(result.warnings[1], /the model failed again on b\.png; the remaining files are described from their names and frames/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("featuredAssets: the notes, a file the prompt names, the one file that is what the prompt asks to show, or a handful handed in", () => {
   const many = [
     { src: "assets/pricing.png", kind: "image", notes: { shows: "pricing page" } },

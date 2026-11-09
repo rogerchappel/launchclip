@@ -43,6 +43,8 @@ export const UNDERSTANDING_VERSION = 1;
 export const DESCRIPTION_MODES = Object.freeze(["auto", "local", "off"]);
 // The most files one run sends to the vision model; the rest are described locally.
 export const MAX_VISION_FILES = 24;
+// After this many model failures in a row, the rest of the run is described locally.
+const MAX_VISION_FAILURES = 2;
 // Frames of a video the vision model sees, as shares of its length.
 const VIDEO_FRAME_SHARES = [0.1, 0.35, 0.65, 0.9];
 // The long side of what the vision model sees (px).
@@ -156,6 +158,7 @@ export async function describeInventory(inventory, options = {}) {
   let calls = 0;
   let announced = false;
   let limited = false;
+  let failures = 0;
   for (const entry of entries) {
     const own = entry.notes ?? null;
     // The caller already says what it shows: theirs stands, nothing is computed.
@@ -177,7 +180,7 @@ export async function describeInventory(inventory, options = {}) {
     let usedModel = null;
     // A vision description made earlier is reused even when this run has no model.
     if (mode !== "local" && cached.vision?.notes) { source = "vision"; notes = cached.vision.notes; usedModel = cached.vision.model ?? null; hit = true; }
-    else if (useVision && path.extname(entry.path).toLowerCase() !== ".svg") {
+    else if (useVision && failures < MAX_VISION_FAILURES && path.extname(entry.path).toLowerCase() !== ".svg") {
       if (calls >= limit) {
         if (!limited) out.warnings.push(`more than ${limit} files to describe; the rest are described from their names and frames (run again to describe more with the model)`);
         limited = true;
@@ -190,9 +193,14 @@ export async function describeInventory(inventory, options = {}) {
           if (seen.notes) {
             source = "vision"; notes = seen.notes; usedModel = seen.result?.model ?? model;
             await writeCache(cacheFile, { ...cached, version: UNDERSTANDING_VERSION, vision: { model: usedModel, notes } });
+            failures = 0;
           } else out.warnings.push(`the model returned no usable description of ${entry.path}; described from its name and frames`);
         } catch (error) {
-          out.warnings.push(`the model could not describe ${entry.path} (${String(error?.message ?? error).split("\n")[0]}); described from its name and frames`);
+          failures += 1;
+          // A bad key or a model that is down fails every file the same way: say it once and stop asking.
+          out.warnings.push(failures < MAX_VISION_FAILURES
+            ? `the model could not describe ${entry.path} (${String(error?.message ?? error).split("\n")[0]}); described from its name and frames`
+            : `the model failed again on ${entry.path}; the remaining files are described from their names and frames`);
         }
       }
     }
