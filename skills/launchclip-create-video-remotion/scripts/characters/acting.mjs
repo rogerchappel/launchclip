@@ -11,8 +11,10 @@
 // - A pose with a gesture (a wave, typing, walking, a cheer's bounce, a
 //   head scratch) loops whole cycles while it holds and ends each loop back
 //   on the pose, so the next change always starts from the pose's values.
-// - Idle life on separate groups: breathing (the chest), a slow head sway,
-//   and blinks at a steady, per-character rhythm.
+// - Life while a pose holds, on separate groups: breathing (the chest), a
+//   slow head sway, blinks at uneven intervals (and as a big move starts),
+//   small eye darts and slight weight shifts, each on a schedule seeded from
+//   the character's id.
 // - Expressions crossfade their faces; mouths open and close on the
 //   character's spoken words (open and closed shapes, not lip sync).
 // - An acting profile (ACTING_PROFILES) scales all of it per character.
@@ -24,9 +26,11 @@
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
 
-export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09,
+export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, breathDepth: 0.012, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09,
   // Idle arms (styles whose geometry sets idleArms): a slow swing at the shoulder and a give at the elbow, and a slight sway of the body.
-  armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9});
+  armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9,
+  // Life while holding: eye darts (rig units aside and up or down, seconds out and back) and weight shifts (degrees).
+  dartX: 5, dartY: 1.2, dartOut: 0.07, dartBack: 0.1, shiftDeg: 0.9});
 
 // Acting profiles: how one character moves. Each scales the amplitude and
 // rhythm of the acting around the default (1 = today's feel); none changes
@@ -209,6 +213,21 @@ export function stateJoints(state, actor) {
   return j;
 }
 
+/**
+ * A to-and-fro of one prop between a and b from t0 to the scene's end: whole
+ * eased swings, then the part of one that fits, so idle motion runs to the
+ * last frame rather than stopping where a whole swing no longer fits.
+ */
+function swing(ops, targets, prop, t0, end, period, a, b) {
+  for (let t = t0, k = 0; t < end - 0.05; t += period, k++) {
+    const from = k % 2 ? b : a, to = k % 2 ? a : b;
+    const whole = t + period <= end + 1e-9;
+    // The part of an eased swing covered by the time left.
+    const share = whole ? 1 : (1 - Math.cos(Math.PI * (end - t) / period)) / 2;
+    for (const target of targets) tw(ops, target, rt(t), whole ? period : rt(end - t), whole || share > 0.5 ? 'sine.inOut' : 'sine.in', {[prop]: from}, {[prop]: rt(from + (to - from) * share)});
+  }
+}
+
 /** Gesture loops between t0 and t1 (whole cycles, ending on the pose). */
 function gestureOps(ops, cid, j, t0, t1) {
   const g = j.gesture;
@@ -264,6 +283,9 @@ export function actingOps(ops, actor) {
   // A state's look: its pose, facing and seat (a new look restarts the gesture loop).
   const lookOf = state => `${state.pose}|${state.facing ?? actor.facing}|${state.standing ? 1 : 0}`;
   // Poses
+  const moveBlinks = [];
+  // Life is seeded from the character's id (the part id when there is none), so each character has its own rhythm.
+  const seed = actor.id ?? cid;
   let current = jointsAt(states[0]);
   for (const [target, props] of Object.entries(jointTargets(cid, current))) set(ops, target, start, props);
   states.forEach((state, i) => {
@@ -272,7 +294,8 @@ export function actingOps(ops, actor) {
     let settle = state.time;
     const from = jointTargets(cid, current), to = jointTargets(cid, next);
     if (i > 0 && Object.keys(to).some(target => !same(from[target], to[target]))) {
-      poseChangeOps(ops, from, to, state.time, P);
+      // The eyes close as a big move starts.
+      if (poseChangeOps(ops, from, to, state.time, P) >= 0.8) moveBlinks.push(state.time + A.poseTween * P.pace * MOVE.anticipate);
       settle = rt(state.time + A.poseTween);
     }
     if (i === 0 || lookOf(state) !== lookOf(states[i - 1])) gestureOps(ops, cid, next, settle + (i === 0 ? 0.2 : 0), holdEnd - 0.05);
@@ -314,43 +337,120 @@ export function actingOps(ops, actor) {
   mouthAt(start, false);
   for (const change of actor.speech) if (change.time > start && change.time < end) mouthAt(change.time, change.open);
   // Idle: breathing and a slow head sway for the whole scene.
-  for (let t = start, k = 0; t + A.breath <= end; t += A.breath, k++) {
-    tw(ops, `${cid}-breath`, rt(t), A.breath, 'sine.inOut', {scaleY: k % 2 ? 1.012 : 1}, {scaleY: k % 2 ? 1 : 1.012});
-  }
   const p = phase(cid);
-  for (let t = start + p * 0.8, k = 0; t + A.sway <= end; t += A.sway, k++) {
-    const from = {rotation: k % 2 ? A.swayDeg : 0}, to = {rotation: k % 2 ? 0 : A.swayDeg};
-    tw(ops, `${cid}-headidle`, rt(t), A.sway, 'sine.inOut', from, to);
-    tw(ops, `${cid}-hbidle`, rt(t), A.sway, 'sine.inOut', from, to);
-  }
+  swing(ops, [`${cid}-breath`], 'scaleY', start, end, rt(A.breath / P.breathRate), 1, rt(1 + A.breathDepth * P.breath));
+  swing(ops, [`${cid}-headidle`, `${cid}-hbidle`], 'rotation', start + p * 0.8, end, A.sway, 0, A.swayDeg);
   // Idle arms and body (geometry.idleArms): each arm swings on its own
   // rhythm, so a figure drawn in lines never holds dead still. These move
   // wrappers inside the posed joints (armidle, foreidle), so a pose change
   // never fights them; they are absolute tweens, so any frame seeks alike.
   if (actor.geometry?.idleArms) {
-    const loop = (target, period, amount, offset) => {
-      for (let t = start + offset, k = 0; t + period <= end; t += period, k++) {
-        tw(ops, target, rt(t), period, 'sine.inOut', {rotation: k % 2 ? amount : 0}, {rotation: k % 2 ? 0 : amount});
-      }
-    };
-    loop(`${cid}-armidle-l`, A.armSway, A.armDeg, p * 0.7);
-    loop(`${cid}-armidle-r`, A.armSway * 1.13, A.armDeg, 0.35 + p * 0.5);
-    loop(`${cid}-foreidle-l`, A.foreSway, A.foreDeg, 0.2 + p * 0.9);
-    loop(`${cid}-foreidle-r`, A.foreSway * 1.09, A.foreDeg, 0.6 + p * 0.4);
+    swing(ops, [`${cid}-armidle-l`], 'rotation', start + p * 0.7, end, A.armSway, 0, A.armDeg);
+    swing(ops, [`${cid}-armidle-r`], 'rotation', start + 0.35 + p * 0.5, end, A.armSway * 1.13, 0, A.armDeg);
+    swing(ops, [`${cid}-foreidle-l`], 'rotation', start + 0.2 + p * 0.9, end, A.foreSway, 0, A.foreDeg);
+    swing(ops, [`${cid}-foreidle-r`], 'rotation', start + 0.6 + p * 0.4, end, A.foreSway * 1.09, 0, A.foreDeg);
     // The body leans out from upright, then sways side to side about it.
     const half = A.bodySway / 2;
     if (start + p + half <= end) tw(ops, `${cid}-breath`, rt(start + p), half, 'sine.out', {rotation: 0}, {rotation: A.bodyDeg});
-    for (let t = start + p + half, k = 0; t + A.bodySway <= end; t += A.bodySway, k++) {
-      tw(ops, `${cid}-breath`, rt(t), A.bodySway, 'sine.inOut', {rotation: k % 2 ? -A.bodyDeg : A.bodyDeg}, {rotation: k % 2 ? A.bodyDeg : -A.bodyDeg});
-    }
+    swing(ops, [`${cid}-breath`], 'rotation', start + p + half, end, A.bodySway, A.bodyDeg, -A.bodyDeg);
   }
-  // Blinks
-  for (let t = start + 0.9 + p * 1.6; t + 0.2 < end; t += A.blinkEvery + (p - 0.5) * 0.6) {
+  // Blinks: irregular, with the odd double blink, and one as each big move starts.
+  for (const t of blinkTimes(seed, start, end, P, moveBlinks)) {
     for (const name of actor.expressions) {
       tw(ops, `${cid}-eyes-${name}`, rt(t), A.blinkDown, 'power1.in', {scaleY: 1}, {scaleY: 0.12});
       tw(ops, `${cid}-eyes-${name}`, rt(t + A.blinkDown), A.blinkUp, 'power1.out', {scaleY: 0.12}, {scaleY: 1});
     }
   }
+  // Eye darts: a quick glance aside, a short hold, and back (the eyes' own
+  // offset, so a blink's scale never fights it). Not for the realistic
+  // styles, whose eye group is the whole eye, lids and all.
+  if (!NO_DARTS.includes(actor.style)) {
+    for (const dart of dartTimes(seed, start, end, P)) {
+      const aside = {x: dart.x, y: dart.y};
+      for (const name of actor.expressions) {
+        tw(ops, `${cid}-eyes-${name}`, rt(dart.time), A.dartOut, 'power2.out', {x: 0, y: 0}, aside);
+        tw(ops, `${cid}-eyes-${name}`, rt(dart.time + A.dartOut + dart.hold), A.dartBack, 'power2.inOut', aside, {x: 0, y: 0});
+      }
+    }
+  }
+  // Weight shifts: the upper body eases a little to one side, holds, then to
+  // the other, at uneven intervals (styles with idle arms sway above instead).
+  if (!actor.geometry?.idleArms) {
+    let lean = 0;
+    for (const shift of shiftTimes(seed, start, end, P)) {
+      tw(ops, `${cid}-breath`, rt(shift.time), shift.duration, 'sine.inOut', {rotation: lean}, {rotation: shift.rotation});
+      lean = shift.rotation;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Life while a pose holds. Each schedule is drawn from a generator seeded
+// with the character's id, so it is uneven but the same on every run, in
+// both renderers and at any seek position.
+
+// Styles whose eyes do not dart (the eye group carries the lids and whites).
+const NO_DARTS = Object.freeze(['lifelike', 'cinematic']);
+
+/** A deterministic generator of numbers in [0, 1) for a text seed. */
+export function seededRandom(seed) {
+  let a = 2166136261;
+  for (const ch of String(seed)) a = Math.imul(a ^ ch.charCodeAt(0), 16777619);
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * When a character blinks between start and end: gaps around
+ * ACTING.blinkEvery (half to one and a half times it, divided by the
+ * profile's blink rate), one in five followed by a second blink, plus the
+ * `extra` times (big moves). No two closer than a blink takes.
+ */
+export function blinkTimes(seed, start, end, P = ACTING_PROFILES.default, extra = []) {
+  const A = ACTING, rand = seededRandom(`${seed}|blink`);
+  const times = [...extra];
+  for (let t = start + 0.5 + rand() * 1.6; t + 0.2 < end; t += A.blinkEvery * (0.5 + rand()) / P.blinks) {
+    times.push(t);
+    if (rand() < 0.2) times.push(t + 0.3);
+  }
+  const out = [];
+  for (const t of times.sort((a, b) => a - b)) if (t >= start && t + 0.2 < end && (!out.length || t - out[out.length - 1] >= 0.24)) out.push(rt(t));
+  return out;
+}
+
+/** Eye darts between start and end: [{time, hold, x, y}] (rig units; the eyes return after the hold). */
+export function dartTimes(seed, start, end, P = ACTING_PROFILES.default) {
+  const A = ACTING, rand = seededRandom(`${seed}|dart`);
+  const out = [];
+  for (let t = start + 1 + rand() * 2.4; ;) {
+    const hold = 0.3 + rand() * 0.7;
+    const x = (rand() < 0.5 ? -1 : 1) * (A.dartX * (0.55 + 0.45 * rand()));
+    const y = (rand() - 0.5) * A.dartY * 2;
+    const length = A.dartOut + hold + A.dartBack;
+    if (t + length > end - 0.05) break;
+    out.push({time: rt(t), hold: rt(hold), x: rt(x), y: rt(y)});
+    t += length + (1.8 + rand() * 3.6) / P.darts;
+  }
+  return out;
+}
+
+/** Weight shifts between start and end: [{time, duration, rotation}] (degrees the upper body leans to, alternating sides). */
+export function shiftTimes(seed, start, end, P = ACTING_PROFILES.default) {
+  const A = ACTING, rand = seededRandom(`${seed}|shift`);
+  const out = [];
+  let side = rand() < 0.5 ? -1 : 1;
+  for (let t = start + 0.7 + rand() * 1.5; ;) {
+    const duration = 0.8 + rand() * 0.5;
+    if (t + duration > end) break;
+    out.push({time: rt(t), duration: rt(duration), rotation: rt(side * A.shiftDeg * (0.6 + 0.4 * rand()) * Math.min(1.5, P.shifts))});
+    side = -side;
+    t += duration + (1.4 + rand() * 2.8) / P.shifts;
+  }
+  return out;
 }
 
 /**

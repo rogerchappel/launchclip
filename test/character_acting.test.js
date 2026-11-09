@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {poseJoints, rigGeometry} from '@launchclip/core/characters/rig.mjs';
 import {starterCharacter} from '@launchclip/core/characters/cast.mjs';
-import {ACTING, ACTING_PROFILES, MOVE, actingOps, jointTargets, poseChangeOps, poseTravel} from '@launchclip/core/characters/acting.mjs';
+import {ACTING, ACTING_PROFILES, MOVE, actingOps, blinkTimes, dartTimes, jointTargets, poseChangeOps, poseTravel, shiftTimes} from '@launchclip/core/characters/acting.mjs';
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 
 const geometry = rigGeometry(starterCharacter('maya').params);
@@ -107,4 +107,54 @@ test('profiles scale the move: bouncy swings wider, calm less, nervous is quicke
     assert.ok(one.done <= 2 + ACTING.poseTween + 1e-6);
     assert.ok(Math.abs(frameState(one.ops, 2 + ACTING.poseTween).get('c-arm-r').rotation - targets('cheer')['c-arm-r'].rotation) < 1e-6);
   }
+});
+
+test('life while holding: blinks come at uneven but repeatable intervals, seeded from the character id', () => {
+  const maya = blinkTimes('maya', 0, 40), again = blinkTimes('maya', 0, 40), theo = blinkTimes('theo', 0, 40);
+  assert.deepEqual(maya, again, 'the same character blinks at the same times on every run');
+  assert.notDeepEqual(maya, theo, 'each character has its own rhythm');
+  const gaps = maya.slice(1).map((t, i) => t - maya[i]);
+  assert.ok(maya.length >= 8 && maya.length <= 22, `${maya.length} blinks in 40 s`);
+  assert.ok(new Set(gaps.map(gap => gap.toFixed(2))).size >= gaps.length * 0.7, 'gaps differ');
+  assert.ok(Math.min(...gaps) >= 0.24 - 1e-9 && Math.max(...gaps) <= ACTING.blinkEvery * 1.5 + 0.31);
+  assert.ok(blinkTimes('maya', 0, 40, ACTING_PROFILES.nervous).length > maya.length && blinkTimes('maya', 0, 40, ACTING_PROFILES.calm).length < maya.length);
+  // A big move brings a blink of its own; one too close to another is dropped.
+  assert.ok(blinkTimes('maya', 0, 40, ACTING_PROFILES.default, [20.5]).includes(20.5) || maya.some(t => Math.abs(t - 20.5) < 0.24));
+  // In a scene: every face's eyes close together and reopen fully.
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}, {time: 3, pose: 'cheer', expression: 'happy'}]);
+  const closes = name => ops.filter(op => op.target === `c-eyes-${name}` && op.to.scaleY < 0.2).map(op => op.start);
+  assert.deepEqual(closes('neutral'), closes('happy'));
+  assert.ok(closes('neutral').some(t => t > 3 && t < 3 + ACTING.poseTween), 'a blink as the cheer starts');
+  for (const t of closes('neutral')) assert.equal(value(ops, t + ACTING.blinkDown + ACTING.blinkUp + 0.01, 'c-eyes-neutral', 'scaleY'), 1);
+});
+
+test('life while holding: the eyes dart and return, the chest breathes and the weight shifts, so a held pose never freezes', () => {
+  const ops = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20});
+  const darts = dartTimes('maya', 0, 20);
+  assert.ok(darts.length >= 2);
+  for (const dart of darts) {
+    assert.ok(Math.abs(dart.x) <= ACTING.dartX && Math.abs(dart.y) <= ACTING.dartY, 'a dart is small');
+    assert.equal(value(ops, dart.time + ACTING.dartOut + dart.hold / 2, 'c-eyes-neutral', 'x'), dart.x, 'held aside');
+    assert.equal(value(ops, dart.time + ACTING.dartOut + dart.hold + ACTING.dartBack + 0.01, 'c-eyes-neutral', 'x'), 0, 'and back');
+  }
+  const shifts = shiftTimes('maya', 0, 20);
+  assert.ok(shifts.length >= 3);
+  assert.ok(shifts.every((shift, i) => i === 0 || Math.sign(shift.rotation) !== Math.sign(shifts[i - 1].rotation)), 'side to side');
+  assert.ok(shifts.every(shift => Math.abs(shift.rotation) <= ACTING.shiftDeg * 1.5));
+  // Something moves in every half second of a 20 s hold.
+  const frame = t => JSON.stringify([...frameState(ops, t)].sort(([a], [b]) => a.localeCompare(b)));
+  for (let t = 0.5; t < 19.5; t += 0.5) assert.notEqual(frame(t), frame(t + 0.25), `frozen at ${t}`);
+  // The body's joints stay on the pose throughout: life runs on its own groups.
+  for (const t of [1, 7.3, 15.9]) assert.equal(value(ops, t, 'c-arm-r', 'rotation'), targets('stand')['c-arm-r'].rotation);
+  // The realistic styles keep their eyes still (the eye group is the whole eye); a stick figure sways on its idle arms instead.
+  const real = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, style: 'lifelike'});
+  assert.ok(!real.some(op => op.target === 'c-eyes-neutral' && op.to?.x !== undefined));
+  const stick = acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, geometry: {...geometry, idleArms: true}});
+  assert.ok(stick.some(op => op.target === 'c-armidle-l') && !ops.some(op => op.target === 'c-armidle-l'));
+  assert.ok(stick.filter(op => op.target === 'c-breath' && op.to?.rotation !== undefined).every(op => Math.abs(op.to.rotation) <= ACTING.bodyDeg), 'the stick keeps its own sway, with no weight shifts over it');
+  // Profiles: a nervous character darts and shifts more, a calm one breathes slower and deeper.
+  assert.ok(dartTimes('maya', 0, 20, ACTING_PROFILES.nervous).length > darts.length && shiftTimes('maya', 0, 20, ACTING_PROFILES.nervous).length > shifts.length);
+  const breath = name => acted([{time: 0, pose: 'stand', expression: 'neutral'}], {end: 20, acting: name}).find(op => op.target === 'c-breath' && op.to?.scaleY > 1);
+  assert.ok(breath('calm').duration > breath('default').duration && breath('calm').to.scaleY > breath('default').to.scaleY);
+  assert.deepEqual([breath('default').duration, breath('default').to.scaleY], [ACTING.breath, 1.012], 'the default breath is unchanged');
 });
