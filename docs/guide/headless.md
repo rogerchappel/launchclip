@@ -181,7 +181,7 @@ nothing. What it does differently from the ordinary run:
 | Part | The ordinary run | A draft |
 | --- | --- | --- |
 | Script | Research when the brief calls for it, five concepts and a judge, the story and its edit, the script, a repair pass and a resize pass | One call from the brief, streamed, on the plan's hard word ceiling. Tooling cuts whole sentences from a script that is over it, and ends a script without a call to action on one |
-| Voice | One take of the whole narration, after the script | One take a sentence, four at a time, started while the script is still being written, then joined into one narration |
+| Voice | One take of the whole narration, after the script | One take a sentence, started while the script is still being written (four at a time for a hosted voice, one after another for the local one), then joined into one narration |
 | Storyboard | A direction map, then the storyboard, with up to four repair calls | Made by rule at once: the narration is cut into lines of a few seconds, and each line gets a character of a small cast beside the line's own words, with the call to action last. Beside it, one fast call may recast the characters for the topic and rewrite their acting and the card words |
 | Shots | Asked for as the planner goes | Every request goes to your asset provider at once, and each has 8 s to answer. A clip that is late is not waited for: its scene is drawn instead |
 | After the plan | Candidates, the render, the critic and its repair rounds | Nothing: the run stops |
@@ -266,7 +266,10 @@ they are, so the timings do not move; the direction map and the storyboard
 are planned the ordinary way, with their repair calls. `storyboard.json` is
 replaced when the plan passes, and the draft's is kept at
 `.launchclip/draft/storyboard.json`. A host can show the draft at once, run
-this in the background and swap the plan in when it ends. `MAKE.json` then
+this in the background and swap the plan in when it ends. It takes as long
+as an ordinary run's planning (minutes), and when the model's storyboard
+fails its checks the run fails as an ordinary one does: `storyboard.json` is
+then still the draft's, so keep showing it. `MAKE.json` then
 has `draft.mode` `refine` and `draft.parts` `{"script": "draft", "voice":
 "draft", "storyboard": "refined", "render": "none"}`.
 

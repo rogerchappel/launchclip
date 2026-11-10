@@ -67,7 +67,7 @@ refine of the draft.
 | the script | between 205 and 240 (not timed apart from the voice) | 11.2 |
 | the voice | 240.4 | 43.1 |
 | a playable plan | 392.2 | **50.9** |
-| model calls | 12 | 2 |
+| model calls | 11 | 2 |
 | model cost | not totalled (stopped) | $0.003 |
 
 The draft's 28.9 s narration was planned in 51.5 s of wall time: under a
