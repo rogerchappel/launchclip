@@ -116,6 +116,8 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
     groups.get(key).clashes.push(clash);
   }
   for (const { owner, clashes } of [...groups.values()].sort((a, b) => a.clashes[0].start - b.clashes[0].start)) {
+    // A clash of a scene the story no longer has (a card dropped since the check ran) is not settled: nothing is there.
+    if (picture && !owner) continue;
     let overlay = overlayFor(clashes[0]);
     // A zone tooling placed that the check still fails is withdrawn: the captions hide there.
     const inPlaced = clashes.some((clash) => /@placed-\d+$/.test(clash.captions));

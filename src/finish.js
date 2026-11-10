@@ -79,6 +79,7 @@ import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate
 import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
+import { PLAYER_MANIFEST_FILE, writePlayerManifest } from "./player_manifest.js";
 import { captionBandWarnings, fitCaptionBand } from "./caption_band_fit.js";
 import { captionVisibilityGate } from "./caption_visibility.js";
 import { fitFaceClear } from "./face_clear_fit.js";
@@ -110,6 +111,10 @@ export const FINISH_STATE_VERSION = "launchclip.finish-state.v1";
 export const FINISH_REPORT_VERSION = "launchclip.finish.v1";
 export const DEFAULT_VOICE_PROVIDER = "kokoro";
 export const LOUDNESS_TARGET = Object.freeze({ lufs: -14, tp: -1 });
+// The gates that read the rendered video: --plan-only cannot run them (the
+// layout gate's caption legibility and the structure gate's opening pixels
+// are the parts of those two gates that wait for the render as well).
+export const RENDER_ONLY_GATES = Object.freeze(["loudness", "motion", "audio", "temporal_evidence", "style", "critic"]);
 // A master within this many LU of the level target complies (the mastering script's own tolerance).
 export const LOUDNESS_TOLERANCE_LU = 1.5;
 // A master that misses the target is run again at most this many times.
@@ -757,7 +762,11 @@ export function defaultAdapters() {
  *     (--preview-scene),
  *   chapter: a chapter id: its render segments re-render (the rest are
  *     reused), the master is stitched from all of them, and the chapter is
- *     also written alone to renders/chapters/<id>.mp4 (--chapter)}
+ *     also written alone to renders/chapters/<id>.mp4 (--chapter),
+ *   planOnly: stop before the render (--plan-only): voice, validate, captions
+ *     and sound run, then the resolved story, PLAYER-MANIFEST.json (every file
+ *     a browser player needs) and the gates that need no rendered pixels are
+ *     written; no renderer or browser starts. A later finish reuses it all}
  * adapters: any of defaultAdapters() to replace.
  * Returns the finish.json report; it never throws for a stage failure (the
  * report's status is "failed"), only for an unreadable project.
@@ -813,6 +822,9 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   const animatic = Boolean(options.animatic);
   if (animatic && quality !== "draft") throw new Error("--animatic renders at draft quality; drop --quality high (the delivery render is launchclip finish --quality high)");
   if (animatic && (candidate || prototype || options.previewScene || iteration.chapter)) throw new Error("--animatic renders the whole story; drop --candidate, --prototype, --preview-scene and --chapter");
+  // --plan-only: everything up to the render, for a browser player (src/player_manifest.js).
+  const planOnly = Boolean(options.planOnly);
+  if (planOnly && (candidate || prototype || animatic || options.previewScene || iteration.scenes.length || iteration.chapter)) throw new Error("--plan-only renders nothing; drop --candidate, --prototype, --animatic, --scene, --preview-scene and --chapter");
   const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : animatic ? ANIMATIC_VIDEO : prototype ? `renders/prototype${quality === "high" ? "-high" : ""}.mp4` : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
@@ -846,6 +858,12 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   const temp = await useProjectTemp(project);
   try {
     for (const definition of STAGES) {
+      if (planOnly && definition.name === "render" && !failed && !ctx.halt) {
+        const entry = await runPlanStep(ctx, stages);
+        stages.push(entry);
+        if (entry.status === "failed") failed = entry.name;
+        else ctx.halt = "--plan-only: the story is planned and playable; nothing was rendered";
+      }
       if (failed) {
         stages.push({ name: definition.name, status: "blocked", reason: `${failed} failed`, seconds: 0, outputs: [] });
         continue;
@@ -873,7 +891,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     }
     // A finished video: the designed cover when the story has one (it becomes
     // the thumbnail), then publish.json beside it.
-    finished = !failed && !ctx.preview && !candidate && !prototype && !animatic && existsSync(out);
+    finished = !failed && !ctx.preview && !ctx.plan && !candidate && !prototype && !animatic && existsSync(out);
     if (animatic && !failed && existsSync(out)) {
       const written = await writeAnimatic(project, {
         resolved: ctx.resolved,
@@ -895,6 +913,58 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (finished) report.publish = await finishPublish(ctx, report);
   await writeJson(path.join(project, PATHS.report), report);
   return report;
+}
+
+// --plan-only: what the render stage would start from, without the render.
+// The captions get their predicted plates, the story is resolved and written
+// as the renderers read it, the gates that need no pixels run, and the player
+// manifest lists every file the resolved story names.
+async function runPlanStep(ctx, stages) {
+  const started = ctx.adapters.now();
+  ctx.adapters.progress?.({ step: "plan" });
+  const entry = { name: "plan", status: "done", reason: "--plan-only: the resolved story, the player manifest and the checks that need no render", seconds: 0, outputs: [PATHS.resolved, PLAYER_MANIFEST_FILE] };
+  try {
+    await applyCaptionPlates(ctx);
+    ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+    await writeResolvedCopy(ctx);
+    const gates = await runGates(ctx, { pixels: false });
+    const failed = Object.entries(gates).filter(([, gate]) => gate.status === "failed").map(([name]) => name);
+    const soundStage = stages.find((stage) => stage.name === "sound");
+    const sound = soundStage && soundStage.status !== "skipped" ? soundStage.details ?? null : null;
+    const audio = ctx.resolved.audio ?? {};
+    const manifest = await writePlayerManifest(ctx.project, {
+      story: PATHS.resolved,
+      resolved: ctx.resolved,
+      stems: [...(sound?.music?.file ? [{ path: sound.music.file, role: "music" }] : []), ...(sound ? [{ path: PATHS.cues, role: "sfx-cues" }] : []), ...(audio.voice ? [{ path: audio.voice, role: "narration" }] : [])],
+      audio: {
+        // The one track a player mounts: the mix (voice, music and effects), else the voice alone. A footage-led base carries its own voice.
+        track: audio.mix ?? (storyBase(ctx.resolved) ? null : audio.voice ?? null),
+        narration: audio.voice ?? null,
+        words: audio.words ?? null,
+        music: sound?.music ? { provider: sound.music.provider, file: sound.music.file } : null,
+        sfx: sound ? { mode: sound.sfx_mode ?? null, cues: sound.cues ?? 0 } : null,
+        ...(soundStage?.status === "skipped" ? { mix_skipped: soundStage.reason } : {}),
+        mastered: false
+      },
+      clock: ctx.adapters.clock
+    });
+    if (manifest.missing.length) ctx.warnings.push(`referenced assets not found: ${manifest.missing.join(", ")}`);
+    ctx.plan = {
+      story: PATHS.resolved,
+      manifest: PLAYER_MANIFEST_FILE,
+      files: manifest.files.filter((file) => file.player).length,
+      bytes: manifest.bytes,
+      missing: manifest.missing,
+      audio: manifest.audio,
+      checks: { status: failed.length ? "failed" : "passed", failed, gates, needs_render: [...RENDER_ONLY_GATES] }
+    };
+    entry.details = { files: ctx.plan.files, bytes: ctx.plan.bytes, checks: ctx.plan.checks.status, failed };
+  } catch (error) {
+    entry.status = "failed";
+    entry.error = error.message;
+  }
+  entry.seconds = round3((ctx.adapters.now() - started) / 1000);
+  return entry;
 }
 
 async function finishCover(ctx) {
@@ -1614,7 +1684,8 @@ function timingLine(moved) {
  *     (fitSceneTimings);
  *   - a card on the presenter's face (subject-face) moves beside, above or
  *     below the head, or, for a module made to sit behind the presenter
- *     that the scene put in front, goes back behind (fitFaceClear);
+ *     that the scene put in front, goes back behind (fitFaceClear); a card
+ *     no room fits, or that a pass could not clear, is dropped;
  *   - a card in the caption band while captions show moves out of it, else
  *     the captions move for that scene, and only then are they hidden under
  *     it (fitCaptionBand), whatever other errors there are. check(storyboard)
@@ -1635,11 +1706,35 @@ export async function repairLayout(ctx, layout, { resolveOptions, infos = async 
   }
   const faces = new Set(errors.filter((finding) => finding.rule === "subject-face").flatMap((finding) => finding.ids));
   if (faces.size) {
-    const cleared = fitFaceClear(storyboard, { ...resolveOptions(), infos: await infos(), behind: true, only: faces });
-    if (cleared.moved.length || cleared.behind.length) {
+    // drop: a card no room fits, and that cannot go behind, comes out. The
+    // presenter plays under where it was; that beats failing the render
+    // after the paid plan over one card.
+    const before = storyboard;
+    const cleared = fitFaceClear(storyboard, { ...resolveOptions(), infos: await infos(), behind: true, drop: true, only: faces });
+    if (cleared.moved.length || cleared.behind.length || cleared.dropped.length) {
       storyboard = cleared.storyboard;
       if (cleared.moved.length) changes.push(`face: tooling ${cleared.moved.join("; ")}`);
       changes.push(...cleared.behind.map((entry) => `face: tooling ${entry}`));
+      changes.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
+    }
+    // The face rule samples the head through every camera and layout move;
+    // the fit judges a card by one box. A card the rule still fails after a
+    // repair pass has had its turn, or that the fit left untouched, comes out
+    // too, when it is an overlay and not the picture itself.
+    const tries = (ctx.faceRepairs ??= new Map());
+    const stuck = [];
+    for (const id of faces) {
+      const was = before.scenes?.find((scene) => scene?.id === id);
+      const now = storyboard.scenes?.find((scene) => scene?.id === id);
+      if (!now) continue;
+      const untouched = JSON.stringify(was) === JSON.stringify(now);
+      const count = (tries.get(id) ?? 0) + 1;
+      tries.set(id, count);
+      if ((untouched || count > 2) && Number(now.track ?? 0) > 0 && now.insert !== true) stuck.push(id);
+    }
+    if (stuck.length) {
+      storyboard = { ...storyboard, scenes: storyboard.scenes.filter((scene) => !stuck.includes(scene?.id)) };
+      changes.push(...stuck.map((id) => `face: tooling ${id} dropped: it still covered the presenter's face and no move cleared it (plan it beside the presenter)`));
     }
   }
   const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
@@ -1822,7 +1917,8 @@ async function defaultSideBySide(left, right, output) {
 // (geometric, from the validate stage), loudness (master), motion and audio
 // analysis of the final MP4, the temporal evidence manifest, and (when the
 // story names a style) style adherence (src/style_adherence.js).
-async function runGates(ctx) {
+// pixels: false (--plan-only) leaves out every gate that reads the rendered video (RENDER_ONLY_GATES).
+async function runGates(ctx, { pixels = true } = {}) {
   const format = storyFormat(ctx.resolved);
   const duration = Number(ctx.resolved.resolved?.duration ?? format.duration);
   const gates = {};
@@ -1833,7 +1929,7 @@ async function runGates(ctx) {
   // A caption line still illegible on the rendered frames, after its plate
   // pass, is a layout error (docs/DIRECTION_GUARDRAILS.md §3).
   const legibility = ctx.captionLegibility ?? ctx.state.stages?.render?.details?.captions ?? null;
-  if (legibility && gates.layout.status !== "skipped") {
+  if (pixels && legibility && gates.layout.status !== "skipped") {
     const failed = (legibility.lines ?? []).filter((line) => (legibility.failed ?? []).includes(line.id));
     const findings = failed.map((line) => ({ rule: "caption-illegible", severity: "error", ids: [line.id], at: line.time, detail: `"${line.text}" reads at ${line.contrast}:1 with ${Math.round((line.camouflage ?? 0) * 100)}% of its surround in the text colour${line.plated ? ", even on its plate" : ""} (needs 3:1 and at most 35%); move it off the busy area or simplify what is behind it` }));
     gates.layout = { ...gates.layout, captions: { report: PATHS.captionLegibility, lines: (legibility.lines ?? []).length, plated: (legibility.plates ?? ctx.captionPlates ?? []).length, failed: failed.length } };
@@ -1881,13 +1977,13 @@ async function runGates(ctx) {
   }
 
   const master = ctx.state.stages?.master?.details;
-  gates.loudness = !master
+  if (pixels) gates.loudness = !master
     ? { status: "skipped", reason: "master did not run" }
     : master.mastered === false
       ? { status: "skipped", reason: master.reason }
       : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output, ...(master.loudness?.repairs?.length ? { repairs: master.loudness.repairs.length } : {}), ...(master.loudness?.compliant ? {} : { errors: [`the master is ${master.loudness?.output?.integrated_lufs} LUFS / ${master.loudness?.output?.true_peak_dbtp} dBTP${master.loudness?.repairs?.length ? ` after ${master.loudness.repairs.length} re-master${master.loudness.repairs.length === 1 ? "" : "s"}` : ""}; target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`] }) };
 
-  try {
+  if (pixels) try {
     // The motion floors are the cadence profile's bands (a locked-off talking
     // head barely moves; a motion explainer must).
     const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
@@ -1907,7 +2003,7 @@ async function runGates(ctx) {
     gates.motion = { status: "failed", error: error.message };
   }
 
-  try {
+  if (pixels) try {
     const manifest = existsSync(path.join(ctx.project, PATHS.audioManifest)) ? path.join(ctx.project, PATHS.audioManifest) : null;
     // The same music volume cinematic-check resolves, so the two gates agree.
     const mixSettings = await resolveMusicMix(ctx.project, manifest, { soundDetails: ctx.state.stages?.sound?.details ?? null });
@@ -1919,7 +2015,7 @@ async function runGates(ctx) {
     gates.audio = { status: "failed", error: error.message };
   }
 
-  try {
+  if (pixels) try {
     const manifest = await readOptionalJson(path.join(ctx.project, PATHS.evidence));
     if (!manifest) gates.temporal_evidence = { status: "failed", error: `${PATHS.evidence} is missing` };
     else {
@@ -1932,7 +2028,7 @@ async function runGates(ctx) {
   }
 
   // Style (RFC §9.5): when the story names a style, the render must follow it.
-  if (ctx.style) {
+  if (pixels && ctx.style) {
     try {
       const request = storyStyleRequest(ctx.story ?? ctx.resolved)?.name ?? ctx.style.name;
       const { pack } = await ctx.adapters.resolveStyle(ctx.style.file ?? request, { projectDir: ctx.project });
@@ -1973,7 +2069,7 @@ async function runGates(ctx) {
     if (constraints.status !== "skipped") gates.constraints = constraints;
     if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
-    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
+    const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: pixels ? ctx.out : null, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
     if (structure.status !== "skipped") gates.structure = structure;
     // Hook (src/short_form_checks.js): how a short opens, from the storyboard and the measured narration.
     const hook = hookGate({ story: ctx.resolved, words: scope.words, profile, duration: Number(ctx.resolved?.resolved?.duration) || null });
@@ -1982,7 +2078,7 @@ async function runGates(ctx) {
     gates.direction ??= { status: "failed", error: error.message };
   }
 
-  gates.critic = {
+  if (pixels) gates.critic = {
     status: "pending",
     reason: "finish does not produce critic receipts",
     next_step: `Have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json (citing the qa/temporal-evidence IDs), then run: launchclip cinematic-check ${ctx.project} --renderer ${ctx.rendererName} --video ${rel(ctx.project, ctx.out)} --expect-audio`
@@ -2041,7 +2137,7 @@ async function stylePack(ctx) {
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : ctx.prototype ? "prototype" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.plan ? "planned" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : ctx.prototype ? "prototype" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
   const render = stages.find((stage) => stage.name === "render");
   if (failed) {
@@ -2054,6 +2150,10 @@ function buildReport(ctx, stages, { seconds, failed }) {
   if (!failed && ctx.candidateReceipt) nextSteps.push(`Score candidate ${ctx.candidate} (0-10 per field) in ${ctx.candidateReceipt.receipt} from its frames, then set selected_candidate_id (highest mean, ties by candidate_order), selection_rationale and a rejection_reason for each loser.`);
   if (!failed && ctx.prototype) nextSteps.push(`Review the prototype (${rel(ctx.project, ctx.out)}${ctx.prototype.cut ? `, the opening ${ctx.prototype.cut} s of ${ctx.prototype.duration} s` : ""}) for style, layout, density and sound; when it is right, run launchclip finish ${ctx.project} for the whole video.`);
   if (!failed && ctx.animatic?.file) nextSteps.push(`Review the animatic (${ctx.animatic.video}) for story, staging and acting: launchclip finish ${ctx.project} --animatic --review has a vision model do it (${ctx.animatic.shots} shot${ctx.animatic.shots === 1 ? "" : "s"} in ${ANIMATIC_FILE}); when it is right, run launchclip finish ${ctx.project} --quality high for the delivery render.`);
+  if (!failed && ctx.plan) {
+    for (const name of ctx.plan.checks.failed) nextSteps.push(`The ${name} check fails on the planned story (plan.checks.gates.${name} in ${PATHS.report}); fix storyboard.json and run launchclip finish ${ctx.project} --plan-only again.`);
+    nextSteps.push(`Play the planned story in a browser player (${PLAYER_MANIFEST_FILE} lists its files; ${PATHS.resolved} is the story), then render it: launchclip finish ${ctx.project} (the voice, captions and sound are reused).`);
+  }
   if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
@@ -2066,9 +2166,10 @@ function buildReport(ctx, stages, { seconds, failed }) {
     style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
     // An animatic is not the final: it is named under `animatic`.
-    final: !failed && !ctx.preview && !ctx.animatic && existsSync(ctx.out) ? ctx.out : null,
+    final: !failed && !ctx.preview && !ctx.animatic && !ctx.plan && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
+    ...(ctx.plan ? { plan: ctx.plan } : {}),
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
     ...(ctx.animatic?.file ? { animatic: ctx.animatic } : {}),
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
@@ -2103,6 +2204,7 @@ export function formatFinishSummary(report) {
     if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
   if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  if (report.plan) lines.push(`planned: ${report.plan.manifest} (${report.plan.files} file${report.plan.files === 1 ? "" : "s"} for a player, ${report.plan.bytes} bytes); checks ${report.plan.checks.status}${report.plan.checks.failed.length ? ` (${report.plan.checks.failed.join(", ")})` : ""}; still need the render: ${report.plan.checks.needs_render.join(", ")}`);
   if (report.chapter) lines.push(`chapter ${report.chapter.id} (${report.chapter.title}, ${report.chapter.start}–${report.chapter.end} s): ${report.chapter.segments ? `${report.chapter.segments.forced} of ${report.chapter.segments.total} segments re-rendered, ` : ""}master stitched${report.chapter.output ? `, ${report.chapter.output}` : ""}`);
   if (report.chapters) lines.push(`chapters: ${report.chapters.list.length} in ${report.chapters.file} and the MP4${report.chapters.problems.length ? ` (YouTube would not show them: ${report.chapters.problems.join("; ")})` : ""}`);
   if (report.candidate?.receipt) lines.push(`candidate ${report.candidate.id} (${report.candidate.comparison}): ${report.candidate.artifacts.join(", ")} -> ${report.candidate.receipt}`);
