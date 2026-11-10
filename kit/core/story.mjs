@@ -1072,6 +1072,8 @@ export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
   };
   const params = { ...scene.params };
   if (Array.isArray(params.cast)) params.cast = params.cast.map((entry, i) => actor(entry, `params.cast[${i}]`));
+  // Prop cues (a starting gate that opens on a word) take the same anchors.
+  if (Array.isArray(params.props)) params.props = params.props.map((entry, i) => (isObject(entry) && Array.isArray(entry.cues) ? { ...entry, cues: entry.cues.map((cue, j) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: rel(cue.at, `params.props[${i}].cues[${j}].at`) } : cue)) } : entry));
   if (scene.module === "character-cameo") Object.assign(params, actor(params, "params"));
   return params;
 }

@@ -18,7 +18,7 @@ import { MODULES as CATALOG_F } from './catalog-f.mjs';
 import { MODULES as CATALOG_G, catalogGView } from './catalog-g.mjs';
 import { MODULES as CATALOG_H, catalogHView } from './catalog-h.mjs';
 import { MODULES as CHARACTERS } from './catalog-characters.mjs';
-import { MODULES as WORLD, castStandsIn, worldBeneath } from './catalog-world.mjs';
+import { MODULES as WORLD, castStandsIn, propStatesBefore, worldBeneath } from './catalog-world.mjs';
 import { plateBleed, rideOf } from './camera-world.mjs';
 import { CARRY_TRANSITIONS, sceneWindows } from './transitions.mjs';
 import { storyBase } from './story.mjs';
@@ -566,7 +566,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), propStates: propStatesBefore(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story) }); }
   catch (error) { throw Object.assign(new Error(`module "${module}" params: ${error.message}`), error.timing ? { timing: error.timing } : {}); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
