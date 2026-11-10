@@ -617,7 +617,8 @@ const UNREAD = ['open', 'small', 'wide', 'open', 'o', 'small'];
  *   (phonemeVisemes).
  * - A word with only its text takes the shapes of its spelling
  *   (wordVisemes), spread evenly across the word. Either way the mouth
- *   closes when the word ends unless the next one follows at once.
+ *   closes when the word ends unless the next one follows at once (in this
+ *   range, or as the first word of the next).
  * - A word without text opens on its start and closes after most of it (a
  *   long word gets a second flap), cycling through the open shapes.
  * - A range without word timings flaps on a steady 0.24 s rhythm.
@@ -625,11 +626,13 @@ const UNREAD = ['open', 'small', 'wide', 'open', 'o', 'small'];
 export function speechChanges(ranges) {
   const out = [];
   let unread = 0;
-  for (const range of ranges) {
+  ranges.forEach((range, at) => {
+    // The word after this range's last: the next range's first (says: "auto" makes a range of every word).
+    const after = range.words?.length ? ranges[at + 1]?.words?.[0] : undefined;
     const words = range.words?.length ? range.words : Array.from({length: Math.max(1, Math.floor((range.to - range.from) / 0.24))}, (_, i) => [range.from + i * 0.24, range.from + i * 0.24 + 0.2]);
     words.forEach(([s, e, text, phonemes], index) => {
       const d = Math.max(0.08, e - s);
-      const next = words[index + 1];
+      const next = words[index + 1] ?? after;
       const heard = phonemes ? phonemeVisemes(phonemes, s, s + d) : null;
       if (heard) {
         for (const {time, shape} of heard) out.push({time: rt(time), shape, open: shape !== 'closed'});
@@ -649,7 +652,7 @@ export function speechChanges(ranges) {
         out.push({time: rt(t + Math.max(0.06, Math.min(len * 0.62, 0.2))), shape: 'closed', open: false});
       }
     });
-  }
+  });
   out.sort((a, b) => a.time - b.time || (a.open ? 1 : -1));
   // A shape that repeats the one before it changes nothing.
   return out.filter((change, i) => i === 0 || change.shape !== out[i - 1].shape || change.time === out[i - 1].time);

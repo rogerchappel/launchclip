@@ -140,6 +140,9 @@ test('speechChanges: words with phonemes take them; words without keep the spell
   // One word with phonemes beside one without: each takes its own path.
   const mixed = speechChanges([{from: 0, to: 1, words: [[0, 0.3, 'boat', 'b:60 ˈ:45 o:70 ʊ:70 t:55'], [0.5, 0.9, 'you']]}]);
   assert.deepEqual(mixed.map(change => change.shape), ['closed', 'o', 'closed', 'wide', 'o', 'closed']);
+  // says: "auto" makes a range of every word: the mouth still runs on into a word that follows at once, and closes at a pause.
+  const auto = speechChanges([{from: 0, to: 0.3, words: [[0, 0.3, 'you']]}, {from: 0.33, to: 0.6, words: [[0.33, 0.6, 'are']]}, {from: 1, to: 1.3, words: [[1, 1.3, 'you']]}]);
+  assert.deepEqual(auto.filter(change => !change.open).map(change => change.time), [0.6, 1.3]);
   // Malformed phonemes fall back to the spelling.
   assert.deepEqual(speechChanges([{from: 0, to: 1, words: [[0.5, 0.9, 'you', 'nonsense']]}]), speechChanges([{from: 0, to: 1, words: [[0.5, 0.9, 'you']]}]));
 });
