@@ -58,7 +58,8 @@ test("make --animation designs and freezes a show bible, then plans a storyboard
     assert.equal(bible.cast.style, "chibi");
     assert.deepEqual(bible.style, { pack: report.style.name, seed: report.style.seed, drawing_style: "chibi" });
     assert.deepEqual(bible.cast.characters.map((entry) => [entry.id, entry.position, entry.sheet]), [["maya", "left", "bible/sheets/maya.png"], ["sam", "right", "bible/sheets/sam.png"]], "two characters asked for the left: the second takes the right");
-    assert.deepEqual(t.sheets.map((file) => path.relative(t.project, file)), ["bible/sheets/maya.png", "bible/sheets/sam.png"]);
+    // (The sheets are drawn side by side, so the order they are drawn in is not fixed.)
+    assert.deepEqual(t.sheets.map((file) => path.relative(t.project, file)).sort(), ["bible/sheets/maya.png", "bible/sheets/sam.png"]);
     const [maya, sam] = bible.cast.characters;
     assert.deepEqual([maya.hair, maya.outfit.top, maya.colors.top, maya.accessories], [{ style: "bob", color: "auburn" }, "sweater", "teal", ["round-glasses"]]);
     assert.ok(maya.must_keep.includes("auburn bob hair") && maya.must_keep.includes("round glasses"));
@@ -442,12 +443,14 @@ test("the reference sheets are drawn side by side within the render budget, and 
   const two = await drawn(2);
   assert.equal(one.peak, 1);
   assert.equal(two.peak, 2);
-  assert.deepEqual(two.order, one.order, "the sheets start in cast order");
+  assert.deepEqual(one.order, ["maya.png", "sam.png"], "one at a time, in cast order");
+  assert.deepEqual([...two.order].sort(), one.order, "side by side, the same sheets");
   assert.deepEqual(two.bible, one.bible);
   assert.deepEqual(two.story, one.story);
   assert.deepEqual(two.report.bible, one.report.bible);
   assert.deepEqual(two.report.model_calls.stages.bible.side_by_side, ["reference sheets: 2 at a time"]);
   assert.equal(one.report.model_calls.stages.bible.side_by_side, undefined);
+});
 
 test("a designed animal keeps only what an animal takes: a foal with a person's age and hair is still designed", async () => {
   const { kindConsistentSets } = await import("../src/cast_design.js");
