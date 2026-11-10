@@ -4,7 +4,11 @@
 // ending in "out", furniture?(plan) → {html, css}, vars?(plan, frame)}.
 
 import { LOOK as blueprint } from './blueprint.mjs';
+import { LOOK as hologram } from './hologram.mjs';
+import { LOOK as thermal } from './thermal.mjs';
 
 export const LOOKS = Object.freeze({
-  blueprint
+  blueprint,
+  hologram,
+  thermal
 });

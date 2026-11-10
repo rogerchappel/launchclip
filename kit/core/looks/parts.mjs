@@ -151,3 +151,37 @@ export function shotAt(plan, t) {
   for (let i = 0; i < plan.shots.length; i += 1) if (plan.shots[i].start <= t + 1e-6) index = i;
   return { index, age: index < 0 ? 0 : t - plan.shots[index].start };
 }
+
+/** Lines `line` px thick every `cell` px across the canvas, white on transparent: horizontal (`axis` "y") or vertical ("x"). */
+export const rules = (result, axis, cell, line, plan) => [
+  fe('feFlood', { 'flood-color': '#ffffff', x: 0, y: 0, width: axis === 'y' ? r(cell, 2) : r(line, 2), height: axis === 'y' ? r(line, 2) : r(cell, 2), result: `${result}-l` }),
+  fe('feOffset', { in: `${result}-l`, dx: 0, dy: 0, x: 0, y: 0, width: r(cell, 2), height: r(cell, 2), result: `${result}-c` }),
+  fe('feTile', { in: `${result}-c`, x: 0, y: 0, width: plan.width, height: plan.height, result })
+].join('');
+
+/**
+ * Tearing: a few horizontal bands of the picture pushed sideways by up to
+ * `amount` px, the bands chosen by `seed`. Most rows do not move.
+ */
+export const tear = (result, input, seed, amount, band = 0.02) => [
+  noise(`${result}-n`, freq(0.00001, band), seed, 1),
+  // Only the extremes of the noise move a row; the middle maps to no displacement.
+  curve(`${result}-t`, `${result}-n`, [0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1]),
+  displace(`${result}-d`, input, `${result}-t`, amount * 2, 'R', 'A'),
+  filled(result, `${result}-d`, input)
+].join('');
+
+/**
+ * A counter digit: ten stacked numerals, the one equal to the CSS variable
+ * `name` showing. Set the variable to 0..9 per frame.
+ */
+export function digit(name) {
+  return `<span class="lc-look-digit">${Array.from({ length: 10 }, (_, n) => `<span style="opacity:clamp(0, calc(1 - max(var(${name}, 0) - ${n}, ${n} - var(${name}, 0))), 1)">${n}</span>`).join('')}<i>0</i></span>`;
+}
+export const DIGIT_CSS = '.lc-look-digit { position: relative; display: inline-block; } .lc-look-digit > span { position: absolute; left: 0; top: 0; } .lc-look-digit > i { font-style: normal; visibility: hidden; }';
+/** The variables of a mm:ss clock at `seconds`, as {`${prefix}0`..`${prefix}3`}. */
+export function clockVars(prefix, seconds) {
+  const s = Math.max(0, Math.floor(seconds + 1e-6));
+  const mm = Math.floor(s / 60) % 100, ss = s % 60;
+  return { [`${prefix}0`]: Math.floor(mm / 10), [`${prefix}1`]: mm % 10, [`${prefix}2`]: Math.floor(ss / 10), [`${prefix}3`]: ss % 10 };
+}
