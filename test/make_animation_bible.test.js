@@ -395,8 +395,8 @@ test("--stop-after and --approve: the flags, their values and the CLI's parse", 
   assert.deepEqual(approvals("Bible, bible"), ["bible"]);
   assert.deepEqual(approvals(undefined), []);
   assert.doesNotThrow(() => validateMakeOptions({ stopAfter: "bible", approve: ["bible"] }));
-  assert.throws(() => validateMakeOptions({ stopAfter: "storyboard" }), /--stop-after must be bible or animatic; got storyboard/);
-  assert.throws(() => validateMakeOptions({ approve: "script" }), /--approve must be bible or animatic; got script/);
+  assert.throws(() => validateMakeOptions({ stopAfter: "script" }), /--stop-after must be bible, animatic, storyboard; got script/);
+  assert.throws(() => validateMakeOptions({ approve: "script" }), /--approve must be bible, animatic, storyboard; got script/);
   assert.throws(() => validateMakeOptions({ approve: true }), /--approve names what is approved: --approve bible/);
 });
 

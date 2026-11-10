@@ -406,6 +406,32 @@ test("repairLayout moves cards off the face and fits the caption band even besid
   assert.deepEqual(none, { storyboard: story, changes: [] });
 });
 
+test("repairLayout drops a card that fits nowhere clear of the face instead of failing the render", async () => {
+  // A production failure: a card over 81% of the presenter's head for 3 s, in
+  // a close shot with no room beside, above or below it. The run had been paid for.
+  const HEAD = { x: 0.5, y: 0.5, w: 0.96, h: 0.96 };
+  const track = { source: { width: 1080, height: 1920 }, fps: 10, frames: Array.from({ length: 201 }, (_, i) => ({ t: i / 10, head: HEAD, body: { x: 0.5, y: 0.6, w: 1, h: 1 } })) };
+  const story = {
+    schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 },
+    base: { src: "assets/recording.mp4" },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } },
+    scenes: [
+      { id: "proposed-roof-card", module: "polaroid", track: 1, start: 4, end: 7.5, params: { caption: "Proposed roof", tilt: 3 } },
+      { id: "kept-card", module: "polaroid", track: 1, start: 12, end: 14, params: { caption: "Kept" } }
+    ]
+  };
+  const finding = { rule: "subject-face", severity: "error", ids: ["proposed-roof-card"], at: 4, detail: "proposed-roof-card covers the presenter's face for 3.07 s from 4 s" };
+  const ctx = { copy: story };
+  const repaired = await repairLayout(ctx, { findings: [finding] }, { resolveOptions: () => ({ track }) });
+  assert.deepEqual(repaired.storyboard.scenes.map((scene) => scene.id), ["kept-card"], repaired.changes.join("\n"));
+  assert.match(repaired.changes.join("\n"), /face: tooling proposed-roof-card .*dropped/);
+  assert.equal(story.scenes.length, 2, "the input is not mutated");
+  // A card on the base track is the picture itself: it is never dropped, so the error stands.
+  const base = { ...story, scenes: [{ ...story.scenes[0], track: 0, insert: true }] };
+  const left = await repairLayout({ copy: base }, { findings: [finding] }, { resolveOptions: () => ({ track }) });
+  assert.equal(left.storyboard.scenes.length, 1);
+});
+
 test("--music-volume sets the bed's gain over the story's and the energy default", async () => {
   const project = await narratedProject({ mutate: (story) => { story.audio.music = { provider: "synth", volume: 0.3 }; } });
   try {

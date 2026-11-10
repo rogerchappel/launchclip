@@ -161,9 +161,161 @@ Useful flags:
 | `0` | `ready`, `ready-for-review` | The video is finished. `ready-for-review` means a review is still pending (for example, no critic ran). |
 | `1` | `failed` | A stage failed; `next_steps` says what to fix. |
 | `2` | `needs-repair` | The video rendered, but a gate still fails after the repair rounds. Don't present it as finished. |
+| `3` | `awaiting-approval` | The run stopped where you asked it to (`--stop-after storyboard`): the video is planned, nothing is rendered. See [Plan first, render on demand](#plan-first-render-on-demand). |
 
 Pass `--allow-needs-repair` to get `0` instead of `2`, which is how `make`
 behaved before. The report and the video are written either way.
+
+## Plan first, render on demand
+
+A render is the slow part of a run, and the plan is the part a person waits
+to see. `--stop-after storyboard` stops the run once the video is planned,
+with everything a browser player needs to play it, and renders nothing:
+
+```bash
+launchclip make "<prompt>" --assets ./assets --out ./video --stop-after storyboard   # ends awaiting-approval, exit 3
+# play ./video in a browser player; edit storyboard.json if you want
+launchclip make "<prompt>" --assets ./assets --out ./video --stop-after storyboard --approve storyboard   # renders it
+```
+
+The first command runs every stage up to the storyboard, then a `plan`
+stage: the voice, the captions and the sound (music bed, sound effects and
+the mix) are made, the story is resolved, and the checks that need no
+rendered pixels run. No renderer and no browser starts. `MAKE.json` ends
+`status: "awaiting-approval"` with `stopped.after: "storyboard"`, and
+`next_steps` says how to render.
+
+The second command is the first plus `--approve storyboard`. It reuses every
+finished step (the script, the voice, the storyboard, the captions, the
+sound: no model call, no new audio) and goes on to the render, the gates
+and the critic. `launchclip finish ./video` renders a planned project too
+(`next_steps` has the command with the same `--music` and `--sfx`); it
+writes `finish.json` but not `MAKE.json`, and no critic runs. On the same
+inputs the rendered video is the one an uninterrupted run makes.
+
+An approval is of a storyboard that exists. If the approving run has to plan
+again (the prompt or the assets changed, or `--replan`), it stops again with
+the new plan. The candidates stage (the rendered comparison of the opening
+and one transition) does not run in this mode, before or after the approval:
+the story you were shown is the story that is rendered.
+
+### What a planned project holds
+
+```
+video/
+  PLAYER-MANIFEST.json                    every file a player needs: role, size, sha256
+  .launchclip/finish/story.resolved.json  the resolved story, as the renderers read it
+  storyboard.json                         the plan you can edit
+  NARRATION.json                          the narration's word timings
+  assets/audio/narration.wav              the narration
+  assets/captions/captions.json           the captions, as the renderers draw them
+  assets/audio/mix.wav                    narration, music bed and sound effects, mixed (not mastered)
+  assets/…                                every image, clip and matte the story names
+  MAKE.json, finish.json                  the reports (finish.json has status "planned")
+```
+
+`PLAYER-MANIFEST.json` (`launchclip.player-manifest.v1`):
+
+| Field | What it is |
+| --- | --- |
+| `story` | The resolved story's path in the project. This is the story to hand a player. |
+| `format` | `width`, `height`, `fps`, `duration`. |
+| `files[]` | `{path, role, bytes, sha256, player}`. `player: true` files are the ones the story names, so a player fetches them; `player: false` files are inside the mix already and listed for a host that wants them apart. |
+| `missing[]` | Paths the story names that are not in the project (also a warning). Empty in a healthy plan. |
+| `bytes` | The size of the `player: true` files together. |
+| `audio` | `track` (the one audio file the player mounts), `narration`, `words`, `music` (`{provider, file}` or null), `sfx` (`{mode, cues}` or null), `mastered: false`. |
+| `not_in_preview[]` | What a preview will not match (below), in words. |
+
+Roles: `story`, `words` (NARRATION.json), `captions`, `mix`, `narration`,
+`base` (a footage-led recording), `subject` (presenter mattes), `media`
+(every other image or clip), and with `player: false`: `music` (the bed on
+its own) and `sfx-cues` (the cue list, `assets/audio/cues.json`).
+
+The music bed and the sound effects are decided at plan time: they are in
+`assets/audio/mix.wav`, which is the track the player plays. With `--music
+elevenlabs` or generated sound effects the plan stage makes the paid calls a
+render would have made, and the render reuses them. When a story has no
+music and no effects, there is no mix: `audio.track` is the narration and
+`audio.mix_skipped` says why.
+
+### Playing it in a browser
+
+The kit's Player props take the resolved story as it is
+([`@launchclip/remotion`](../../kit/remotion/README.md)):
+
+```jsx
+import { Player } from '@remotion/player';
+import { setAssetResolver, storyPlayerProps } from '@launchclip/remotion';
+
+// 1. Upload every manifest file with player: true; keep a map of path -> URL.
+// 2. Point the kit at the URLs, once, before the first frame.
+setAssetResolver((src) => urls[src] ?? null);
+// 3. The story is the manifest's `story` file, parsed.
+const props = await storyPlayerProps(resolvedStory);
+<Player {...props} controls />;
+```
+
+`storyPlayerProps` fetches the captions through the resolver; the Player
+fetches the mix and the media the same way. Every path either of them asks
+for is a `player: true` file in the manifest. A file's `sha256` is its
+content hash, so a host can skip an upload it already has.
+
+After an edit to `storyboard.json`, `launchclip finish ./video --plan-only`
+(with the `--music` and `--sfx` of the run) refreshes the resolved story, the
+audio that changed and the manifest, again without rendering.
+
+### The checks at plan time, and the ones that wait for the render
+
+`MAKE.json` `plan.checks` has every check that reads the plan and not the
+pixels, so a host can show a problem before anyone pays for a render:
+
+- `script`: the script's own checks (its reading time against the clock,
+  the brief), from the prepare stage.
+- `storyboard`: whether the plan passed first time and how many repair
+  passes it took. A plan that fails its checks (story validation, layout,
+  the caption band, the cast, the script's line ids) fails the storyboard
+  stage as it always has.
+- `gates`: `placeholders`, `layout` (safe zones, overlaps, the caption
+  band, reading time), `physics`, `ghosting`, `density`, `variety`, `holds`,
+  `states`, `direction`, `acting`, `coverage`, `structure`, `hook`, and when
+  they apply `cast`, `bible`, `subject`, `lip-sync`, `face`, `constraints`,
+  `base_edit_qa` and `research`. Each has a `status` and its findings.
+- `status` and `failed`: `failed` when any gate failed, with their names. A
+  failing check does not fail the run or change its status: it is reported
+  (and warned about), because the render's gate would fail the same way.
+- `needs_render`: the gates that read the rendered video and so have not
+  run: `loudness`, `motion`, `audio`, `temporal_evidence`, `style` and
+  `critic`. Two parts of plan-time gates wait as well: the layout gate's
+  caption legibility (measured on frames) and the structure gate's check of
+  the opening's pixels.
+
+`MAKE.json` `gates` stays `null` until a render: it is the rendered video's.
+
+### What the preview will not match
+
+- **Loudness.** The player plays the unmastered mix. The render masters the
+  video to -14 LUFS and -1 dBTP, so levels differ slightly.
+- **Caption plates from the render.** A caption line predicted to cross a
+  character or a card already has its plate. A line the render measures as
+  illegible gets a plate and a second pass; the preview does not have those.
+- **Pixel gates and the critic.** Motion, audio, temporal evidence, style
+  and the critic judge rendered frames. A critic repair round can change
+  scenes after the approval (`--critic-repairs 0` or `--no-critic` keeps the
+  rendered story the approved one).
+- **The cover and `publish.json`** are written with the rendered video.
+- **The renderer.** The Player draws with the Remotion kit. A `--renderer
+  hyperframes` render is held to parity with it, not to identical pixels.
+
+### How long planning took
+
+`MAKE.json` `plan.timings` has `seconds` (the whole plan), `stages` (each
+make stage, as in `timings`) and `steps` (the plan stage's own: `voice`,
+`validate`, `captions`, `sound`, `plan`). The progress lines name the stage
+and its steps: `launchclip:progress {"stage":"plan","step":"sound"}`.
+
+A character story (`--animation`) can stop here too. Its show bible is
+still drawn with a browser (the reference sheets), and its animatic is made
+after the approval.
 
 ## Record your product with `--repo`
 
@@ -342,7 +494,7 @@ round spent on the animatic is not spent again on the video.
 | --- | --- | --- |
 | `ready` | every gate passed and the critic said `ship` | 0 |
 | `needs-repair` | a gate failed, or the critic still does not say `ship` once the rounds are spent. The video is rendered, not finished | 2 |
-| `awaiting-approval` | it stopped after the bible or the animatic | 3 |
+| `awaiting-approval` | it stopped after the bible, the storyboard (`--stop-after storyboard`) or the animatic | 3 |
 | `ready-for-review` | no model could look at it (no vision model, or `--no-critic`) | 4 |
 | `failed` | a stage failed | 1 |
 
@@ -515,6 +667,7 @@ launchclip-<slug>/
   publish.json             titles, description, hashtags, CTA and platform fit
   video/cover.png          the designed cover, when the storyboard has one
   MAKE.json                routing and reasons, models, costs, timings, gate results
+  PLAYER-MANIFEST.json     with --stop-after storyboard: the files a browser player needs
   storyboard.json          the plan; edit it and run `launchclip finish` to iterate
   CONSTRAINTS.json         your app's rules, when it set any
   SCRIPT.json, NARRATION.json, ASSETS.json, BRIEF.md
