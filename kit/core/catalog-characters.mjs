@@ -675,7 +675,25 @@ function resolveCameo(params, ctx) {
     const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe});
     return {actors: [{...placed, reach: actorReach(placed)}]};
   };
-  const actor = fitShot(shot, place, {canvas: b.canvas, count: 1}).actors[0];
+  let actor = fitShot(shot, place, {canvas: b.canvas, count: 1}).actors[0];
+  // A whole figure stays inside its area in every pose it takes: a wide
+  // character (a blob, a cup) or a wide gesture (a cheer, a shrug) is moved
+  // toward the middle and, when the area is narrower than its reach, drawn
+  // smaller. The 620-unit slot above fits a person standing; this fits what
+  // is drawn (the reach the cast gate measures).
+  if (shot === 'wide') {
+    const lo = Math.max(area.x, safe.x) + pad, hi = Math.min(area.x + area.width, safe.x + safe.width) - pad;
+    let at = {x: actor.x, floor: actor.floor, scale: actor.scale};
+    for (let round = 0; round < 4; round++) {
+      const {left, right} = actor.reach;
+      if (left >= lo - 0.5 && right <= hi + 0.5) break;
+      const width = right - left;
+      if (width > hi - lo) at = {...at, scale: Math.floor(at.scale * (hi - lo) / width * 990) / 1000};
+      else at = {...at, x: r2(at.x + (left < lo ? lo - left : hi - right))};
+      const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe});
+      actor = {...placed, reach: actorReach(placed)};
+    }
+  }
   const {x} = actor;
   let cardBox = null;
   if (card) {

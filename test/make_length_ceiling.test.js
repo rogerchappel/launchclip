@@ -1,7 +1,7 @@
 // The duration is a ceiling (docs/MAKE_SKILL_PARITY.md, phase 4): make trims
 // a script that runs over and never pads one that runs short.
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -72,7 +72,10 @@ test("short form: a script that says less than the duration is kept, and the vid
   assert.ok(report.script.take.seconds < 15);
   assert.ok(report.script.take.short_of_target_seconds > 15);
   assert.ok(report.notices.some((line) => /the 30s target is a ceiling; nothing is padded/.test(line)));
-  assert.ok(!report.script.check.warnings.includes("wpm-band"), "the script is checked at the length it runs, so it is not told to add words");
+  // The script is checked at the length it runs, so it is not told to add words; and the take is the proof it fits that clock.
+  const receipt = JSON.parse(await readFile(path.join(cwd, "video", "SCRIPT.json"), "utf8")).check;
+  assert.ok(!receipt.warnings.some((warning) => /Add about/.test(warning.fix)), JSON.stringify(receipt.warnings));
+  assert.deepEqual(report.script.check.errors, [], "a test voice that reads fast is not reported as words that cannot be read");
 });
 
 test("long form: chapters that come in short are not rewritten longer", async (t) => {

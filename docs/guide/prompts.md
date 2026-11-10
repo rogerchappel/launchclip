@@ -63,7 +63,24 @@ launchclip make "What a 4-day week study found" --aspect 9:16 --duration 45 --fo
 ```
 
 Whatever the format, the script never invents a number, customer, quote,
-deadline or guarantee: everything comes from your prompt and files.
+deadline or guarantee: everything comes from your prompt and files. It never
+runs over its word ceiling (an overshoot is cut by whole sentences), and it
+always ends on one call to action.
+
+### An explainer with nothing to show
+
+When you give `make` a prompt and no files, an explainer or a short-form
+piece is carried by characters: the subject as an object with a face, its
+parts as little mascots, acting out each line, with diagrams and cards as
+support. The look is lively by default. To change that:
+
+- name the tone in the prompt ("a calm explainer…", "serious, documentary"),
+  or pass `--style <name>` to use a style of your own (its look and cast are
+  kept, and no characters are added);
+- put screenshots, footage or a logo in `--assets` and the video is built
+  from those instead;
+- `--format data-explainer` plans charts, and `--animation` a character
+  story with dialogue.
 
 ## Changing it afterwards
 

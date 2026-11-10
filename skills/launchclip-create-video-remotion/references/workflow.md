@@ -599,6 +599,35 @@ The finish gates fail these, so plan for them from the first draft (design:
     it, pointing up or reacting.
   - No shot repeats back to back. Moving the same pair to a new background is
     not a new shot.
+  - A video pictures its subject. One of 15 s or more made only of line
+    diagrams, step rows and text cards (no character, photo, footage, object,
+    chart or interface in any scene) fails the variety gate.
+- **Explainers are carried by characters.** An explainer with nothing to show
+  (no footage, no product screens) gets a small recurring cast, not a deck of
+  diagrams:
+  - Cast one to three characters for the idea: the subject itself as an
+    object with a face, its parts or forces as mascots (for "why it rains":
+    a cloud and a droplet; a recoloured cup is a jar or a pot, a blob or a
+    monster is a germ or an ingredient), or a starter person for a topic
+    about people. Write them
+    as `story.cast` (`"style": "chibi"`), a kind with its own colours:
+    `{"id": "starter", "kind": "cup", "colors": {"body": "#f3e3c0"}}`.
+  - Build most beats as `character-cameo` (one character beside a card that
+    carries the line's few words) and bring two or three together in a
+    `cast-scene` (`set: "standing"`, `shot: "medium"` or `"close"` for
+    objects, mascots and animals, which are short). Give every character
+    scene pose and expression cues on the narration's words.
+  - A character is on screen for at least half the runtime and in the
+    opening scene, whole on frame 0. Never open on a module that draws itself
+    from an empty plate (`line-diagram`, `doodle-outline`).
+  - Diagrams, charts and cards support the cast: one where it shows what a
+    character cannot, never two in a row.
+  - Honest evidence: a character illustrates what the narration says. No
+    card, label or speech bubble states a fact, a number or a quote the
+    script does not have, and a character never speaks lines of its own.
+- **Reading time.** A card is fully shown for about its scene minus 0.8 s and
+  needs 0.22 s a word (at least 1.2 s): a 3 s scene holds 10 words, title,
+  body, labels and steps together. Cut the copy or split the scene.
   - In 9:16: card in the top band, cast framed at medium (knees up, the
     default for people sets) below it with captions over their bodies, never
     their faces, and at most two seated characters.

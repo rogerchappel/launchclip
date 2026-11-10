@@ -10,10 +10,11 @@
 // (the crowded take, the subject inventory, three fresh angles; ANGLE.json)
 // and scores its five title options, in the same call; the titles are then
 // ordered best first by a deterministic score.
-import { SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "@launchclip/core/script-formats.mjs";
+import { MAX_WORDS_PER_SECOND, PACES, SHORT_VIDEO_SECONDS, chooseScriptPlan, scriptPlanLines, scriptRuleLines } from "@launchclip/core/script-formats.mjs";
 import { NARRATED_SCRIPT_VERSION, SCREENPLAY_VERSION } from "@launchclip/core/screenplay.mjs";
 import { skeletonScriptPlan } from "@launchclip/core/skeleton-library.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { checkScript, countWords, splitSentences } from "../script_check.js";
 import { TEASERS } from "../publish_manifest.js";
 import { storyScriptSection } from "./concept_story.js";
 
@@ -30,13 +31,18 @@ export const WORDS_PER_MINUTE = 150;
 // short is never resized, because the only way to lengthen it is to pad it.
 export const RESIZE_TOLERANCE = 0.15;
 
+// The call to action is a field of its own, so a script cannot leave it out:
+// when the narration has none, tooling ends the script on this sentence.
+const CALL_TO_ACTION_SCHEMA = Object.freeze({ type: "string", description: "The one spoken sentence that asks the viewer to act, word for word as the narration ends on it. It starts with the verb (\"Save this before your next bake.\", \"Follow for the next one.\", \"Try it free at example.com.\", \"Comment DECK and I'll send you the checklist.\"). Empty only when the plan says a call to action is optional and the script has none." });
+
 // title and narration are all an older response carries; title_options and
 // beats came with the planning pass and are optional when parsing.
 export const SCRIPT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["title", "narration", "title_options", "beats"],
+  required: ["title", "narration", "title_options", "beats", "call_to_action"],
   properties: {
+    call_to_action: CALL_TO_ACTION_SCHEMA,
     title: { type: "string", description: "A short working title (≤ 60 characters)." },
     narration: { type: "string", description: "The complete voiceover text, plain sentences, no stage directions: the beats' text joined in order." },
     title_options: {
@@ -120,10 +126,12 @@ Write narration that will be read aloud by a text-to-speech voice:
 - Each sentence can own a scene: make every one concrete, and keep product names exactly as given.
 - Teach something: for every option, step or item you name, say at least one thing about it the viewer can use (what it is good at, its trade-off, what it needs). Naming options and moving on says nothing.`;
 
-const output = (titles) => `Output:
+const output = (titles, plan) => `Output:
 - narration: the whole script. beats: the same sentences split by beat id, in the plan's order; their text joined is the narration.
+- call_to_action: the sentence the narration ends on that asks the viewer to act, word for word. A script without one is not finished: tooling adds a plain one.
 - title: a short working title. title_options: ${titles} publish-ready titles the video pays off.
-- Hit the word budget within ±10%. Return only the JSON object.`;
+- Length is a hard limit: ${plan?.word_ceiling ? `${plan.word_ceiling} words at most, about ${plan.word_target} is right` : "the plan's ceiling"}. Count the words of the narration before you answer and cut until it fits; tooling cuts whole sentences from a script that is over, and it will not choose as well as you.
+- Return only the JSON object.`;
 
 /** How many title options a plan asks for: five, best first, for a short video; else three. */
 export const titleCount = (plan) => (Number(plan?.duration) <= SHORT_VIDEO_SECONDS ? 5 : 3);
@@ -131,7 +139,7 @@ export const titleCount = (plan) => (Number(plan?.duration) <= SHORT_VIDEO_SECON
 /** The script pass instructions for a plan (chooseScriptPlan() or skeletonScriptPlan()). */
 export function scriptInstructions(plan) {
   const short = isShort(plan) ? ["", ...ANGLE_LINES, "", ...TITLE_LINES, "", ...POST_LINES(plan)] : [];
-  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), ...short, "", output(titleCount(plan) === 5 ? "five, the best first," : "three")].join("\n");
+  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), ...short, "", output(titleCount(plan) === 5 ? "five, the best first," : "three", plan)].join("\n");
 }
 
 /**
@@ -161,6 +169,80 @@ export function parseAngle(value) {
   return { crowded: text(value.crowded), inventory: (Array.isArray(value.inventory) ? value.inventory : []).map(text).filter(Boolean).slice(0, 12), angles, chosen };
 }
 
+// The plan's inputs the script checks read (src/script_check.js).
+const planChecks = (plan) => ({ format: plan.format, goal: plan.goal, awareness: plan.awareness, pace: plan.pace, ...(plan.cta?.keyword ? { ctaKeyword: plan.cta.keyword } : {}), ...(plan.series?.choices ? { choices: plan.series.choices } : {}) });
+const sentencesOf = (text) => splitSentences(String(text ?? "")).map((sentence) => sentence.text.trim()).filter(Boolean);
+const hasNoCta = (narration, plan) => checkScript({ narration, duration: plan.duration, ...planChecks(plan) }).errors.some((error) => error.id === "cta-missing");
+const joinOr = (items) => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`);
+
+/** The plain call to action tooling ends a script on when the writer gave none the checks recognise. */
+export function defaultCallToAction(plan) {
+  if (plan?.series?.choices?.length) return `Comment ${joinOr(plan.series.choices)}. One word.`;
+  if (plan?.cta?.keyword && plan.cta.offer) return `Comment ${String(plan.cta.keyword).toUpperCase()} and I'll send you ${plan.cta.offer}.`;
+  return plan?.goal === "convert" ? "Try it today." : "Save this for later.";
+}
+
+/**
+ * A script cannot omit its call to action: when the checks find none in the
+ * narration, it ends on the writer's own call_to_action sentence, or, when
+ * that is empty or not an ask the checks recognise, on defaultCallToAction().
+ * A story may end without one (kit/core/script-formats.mjs), so a story is
+ * left alone. script: {narration, beats}. → {narration, beats, added} (added:
+ * the sentence, or null).
+ */
+export function ensureCallToAction(script, plan, callToAction = "") {
+  const narration = String(script?.narration ?? "").trim();
+  const beats = Array.isArray(script?.beats) ? script.beats : [];
+  if (!narration || !plan || plan.format === "story" || !hasNoCta(narration, plan)) return { narration, beats, added: null };
+  const own = sentencesOf(cleanNarration(callToAction)).slice(0, 1).join(" ");
+  const sentence = [own, defaultCallToAction(plan)].filter(Boolean).map((text) => (/[.!?]$/.test(text) ? text : `${text}.`)).find((text) => !hasNoCta(`${narration} ${text}`, plan));
+  if (!sentence) return { narration, beats, added: null };
+  const next = beats.map((entry) => ({ ...entry }));
+  if (next.length) next[next.length - 1].text = `${next[next.length - 1].text} ${sentence}`.trim();
+  return { narration: `${narration} ${sentence}`, beats: next, added: sentence };
+}
+
+/**
+ * The word ceiling is a hard limit: a narration over it is cut to fit, whole
+ * sentences only (never inside one). The first sentence (the hook) and the
+ * last (the call to action) stay. Each cut takes the last sentence of the
+ * beat furthest over its own word budget (the call to action not counted),
+ * and never a beat's only sentence while another beat has two; so the
+ * elaboration goes first and every beat keeps its turn. Without beats the
+ * narration is one beat.
+ * script: {narration, beats}; plan: {word_ceiling, beats: [{id, words}]}.
+ * → {narration, beats, cut: [sentence], words}
+ */
+export function fitWordBudget(script, plan) {
+  const ceiling = Number(plan?.word_ceiling);
+  const given = Array.isArray(script?.beats) && script.beats.length ? script.beats : [{ beat: null, text: String(script?.narration ?? "") }];
+  const groups = given.map((entry) => ({ entry, sentences: sentencesOf(entry.text) }));
+  const total = () => groups.reduce((sum, group) => sum + group.sentences.reduce((n, text) => n + countWords(text), 0), 0);
+  const cut = [];
+  const whole = () => ({ narration: groups.flatMap((group) => group.sentences).join(" "), beats: script?.beats?.length ? groups.filter((group) => group.sentences.length).map((group) => ({ ...group.entry, text: group.sentences.join(" ") })) : [], cut, words: total() });
+  if (!(ceiling > 0) || total() <= ceiling) return { narration: String(script?.narration ?? "").trim(), beats: Array.isArray(script?.beats) ? script.beats : [], cut, words: total() };
+  const budgets = new Map((plan.beats ?? []).map((item) => [item.id, Number(item.words) || 0]));
+  const lastGroup = groups.length - 1;
+  // The sentences of a beat that carry its turn: all of them, but the script's last sentence (the call to action) is not one of the last beat's.
+  const own = (group, index) => (index === lastGroup ? group.sentences.slice(0, -1) : group.sentences);
+  while (total() > ceiling) {
+    const spare = groups.some((group, index) => own(group, index).length > 1);
+    let pick = null;
+    groups.forEach((group, index) => {
+      const mine = own(group, index);
+      // What may go: never the script's first sentence, and never a beat's only sentence while another beat has two.
+      const from = index === 0 ? 1 : 0;
+      if (mine.length <= from || (spare && mine.length < 2)) return;
+      const words = mine.reduce((n, text) => n + countWords(text), 0);
+      const over = words - (budgets.get(group.entry.beat) ?? words / 2);
+      if (!pick || over > pick.over) pick = { group, at: mine.length - 1, over };
+    });
+    if (!pick) break;
+    cut.push(pick.group.sentences.splice(pick.at, 1)[0]);
+  }
+  return whole();
+}
+
 /** Target words for a duration at WORDS_PER_MINUTE. */
 export function targetWords(duration, wpm = WORDS_PER_MINUTE) {
   return Math.max(8, Math.round(Number(duration) * wpm / 60));
@@ -188,7 +270,7 @@ export async function writeScript(options = {}) {
   const plan = options.skeleton ? skeletonScriptPlan(planOptions, options.skeleton) : chooseScriptPlan({ ...planOptions, skeleton: given.skeleton });
   const words = plan.word_target;
   const lines = [
-    `Write the narration for this video, about ${words} words (it should run about ${duration} seconds read at ${plan.wpm} words a minute), as a ${plan.format} script on the ${plan.skeleton} skeleton.`,
+    `Write the narration for this video, about ${words} words and never more than ${plan.word_ceiling} (it should run about ${duration} seconds read at ${plan.wpm} words a minute), as a ${plan.format} script on the ${plan.skeleton} skeleton.`,
     LENGTH_CEILING,
     "",
     "## Prompt",
@@ -211,7 +293,7 @@ export async function writeScript(options = {}) {
   }
   if (repair?.previous) {
     const errors = [repair.errors ?? []].flat().map((error, index) => `${index + 1}. ${typeof error === "string" ? error : `[${error.id}] ${error.message} Fix: ${error.fix}`}`);
-    lines.push("", "## Repair", "", `Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief, the length), and return the beats and ${titleCount(plan) === 5 ? "five title options, best first," : "three title options"} again.`, "", ...errors, "", "Previous narration:", "", repair.previous);
+    lines.push("", "## Repair", "", `Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief), inside the word ceiling of ${plan.word_ceiling}, and return the beats and ${titleCount(plan) === 5 ? "five title options, best first," : "three title options"} again.`, "", ...errors, "", "Previous narration:", "", repair.previous);
   }
   const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: scriptSchema(plan), schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : parseText(result?.text);
@@ -220,8 +302,14 @@ export async function writeScript(options = {}) {
     const role = plan.beats.find((item) => item.id === entry.beat)?.role;
     return role ? { ...entry, role } : entry;
   });
-  const narration = cleanNarration(value?.narration) || cleanNarration(beats.map((entry) => entry.text).join(" "));
-  if (!narration) throw new Error("the script pass returned no narration text");
+  const written = cleanNarration(value?.narration) || cleanNarration(beats.map((entry) => entry.text).join(" "));
+  if (!written) throw new Error("the script pass returned no narration text");
+  // The two things a script cannot get wrong: it ends on a call to action, and it fits the word ceiling (cut by whole sentences).
+  const asked = ensureCallToAction({ narration: written, beats }, plan, value?.call_to_action);
+  const fitted = fitWordBudget(asked, plan);
+  const narration = fitted.narration;
+  beats.splice(0, beats.length, ...fitted.beats);
+  const fit = asked.added || fitted.cut.length ? { ...(asked.added ? { call_to_action_added: asked.added } : {}), ...(fitted.cut.length ? { cut: fitted.cut, words_before: countWords(asked.narration) } : {}) } : null;
   const usage = result?.usage ?? {};
   const cost = estimateModelUsageCost(provider ?? client?.provider ?? "openai", result?.model ?? model, usage);
   let title = String(value?.title ?? "").trim().slice(0, 80) || "Untitled";
@@ -243,6 +331,7 @@ export async function writeScript(options = {}) {
     ...(postCaption ? { description: postCaption } : {}),
     narration,
     beats,
+    ...(fit ? { fit } : {}),
     plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, pace: plan.pace, voice_speed: plan.voice_speed, ...(plan.cta ? { cta: plan.cta } : {}), ...(plan.series ? { series: plan.series } : {}), wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
     word_target: words,
     word_count: narration.split(/\s+/).filter(Boolean).length,
@@ -303,6 +392,20 @@ export function needsResize(measuredSeconds, targetSeconds, tolerance = RESIZE_T
 /** Whether a take runs short of its target by more than the tolerance (reported, never padded). */
 export function runsShort(measuredSeconds, targetSeconds, tolerance = RESIZE_TOLERANCE) {
   return targetSeconds > 0 && (targetSeconds - measuredSeconds) / targetSeconds > tolerance;
+}
+
+/**
+ * The clock the final script check runs on, for a measured take. A take that
+ * runs short is checked at the length it runs, and it is its own proof that
+ * the words fit that time: a voice that reads faster than the plan's pace
+ * (Kokoro at 1.2×) is held to the rate it spoke at, never told its words
+ * "cannot be read" in the seconds it read them in. → {duration, limits?}
+ */
+export function takeClock({ narration, seconds, target, pace = null }) {
+  if (!runsShort(seconds, target)) return { duration: target };
+  const duration = Math.max(1, Math.round(seconds));
+  const spoken = Math.ceil(countWords(String(narration ?? "")) / duration * 100) / 100;
+  return { duration, limits: { wordsPerSecond: Math.max(PACES[pace]?.ceiling ?? MAX_WORDS_PER_SECOND, spoken) } };
 }
 
 function parseText(text) {

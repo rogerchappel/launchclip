@@ -1,0 +1,71 @@
+{
+  "ghosting": {
+    "status": "failed",
+    "errors": 4,
+    "warnings": 0,
+    "findings": [
+      {
+        "rule": "text-hold",
+        "severity": "error",
+        "at": 0.4821,
+        "ids": [
+          "starter-jar-and-loaf"
+        ],
+        "detail": "starter-jar-and-loaf (33 words) is fully shown for 2.24 s; it needs 7.26 s to be read (0.22 s a word, at least 1.2 s): lengthen the scene or cut the text"
+      },
+      {
+        "rule": "text-hold",
+        "severity": "error",
+        "at": 6.4321,
+        "ids": [
+          "starter-ingredients-and-microbes"
+        ],
+        "detail": "starter-ingredients-and-microbes (31 words) is fully shown for 2.35 s; it needs 6.82 s to be read (0.22 s a word, at least 1.2 s): lengthen the scene or cut the text"
+      },
+      {
+        "rule": "text-hold",
+        "severity": "error",
+        "at": 14.6321,
+        "ids": [
+          "bubbles-raise-dough"
+        ],
+        "detail": "bubbles-raise-dough (34 words) is fully shown for 2.47 s; it needs 7.48 s to be read (0.22 s a word, at least 1.2 s): lengthen the scene or cut the text"
+      },
+      {
+        "rule": "text-hold",
+        "severity": "error",
+        "at": 20.4521,
+        "ids": [
+          "starter-rise-and-tang"
+        ],
+        "detail": "starter-rise-and-tang (34 words) is fully shown for 2.78 s; it needs 7.48 s to be read (0.22 s a word, at least 1.2 s): lengthen the scene or cut the text"
+      }
+    ]
+  },
+  "structure": {
+    "status": "failed",
+    "checks": {
+      "first_frame": {
+        "ok": true,
+        "detail": "opens on line-diagram at 0 s"
+      },
+      "packaging": {
+        "ok": true,
+        "detail": "5 title option(s)"
+      },
+      "opening_pixels": {
+        "ok": false,
+        "detail": "frame 0 carries 30% of the content at 1 s: it fades up from an empty background (the opening image must be drawn on frame 0)"
+      }
+    },
+    "findings": [
+      "opening_pixels: frame 0 carries 30% of the content at 1 s: it fades up from an empty background (the opening image must be drawn on frame 0)"
+    ]
+  },
+  "motion": {
+    "status": "failed",
+    "stillness": {
+      "still_share": 0.8191
+    }
+  }
+}

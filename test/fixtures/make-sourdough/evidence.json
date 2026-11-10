@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "id": "brief",
+      "kind": "brief",
+      "role": "primary",
+      "title": "The prompt",
+      "content": "A 30-second explainer on why sourdough needs a starter",
+      "provenance": "user",
+      "claims_allowed": true
+    }
+  ]
+}

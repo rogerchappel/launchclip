@@ -18,9 +18,17 @@
 // A long video's story is a spine of at most STORY_SPINE_SECONDS: the outline
 // is derived from its beats, and the chapters are still written one at a time.
 //
+// A one-line prompt is the only evidence a bare make has, and the story's
+// claims must cite evidence, so the evidence also carries a general-knowledge
+// item: what is widely taught about the subject may be stated and cited; a
+// figure, a date, a name or a quote still needs the brief or a note. Without
+// it a writer asked to explain how something works has nothing it may cite,
+// and returns either unsupported claims or a refusal (both fail the check).
+//
 // A stage that fails (a model that cannot return the structure, or a story
 // under the editor's floors after its repair attempt) never fails the video:
-// make says so and writes the script from the brief, as before.
+// make says so and writes the script from the brief, as before. It fails
+// inside CONCEPT_BUDGET_SECONDS: no call of the stage starts after that.
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -32,6 +40,11 @@ export const CONCEPT_PATHS = Object.freeze({ workspace: ".launchclip/make/concep
 export const CONCEPT_CANDIDATES = 5;
 // A long video's story is written as a spine this long at most; the outline expands it.
 export const STORY_SPINE_SECONDS = 180;
+// No call of the stage starts later than this after its first: a stage that is going wrong stops here, and the script is written from the brief.
+export const CONCEPT_BUDGET_SECONDS = 300;
+// The evidence id for what is widely taught about the subject.
+export const GENERAL_KNOWLEDGE_ID = "general-knowledge";
+const GENERAL_KNOWLEDGE = "Well-established general knowledge about the subject of the prompt: what a thing is, what it is made of, how it works and what it is for, as a school textbook or an encyclopedia would state it. A claim of that kind may be stated plainly and cites this id. It does not cover specifics: a figure, a date, a price, a named person, product, study or source, a quote, a ranking or anything recent needs the prompt or a note, and where the prompt or a note says otherwise, they win.";
 // The story may run this far under and over the script plan's pace (the length is a ceiling, so the floor is low).
 const WPM_FLOOR = 0.6;
 const WPM_CEILING = 1.1;
@@ -73,13 +86,16 @@ export function conceptIntake({ prompt, rules = null, format, duration, wpm, mod
 }
 
 /**
- * The evidence the concepts and the story may claim from: the prompt and each
- * note (research's notes among them). The rules and the list of files the
- * video can show are context, never a source for a claim.
+ * The evidence the concepts and the story may claim from: the prompt, each
+ * note (research's notes among them) and general knowledge of the subject
+ * (GENERAL_KNOWLEDGE_ID: what is widely taught, never a specific). The rules
+ * and the list of files the video can show are context, never a source for a
+ * claim.
  */
 export function conceptEvidence({ prompt, notes = [], rules = null, assets = [] }) {
   const items = [{ id: "brief", kind: "brief", role: "primary", title: "The prompt", content: String(prompt), provenance: "user", claims_allowed: true }];
   notes.forEach((text, index) => items.push({ id: `note-${index + 1}`, kind: "notes", role: "primary", title: `Notes ${index + 1}`, content: String(text), provenance: "user", claims_allowed: true }));
+  items.push({ id: GENERAL_KNOWLEDGE_ID, kind: "general-knowledge", role: "primary", title: "General knowledge of the subject (widely taught facts only)", content: GENERAL_KNOWLEDGE, provenance: "tooling", claims_allowed: true });
   if (rules) items.push({ id: "rules", kind: "rules", role: "reference", title: "The collection's rules (keep every one)", content: String(rules), provenance: "user", claims_allowed: false });
   if (assets.length) items.push({ id: "assets", kind: "assets", role: "reference", title: "Files the video can show", content: assets.join("\n"), provenance: "tooling", claims_allowed: false });
   return { items };
@@ -87,8 +103,11 @@ export function conceptEvidence({ prompt, notes = [], rules = null, assets = [] 
 
 // make's client behind the interface the production stages call: the route's
 // model, reasoning and background settings are make's own, so they are dropped.
-function stageClient(client, calls) {
+function stageClient(client, calls, { budget = CONCEPT_BUDGET_SECONDS, now = () => Date.now() } = {}) {
+  const started = now();
   const run = async (request) => {
+    const elapsed = (now() - started) / 1000;
+    if (elapsed > budget) throw new Error(`the concept and story stage passed its ${budget} s budget before ${COST_STAGES[request.schemaName] ?? request.schemaName} (${Math.round(elapsed)} s in)`);
     const result = await client.runStructured({ instructions: request.instructions, input: request.input, schema: request.schema, schemaName: request.schemaName, model: undefined, maxOutputTokens: request.maxOutputTokens });
     calls.push({ stage: COST_STAGES[request.schemaName] ?? request.schemaName, usage: result?.usage ?? null, model: result?.model ?? null });
     return { value: result?.value ?? parseText(result?.text), response_id: result?.response_id ?? null, model: result?.model ?? null, usage: result?.usage ?? {}, status: "completed" };
@@ -100,8 +119,9 @@ function stageClient(client, calls) {
  * Five concepts judged in a fresh context, then the winner written and
  * edited as a story. options: {project, client, model: {provider, model,
  * reasoning}, prompt, notes, rules, assets (manifest lines), format: {width,
- * height}, duration (the story's seconds), wpm, say}. adapters:
- * {planConceptTournament, writeRetentionStory} (tests).
+ * height}, duration (the story's seconds), wpm, say, budgetSeconds (default
+ * CONCEPT_BUDGET_SECONDS)}. adapters: {planConceptTournament,
+ * writeRetentionStory, now} (tests).
  * → {tournament, concept (the winner), story, calls: [{stage, usage, model}]}
  * and writes CONCEPTS.json and STORY.json. Throws when a stage fails; calls
  * made before the failure are on error.calls.
@@ -116,7 +136,7 @@ export async function planConceptStory(options = {}, adapters = {}) {
   await writeJson(path.join(workspace, PRODUCTION_PATHS.intake), { workspace, ...conceptIntake({ prompt, rules, format, duration, wpm, model: options.model }) });
   await writeJson(path.join(workspace, PRODUCTION_PATHS.evidence), conceptEvidence({ prompt, notes, rules, assets }));
   const calls = [];
-  const stage = { client: stageClient(client, calls) };
+  const stage = { client: stageClient(client, calls, { ...(options.budgetSeconds != null ? { budget: Number(options.budgetSeconds) } : {}), ...(adapters.now ? { now: adapters.now } : {}) }) };
   try {
     say?.(`model: PAID calls to ${options.model?.provider ?? client.provider} ${options.model?.model ?? ""} (${CONCEPT_CANDIDATES} concepts, then a judge in a fresh context)`.replace("  ", " "));
     await (adapters.planConceptTournament ?? planConceptTournament)(workspace, { background: false }, stage);
