@@ -40,7 +40,7 @@ function args(argv) {
 /** The sheet's cast: starters across the range plus a generated cast. */
 export function sheetCast({ids, seed = '7f3a91c2', set = 'office-team'} = {}) {
   if (ids) return ids.map(id => ({id}));
-  const starters = ['maya', 'oliver', 'fatima', 'ruth', 'lily'].map(id => ({id}));
+  const starters = ['maya', 'oliver', 'noor', 'ruth', 'lily'].map(id => ({id}));
   return [...starters, ...generateCast({seed, set, count: 3, palette: BRAND.colors})];
 }
 

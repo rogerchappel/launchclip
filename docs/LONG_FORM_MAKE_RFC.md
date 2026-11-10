@@ -124,10 +124,17 @@ Long form has no single "resize pass". Instead:
 - Its measured words per minute sets the word target for the rest. Kokoro,
   ElevenLabs and a cloned voice each speak at a different pace, and this
   absorbs that.
-- A chapter more than 15% off its target gets one resize pass, for that
-  chapter only.
+- A chapter's seconds are a ceiling. One that runs more than 15% over gets
+  one resize pass, for that chapter only. One that comes in short is kept
+  short; it is never rewritten longer.
+- The seconds a short chapter did not use go to the later chapters with the
+  most facts (never past 180 s a chapter). What no chapter can use is
+  dropped.
+- Tooling trims an outline that adds up to more than the duration and leaves
+  one that adds up to less.
 - The video's length is what the voice says. The report warns when the total
-  is more than 10% from the target, as a short does today.
+  is more than 10% over the target, and notes it when it is more than 10%
+  under (see `docs/MAKE_SKILL_PARITY.md`, phase 4).
 
 ## 5. Voice, plan and story
 

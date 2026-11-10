@@ -149,8 +149,8 @@ test("the Anthropic client sends images as content blocks, before the text", asy
     { type: "image", source: { type: "url", url: "https://example.test/sheet.jpg" } },
     { type: "text", text: "look" }
   ]);
-  assert.throws(() => anthropicContent("look", [{ url: "data:image/tiff;base64,AAAA" }]), /must be JPEG, PNG, GIF or WebP/);
-  assert.throws(() => anthropicContent("look", [{ url: "file:///tmp/sheet.jpg" }]), /needs a base64 data: URL or an http\(s\) URL/);
+  assert.throws(() => anthropicContent("look", [{ url: "data:image/tiff;base64,AAAA" }]), /takes JPEG, PNG, GIF or WebP/);
+  assert.throws(() => anthropicContent("look", [{ url: "file:///tmp/sheet.jpg" }]), /neither a base64 data URL nor an https URL/);
 
   const bodies = [];
   const sdk = { messages: { create: async (body) => { bodies.push(body); return { id: "msg_1", model: body.model, content: [{ type: "text", text: "{\"verdict\":\"ship\"}" }], usage: { input_tokens: 1200, output_tokens: 40 } }; } } };

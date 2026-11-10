@@ -26,6 +26,10 @@
 //   minute as p10/p50/p90 over the references (launchclip.cadence-profile.v1);
 // - sound: integrated loudness, silence ratio and transient rate
 //   (src/render_audio_analysis.js) → SFX density and music presence;
+// - drawing (src/drawing_traits.js): how the frames are drawn: outline
+//   presence and line weight, fill type, saturation and contrast, shape
+//   language, grain and frame stepping, each with a confidence, mapped to the
+//   nearest drawing style and the dials that exist (src/drawing_match.js);
 // - fonts: never read or copied; a nearest bundled family is suggested from
 //   the measured text weight (or from --font-hint names).
 // Reference media is never copied into the pack: only file names, hashes and
@@ -39,6 +43,8 @@ import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRati
 import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
 import { analyzeRenderMotion } from "./render_motion_analysis.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
+import { combineDrawingNumbers, drawingLimits, drawingTraits, measureDrawing } from "./drawing_traits.js";
+import { mapDrawingTraits } from "./drawing_match.js";
 
 const execFileAsync = promisify(execFile);
 export const REFERENCE_SAMPLE_WIDTH = 160;
@@ -587,8 +593,9 @@ export function detectLayouts(frames) {
 
 /**
  * Measure one reference video: palette clusters, pacing, energy, captions and
- * sound. adapters: {run, motion, audio, changes, refineCase (null skips the
- * caption-case re-read)} to replace ffmpeg-backed steps in tests.
+ * sound, and how it is drawn. adapters: {run, motion, audio, changes,
+ * refineCase (null skips the caption-case re-read), drawing (null skips the
+ * drawing traits)} to replace ffmpeg-backed steps in tests.
  */
 export async function analyzeReference(file, options = {}, adapters = {}) {
   const resolved = path.resolve(file);
@@ -604,6 +611,8 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
   const layouts = image ? null : detectLayouts(detail);
   let captions = image ? null : detectCaptions(detail, { layouts: layouts.frames });
   if (captions?.position && adapters.refineCase !== null) captions = await (adapters.refineCase ?? ((video, found, times) => refineCaptionCase(video, found, times, {}, run)))(resolved, captions, detail.map((frame) => frame.at));
+  // How it is drawn: raw numbers that add up across references (src/drawing_traits.js).
+  const drawing = adapters.drawing === null ? null : await (adapters.drawing ?? ((source, opts) => measureDrawing(source, opts, run)))(resolved, { image });
   let pacing = null, energy = null, sound = null;
   if (!image) {
     const motion = await (adapters.motion ?? ((video) => analyzeRenderMotion(video)))(resolved);
@@ -649,7 +658,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
       };
     } else sound = { audio: false };
   }
-  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, vivid, captions, layouts, pacing, energy, sound };
+  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, vivid, captions, layouts, pacing, energy, sound, drawing };
 }
 
 // ---------------------------------------------------------------------------
@@ -975,6 +984,11 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
   const profile = profileFromReferences(name, references, { ...(format ? { format } : {}), ...(rights ? { rights } : {}) });
   const fonts = fontsFromReference(videos.map((entry) => entry.captions), fontHints);
   const colors = { ...roles.colors };
+  // How the references are drawn, and what of it LaunchClip can draw.
+  const numbers = combineDrawingNumbers(references.map((entry) => entry.drawing));
+  const drawing = numbers ? drawingTraits(numbers) : null;
+  const drawn = drawing ? mapDrawingTraits(drawing) : null;
+  const panel = { ...layouts.layouts.panel, ...(drawn?.apply.panel_radius !== undefined ? { radius: drawn.apply.panel_radius } : {}) };
   if (captions.highlight && contrastRatio(captions.highlight, colors.bg) >= 3 && colorDistance(captions.highlight, colors.primary) > 0.12) captions.notes.push(`caption highlight ${captions.highlight} differs from primary ${colors.primary}; set captions.colors.active to use it`);
   const pack = {
     schema: STYLE_SCHEMA,
@@ -986,9 +1000,11 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
     captions: captions.captions,
     sound: { sfx_density: sound.sfx_density, ...(sound.music ? { music: sound.music } : {}) },
     modules: { prefer: [], avoid: [], params: {} },
-    layouts: layouts.layouts,
-    vocabulary: structuredClone(STYLE_V3_DEFAULTS.vocabulary),
+    layouts: { ...layouts.layouts, panel },
+    vocabulary: { ...structuredClone(STYLE_V3_DEFAULTS.vocabulary), ...(drawn?.apply.vocabulary ?? {}) },
     ...(profile ? { profile } : {}),
+    ...(drawn?.apply.cast ? { cast: drawn.apply.cast } : {}),
+    ...(drawn?.apply.background ? { background: drawn.apply.background } : {}),
     brand_frame: structuredClone(STYLE_V3_DEFAULTS.brand_frame),
     dials: structuredClone(STYLE_V3_DEFAULTS.dials),
     references: references.map((entry) => ({ name: entry.name, sha256: entry.sha256, kind: entry.kind, width: entry.width, height: entry.height, duration_seconds: entry.duration_seconds })),
@@ -998,18 +1014,19 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
       ...(energyStats ? { energy: energyStats } : {}),
       ...(sound.stats ? { sound: sound.stats } : {}),
       ...(layouts.mix ? { layout_mix: layouts.mix } : {}),
-      ...(captions.treatment ? { captions: captions.treatment } : {})
+      ...(captions.treatment ? { captions: captions.treatment } : {}),
+      ...(drawing ? { drawing: { ...drawing, match: { matched: drawn.matched, unmatched: drawn.unmatched } } } : {})
     },
     created_at: new Date().toISOString()
   };
-  const inferred = { palette: roles, grammar, ambient, sound, captions, fonts, layouts, profile };
+  const inferred = { palette: roles, grammar, ambient, sound, captions, fonts, layouts, profile, drawing: drawing ? { ...drawing, ...drawn } : null };
   return { pack, inferred, report: referenceReport(pack, references, inferred) };
 }
 
 const pct = (value) => `${Math.round(value * 100)}%`;
 
 export function referenceReport(pack, references, inferred) {
-  const { palette, grammar, ambient, sound, captions, fonts, layouts, profile } = inferred;
+  const { palette, grammar, ambient, sound, captions, fonts, layouts, profile, drawing } = inferred;
   const lines = [
     `# Reference report: ${pack.name}`,
     '',
@@ -1051,8 +1068,41 @@ export function referenceReport(pack, references, inferred) {
   else lines.push('No video reference: no profile; pick a shipped one by id in `profile`.');
   lines.push('', '## Sound', '', `- sound.sfx_density: **${pack.sound.sfx_density}** (confidence ${sound.confidence.toFixed(2)}).`, ...sound.notes.map((note) => `- ${note}`), `- music: ${pack.sound.music ? 'a bed is suggested; set provider and prompt hints to taste' : 'not inferred'}. Tempo (bpm) is not measured.`);
   lines.push('', '## Fonts', '', `- brand.fonts: \`${JSON.stringify(pack.brand.fonts)}\` (confidence ${fonts.confidence.toFixed(2)}).`, ...fonts.notes.map((note) => `- ${note}`));
-  lines.push('', '## Next steps', '', '- Review the palette roles and fonts above; edit style.json by hand where the confidence is low.', `- Render a storyboard with \`"style": "${pack.name}"\` and run \`launchclip style check <project> --against ${pack.name}\` to measure drift against these reference statistics.`, '');
+  lines.push('', '## Drawing', '');
+  if (drawing) lines.push(...drawingReport(pack, drawing));
+  else lines.push('Not measured.');
+  lines.push('', '## Next steps', '', '- Review the palette roles and fonts above; edit style.json by hand where the confidence is low.', `- Run \`launchclip style compare ${pack.name}\` to render a short sample in this style, measure it the same way and see how far each drawing trait is from the reference.`, `- Render a storyboard with \`"style": "${pack.name}"\` and run \`launchclip style check <project> --against ${pack.name}\` to measure drift against these reference statistics.`, '');
   return lines.join('\n');
+}
+
+/** The report's Drawing section: the measured traits, what was set from them and what has no dial. */
+export function drawingReport(pack, drawing) {
+  const t = drawing.traits ?? {};
+  const c = (trait) => (trait ? trait.confidence.toFixed(2) : '—');
+  const rows = [];
+  if (t.outline) rows.push(['Outline', `${t.outline.label}: ${pct(t.outline.presence)} of boundaries inked, lines are ${pct(t.outline.line_share)} of all edges`, c(t.outline)], ['Line weight', t.outline.weight ? `${t.outline.weight} px at 1080 (spread ×${t.outline.weight_spread}), ${t.outline.tone} pen \`${t.outline.color}\`` : 'no lines', c(t.outline)]);
+  if (t.fill) rows.push(['Fill', `${t.fill.type}: gradient ${pct(t.fill.gradient)}, textured ${pct(t.fill.textured)}, cel steps ${pct(t.fill.cel)}${t.fill.shaded === null ? '' : `, shading inside figures ${pct(t.fill.shaded)}`}; even areas ${pct(t.fill.even_area)} of the frame`, c(t.fill)]);
+  if (t.palette) rows.push(['Saturation and contrast', `chroma ${t.palette.saturation} (p90 ${t.palette.saturation_p90}), lightness range ${t.palette.contrast}, ${t.palette.theme}`, c(t.palette)]);
+  if (t.shape) rows.push(['Shape', `${t.shape.label}: roundness ${t.shape.roundness} (edges ${pct(t.shape.straight)} straight, ${pct(t.shape.curved)} curved, ${pct(t.shape.corner)} corners)`, c(t.shape)]);
+  if (t.grain) rows.push(['Grain', t.grain.label === 'none' ? 'none' : `${t.grain.label}: ${t.grain.amount} luma levels over ${pct(t.grain.coverage)} of the even areas${t.grain.motion === null ? '' : `, moving ${t.grain.motion}`}`, c(t.grain)]);
+  if (t.stepping) rows.push(['Stepping', `${t.stepping.label}: ${t.stepping.drawings_per_second} drawings a second at ${t.stepping.fps} fps`, c(t.stepping)]);
+  const lines = [
+    `How the references are drawn, from ${drawing.frames} frames at up to 960 px wide (\`reference_stats.drawing\` in style.json, schema \`${drawing.schema}\`). Lines are thin runs darker or lighter than both sides; fills are read from even 8 px blocks; shapes from how edges turn; stepping from differences between consecutive frames. Only these measurements are matched: no character, face or design of the reference is copied.`,
+    '',
+    '| Trait | Measured | Confidence |',
+    '| --- | --- | --- |',
+    ...rows.map((row) => `| ${row.join(' | ')} |`),
+    '',
+    '### Set from the drawing',
+    ''
+  ];
+  const set = (drawing.matched ?? []).filter((entry) => !entry.field.startsWith('('));
+  lines.push(...(set.length ? set.map((entry) => `- ${entry.field}: **${typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)}** (confidence ${Number(entry.confidence).toFixed(2)}): ${entry.why}.`) : ['- Nothing: no trait was measured confidently enough to set a field.']));
+  for (const entry of (drawing.matched ?? []).filter((entry) => entry.field.startsWith('('))) lines.push(`- ${entry.trait}: ${entry.value}, which is how LaunchClip already draws (${entry.why}).`);
+  lines.push('', '### Not matched', '');
+  lines.push(...((drawing.unmatched ?? []).length ? drawing.unmatched.map((entry) => `- ${entry.trait}${entry.measured ? ` (${entry.measured})` : ''}: ${entry.reason}.`) : ['- Nothing.']));
+  lines.push('', '### What these measurements cannot tell', '', ...drawingLimits().map((limit) => `- ${limit}`));
+  return lines;
 }
 
 // ---------------------------------------------------------------------------

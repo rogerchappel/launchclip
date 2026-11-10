@@ -1,5 +1,6 @@
 // Designing characters: `launchclip cast create / edit / options / export /
-// import`, and the sheet of one saved character.
+// import`, the sheet of one saved character, and a show bible's reference
+// sheets (referenceSheet; src/bible.js).
 //
 //   cast create <id> [--describe "…"] [--set path=value …] [--from <id>]
 //   cast edit <id> [--instruction "…"] [--set path=value …]
@@ -18,11 +19,11 @@
 // library with --to library) and its sheet is drawn beside it
 // (<id>.sheet.png): a few poses and every expression, in its drawing style.
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { CHARACTER_PATHS, CHARACTER_SCHEMA, applyCharacterSets, characterCastEntry, characterPaths, normalizeCharacter, parseSet } from "@launchclip/core/characters/character.mjs";
 import { describeCharacter, newCharacterDefaults, pickVoice } from "@launchclip/core/characters/describe.mjs";
-import { starterCharacter, STARTER_IDS } from "@launchclip/core/characters/cast.mjs";
+import { isStarterId, starterCharacter, STARTER_IDS } from "@launchclip/core/characters/cast.mjs";
 import { EXPRESSIONS, POSES } from "@launchclip/core/characters/rig.mjs";
 import { listCharacters, loadCharacter, projectCastRoot, readCastPack, saveCharacter, writeCastPack } from "./character_store.js";
 
@@ -131,7 +132,7 @@ async function baseCharacter(from, options) {
 /** `cast create <id>`: a new saved character from a description and set paths. */
 export async function castCreate(id, flags = {}, hooks = {}) {
   if (!id) throw new Error("cast create needs an id: launchclip cast create <id> --describe \"…\" [--set path=value]");
-  if (STARTER_IDS.includes(id)) throw new Error(`"${id}" is a starter character; choose another id (or start from it: launchclip cast create <new-id> --from ${id})`);
+  if (isStarterId(id)) throw new Error(`"${id}" is a starter character; choose another id (or start from it: launchclip cast create <new-id> --from ${id})`);
   const options = storeOptions(flags, hooks);
   const to = text(flags.to) ?? "project";
   const existing = await loadCharacter(id, { ...options, only: to });
@@ -163,7 +164,7 @@ export async function castEdit(id, flags = {}, hooks = {}) {
   if (!id) throw new Error("cast edit needs an id: launchclip cast edit <id> --instruction \"…\" [--set path=value]");
   const options = storeOptions(flags, hooks);
   const loaded = await loadCharacter(id, options);
-  if (!loaded) throw new Error(STARTER_IDS.includes(id) ? `"${id}" is a starter character and is not edited; copy it first: launchclip cast create <new-id> --from ${id}` : `no saved character "${id}" in ${projectCastRoot(options.projectDir)} or the library (see launchclip cast list)`);
+  if (!loaded) throw new Error(isStarterId(id) ? `"${id}" is a starter character and is not edited; copy it first: launchclip cast create <new-id> --from ${id}` : `no saved character "${id}" in ${projectCastRoot(options.projectDir)} or the library (see launchclip cast list)`);
   const words = text(flags.instruction) ?? text(flags.describe);
   const mapped = words ? await mapWords(words, { current: loaded.character, model: flags.model, client: hooks.client }) : { sets: [], voice: null, accent: null, unmatched: [], personality: null, via: null };
   const sets = [...mapped.sets, ...shorthandSets(flags), ...flagSets(flags)];
@@ -226,6 +227,25 @@ export async function characterSheet(character, { projectDir, file, out, poses, 
   const png = path.resolve(out ?? path.join(path.dirname(file ?? path.join(projectCastRoot(projectDir), "x")), `${normal.id}.sheet.png`));
   await (render ?? screenshotHtml)(html, png);
   return { png, rows, style: normal.style };
+}
+
+/**
+ * A bible character's reference sheet (docs/ANIMATION_PIPELINE_RFC.md §4.2):
+ * every pose the rig has and a face close-up of every expression, drawn in
+ * the bible's drawing style and colours with the same view tree the scenes
+ * render, so the sheet is the character. entry: a story cast entry with its
+ * params (a bible cast entry without the bible's own fields).
+ */
+export async function referenceSheet(entry, { style, colors = null, brand = null, out, render, chromium } = {}) {
+  if (!out) throw new Error("referenceSheet needs out: the PNG to write");
+  const { castSheetHtml, screenshotHtml } = await import("./cast.js");
+  const story = { ...(brand ? { brand } : {}), cast: { style, ...(colors ? { colors } : {}), characters: [entry] } };
+  const usage = new Map([[entry.id, { poses: [...POSES], expressions: [...EXPRESSIONS] }]]);
+  const { html, rows } = castSheetHtml(story, usage, { title: `${entry.name ?? entry.id}: reference sheet (${style})` });
+  const png = path.resolve(out);
+  await mkdir(path.dirname(png), { recursive: true });
+  await (render ?? ((page, file) => screenshotHtml(page, file, { chromium })))(html, png);
+  return { png, rows, style };
 }
 
 /** `cast sheet <id>` for a saved character. */

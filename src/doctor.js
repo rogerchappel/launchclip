@@ -42,6 +42,8 @@ export async function diagnoseInstallation(options = {}) {
   const ytDlp = await commandAvailable("yt-dlp");
   const whisper = await commandAvailable("whisper");
   const subject = await (options.subjectStatus ?? subjectStatus)(env);
+  // Recording source pages for research (optional playwright, a Chromium, ffmpeg).
+  const evidenceCapture = await (options.captureStatus ?? (async () => (await import("./research/capture_status.js")).captureRecorderStatus({ env })))();
   const rasterizer = await firstAvailable(["magick", "convert", "sips"], commandAvailable);
   const nodeSupported = nodeMajor >= MINIMUM_NODE_MAJOR;
   const coreReady = nodeSupported && missingPackageFiles.length === 0;
@@ -77,13 +79,18 @@ export async function diagnoseInstallation(options = {}) {
       rasterizer: { available: Boolean(rasterizer), command: rasterizer, required_for_rendering: false },
       whisper: { available: whisper, required_for_rendering: false },
       subject,
+      evidence_capture: evidenceCapture,
       yt_dlp: { available: ytDlp, required_for_rendering: false }
     },
     credentials: {
       openai_api_key: Boolean(env.OPENAI_API_KEY),
       anthropic_api_key: Boolean(env.ANTHROPIC_API_KEY),
-      elevenlabs_api_key: Boolean(env.ELEVENLABS_API_KEY)
+      elevenlabs_api_key: Boolean(env.ELEVENLABS_API_KEY),
+      // Research's web search; without one, news comes from the keyless sources (docs/RESEARCH.md).
+      web_search_key: env.BRAVE_API_KEY ? "brave" : env.TAVILY_API_KEY ? "tavily" : env.SERPER_API_KEY ? "serper" : null
     },
+    // Not needed to render, but a run that wants them says so: what is off and how to turn it on.
+    notes: [...(evidenceCapture.available ? [] : [evidenceCapture.hint])],
     modes: {
       subscription_agent: {
         available: coreReady,

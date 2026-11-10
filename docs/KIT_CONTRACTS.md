@@ -206,6 +206,10 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   backdrop plate; see [Backdrop plates](#backdrop-plates-kitcoreplatesmjs).
 - `engine` = `{version?, revision?}` is the stamp of the engine that wrote
   the story; see [Story versions and migrations](#story-versions-and-migrations-kitcorestory-migrationsmjs).
+- `bible` = `{file, hash}` names the show bible a character story was made
+  with (`BIBLE.json` and its hash); see "Show bible". The field is optional
+  and additive: a story without it is unchanged, and `STORY_REVISION` did
+  not move.
 
 Exports:
 
@@ -1165,7 +1169,12 @@ type (0.15: display, body, case), motion (0.2: grammar, ease family, tempo,
 camera mode, whip, blur, zoom cadence), backdrops (0.15: background kind,
 plate set, panel treatment, radius, panel fill) and variants (0.2: the share
 of catalogue modules drawn with a different variant). `styleTraits(pack)`
-precomputes a pack's side for many comparisons; packs without a feel read
+precomputes a pack's side for many comparisons; `drawingDistanceReport(a, b)`
+(`{distance, parts, unmeasured}`) compares two drawing-traits blocks
+(`launchclip.drawing-traits.v1`, measured from a reference or a render by
+`src/drawing_traits.js`) over outline (0.2), line weight (0.1), fill (0.2),
+saturation (0.1), contrast (0.1), shape (0.1), grain (0.1) and stepping (0.1),
+leaving out the parts either side could not measure; packs without a feel read
 their grammar preset. Below `NEAR_DUPLICATE` (0.2) two styles read as one
 brand; `avoid: [packs]` keeps a result at least `MIN_AVOID_DISTANCE` (0.35)
 from each, stepping through up to `MAX_AVOID_STEPS` derived seeds and keeping
@@ -1490,7 +1499,72 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
 - `StoryComposition` props may carry `__captions` (filled by
   `calculateMetadata` from the overlay `src` or chunked `audio.words`).
   Custom modules register through `<LaunchclipCompositions customModules={…}/>`
-  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
+  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`
+  (see "Custom modules" below).
+
+### Custom modules (`kit/core/custom-modules.mjs`, `kit/hyperframes/custom-module.mjs`)
+
+A bespoke-tier scene with `"module": "custom"` is drawn by the project's own
+code. It has one form per renderer, and `scene.source` says which exist:
+
+```json
+{ "id": "signal", "module": "custom", "start": 3, "end": 6,
+  "source": { "remotion": "remotion/SignalLabel.tsx", "hyperframes": "hyperframes/signal-label.html" },
+  "params": { "component": "SignalLabel", "text": "Signal locked" } }
+```
+
+`source` may also be one path, as before: that is the Remotion form alone.
+`params.component` names the module, and `params.hidesCaptions: true` hides
+the captions over it in both renderers.
+
+- **Remotion form:** a React component registered under `params.component`
+  through `<LaunchclipCompositions customModules={…}/>` in the project's
+  `remotion/entry.tsx`. It receives `{scene, params, brand, format, model}`
+  and draws from `useCurrentFrame()` alone.
+- **HyperFrames form:** an HTML fragment, not a document:
+
+  ```html
+  <style> .card { position: absolute; left: 80px; top: 600px; background: var(--lc-paper); } </style>
+  <div class="card"><p class="text"></p></div>
+  <script>
+    root.querySelector('.text').textContent = params.text;
+    tl.fromTo(root.querySelector('.card'), {opacity: 0, y: 60},
+      {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: false}, scene.start + 0.2);
+  </script>
+  ```
+
+  The markup goes in a full-canvas element, the scene's root
+  (`#lc-custom-<scene id>`). The `<style>` rules are nested under that root,
+  so they cannot restyle the rest of the story. Each `<script>` runs once
+  when the page loads, with `tl` (the story's paused GSAP timeline, in
+  absolute seconds), `root`, and the values the Remotion form gets as props:
+  `scene` (`{id, start, end, duration}`), `params`, `brand`, `format` and
+  `model` (which also has `fonts`). The root carries the brand as CSS
+  variables: `--lc-bg`, `--lc-primary`, `--lc-accent`, `--lc-ink`,
+  `--lc-paper` (those the brand sets) and `--lc-font-display`,
+  `--lc-font-body`, `--lc-font-meta`. The compiler shows and hides the scene
+  and applies its transition, as for any module.
+- **Pure function of time, in both.** Everything that moves is a function of
+  the frame (Remotion) or a tween on `tl` (HyperFrames). A fragment is
+  refused (`lintCustomFragment`) when it uses `Math.random`, a clock, a timer
+  or animation-frame callback, a network request, dynamic code loading, an
+  external script, an `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>` or
+  `<base>` element, a remote URL, a CSS `@import`, or a CSS animation or
+  transition. This is a lint against mistakes, not a sandbox: a custom
+  module is the project's own code and runs in the render browser.
+- **A missing form is an error, not a placeholder.** `launchclip finish`
+  stops at the render stage, before anything renders, when a custom scene
+  has no form for the chosen renderer, or its fragment is missing or
+  refused. The message names the scene, the module and the renderer, for
+  example: `scene "signal": the custom module "SignalLabel" has no
+  hyperframes form (only a remotion one, remotion/SignalLabel.tsx); add an
+  HTML fragment at source.hyperframes, render with --renderer remotion, or
+  use a catalogue module`. A direct `compileStoryToHyperFrames()` call still
+  draws the labelled placeholder and returns that message as a warning.
+- **Parity is the author's job.** The two forms are separate code. Draw from
+  the same numbers and eases (`@launchclip/core/motion.mjs` `tween` matches
+  GSAP's eases) and compare stills. `test/custom_module.test.js` does this for
+  `test/fixtures/custom-module/`, which is also the worked example.
 
 ### Fonts (`kit/core/fonts.mjs`)
 
@@ -3075,6 +3149,24 @@ The example is `examples/story/footage/`; regenerate its recording with
   burst, arranged stacks, counted headline, light-sweep, push-blur, studio light,
   dot grid, word-chip captions, snap feel). That story sets `motion.blur: false`,
   so a still is one frame on both renderers. Story times snap to whole frames.
+- `node scripts/parity-shard.mjs` renders a slice of the per-module corpus
+  with one shared Remotion bundle: `--shard 2/12` is one of twelve equal
+  parts, `--rotate <n> --every 12` is every twelfth fixture offset by `n`, so
+  twelve consecutive `n` cover the corpus. `--times settle,mid` limits the
+  sample times; `--list` prints the slice. CI uses it twice:
+  - every pull request renders a rotating twelfth at the settle and mid-hold
+    times (the `parity-sample` job; `n` is the run number): 39 fixtures at
+    about 5 s each, a 4-minute job;
+  - the "Parity corpus" workflow (`.github/workflows/parity-full.yml`)
+    renders all of it at every sample time in twelve shards, nightly, on
+    demand, and on a pull request that changes `kit/`, a fixture or the
+    harness: about 14 s a fixture on ubuntu-latest, 9 minutes of rendering a
+    shard. Nightly and on demand it also runs the story, background, camera,
+    footage and caption parity tests.
+- `test/fixtures/parity-known-failures.json` lists, per platform, fixtures
+  that fail there today. The slice runner reports them without failing, and
+  says when one passes again. It is an open bug list: an entry is removed by
+  fixing the renderer, and nothing is added to make a new failure pass.
 
 ## Direction constraints (`src/constraints.js`)
 
@@ -3192,6 +3284,10 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | Field | Type | What uses it |
 | --- | --- | --- |
 | `description` | text ≤ 500 | the manifest line the planner reads; clip matching (`matchScore`) |
+| `shows` | a few words, ≤ 60 | what the file is ("pricing page", "dashboard", "onboarding flow", "product photo", "person on camera"): the manifest line; clip matching (weighted double); which file a prompt's "show the pricing page" means |
+| `text` | up to 12 lines, ≤ 120 each | the key words readable on screen: the manifest line; clip matching |
+| `fits` | up to 6 phrases | the story beats the file suits ("the price or offer line", "how it works"): the manifest line; clip matching |
+| `feature` | true/false | true: the user wants this file in the video (see "Featured files" below); false: never treat it as featured |
 | `subjects`, `tags` | lists of words or phrases | the manifest line; clip matching (weighted double) |
 | `windows` | `[{start, end, quality?, note?}]` seconds into the clip | the manifest line (with how to use them); tooling moves a video scene whose `params.media.sourceStart` (plus its length) is outside every window to the best window's start (`snapMediaWindows`: one long enough first, then quality, then the note's match); the fill's in points |
 | `quality` | 0–1 | the manifest line (below 0.4 it says "use only when nothing better fits"); the media order (higher first); clip choice |
@@ -3200,6 +3296,119 @@ inventoried, and are re-read on every run (a cached entry gets the new notes).
 | `role` | the inventory's roles for the file's kind (`talking-head`, `screen-recording`, `b-roll`; `logo`, `screenshot`, `product-image`; `voiceover`, `music`) | overrides the heuristic (kept in `entry.detected`); a `b-roll` clip is never the base, even with speech on it |
 
 `ASSETS.json` entries carry `notes`; the routing's media items carry them too.
+
+### Described automatically (`src/asset_understanding.js`)
+
+`launchclip make` gives every handed-in image (logos aside) and video these
+notes even when the caller wrote none, so the planner knows what each file
+shows and where it fits. Per file, the first source that applies:
+
+| Source | When | What it costs |
+| --- | --- | --- |
+| `notes` | the caller's sidecar or `inventory.json` already has `shows` or `description` | nothing: no model is called and nothing is computed |
+| `vision` | the run's model can take images (OpenAI, OpenRouter and compatible endpoints) | one PAID call per file: the image scaled to 1024 px, or four frames of a video (at 10, 35, 65 and 90% of its length) with their times |
+| `local` | no model that can see, `--asset-descriptions local`, or the model call failed | nothing: the file name and folder, the inventory's role, the frame's shape, and the words Tesseract reads when `tesseract` is installed |
+
+The caller's own fields always win over a computed one, field by field.
+`windows` are computed for a video only: the model's, or locally the
+stretches of at least 1.5 s where something moves, given only when the clip
+is still for at least 15% of its length (a clip that moves throughout needs no
+windows). A local description says in its text that no model looked at the
+file, and the manifest line tells the planner to trust the narration over it.
+
+Results are cached by the file's SHA-256, one JSON per file, in
+`~/.cache/launchclip/asset-descriptions` (`LAUNCHCLIP_CACHE`, or
+`LAUNCHCLIP_ASSET_DESCRIPTIONS_DIR` for this cache alone; an embedding app's
+`withStateDirs` cache when set). A file is sent to the model once, however
+many projects it is handed to; a cached model description is reused even in a
+run with no model. One run sends at most 24 new files to the model
+(`MAX_VISION_FILES`) and describes the rest locally.
+
+`--asset-descriptions auto|local|off` (default `auto`): `local` never calls a
+model, `off` leaves the inventory as the heuristics and the caller's notes
+made it. Each described `ASSETS.json` entry carries `understanding: {source,
+sha256, cached, model?}`, and `MAKE.json` `assets.descriptions` counts the
+files per source.
+
+### Featured files
+
+A handed-in file the user clearly meant to be in the video must not be left
+out. `featuredAssets()` picks them, each with its reason:
+
+1. its notes say `feature: true`;
+2. the prompt names the file (`pricing-page.png`, or a multi-word file name
+   written with spaces);
+3. the prompt asks to show what it is ("show the pricing page") and it is
+   the only file that is one;
+4. three or fewer showable files were handed in (`FEW_ASSETS`).
+
+Rules 3 and 4 skip a file whose notes give it a `quality` under 0.4, and
+`feature: false` opts a file out of all of them. `media.must_use` files are
+the constraints' to enforce and are not listed again.
+
+The planner's prompt lists the featured files. A storyboard that shows none
+of one gets a repair error (`featured: assets/pricing-page.png (a pricing
+page) is not in the storyboard…`); like the hook and card checks, a plan that
+fails only this still ships when the repairs run out, with the error as a
+warning in `MAKE.json`. `MAKE.json` `assets.featured` lists the files and
+reasons, and `assets.unused_featured` the ones the storyboard left out. For a
+hard rule, use `media.must_use`.
+
+## Short-form checks (`src/short_form_checks.js`)
+
+Rules for every video of 90 s or less (`SHORT_SECONDS`), whether or not any
+footage was supplied. The planner checks the storyboard on every attempt and
+sends failures back as repair errors (`hook: …`, `cards: …`). A storyboard that
+fails only these still ships when the repairs run out, with the errors as
+warnings. `launchclip finish` then gates the opening it is about to deliver
+(the `hook` gate). Every check reads the storyboard and the measured narration,
+never the render, so Remotion and HyperFrames get the same verdict.
+
+| Check | Fails when | Where |
+| --- | --- | --- |
+| text | the opening scene's headline is a bare topic: under 4 words (`MIN_HOOK_WORDS`), or a question under 6 words with no number ("Deck care?"). Skipped when a recording opens the video | planner, `hook` gate |
+| claim | no phrase (2 words or more, `MIN_CLAIM_WORDS`) or number is on screen by `claim_by`. A scene on any track counts; so do the captions once the voice has started by `claim_by` | planner, `hook` gate |
+| logo_open | the opening scene is a `brand-lockup` or `logo-row` with no claim on it (the brand's own name is not a claim). Skipped when a recording opens the video | planner, `hook` gate |
+| entrance | the opening scene's `in` transition runs longer than `entrance_max` | planner, `hook` gate |
+| first_word | the first spoken word starts after `first_word_by` | `hook` gate only: a storyboard repair cannot move the voice |
+| cards | more text or icon cards (`concept-card`, `icon-row`, `icon-grid`, `checklist` and the title cards) than one per 15 s (at least 2), two back to back, or one module more than twice. With a footage library the cap holds at any length | planner |
+
+The opening's limits come from the cadence profile the story is gated against
+(`kit/profiles/`), not from constants in the check (`hookThresholds()`):
+
+| Limit | Source | short-motion | short-talking-head |
+| --- | --- | --- | --- |
+| `claim_by` | `first_visual_seconds` p90 ("when the first designed graphic appears") | 0.5 s | 1.5 s |
+| `entrance_max` | `first_motion_seconds` p90 ("when the first meaningful motion arrives") | 0.35 s | 2 s |
+| `first_word_by` | the later of the two. No profile measures when speech starts, so the voice is held to the window the profile gives the picture and the motion | 0.5 s | 2 s |
+
+A band under 0.35 s (some reels measure 0) is raised to `FIRST_FRAME_SECONDS`,
+the structure gate's "opening image on screen by". A profile without the band
+falls back to the shipped short profile for the lane: `short-talking-head`
+when a recording opens the video, `short-motion` otherwise. `MIN_CLAIM_WORDS`
+is a judgement (one word is a label), not a measured band.
+
+The `hook` gate in `finish.json` and `MAKE.json` is `{status, thresholds:
+{claim_by, entrance_max, first_word_by, profile, sources}, checks: {claim,
+logo_open?, entrance, first_word, text}, findings}`; `sources` says in words
+where each number came from. A failed check makes the run `needs-repair`. The
+structure gate still owns "opens on an image, not a title card, by 0.35 s",
+and the motion gate still measures the render's first motion and hook events.
+
+### Loudness repair (`src/finish.js`)
+
+The master targets −14 LUFS integrated and at most −1 dBTP
+(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+a warning: the master step runs again from the raw render, aimed past the
+target by what the last pass missed by (`repairAim()`: the level moved by the
+miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice
+(`MASTER_REPAIRS`). The master stage's `loudness.repairs` lists each pass
+(`{attempt, missed, aim, output, compliant}`), and `loudness.target` stays the
+delivery target. A repaired master passes the `loudness` gate with `repairs:
+<n>` and a `loudness:` warning that says what the first pass measured. A
+master that still misses fails the gate with the measurement in `errors`, and
+the run is `needs-repair`.
 
 ## Subject layer (`kit/core/subject-layer.mjs`)
 
@@ -3782,7 +3991,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `shot?` wide/medium/close, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. At medium or close its head sits at the top of its area and its body runs off the frame's bottom edge (no floor needed). `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 | `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
@@ -3811,7 +4020,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (24 characters). Ids are stable and never
+- `cast.mjs`: the starter cast (71 characters: the original set, then a wider cast with a personality each and one accessory at most). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
@@ -3841,6 +4050,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
   | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
+  | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head; a headscarf wraps close under the chin |
+  | `chibi-plain` | `style-chibi.mjs` | the chibi figure with no skin tone: skin drawn paper white, hair and clothes in their own colours, for a neutral cast |
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
@@ -3866,11 +4077,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   div places the pivot, an inner div with the joint's id carries the CSS
   transform about `0px 0px`); runs of shapes become overflow-visible SVGs in
   drawing order.
-- `acting.mjs`: one actor's states → ops. A pose change tweens every joint
-  over 0.45 s (`power2.inOut`); gestures loop whole cycles while a pose holds
-  and end on the pose; breathing, a head sway and blinks run on their own
-  groups; expressions crossfade over 0.16 s; mouths open on spoken words (two
-  flaps on a long word, a steady rhythm when a range has no word timings).
+- `acting.mjs`: one actor's states → ops. Every op is an absolute `set` or
+  from-to tween, so any frame draws on its own (seek-safe) and both
+  renderers read the same list; nothing is random. See "Acting" below.
 - `sets.mjs`: the room, furniture and slots for each set (left to right; a
   slot faces the middle of the frame): desk-laptop, phone, meeting, screen,
   kitchen-counter, sofa, podium, stage, car, park-bench, video-call and
@@ -3934,10 +4143,63 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   bending the elbow, stops the fingertip before 46 % of the gap to another
   character (two people pointing at each other never cross arms) and inside
   the safe zone; the state carries `aim: {side, arm, fore, tip}`.
-- **Idle life.** A style whose geometry sets `idleArms` (stick) also swings
-  each arm at the shoulder and the elbow (`armidle-*`, `foreidle-*`
-  wrappers inside the posed joints) and sways the body a little, on
-  absolute tweens, so a figure drawn in lines never holds still.
+- **Acting** (`acting.mjs`). What turns cues into a performance:
+  - **Pose changes.** A cue's change takes `ACTING.poseTween` (0.45 s) and
+    is at rest on the new pose when that ends; `CHARACTER_TIMING`, the cue
+    spacing rule and each cue event's `endTime` rest on this, and nothing
+    below changes it. `poseTravel(from, to)` is the largest joint move in
+    degrees (offsets and scales weighed in). Under `MOVE.small` (24) the
+    change is one `power2.inOut` tween per joint. Above it the change is
+    acted (`poseChangeOps`), at a strength that grows to full at `MOVE.full`
+    (140): the first 20 % of the window is anticipation (each joint moves
+    against its travel by up to 10 % of it, capped at 7°, and the torso
+    squashes a little), then the travel (`power2.inOut`), then the last 22 %
+    settles from a small follow-through (up to 6 % past the pose) back onto
+    it. Finger opacity never leaves 0–1.
+  - **Overlap.** The head and the hair behind it (35 ms), the forearms and
+    shins (45 ms) and the fingers (60 ms) start after the body, hold through
+    the anticipation, and settle in what is left of the window; the head
+    nods as the move lands. A change of gaze (`C-turn`, `C-gaze`) leads: one
+    tween from the cue.
+  - **Gestures** loop whole cycles while a pose holds and end on the pose,
+    starting when the change window ends.
+  - **Life while a pose holds**, each on its own group so a pose change
+    never fights it, each schedule drawn from `seededRandom` seeded with
+    the character's id (the part id when an actor has none): blinks
+    (`blinkTimes`: gaps of half to one and a half times `ACTING.blinkEvery`,
+    one in five doubled, plus one as each big move starts) on
+    `C-eyes-<expression>` scaleY; eye darts (`dartTimes`: a quick glance of
+    up to 5 rig units aside, a hold, and back) on the same group's x and y,
+    not for `lifelike` or `cinematic`, whose eye group carries the lids;
+    weight shifts (`shiftTimes`: the upper body eases up to about 1° to one
+    side, holds, then to the other) on `C-breath` rotation. Breathing
+    (`C-breath` scaleY) and the head sway (`C-headidle`, `C-hbidle`) run to
+    the scene's last frame. A style whose geometry sets `idleArms` (stick)
+    swings each arm at the shoulder and the elbow (`armidle-*`,
+    `foreidle-*` wrappers inside the posed joints) and sways the body
+    instead of shifting its weight.
+  - **Speech.** `speechChanges(ranges)` → `[{time, shape, open}]`. A spoken
+    word with its text (`words: [[start, end, "word"]]`; the story resolver
+    adds the text for word anchors and `says: "auto"`) takes a mouth shape
+    per sound from its spelling (`wordVisemes`): `closed` on m, b, p; `o`
+    on o, u, w; `wide` on e, i, y; `open` on a; `small` on other
+    consonants. The shapes spread across the word (none shorter than
+    0.07 s; with more sounds than fit, the part-open consonants go first),
+    and the mouth closes when the word ends unless the next follows within
+    0.07 s. A word without text opens and closes as before (two flaps on a
+    long word), cycling through the open shapes; a range without word
+    timings flaps every 0.24 s. The rig draws two mouths per face, so
+    `closed` is the closed mouth and every other shape is that face's open
+    mouth at a size (`VISEMES`: scaleX, scaleY on `C-open-<expression>`,
+    which `view.mjs` makes a pivot div at the mouth's centre). Sprite scenes
+    read only `open`.
+  - **Expressions** crossfade over 0.16 s.
+  - **Profiles.** A story cast entry's `acting` (`ACTING_PROFILES`: `default`,
+    `calm`, `bouncy`, `nervous`) scales the above per character: `pace` (the
+    share of the change window the move takes, never more than 1, so a
+    nervous character lands early and holds), `anticipation`, `settle`,
+    `lag`, the rates of `blinks`, `darts` and `shifts`, and `breath` and
+    `breathRate`. Every value of `default` is 1.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
@@ -3972,15 +4234,16 @@ them.
 Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
 `C-breath`, `C-head`/`C-hb` (head and the hair behind it), `C-headidle`,
 `C-arm-l|r`, `C-fore-l|r`, `C-fingerwrap-l|r`, `C-leg-l|r`, `C-shin-l|r`,
-`C-face-<expression>`, `C-eyes-<expression>`, `C-mouth-<expression>`,
-`C-open-<expression>`.
+`C-face-<expression>`, `C-eyes-<expression>` (blinks: scaleY; darts: x, y),
+`C-mouth-<expression>`, `C-open-<expression>` (the open mouth: opacity, and
+scaleX and scaleY for its speech shape).
 
 ### Story cast (`story.cast`)
 
 ```json
 { "style": "flat", "colors": { "primary": "teal" },
   "characters": [ { "id": "maya", "voice": "af_heart", "position": "left" },
-                  { "id": "sam", "from": "theo", "hair": { "style": "curly" } },
+                  { "id": "sam", "from": "theo", "hair": { "style": "curly" }, "acting": "bouncy" },
                   { "id": "riley", "skin": "deep", "hair": { "style": "locs", "color": "black" } } ] }
 ```
 
@@ -3988,7 +4251,9 @@ An id (or `from`) naming a starter starts from its params; the fields given
 override them. Other ids need their own skin and hair. When the cast lists
 characters, scenes may only use those; without a cast, scenes may use any
 starter. `position` (left, centre or right) is the side the character
-takes in every cast scene it shares, unless a scene says otherwise. Scenes
+takes in every cast scene it shares, unless a scene says otherwise. `acting`
+(default, calm, bouncy or nervous) is how the character moves in every scene
+(see "Acting"); it is not part of the character's identity. Scenes
 name characters by id and never carry params, so a
 character cannot change inside a story. `storyCastErrors(cast)` and
 `resolveStoryCast(story)` validate it; a style pack's cast mapping reaches
@@ -4074,6 +4339,121 @@ One designed character as a file, used by the CLI, by agents (the
 - A reference image maps to traits (the skill has the agent read it and
   choose options); nothing stores or reproduces a likeness.
 
+### Show bible (`launchclip.show-bible.v1`, `kit/core/bible.mjs`, `src/bible.js`)
+
+`BIBLE.json` beside `storyboard.json` pins who is in a character story,
+what each of them looks and sounds like, where it happens and how it is
+drawn (ANIMATION_PIPELINE_RFC.md §4.2):
+
+```json
+{ "schema": "launchclip.show-bible.v1", "frozen": true, "hash": "sha256:…",
+  "cast": { "style": "outlined",
+    "characters": [
+      { "id": "nova", "name": "Nova", "voice": "bf_emma", "position": "left",
+        "build": "slim", "height": "tall", "skin": "deep",
+        "hair": { "style": "locs", "color": "silver" },
+        "outfit": { "top": "blazer", "bottom": "trousers" },
+        "accessories": ["round-glasses"],
+        "colors": { "top": "red", "bottom": "charcoal", "shoes": "black", "accent": "accent" },
+        "character_file": "cast/nova.character.json",
+        "sheet": "bible/sheets/nova.png", "fingerprint": "1acb77987b1a5632",
+        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"] } ] },
+  "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"] },
+  "style": { "pack": "project", "seed": 4821, "drawing_style": "outlined" },
+  "rules": ["Rae never raises his voice."],
+  "inputs": { "script_hash": "sha256:…" } }
+```
+
+- `cast` is the story cast shape with four additions per character:
+  `character_file` (the saved character it came from, inside the project;
+  a starter has none), `sheet`, `fingerprint` and `must_keep`.
+  `bibleCast(bible)` removes the four and is a valid `story.cast`. Every
+  entry carries its full rig params, so the bible does not change when a
+  starter or a saved file does. An `art` (illustrated) entry is refused:
+  the rig draws the animatic and is the fallback for handed-in art.
+- `fingerprint` is the first 16 hex digits of the SHA-256 of the
+  character's `rigFingerprint` (its params and the cast's drawing style).
+- `must_keep` is what a viewer would notice changing, written by
+  `mustKeep(params)`: hair (or the headscarf), skin tone, top, bottom (not
+  under a dress), over-layer, glasses, facial hair other than stubble, a
+  hearing aid, a bindi, headwear, a mobility aid, and age when not an
+  adult. Colours are named as the params name them (`"hoodie in the
+  brand's primary colour"` for a brand role). A file may add features; it
+  may not drop one the params give.
+- `world` is a story world (`storyWorldErrors`) plus `sets`, the sets the
+  story may use (`SETS`). `style` names the project's style pack and seed;
+  its `drawing_style` is the cast's. `rules` are sentences for the planner
+  and the critic. `inputs.script_hash` is the SHA-256 of `SCRIPT.json`'s
+  bytes when the bible was frozen.
+- `hash` is `"sha256:"` and the SHA-256 of the file's content without
+  `hash`, as JSON with sorted keys (`bibleHash`). A draft (`frozen: false`)
+  has the same fields without the hash, sheets, fingerprints and
+  `must_keep`.
+
+```js
+export const BIBLE_SCHEMA, BIBLE_FILE, BIBLE_SHEETS, BIBLE_CHARACTER_FIELDS
+export function validateBible(bible, {script, exists} = {}) // → {ok, errors, warnings}
+// script: SCRIPT.json (each of its `characters` needs an entry and a voice);
+// exists(path): whether a project-relative file is on disk (sheets, character files).
+export function bibleHash(bible)                 // → "sha256:…"
+export function mustKeep(params)                 // → [feature]
+export function bibleFingerprint(member)         // member: a resolved cast member
+export function bibleCharacter(member, {character_file, sheet})  // → a bible cast entry
+export function bibleCast(bible)                 // → story.cast
+export function bibleRef(bible, file)            // → {file, hash}
+export function bibleRefErrors(ref, path)        // also exported by story.mjs
+export function withBible(story, bible, file)    // → the story with the bible's cast and bible: {file, hash}
+export function directionWithBible(map, bible, file)
+export function bibleCastFindings(story, bible)  // → [text]; [] when the casts agree
+```
+
+Validation: the cast passes `storyCastErrors` and `resolveStoryCast`; a
+frozen bible has a voice, a sheet, a matching fingerprint and a complete
+`must_keep` on every character, and a hash that matches its content; every
+character the script lists has an entry and a voice; the world and every
+set exist; two characters sharing a voice is a warning.
+
+Commands (`src/bible.js`):
+
+- `launchclip bible freeze <project> [--characters nova,rae] [--style …]
+  [--position nova=left]… [--world office] [--time day] [--sets a,b]
+  [--rule "…"]… [--pack …] [--seed …] [--chromium <path>] [--no-pin]
+  [--force]` resolves the cast from, in order: `--characters` (saved
+  characters or starters, read as their files are now), the `BIBLE.json`
+  already there (a draft, or a frozen one, whose entries are kept as
+  pinned), `storyboard.json`'s cast, or every character saved in the
+  project. A library character is copied to `<project>/cast/`. The drawing
+  style is `--style`, else the bible's, the storyboard's, else the first
+  saved character's. It draws one sheet per character to
+  `bible/sheets/<id>.png` (`referenceSheet` in `src/cast_design.js`: every
+  pose, and a face close-up of every expression, with the modules' own view
+  tree), then writes the file and its hash. Nothing is written when a sheet
+  cannot be drawn. When `storyboard.json` or `DIRECTION.json` exist they are
+  pinned: the story's cast becomes `bibleCast(bible)` and both get `bible:
+  {file, hash}`. Freezing a frozen bible with different content is refused
+  without `--force`; an edited `SCRIPT.json` alone does not change the hash
+  (a warning says so).
+- `launchclip bible show <project>` prints the bible, its validation
+  against the disk and the script, and the gate's result for the
+  storyboard when there is one. It exits 1 when the bible is not valid.
+
+The story and the direction map: `bible: {file, hash}` is a top-level field
+of `storyboard.json` (`validateStory`) and of `DIRECTION.json`
+(`validateDirection`); both check its shape only.
+
+The gate: `launchclip finish` runs `bibleGate(project, resolved,
+{direction})` in its validate stage, after the cast gate, and reports
+`gates.bible`. It fails when the bible file is missing or a draft, when it
+is not valid (a changed hash, a missing sheet, a script character without
+an entry), when the story or the direction map names another hash, when a
+frozen `BIBLE.json` is in the project and the story does not name it, and
+when the story's cast differs from the bible's: a character added or
+missing, different rig params, voice, position or name, another drawing
+style or colour mapping. The two casts are compared resolved, so a story
+entry that names a starter or a saved character by id matches while that
+character is unchanged. A story that names no bible in a project with no
+frozen bible skips the gate.
+
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
 ```json
@@ -4146,6 +4526,195 @@ cost (`SPRITE_IMAGE_USD` per picture).
 `test/fixtures/parity/characters-*.json` (every set, both orientations, a
 screen with a video and with an image, a cameo with a card) through
 `scripts/parity.mjs`.
+
+## Screenplay: SCRIPT.json version 2 (`kit/core/screenplay.mjs`)
+
+`SCRIPT.json` has two versions. Version 1 (`launchclip.make-script.v1`) is a
+narrated script: a title, one `narration` string and `beats: [{beat, text}]`,
+whose beat ids come from the script skeleton (hook, problem, cta, …). `make`
+writes it today. Version 2 (`launchclip.make-script.v2`) is a screenplay: it
+adds speakers and silent lines, for a story told by characters
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §4.1). A narrated
+script is the case where every speaker is the narrator, so a version 1 file
+reads as a version 2 one and nothing written today breaks.
+
+```json
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "She skipped one check",
+  "logline": "Maya's deploy fails again; Sam shows her the one check she skipped.",
+  "premise": { "want": "ship before lunch", "obstacle": "the same failing deploy", "change": "she checks first" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "to ship", "speech": "short, dry" },
+    { "id": "sam", "role": "foil", "want": "to help without gloating", "speech": "warm, unhurried" }
+  ],
+  "beats": [
+    { "beat": "problem", "place": "desk-laptop",
+      "lines": [
+        { "id": "l2", "speaker": "maya", "text": "Third time. Same red build.", "playing": "flat, to herself" },
+        { "id": "l3", "speaker": "sam", "text": "Did you run the check?", "playing": "gentle" },
+        { "id": "l4", "speaker": null, "action": "Maya turns to look at him.", "seconds": 1.2 }
+      ] }
+  ],
+  "narration": "Third time. Same red build. Did you run the check?",
+  "title_options": ["She skipped one check"]
+}
+```
+
+A full example is `test/fixtures/screenplay/two-characters.json`.
+
+- `characters[]`: `id` (lower-case letters, digits and hyphens, at most 24
+  characters; the same id the cast and the voice use; never `"narrator"`),
+  and free-text `role`, `want` and `speech`. An optional `name` is how
+  actions refer to the character when that is not the id. How a character
+  looks belongs to the show bible, not here.
+- `beats[]`: `beat` is one of `setup`, `problem`, `attempt`, `turn`,
+  `resolution`, `cta` (`NARRATIVE_BEATS` in `kit/core/direction.mjs`);
+  `place` is an optional set name; `lines` is never empty.
+- A **spoken line** is `{id, speaker, text, playing?}`. `speaker` is a
+  character id or `"narrator"`. `playing` is a note for the acting and the
+  voice and is never spoken.
+- A **silent line** is `{id, speaker: null, action, seconds}`: something that
+  happens with nobody speaking. `seconds` is above 0 and at most 3, and
+  silent lines in a row add up to at most 3 between two spoken lines,
+  because the pause a dialogue line carries (`audio.narration.lines[].gap`)
+  is at most 3 s.
+- Line ids are unique across the script; later stages point at lines by id.
+- `narration` is every spoken line's text, in order, joined by single spaces.
+- Other keys (`plan`, `title_scores`, `check`, …) are kept as they are.
+
+### Functions
+
+- `readScreenplay(value)` → the version 2 shape of any SCRIPT.json. A version
+  2 value is returned unchanged. A version 1 value (or an older one with no
+  version) becomes one narrator line per beat (`l1`, `l2`, …), or one line
+  holding the whole narration when it has no beats, with `characters: []`
+  and `source_version` set to what was read. It throws on a version it does
+  not know. `isScreenplay(value)` says whether a value is already in the
+  version 2 shape.
+- `validateScreenplay(value, {duration, wpm, gap, problemLandsSeconds,
+  tolerance})` → `{ok, errors: [{id, message, fix, line?}], warnings,
+  stats}`. Errors:
+
+  | id | rule |
+  |---|---|
+  | `script-shape` | not a script, an unknown version, no beats, no spoken line, a bad or repeated character id, a character called `narrator` |
+  | `beat-name` | a beat that is not a story beat |
+  | `line-id` | a line with no id, or an id used twice |
+  | `line-shape` | a spoken line with no text or with an action or a length; a silent line with no action or with text; a line with no `speaker` field |
+  | `silent-length` | a silent line with no `seconds`, or over 3 s, or a run of silent lines over 3 s between two spoken lines |
+  | `speaker-unknown` | a speaker who is not a listed character or the narrator |
+  | `character-unused` | a listed character who never speaks and whom no action names (by `id` or `name`, as a whole word) |
+  | `narration-mismatch` | `narration` is not the spoken lines joined |
+  | `fits-length` | the estimated length is more than 15% over `duration` at `wpm` (the voice's measured pace; 150 until one is measured) |
+  | `problem-missing` | no `problem` beat |
+  | `problem-lands` | the `problem` beat starts after `problemLandsSeconds` (the profile's `problem_lands_seconds`, 12 s in `story-characters`) |
+
+  Warnings: `no-duration`, `under-length` (more than 15% short),
+  `no-problem-limit`, `edge-silence` (the script opens or ends on a silent
+  line). A version 1 value is validated as all-narrator, without the
+  `beat-name`, `narration-mismatch` and problem rules.
+- `screenplayTiming(script, {wpm, gap})` → estimated times before any take
+  exists: a spoken line runs its words at `wpm`, two spoken lines in a row
+  are `gap` apart (0.3 s), a silent line runs its own `seconds`. Returns
+  `{seconds, spoken_seconds, silent_seconds, words, wpm, lines: [{id,
+  speaker, beat, start, end}], beats: [{beat, start, end}]}`.
+- `screenplayNarration(script)` → `{lines: [{speaker, text, gap?}],
+  lead_seconds, tail_seconds}`. `lines` is `audio.narration.lines`, the
+  dialogue format `src/voice/dialogue.js` voices, with no change to the voice
+  code. A silent line becomes the `gap` of the spoken line before it; a
+  line with no silent line after it has no `gap`, so the story's own gap
+  applies. Silent lines before the first spoken line and after the last
+  cannot be a pause between lines: their lengths come back as
+  `lead_seconds` and `tail_seconds` for the shot list to hold.
+- `spokenLines(script)` → the spoken lines with their character offsets in
+  `screenplayText(script)`, the spoken text joined.
+
+### The check (`src/script_check.js`, `launchclip script check`)
+
+`checkScreenplay({script, duration, wpm, problemLandsSeconds, brief, …})`
+runs `validateScreenplay`, then runs `checkScript` on the spoken text as one
+narration (format `story` unless given), so every spoken line passes the same
+script checks and evidence rules as a narrated script: figures, quotes,
+ratings and deadlines trace to the brief. A finding inside a line carries
+that line's `line` id and `speaker`. A character story may end without a
+call to action, so `cta-missing` is only an error when the script has a
+`cta` beat. The report is the `checkScript` report with `stats.screenplay`
+and `narration` (the derived lines).
+
+`launchclip script check <project>` checks the project's `SCRIPT.json`
+(a file path works too). `--duration` is the target length, `--wpm` the
+voice's measured pace (else the script's `plan.wpm`, else 150), `--profile`
+the cadence profile whose `problem_lands_seconds` p90 is the limit (default
+`story-characters`), `--brief` the prompt and notes the script was written
+from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
+checked exactly as before.
+
+### The writers' room (`src/make/animation.js`, `launchclip make --animation`)
+
+`make --animation` writes a version 2 `SCRIPT.json` and voices it
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §6.1, phase 5). The
+router marks the run `routing.kind: "animation"` on the `motion` lane
+(`routing.format` is the frame size, so the mark has its own key). Only the
+flag sets it for now: a brief that merely reads as a character story still
+makes a whole narrated video, because the animation path stops after the
+voice until its later stages exist.
+
+Three structured calls, each with a strict schema, then at most one repair:
+
+| Call | `schemaName` | Reads | Returns |
+|---|---|---|---|
+| `writePremise` | `launchclip_animation_premise` | the prompt, the notes, the collection's rules | `premise`, `characters` (with a `voice_type` of `female`, `male` or `either`), 3 to 5 `loglines` |
+| `judgeLoglines` | `launchclip_animation_loglines` | the prompt, the notes, the rules and the loglines only | a score per logline on `hook`, `turn`, `playable`, `brief` (0-10), its own pick, a reason |
+| `writeScreenplay` | `launchclip_animation_script` | the brief, the chosen logline, the premise, the cast, the word budget, a library skeleton's structure lines when one fits | `title`, `title_options`, `beats` |
+
+- The story is the logline with the best mean score; a tie goes to the
+  judge's own pick, then the earlier one (`rankLoglines`).
+- The model returns every line with the same five fields (`speaker`, `text`,
+  `playing`, `action`, `seconds`), because strict schemas have no optional
+  ones. `normalizeScreenplay` turns that into the contract: ids `l1`, `l2`, …
+  in order, a line with no speaker is silent, a `place` that is not a kit set
+  (`SETS`) is dropped. An unknown speaker or beat is kept, so the check can
+  name it.
+- The word budget is 80% of the target length at the voice's pace before a
+  take exists (`estimatedPace`: 150 words a minute × the voice speed for
+  Kokoro, so 180 at its default 1.2, from one measured dialogue; 150
+  otherwise).
+- `checkScreenplay` runs with the `story-characters` profile's
+  `problem_lands_seconds` p90 (`--profile` names another) and the prompt,
+  notes and asset lines as the brief.
+- **One repair pass in all.** It is spent on the first check's errors. If
+  that check passed, it is spent after voicing instead, when the script fails
+  at the measured pace or the take is more than 15% short (`under-length`).
+  Errors left are warnings; the script is still written and voiced.
+
+`SCRIPT.json` then also carries `loglines` (`chosen`, `reason`, and every
+option with its scores), `passes` (`premise`, `loglines`, `write`, and
+`repair` when used), `word_target`, `word_count`, `take` (the measured
+seconds, words and pace) and `check` (the final check, at the measured pace).
+`characters[].voice_type` is the writers' hint for the designer; the show
+bible owns each character's real voice.
+
+**Voice.** `screenplayNarration(script).lines` goes through
+`src/voice/dialogue.js` unchanged, and `NARRATION.json` is the dialogue
+document (`words[].speaker`, `lines`, `gaps`). Until a bible exists the
+characters borrow stand-in voices (`standInCast`): under Kokoro one each, by
+`voice_type`, never the narrator's; under any other provider none, so the
+narrator's voice reads every line and `MAKE.json` warns. The joined take is
+`.launchclip/make/narration.wav`.
+
+**Reuse.** The script is reused while its inputs hash the same (the prompt,
+notes, rules, target length, model, voice, pace, skeleton and profile
+limit), the take while every line's request and every pause is unchanged. A
+rerun that reuses both leaves `SCRIPT.json` and `NARRATION.json` untouched
+and reports `prepare` as `cached`.
+
+**The stop.** `MAKE.json` ends `status: "stopped"` with `stopped: {after:
+"prepare", reason}`; `storyboard`, `subject`, `finish` and `critic` are
+`skipped` with that reason, and `report.script` has `kind: "animation"`,
+the `characters`, `speakers`, line counts and `voices`. A stage ends a run
+by setting `ctx.stop = {after, status, reason, next}` in
+`src/make/index.js`; the later animation stages move or remove this stop.
 
 ## World module (`kit/core/catalog-world.mjs`)
 

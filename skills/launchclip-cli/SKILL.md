@@ -189,8 +189,11 @@ For storyboards, use a v2 pack: set `"style": "<name>"` in `storyboard.json`
 warm-documentary, neon-explainer) and plan with `launchclip story plan --style
 <name>`. To mimic earlier videos or a reference, draft a pack with `launchclip
 style create <name> --from-reference a.mp4 [b.mp4 ...]`, review its
-`reference-report.md`, and measure later renders with `launchclip style check
-<project> --against <name>`. Upgrade v1 packs with `launchclip style upgrade
+`reference-report.md` (it also says how the reference is drawn, which drawing
+style and backdrop were set from that, and what could not be matched), run
+`launchclip style compare <name>` to see how far a sample in the pack is from
+the reference per drawing trait, and measure later renders with `launchclip
+style check <project> --against <name>`. Upgrade v1 packs with `launchclip style upgrade
 <name>`.
 
 With no style and no brand (no `--style`, brand.json or logo), `make` and

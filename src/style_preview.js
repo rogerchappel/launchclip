@@ -18,7 +18,9 @@ export async function stageStylePreview(style, dir, options = {}) {
   const validation = validateStylePack(style);
   if (!validation.ok) throw new Error(`style ${style?.name ?? ""} is invalid:\n- ${validation.errors.join("\n- ")}`);
   const project = path.resolve(dir);
-  const story = stylePreviewStory(style, options);
+  // options.story: a story to stage instead of the preview reel (style compare's sample).
+  const { story: given, ...preview } = options;
+  const story = given ?? stylePreviewStory(style, preview);
   await rm(project, { recursive: true, force: true });
   await mkdir(path.join(project, ".launchclip", "styles", style.name), { recursive: true });
   await writeFile(path.join(project, ".launchclip", "styles", style.name, "style.json"), `${JSON.stringify(style, null, 2)}\n`);

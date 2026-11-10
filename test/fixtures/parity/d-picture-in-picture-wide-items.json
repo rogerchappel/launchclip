@@ -1,0 +1,46 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: picture-in-picture, still and a list",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "picture-in-picture",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "media": "assets/shots/boards.svg",
+          "variant": "bottom-left",
+          "title": "Before you leave",
+          "items": [
+            "Water",
+            "Fuel",
+            "Recovery gear"
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

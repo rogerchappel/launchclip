@@ -111,7 +111,7 @@ const EPS = 1e-6;
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
-const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine"]);
+const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -348,6 +348,21 @@ function dotWipeOptionErrors(transition, path, fps) {
   return errors;
 }
 
+/**
+ * Problems with a `bible: {file, hash}` reference, as strings: what a story
+ * and a direction map carry to name the show bible they were made with
+ * (kit/core/bible.mjs).
+ */
+export function bibleRefErrors(ref, path = "bible") {
+  if (!isObject(ref)) return [`${path} must be {file, hash}: the show bible this was made with (BIBLE.json and its hash)`];
+  const errors = [];
+  for (const key of Object.keys(ref)) if (!["file", "hash"].includes(key)) errors.push(`${path}.${key} is not supported (allowed: file, hash)`);
+  const inside = typeof ref.file === "string" && ref.file.trim() && !/^([a-zA-Z]:|[\\/])/.test(ref.file) && !ref.file.includes("\\") && !ref.file.split("/").includes("..");
+  if (!inside) errors.push(`${path}.file must be the bible's path inside the project, like "BIBLE.json"`);
+  if (typeof ref.hash !== "string" || !/^sha256:[0-9a-f]{64}$/.test(ref.hash)) errors.push(`${path}.hash must be the frozen bible's hash ("sha256:" and 64 hex digits)`);
+  return errors;
+}
+
 export function validateStory(story, { modules, moduleParams } = {}) {
   const errors = [];
   const warnings = [];
@@ -373,6 +388,9 @@ export function validateStory(story, { modules, moduleParams } = {}) {
       else if ((engine.revision ?? 0) < STORY_REVISION) err(`engine.revision ${engine.revision ?? 0} is older than this engine's (${STORY_REVISION}); bring the story up to date with migrateStory (kit/core/story-migrations.mjs) first`);
     }
   }
+  // bible: the show bible a character story was made with (kit/core/bible.mjs). Its shape is checked here;
+  // the `bible` gate in finish compares the story's cast with the file (src/bible.js bibleGate).
+  if (story.bible !== undefined) for (const message of bibleRefErrors(story.bible)) err(message);
   if (story.phase !== undefined && story.phase !== 2) err("phase must be 2 when set (the phase-2 cinematic contract)");
   if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
   for (const key of Object.keys(story)) if (!TOP_LEVEL.has(key)) warn(`${key} is not a story.json v1 field and is ignored`);
@@ -568,8 +586,19 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     else ids.set(scene.id, index);
 
     if (scene.module === "custom") {
-      if (scene.source === undefined) err(`${path}.source is required for a custom module (a project-relative path)`);
-      else if (projectPath(scene.source, `${path}.source`, err)) warn(`${label} uses a custom module (${scene.source}); custom modules are bespoke-tier only and must stay a pure function of time`);
+      // source: one path (the Remotion component) or one per renderer (kit/core/custom-modules.mjs).
+      if (scene.source === undefined) err(`${path}.source is required for a custom module (a project-relative path, or {remotion, hyperframes} with a path per renderer)`);
+      else if (isObject(scene.source)) {
+        const keys = Object.keys(scene.source);
+        const unknown = keys.filter((key) => !CUSTOM_RENDERERS.includes(key));
+        if (unknown.length) err(`${path}.source has unknown key${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}; use ${CUSTOM_RENDERERS.join(" and ")}`);
+        else if (!keys.length) err(`${path}.source needs a path for ${CUSTOM_RENDERERS.join(" or ")}`);
+        else {
+          const paths = keys.map((key) => projectPath(scene.source[key], `${path}.source.${key}`, err));
+          if (typeof scene.source.hyperframes === "string" && !/\.html?$/i.test(scene.source.hyperframes)) err(`${path}.source.hyperframes must be an .html fragment (markup, <style> and a <script> that adds tweens to tl); got ${JSON.stringify(scene.source.hyperframes)}`);
+          else if (paths.every(Boolean)) warn(`${label} uses a custom module (${keys.map((key) => `${key}: ${scene.source[key]}`).join(", ")}); custom modules are bespoke-tier only and must stay a pure function of time`);
+        }
+      } else if (projectPath(scene.source, `${path}.source`, err)) warn(`${label} uses a custom module (${scene.source}); custom modules are bespoke-tier only and must stay a pure function of time`);
     } else if (typeof scene.module !== "string" || !MODULE_ID.test(scene.module)) err(`${path}.module must be a catalogue module id like "metric"`);
     else {
       if (known && !known.has(scene.module)) err(`${path}.module "${scene.module}" is not a known module`);
@@ -969,7 +998,8 @@ export function resolveUiAnchors(params, sceneStart, resolve) {
 // Character scenes (kit/core/catalog-characters.mjs): cue `at` and spoken
 // `says` ranges may be time anchors; they resolve to seconds from the scene
 // start, and a spoken range gains the timing of each narration word in it
-// (`words: [[start, end], ...]`), so a mouth opens on the voice's words.
+// and its text (`words: [[start, end, "word"], ...]`), so a mouth shapes
+// the voice's words.
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
 // Scenes whose cues and spoken ranges resolve here: the rig's cast modules and
 // the illustrated sprite-scene (kit/core/catalog-sprites.mjs).
@@ -993,6 +1023,12 @@ export function castRefId(id, ids = []) {
   return match && ids[Number(match[1]) - 1] ? ids[Number(match[1]) - 1] : id;
 }
 
+// A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one (the mouth shapes follow its sounds).
+function spokenWord(word, start) {
+  const text = typeof (word.text ?? word.word) === "string" ? (word.text ?? word.word).trim() : "";
+  return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : [])];
+}
+
 /** A character scene's params with anchors (and cast references) resolved. resolve(anchor, path) → seconds. */
 export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
   if (!isObject(scene) || !isObject(scene.params)) return scene?.params;
@@ -1009,7 +1045,7 @@ export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
       const id = out.id ?? out.character;
       const end = Number(scene.end);
       out.says = words.filter((word) => word.speaker === id && word.start >= start - EPS && word.start < end - EPS)
-        .map((word) => ({ from: Math.round((word.start - start) * 1000) / 1000, to: Math.round((word.end - start) * 1000) / 1000, words: [[Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000]] }));
+        .map((word) => ({ from: Math.round((word.start - start) * 1000) / 1000, to: Math.round((word.end - start) * 1000) / 1000, words: [spokenWord(word, start)] }));
     }
     if (Array.isArray(entry.says)) out.says = entry.says.map((range, i) => {
       if (!isObject(range)) return range;
@@ -1020,7 +1056,7 @@ export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
       const last = words.find((word) => Math.abs(Number(word.start) - (start + to)) < 1e-6);
       const end = last ? Math.round((Number(last.end) - start) * 1000) / 1000 : to;
       const spoken = words.filter((word) => word.start >= start + from - EPS && word.start <= start + to + EPS)
-        .map((word) => [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000]);
+        .map((word) => spokenWord(word, start));
       return { ...range, from, to: end, words: spoken };
     });
     return out;
@@ -1840,6 +1876,9 @@ export function aspectName(width, height) {
 
 // ---------------------------------------------------------------------------
 // Helpers
+
+// The renderers a custom module can have a form for (kit/core/custom-modules.mjs CUSTOM_RENDERERS).
+const CUSTOM_RENDERERS = ["remotion", "hyperframes"];
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

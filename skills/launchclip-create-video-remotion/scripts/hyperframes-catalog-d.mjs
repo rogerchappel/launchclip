@@ -94,14 +94,23 @@ export function emitSetProp(model) {
 export function emitMediaLayout(model) {
   const raw = mediaLayoutView(model);
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
-  const windows = raw.windows.map((node, i) => {
+  // HyperFrames draws a <video>'s frames without its box-shadow, so a video
+  // window's drop shadow and ring go on a twin under it, moved by the same ops.
+  const twins = new Set();
+  const windows = raw.windows.flatMap((node, i) => {
     const media = model.content.windows[i].media;
-    if (media.kind !== 'video') return node;
-    return {...node, attrs: {...node.attrs, class: 'clip', 'data-start': model.start, 'data-duration': model.duration, 'data-media-start': media.sourceStart, 'data-track-index': model.track}};
+    if (media.kind !== 'video') return [node];
+    const {boxShadow, ...style} = node.style;
+    const video = {...node, style, attrs: {...node.attrs, class: 'clip', 'data-start': model.start, 'data-duration': model.duration, 'data-media-start': media.sourceStart, 'data-track-index': model.track}};
+    if (!boxShadow) return [video];
+    twins.add(node.id);
+    const {objectFit, objectPosition, background, ...box} = style;
+    return [{tag: 'div', id: `${node.id}-shadow`, style: {...box, boxShadow}}, video];
   });
   const hoists = model.content.windows.some(win => win.media.kind === 'video');
   const frame = {tag: 'div', id: `${model.id}-frame`, style: {position: 'absolute', left: 0, top: 0, width: model.canvas.width, height: model.canvas.height}, children: [raw.base, ...windows, ...(hoists ? [] : [raw.overlay])]};
-  const {view, ops} = gsapOwnedTransforms({frame, overlay: raw.overlay}, mediaLayoutTimeline(model), model.start);
+  const timeline = mediaLayoutTimeline(model).flatMap(op => (twins.has(op.target) ? [op, {...op, target: `${op.target}-shadow`}] : [op]));
+  const {view, ops} = gsapOwnedTransforms({frame, overlay: raw.overlay}, timeline, model.start);
   const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
   if (!hoists) return {...out, html: renderNode(view.frame, timed(model.track, ` data-module="${model.module}"`))};
   return {...out, html: renderNode(view.frame, timed(model.track, ` data-module="${model.module}"`)),

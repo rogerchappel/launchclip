@@ -488,8 +488,38 @@ draft a pack from them and measure later renders against it:
 launchclip style create my-channel --from-reference ep1.mp4 ep2.mp4
 launchclip story plan --brief brief.md --style my-channel
 launchclip style check ./episode-3 --against my-channel
+launchclip style compare my-channel   # a sample in the style vs how the reference is drawn
 launchclip style upgrade ai-news   # v1 or v2 pack → v3
 ```
+
+`--from-reference` also measures how the references are drawn and keeps it in
+the pack at `reference_stats.drawing` (`launchclip.drawing-traits.v1`), each
+trait with its numbers and a confidence:
+
+| Trait | What is measured | Mapped to |
+| --- | --- | --- |
+| `outline` | share of boundaries that are inked, share of edges that are lines, line weight (px at 1080), pen tone and colour | `cast.drawing_style` (nearest measured drawing style); line weight and colour have no dial |
+| `fill` | flat, cel-shaded, gradient or textured; shading inside figures | `cast.drawing_style`, `vocabulary.illustration`, `background.kind` |
+| `palette` | saturation (OKLCH chroma), lightness range, theme | the palette roles (`brand.colors`) |
+| `shape` | roundness: curves against corners along edges | `layouts.panel.radius` |
+| `grain` | texture strength and coverage; paper (still) or grain (moving) in a video | `background.kind` (`paper`, `grain-gradient`); nothing textures the drawings |
+| `stepping` | frames each drawing is held (ones, twos, threes), drawings per second | none: LaunchClip animates every frame |
+
+The drawing style is the nearest of the characters kit's styles, each measured
+the same way (`src/drawing_style_profiles.js`; regenerate it with `node
+scripts/measure-drawing-styles.mjs` after adding or redrawing a style). A
+reference further than 0.3 from every style gets none. `reference-report.md`
+lists what was set, what was not matched and why, and what the measurements
+cannot tell (text reads as lines, footage reads as texture). Still images
+cannot show stepping or whether a texture moves.
+
+`launchclip style compare <name>` renders the style's 8 s sample (its preview
+reel with a character cameo when the style names a drawing style), measures it
+the same way and reports the distance to the reference per trait (`outline`,
+`line_weight`, `fill`, `saturation`, `contrast`, `shape`, `grain`, `stepping`,
+each 0–1, plus the palette distance), with the field to change for a trait
+over 0.25. `--video` or `--images` compares a render you already have;
+`--out` writes the report as JSON.
 
 Captions have 17 presets shared by both renderers (`word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,

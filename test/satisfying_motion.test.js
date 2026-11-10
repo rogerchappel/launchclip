@@ -160,3 +160,9 @@ test('tag-chips and serif-accent: the sentence builds word by word; key words ge
   assert.deepEqual(serifWords, ['reels']);
   assert.match(serif.css, /\.lc-cap-serif \{[^}]*Instrument Serif[^}]*font-style: italic/);
 });
+
+test('drop-grid: the schema takes times as a list of seconds, one per item', async () => {
+  const {validateModuleParams} = await import('@launchclip/core/module-schemas.mjs');
+  assert.deepEqual(validateModuleParams('drop-grid', {items: ['Mon', 'Tue', 'Wed'], times: [0.5, 0.9, 1.3]}), []);
+  assert.notDeepEqual(validateModuleParams('drop-grid', {count: 3, times: 0.5}), []);
+});

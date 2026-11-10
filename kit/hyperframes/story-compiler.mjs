@@ -52,6 +52,7 @@ import { EMITTERS as CATALOG_G_EMITTERS } from './catalog-g.mjs';
 import { EMITTERS as CATALOG_H_EMITTERS } from './catalog-h.mjs';
 import { EMITTERS as CHARACTER_EMITTERS } from './catalog-characters.mjs';
 import { EMITTERS as WORLD_EMITTERS } from './catalog-world.mjs';
+import { customModel, emitCustom, loadCustomModules } from './custom-module.mjs';
 import { cameraOverlaps } from '../core/catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
 import { LAYOUT_FRAME, LAYOUT_FRAME_UNDER, breakoutNotch, layoutFrameStyle, layoutPlan, layoutUnderFrameStyle, withLayoutCameras } from '../core/footage-layout.mjs';
@@ -251,13 +252,21 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (worldLight) cameraMotion.push(...worldLight.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
+  const customModules = await loadCustomModules(story, { sourceDir });
   const build = (entry, { idSuffix = '', track, clone = false, held = false } = {}) => {
     const scene = idSuffix ? { ...entry.scene, id: `${entry.scene.id}${idSuffix}` } : entry.scene;
     const end = clone && !held ? entry.scene.end : entry.renderEnd;
     let model;
     let reason = null;
-    if (scene.module === 'custom') reason = 'custom modules render only in Remotion (remotion/modules/); use a catalogue module for HyperFrames';
-    else {
+    if (scene.module === 'custom') {
+      // A custom scene with a HyperFrames form (custom-module.mjs) is drawn from its fragment.
+      const custom = customModules.get(entry.scene.id);
+      if (custom?.fragment) {
+        model = customModel(scene, story, { end, track });
+        return { model, out: emitCustom(model, custom.fragment, { scene, story }) };
+      }
+      reason = custom?.error ?? 'custom module has no hyperframes form';
+    } else {
       try { model = resolveModule(scene, story, { track, end }); }
       catch (error) { reason = error.message; }
     }

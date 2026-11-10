@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import {existsSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DEFAULT_ENTRY, runParity, runStoryParity} from '../scripts/parity.mjs';
+import {mkdtemp, rm} from 'node:fs/promises';
+import os from 'node:os';
+import {DEFAULT_ENTRY, bundleRemotion, runParity, runStoryParity} from '../scripts/parity.mjs';
 import {backgroundFixtures, runBackgroundParity} from '../scripts/parity-backgrounds.mjs';
 import {CI_UI_STORY} from '../scripts/parity-ci.mjs';
 
@@ -16,9 +18,20 @@ const enabled = process.env.LAUNCHCLIP_PARITY === '1';
 // The real kit entry once it exists; the test-only ModuleReview entry until then.
 const entry = process.env.LAUNCHCLIP_PARITY_ENTRY ?? (existsSync(DEFAULT_ENTRY) ? DEFAULT_ENTRY : path.join(ROOT, 'test', 'fixtures', 'parity-entry', 'entry.tsx'));
 
+// LAUNCHCLIP_PARITY_MODULES=0 leaves the per-module fixtures out: CI renders
+// those in shards (scripts/parity-shard.mjs) and the rest of this file apart.
+const modules = process.env.LAUNCHCLIP_PARITY_MODULES !== '0';
+// The Remotion entry is bundled once for every fixture.
+let bundleDir = null, bundled = null;
+const bundle = () => (bundled ??= (async () => {
+  bundleDir = await mkdtemp(path.join(os.tmpdir(), 'launchclip-parity-bundle-'));
+  return bundleRemotion(entry, path.join(bundleDir, 'bundle'), {publicDir: DIR});
+})());
+test.after(async () => { if (bundleDir) await rm(bundleDir, {recursive: true, force: true}); });
+
 for (const file of readdirSync(DIR).filter(name => name.endsWith('.json')).sort()) {
-  test(`parity: ${file}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render parity fixtures', timeout: 600_000}, async () => {
-    const report = await runParity(path.join(DIR, file), {entry, out: path.join(ROOT, 'qa', 'parity', file.replace(/\.json$/, ''))});
+  test(`parity: ${file}`, {skip: !enabled ? 'set LAUNCHCLIP_PARITY=1 to render parity fixtures' : modules ? false : 'LAUNCHCLIP_PARITY_MODULES=0', timeout: 900_000}, async () => {
+    const report = await runParity(path.join(DIR, file), {entry, bundle: await bundle(), out: path.join(ROOT, 'qa', 'parity', file.replace(/\.json$/, ''))});
     for (const sample of report.samples) assert.ok(sample.pass, `${file} ${sample.name} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim} (see ${report.outDir}/${sample.sideBySide})`);
   });
 }

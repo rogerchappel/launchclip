@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
+import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
 import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
@@ -62,6 +64,7 @@ import { applyEarshotSounds, findEarshot } from "./sfx/earshot.js";
 import { SCORE_FAMILIES, planScore } from "./sfx/score.js";
 import { applyScoreSounds } from "./sfx/score_sounds.js";
 import { structureGate } from "./skeletons.js";
+import { hookGate } from "./short_form_checks.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
@@ -106,6 +109,12 @@ export const FINISH_STATE_VERSION = "launchclip.finish-state.v1";
 export const FINISH_REPORT_VERSION = "launchclip.finish.v1";
 export const DEFAULT_VOICE_PROVIDER = "kokoro";
 export const LOUDNESS_TARGET = Object.freeze({ lufs: -14, tp: -1 });
+// A master within this many LU of the level target complies (the mastering script's own tolerance).
+export const LOUDNESS_TOLERANCE_LU = 1.5;
+// A master that misses the target is run again at most this many times.
+export const MASTER_REPAIRS = 2;
+// How far under the measured overshoot a repair sets the peak ceiling (the script's own retry margin).
+const MASTER_PEAK_MARGIN_DB = 0.2;
 
 export const PATHS = Object.freeze({
   state: ".launchclip/finish-state.json",
@@ -1058,6 +1067,11 @@ const STAGES = [
       const { castGate } = await import("./cast.js");
       ctx.castGate = castGate(resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
       if (ctx.castGate.status === "failed") throw new Error(`cast check failed:\n- ${ctx.castGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
+      // A story made with a show bible: its cast is the frozen bible's, and
+      // the bible is intact (src/bible.js bibleGate).
+      const { bibleGate } = await import("./bible.js");
+      ctx.bibleGate = await bibleGate(ctx.project, resolved, { direction: await readOptionalJson(path.join(ctx.project, "DIRECTION.json")) });
+      if (ctx.bibleGate.status === "failed") throw new Error(`bible check failed:\n- ${ctx.bibleGate.findings.slice(0, 8).map((finding) => finding.detail).join("\n- ")}`);
       const { checkLayoutProject, subjectInfos } = await import("./layout_check.js");
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       const resolveOptions = () => ({ words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
@@ -1079,7 +1093,7 @@ const STAGES = [
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
-      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, bible: ctx.bibleGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -1493,10 +1507,46 @@ async function masterDelivery(ctx) {
   }
   // Master to a temporary file so a failed pass never leaves a half-written deliverable.
   const temporary = path.join(path.dirname(ctx.out), `.${path.basename(ctx.out, path.extname(ctx.out))}.mastering${path.extname(ctx.out) || ".mp4"}`);
-  const result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
+  const target = { integrated_lufs: LOUDNESS_TARGET.lufs, true_peak_dbtp: LOUDNESS_TARGET.tp };
+  let result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
+  // An adapter that reports no measurement keeps its own verdict.
+  const meets = (pass) => (Number.isFinite(Number(pass.output?.integrated_lufs)) ? loudnessCompliant(pass.output) : Boolean(pass.compliant));
+  let compliant = meets(result);
+  // A miss is repaired, not shipped: the master runs again from the raw
+  // render, aimed past the target by what the last pass missed by.
+  const repairs = [];
+  let aim = { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp };
+  while (!compliant && repairs.length < MASTER_REPAIRS) {
+    const miss = { ...result.output };
+    aim = repairAim(aim, miss);
+    result = await ctx.adapters.master(ctx.raw, temporary, aim);
+    compliant = meets(result);
+    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant });
+  }
   await rename(temporary, ctx.out);
-  if (!result.compliant) ctx.warnings.push(`mastered loudness is ${result.output?.integrated_lufs} LUFS / ${result.output?.true_peak_dbtp} dBTP; target ${LOUDNESS_TARGET.lufs} LUFS, ≤ ${LOUDNESS_TARGET.tp} dBTP`);
-  return { mastered: true, output: rel(ctx.project, ctx.out), loudness: result };
+  const read = (output) => `${output?.integrated_lufs} LUFS / ${output?.true_peak_dbtp} dBTP`;
+  const goal = `target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`;
+  if (repairs.length && compliant) ctx.warnings.push(`loudness: the first master measured ${read(repairs[0].missed)} (${goal}); re-mastered ${repairs.length === 1 ? "once" : `${repairs.length} times`}, now ${read(result.output)}`);
+  if (!compliant) ctx.warnings.push(`loudness: the master is ${read(result.output)} after ${repairs.length} repair${repairs.length === 1 ? "" : "s"}; ${goal}. The loudness gate fails: check the mix (a very quiet or very peaky voice or music track) and run finish again`);
+  return { mastered: true, output: rel(ctx.project, ctx.out), loudness: { ...result, target: { ...result.target, ...target }, compliant, ...(repairs.length ? { repairs } : {}) } };
+}
+
+/** Whether a measured master meets LOUDNESS_TARGET: within LOUDNESS_TOLERANCE_LU of the level, at or under the peak ceiling. */
+export function loudnessCompliant(output) {
+  const level = Number(output?.integrated_lufs), peak = Number(output?.true_peak_dbtp);
+  return Number.isFinite(level) && Math.abs(level - LOUDNESS_TARGET.lufs) <= LOUDNESS_TOLERANCE_LU && !(peak > LOUDNESS_TARGET.tp);
+}
+
+/** The next master's aim after a miss: the level moved by what was missed, the ceiling lowered by the overshoot plus a margin. */
+export function repairAim(aim, missed) {
+  const level = Number(missed?.integrated_lufs), peak = Number(missed?.true_peak_dbtp);
+  const round1 = (value) => Math.round(value * 10) / 10;
+  const off = Number.isFinite(level) && Math.abs(level - LOUDNESS_TARGET.lufs) > LOUDNESS_TOLERANCE_LU ? LOUDNESS_TARGET.lufs - level : 0;
+  // loudnorm takes I from -70 to -5 and TP from -9 to 0.
+  return {
+    lufs: round1(Math.max(-24, Math.min(-9, aim.lufs + off))),
+    tp: round1(Math.max(-6, peak > LOUDNESS_TARGET.tp ? aim.tp - (peak - LOUDNESS_TARGET.tp) - MASTER_PEAK_MARGIN_DB : aim.tp))
+  };
 }
 
 /** The story's chapters for delivery ([] for a prototype, a candidate or a preview). */
@@ -1622,7 +1672,19 @@ export function chapterWindow(resolved, id) {
   return { id: chapter.id, title: chapter.title, start: chapter.start, end: chapter.end, frames: [Math.round(chapter.start * fps), Math.round(chapter.end * fps)] };
 }
 
+/**
+ * Custom modules: a custom scene with no form for this renderer, or whose
+ * HyperFrames fragment is missing or breaks the rules, stops the run before
+ * anything renders, naming the scene and the renderer, instead of shipping a
+ * "Missing module" card. → [{id, module: "custom", reason}]
+ */
+export async function customModuleErrors(resolved, { renderer, project }) {
+  return renderer === "hyperframes" ? customModuleProblems(resolved, { sourceDir: project }) : customModuleGaps(resolved, renderer);
+}
+
 async function runRender(ctx) {
+  const custom = await customModuleErrors(ctx.resolved, { renderer: ctx.rendererName, project: ctx.project });
+  if (custom.length) throw new Error(`${custom.length === 1 ? "a custom module" : `${custom.length} custom modules`} cannot render in ${ctx.rendererName}: ${custom.map((entry) => entry.reason).join("; ")}`);
   const adapter = ctx.adapters.renderer(ctx.rendererName);
   const tools = ctx.adapters.segmentTools;
   if (ctx.options.previewScene) {
@@ -1755,6 +1817,8 @@ async function runGates(ctx) {
   if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
   const castGate = ctx.castGate ?? ctx.state.stages?.validate?.details?.cast;
   if (castGate && castGate.status !== "skipped") gates.cast = castGate;
+  const bibleGate = ctx.bibleGate ?? ctx.state.stages?.validate?.details?.bible;
+  if (bibleGate && bibleGate.status !== "skipped") gates.bible = bibleGate;
   // Direction guardrails (docs/DIRECTION_GUARDRAILS.md), on the resolved story.
   try {
     gates.physics = physicsGate(ctx.resolved);
@@ -1785,7 +1849,7 @@ async function runGates(ctx) {
     ? { status: "skipped", reason: "master did not run" }
     : master.mastered === false
       ? { status: "skipped", reason: master.reason }
-      : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output };
+      : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output, ...(master.loudness?.repairs?.length ? { repairs: master.loudness.repairs.length } : {}), ...(master.loudness?.compliant ? {} : { errors: [`the master is ${master.loudness?.output?.integrated_lufs} LUFS / ${master.loudness?.output?.true_peak_dbtp} dBTP${master.loudness?.repairs?.length ? ` after ${master.loudness.repairs.length} re-master${master.loudness.repairs.length === 1 ? "" : "s"}` : ""}; target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`] }) };
 
   try {
     // The motion floors are the cadence profile's bands (a locked-off talking
@@ -1872,6 +1936,9 @@ async function runGates(ctx) {
     // Structure (docs/VIRAL_FORMATS_RFC.md): the short-video rules, and the key shot of a library skeleton.
     const structure = await structureGate({ project: ctx.project, story: ctx.resolved, words: scope.words, prototype, duration: Number(ctx.resolved?.resolved?.duration) || null, video: ctx.out, ...(ctx.adapters.openingPixels ? { pixels: ctx.adapters.openingPixels } : {}) });
     if (structure.status !== "skipped") gates.structure = structure;
+    // Hook (src/short_form_checks.js): how a short opens, from the storyboard and the measured narration.
+    const hook = hookGate({ story: ctx.resolved, words: scope.words, profile, duration: Number(ctx.resolved?.resolved?.duration) || null });
+    if (hook.status !== "skipped") gates.hook = hook;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }
@@ -1887,16 +1954,18 @@ async function runGates(ctx) {
 /**
  * Placeholders: no scene may ship as a labelled "Missing module" card. A
  * scene renders as one when its module is unknown to the kit, when its params
- * do not resolve, when it is a custom module under HyperFrames (custom
- * modules are Remotion-only), or when the HyperFrames compiler reported
- * falling back for it (an emitter failure).
+ * do not resolve, when it is a custom module with no form for the renderer
+ * (kit/core/custom-modules.mjs; the render stage refuses those first), or
+ * when the HyperFrames compiler reported falling back for it (an emitter
+ * failure).
  */
 export function placeholderScenes(resolved, { renderer, compileWarnings = [] } = {}) {
   const known = new Set(knownModules());
   const scenes = [];
   for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
     if (scene?.module === "custom") {
-      if (renderer === "hyperframes") scenes.push({ id: scene.id, module: scene.module, reason: "custom modules render only in Remotion" });
+      const [gap] = customModuleGaps({ scenes: [scene] }, renderer);
+      if (gap) scenes.push({ id: scene.id, module: scene.module, reason: gap.reason });
       continue;
     }
     if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, reason: `module "${scene?.module}" is not a known module` }); continue; }

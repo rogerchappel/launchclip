@@ -120,7 +120,8 @@ function cellNode(member, pose, expression, id, { face = false } = {}) {
   const joints = sceneJoints(pose, { facing: "right", geometry, seated: pose === "sit", params: member.params });
   const drawing = drawCharacter(member.style, member.params, member.colors, { id, joints, expression, expressions: [expression], facing: "right" });
   if (face) {
-    const headY = geometry.hipY - geometry.torso - geometry.neck + geometry.head.cy;
+    // bodyY: a seated body (a wheelchair user's in every pose) sits lower, and the close-up follows it.
+    const headY = geometry.hipY - geometry.torso - geometry.neck + geometry.head.cy + (joints.bodyY ?? 0);
     const scale = (CELL.face * 0.34) / geometry.head.ry;
     return characterView(drawing, { id, x: CELL.face / 2, y: CELL.face * 0.56 - headY * scale, scale });
   }

@@ -1,0 +1,10 @@
+{
+  "note": "Per-module parity fixtures that fail on a platform today, by platform (process.platform). scripts/parity-shard.mjs reports them without failing the run, and says so when one passes again. They are open bugs, not accepted differences: fix the renderer and remove the entry. Never add an entry to make a new failure pass. Measured on ubuntu-latest, 2026-11-09, at every sample time.",
+  "linux": {
+    "b-media-window-image.json": "enter-mid 0.944 (threshold 0.97): the window mid-entrance",
+    "b-media-window-video.json": "enter-mid 0.928 (threshold 0.93): the window mid-entrance",
+    "h-commit-card-glass-landscape.json": "hold and exit 0.967 (threshold 0.97): the glass card",
+    "h-diff-view-glass-landscape.json": "hold, events and exit 0.952 to 0.959 (threshold 0.97): the code rows sit about a pixel apart",
+    "h-social-post-native-portrait.json": "enter-end 0.928, exit-mid 0.904 (threshold 0.97): the card's glow mid-fade"
+  }
+}

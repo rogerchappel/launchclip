@@ -65,7 +65,7 @@ Useful flags:
 | --- | --- | --- |
 | `--assets <dir>` | none | Logos, screenshots, screen recordings, a talking-head clip, a voiceover, `brand.json`, a `style.json`, notes (`.md`/`.txt`). |
 | `--aspect` | the recording's shape, else `16:9` | `16:9`, `9:16` or `1:1`. |
-| `--duration` | from the prompt, else 30 | Target length in seconds. The video is sized to the real narration. |
+| `--duration` | from the prompt, else 30 | The longest the video should run, in seconds. It is a ceiling: a script that runs over is trimmed once, and one with less to say makes a shorter video. Nothing is padded to reach it. |
 | `--format` | from the prompt | The kind of script: `short-form`, `long-form`, `explainer`, `data-explainer`, `story` or `promo`. See [Script formats](prompts.md#script-formats-goal-and-awareness). |
 | `--goal` | `convert` for a promo, else `reach` | `reach` (views and watch time) or `convert` (an action: sign-ups, sales). |
 | `--awareness` | depends on the format | What the viewer already knows: `unaware`, `problem`, `solution`, `product` or `most`. It decides the opening line. |
@@ -75,9 +75,13 @@ Useful flags:
 | `--renderer` | `remotion` | Or `hyperframes`. |
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
+| `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. It needs no key: with no web search key, stories come from company feeds, Hacker News, GDELT and Wikipedia's current events, and a brief that asks for "this week" or "the latest" leaves out anything older. Recording source pages needs the optional `playwright` dependency and a Chromium; without them the video is still made, and `MAKE.json`, the warnings and the `research` gate say which claims have no page to show and how to fix it (`launchclip doctor` checks the recorder). See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. |
+| `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
+| `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on when the model takes images | Skip the automatic visual review. OpenAI, Anthropic and OpenRouter models take images; a local Ollama model does not. |
-| `--critic-repairs <n>` | `1` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
+| `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
+| `--allow-needs-repair` | off | Exit 0 even when the video is `needs-repair` (see [Exit codes](#exit-codes)). |
 | `--layout <name>` | `full` | A talking head's layout for the whole video: `full` (the planner picks footage layouts per section) or `stacked` (9:16: the presenter stays in the lower 45% under a graphics panel that changes every sentence, with close-ups on personal lines and one-word captions on the seam) or `overlay` (one continuous full-frame take, graphics in the free space around the presenter, some behind them, one-word captions at chest height). |
 | `--base-edited` | off | The talking-head recording or voiceover in `--assets` is already edited by your app: make skips its own edit (bad takes, pauses) and only levels the audio. |
 | `--base-transcript <file>` | local Whisper | Word-timed JSON for that recording or voiceover (Whisper's, or `{words: [{text, start, end}]}`): make uses these words and skips Whisper. |
@@ -98,25 +102,61 @@ Useful flags:
 
    Screenshots and screen recordings are shown in product windows in every
    type.
-3. **Plans and writes the script** (motion videos only). It first decides
-   what kind of video this is (format, goal and viewer awareness), then
-   writes to that format's beats, sized to your duration. It checks the
+3. **Chooses a concept, then writes the script** (motion videos only). It
+   first decides what kind of video this is (format, goal and viewer
+   awareness). Then it drafts five concepts, has a separate model call judge
+   them with only the brief and the concepts in front of it, writes the
+   winner as a story and has an editor tighten it. `CONCEPTS.json` keeps all
+   five with their scores and `STORY.json` the edited story. The script is
+   written on that story, to the format's beats, at most as long as your
+   duration. A long video's story is a spine of up to three minutes, and its
+   chapter outline is derived from it. `--concepts off` skips the concepts
+   and writes the script from the brief in one pass; so does a concept stage
+   that fails, with a warning. It checks the
    script (see [Check a script](#check-a-script)) and asks the model for one
    rewrite if a check fails, then records the voice. `SCRIPT.json` keeps the
    plan, the beats, three title options and the check report.
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
    for up to four repairs.
-5. **Finishes the video:** captions, music and sound effects, rendering,
+5. **Tries a second opening and a second transition** (short motion videos,
+   with a model that can see). The skill does not commit to its first idea
+   for the two moments that decide a video, and neither does `make`. It
+   designs a second opening in a separate call that never sees the first,
+   and tries a different kind of move at the riskiest transition in the
+   first 30 seconds. Each candidate is rendered as three stills at delivery
+   size (no encode, no audio, no paid render). The model scores every
+   candidate 0–10 on ten fields from the frames alone, and the higher mean
+   wins, ties going to the planner's. A winning alternative replaces the
+   planner's in `storyboard.json`. The frames and scores are kept in
+   `qa/rendered-candidates/` and `qa/rendered-candidates.json`, the receipt
+   `cinematic-check` reads, and `MAKE.json` `candidates` says who won and
+   why. Long videos and talking-head videos skip this step for now, and
+   `--candidates off` skips it everywhere.
+6. **Finishes the video:** captions, music and sound effects, rendering,
    mastering to −14 LUFS, and quality gates.
-6. **Reviews the frames** with the model when it can see images (OpenAI), and
+7. **Reviews the frames** with the model when it can see images (OpenAI,
+   Anthropic or an OpenRouter route; a local Ollama model needs `--critic`), and
    writes `qa/critic.json`. When the critic asks for a repair, its findings go
-   back to the planner (`--critic-repairs`, one round by default): the scenes
+   back to the planner (`--critic-repairs`, up to three rounds by default): the scenes
    it named are fixed and rendered again, or the plan is redone when the
    critic asks for a replan or the hook is the problem. The critic then looks
    again. A round that doesn't lower the blocking and major findings is
-   undone, so make never ships a worse cut than the one it had. Each round is
-   in `MAKE.json` `critic_repairs`.
+   undone and the rounds stop, so make never ships a worse cut than the one it
+   had. In a long video, a round re-directs the chunks that hold the scenes
+   the critic named. Each round is in `MAKE.json` `critic_repairs`. A video
+   the critic still won't ship after the rounds is `needs-repair`.
+
+### Exit codes
+
+| Code | `MAKE.json` `status` | Meaning |
+| --- | --- | --- |
+| `0` | `ready`, `ready-for-review` | The video is finished. `ready-for-review` means a review is still pending (for example, no critic ran). |
+| `1` | `failed` | A stage failed; `next_steps` says what to fix. |
+| `2` | `needs-repair` | The video rendered, but a gate still fails after the repair rounds. Don't present it as finished. |
+
+Pass `--allow-needs-repair` to get `0` instead of `2`, which is how `make`
+behaved before. The report and the video are written either way.
 
 ## Record your product with `--repo`
 
@@ -131,6 +171,49 @@ Before the script, make starts your app, seeds it, plans 2–4 flows with the sa
 - **It asks first.** In a terminal, make lists the seed and start commands and waits for a yes, then lists the recorded flows' contact sheets and asks before using them. With no terminal (CI, a script), pass `--approve-demo` to agree to both up front. Without it, make stops after recording, with the review as its next step. Run `launchclip demo approve <project>/assets/demo` and re-run make, which reuses the recording.
 - **Same guardrails as `demo record`:** local or staging URLs only (`--allow-host <host>` to opt in), seed data or `LAUNCHCLIP_DEMO_*` test accounts only, and secrets redacted.
 - `--demo-plan DEMO-PLAN.json` records your own plan instead of a planned one. `--start` and `--url` override detection, and `--redemo` records again.
+
+## A character story with `--animation`
+
+`--animation` asks for a story told by characters instead of a narrated
+motion video:
+
+```bash
+launchclip make "A 30-second short: Maya keeps shipping a fix that fails, and Sam shows her the check she skipped" --animation --aspect 9:16
+```
+
+**For now it stops after the script and the voice, and renders no video.**
+The stages that design the cast, plan the shots and render are being built
+([ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md)). `MAKE.json`
+ends with status `stopped`, `stopped.after` is `prepare`, and the later
+stages are `skipped`. For a finished video today, leave `--animation` off.
+
+What it does write:
+
+- **`SCRIPT.json`**, a screenplay (version 2): a title, a logline, the
+  premise, the characters, and beats whose lines are spoken (by a character
+  or the narrator) or silent (an action and its length). A narrator carries
+  the story and the characters speak the turns, with two characters unless
+  your prompt names more. The format is in
+  [KIT_CONTRACTS.md](../KIT_CONTRACTS.md) under "Screenplay".
+- **`NARRATION.json`**, the voiced dialogue: one take a line, joined, with a
+  `speaker` on every word and the silent lines as pauses.
+
+The script comes from three small model calls, the writers' room: the
+premise, the cast and three to five loglines; a second call that sees only
+your prompt and the loglines and scores them (the best score is the story);
+then the script. It is checked like `launchclip script check <project>`
+checks it. If it fails, one repair call fixes it. If it passes but the real
+voice runs it more than 15% short of the target, or it fails at the voice's
+real pace, that one repair call is spent then instead. Errors left after the
+repair are warnings in `MAKE.json`.
+
+Under Kokoro each character borrows a voice of its own until the cast is
+designed; with ElevenLabs the narrator's voice reads every line for now. Run
+the same command again and the script and the take are reused: no model
+call, no new take.
+
+`--animation` needs the motion lane, so it refuses an assets folder that
+holds a voiceover or a recording with speech, and a length over 180 seconds.
 
 ## Rules and notes from your app
 
@@ -182,6 +265,41 @@ line, preferring higher quality. A video scene that starts outside a usable
 window is moved to the best one. `orientation` overrides the probe, and
 `role: "b-roll"` keeps a clip with wind or chatter on it from becoming the
 base. Field by field: [Footage inventory notes](../KIT_CONTRACTS.md#footage-inventory-notes-srcinventory_notesjs).
+
+Notes can also say what a file is and where it belongs:
+
+```json
+{ "shows": "pricing page",
+  "description": "Three plans side by side, the middle one highlighted",
+  "text": ["Starter $9", "Pro $29", "Start free"],
+  "fits": ["the price or offer line", "the call to action"],
+  "feature": true }
+```
+
+You do not have to write these. make describes every image and clip you hand
+in that has no `shows` or `description` of its own:
+
+- With a model that can take images (an OpenAI or OpenRouter key), it sends
+  each new file once (a PAID call per file: the image, or four frames of a
+  video) and caches the answer by the file's content, so the same file is
+  never sent twice, in this project or any other.
+- Without one, it guesses from the file name and folder
+  (`screens/pricing.png` is a pricing page), the kind of file, where a clip
+  moves, and the words on screen when Tesseract is installed. Name your files
+  for what they show and the guess is usually right.
+
+`--asset-descriptions local` never calls a model; `off` skips the step. Your
+own notes always win, so an app that already knows what its files show writes
+them and pays for no description calls. `ASSETS.json` shows each file's
+description and where it came from.
+
+**Featured files.** If you hand in three files or fewer, name a file in the
+prompt, ask to "show the pricing page" when one file is the pricing page, or
+set `"feature": true` in its notes, make treats the file as one you want in
+the video. A storyboard that leaves it out is sent back for repair; if it is
+still missing when the repairs run out, the video ships and `MAKE.json` says
+so (`assets.unused_featured`, and a `featured:` warning). Use
+`media.must_use` when a missing file should fail the run instead.
 
 **Pronunciation and voice** for a synthesised narration go in the assets
 folder too (app settings, not assets: never inventoried or copied).
@@ -247,6 +365,15 @@ unless you pass `--format`, `--goal` or `--awareness`. `--brief` takes the promp
 written from (repeat it for several files). It exits 1 when there are errors
 and prints the fix for each one.
 
+A project folder works too: `launchclip script check <project>` checks its
+`SCRIPT.json`. When that file is a screenplay (version 2: speakers and silent
+lines, for a story told by characters), the check first validates the
+contract: every speaker is a listed character or the narrator, every listed
+character speaks or acts, the script fits `--duration` at `--wpm`, and the
+problem lands inside the profile's limit. Then the spoken lines pass the same
+checks as any narration. The format is in
+[KIT_CONTRACTS.md](../KIT_CONTRACTS.md) under "Screenplay".
+
 Errors are kept for rules that are arithmetic, legal or universal:
 
 - **The clock:** more words than the duration can hold at 2.75 words a second.
@@ -291,7 +418,10 @@ Every finished video also gets `publish.json`: the title and title options
 from the script, a description, hashtags, the CTA, the aspect, duration, video,
 cover and any `.srt`/`.vtt` captions, and whether the video fits YouTube
 Shorts (vertical, at most 180 s), TikTok, Reels, YouTube, LinkedIn (which
-recommends 15–30 s) and X. Write it again with a tracking link:
+recommends 15–30 s) and X. When research brought in photos or footage, it
+also lists `credits` (the licence and attribution of each item used, added
+to the description too) and `sources` (each source page shown on screen).
+Write it again with a tracking link:
 
 ```bash
 launchclip publish-manifest launchclip-ledgerly --link https://ledgerly.dev --utm spring-launch
@@ -354,7 +484,10 @@ close. It exits 1 when it finds one; `--json` gives the full report.
   script pass, maybe one repair and one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
   A critic repair round adds a storyboard repair, the re-render and a second
-  critic pass.
+  critic pass. The concept and story stage adds four calls before the script
+  (five concepts, the judge, the story and its edit); the figures here were
+  measured before it existed, so check `MAKE.json` for what a run costs now,
+  or pass `--concepts off`.
   In testing, a 45 s motion video cost about $0.12 and a 17 s footage-led
   video about $0.08.
 - Kokoro voice, the synth music bed, Whisper transcription, rendering and
