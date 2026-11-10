@@ -57,6 +57,11 @@ export const CAMERA_PARITY = Object.freeze([
   // streaks sit on the same pixels, but each renderer's Chrome rasterises
   // their blurred gradients over the dark veil a little differently.
   {id: 'cinematic-transitions-9x16', threshold: 0.94, times: [1.5, 3.1, 3.2, 3.3, 3.4, 5.7, 5.8, 5.9, 6.0, 7.0]},
+  // Footage to footage on the world camera (kit/core/transition-frames.mjs):
+  // at rest, through the push (the new still fading in inset, growing, nearly
+  // full), mid-zoom, through the pull, mid-iris and mid-fade. Every sample
+  // has a picture edge to edge: no background shows.
+  {id: 'footage-transitions-9x16', threshold: 0.95, times: [1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 6.1, 6.25, 9.1, 9.3, 9.5, 12.25, 15.25]},
   {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
     files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);

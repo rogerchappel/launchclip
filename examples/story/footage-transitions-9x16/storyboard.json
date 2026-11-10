@@ -1,0 +1,148 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Footage to footage transitions (golden, 9:16)",
+  "notes": "Golden story for transitions between two full-frame footage scenes on the world camera (kit/core/transitions.mjs, kit/core/transition-frames.mjs): six clip stills joined by a push (the new picture grows out of the old one), a zoom, a pull, an iris and a fade. The outgoing picture stays whole under the incoming one, so no frame drops to the background. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 18,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ff7a59",
+      "accent": "#7ce7ff",
+      "ink": "#0b1020",
+      "paper": "#f5f1ea"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "blur": false
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "clip",
+      "start": 0,
+      "end": 3,
+      "energy": 1,
+      "params": {
+        "media": "assets/shots/ridge.svg",
+        "focus": {
+          "x": 0.74,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s2",
+      "module": "clip",
+      "start": 3,
+      "end": 6,
+      "energy": 1,
+      "in": {
+        "type": "push",
+        "dur": 0.6
+      },
+      "params": {
+        "media": "assets/shots/boards.svg",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s3",
+      "module": "clip",
+      "start": 6,
+      "end": 9,
+      "energy": 1,
+      "in": {
+        "type": "zoom",
+        "dur": 0.5
+      },
+      "params": {
+        "media": "assets/shots/ridge.svg",
+        "focus": {
+          "x": 0.74,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s4",
+      "module": "clip",
+      "start": 9,
+      "end": 12,
+      "energy": 1,
+      "in": {
+        "type": "pull",
+        "dur": 0.6
+      },
+      "params": {
+        "media": "assets/shots/boards.svg",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s5",
+      "module": "clip",
+      "start": 12,
+      "end": 15,
+      "energy": 1,
+      "in": {
+        "type": "iris",
+        "dur": 0.5
+      },
+      "params": {
+        "media": "assets/shots/ridge.svg",
+        "focus": {
+          "x": 0.74,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s6",
+      "module": "clip",
+      "start": 15,
+      "end": 18,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.5
+      },
+      "params": {
+        "media": "assets/shots/boards.svg",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    }
+  ],
+  "ending": {
+    "loop": false
+  }
+}

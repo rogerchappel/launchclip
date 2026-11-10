@@ -8,7 +8,7 @@ import {getEase} from '@launchclip/core/motion.mjs';
 import {cameraPlan, rideOf, rideWorldPlates, screenPoint, worldPoint, sceneObjectLookup} from '@launchclip/core/camera-world.mjs';
 import {resolveModule} from '@launchclip/core/modules.mjs';
 import {resolveStory} from '@launchclip/core/story.mjs';
-import {FULL_FRAME_PLATES, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
+import {FULL_FRAME_PLATES, layerStateAt, sceneWindows, transitionTweens} from '@launchclip/core/transitions.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
 const W = 1080, H = 1920;
@@ -114,8 +114,9 @@ test('a camera push into a full-frame plate never shows an empty frame', () => {
   assert.ok(FULL_FRAME_PLATES.includes('photo-scene') && FULL_FRAME_PLATES.includes('world'));
   const d = 0.6;
   const opaque = transitionTweens({type: 'push', dur: d}, {width: W, height: H, mode: 'world', opaque: true});
-  // A fromTo holds its from value before it starts (GSAP immediateRender).
-  const at = (list, t) => { const tw = list.find(item => item.prop === 'opacity'); const p = Math.min(1, Math.max(0, (t - tw.start) / tw.duration)); return tw.from + (tw.to - tw.from) * getEase(tw.ease)(p); };
+  // The incoming fade holds its first value from the transition's first frame.
+  assert.deepEqual(opaque.in.map(tw => [tw.prop, tw.from, tw.to, tw.start]), [['opacity', 0, 0, 0], ['opacity', 0, 1, opaque.in[0].duration]]);
+  const at = (list, t) => layerStateAt(t, list.map(tw => ({...tw, at: tw.start})), getEase).opacity;
   for (let t = 0; t <= d + 1e-9; t += d / 30) {
     const incoming = at(opaque.in, t), outgoing = at(opaque.out, t);
     // The incoming plate is on top: what shows is in + out × (1 − in).
@@ -124,7 +125,9 @@ test('a camera push into a full-frame plate never shows an empty frame', () => {
   }
   // A card plate keeps the clean hand-over (the two cards' text never shows at once).
   const card = transitionTweens({type: 'push', dur: d}, {width: W, height: H, mode: 'world'});
-  assert.ok(card.in[0].start > opaque.in[0].start && card.out[0].start < opaque.out[0].start);
+  assert.ok(card.in.at(-1).start > opaque.in.at(-1).start && card.out[0].start < opaque.out[0].start);
+  // Out of a full-frame plate the outgoing picture stays whole under the incoming one.
+  assert.deepEqual(transitionTweens({type: 'push', dur: d}, {width: W, height: H, mode: 'world', opaque: true, opaqueFrom: true}).out, []);
   // sceneWindows marks a photo plate's push as opaque.
   const s = story({move: {type: 'push', dur: 0.6}});
   const p2 = sceneWindows(s).scenes.find(entry => entry.id === 'p2');

@@ -259,7 +259,8 @@ test("camera transitions keep their layers still and dollies crossfade; world mo
   const size = { width: W, height: H };
   assert.deepEqual(transitionTweens({ type: "pan", dur: 0.6, direction: "right" }, size), { type: "pan", duration: 0.6, camera: true, in: [], out: [] });
   const push = transitionTweens({ type: "push", dur: 1 }, { ...size, mode: "world" });
-  assert.deepEqual(push.in.map((tw) => [tw.prop, tw.from, tw.to]), [["opacity", 0, 1]]);
+  // The incoming fade starts late and holds 0 until then.
+  assert.deepEqual(push.in.map((tw) => [tw.prop, tw.from, tw.to]), [["opacity", 0, 0], ["opacity", 0, 1]]);
   assert.deepEqual(push.out.map((tw) => [tw.prop, tw.from, tw.to]), [["opacity", 1, 0]]);
   assert.deepEqual(transitionTweens({ type: "push", dur: 0.5, direction: "left" }, size).in.map((tw) => tw.prop), ["x"], "push stays a slide in cuts mode");
   assert.deepEqual(transitionTweens({ type: "fade", dur: 0.4 }, { ...size, mode: "world" }).out.map((tw) => [tw.prop, tw.from, tw.to]), [["opacity", 1, 0]]);
