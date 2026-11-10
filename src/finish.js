@@ -2046,7 +2046,8 @@ function buildReport(ctx, stages, { seconds, failed }) {
     quality: ctx.quality,
     style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
-    final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
+    // An animatic is not the final: it is named under `animatic`.
+    final: !failed && !ctx.preview && !ctx.animatic && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
