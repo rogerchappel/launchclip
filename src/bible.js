@@ -25,6 +25,7 @@ import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/c
 import { DIRECTION_FILE } from "@launchclip/core/direction.mjs";
 import { storyStyleRequest } from "@launchclip/core/style.mjs";
 import { applySavedCharacters, listCharacters, loadCharacter, projectCharacterRef, saveCharacter } from "./character_store.js";
+import { mapLimit } from "./concurrency.js";
 
 const STORY_FILE = "storyboard.json";
 const SCRIPT_FILE = "SCRIPT.json";
@@ -174,13 +175,14 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   // The sheets: drawn before the file is written, so a frozen bible always has them.
   const { referenceSheet } = await import("./cast_design.js");
   const brand = isObj(story?.brand) ? story.brand : null;
-  for (const entry of bibleCast(bible).characters) {
+  // options.sheetConcurrency: how many sheets are drawn side by side (default 1; make passes what the render budget has room for). Each is its own file.
+  await mapLimit(bibleCast(bible).characters, options.sheetConcurrency ?? 1, async (entry) => {
     try {
       await referenceSheet(entry, { style, colors: isObj(colors) ? colors : null, brand, out: path.join(project, sheetOf(entry.id)), render: hooks.render, chromium: text(options.chromium) ?? hooks.chromium });
     } catch (error) {
       throw new Error(`could not draw ${entry.id}'s reference sheet: ${error.message}\nThe sheets are drawn in Chromium: install one (npx playwright install chromium), or name one with --chromium <path> or LAUNCHCLIP_CHROMIUM. ${BIBLE_FILE} was not written.`);
     }
-  }
+  });
   await mkdir(project, { recursive: true });
   await writeJson(file, bible);
 

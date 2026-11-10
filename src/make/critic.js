@@ -143,10 +143,16 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   }
   const images = [];
   const lines = [];
-  for (const sheet of sheets) {
-    const file = path.join(project, "qa/critic-sheets", sheet.sheet);
-    if (!existsSync(file)) continue;
-    images.push({ url: await dataUrl(file), detail: "high" });
+  // The sheets and the reference sheets are read together; the images and the lines keep the sheets' order.
+  const sheetFiles = sheets.map((sheet) => path.join(project, "qa/critic-sheets", sheet.sheet));
+  const references = referenceSheets ? await bibleReferenceSheets(project) : [];
+  const [sheetUrls, referenceUrls] = await Promise.all([
+    Promise.all(sheetFiles.map((file) => (existsSync(file) ? dataUrl(file) : null))),
+    Promise.all(references.map((reference) => dataUrl(path.join(project, reference.file))))
+  ]);
+  for (const [index, sheet] of sheets.entries()) {
+    if (!sheetUrls[index]) continue;
+    images.push({ url: sheetUrls[index], detail: "high" });
     lines.push(`Sheet ${images.length} (${sheet.sheet}), tiles left to right, top to bottom:`);
     for (const sample of sheet.samples ?? []) {
       for (const entry of bySample.get(sample) ?? []) lines.push(`  ${entry.evidence_id}  (${entry.source}, ${entry.role ?? "sample"} at ${entry.at_seconds}s${entry.boundary_id ? `, boundary ${entry.boundary_id}` : ""})`);
@@ -156,10 +162,9 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   if (existsSync(overview)) { images.push({ url: await dataUrl(overview), detail: "low" }); lines.push(`Image ${images.length}: the overview strip (context only; cite the sheet tiles)`); }
   if (!images.length) return { status: "skipped", reason: "no critic sheet images were found" };
   // The show bible's reference sheets, beside the frames (§4.7).
-  const references = referenceSheets ? await bibleReferenceSheets(project) : [];
   if (references.length) lines.push("", "Reference sheets (how each character must look in every shot; not evidence, never cite them):");
-  for (const reference of references) {
-    images.push({ url: await dataUrl(path.join(project, reference.file)), detail: "high" });
+  for (const [index, reference] of references.entries()) {
+    images.push({ url: referenceUrls[index], detail: "high" });
     lines.push(`  Image ${images.length}: ${reference.name} (${reference.character})${reference.must_keep.length ? `; must keep: ${reference.must_keep.join(", ")}` : ""}`);
   }
   const shotLines = shotListLines(shots);

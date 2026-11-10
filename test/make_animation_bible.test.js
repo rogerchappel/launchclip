@@ -413,3 +413,39 @@ test("a video that is not a character story skips the bible stage", async () => 
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("the reference sheets are drawn side by side within the render budget, and the bible is the same one", async () => {
+  // A sheet stand-in that takes a moment and counts how many are open at once.
+  const drawn = async (concurrency) => {
+    const t = await room();
+    let open = 0;
+    let peak = 0;
+    const order = [];
+    t.adapters.renderSheet = async (html, png) => {
+      open += 1;
+      peak = Math.max(peak, open);
+      order.push(path.basename(png));
+      // The first sheet takes longest, so the second one ends first.
+      await new Promise((resolve) => setTimeout(resolve, order.length === 1 ? 30 : 5));
+      await writeFile(png, "png");
+      open -= 1;
+    };
+    try {
+      const report = await t.make({ concurrency });
+      assert.equal(report.stages.bible.status, "done", JSON.stringify(report.stages));
+      return { peak, order, report, bible: await t.read("BIBLE.json"), story: await t.read("storyboard.json") };
+    } finally {
+      await t.done();
+    }
+  };
+  const one = await drawn(1);
+  const two = await drawn(2);
+  assert.equal(one.peak, 1);
+  assert.equal(two.peak, 2);
+  assert.deepEqual(two.order, one.order, "the sheets start in cast order");
+  assert.deepEqual(two.bible, one.bible);
+  assert.deepEqual(two.story, one.story);
+  assert.deepEqual(two.report.bible, one.report.bible);
+  assert.deepEqual(two.report.model_calls.stages.bible.side_by_side, ["reference sheets: 2 at a time"]);
+  assert.equal(one.report.model_calls.stages.bible.side_by_side, undefined);
+});

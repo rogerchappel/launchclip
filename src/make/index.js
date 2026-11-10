@@ -931,7 +931,7 @@ async function stageBible(ctx) {
     const call = await designBible({ client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, prompt: ctx.text, notes, rules, script, saved: (await savedForDesign(project, hooks)).filter((entry) => !own.includes(entry.id)), styleFixed: packStyle });
     addCost(report, "bible", ctx.model, call);
     const drawing = packStyle ?? call.design.drawing_style ?? DEFAULT_DRAWING_STYLE;
-    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env) }, hooks);
+    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env), sheetConcurrency: sideBySide(ctx, 4, "reference sheets") }, hooks);
     for (const member of made.characters) if (member.rejected?.length) report.warnings.push(`bible: the rig has no ${member.rejected.map((set) => `${set.path}=${set.value}`).join(", ")} for ${member.id}; left out`);
     for (const warning of made.bible.warnings ?? []) report.warnings.push(`bible: ${warning}`);
     designed = made.characters.map(({ rejected: _rejected, ...member }) => member);
