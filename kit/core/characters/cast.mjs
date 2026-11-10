@@ -12,6 +12,7 @@
 
 import {normalizeRigParams, rigFingerprint} from './rig.mjs';
 import {castRoles, characterColors} from './palette.mjs';
+import {isKind, kindColors} from './kinds.mjs';
 
 const C = (id, name, summary, params, voice) => ({id, name, summary, params, voice});
 
@@ -116,6 +117,6 @@ export function starterCharacter(id) {
  */
 export function characterLook(params, {style = 'flat', brand = null, mapping = null} = {}) {
   const roles = castRoles(brand, mapping);
-  const colors = characterColors(params.colors, roles);
+  const colors = isKind(params) ? kindColors(params.colors, roles) : characterColors(params.colors, roles);
   return {params, style, colors, fingerprint: rigFingerprint(params, style), look: JSON.stringify({style, params, colors})};
 }

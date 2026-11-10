@@ -9,6 +9,10 @@
 // The drawing keeps the same part ids in every style (toon.mjs), so the op
 // list from acting.mjs animates any of them.
 //
+// A character of a kind other than a person (kinds.mjs: an animal, a mascot,
+// an object with a face) has one body in every style; the style chooses the
+// pen it is inked with (kind-draw.mjs).
+//
 // Imports only sibling kit/core files.
 
 import {rigGeometry} from './rig.mjs';
@@ -23,6 +27,8 @@ import {STYLE as lifelike} from './style-lifelike.mjs';
 import {STYLE as cinematic} from './style-cinematic.mjs';
 import {STYLE as avatar} from './style-avatar.mjs';
 import {STYLE as chibi, STYLE_PLAIN as chibiPlain} from './style-chibi.mjs';
+import {isKind, kindGeometry, kindHeight} from './kinds.mjs';
+import {drawKind} from './kind-draw.mjs';
 
 // In order from the default to the newest; flat stays first.
 const STYLES = {
@@ -52,11 +58,13 @@ function styleOf(name) {
 /** Draw a character in a drawing style. options.light: a light (light.mjs), normalised here. */
 export function drawCharacter(style, params, colors, options) {
   const light = options?.light ? {dir: options.light.dir, color: options.light.color, intensity: options.light.intensity} : null;
+  // A kind other than a person has its own body (kind-draw.mjs), inked with the style's pen.
+  if (isKind(params)) { styleOf(style); return drawKind(style ?? 'flat', params, colors, {...options, light: normalizeLight(light)}); }
   return styleOf(style).draw(params, colors, {...options, light: normalizeLight(light)});
 }
 
 /** Drawn height above the feet in rig units, with hair, for a style. */
-export const styleHeight = (style, params) => styleOf(style).height(params);
+export const styleHeight = (style, params) => (isKind(params) ? kindHeight(params) : styleOf(style).height(params));
 
 /** The rig geometry a style draws and poses with. */
-export const styleGeometry = (style, params) => styleOf(style).geometry(params);
+export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(params) : styleOf(style).geometry(params));
