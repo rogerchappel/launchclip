@@ -14,6 +14,11 @@
 //      count ("35" -> "thirty five");
 //   3. snaps each onset to the nearest RMS energy onset within 50 ms.
 //
+// Each word also keeps its phonemes and how long the model held each one
+// (`phonemes`, wordPhonemes below), so a character's mouth can take a shape
+// per sound (kit/core/characters/acting.mjs). A take timed by the fallback
+// below has none.
+//
 // If the model returns no durations (for example a non-timestamped export),
 // the provider falls back to splitting each synthesised sentence's voiced span
 // across its words in proportion to their phoneme counts, then snaps onsets
@@ -96,7 +101,7 @@ export function create(options = {}) {
           method = "proportional-phonemes";
           local = await proportionalChunkWords(tokens, chunk, sampleRate, tts.phonemize);
         }
-        for (const word of local ?? []) words.push({ text: word.text, start: cursor + word.start, end: cursor + word.end });
+        for (const word of local ?? []) words.push({ text: word.text, start: cursor + word.start, end: cursor + word.end, ...(word.phonemes ? { phonemes: word.phonemes } : {}) });
         chunks.push(chunk.samples);
         cursor += chunkSeconds;
       }
@@ -132,6 +137,7 @@ export function create(options = {}) {
  * Word spans from per-phoneme durations. `durations[i]` is the seconds the
  * model spent on `phonemes[i]` (code point index); `lead` is the silence
  * before the first phoneme. Returns null if the mapping is unusable.
+ * A word mapped to its own phonemes carries them (`phonemes`, wordPhonemes).
  */
 export async function wordsFromPhonemeDurations(tokens, phonemes, durations, lead = 0, { phonemize } = {}) {
   const groups = phonemeGroups(phonemes, durations, lead);
@@ -143,8 +149,25 @@ export async function wordsFromPhonemeDurations(tokens, phonemes, durations, lea
   else return proportionalAlign(tokens, expected, groups[0].start, groups.at(-1).end, { gap: 0.02 });
   return tokens.map((text, index) => {
     const [first, last] = assignment[index];
-    return { text, start: groups[first].start, end: groups[last].end };
+    const spoken = wordPhonemes(phonemes, durations, groups[first].from, groups[last].to);
+    return { text, start: groups[first].start, end: groups[last].end, ...(spoken ? { phonemes: spoken } : {}) };
   });
+}
+
+/**
+ * A word's phonemes with their lengths, as kept in NARRATION.json: one
+ * `symbol:milliseconds` per phoneme code point in order from the word's
+ * start, joined by spaces ("h:55 ə:40 l:60 ˈ:10 o:90 ʊ:70"). A space or
+ * pause inside the word (a number read as two words) is `_`. `from` and `to`
+ * are code point indexes into `phonemes`. Null when nothing has a length.
+ */
+export function wordPhonemes(phonemes, durations, from, to) {
+  const characters = Array.from(phonemes).slice(from, to);
+  const parts = characters.map((character, index) => {
+    const symbol = character === " " || /\s/.test(character) || PAUSE_CHARACTERS.has(character) || character === ":" || character === "_" ? "_" : character;
+    return `${symbol}:${Math.max(0, Math.round((Number(durations[from + index]) || 0) * 1000))}`;
+  });
+  return parts.some((part) => !part.startsWith("_:") && !part.endsWith(":0")) ? parts.join(" ") : null;
 }
 
 /** Split phonemes into words at spaces and pause punctuation, with time spans. */
@@ -158,9 +181,10 @@ export function phonemeGroups(phonemes, durations, lead = 0) {
     if (character === " " || PAUSE_CHARACTERS.has(character) || /\s/.test(character)) {
       if (current) { groups.push(current); current = null; }
     } else {
-      if (!current) current = { start: time, end: time, length: 0 };
+      if (!current) current = { start: time, end: time, length: 0, from: index, to: index };
       current.end = time + length;
       current.length += 1;
+      current.to = index + 1;
     }
     time += length;
   });

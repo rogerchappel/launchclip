@@ -35,7 +35,7 @@ import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from 
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
 import { holdGate, stateGate } from "./movement_guardrails.js";
-import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
@@ -1925,6 +1925,9 @@ async function runGates(ctx) {
     // Acting (docs/DIRECTION_GUARDRAILS.md §2): each line's key action is performed on screen.
     const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words, rects: ctx.layout?.rects ?? [] });
     if (acting.status !== "skipped") gates.acting = acting;
+    // Lip sync (docs/ANIMATION_PIPELINE_RFC.md §8.2): drawn mouths move on their own words and rest between them.
+    const lipSync = lipSyncGate({ resolved: ctx.resolved, words: scope.words });
+    if (lipSync.status !== "skipped") gates["lip-sync"] = lipSync;
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
     const hidden = await readOptionalJson(path.join(ctx.project, "CONSTRAINTS.json")).then((doc) => Array.isArray(doc?.ranges) && doc.ranges.some((range) => range?.picture === "hidden")).catch(() => false);
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype, hidden });
@@ -2391,12 +2394,12 @@ async function writeResolvedCopy(ctx) {
   if (ctx.resolved) await writeJson(path.join(ctx.project, PATHS.resolved), ctx.resolved);
 }
 
-async function loadWords(project, story) {
+export async function loadWords(project, story) {
   const file = typeof story?.audio?.words === "string" ? path.join(project, story.audio.words) : null;
   if (!file || !existsSync(file)) return null;
   const words = narrationWords(await readJson(file, story.audio.words));
-  // A dialogue's words keep their speaker (character scenes' says: "auto").
-  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}) }));
+  // A dialogue's words keep their speaker (character scenes' says: "auto") and their phonemes (mouth shapes).
+  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}), ...(typeof word.phonemes === "string" ? { phonemes: word.phonemes } : {}) }));
 }
 
 // Every assets/ path referenced anywhere in the resolved story.
