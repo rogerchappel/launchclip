@@ -90,3 +90,14 @@ test("pace: a quick shot takes time from a neighbour only down to the hold, and 
   assert.equal(kept.scenes.length, 3);
   assert.deepEqual(none, []);
 });
+
+test("a cast scene merged into another hands over the characters the host lacks, and a lone host leaves the centre", () => {
+  const cast = (id, start, end, members) => ({ id, module: "cast-scene", start, end, params: { cast: members } });
+  const storyboard = { format, scenes: [cast("ask", 0, 1.2, [{ id: "foal", position: "left", says: "auto" }, { id: "mare", position: "right" }]), cast("answer", 1.2, 3.2, [{ id: "mare", position: "centre", pose: "look" }])] };
+  const { storyboard: fitted, changed } = fitDurations(storyboard, [short(0, "ask", "cast-scene", 2, 1.2)]);
+  assert.deepEqual(changed, ["ask (1.2 s) merged into answer, which takes foal from it"]);
+  assert.deepEqual(fitted.scenes, [{ id: "answer", module: "cast-scene", start: 0, end: 3.2, params: { cast: [{ id: "mare", pose: "look" }, { id: "foal", says: "auto" }] } }]);
+  // A host that already has everyone is merged as before.
+  const same = { format, scenes: [cast("ask", 0, 1.2, [{ id: "mare" }]), cast("answer", 1.2, 3.2, [{ id: "mare" }])] };
+  assert.deepEqual(fitDurations(same, [short(0, "ask", "cast-scene", 2, 1.2)]).changed, ["ask (1.2 s) merged into answer"]);
+});
