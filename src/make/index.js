@@ -2,7 +2,7 @@
 // of assets to a finished video, headless.
 //
 //   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
-//     → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
+//     → bible (--animation: the cast and the world, designed and frozen) → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
 //     → subject (matte the planned ranges) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
@@ -31,9 +31,13 @@ import { VOICE_SETTINGS, narrationDocument, narrationRequest, normalizeVoiceSett
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
-import { validateMakeOptions } from "./options.js";
+import { approvals, validateMakeOptions } from "./options.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
+import { DEFAULT_DRAWING_STYLE, animationBriefLines, designBible, makeBible, savedForDesign } from "./show_bible.js";
+import { BIBLE_FILE, BIBLE_SHEETS, bibleCast, withBible } from "@launchclip/core/bible.mjs";
+import { readBible } from "../bible.js";
+import { askYesNo } from "../demo/autopilot.js";
 import { NARRATOR, SCREENPLAY_VERSION, screenplayNarration } from "@launchclip/core/screenplay.mjs";
 import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } from "../voice/dialogue.js";
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
@@ -119,13 +123,18 @@ export function slugify(prompt) {
  *   the assets under assets/collection-brand/),
  *   visualHistoryDir (the series' history index: plan against it, record into it),
  *   visualHistoryLimit (recent entries the planner sees, default 8),
- *   visualSimilarityLimit (the variety lint's limit, default 0.6)}
+ *   visualSimilarityLimit (the variety lint's limit, default 0.6),
+ *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen),
+ *   approve ("bible": the approval, so the run goes on)}
  * adapters: {env, client ({client, provider, model, vision}), clientOptions
  * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
  * (the model check asks a local Ollama for its model list through it), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
- *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
+ *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock,
+ *   ask (question → yes/no: the attended approvals, demo flows and the show bible),
+ *   renderSheet ((html, png): draws a bible reference sheet instead of Chromium),
+ *   home (the character library's root), synthesizeDialogue}
  * Returns the MAKE.json report. Throws only on bad options; stage failures
  * are reported with status "failed" and a next step.
  */
@@ -155,7 +164,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}), ...(options.stopAfter != null ? { stop_after: String(options.stopAfter).toLowerCase() } : {}), ...(approvals(options.approve).length ? { approve: approvals(options.approve) } : {}) },
     model: null,
     model_access: null,
     routing: null,
@@ -182,6 +191,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["demo", stageDemo],
     ["route", stageRoute],
     ["prepare", stagePrepare],
+    // The animation path's own stages sit here, between the voiced script and the shot list.
+    ["bible", stageBible],
     ["storyboard", stageStoryboard],
     ["candidates", stageCandidates],
     ["subject", stageSubject],
@@ -714,8 +725,8 @@ async function prepareMotion(ctx) {
 // checks run on it, and its spoken lines are voiced as a dialogue, one voice a
 // speaker. One repair pass in all: on the first check's errors, else on the
 // check against the measured take (its errors, or a take over 15% short).
-// The run stops here: the show bible, the shot list and the render are the
-// animation path's later stages.
+// The characters speak in the voices of the project's frozen show bible when
+// it has one, else in stand-in voices the bible stage then keeps.
 async function prepareAnimation(ctx) {
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
@@ -745,7 +756,7 @@ async function prepareAnimation(ctx) {
     }
   }
   if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for each line (cached per line in .launchclip/voice)");
-  let voiced = await voiceScreenplay(ctx, script);
+  let voiced = await voiceScreenplay(ctx, script, await bibleVoices(ctx, script));
   const brief = { prompt: ctx.text, notes, assets: assetLines };
   const measuredCheck = () => checkAnimationScript(script, { duration: target, wpm: voiced.wpm, problemLandsSeconds, brief });
   if (!reuse && repairs > 0) {
@@ -756,7 +767,7 @@ async function prepareAnimation(ctx) {
       const repaired = await repairScreenplay({ ...room, script, errors: problems, measured: { seconds: voiced.take.duration, wpm: voiced.wpm } });
       spend(repaired.calls);
       script = repaired.script;
-      voiced = await voiceScreenplay(ctx, script);
+      voiced = await voiceScreenplay(ctx, script, await bibleVoices(ctx, script));
     }
   }
   const { take, derived } = voiced;
@@ -781,28 +792,25 @@ async function prepareAnimation(ctx) {
   ctx.cast = voiced.cast;
   const stats = script.check.stats.screenplay ?? {};
   report.script = { source: "model", kind: "animation", file: MAKE_PATHS.script, version: SCREENPLAY_VERSION, title: script.title, logline: script.logline, characters: script.characters.map((character) => character.id), speakers: stats.speakers ?? [], lines: { spoken: stats.spoken_lines ?? 0, silent: stats.silent_lines ?? 0 }, words: script.word_count, target_words: script.word_target, plan: { format: "story", skeleton: skeleton?.id ?? null }, passes: script.passes?.length ?? 0, reused: reuse, take: script.take, voices: voiced.voices, voice_reused: voiced.reused, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
-  if (voiced.cast.length && voiced.cast.every((member) => !member.voice)) report.warnings.push(`every character speaks in the narrator's voice: the ${voiceProvider} voice has no stand-in voices, and the show bible that gives each character its own is not built yet`);
+  const characterVoices = Object.entries(voiced.voices).filter(([speaker]) => speaker !== NARRATOR).map(([, voice]) => voice);
+  if (characterVoices.length && characterVoices.every((voice) => voice === (voiced.voices[NARRATOR] ?? narrationRequest(narrationVoice(ctx)).voice ?? null))) report.warnings.push(`every character speaks in the narrator's voice: the ${voiceProvider} voice has no voices to hand out. Give each character its own with launchclip cast edit <id> --voice <voice id> --project ${project}, then launchclip bible freeze ${project} --characters ${script.characters.map((character) => character.id).join(",")} --force`);
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
-  ctx.stop = {
-    after: "prepare",
-    status: "stopped",
-    reason: "the animation path stops after the script and the voice; the show bible, the shot list and the render are its later stages (docs/ANIMATION_PIPELINE_RFC.md §9)",
-    next: [`Read ${path.join(project, MAKE_PATHS.script)} (launchclip script check ${project}) and ${path.join(project, MAKE_PATHS.words)}. No video is rendered: the animation path's later stages are not built yet. For a finished video today, run launchclip make without --animation.`]
-  };
   return unchanged ? { status: "cached", reason: "script and voice inputs unchanged" } : { status: "done" };
 }
 
 // A screenplay's spoken lines voiced as a dialogue (src/voice/dialogue.js): one
 // take a line, each in its speaker's voice, joined with the silent lines as
 // pauses, and NARRATION.json with a speaker on every word. The characters
-// borrow stand-in voices until the show bible gives each its own. The joined
-// take is reused while every line's request and every pause is unchanged.
-async function voiceScreenplay(ctx, script) {
+// borrow stand-in voices until the show bible is frozen (it keeps them, so the
+// take stands). The joined take is reused while every line's request and
+// every pause is unchanged.
+async function voiceScreenplay(ctx, script, pinned = null) {
   const { project, adapters, state, voiceProvider } = ctx;
   const derived = screenplayNarration(script);
   const voice = narrationVoice(ctx);
   const narratorVoice = narrationRequest(voice).voice;
-  const cast = standInCast(script.characters, { provider: voiceProvider, narratorVoice });
+  // pinned: the show bible's [{id, voice}], once there is one.
+  const cast = pinned ?? standInCast(script.characters, { provider: voiceProvider, narratorVoice });
   const narration = { ...voice, lines: derived.lines };
   // A script the repair pass could not fix may still name a speaker who is not a character: the narrator's voice reads those lines, so the take can be heard.
   const strangers = [...new Set(derived.lines.map((line) => line.speaker))].filter((speaker) => speaker !== NARRATOR && !cast.some((member) => member.id === speaker));
@@ -832,6 +840,133 @@ async function voiceScreenplay(ctx, script) {
   const wpm = Math.round(take.words.length / Math.max(0.1, spoken) * 60);
   const voices = Object.fromEntries(entries.map((entry) => [entry.speaker, entry.request.voice ?? null]));
   return { take, derived, narration, cast, voices, wpm, reused };
+}
+
+// The voices a frozen show bible gives the script's characters, [{id, voice}],
+// or null when the project has no frozen bible that covers them all.
+async function bibleVoices(ctx, script) {
+  const bible = await readJson(path.join(ctx.project, BIBLE_FILE));
+  if (bible?.frozen !== true) return null;
+  const entries = bibleCast(bible)?.characters ?? [];
+  const cast = (script.characters ?? []).map((character) => entries.find((entry) => entry?.id === character.id)).map((entry) => (entry?.voice ? { id: entry.id, voice: entry.voice } : null));
+  return cast.length && cast.every(Boolean) ? cast : null;
+}
+
+// The browser that draws the reference sheets: LAUNCHCLIP_CHROMIUM or a
+// Playwright or system Chrome (src/demo/record.js findChromium), else the
+// headless shell the Remotion renderer already has, so a machine that can
+// render a video can draw its sheets. null leaves it to Playwright's default.
+async function sheetBrowser(env) {
+  const { findChromium } = await import("../demo/record.js");
+  const found = await findChromium({ env }).catch(() => null);
+  if (found) return found;
+  const { remotionBrowserExecutable } = await import("../renderers/remotion_segments.js");
+  return remotionBrowserExecutable(env) ?? null;
+}
+
+// The show bible (docs/ANIMATION_PIPELINE_RFC.md §4.2, §6.1, §6.3; the
+// animation path only): who is in the story and where it happens, frozen
+// before any shot is planned. One structured call designs the cast and the
+// world (src/make/show_bible.js), each character goes through the door `cast
+// create` uses, and `bible freeze` draws the sheets and writes BIBLE.json.
+//
+// A frozen bible already in the project is used as it is: make's own while
+// the script's characters and the brief are unchanged, and one somebody else
+// froze (launchclip bible freeze) always, so a cast you designed or edited is
+// never redesigned. --replan plans new shots; it does not design a new cast.
+//
+// The stage is one of the two places to stop (§6.3): --stop-after bible ends
+// the run `awaiting-approval`, an attended run asks, and --approve bible (or a
+// yes) records the approval of this bible, so the run goes on.
+async function stageBible(ctx) {
+  if (!isAnimation(ctx.routing)) return { status: "skipped", reason: "not a character story (--animation)" };
+  const { project, report, state, options, adapters, script } = ctx;
+  const ids = script.characters.map((character) => character.id);
+  const strangers = [...new Set(script.beats.flatMap((beat) => beat.lines).map((line) => line.speaker).filter((speaker) => speaker && speaker !== NARRATOR && !ids.includes(speaker)))];
+  if (strangers.length) throw new Error(`the script gives lines to ${strangers.map((id) => `"${id}"`).join(", ")}, who ${strangers.length === 1 ? "is" : "are"} not in its characters (${ids.join(", ")}); a cast cannot be designed from it. Fix ${MAKE_PATHS.script} (launchclip script check ${project}) or run again for a new script`);
+  const style = await projectStyle(ctx);
+  // A chosen style pack's drawing style is the cast's; a seeded style's is not a choice anyone made.
+  const packStyle = !ctx.generatedStyle && style?.pack?.cast?.drawing_style ? style.pack.cast.drawing_style : null;
+  const narratorVoice = narrationRequest(narrationVoice(ctx)).voice ?? null;
+  // The voices the script was voiced in under Kokoro: the bible keeps them, so the take stands.
+  const voices = new Map(standInCast(script.characters, { provider: "kokoro", narratorVoice }).map((member) => [member.id, member.voice]));
+  const notes = await notesText(ctx);
+  const rules = rulesText(ctx);
+  const inputs = hashValue({ characters: script.characters, places: script.beats.map((beat) => beat.place ?? null), prompt: ctx.text, notes, model: ctx.model.spec, narrator: narratorVoice, style: packStyle, ...(rules ? { rules } : {}), v: 1 });
+  const hooks = { ...(adapters.renderSheet ? { render: adapters.renderSheet } : {}), ...(adapters.home ? { home: adapters.home } : {}) };
+  const found = await readBible(project, hooks);
+  const frozen = found?.bible?.frozen === true;
+  const mine = frozen && state.bible?.hash === found.bible.hash && !state.bible.adopted;
+  let source = null;
+  let designed = state.bible?.characters ?? null;
+  if (frozen && found.check.ok && (!mine || state.bible.inputs === inputs)) {
+    source = mine ? "reused" : "project";
+    if (!mine && state.bible?.hash !== found.bible.hash) {
+      ctx.say(`bible: using the frozen ${BIBLE_FILE} in the project (${found.bible.hash.slice(7, 19)}); make designs a cast only when there is none`);
+      state.bible = { hash: found.bible.hash, adopted: true };
+      designed = null;
+    }
+  } else if (frozen && !mine) {
+    throw new Error(`${BIBLE_FILE} is frozen but is not valid for this project:\n- ${found.check.errors.slice(0, 8).join("\n- ")}\nFreeze it again for the script's characters (launchclip bible freeze ${project} --characters ${ids.join(",")} --force), or delete it and make designs the cast`);
+  } else {
+    const own = state.bible?.designed ?? [];
+    ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (show bible: the cast of ${ids.length} and the world)`);
+    const call = await designBible({ client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, prompt: ctx.text, notes, rules, script, saved: (await savedForDesign(project, hooks)).filter((entry) => !own.includes(entry.id)), styleFixed: packStyle });
+    addCost(report, "bible", ctx.model, call);
+    const drawing = packStyle ?? call.design.drawing_style ?? DEFAULT_DRAWING_STYLE;
+    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env) }, hooks);
+    for (const member of made.characters) if (member.rejected?.length) report.warnings.push(`bible: the rig has no ${member.rejected.map((set) => `${set.path}=${set.value}`).join(", ")} for ${member.id}; left out`);
+    for (const warning of made.bible.warnings ?? []) report.warnings.push(`bible: ${warning}`);
+    designed = made.characters.map(({ rejected: _rejected, ...member }) => member);
+    state.bible = { hash: made.bible.hash, inputs, designed: made.characters.filter((member) => member.source !== "saved" && member.file).map((member) => member.id), characters: designed };
+    source = "designed";
+  }
+  const bible = source === "designed" ? (await readBible(project, hooks)).bible : found.bible;
+  ctx.bible = bible;
+  const cast = bibleCast(bible).characters;
+  // The take in the bible's voices: reused when the script was voiced in them (the usual case), else voiced again line by line from the cache.
+  const voiced = await voiceScreenplay(ctx, script, cast.map((entry) => ({ id: entry.id, voice: entry.voice ?? null })));
+  if (!voiced.reused) {
+    ctx.say("bible: the cast's voices differ from the take; the dialogue was voiced again in them");
+    script.take = { seconds: voiced.take.duration, words: voiced.take.words.length, wpm: voiced.wpm, lines: voiced.take.lines.length, cached: Boolean(voiced.take.cached) };
+    await writeJson(path.join(project, MAKE_PATHS.script), script);
+    ctx.words = voiced.take.words;
+    ctx.format = { ...ctx.routing.format, duration: round1(voiced.derived.lead_seconds + voiced.take.duration + voiced.derived.tail_seconds + 0.8) };
+    if (report.script) report.script = { ...report.script, take: script.take, voices: voiced.voices };
+  }
+  ctx.narration = voiced.narration;
+  ctx.cast = voiced.cast;
+  const sheets = path.join(project, BIBLE_SHEETS);
+  const approve = approvals(options.approve).includes("bible");
+  if (approve) state.bible.approved = bible.hash;
+  let approved = state.bible.approved === bible.hash;
+  report.bible = {
+    file: BIBLE_FILE, hash: bible.hash, source, style: bible.cast.style, sheets: BIBLE_SHEETS,
+    characters: bible.cast.characters.map((entry) => ({ id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, sheet: entry.sheet ?? null, ...(entry.character_file ? { character_file: entry.character_file } : {}), must_keep: entry.must_keep ?? [], ...(designed?.find((member) => member.id === entry.id) ? { designed: designed.find((member) => member.id === entry.id) } : {}) })),
+    ...(bible.world ? { world: bible.world } : {}),
+    ...(bible.rules?.length ? { rules: bible.rules } : {}),
+    approved
+  };
+  ctx.say(`bible: ${bible.cast.characters.map((entry) => `${entry.name ?? entry.id} (${(entry.must_keep ?? []).slice(0, 3).join(", ")})`).join("; ")}; drawn ${bible.cast.style}${bible.world?.kind ? `, in ${bible.world.kind}` : ""}; sheets in ${sheets}`);
+  if (!approved) {
+    let stop = String(options.stopAfter ?? "").toLowerCase() === "bible";
+    // An attended run asks (a terminal, or the app's own question); a headless run goes on unless --stop-after bible.
+    const attended = Boolean(adapters.ask) || Boolean(process.stdin.isTTY && process.stderr.isTTY);
+    if (!stop && attended) {
+      if (await (adapters.ask ?? askYesNo)(`bible: look at the reference sheets in ${sheets}. Plan the shots with this cast?`)) { state.bible.approved = bible.hash; approved = true; report.bible.approved = true; }
+      else stop = true;
+    }
+    if (stop) {
+      const again = `launchclip make ${JSON.stringify(ctx.text)} --animation --out ${project} --approve bible`;
+      ctx.stop = {
+        after: "bible",
+        status: "awaiting-approval",
+        reason: "stopped for approval of the show bible (--stop-after bible)",
+        next: [`Look at the reference sheets in ${sheets} (launchclip bible show ${project}). To go on with this cast, run the same command with --approve bible (${again}): the script, the voice and the bible are reused. To change a character first: launchclip cast edit <id> --instruction "…" --project ${project}, then launchclip bible freeze ${project} --characters ${ids.join(",")} --force.`]
+      };
+    }
+  }
+  return source === "designed" ? { status: "done" } : { status: "cached", reason: source === "project" ? `the frozen ${BIBLE_FILE} in the project` : "the script's characters and the brief are unchanged" };
 }
 
 // Long form (docs/LONG_FORM_MAKE_RFC.md, src/make/long_form.js): an outline,
@@ -1133,10 +1268,12 @@ async function stageStoryboard(ctx) {
   await settleCaptures(ctx);
   if (ctx.longForm) return stageLongFormStoryboard(ctx);
   const { project, report, state, options, routing } = ctx;
-  const style = await loadStyle(ctx);
+  const style = await projectStyle(ctx);
   const brand = await loadBrand(ctx);
   const manifest = assetManifestLines(ctx);
   const brief = await composeBrief(ctx, manifest);
+  // A character story (--animation): the frozen show bible is pinned in every plan, repair and replan, and the script's line ids are checked.
+  const pinned = ctx.bible ? { bible: ctx.bible, script: ctx.script } : null;
   // A critic repair round (criticRepairs): a replan carries the critic's
   // findings in its brief; a repair starts from the current storyboard.
   const round = ctx.criticRound ?? null;
@@ -1165,7 +1302,7 @@ async function stageStoryboard(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1232,6 +1369,7 @@ async function stageStoryboard(ctx) {
     ...(featured.length ? { featured } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
     ...(subjectTrack ? { subjectTrack } : {}),
+    ...(pinned ?? {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
   for (const shot of plan.shots ?? []) {
@@ -1255,14 +1393,14 @@ async function stageStoryboard(ctx) {
     if (plan.storyboard) await writeJson(path.join(project, "storyboard.rejected.json"), plan.storyboard);
     throw new Error(`the storyboard failed its checks after ${plan.attempts.length} attempt(s):\n- ${plan.errors.slice(0, 10).join("\n- ")}`);
   }
-  const story = finalizeStory(plan.storyboard, ctx);
+  const story = pinned ? withBible(finalizeStory(plan.storyboard, ctx), pinned.bible) : finalizeStory(plan.storyboard, ctx);
   // The look dials that would repeat the latest videos move to unused values
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
-  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
   // The same checks, for a storyboard with one scene changed (the candidates stage).
   ctx.storyCheck = (candidate) => {
-    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
     return [...(checked.ok ? [] : checked.errors), ...assetErrors(candidate, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(candidate, ctx.skeleton)];
   };
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
@@ -1806,8 +1944,11 @@ async function composeBrief(ctx, manifest) {
   const notes = await notesText(ctx);
   const lines = [`# ${ctx.script?.title ?? "Video brief"}`, "", ctx.text, ""];
   const lane = ctx.routing.lane;
-  if (lane === "motion") lines.push("## Narration (already synthesised; the word timings are given, so time scenes to its words)", "", ctx.narrationText, "");
-  if (lane === "motion" && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}${entry.role ? ` (${entry.role})` : ""}: ${entry.text}`), "");
+  // A character story's brief is its screenplay and its show bible (src/make/show_bible.js).
+  const animation = isAnimation(ctx.routing);
+  if (animation) lines.push(...animationBriefLines({ script: ctx.script, bible: ctx.bible }));
+  if (lane === "motion" && !animation) lines.push("## Narration (already synthesised; the word timings are given, so time scenes to its words)", "", ctx.narrationText, "");
+  if (lane === "motion" && !animation && ctx.script?.beats?.length) lines.push(`## Script beats (${ctx.script.plan?.format ?? "script"}, ${ctx.script.plan?.skeleton ?? "skeleton"}; follow them in order)`, "", ...ctx.script.beats.map((entry) => `- ${entry.beat}${entry.role ? ` (${entry.role})` : ""}: ${entry.text}`), "");
   // Titles best first (scored in the script pass): the cover echoes the first.
   if (lane === "motion" && ctx.script?.title_scores?.length) lines.push("## Titles (best first; the cover echoes the first)", "", ...ctx.script.title_options.map((title, index) => `${index + 1}. ${title}`), "");
   const angle = ctx.script?.angle;
@@ -1855,6 +1996,12 @@ async function notesText(ctx) {
   const notes = [];
   for (const entry of ctx.inventory?.entries ?? []) if (entry.kind === "notes" && entry.text) notes.push(entry.text.trim());
   return notes;
+}
+
+// The project's style, loaded once a run: the bible stage and the storyboard stage both read it.
+async function projectStyle(ctx) {
+  if (ctx.loadedStyle === undefined) ctx.loadedStyle = await loadStyle(ctx);
+  return ctx.loadedStyle;
 }
 
 async function loadStyle(ctx) {
@@ -1933,6 +2080,7 @@ function nextStepFor(stage, error, ctx) {
     case "model": return `Set OPENAI_API_KEY or ANTHROPIC_API_KEY (shell or .env), or pass --model provider:model. (${message})`;
     case "inventory": return `Check the --assets folder and that ffmpeg/ffprobe are installed (launchclip doctor). (${message})`;
     case "prepare": return `Fix the inputs (${message}) and run the same launchclip make command again; finished steps are reused.`;
+    case "bible": return `The show bible was not frozen (${message}). Fix that and run the same launchclip make command again (the script and the voice are reused), or design the cast yourself: launchclip cast create, then launchclip bible freeze ${project}.`;
     case "storyboard": return `The model's storyboard did not pass the checks; see ${path.join(project, MAKE_PATHS.plan)} and storyboard.rejected.json. Run launchclip make again with --replan (or a stronger --model).`;
     case "subject": return `Check the presenter cut-out (launchclip doctor; launchclip subject probe ${path.join(project, ctx.subject?.src ?? MAKE_PATHS.base)}), or run launchclip make again with --no-subject. (${message})`;
     case "finish": return `See ${path.join(project, "finish.json")}; fix the failing stage and run launchclip finish ${project} (or launchclip make again; finished stages are reused).`;

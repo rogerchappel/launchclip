@@ -574,6 +574,12 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
+    // make --approve bible names what is approved; elsewhere --approve is a switch.
+    if (name === "approve" && /^(bible|animatic)(,(bible|animatic))*$/.test(args[index + 1] ?? "")) {
+      flags[name] = args[index + 1];
+      index += 1;
+      continue;
+    }
     if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin") {
       flags[name] = true;
       continue;

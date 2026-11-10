@@ -33,6 +33,17 @@
   has an unknown speaker, a character who never speaks or acts, a script
   over its length or a problem that lands late; `finish` does not call it
   yet. See `docs/ANIMATION_MEASUREMENT.md`.
+- `launchclip make --animation` now makes the whole video. After the script
+  and the voice it designs the cast and the world in one model call, from
+  the rig's own options (the set paths `cast create` takes), freezes
+  `BIBLE.json` with a reference sheet per character, and plans the shots
+  with that cast pinned: a repair or `--replan` cannot change who is in the
+  story. The cast is drawn `chibi` unless a style pack or the prompt names
+  another style. `--stop-after bible` ends the run `awaiting-approval` so
+  you can look at the sheets, and `--approve bible` goes on from there. In
+  a terminal make asks instead. A frozen `BIBLE.json` already in the
+  project is used as it is. The run used to stop after the voice with
+  status `stopped`.
 - Shot fields for character stories. A direction-map line may name the
   script line it plays (`"line": "l3"`, checked against `SCRIPT.json`). In a
   story told in beats, a character who speaks must be in a scene on screen

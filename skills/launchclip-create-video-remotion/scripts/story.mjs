@@ -999,7 +999,8 @@ export function resolveUiAnchors(params, sceneStart, resolve) {
 // `says` ranges may be time anchors; they resolve to seconds from the scene
 // start, and a spoken range gains the timing of each narration word in it
 // and its text (`words: [[start, end, "word"], ...]`), so a mouth shapes
-// the voice's words.
+// the voice's words; a word whose voice reported its phonemes carries them
+// as a fourth entry (`[start, end, "word", "h:55 ə:40 …"]`).
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
 // Scenes whose cues and spoken ranges resolve here: the rig's cast modules and
 // the illustrated sprite-scene (kit/core/catalog-sprites.mjs).
@@ -1023,10 +1024,11 @@ export function castRefId(id, ids = []) {
   return match && ids[Number(match[1]) - 1] ? ids[Number(match[1]) - 1] : id;
 }
 
-// A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one (the mouth shapes follow its sounds).
+// A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one and then its phonemes (the mouth shapes follow its sounds).
 function spokenWord(word, start) {
   const text = typeof (word.text ?? word.word) === "string" ? (word.text ?? word.word).trim() : "";
-  return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : [])];
+  const phonemes = text && typeof word.phonemes === "string" ? word.phonemes.trim() : "";
+  return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : []), ...(phonemes ? [phonemes] : [])];
 }
 
 /** A character scene's params with anchors (and cast references) resolved. resolve(anchor, path) → seconds. */
