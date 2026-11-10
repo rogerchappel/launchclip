@@ -123,13 +123,18 @@ export function slugify(prompt) {
  *   the assets under assets/collection-brand/),
  *   visualHistoryDir (the series' history index: plan against it, record into it),
  *   visualHistoryLimit (recent entries the planner sees, default 8),
- *   visualSimilarityLimit (the variety lint's limit, default 0.6)}
+ *   visualSimilarityLimit (the variety lint's limit, default 0.6),
+ *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen),
+ *   approve ("bible": the approval, so the run goes on)}
  * adapters: {env, client ({client, provider, model, vision}), clientOptions
  * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
  * (the model check asks a local Ollama for its model list through it), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
- *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
+ *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock,
+ *   ask (question → yes/no: the attended approvals, demo flows and the show bible),
+ *   renderSheet ((html, png): draws a bible reference sheet instead of Chromium),
+ *   home (the character library's root), synthesizeDialogue}
  * Returns the MAKE.json report. Throws only on bad options; stage failures
  * are reported with status "failed" and a next step.
  */
@@ -847,6 +852,18 @@ async function bibleVoices(ctx, script) {
   return cast.length && cast.every(Boolean) ? cast : null;
 }
 
+// The browser that draws the reference sheets: LAUNCHCLIP_CHROMIUM or a
+// Playwright or system Chrome (src/demo/record.js findChromium), else the
+// headless shell the Remotion renderer already has, so a machine that can
+// render a video can draw its sheets. null leaves it to Playwright's default.
+async function sheetBrowser(env) {
+  const { findChromium } = await import("../demo/record.js");
+  const found = await findChromium({ env }).catch(() => null);
+  if (found) return found;
+  const { remotionBrowserExecutable } = await import("../renderers/remotion_segments.js");
+  return remotionBrowserExecutable(env) ?? null;
+}
+
 // The show bible (docs/ANIMATION_PIPELINE_RFC.md §4.2, §6.1, §6.3; the
 // animation path only): who is in the story and where it happens, frozen
 // before any shot is planned. One structured call designs the cast and the
@@ -897,7 +914,7 @@ async function stageBible(ctx) {
     const call = await designBible({ client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, prompt: ctx.text, notes, rules, script, saved: (await savedForDesign(project, hooks)).filter((entry) => !own.includes(entry.id)), styleFixed: packStyle });
     addCost(report, "bible", ctx.model, call);
     const drawing = packStyle ?? call.design.drawing_style ?? DEFAULT_DRAWING_STYLE;
-    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: ctx.env.LAUNCHCLIP_CHROMIUM ?? null }, hooks);
+    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env) }, hooks);
     for (const member of made.characters) if (member.rejected?.length) report.warnings.push(`bible: the rig has no ${member.rejected.map((set) => `${set.path}=${set.value}`).join(", ")} for ${member.id}; left out`);
     for (const warning of made.bible.warnings ?? []) report.warnings.push(`bible: ${warning}`);
     designed = made.characters.map(({ rejected: _rejected, ...member }) => member);
