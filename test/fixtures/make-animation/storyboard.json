@@ -26,14 +26,14 @@
           { "at": "word:Oh.", "pose": "slump", "expression": "surprised" }
         ] }
       ] } },
-    { "id": "saved", "module": "cast-scene", "start": "word:found-0.6", "end": "word:Run-0.2",
+    { "id": "saved", "module": "cast-scene", "start": "word:found-0.6", "end": "word:Run#2-0.2",
       "params": { "set": "standing", "cast": [
         { "id": "maya", "pose": "stand", "expression": "happy", "cues": [
           { "at": "word:found", "pose": "cheer", "expression": "delighted" }
         ] },
         { "id": "sam", "pose": "arms-crossed", "expression": "happy" }
       ] } },
-    { "id": "close", "module": "character-cameo", "start": "word:Run-0.2", "end": "end",
+    { "id": "close", "module": "character-cameo", "start": "word:Run#2-0.2", "end": 19.3,
       "params": { "character": "sam", "pose": "stand", "expression": "happy", "side": "left", "says": "auto",
         "card": { "kicker": "Before you ship", "title": "Run the check first", "body": "Then ship." },
         "cues": [{ "at": "word:Then", "pose": "point", "expression": "delighted" }] } }
