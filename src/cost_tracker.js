@@ -150,6 +150,16 @@ export function createCostTracker(options = {}) {
       settle(token);
       return response;
     }
+    // A streamed answer (server-sent events) is handed back at once and counted when its stream ends; its share of the limit is held until then.
+    if (/text\/event-stream/i.test(response.headers?.get?.("content-type") ?? "")) {
+      account(request, response, token).catch(() => {});
+      return response;
+    }
+    await account(request, response, token);
+    return response;
+  }
+
+  async function account(request, response, token) {
     let ended = [];
     try {
       const item = await lineItemFor(request, response, (payload) => { ended = watchBackground(token, payload); });
@@ -172,7 +182,6 @@ export function createCostTracker(options = {}) {
     // The call's cost is counted: its share is free, unless it is a background response still running.
     if (token && !inFlight.get(token)?.id) settle(token);
     for (const held of ended) settle(held);
-    return response;
   }
 
   return {
@@ -531,6 +540,18 @@ function summarize(items) {
 async function responseJson(response) {
   const clone = response?.clone?.();
   if (!clone) return null;
+  // A streamed Responses call: the finished response rides in its last event.
+  if (/text\/event-stream/i.test(response.headers?.get?.("content-type") ?? "")) {
+    try {
+      const text = await clone.text();
+      for (const line of text.split(/\r?\n/).reverse()) {
+        if (!line.startsWith("data:") || !line.includes("response.completed")) continue;
+        const event = JSON.parse(line.slice(5));
+        if (event?.type === "response.completed") return event.response ?? null;
+      }
+    } catch { /* an unreadable stream is an uncounted call */ }
+    return null;
+  }
   try { return await clone.json(); } catch { return null; }
 }
 

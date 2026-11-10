@@ -209,3 +209,40 @@ function jsonResponse(value, status = 200, headers = {}) {
     text: async () => JSON.stringify(value)
   };
 }
+
+test("a call with onDelta is streamed: each piece of text arrives as it is written, and the result is the finished response", async () => {
+  const requests = [];
+  const events = [
+    { type: "response.created", response: { id: "resp_s", status: "in_progress" } },
+    { type: "response.output_text.delta", delta: "{\"answer\":\"str" },
+    { type: "response.output_text.delta", delta: "eamed\"}" },
+    { type: "response.completed", response: { id: "resp_s", status: "completed", model: "gpt-5.6", output_text: "{\"answer\":\"streamed\"}", usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 } } }
+  ];
+  // The stream arrives in pieces that split an event in two.
+  const text = events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("");
+  const pieces = [text.slice(0, 70), text.slice(70, 200), text.slice(200)];
+  const client = new OpenAIResponsesClient({
+    apiKey: "test-key",
+    fetch: async (url, init) => {
+      requests.push({ url, body: JSON.parse(init.body), accept: init.headers.Accept });
+      return { ok: true, status: 200, body: (async function* () { for (const piece of pieces) yield new TextEncoder().encode(piece); })() };
+    }
+  });
+  const deltas = [];
+  const result = await client.runStructured({ model: "gpt-5.6", reasoningEffort: "low", input: "hi", schema: SCHEMA, schemaName: "answer", onDelta: (piece) => deltas.push(piece) });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].body.stream, true);
+  assert.equal(requests[0].body.background, false);
+  assert.equal(requests[0].accept, "text/event-stream");
+  assert.deepEqual(deltas, ["{\"answer\":\"str", "eamed\"}"]);
+  assert.deepEqual(result.value, { answer: "streamed" });
+  assert.equal(result.usage.output_tokens, 4);
+});
+
+test("a stream that ends without a finished response is an error, and a failed one says why", async () => {
+  const stream = (events) => ({ ok: true, status: 200, body: (async function* () { yield events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""); })() });
+  const cut = new OpenAIResponsesClient({ apiKey: "k", fetch: async () => stream([{ type: "response.output_text.delta", delta: "{" }]) });
+  await assert.rejects(cut.runStructured({ input: "hi", schema: SCHEMA, schemaName: "answer", onDelta() {} }), /ended before the response completed/);
+  const failed = new OpenAIResponsesClient({ apiKey: "k", fetch: async () => stream([{ type: "response.failed", response: { id: "r", status: "failed", error: { message: "server error" } } }]) });
+  await assert.rejects(failed.runStructured({ input: "hi", schema: SCHEMA, schemaName: "answer", onDelta() {} }), /server error|failed/);
+});

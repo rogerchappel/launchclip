@@ -416,3 +416,28 @@ function jsonResponse(value, headers = {}) {
 function binaryResponse(headers = {}) {
   return new Response(Buffer.from("audio"), { status: 200, headers });
 }
+
+test("a streamed OpenAI answer is handed back at once and counted when its stream ends", async () => {
+  const { createCostTracker } = await import("../src/cost_tracker.js");
+  const completed = { type: "response.completed", response: { id: "resp_stream", status: "completed", model: "gpt-5.6-luna", usage: { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 } } };
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  const body = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "{" })}\n\n`));
+      await held;
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(completed)}\n\n`));
+      controller.close();
+    }
+  });
+  const tracker = createCostTracker({ fetch: async () => new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }) });
+  const response = await tracker.fetch("https://api.openai.com/v1/responses", { method: "POST", body: JSON.stringify({ model: "gpt-5.6-luna", stream: true }) });
+  // The fetch resolved while the stream is still open: nothing is counted yet.
+  assert.equal(tracker.lineItems().length, 0);
+  release();
+  await response.text();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const items = tracker.lineItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].request_id, "resp_stream");
+});

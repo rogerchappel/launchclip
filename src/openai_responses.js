@@ -41,10 +41,32 @@ export class OpenAIResponsesClient {
   }
 
   async runStructured(options) {
+    // onDelta(text): the answer is streamed, and each piece of output text is handed over as it arrives.
+    if (typeof options.onDelta === "function") return this.streamStructured(options);
     const submitted = await this.submitStructured(options);
     await options.onSubmitted?.(submitted);
     const response = submitted.status === "completed" ? submitted : await this.wait(submitted, options);
     return structuredResult(response, options);
+  }
+
+  /**
+   * One streamed call (server-sent events, no background job and no polling):
+   * options.onDelta(text) gets each piece of the output text as it arrives,
+   * and the result is the same as runStructured's. A request refused before
+   * the stream opens is retried as any other; a stream that breaks is not.
+   */
+  async streamStructured(options) {
+    const body = { ...buildStructuredRequest(options), background: false, stream: true };
+    const response = await this.request("/responses", { method: "POST", body: JSON.stringify(body), headers: { Accept: "text/event-stream" } }, { raw: true });
+    let completed = null;
+    for await (const event of serverSentEvents(response.body)) {
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string") options.onDelta(event.delta);
+      else if (event.type === "response.completed") completed = event.response;
+      else if (event.type === "response.failed" || event.type === "response.incomplete") throw responseFailure(event.response ?? { status: "failed" });
+      else if (event.type === "error") throw new Error(`OpenAI stream failed: ${sanitize(String(event.message ?? event.error?.message ?? "error"))}`);
+    }
+    if (!completed) throw new Error("OpenAI stream ended before the response completed");
+    return structuredResult(completed, options);
   }
 
   async resumeStructured(responseId, options = {}) {
@@ -52,7 +74,7 @@ export class OpenAIResponsesClient {
     return structuredResult(response, options);
   }
 
-  async request(endpoint, init) {
+  async request(endpoint, init, { raw = false } = {}) {
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       let response;
       try {
@@ -70,6 +92,8 @@ export class OpenAIResponsesClient {
         await this.sleep(retryDelayMs(null, attempt));
         continue;
       }
+      // raw: an accepted request's response is the caller's to read (a stream).
+      if (raw && response.ok) return response;
       const payload = await parseResponseBody(response);
       if (response.ok) return payload;
       const retryable = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;
@@ -95,6 +119,30 @@ export function pollDelayMs(waitedMs) {
   if (waitedMs < 2_000) return 1_000;
   if (waitedMs < 120_000) return 2_000;
   return 5_000;
+}
+
+/** The JSON events of a server-sent event stream (a web ReadableStream or any async iterable of bytes or text). */
+export async function* serverSentEvents(stream) {
+  if (!stream) throw new Error("OpenAI stream had no body");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const events = function* (final) {
+    for (;;) {
+      const at = buffer.search(/\r?\n\r?\n/);
+      if (at < 0 && !(final && buffer.trim())) return;
+      const block = at < 0 ? buffer : buffer.slice(0, at);
+      buffer = at < 0 ? "" : buffer.slice(at).replace(/^\r?\n\r?\n/, "");
+      const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+      if (!data || data === "[DONE]") continue;
+      try { yield JSON.parse(data); } catch { /* a keep-alive or a partial line: not an event */ }
+    }
+  };
+  for await (const chunk of stream) {
+    buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+    yield* events(false);
+  }
+  buffer += decoder.decode();
+  yield* events(true);
 }
 
 function structuredResult(response, options) {
