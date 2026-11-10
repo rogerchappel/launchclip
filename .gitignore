@@ -44,6 +44,7 @@ Thumbs.db
 
 # Renderer parity reports (scripts/parity.mjs)
 qa/parity/
+qa/looks/
 qa/parity-ci/
 qa/parity-captions/
 qa/density/

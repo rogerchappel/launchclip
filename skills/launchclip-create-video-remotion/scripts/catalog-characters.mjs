@@ -38,6 +38,7 @@ import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
 import {OVERSCAN} from './worlds/index.mjs';
 import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
+import {lookCastOptions} from './looks/index.mjs';
 import {PORTRAIT_MEDIUM_SETS, SHOTS, defaultShot, fitShot, frameCast, frameGuides, framingMarks, punchIn} from './characters/framing.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
@@ -220,11 +221,14 @@ function inWorld(actor, world) {
 // A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
 const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
 
+// What the story's look asks of the cast's drawing (kit/core/look.mjs lookCastOptions: pin joints for paper cutout); nothing without a look.
+const castDraw = ctx => { const options = lookCastOptions(ctx.look); return options ? {castDraw: options} : {}; };
+
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = stateJoints(first, actor);
-  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze), turns: Boolean(actor.turns)});
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {...model.content.castDraw, id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze), turns: Boolean(actor.turns)});
   const view = characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
   // A walking character moves on its own wrapper, so its scale stays on the view.
   return actor.walks ? el('div', `${cid}-walk`, abs(0, 0, 0, 0), [view]) : view;
@@ -528,7 +532,7 @@ function resolveCastScene(params, ctx) {
   const sr = layout.screenRect, k = frame.set;
   const screenRect = sr && shot !== 'wide' ? {x: r2(sr.x * k.scale + k.x), y: r2(sr.y * k.scale + k.y), width: r2(sr.width * k.scale), height: r2(sr.height * k.scale)} : sr;
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
+  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), ...castDraw(ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
     shot: {name: shot, zoom: frame.zoom, set: frame.set, punches}};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
@@ -662,7 +666,7 @@ function resolveCameo(params, ctx) {
   }
   castEvents(b, [actor]);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx, [actor.id]), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side, shot: {name: shot}};
+  const content = {...castPassage(b, ctx, [actor.id]), ...castDraw(ctx), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side, shot: {name: shot}};
   return b.finish(content, {minTextPx: card ? cardBox.titleSize : b.min.key});
 }
 
