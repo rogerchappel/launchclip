@@ -418,7 +418,42 @@ style ones:
 - `acting` (character stories): a pose or expression that does not match its
   line, or a character that holds still while the story moves.
 - `character-consistency` (character stories): a character that looks
-  different between shots.
+  different between shots, or unlike its reference sheet.
+- `lip-sync` (character stories): a mouth that does not match its line:
+  closed while the character speaks, open while it is silent, or the wrong
+  character's mouth moving.
+
+For a character story with a show bible, put each character's reference sheet
+(`bible/sheets/<id>.png`) beside the frames you review: the sheet is how that
+character must look in every shot. A sheet is not evidence; a finding cites
+the frame that shows the mismatch.
+
+Review a character story twice. First the animatic, for story, staging and
+acting only, while a change is cheap:
+
+```bash
+launchclip finish <project> --animatic
+```
+
+That writes `renders/animatic.mp4`, `ANIMATIC.json` (its shots and gates)
+and the same contact sheets. Save the staging review at
+`qa/animatic-critic.json` in the format above, using only `narrative`,
+`composition`, `timing`, `acting`, `character-consistency` and `lip-sync`,
+and show the user the animatic before the delivery render. Then review the
+final as usual.
+
+Fix a failed review a shot at a time, at most three passes. First redirect
+the shot the finding names: change its poses, expressions, cues, set or
+framing in `storyboard.json`, keep its `start` and `end`, and re-render only
+it with `launchclip finish <project> --animatic --scene <id>` (drop
+`--animatic` for the final). If the shot still fails, replan every shot of
+its story beat the same way. Record each pass in `qa/retakes.json`
+(`launchclip.retakes.v1`: the findings, the shots, what was tried, whether it
+was kept), and undo a pass that does not lower the blocking and major
+findings. With a vision model key, `launchclip finish <project> --animatic
+--retake` runs the review and these passes itself. After three passes that
+still do not ship, report `needs-repair`; do not present the video as
+finished.
 
 Judge sparseness against the format, not a fixed share: `launchclip finish`
 reports the coverage gate's measured missed opportunities and undressed runs in

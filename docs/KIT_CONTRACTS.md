@@ -4523,6 +4523,101 @@ map line plays, which always includes the silent ones. Without a map, lines
 are grouped by speaker. The command prints text; `--json` prints the report.
 `examples/story/dialogue-9x16` is a two-character dialogue with a script.
 
+### The animatic, its review and retakes (`src/animatic.js`, `src/make/critic.js`, `src/make/retakes.js`)
+
+The animatic is the whole story drawn by the rig at draft quality, with the
+real voice and captions (docs/ANIMATION_PIPELINE_RFC.md §4.4). It is an
+ordinary draft `finish` written to its own file:
+
+```bash
+launchclip finish <project> --animatic            # renders/animatic.mp4 and ANIMATIC.json
+launchclip finish <project> --animatic --review   # then the staging review (a vision model)
+launchclip finish <project> --animatic --retake   # then retake the shots the review fails
+```
+
+`ANIMATIC.json` (`launchclip.animatic.v1`), written by `finish`:
+
+```json
+{
+  "schema": "launchclip.animatic.v1",
+  "story_hash": "8a35…", "bible_hash": "sha256:2cd6…",
+  "video": "renders/animatic.mp4", "renderer": "remotion", "fps": 30, "duration": 20.5,
+  "shots": [{ "id": "ask", "start": 2.156, "end": 8.524, "frames": 191, "first_frame": 65, "last_frame": 255, "who": ["maya", "sam"], "segment": "01-ask:c133f436d9de", "segments": ["01-ask:c133f436d9de"] }],
+  "gates": { "cast": "passed", "acting": "passed", "motion": "failed" },
+  "gates_failed": ["motion"],
+  "review": { "verdict": "ship", "file": "qa/animatic-critic.json" }
+}
+```
+
+- `story_hash` is the hash of `storyboard.json` as parsed, `bible_hash` the
+  frozen bible's own hash (null with no bible). `readAnimatic(project)` returns
+  `{animatic, fresh, reasons}`: fresh while both still match and the video is
+  on disk, so a rerun can reuse the animatic.
+- `shots` is the shot list (`story shots`) with the render segments that show
+  each shot; `segment` is the one that holds most of it. Both are null for a
+  renderer without frame ranges.
+- `gates` are finish's own, without `critic`: the review stands in for it.
+  `animaticApproved(animatic)` is true when no gate failed and the review
+  said `ship`.
+- An animatic has no cover and no `publish.json`, and `finish.json` reports it
+  under `animatic` with `final: null`.
+
+**The staging review** (`reviewAnimatic`, or `runHeadlessCritic({review:
+"animatic"})`) is the critic over the animatic's contact sheets for story,
+staging and acting only: its findings use `narrative`, `composition`,
+`timing`, `acting`, `character-consistency` and `lip-sync`, and a finding in
+any other category is dropped with a warning. It writes
+`qa/animatic-critic.json` in the `qa/critic.json` format and records its
+verdict in `ANIMATIC.json`.
+
+**Reference sheets.** In a project with a show bible, both reviews show the
+model each character's sheet (`bible/sheets/<id>.png`) after the contact
+sheets, with the character's `must_keep` list, and the critique lists them
+under `reviewer.reference_sheets`. A sheet is what a character must look
+like; it is never evidence, and a finding cites the tile that shows the
+mismatch. The reviews are also given the shot list as text (who is in each
+shot, what is said, the poses planned).
+
+**Retakes** (`runRetakes`, §4.7). While the review does not say `ship` and
+rounds remain (three at most, `--critic-repairs`), a round fixes the shots
+the blocking and major findings name, by the cheapest step that could work
+(`retakeStep`):
+
+| Step | When | What may change |
+|---|---|---|
+| `redirect` | a finding names the shot | that shot's poses, expressions, cues, set, framing and who is in it |
+| `replan-beat` | the critic asked for `replan`, a narrative finding names the shot, or the shot was redirected and still fails | the same, for every shot of the story beat the shot is in |
+
+A retake never moves a shot's start or end, and never touches a scene outside
+its shots: `scopedRetake` takes only the named scenes from what the planner
+returned and lists the rest under `ignored`. Only the changed scenes render
+again (`finish --scene`), then the review runs again. A round that fails,
+changes nothing or does not lower the blocking and major findings is undone
+and the rounds stop. Dropping a shot's handed-in art (step 2 of the RFC)
+arrives with hand-in.
+
+`qa/retakes.json` (`launchclip.retakes.v1`):
+
+```json
+{
+  "schema": "launchclip.retakes.v1", "review": "animatic", "limit": 3,
+  "status": "ship", "verdict": "ship",
+  "rounds": [{
+    "round": 1, "step": "redirect", "reason": "a finding names the shot",
+    "findings": [{ "id": "f1", "severity": "major", "category": "acting", "message": "…", "shots": ["ask"] }],
+    "shots": ["ask"], "tried": "Maya puts her hands on her hips as she gives in.",
+    "changed": ["ask"], "rendered": ["ask"],
+    "segments": { "mode": "segments", "total": 6, "rendered": 1, "reused": 5 },
+    "verdict_before": "repair", "verdict_after": "ship", "kept": true, "seconds": 41.2
+  }]
+}
+```
+
+`status` is `ship` or `needs-repair`. The default step is one small model
+call (`redirectShots`) whose answer must validate as a story; `runRetakes`
+takes `redirect`, `render` and `critic` hooks, so `make` can pass its own
+planner and stages.
+
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
 ```json
