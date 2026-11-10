@@ -24,6 +24,7 @@ import { samePlaceCuts, twoCopies } from "@launchclip/core/story.mjs";
 import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { ACTION_INFO, LOOK_ACTIONS } from "@launchclip/core/characters/actions.mjs";
 import { narrationWords } from "@launchclip/core/direction.mjs";
+import { abstractFindings } from "@launchclip/core/explainer.mjs";
 
 // Sampling step (s) and tolerances for "moves with its layer".
 export const PHYSICS = Object.freeze({ step: 0.1, px: 0.5, scale: 0.001, fadeLow: 0.02, fadeHigh: 0.98 });
@@ -236,10 +237,16 @@ function tweenOpacity(entry, t) {
   return value;
 }
 
-// Words in a text module's params (headline, text, quote, labels…), for its reading time.
-function paramWords(params) {
+// Params that wire or style a module, never copy: a diagram's point names
+// ("from": "jl", "to": "jr"), a line's weight and style, a colour role, a
+// layout mode. Counting them as words to read failed a 10-word line diagram
+// as 33 words.
+const WIRING_KEYS = ["from", "to", "point", "weight", "style", "bend", "mode", "numbered", "color", "accent", "presentation", "theme", "density", "motion", "align", "event", "cue", "shape", "direction", "fit", "enter", "exit", "side", "shot", "pose", "expression", "facing", "character", "target", "action", "says", "time", "camera"];
+
+/** Words in a text module's params (headline, text, quote, labels…), for its reading time. */
+export function paramWords(params) {
   // Meta lines (a source, a role) are glanced at, not read: they do not count.
-  const skip = new Set(["icon", "tone", "surface", "variant", "layout", "src", "kind", "set", "id", "emphasis", "highlight", "at", "rect", "source", "role", "author", "kicker"]);
+  const skip = new Set(["icon", "tone", "surface", "variant", "layout", "src", "kind", "set", "id", "emphasis", "highlight", "at", "rect", "source", "role", "author", "kicker", ...WIRING_KEYS]);
   let count = 0;
   const walk = (value, key) => {
     if (skip.has(key)) return;
@@ -318,15 +325,39 @@ export function ghostingGate(story) {
     if (slow > TEXT_FADE.max + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} fades over ${round(slow, 2)} s; text fades take at most ${TEXT_FADE.max} s` });
     const transition = entry.transitionIn;
     if (transition && ["fade", "dissolve", "crossfade"].includes(transition.type) && transition.dur > GHOSTING.textHalf + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} dissolves in over ${transition.dur} s; a text scene's fade takes at most ${GHOSTING.textHalf} s` });
-    // A ui-scene's reading text is its headlines (uiReadingWords); panel labels are glanced at.
-    const words = entry.scene.module === "ui-scene" ? uiReadingWords(entry.scene.params) : paramWords(entry.scene.params);
-    const enterEnd = Number.isFinite(m.enterEnd) ? m.enterEnd : entry.start + (fadeIn || 0);
-    const exitStart = Number.isFinite(m.exitStart) ? m.exitStart : model.end;
-    const hold = round(exitStart - enterEnd, 2);
-    const need = textHold(words);
-    if (words && hold < need - 1e-6) findings.push({ rule: "text-hold", severity: "error", at: enterEnd, ids: [id], detail: `${id} (${words} words) is fully shown for ${hold} s; it needs ${need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
+    const read = readingTime(entry, model);
+    if (read.words && read.hold < read.need - 1e-6) findings.push({ rule: "text-hold", severity: "error", at: read.at, ids: [id], detail: `${id} (${read.words} words) is fully shown for ${read.hold} s; it needs ${read.need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
   }
   return gateResult(findings);
+}
+
+// A text module's reading time: the words it shows, how long it is fully shown, and how long they need.
+function readingTime(entry, model) {
+  const m = model.motion;
+  const fadeIn = m.enterFrom?.opacity < 1 ? m.enterDuration : 0;
+  // A ui-scene's reading text is its headlines (uiReadingWords); panel labels are glanced at.
+  const words = entry.scene.module === "ui-scene" ? uiReadingWords(entry.scene.params) : paramWords(entry.scene.params);
+  const enterEnd = Number.isFinite(m.enterEnd) ? m.enterEnd : entry.start + (fadeIn || 0);
+  const exitStart = Number.isFinite(m.exitStart) ? m.exitStart : model.end;
+  return { words, at: enterEnd, hold: round(exitStart - enterEnd, 2), need: textHold(words) };
+}
+
+/**
+ * Cards that hold more words than their time on screen allows, for the
+ * planner (the ghosting gate's text-hold rule, before anything is rendered):
+ * → [{id, module, words, hold, need, fits}] where fits is the most words the
+ * scene can show as it is timed. story: a resolved storyboard.
+ */
+export function readingFindings(story) {
+  const { entries } = renderedModels(story);
+  const out = [];
+  for (const [id, { entry, model }] of entries) {
+    if (!["text", "hero"].includes(model.layout?.role) || !model.motion) continue;
+    const read = readingTime(entry, model);
+    if (!read.words || read.hold >= read.need - 1e-6) continue;
+    out.push({ id, module: entry.scene.module, words: read.words, hold: read.hold, need: read.need, fits: read.hold >= TEXT_FADE.minHold ? Math.max(0, Math.floor((read.hold + 1e-6) / TEXT_FADE.perWord)) : 0 });
+  }
+  return out;
 }
 
 // Density thresholds (docs/DIRECTION_GUARDRAILS.md §5).
@@ -396,7 +427,8 @@ function shotOf(model) {
  * Variety (docs/DIRECTION_GUARDRAILS.md §5): consecutive cast scenes with
  * the same set, framing, cast, poses and actions are the same shot again (even over a
  * different world) — an error; the same set and cast more than three times
- * in a video is a warning.
+ * in a video is a warning. A video of 15 s or more whose five or more scenes
+ * are all line diagrams, step rows and text cards (abstract-only) is an error.
  */
 export function varietyGate(story) {
   const { entries } = renderedModels(story);
@@ -409,5 +441,8 @@ export function varietyGate(story) {
   const counts = new Map();
   for (const shot of shots) counts.set(`${shot.set}|${shot.cast}`, [...(counts.get(`${shot.set}|${shot.cast}`) ?? []), shot.id]);
   for (const [key, ids] of counts) if (ids.length > 3) findings.push({ rule: "same-setup", severity: "warning", at: shots.find((shot) => shot.id === ids[3]).start, ids, detail: `${key.replace("|", " with ")} appears ${ids.length} times; vary the set or the cast` });
+  // abstract-only (kit/core/explainer.mjs): nothing but line diagrams, step rows and text cards, with nothing pictured.
+  const abstract = abstractFindings(story);
+  if (abstract.abstract) findings.push({ rule: "abstract-only", severity: "error", at: 0, ids: [], detail: `all ${abstract.scenes} scenes are line diagrams, step rows and text cards (${abstract.modules.join(", ")}), with nothing pictured; show the subject: a character acting the line, an object, a photo, a chart of real figures or an interface, and keep diagrams as support` });
   return gateResult(findings, { shots: shots.length });
 }
