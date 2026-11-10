@@ -91,6 +91,63 @@ const TITLE_SCORES_SCHEMA = Object.freeze({
 
 const POST_CAPTION_SCHEMA = Object.freeze({ type: "string", description: "The post text under the video: the hook line, then the list written out in full (one line per item, numbered), then the call to action, then \"Save this\" with a reason. Plain text, line breaks allowed, no hashtags." });
 
+// A fast draft's script (make --speed draft): one streamed call, so only what the draft needs is asked for, in the order a
+// host can show it: the title, the narration beat by beat, the call to action. No angle, title scores or post caption.
+export const DRAFT_SCRIPT_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "beats", "call_to_action"],
+  properties: {
+    title: SCRIPT_SCHEMA.properties.title,
+    beats: { ...SCRIPT_SCHEMA.properties.beats, description: "The narration, split into the plan's beats, in order: the beats' text joined is the whole voiceover." },
+    call_to_action: CALL_TO_ACTION_SCHEMA
+  }
+});
+
+/** The script pass instructions for a fast draft: the same plan and rules, and a short answer. */
+export function draftScriptInstructions(plan) {
+  return [ROLE, "", "## Plan", "", ...scriptPlanLines(plan), "", "## Rules", "", ...scriptRuleLines(plan).map((line) => `- ${line}`), "", `Output:
+- title: a short working title.
+- beats: the narration split by beat id, in the plan's order; their text joined is the whole script. Plain spoken sentences only.
+- call_to_action: the sentence the narration ends on that asks the viewer to act, word for word.
+- Length is a hard limit: ${plan.word_ceiling} words at most, about ${plan.word_target} is right. Tooling cuts whole sentences from a script that is over.
+- Return only the JSON object.`].join("\n");
+}
+
+/**
+ * The sentences of a draft script as its JSON arrives: feed(piece) → the
+ * sentences that piece completed, in order. A sentence is complete when its
+ * beat's text has closed, or when another sentence has started after it.
+ */
+export function sentenceStream() {
+  let raw = "";
+  let sent = 0;
+  return {
+    feed(piece) {
+      raw += String(piece ?? "");
+      const done = [];
+      const pattern = /"text"\s*:\s*"/g;
+      for (let match = pattern.exec(raw); match; match = pattern.exec(raw)) {
+        let end = match.index + match[0].length;
+        while (end < raw.length && raw[end] !== "\"") end += raw[end] === "\\" ? 2 : 1;
+        const closed = end < raw.length;
+        let body = raw.slice(match.index + match[0].length, Math.min(end, raw.length));
+        // An escape cut in two by the stream waits for its other half.
+        if (!closed) body = body.replace(/\\(u[0-9a-fA-F]{0,3})?$/, "");
+        let text;
+        try { text = JSON.parse(`"${body}"`); } catch { break; }
+        const sentences = sentencesOf(cleanNarration(text));
+        done.push(...(closed ? sentences : sentences.slice(0, -1)));
+        if (!closed) break;
+        pattern.lastIndex = end + 1;
+      }
+      const fresh = done.slice(sent);
+      sent = Math.max(sent, done.length);
+      return fresh;
+    }
+  };
+}
+
 /** The script schema for a plan: a short video's adds the angle, the title scores and the post caption. */
 export function scriptSchema(plan) {
   if (!isShort(plan)) return SCRIPT_SCHEMA;
@@ -295,7 +352,12 @@ export async function writeScript(options = {}) {
     const errors = [repair.errors ?? []].flat().map((error, index) => `${index + 1}. ${typeof error === "string" ? error : `[${error.id}] ${error.message} Fix: ${error.fix}`}`);
     lines.push("", "## Repair", "", `Your previous narration failed these script checks. Rewrite it to fix every one, keeping the plan's beats and what already works (the hook, the facts from the brief), inside the word ceiling of ${plan.word_ceiling}, and return the beats and ${titleCount(plan) === 5 ? "five title options, best first," : "three title options"} again.`, "", ...errors, "", "Previous narration:", "", repair.previous);
   }
-  const result = await client.runStructured({ instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: scriptSchema(plan), schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
+  // draft ({reasoning?, onSentence?}): a fast draft's one call (make --speed draft), streamed where the client can, each sentence handed over as it completes.
+  const draft = options.draft ?? null;
+  const stream = draft ? sentenceStream() : null;
+  const result = await client.runStructured(draft
+    ? { instructions: draftScriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: DRAFT_SCRIPT_SCHEMA, schemaName: "launchclip_make_draft_script", model: draft.model ?? undefined, maxOutputTokens: 3000, ...(draft.reasoning ? { reasoningEffort: draft.reasoning } : {}), onDelta: (piece) => { for (const sentence of stream.feed(piece)) draft.onSentence?.(sentence); } }
+    : { instructions: scriptInstructions(plan), input: `${lines.join("\n")}\n`, schema: scriptSchema(plan), schemaName: "launchclip_make_script", model: undefined, maxOutputTokens: 6000 });
   const value = result?.value && typeof result.value === "object" ? result.value : parseText(result?.text);
   // Each beat keeps its role from the plan (a library skeleton's share beat is how the structure gate finds it).
   const beats = parseBeats(value?.beats).map((entry) => {
