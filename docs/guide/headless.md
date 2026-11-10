@@ -76,6 +76,9 @@ Useful flags:
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--model-concurrency <n>` | `4` | How many model calls may be in flight at once (1–32), or set `LAUNCHCLIP_MODEL_CONCURRENCY`. `1` sends one call at a time. The video is the same at any value. See [What runs at the same time](#what-runs-at-the-same-time). |
+| `--speed` | `standard` | `draft` makes a fast draft: a planned, playable video in about the time it takes to write and voice the script, with nothing rendered. See [A fast draft](#a-fast-draft-with---speed-draft). |
+| `--draft-model <provider:model[@effort]>` | the run's model at `low` reasoning | The model a draft's calls use, or set `LAUNCHCLIP_DRAFT_MODEL`. |
+| `--refine` | off | Continue a draft project to the full-quality plan, keeping its script and its voice. |
 | `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. It needs no key: with no web search key, stories come from company feeds, Hacker News, GDELT and Wikipedia's current events, and a brief that asks for "this week" or "the latest" leaves out anything older. Recording source pages needs the optional `playwright` dependency and a Chromium; without them the video is still made, and `MAKE.json`, the warnings and the `research` gate say which claims have no page to show and how to fix it (`launchclip doctor` checks the recorder). See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. The script, the voice and every other finished step are reused unless your own inputs changed (the prompt, your notes, the files you handed in, the flags). Clips your asset provider wrote into `--assets` during an earlier run do not count as a change: see [Clips your asset provider fetched](#clips-your-asset-provider-fetched). |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
@@ -164,6 +167,122 @@ Useful flags:
 
 Pass `--allow-needs-repair` to get `0` instead of `2`, which is how `make`
 behaved before. The report and the video are written either way.
+
+## A fast draft with `--speed draft`
+
+```bash
+launchclip make "A 30-second explainer on why sourdough needs a starter" --speed draft --out ./sourdough
+```
+
+A draft is for the first look. It gets to a planned video (a script, a
+voice and a storyboard a player can show) as fast as it can, and renders
+nothing. What it does differently from the ordinary run:
+
+| Part | The ordinary run | A draft |
+| --- | --- | --- |
+| Script | Research when the brief calls for it, five concepts and a judge, the story and its edit, the script, a repair pass and a resize pass | One call from the brief, streamed, on the plan's hard word ceiling. Tooling cuts whole sentences from a script that is over it, and ends a script without a call to action on one |
+| Voice | One take of the whole narration, after the script | One take a sentence, four at a time, started while the script is still being written, then joined into one narration |
+| Storyboard | A direction map, then the storyboard, with up to four repair calls | Made by rule at once: the narration is cut into lines of a few seconds, and each line gets a character of a small cast beside the line's own words, with the call to action last. Beside it, one fast call may recast the characters for the topic and rewrite their acting and the card words |
+| Shots | Asked for as the planner goes | Every request goes to your asset provider at once, and each has 8 s to answer. A clip that is late is not waited for: its scene is drawn instead |
+| After the plan | Candidates, the render, the critic and its repair rounds | Nothing: the run stops |
+
+Every check that needs no pixels still runs on a draft, and so do tooling's
+own corrections (scene lengths, reading time, the caption band, cues), so
+the storyboard is a valid one. If the rule-made plan ever fails a check, a
+plainer one (a character beside every line, no clips or diagrams) is
+planned in its place.
+
+The one direction call has a deadline, 12 s by default. If the model has not
+answered by then, answers with something the kit cannot draw, or its
+storyboard fails a check, the rule-made plan stands and the run goes on.
+`MAKE.json` says which happened.
+
+A host reads the same progress lines as ever, plus four steps:
+
+```
+launchclip:progress {"stage":"prepare","step":"sentence","index":1,"text":"Why does sourdough need a starter?"}
+launchclip:progress {"stage":"prepare","step":"script","status":"ready","words":78,"seconds":6.1}
+launchclip:progress {"stage":"prepare","step":"voice","status":"ready","seconds":7.4}
+launchclip:progress {"stage":"storyboard","step":"plan","status":"ready","seconds":13.9}
+```
+
+`sentence` is written as each sentence of the script arrives, so you can
+show the script while it is being written. `seconds` counts from the start
+of the run.
+
+The run ends with `status` `awaiting-approval` and `stopped.after`
+`storyboard` (exit code 0). The project holds `SCRIPT.json`,
+`NARRATION.json` with the word timings, the narration at
+`.launchclip/make/narration.wav`, `storyboard.json` and `DIRECTION.json`.
+`MAKE.json` records what was made the fast way:
+
+```json
+"milestones": { "first_sentence_seconds": 3.2, "script_seconds": 6.1, "voice_seconds": 7.4, "plan_seconds": 13.9 },
+"draft": {
+  "mode": "draft",
+  "parts": { "script": "draft", "voice": "draft", "storyboard": "draft", "render": "none" },
+  "model": { "spec": "openai:gpt-5.6-luna", "reasoning": "low" },
+  "script": { "streamed_sentences": 8, "words": 78, "word_ceiling": 82 },
+  "voice": { "sentences": 8, "at_once": 4, "joined": true },
+  "storyboard": {
+    "source": "rules+direction",
+    "direction": { "status": "applied", "seconds": 5.8, "changed": 6 },
+    "shots": { "asked": 3, "answered": 2, "late": 1, "deadline_seconds": 8 }
+  }
+}
+```
+
+`milestones` is in every run's `MAKE.json`, so you can compare a draft with
+an ordinary run. `storyboard.source` is `rules` when the direction call did
+not make it in; `direction.status` is then `late`, `failed`, `invalid` or
+`off`.
+
+### What a draft gives up
+
+- **The writing.** No research, no concepts, no story pass, and no repair:
+  a script check that fails is a warning in `MAKE.json`. A take that runs
+  over the target length is kept (there is no resize pass).
+- **The voice's flow.** Sentences are voiced apart, so the read does not
+  carry from one sentence into the next as a single take does.
+- **Design.** The storyboard is a character beside the line's words in most
+  scenes. There are no charts, no library skeleton and its key shot, no
+  designed opening, and no cadence profile behind the cuts.
+- **Review.** Nothing is rendered, so no gate that needs frames has run, and
+  no critic has looked at it.
+- **Research is off**, whatever `--research` says.
+
+A recording as the base (a talking head), `--animation` and a long video are
+planned the ordinary way under `--speed draft`; the run still stops at the
+plan.
+
+### From the draft to the full plan
+
+```bash
+launchclip make "A 30-second explainer on why sourdough needs a starter" --out ./sourdough --refine
+```
+
+`--refine` continues a draft project. The script and the voice are kept as
+they are, so the timings do not move; the direction map and the storyboard
+are planned the ordinary way, with their repair calls. `storyboard.json` is
+replaced when the plan passes, and the draft's is kept at
+`.launchclip/draft/storyboard.json`. A host can show the draft at once, run
+this in the background and swap the plan in when it ends. `MAKE.json` then
+has `draft.mode` `refine` and `draft.parts` `{"script": "draft", "voice":
+"draft", "storyboard": "refined", "render": "none"}`.
+
+Both stop at the plan. `launchclip finish <project>` renders whichever
+storyboard is in the project.
+
+### Settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `--draft-model`, `LAUNCHCLIP_DRAFT_MODEL` | the run's model at `low` | The model for the draft's two calls, for example `openai:gpt-5.6-luna@low`. |
+| `LAUNCHCLIP_DRAFT_DIRECTION_MS` | `12000` | How long the draft waits for the direction call. `0` sends none: the draft is one model call. |
+| `LAUNCHCLIP_DRAFT_SHOT_MS` | `8000` | How long each shot request may take before its scene is drawn. |
+
+How long a draft takes, measured, and what stands between it and the length
+of the video: [benchmarks/MAKE_FAST_DRAFT.md](../../benchmarks/MAKE_FAST_DRAFT.md).
 
 ## Record your product with `--repo`
 
@@ -677,6 +796,10 @@ What overlaps today:
   at a time; they now share the one limit.
 - **Source page recordings** (`--research`) were already recorded while the
   script is written and voiced.
+
+A fast draft (`--speed draft`) overlaps more: the sentence takes are
+voiced while the script is still streaming, the direction call runs beside
+the rule-made plan, and every shot request is open at once.
 
 Most of a short video's writing is a chain, and a chain cannot overlap: the
 judge needs the five concepts (they come from one call), the story needs the

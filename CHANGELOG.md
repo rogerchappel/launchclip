@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- `launchclip make --speed draft`: a fast draft for a first look. The script
+  is one streamed model call on a hard word budget (each sentence is a
+  progress line as it arrives), the voice is a take per sentence started
+  while the script is still being written, the storyboard is made by rule
+  (a small cast carries the lines) with at most one fast direction call
+  beside it, every shot is asked of the asset provider at once with a short
+  deadline (a late clip's scene is drawn), and the run stops at the plan:
+  no candidates, render or critic. Every check that needs no pixels still
+  runs. `--refine` continues a draft project to the full-quality plan on the
+  same script and voice. `MAKE.json` has `draft` (what was draft-made) and,
+  in every run, `milestones` (seconds to the script, the voice and the
+  plan). See docs/guide/headless.md and benchmarks/MAKE_FAST_DRAFT.md.
+- The OpenAI client streams a call that passes `onDelta`, and the cost
+  tracker counts a streamed call when its stream ends.
+
 ### Fixed
 
 - `make` no longer fails the storyboard stage when a style puts the captions
