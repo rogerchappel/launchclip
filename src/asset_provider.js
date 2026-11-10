@@ -59,6 +59,7 @@ import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { DARK_PLATE_KINDS } from "@launchclip/core/plates.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { bestWindow, normalizeNotes } from "./inventory_notes.js";
+import { recordProvided } from "./provided_files.js";
 import { MAX_SAME_CARD, SECONDS_PER_TEXT_CARD, TEXT_CARD_MODULES } from "./short_form_checks.js";
 
 export const SHOT_REQUEST = "shot";
@@ -675,6 +676,8 @@ async function snapshotShot(answer, request, project) {
   const target = path.join(project, src);
   await mkdir(path.dirname(target), { recursive: true });
   await copyFile(path.resolve(String(shot.file)), target);
+  // Kept by content, so a later run that finds this file in its --assets folder knows the provider fetched it (src/provided_files.js).
+  await recordProvided(project, { file: target, src, request, shot: { kind: shot.kind ?? (VIDEO.test(ext) ? "video" : "image"), notes: shot.notes ?? null } });
   const { file: _file, path: _path, ...rest } = answer;
   return { ...rest, src };
 }

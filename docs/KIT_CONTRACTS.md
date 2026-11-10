@@ -3506,6 +3506,13 @@ many projects it is handed to; a cached model description is reused even in a
 run with no model. One run sends at most 24 new files to the model
 (`MAX_VISION_FILES`) and describes the rest locally.
 
+A file the asset provider fetched for an earlier plan of the same project and
+wrote into `--assets` is none of these (`src/provided_files.js`): it is
+matched by its SHA-256 against `.launchclip/provided-files.json`, takes its
+notes from the provider's answer and the request it answered before this
+step runs (so it counts as `notes`), carries `provided: {src, shows}`, and
+is left out of routing (`routing.provided`).
+
 `--asset-descriptions auto|local|off` (default `auto`): `local` never calls a
 model, `off` leaves the inventory as the heuristics and the caller's notes
 made it. Each described `ASSETS.json` entry carries `understanding: {source,

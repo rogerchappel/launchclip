@@ -77,7 +77,7 @@ Useful flags:
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
 | `--model-concurrency <n>` | `4` | How many model calls may be in flight at once (1–32), or set `LAUNCHCLIP_MODEL_CONCURRENCY`. `1` sends one call at a time. The video is the same at any value. See [What runs at the same time](#what-runs-at-the-same-time). |
 | `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. It needs no key: with no web search key, stories come from company feeds, Hacker News, GDELT and Wikipedia's current events, and a brief that asks for "this week" or "the latest" leaves out anything older. Recording source pages needs the optional `playwright` dependency and a Chromium; without them the video is still made, and `MAKE.json`, the warnings and the `research` gate say which claims have no page to show and how to fix it (`launchclip doctor` checks the recorder). See [Research](../RESEARCH.md#in-make). |
-| `--replan` | off | Plan a new storyboard on a rerun. |
+| `--replan` | off | Plan a new storyboard on a rerun. The script, the voice and every other finished step are reused unless your own inputs changed (the prompt, your notes, the files you handed in, the flags). Clips your asset provider wrote into `--assets` during an earlier run do not count as a change: see [Clips your asset provider fetched](#clips-your-asset-provider-fetched). |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on when the model takes images | Skip the automatic visual review. OpenAI, Anthropic and OpenRouter models take images; a local Ollama model does not. |
@@ -119,7 +119,13 @@ Useful flags:
    plan, the beats, three title options and the check report.
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
-   for up to four repairs.
+   for up to four repairs. What tooling can settle never costs a repair or
+   fails the run: a card that sits in the caption band has the captions
+   hidden under it while it is up (the card carries the line), and
+   `MAKE.json` `warnings` says so (`layout: tooling hid captions 3.94–6.02 s
+   under s3`). That covers a style whose captions sit at the top, in the
+   middle or low in the frame, at any size: the planner is told where that
+   band is, and the check measures the band the captions really take.
 5. **Tries a second opening and a second transition** (short motion videos,
    with a model that can see). The skill does not commit to its first idea
    for the two moments that decide a video, and neither does `make`. It
@@ -440,6 +446,33 @@ in that has no `shows` or `description` of its own:
 own notes always win, so an app that already knows what its files show writes
 them and pays for no description calls. `ASSETS.json` shows each file's
 description and where it came from.
+
+### Clips your asset provider fetched
+
+An `--asset-provider-cmd` may answer a shot request with a file it has just
+written into the same folder you pass as `--assets`. make copies that file to
+`assets/shots/` in the project and records it, by its content, with the
+request it answered and the provider's notes
+(`.launchclip/provided-files.json`).
+
+When the project runs again, as a rerun or with `--replan`, make finds those
+files in `--assets` and knows where they came from:
+
+- No model describes them, at any `--asset-descriptions` setting. Their
+  `ASSETS.json` entry carries the provider's description and the request
+  ("Fetched by the asset provider for …") under `notes`, and
+  `provided: {src, shows}`.
+- They are not routed as your media. They are never the base recording, a
+  voiceover or footage offered to the planner, and they do not change the
+  brief, so the concept, the story, the script and the voice are reused.
+  `MAKE.json` lists them in `routing.provided` and counts them in
+  `assets.provided`. The planner asks the provider again for the shots the
+  new plan wants, so `shots` still says where each one came from.
+- A file you add to the folder yourself is described and offered as before.
+
+The match is by content, so a clip is recognised under any name. A file the
+provider wrote there before the first run (a pool your app resolved up front)
+has no record and is your media, as it always was.
 
 **Featured files.** If you hand in three files or fewer, name a file in the
 prompt, ask to "show the pricing page" when one file is the pricing page, or

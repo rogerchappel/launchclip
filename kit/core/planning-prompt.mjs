@@ -14,10 +14,10 @@
 import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
 import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
 import { knownModules, catalogModules, isEditorialKind, moduleTiming, SUBJECT_DENSITY } from './modules.mjs';
-import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
+import { SAFE_ZONE_PROFILES, captionBandAt, profileGeometry } from './layout-check.mjs';
 import { EDITORIAL_VARIANTS } from './editorial-core.mjs';
-import { stylePromptLines } from './style.mjs';
-import { CAPTION_PRESETS } from './captions.mjs';
+import { packCaptionsFor, stylePromptLines } from './style.mjs';
+import { CAPTION_PRESETS, captionLineExtent, captionOptions } from './captions.mjs';
 import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
 import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
 import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
@@ -440,13 +440,40 @@ function faceTimeRule(profile) {
   return ` The presenter is on screen for about ${pct(band.p50 ?? band.p90)} of the runtime and never more than ${pct(band.p90)}: lines that name something the viewer could see (a thing, a place, a step) cut away to a full-frame insert (a shot, or a full-frame graphic).`;
 }
 
-function safeZoneLines(format) {
+/**
+ * The band a story's captions take, in px of its format: the profile's band
+ * at the style pack's caption position, grown about its centre to the
+ * tallest line the pack's preset and size draw (what the layout check
+ * measures against). → {band, position, moved: the band is not the
+ * profile's own}, or null without a format.
+ */
+export function plannedCaptionBand({ format, style = null, lane, brand } = {}) {
+  const canvas = { width: Number(format?.width), height: Number(format?.height) };
+  if (!(canvas.width > 0 && canvas.height > 0)) return null;
+  const usual = profileGeometry(canvas).captionBand;
+  const captions = style ? packCaptionsFor(style, lane) : null;
+  if (!usual || !captions || captions.preset === 'none') return { band: usual, position: 'auto', moved: false };
+  let band = usual;
+  try {
+    const extent = captionLineExtent(captionOptions({ type: 'captions', ...captions }, { brand: brand ?? DEFAULT_BRAND, format }), format);
+    if (extent > band.height) band = { ...band, y: band.y - (extent - band.height) / 2, height: extent };
+  } catch { /* an unknown preset is the checks' to report */ }
+  band = captionBandAt(band, canvas, captions.position);
+  band = { x: Math.round(band.x), y: Math.round(band.y), width: Math.round(band.width), height: Math.round(band.height) };
+  const position = ['top', 'middle', 'low'].includes(captions.position) ? captions.position : 'auto';
+  return { band, position, moved: band.y !== Math.round(usual.y) || band.height !== Math.round(usual.height) };
+}
+
+// captions: plannedCaptionBand()'s result for this story, when its captions are not in the profile's own band.
+function safeZoneLines(format, captions = null) {
   const portrait = !format || Number(format.height) > Number(format.width);
   const profiles = format ? [portrait ? SAFE_ZONE_PROFILES.shorts : SAFE_ZONE_PROFILES.landscape] : [SAFE_ZONE_PROFILES.shorts, SAFE_ZONE_PROFILES.landscape];
   const box = (rect) => `x ${rect.x}–${rect.x + rect.width}, y ${rect.y}–${rect.y + rect.height}`;
-  const lines = profiles.map((profile) => `${profile.id} (${profile.reference.width}x${profile.reference.height}): key content within ${box(profile.safeZone)}; caption band ${box(profile.captionBand)}; centre of mass near y ${profile.centerOfMassY}; key text at least ${profile.minTextPx} px${profile.lowerThird ? '; keep the lower third occupied' : ''}.`);
+  const moved = format && captions?.moved ? captions : null;
+  const lines = profiles.map((profile) => `${profile.id} (${profile.reference.width}x${profile.reference.height}): key content within ${box(profile.safeZone)}; caption band ${box(moved ? moved.band : profile.captionBand)}${moved ? ` (this story's captions: ${moved.position === 'auto' ? 'the usual position, with taller lines' : `position "${moved.position}"`})` : ''}; centre of mass near y ${profile.centerOfMassY}; key text at least ${profile.minTextPx} px${profile.lowerThird ? '; keep the lower third occupied' : ''}.`);
   return [
     ...lines,
+    ...(moved ? [`The style pack puts this story's captions ${moved.position === 'auto' ? 'in a taller band than usual' : moved.position === 'middle' ? 'in the middle of the frame' : moved.position === 'top' ? 'at the top of the frame' : 'low in the frame'}: wherever these rules say "the caption band", it is y ${moved.band.y}–${moved.band.y + moved.band.height}, and "above the caption band" means clear of it, above y ${moved.band.y} or below y ${moved.band.y + moved.band.height}. Modules place themselves and many will sit across that band; tooling then hides the captions under the card while it is up (the card carries the line), so a caption-band error is never a reason to change a module, drop a scene or shorten copy. Where you do set a rect or a position, keep key text clear of y ${moved.band.y}–${moved.band.y + moved.band.height}.`] : []),
     'Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.',
     'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.'
   ];
@@ -973,7 +1000,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
-    ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
+    ...section('Safe zone', safeZoneLines(format, plannedCaptionBand({ format, style, lane, brand })).map((line) => `- ${line}`)),
     ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...section('Data explainers (the study says)', dataExplainerLines().map((line) => `- ${line}`)),
     ...section('Social posts', socialPostLines().map((line) => `- ${line}`)),

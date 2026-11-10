@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed
+
+- `make` no longer fails the storyboard stage when a style puts the captions
+  in the middle of the frame (or at the top, or low, or at a large size). A
+  plan kept on a cadence near miss was never laid out, so every card in the
+  caption band surfaced only when make checked the storyboard again, as "the
+  storyboard failed its checks after make filled in audio". The layout check
+  now runs whenever every module resolves and measures the band the captions
+  really take; the planner is told where that band is; and the storyboard
+  stage hides the captions under a card in the band, as the planner and
+  finish do, with a `layout: tooling hid captions …` warning.
+- A rerun or `--replan` no longer treats clips the asset provider wrote into
+  `--assets` as handed-in media. They are recognised by content
+  (`.launchclip/provided-files.json`), described from the provider's answer
+  with no model call, and left out of routing (`routing.provided`), so the
+  concept, the story, the script and the voice are reused.
+
 ### Changed
 
 - The storyboard planner corrects a plan's mechanical slips itself, before

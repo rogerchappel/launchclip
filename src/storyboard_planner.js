@@ -42,7 +42,8 @@ import { actingGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
-import { fitCaptionBand } from "./caption_band_fit.js";
+import { captionBandWarning, settleCaptionBand } from "./caption_band_fit.js";
+import { captionBandFor } from "./layout_check.js";
 import { fitDiagrams } from "./diagram_fit.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { checkConstraints, constraintsPrompt, enforceHiddenLines, fillConstraints, hasConstraints, reconcileMap } from "./constraints.js";
@@ -400,12 +401,11 @@ export async function planStoryboard(options = {}) {
       // under it (a caption position the module layout does not plan for, such
       // as the middle of the frame, otherwise fails every attempt).
       // Repeated, as finish does: one round can expose the next clash.
-      for (let pass = 0; pass < 4 && !checked.ok; pass += 1) {
-        const fitted = fitCaptionBand(pinned.storyboard, checked.errors);
-        if (!fitted.hidden.length) break;
-        pinned.storyboard = fitted.storyboard;
-        checked = checkStoryboard(pinned.storyboard, checkOptions);
-        pinned.warnings = [...pinned.warnings, `layout: tooling hid ${fitted.hidden.join("; ")}`];
+      const banded = settleCaptionBand(pinned.storyboard, checked, (candidate) => checkStoryboard(candidate, checkOptions));
+      if (banded.hidden.length) {
+        pinned.storyboard = banded.storyboard;
+        checked = banded.checked;
+        pinned.warnings = [...pinned.warnings, captionBandWarning(banded.hidden)];
       }
       // A shot tooling could not give the short-form hold (no neighbour had
       // time to lend) ships as a warning: a repair call for pace alone costs
@@ -645,21 +645,17 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
     if (!cleared.moved.length && !cleared.dropped.length) break;
     let candidate = cleared.storyboard;
     let rechecked = checkStoryboard(candidate, checkOptions);
-    const hidden = [];
-    for (let pass = 0; pass < 4 && !rechecked.ok; pass += 1) {
-      const fitted = fitCaptionBand(candidate, rechecked.errors);
-      if (!fitted.hidden.length) break;
-      candidate = fitted.storyboard;
-      hidden.push(...fitted.hidden);
-      rechecked = checkStoryboard(candidate, checkOptions);
-    }
+    const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions));
+    candidate = banded.storyboard;
+    rechecked = banded.checked;
+    const hidden = banded.hidden;
     if (rechecked.errors.length > checked.errors.length) {
       if (!drop) warnings.push(`face: tooling could not move ${cleared.moved.map((entry) => entry.split(" ")[0]).join(", ")} off the presenter's face without breaking other checks`);
       continue;
     }
     if (cleared.moved.length) warnings.push(`face: tooling ${cleared.moved.join("; ")}`);
     if (cleared.dropped.length) warnings.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
-    if (hidden.length) warnings.push(`layout: tooling hid ${hidden.join("; ")}`);
+    if (hidden.length) warnings.push(captionBandWarning(hidden));
     return { storyboard: candidate, checked: rechecked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
   }
   return { storyboard, checked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
@@ -758,7 +754,11 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); }
     catch (error) { errors.push(`params: ${message(error)}`); }
   }
-  if (errors.length) return { ok: false, errors, warnings, storyboard, layout, clip_share: clipShareValue };
+  // The layout check needs every module resolved, and nothing else: a plan
+  // outside a cadence band (or short of footage, or with a cast finding) is
+  // still laid out, so its layout errors reach the fits and the repair in
+  // the same attempt instead of surfacing after the plan was kept.
+  if (errors.some((entry) => entry.startsWith("params: ") || entry.startsWith("validation: "))) return { ok: false, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
 
   const canvas = { width: resolved.format.width, height: resolved.format.height };
   try {
@@ -779,6 +779,8 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
           hidesCaptions
         }), ...extras.parts];
       },
+      // The band the captions really take: at their position, grown to the tallest line their preset and size draw (as finish checks it).
+      captionBand: captionBandFor(resolved, canvas),
       captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
