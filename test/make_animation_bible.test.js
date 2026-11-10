@@ -413,3 +413,26 @@ test("a video that is not a character story skips the bible stage", async () => 
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("a designed animal keeps only what an animal takes: a foal with a person's age and hair is still designed", async () => {
+  const { kindConsistentSets } = await import("../src/cast_design.js");
+  const { applyCharacterSets, normalizeCharacter } = await import("@launchclip/core/characters/character.mjs");
+  const design = normalizeBibleDesign({
+    characters: [
+      { id: "pip", use: "", position: "left", sets: [
+        { path: "kind", op: "=", value: "foal" }, { path: "age", op: "=", value: "child" }, { path: "hair.style", op: "=", value: "short" },
+        { path: "size", op: "=", value: "small" }, { path: "colors.body", op: "=", value: "tan" }, { path: "build", op: "=", value: "slim" }
+      ] },
+      { id: "mum", use: "", position: "right", sets: [{ path: "skin", op: "=", value: "fair" }, { path: "hair.style", op: "=", value: "bob" }, { path: "size", op: "=", value: "large" }] }
+    ],
+    world: { kind: "park", time: "day" }, sets: [], rules: []
+  }, { characters: [{ id: "pip", name: "Pip", role: "lead" }, { id: "mum", name: "Mum", role: "foil" }], places: [], prompt: "a foal at the track" });
+  const [pip, mum] = design.characters;
+  assert.deepEqual(pip.sets.map((set) => `${set.path}=${set.value}`), ["kind=foal", "size=small", "colors.body=tan"]);
+  assert.deepEqual(pip.rejected.map((set) => set.path), ["age", "hair.style", "build"], "a person's fields are left out and named, not fatal");
+  assert.match(pip.rejected[0].why, /does not apply to foal/);
+  // What is kept makes a valid character: this is the call that failed the bible stage.
+  assert.doesNotThrow(() => normalizeCharacter(applyCharacterSets({ schema: "launchclip.character.v1", id: "pip", name: "Pip", style: "chibi", params: {} }, pip.sets)));
+  assert.deepEqual(mum.sets.map((set) => set.path), ["skin", "hair.style"], "and a person does not take an animal's size");
+  assert.deepEqual(kindConsistentSets([{ path: "name", op: "=", value: "Pip" }, { path: "kind", op: "=", value: "cup" }, { path: "skin", op: "=", value: "fair" }]).kept.map((set) => set.path), ["name", "kind"]);
+});

@@ -97,6 +97,32 @@ export function checkedSets(sets) {
   return { kept, rejected };
 }
 
+// The paths a kind other than a person takes; every other look path is a person's.
+const KIND_ONLY_PATHS = ["size", "marks", "colors.body", "colors.detail"];
+const KIND_PATHS = ["kind", ...KIND_ONLY_PATHS, "colors.accent"];
+const NOT_LOOK_PATHS = ["name", "personality", "voice", "style"];
+
+/**
+ * Sets that agree about what the character is. A model asked for "a foal"
+ * tends to add a person's fields too (an age, a build, hair); the rig refuses
+ * those on an animal, a mascot or an object, and refuses a kind's fields on a
+ * person. Rather than fail the whole design, the fields that do not apply are
+ * left out and reported with the rest of the rejected sets.
+ * → {kept, rejected} (rejected entries carry `why`)
+ */
+export function kindConsistentSets(sets) {
+  const kind = [...sets].reverse().find((set) => set.path === "kind")?.value ?? null;
+  const nonPerson = kind !== null && kind !== "person" && kind !== "none";
+  const kept = [], rejected = [];
+  for (const set of sets) {
+    const look = !NOT_LOOK_PATHS.includes(set.path);
+    const applies = !look || (nonPerson ? KIND_PATHS.includes(set.path) : !KIND_ONLY_PATHS.includes(set.path));
+    if (applies) kept.push(set);
+    else rejected.push({ path: set.path, op: set.op, value: set.value, why: nonPerson ? `does not apply to ${kind}` : "applies only to an animal, a mascot or an object" });
+  }
+  return { kept, rejected };
+}
+
 /**
  * Words → {sets, voice, accent, unmatched, personality, via}. With a model
  * (options.client, --model or LAUNCHCLIP_CAST_MODEL) the model chooses the
@@ -113,7 +139,9 @@ export async function mapWords(words, { current = null, model, client, env = pro
   }
   const input = [current ? `The character now:\n${JSON.stringify(current, null, 2)}\n\nInstruction:` : "Description:", words].join("\n");
   const result = await structured.runStructured({ instructions: modelInstructions(), input: `${input}\n`, schema: MODEL_SCHEMA(), schemaName: "launchclip_character_sets", maxOutputTokens: 2000 });
-  const { kept, rejected } = checkedSets(result?.value?.sets);
+  const checked = checkedSets(result?.value?.sets);
+  const agreed = kindConsistentSets(checked.kept);
+  const kept = agreed.kept, rejected = [...checked.rejected, ...agreed.rejected];
   const personality = text(result?.value?.personality);
   return { sets: kept, voice: local.voice, accent: local.accent, unmatched: [], rejected, personality: personality && personality.length <= 160 ? personality : null, via: `model ${structured.model ?? spec ?? ""}`.trim() };
 }
