@@ -22,6 +22,17 @@ export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
 // --stop-after and --approve (docs/ANIMATION_PIPELINE_RFC.md §6.3): the places a character story can stop for a person's yes.
 export const MAKE_STOP_POINTS = Object.freeze(["bible", "animatic"]);
 
+// --speed: standard (the default run) or draft (src/make/draft.js: a planned, playable video as fast as it can be had; nothing is rendered).
+export const MAKE_SPEEDS = Object.freeze(["standard", "draft"]);
+
+/** --speed (nothing, standard or draft) → "standard" | "draft"; throws on anything else. */
+export function makeSpeed(value) {
+  if (value === undefined || value === null || value === "") return "standard";
+  const speed = value === true ? "" : String(value).toLowerCase();
+  if (!MAKE_SPEEDS.includes(speed)) throw new Error(`--speed must be ${MAKE_SPEEDS.join(" or ")}; got ${value}`);
+  return speed;
+}
+
 /** --approve bible[,…] (a string, a list or nothing) → the approved stop points, lower case. */
 export function approvals(value) {
   if (value === undefined || value === null || value === false || value === "") return [];
@@ -74,6 +85,12 @@ export const MAKE_FLAGS = Object.freeze([
   // Model calls in flight at once (default 4, or LAUNCHCLIP_MODEL_CONCURRENCY): a property of the provider's rate limit, not of a recipe.
   ["model-concurrency", {}],
   ["out", {}],
+  // A fast draft (src/make/draft.js): one streamed script call, the voice a sentence at a time, a rule-made storyboard, no render.
+  ["speed", {}],
+  // The model the draft's calls use (provider:model[@effort]); unset: the run's model at low reasoning.
+  ["draft-model", {}],
+  // Continue a draft project to the full-quality plan, keeping its script and its voice.
+  ["refine", { boolean: true }],
   ["replan", { boolean: true }],
   // Concept and story before the script: on (default) or off (one script pass from the brief).
   ["concepts", { setting: true }],
@@ -168,6 +185,9 @@ export function makeOptionsFromFlags(flags = {}) {
     episode: flags.episode,
     choices: flags.choices,
     out: flags.out,
+    speed: flags.speed,
+    draftModel: flags["draft-model"],
+    ...(flags.refine ? { refine: true } : {}),
     replan: Boolean(flags.replan),
     concepts: flags.concepts,
     candidates: flags.candidates,
@@ -201,6 +221,10 @@ export function validateMakeOptions(options = {}) {
   researchMode(options.research);
   conceptsMode(options.concepts);
   candidatesMode(options.candidates);
+  const speed = makeSpeed(options.speed);
+  if (options.refine != null && typeof options.refine !== "boolean") throw new Error(`--refine takes no value; got ${options.refine}`);
+  if (options.refine && speed === "draft") throw new Error("--refine continues a draft at full quality; pass --speed draft or --refine, not both");
+  if (options.draftModel != null && (options.draftModel === true || !/^[a-z][a-z0-9-]*:\S+$/i.test(String(options.draftModel).trim()))) throw new Error(`--draft-model must be provider:model (for example openai:gpt-5.6-luna@low); got ${options.draftModel}`);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);
@@ -229,7 +253,7 @@ export function validateMakeOptions(options = {}) {
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   ctaPlanOptions(options);
   seriesPlanOptions(options);
-  return { voice, renderer, quality, script: scriptPlanOptions(options) };
+  return { voice, renderer, quality, speed, script: scriptPlanOptions(options) };
 }
 
 /**
