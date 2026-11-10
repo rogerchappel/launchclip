@@ -3,7 +3,7 @@
 // typed command line.
 //
 // This is a real conversion, done as a pixel pass in the grade: the frame is
-// averaged into character cells, each cell's brightness picks one of nine
+// sampled into character cells, each cell's brightness picks one of nine
 // characters (" .-:+=*%#@", sparse to dense), and that character is drawn in
 // the cell from a 5 × 7 bitmap font carried in this file (so it is the same
 // on every machine and in both renderers). Brighter cells are also a
@@ -74,8 +74,10 @@ export const LOOK = {
       grey('l', 'SourceGraphic'),
       // The darkest eighth stays empty (a dim backdrop glow draws nothing); above it the tones spread over the nine characters.
       curve('tone', 'l', [0, 0.06, 0.22, 0.38, 0.52, 0.65, 0.77, 0.89, 1]),
-      // Each cell's average brightness, read at its centre pixel and spread over the cell.
-      blur('avg', 'tone', cell.rx * 0.55, cell.ry * 0.55),
+      // Each cell's brightness, softened, read at its centre pixel and spread over the cell.
+      // (A light blur only: the renderers' browsers approximate a wide one differently, and a cell
+      // near a band's edge would then pick different characters.)
+      blur('avg', 'tone', cell.rx * 0.25, cell.ry * 0.25),
       fe('feFlood', { 'flood-color': '#ffffff', x: cell.rx, y: cell.ry, width: 1, height: 1, result: 'dot' }),
       fe('feOffset', { in: 'dot', dx: 0, dy: 0, x: 0, y: 0, width: cell.cw, height: cell.ch, result: 'dot-cell' }),
       fe('feTile', { in: 'dot-cell', x: 0, y: 0, width: plan.width, height: plan.height, result: 'dots' }),
@@ -98,7 +100,8 @@ export const LOOK = {
     const { width: W, height: H, unit: u } = plan;
     const z = zones(plan);
     const scan = scanlines({ period: Math.max(3, Math.round(4 * u)), color: '#000000', alpha: 0.3 });
-    const dark = vignette({ color: '#000000', amount: 0.62, inner: 50 });
+    // Under 0.6, so the layout audit does not read the corners as covered.
+    const dark = vignette({ color: '#000000', amount: 0.55, inner: 50 });
     const font = Math.round(28 * u);
     const slug = (plan.title || 'scene').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 18) || 'scene';
     const command = (plan.labels[0] ?? `play ${slug} --ascii`).slice(0, 28);
