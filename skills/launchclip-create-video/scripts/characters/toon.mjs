@@ -344,10 +344,10 @@ function cuteEyes(kind, P, dir = 1) {
     const arc = () => out.push(P.line(`M${x - 16} 7Q${x} -15 ${x + 16} 7`, 'outline', 7.5));
     if (kind === 'droop') out.push(P.ellipse(x, 5, 14.5, 14, 'outline', {outline: false}), P.ellipse(x + 5, 1, 4.2, 4.2, '#ffffff', {outline: false}), P.line(`M${x - 19} ${sx < 0 ? -2 : -13}L${x + 19} ${sx < 0 ? -13 : -2}`, 'outline', 7));
     else if (kind === 'shut') out.push(P.line(`M${x - 16} -4Q${x} 16 ${x + 16} -4`, 'outline', 7.5));
-    else if (kind === 'shock') out.push(P.ellipse(x, -1, 18.5, 22.5, 'eyeWhite', {width: 5.5}), P.ellipse(x, 0, 5.5, 6.5, 'outline', {outline: false}));
+    else if (kind === 'shock') out.push(P.ellipse(x, 0, 16, 20, 'eyeWhite', {width: 5.5}), P.ellipse(x, 0, 5.5, 6.5, 'outline', {outline: false}));
     else if (kind === 'line') out.push(P.line(`M${x - 16} 2L${x + 16} 2`, 'outline', 7.5));
-    else if (kind === 'side') out.push(P.shape(lidded(x, 18, -5, 18), 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 8, 5, 8, 9, 'outline', {outline: false}), P.ellipse(x + dir * 8 + 3, 1, 2.8, 2.8, '#ffffff', {outline: false}));
-    else if (kind === 'up') out.push(P.ellipse(x, 0, 17.5, 21, 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 5, -8.5, 8.5, 9.5, 'outline', {outline: false}), P.ellipse(x + dir * 5 + 3, -12, 3, 3, '#ffffff', {outline: false}));
+    else if (kind === 'side') out.push(P.shape(lidded(x, 16.5, -5, 17), 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 7, 5, 8, 9, 'outline', {outline: false}), P.ellipse(x + dir * 7 + 3, 1, 2.8, 2.8, '#ffffff', {outline: false}));
+    else if (kind === 'up') out.push(P.ellipse(x, 0, 16, 20, 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 4, -8, 8.5, 9.5, 'outline', {outline: false}), P.ellipse(x + dir * 4 + 3, -11.5, 3, 3, '#ffffff', {outline: false}));
     else if (kind === 'heart') out.push(P.shape(heartPath(x, 1.5), HEART, {width: 5}), P.ellipse(x + 7, -7, 3.6, 4.2, '#ffffff', {outline: false, opacity: 0.9}));
     else if (kind === 'sparkle') out.push(P.ellipse(x, -1, 17.5, 21.5, 'outline', {outline: false}), P.ellipse(x + 5, -9, 7.2, 8.2, '#ffffff', {outline: false}), P.ellipse(x - 6, 9, 4, 4, '#ffffff', {outline: false}), P.ellipse(x + 8, 9, 2.2, 2.2, '#ffffff', {outline: false, opacity: 0.85}));
     else if (kind === 'chevron') out.push(P.line(`M${x + sx * 14} -11L${x - sx * 11} 0L${x + sx * 14} 11`, 'outline', 7.5));
