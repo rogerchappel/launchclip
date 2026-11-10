@@ -38,6 +38,9 @@ import { fitTimings } from "./timing_fit.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
+import { actingGate } from "./direction_guardrails.js";
+import { placeActions } from "./acting_place.js";
+import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
@@ -171,7 +174,7 @@ export async function planStoryboard(options = {}) {
     fixed.cast = bibleCast(bible);
     fixed.bible = bibleRef(bible);
     // The bible's world is the story's place (its sets stay the bible's own list).
-    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}) };
+    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}), ...(Array.isArray(bible.world.props) && bible.world.props.length ? { props: bible.world.props } : {}) };
     if (style?.cast) planStyle = { ...style, cast: { ...style.cast, drawing_style: fixed.cast.style, members: fixed.cast.characters } };
     direction = pinMap(direction);
   }
@@ -318,6 +321,14 @@ export async function planStoryboard(options = {}) {
       if (diagrams.changed.length) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
+      }
+      // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
+      if (bible && direction) {
+        const placed = placeActions(pinned.storyboard, { direction, words: wordList });
+        if (placed.changed.length) {
+          pinned.storyboard = placed.storyboard;
+          pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
+        }
       }
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
@@ -640,6 +651,15 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   if (second.ok && gated) {
     const gate = castGate(resolved, { direction });
     if (gate.status === "failed") errors.push(...[...new Set(gate.findings.map((finding) => `cast: ${finding.detail}`))].filter((entry) => !errors.some((error) => error.endsWith(entry.slice(6)))).slice(0, 8));
+  }
+  // The acting and lip-sync gates finish runs, here for the same reason: a
+  // line's action that nobody on screen performs (the character is in another
+  // shot, or its cue was dropped), and a mouth that stays shut on its words.
+  if (second.ok && gated) {
+    const acting = direction ? actingGate(resolved, { map: direction, words }) : null;
+    errors.push(...(acting?.findings ?? []).filter((finding) => finding.rule === "action-missing").map((finding) => `acting: ${finding.detail}`).slice(0, 6));
+    const lips = lipSyncGate({ resolved, words });
+    if (lips.status === "failed") errors.push(...lips.errors.slice(0, 6).map((entry) => `lip-sync: ${entry}`));
   }
   // The app's constraints (src/constraints.js): hidden ranges covered,
   // must_use present, never_use absent; errors are prefixed "constraints:".

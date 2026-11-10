@@ -931,6 +931,10 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   if (isObject(copy.light) && Array.isArray(copy.light.pulses)) copy.light.pulses.forEach((pulse, p) => {
     if (isObject(pulse) && pulse.at !== undefined) pulse.at = resolve(pulse.at, `light.pulses[${p}].at`);
   });
+  // A story-wide prop cue (a starting gate that opens once, for every scene): story seconds.
+  if (isObject(copy.world) && Array.isArray(copy.world.props)) copy.world.props = copy.world.props.map((entry, i) => (isObject(entry) && Array.isArray(entry.cues)
+    ? { ...entry, cues: entry.cues.map((cue, j) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: resolve(cue.at, `world.props[${i}].cues[${j}].at`) } : cue)) }
+    : entry));
   const scenes = Array.isArray(copy.scenes) ? copy.scenes : [];
   scenes.forEach((scene, index) => {
     if (!isObject(scene)) return;
@@ -1031,6 +1035,9 @@ export function castRefId(id, ids = []) {
   return match && ids[Number(match[1]) - 1] ? ids[Number(match[1]) - 1] : id;
 }
 
+// The least (s) of a word a scene must hear for its speaker's mouth to move on it there.
+const WORD_SLIVER = 0.03;
+
 // A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one and then its phonemes (the mouth shapes follow its sounds).
 function spokenWord(word, start) {
   const text = typeof (word.text ?? word.word) === "string" ? (word.text ?? word.word).trim() : "";
@@ -1038,23 +1045,66 @@ function spokenWord(word, start) {
   return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : []), ...(phonemes ? [phonemes] : [])];
 }
 
+// How far (s) outside its scene a word-anchored cue may fall and still be
+// meant for it: a line that starts just before the cut, or a scene start
+// rounded a millisecond past its first word. The cue plays at the scene's edge.
+export const CUE_SNAP = 1;
+// The latest a cue may land before its scene ends (the rig's pose tween, characters/acting.mjs ACTING.poseTween).
+const CUE_TAIL = 0.45;
+
+/**
+ * A word anchor inside a scene → seconds from the scene start. The scene's
+ * times are the story's; a cue's are the scene's. Without "#n" the anchor
+ * means the word as it is said during this scene (the first time it is,
+ * else the time nearest the scene), not the first time the narration says
+ * it; "#n" stays the narration's nth. A time within CUE_SNAP outside the
+ * scene moves to its edge. → null when `value` is not a word anchor or the
+ * narration has no such word (the caller's resolver reports it).
+ */
+export function sceneWordAnchor(value, { start, end }, words = []) {
+  const parsed = typeof value === "string" ? parseAnchor(value) : null;
+  if (!parsed || parsed.kind !== "word") return null;
+  const matches = findWord(wordList(words), parsed.text);
+  if (!matches.length) return null;
+  let at;
+  if (value.includes("#")) {
+    if (parsed.occurrence > matches.length) return null;
+    at = matches[parsed.occurrence - 1];
+  } else {
+    const outside = (time) => (time < start - EPS ? start - time : time >= end - EPS ? time - end : 0);
+    at = matches.find((time) => outside(time) === 0) ?? matches.reduce((best, time) => (outside(time) < outside(best) ? time : best));
+  }
+  at += parsed.offset;
+  const last = Math.max(start, end - CUE_TAIL);
+  if (at < start && at >= start - CUE_SNAP) at = start;
+  else if (at > last && at <= end + CUE_SNAP) at = last;
+  return ms(at - start);
+}
+
 /** A character scene's params with anchors (and cast references) resolved. resolve(anchor, path) → seconds. */
 export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
   if (!isObject(scene) || !isObject(scene.params)) return scene?.params;
   const start = Number(scene.start);
+  const end = Number(scene.end);
   const rel = (value, path) => (typeof value === "string" ? Math.round((resolve(value, path) - start) * 1000) / 1000 : value);
+  // A cue's word is the one said during the scene.
+  const cueAt = (value, path) => (Number.isFinite(end) ? sceneWordAnchor(value, { start, end }, words) : null) ?? rel(value, path);
   const actor = (entry, path) => {
     if (!isObject(entry)) return entry;
     const out = { ...entry };
     if (entry.id !== undefined) out.id = castRefId(entry.id, ids);
     if (entry.character !== undefined) out.character = castRefId(entry.character, ids);
-    if (Array.isArray(entry.cues)) out.cues = entry.cues.map((cue, i) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: rel(cue.at, `${path}.cues[${i}].at`) } : cue));
-    // says "auto": the character's own words in a dialogue (words carry a speaker).
-    if (entry.says === "auto") {
+    if (Array.isArray(entry.cues)) out.cues = entry.cues.map((cue, i) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: cueAt(cue.at, `${path}.cues[${i}].at`) } : cue));
+    // A character moves its mouth on its own words: every word of the
+    // dialogue the narration gives it (words carry a speaker) that is heard
+    // during the scene, whether the scene asks ("auto") or leaves `says` out.
+    // A word the cut falls inside counts (the module clips it to the scene).
+    // Explicit ranges are kept as written; `says: []` keeps the mouth shut.
+    if (entry.says === "auto" || entry.says === undefined) {
       const id = out.id ?? out.character;
-      const end = Number(scene.end);
-      out.says = words.filter((word) => word.speaker === id && word.start >= start - EPS && word.start < end - EPS)
+      const own = typeof id !== "string" ? [] : words.filter((word) => word?.speaker === id && Math.min(Number(word.end), end) - Math.max(Number(word.start), start) > WORD_SLIVER)
         .map((word) => ({ from: Math.round((word.start - start) * 1000) / 1000, to: Math.round((word.end - start) * 1000) / 1000, words: [spokenWord(word, start)] }));
+      if (entry.says === "auto" || own.length) out.says = own;
     }
     if (Array.isArray(entry.says)) out.says = entry.says.map((range, i) => {
       if (!isObject(range)) return range;
@@ -1072,6 +1122,8 @@ export function resolveCastAnchors(scene, resolve, words = [], ids = []) {
   };
   const params = { ...scene.params };
   if (Array.isArray(params.cast)) params.cast = params.cast.map((entry, i) => actor(entry, `params.cast[${i}]`));
+  // Prop cues (a starting gate that opens on a word) take the same anchors.
+  if (Array.isArray(params.props)) params.props = params.props.map((entry, i) => (isObject(entry) && Array.isArray(entry.cues) ? { ...entry, cues: entry.cues.map((cue, j) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: rel(cue.at, `params.props[${i}].cues[${j}].at`) } : cue)) } : entry));
   if (scene.module === "character-cameo") Object.assign(params, actor(params, "params"));
   return params;
 }

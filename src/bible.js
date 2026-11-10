@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, bibleCharacter, bibleHash, bibleRefErrors, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
+import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, biblePropFindings, bibleCharacter, bibleHash, bibleRefErrors, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
 import { savedCharacterRequests, withSavedCharacters } from "@launchclip/core/characters/character.mjs";
 import { starterCharacter } from "@launchclip/core/characters/cast.mjs";
 import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/core/characters/cues.mjs";
@@ -63,7 +63,7 @@ function positions(value) {
 
 /**
  * Freeze a project's show bible. options: characters (ids, comma-separated
- * or a list), style, position, world, time, sets, rule, pack, seed, force,
+ * or a list), style, position, world, time, sets, props, rule, pack, seed, force,
  * pin (false leaves storyboard.json and DIRECTION.json alone). hooks: home
  * (the character library's root), render(html, png) (stands in for
  * Chromium), chromium (an executable path).
@@ -137,6 +137,14 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   if (text(options.world)) { world.kind = text(options.world); }
   if (text(options.time)) world.time = text(options.time);
   if (options.sets !== undefined) world.sets = commas(options.sets);
+  // --props: the things the story turns on. They join the world's props (one already placed keeps its placement and cues) and are its `shows`.
+  if (options.props !== undefined) {
+    const ids = commas(options.props);
+    const placed = Array.isArray(world.props) ? world.props : [];
+    const idOf = (entry) => (typeof entry === "string" ? entry : entry?.id);
+    world.props = [...placed, ...ids.filter((id) => !placed.some((entry) => idOf(entry) === id)).map((id) => ({ id }))];
+    world.shows = ids;
+  }
   const pack = text(options.pack) ?? existing?.style?.pack ?? storyStyleRequest(story)?.name ?? null;
   const seedIn = options.seed ?? existing?.style?.seed;
   const seed = seedIn === undefined || seedIn === null ? null : /^\d+$/.test(String(seedIn)) ? Number(seedIn) : String(seedIn);
@@ -262,7 +270,7 @@ export async function showBible(projectDir, hooks = {}) {
 export async function runBibleCommand(action, project, flags = {}, hooks = {}) {
   if (action === "freeze") {
     return freezeBible(project ?? flags.project ?? ".", {
-      characters: flags.characters, style: flags.style, position: flags.position, world: flags.world, time: flags.time, sets: flags.sets,
+      characters: flags.characters, style: flags.style, position: flags.position, world: flags.world, time: flags.time, sets: flags.sets, props: flags.props,
       rule: flags.rule, pack: flags.pack, seed: flags.seed, chromium: flags.chromium, force: Boolean(flags.force), pin: !flags["no-pin"]
     }, hooks);
   }
@@ -313,6 +321,8 @@ export async function bibleGate(projectDir, story, { direction = null } = {}) {
       if (!errors.length && hash && direction.bible.hash !== hash) fail(`${DIRECTION_FILE} was planned against bible ${short(direction.bible.hash)}; the frozen bible is ${short(hash)}`);
     }
     if (isObj(bible?.cast)) for (const detail of bibleCastFindings(story, bible)) fail(detail);
+    // What the story turns on must be on screen: a prop of the bible's world no scene shows fails here.
+    for (const detail of biblePropFindings(story, bible)) fail(detail);
     return { status: findings.length ? "failed" : "passed", file: relative, hash, characters: entriesOf(bible?.cast).map((entry) => entry?.id).filter(Boolean), findings };
   }
   return { status: "failed", file: relative, hash: null, findings };

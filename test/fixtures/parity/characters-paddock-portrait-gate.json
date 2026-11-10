@@ -1,0 +1,111 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Character parity: a foal and a mare in the paddock, the gate open from the story cue (portrait)",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "platform": "youtube-shorts",
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "cast": {
+      "style": "chibi",
+      "characters": [
+        {
+          "id": "foal",
+          "name": "Foal",
+          "position": "left",
+          "kind": "foal",
+          "size": "small",
+          "marks": [
+            "socks"
+          ],
+          "colors": {
+            "body": "chestnut",
+            "detail": "cream"
+          }
+        },
+        {
+          "id": "mare",
+          "name": "Mare",
+          "position": "right",
+          "kind": "mare",
+          "size": "large",
+          "marks": [
+            "blaze"
+          ],
+          "colors": {
+            "body": "grey",
+            "detail": "charcoal"
+          }
+        }
+      ]
+    },
+    "world": {
+      "kind": "paddock",
+      "time": "day",
+      "props": [
+        {
+          "id": "starting-gate",
+          "cues": [
+            {
+              "at": 0.5,
+              "state": "open"
+            }
+          ]
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "id": "pair",
+        "module": "cast-scene",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "set": "standing",
+          "shot": "wide",
+          "cast": [
+            {
+              "id": "foal",
+              "pose": "look",
+              "expression": "happy",
+              "cues": [
+                {
+                  "at": 2,
+                  "pose": "cheer",
+                  "expression": "delighted"
+                }
+              ]
+            },
+            {
+              "id": "mare",
+              "expression": "happy"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "pair",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

@@ -27,7 +27,8 @@ import { STARTER_CAST, isStarterId, starterCharacter } from "@launchclip/core/ch
 import { CHARACTER_PATHS, CHARACTER_SCHEMA, applyCharacterSets, characterCastEntry, normalizeCharacter } from "@launchclip/core/characters/character.mjs";
 import { DRAWING_STYLES, KOKORO_VOICES } from "@launchclip/core/characters/cues.mjs";
 import { SETS } from "@launchclip/core/characters/sets.mjs";
-import { WORLD_KINDS, WORLD_TIMES, suggestWorld } from "@launchclip/core/worlds/index.mjs";
+import { PROPS, PROP_STATES, RACING_WORLDS, STORY_PROP_IDS, WORLD_KINDS, WORLD_TIMES, suggestWorld } from "@launchclip/core/worlds/index.mjs";
+import { lineAnchor, scriptShows } from "./drawable.js";
 import { freezeBible } from "../bible.js";
 import { castCreate, characterOptionLines, checkedSets, kindConsistentSets } from "../cast_design.js";
 import { listCharacters, loadCharacter } from "../character_store.js";
@@ -41,6 +42,10 @@ export const DESIGN_PATHS = Object.freeze(CHARACTER_PATHS.filter((name) => !["na
 export const POSITIONS = Object.freeze(["left", "centre", "right"]);
 export const MAX_BIBLE_SETS = 3;
 export const MAX_BIBLE_RULES = 3;
+/** The story props a bible records: the things the story shows, placed in its world. */
+export const MAX_BIBLE_PROPS = 4;
+// Props that only make sense on a course: a story with one happens in a racing world.
+const COURSE_PROPS = Object.freeze(["starting-gate", "finish-post"]);
 // The world a story gets when neither the model nor the brief's words name one the kit draws.
 const FALLBACK_WORLD = "living-room";
 
@@ -51,7 +56,7 @@ const titleCase = (id) => id.split("-").filter(Boolean).map((part) => part[0].to
 export const BIBLE_DESIGN_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["characters", "drawing_style", "world", "sets", "rules"],
+  required: ["characters", "drawing_style", "world", "sets", "props", "rules"],
   properties: {
     characters: {
       type: "array",
@@ -80,6 +85,7 @@ export const BIBLE_DESIGN_SCHEMA = Object.freeze({
       properties: { kind: { type: "string", enum: [...WORLD_KINDS] }, time: { type: "string", enum: [...WORLD_TIMES] } }
     },
     sets: { type: "array", description: `The sets the story plays on, ${MAX_BIBLE_SETS} at most.`, items: { type: "string", enum: [...SETS] } },
+    props: { type: "array", description: `The things the story shows, ${MAX_BIBLE_PROPS} at most; [] when it shows none.`, items: { type: "string", enum: [...STORY_PROP_IDS] } },
     rules: { type: "array", description: `Up to ${MAX_BIBLE_RULES} continuity rules; [] when there are none.`, items: { type: "string" } }
   }
 });
@@ -101,7 +107,8 @@ What the brief says about anyone's look, age or dress comes first: follow it exa
 
 Also choose:
 - drawing_style: "" keeps the default (${DEFAULT_DRAWING_STYLE}). Name another only when the brief asks for a particular drawing style.
-- world: the kind of place the story happens in, and the time of day.
+- world: the kind of place the story happens in, and the time of day. Keep the place the script names when it names one.
+- props: the things the story shows, ${MAX_BIBLE_PROPS} at most: every object the script turns on (listed under "The story shows"), and nothing that is only decoration. [] when the story shows none.
 - sets: the sets the story plays on, ${MAX_BIBLE_SETS} at most. Include every place the script names.
 - rules: up to ${MAX_BIBLE_RULES} short continuity rules a director must keep ("Sam never raises his voice."), or [].
 
@@ -109,6 +116,13 @@ Do not choose voices, names or lines: those are set. Return only the JSON object
 
 function scriptLines(script) {
   return (script.beats ?? []).map((beat) => [`${beat.beat}${beat.place ? ` (${beat.place})` : ""}:`, ...(beat.lines ?? []).map((entry) => (entry.speaker === null ? `  [silent] ${entry.action}` : `  ${entry.speaker}: ${entry.text}`))].join("\n"));
+}
+
+// What the script says it shows, for the designer: its place and the things it turns on.
+function showsLines(script) {
+  const shows = scriptShows(script);
+  if (!shows.world && !shows.props.length) return [];
+  return ["", "## The story shows", "", ...(shows.world ? [`- Place: ${shows.world}`] : []), ...shows.things.filter((thing) => STORY_PROP_IDS.includes(thing.prop)).map((thing) => `- ${thing.name}: ${thing.prop}`)];
 }
 
 /** The places a script names, in order (each a set of the kit). */
@@ -139,6 +153,7 @@ export async function designBible(options = {}) {
     "",
     ...(script.logline ? [`Logline: ${script.logline}`, ""] : []),
     ...scriptLines(script),
+    ...showsLines(script),
     "",
     "## Characters to design (ids)",
     "",
@@ -159,7 +174,7 @@ export async function designBible(options = {}) {
   if (!value || !Array.isArray(value.characters)) throw new Error("the designer returned no cast");
   const usage = result?.usage ?? {};
   const used = result?.model ?? options.model ?? null;
-  return { design: normalizeBibleDesign(value, { characters, places: scriptPlaces(script), prompt: options.prompt }), usage, model: used, cost_usd: estimateModelUsageCost(options.provider ?? client.provider ?? "openai", used, usage).estimated_usd };
+  return { design: normalizeBibleDesign(value, { characters, places: scriptPlaces(script), prompt: options.prompt, shows: scriptShows(script) }), usage, model: used, cost_usd: estimateModelUsageCost(options.provider ?? client.provider ?? "openai", used, usage).estimated_usd };
 }
 
 /**
@@ -167,10 +182,13 @@ export async function designBible(options = {}) {
  * entry (one the model left out is designed from the defaults), every set is
  * one the rig has, each character has a side of its own (three at most have
  * one), and the world and the sets are ones the kit draws.
+ * shows: scriptShows(script): the script's own place and the things it turns
+ * on. Its things are always among the props, whatever the designer chose,
+ * and a story with a starting gate or a winning post happens on a course.
  * → {characters: [{id, use, sets, rejected, position}], drawing_style | null,
- *    world: {kind, time}, sets, rules}
+ *    world: {kind, time}, sets, props: [ids], rules}
  */
-export function normalizeBibleDesign(value, { characters = [], places = [], prompt = "" } = {}) {
+export function normalizeBibleDesign(value, { characters = [], places = [], prompt = "", shows = null } = {}) {
   const given = new Map();
   for (const entry of Array.isArray(value?.characters) ? value.characters : []) {
     const named = slug(entry?.id);
@@ -193,10 +211,26 @@ export function normalizeBibleDesign(value, { characters = [], places = [], prom
   const free = ["left", "right", "centre"].filter((side) => !taken.has(side));
   for (const member of cast) if (!member.position && free.length) member.position = free.shift();
   const suggested = suggestWorld(prompt);
-  const world = { kind: WORLD_KINDS.includes(value?.world?.kind) ? value.world.kind : suggested?.kind ?? FALLBACK_WORLD, time: WORLD_TIMES.includes(value?.world?.time) ? value.world.time : "day" };
+  const props = [...new Set([...(shows?.props ?? []), ...(Array.isArray(value?.props) ? value.props : [])].filter((id) => STORY_PROP_IDS.includes(id)))].slice(0, MAX_BIBLE_PROPS);
+  const chosen = WORLD_KINDS.includes(value?.world?.kind) ? value.world.kind : shows?.world ?? suggested?.kind ?? FALLBACK_WORLD;
+  const kind = props.some((id) => COURSE_PROPS.includes(id)) && !RACING_WORLDS.includes(chosen) ? "racetrack" : chosen;
+  const world = { kind, time: WORLD_TIMES.includes(value?.world?.time) ? value.world.time : "day" };
   const sets = [...new Set([...places, ...(Array.isArray(value?.sets) ? value.sets : []).filter((name) => SETS.includes(name))])].slice(0, Math.max(MAX_BIBLE_SETS, places.length));
   const rules = [...new Set((Array.isArray(value?.rules) ? value.rules : []).map(text).filter((rule) => rule && rule.length <= 200))].slice(0, MAX_BIBLE_RULES);
-  return { characters: cast, drawing_style: DRAWING_STYLES.includes(value?.drawing_style) ? value.drawing_style : null, world, sets, rules };
+  return { characters: cast, drawing_style: DRAWING_STYLES.includes(value?.drawing_style) ? value.drawing_style : null, world, sets, props, rules };
+}
+
+/**
+ * A story prop as the bible's world places it: a prop drawn at the cast's
+ * scale as it is (a starting gate takes the centre), a small one (a trophy,
+ * a ball, a gift) enlarged so it reads beside the cast.
+ */
+export function biblePropEntry(id, script = null) {
+  const def = PROPS[id];
+  // A change the script plays (the gate opens on a silent line) is cued once, for the whole story, on the narration's words.
+  const cues = script ? scriptShows(script).cues.filter((cue) => cue.prop === id).map((cue) => ({ at: lineAnchor(script, cue.line), state: cue.state })).filter((cue) => cue.at !== null) : [];
+  const entry = def.story ? { id } : def.h < 0.5 ? { id, on: "ground", scale: 2.5 } : { id };
+  return cues.length ? { ...entry, cues } : entry;
 }
 
 const setFlag = (set) => `${set.path}${set.op}${set.value}`;
@@ -275,7 +309,7 @@ export async function makeBible(options = {}, hooks = {}) {
     schema: BIBLE_SCHEMA,
     frozen: false,
     cast: { style, characters: cast.entries },
-    world: { kind: design.world.kind, time: design.world.time, ...(design.sets.length ? { sets: design.sets } : {}) },
+    world: { kind: design.world.kind, time: design.world.time, ...(design.props?.length ? { props: design.props.map((id) => biblePropEntry(id, options.script)), shows: [...design.props] } : {}), ...(design.sets.length ? { sets: design.sets } : {}) },
     style: { drawing_style: style },
     ...(design.rules.length ? { rules: design.rules } : {})
   };
@@ -322,6 +356,7 @@ export function animationBriefLines({ script, bible }) {
       lines.push(`- ${member.id}${member.name ? ` (${member.name})` : ""}${member.position ? `, stands ${member.position}` : ""}: ${[who?.role, who?.want ? `wants ${who.want}` : "", who?.speech ? `speaks ${who.speech}` : ""].filter(Boolean).join("; ") || "a character"}. Look: ${(member.must_keep ?? []).join(", ") || "see the sheet"}.`);
     }
     if (bible.world?.kind) lines.push(`- World: ${bible.world.kind}${bible.world.time ? `, ${bible.world.time}` : ""}.${bible.world.sets?.length ? ` Sets: ${bible.world.sets.join(", ")}.` : ""}`);
+    lines.push(...propBriefLines({ script, bible }));
     for (const rule of bible.rules ?? []) lines.push(`- Rule: ${rule}`);
     lines.push("", `Drawn ${bible.cast.style}. Never add, drop, rename or restyle a character; a scene names who is in it by id.`, "");
   }
@@ -336,5 +371,23 @@ export function animationBriefLines({ script, bible }) {
     "- The cast check fails a limb or a head that reaches off the canvas or out of the safe zone. A closer shot (`shot: \"medium\"` or `\"close\"`) of one seated or gesturing character usually brings it back inside; so does a calmer pose.",
     ""
   );
+  return lines;
+}
+
+/**
+ * The planner's lines on the story's props: what stands in the world (the
+ * bible's world.props, which every cast-scene that draws the world shows),
+ * and the cue for one that changes (the starting gate opening on its line).
+ */
+export function propBriefLines({ script, bible }) {
+  const ids = (bible?.world?.props ?? []).map((entry) => (typeof entry === "string" ? entry : entry?.id)).filter(Boolean);
+  if (!ids.length) return [];
+  const lines = [`- Props: ${ids.join(", ")}. They are in story.world.props, so every cast-scene shows them behind the cast, standing in the world; do not add them again. Keep the cast-scenes on the world (no \`backdrop: "room"\`, no \`world\` param) so they stay on screen, and stage the cast beside them: a character looks at one with \`target: {"prop": "<id>"}\`.`];
+  for (const entry of bible.world.props) {
+    if (!entry?.cues?.length) continue;
+    const states = PROP_STATES[entry.id] ?? [];
+    const line = scriptShows(script).cues.find((cue) => cue.prop === entry.id)?.line;
+    lines.push(`- The ${entry.id} is ${states[0]} and becomes ${entry.cues.at(-1).state}${line ? ` on line ${line}` : ""}: tooling cues that change (do not write it). Have a wide cast-scene on screen then, so the ${entry.id} is in frame as it changes, with the cast reacting to it.`);
+  }
   return lines;
 }
