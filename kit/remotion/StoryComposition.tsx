@@ -534,21 +534,24 @@ const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   );
 };
 
-// The look (kit/core/look.mjs): the grade's filters and the shared CSS once,
-// then the grade layer and the furniture with the variables of the story frame.
-const LookLayer: React.FC<{ plan: any }> = ({ plan }) => {
+// The look (kit/core/look.mjs): the shared CSS, the grade's filters and layer,
+// and the furniture, with the variables of the story frame. `under` draws
+// only the grade of a look whose grade sits under the medium; the main layer
+// then draws only the furniture.
+const LookLayer: React.FC<{ plan: any; under?: boolean }> = ({ plan, under = false }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const defs = React.useMemo(() => ({ __html: lookDefs(plan) }), [plan]);
   const css = React.useMemo(() => lookCss(plan, { grade: LOOK_Z.remotion, furniture: LOOK_Z.remotion }), [plan]);
   const furniture = React.useMemo(() => (plan.furniture ? { __html: plan.furniture.html } : null), [plan]);
   const vars = lookVarsAt(plan, Math.floor((frame * plan.fps) / fps + 1e-6)) as React.CSSProperties;
+  const grade = plan.grade && under === Boolean(plan.under);
   return (
     <>
-      {plan.grade ? <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} /> : null}
-      <style>{css}</style>
-      {plan.grade ? <div id={LOOK_LAYER_ID} data-launchclip-look={plan.name} style={vars} aria-hidden /> : null}
-      {furniture ? <div id={LOOK_FURNITURE_ID} data-launchclip-look={plan.name} data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" style={vars} aria-hidden dangerouslySetInnerHTML={furniture} /> : null}
+      {grade ? <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} /> : null}
+      {under ? null : <style>{css}</style>}
+      {grade ? <div id={LOOK_LAYER_ID} data-launchclip-look={plan.name} style={vars} aria-hidden /> : null}
+      {furniture && !under ? <div id={LOOK_FURNITURE_ID} data-launchclip-look={plan.name} data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" style={vars} aria-hidden dangerouslySetInnerHTML={furniture} /> : null}
     </>
   );
 };
@@ -711,6 +714,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
         {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {wipeLayers}
+          {look?.under ? <LookLayer plan={look} under /> : null}
           {medium ? <MediumLayer plan={medium} /> : null}
           {look ? <LookLayer plan={look} /> : null}
           <BrandFrame story={story} />
@@ -752,6 +756,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       {sweepLights}
       {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
       {wipeLayers}
+      {look?.under ? <LookLayer plan={look} under /> : null}
       {medium ? <MediumLayer plan={medium} /> : null}
       {look ? <LookLayer plan={look} /> : null}
       <BrandFrame story={story} />

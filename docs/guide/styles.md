@@ -204,6 +204,8 @@ A **look** treats the world, the characters and the cards together, so the whole
 | `thermal` | The scene through a black, purple, red, orange, yellow, white heat palette with slight blur and sensor noise, under a camera overlay: crosshair, scale bar, record dot and a running clock. |
 | `neon-night` | A dark scene lit by pink and cyan neon: a rim light of each colour, glow on bright areas, long reflections on a wet floor, haze, and rain outdoors. |
 | `paper-cutout` | Layered craft paper: rough cut edges, paper fibre and soft shadows between layers, the cast as jointed paper puppets with pin fasteners, animated on twos with a tiny jitter at every step. |
+| `watercolour` | Soft washes that bleed at the edges with darker pooled borders and paper grain, loose pencil lines slightly off register, and washes that shift every few frames like hand-painted frames. It is the `watercolour` medium with a pencil drawing under it, held at ten drawings a second. |
+| `anime-cel` | Thin dark outlines and two-tone cel shading with hard shadow edges on the characters and the world alike, big shiny eyes, light rays, and speed lines when a character is surprised. |
 | `none` | The default: no look, the video renders exactly as before. |
 
 A look brings its own colours, and where it needs them a drawing style for the characters, a time of day, a backdrop and lighting. Anything your video sets itself wins, then the look, then the style pack. With its dials:
@@ -218,11 +220,13 @@ A look brings its own colours, and where it needs them a drawing style for the c
 - `palette`: `"brand"` keeps your style's colours instead of the look's. The looks that map the whole frame through their own colours (blueprint, hologram, thermal) still do.
 - `labels`: up to six short labels for the looks that show text: the hologram's floating labels, the blueprint's title and scale, the thermal scale's hottest and coldest values.
 
-You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"* or *"paper cutout"* in your prompt picks the look. From the command line, `launchclip style generate --look hologram` does the same.
+You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"*, *"paper cutout"*, *"watercolour and pencil"* or *"anime"* in your prompt picks the look. (*Watercolour* on its own picks the medium, without the pencil or the held frames.) From the command line, `launchclip style generate --look hologram` does the same.
 
 Captions and the brand frame are never treated, so they stay readable, and a look renders the same every time. A look and a medium can be used together: the medium paints first.
 
 What a look cannot do: it treats the finished picture, so it cannot tell a person from a wall. The thermal look reads brightness as heat (it sets the scene to night so people are the brightest thing in it), and the neon reflections fall on the lower part of the frame, not on a floor it can see.
+
+In `anime-cel`, the speed lines fire on their own whenever a cue turns a character `surprised`. For a punch-in on the face, add `"shot": "close"` to the same cue.
 
 To see every look on a test scene in both renderers, run `node scripts/look-sheet.mjs`.
 

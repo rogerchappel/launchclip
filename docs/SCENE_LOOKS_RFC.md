@@ -24,7 +24,7 @@ function of the absolute frame, drawn from one plan by both renderers.
 
 `story.look` (a pack's `look`, filled by `applyStyle`) is a name or
 `{name, strength?, step?, furniture?, palette?, labels?}`. `none` or no look
-leaves the render exactly as it was. A look is made of five shared parts
+leaves the render exactly as it was. A look is made of six shared parts
 (`kit/core/look.mjs`, `kit/core/looks/`):
 
 1. **Presets.** Values for the existing fields above (`brand.colors`,
@@ -56,8 +56,13 @@ leaves the render exactly as it was. A look is made of five shared parts
    expression cues, so furniture can react: a blueprint draws in at each
    shot, speed lines fire on a surprised face.
 
+6. **Cast options.** A look may ask the cast's drawing for something its
+   drawing style already knows how to do (`pins` for paper cutout, the cute
+   face for anime cel), through one hook in the character modules.
+
 Stacking, low to high: scenes and camera, light, dot wipes, medium, look
-grade, look furniture, brand frame, captions.
+grade, look furniture, brand frame, captions. A look whose grade belongs
+under the paint (watercolour's pencil) draws it just below the medium.
 
 ## Determinism
 
