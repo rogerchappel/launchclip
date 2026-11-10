@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AGES, BOTTOMS, GLASSES, HAIR_STYLES, HEADWEAR, MOBILITY, OVERS, TOPS, ACCESSORIES, normalizeRigParams, rigFingerprint, rigGeometry} from '@launchclip/core/characters/rig.mjs';
-import {CHARACTER_SETS, CHARACTER_SET_NAMES, castFromStyle, generateCast} from '@launchclip/core/characters/generate.mjs';
+import {CHARACTER_SETS, CHARACTER_SET_NAMES, PEOPLE_SET_NAMES, castFromStyle, generateCast} from '@launchclip/core/characters/generate.mjs';
 import {resolveStoryCast, storyCastErrors} from '@launchclip/core/characters/cues.mjs';
 import {characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
 import {sceneJoints} from '@launchclip/core/characters/acting.mjs';
@@ -70,14 +70,14 @@ test('generateCast: deterministic, valid, distinct, and shaped by the set', () =
     assert.deepEqual(storyCastErrors({characters: a}), [], `${set}: a valid story cast`);
     assert.equal(new Set(a.map(m => m.id)).size, 6, `${set}: unique ids`);
     assert.equal(new Set(a.map(({id, name, voice, ...params}) => rigFingerprint(normalizeRigParams(params)))).size, 6, `${set}: distinct people`);
-    assert.ok(new Set(a.map(m => m.skin)).size >= 4, `${set}: skin tones spread across the range`);
+    if (PEOPLE_SET_NAMES.includes(set)) assert.ok(new Set(a.map(m => m.skin)).size >= 4, `${set}: skin tones spread across the range`);
   }
   const chefs = generateCast({seed: 'abc', set: 'chefs', count: 8});
   assert.ok(chefs.filter(m => m.outfit.top === 'chef-coat').length >= 4, 'chefs wear chef coats');
   assert.ok(generateCast({seed: 'abc', set: 'kids', count: 5}).every(m => m.age === 'child'), 'kids are children');
   assert.ok(generateCast({seed: 'abc', set: 'seniors', count: 5}).every(m => m.age === 'senior'), 'seniors are older');
   assert.ok(generateCast({seed: 'abc', set: 'medical', count: 6}).every(m => ['scrubs', 'lab-coat'].includes(m.outfit.top)), 'medical teams wear scrubs or lab coats');
-  for (const set of CHARACTER_SET_NAMES) assert.ok(CHARACTER_SETS[set].describe && CHARACTER_SETS[set].props.length, `${set} describes itself and its props`);
+  for (const set of CHARACTER_SET_NAMES) assert.ok(CHARACTER_SETS[set].describe && (CHARACTER_SETS[set].props.length || CHARACTER_SETS[set].kinds), `${set} describes itself and its props`);
   assert.throws(() => generateCast({seed: 'x', set: 'pirates'}), /unknown character set "pirates"/);
   assert.throws(() => generateCast({set: 'kids'}), /needs a seed/);
 });
@@ -85,7 +85,7 @@ test('generateCast: deterministic, valid, distinct, and shaped by the set', () =
 test('generated casts: thousands of distinct people over seeds, with the rarer options present', () => {
   const people = new Set();
   const seen = {mobility: new Set(), headwear: new Set(), age: new Set(), glasses: 0};
-  for (const set of CHARACTER_SET_NAMES) for (let k = 0; k < 60; k++) {
+  for (const set of PEOPLE_SET_NAMES) for (let k = 0; k < 60; k++) {
     for (const m of generateCast({seed: k.toString(16).padStart(8, '0'), set, count: 4, palette})) {
       people.add(JSON.stringify({...m, id: 0, name: 0, voice: 0}));
       if (m.mobility) seen.mobility.add(m.mobility);
@@ -116,7 +116,7 @@ test('castFromStyle reads a seeded style pack cast; a generated cast plays a sce
 test('balanced casts: a woman and a man, and a light-skinned person, in every cast of two or more', async () => {
   const {SKIN_ORDER} = await import('@launchclip/core/characters/palette.mjs');
   const light = SKIN_ORDER.slice(0, Math.ceil(SKIN_ORDER.length / 3));
-  for (const set of CHARACTER_SET_NAMES) for (let k = 0; k < 40; k++) for (const count of [2, 3, 6]) {
+  for (const set of PEOPLE_SET_NAMES) for (let k = 0; k < 40; k++) for (const count of [2, 3, 6]) {
     const cast = generateCast({seed: `b${k}`, set, count});
     assert.ok(cast.some(m => light.includes(m.skin)), `${set} ${k} ${count}: a light skin tone`);
     const kinds = new Set(cast.map(m => m.voice.slice(1, 2)));

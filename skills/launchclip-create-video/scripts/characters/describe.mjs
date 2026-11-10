@@ -30,6 +30,15 @@ import {BRAND_ROLES, GREY_HAIR, HAIR_COLORS, NEUTRALS, SKIN_ORDER, SKIN_TONES} f
 import {DRAWING_STYLES} from './styles.mjs';
 import {KOKORO_VOICES} from './cues.mjs';
 import {makeRng} from './generate.mjs';
+import {KIND_NAMES} from './kinds.mjs';
+
+// Everyday words for the kinds that are not people (kinds.mjs).
+const KIND_WORDS = {kitten: 'cat', kitty: 'cat', puppy: 'dog', bunny: 'rabbit', hare: 'rabbit', toad: 'frog', 'teddy bear': 'bear', smartphone: 'phone', mobile: 'phone', computer: 'laptop', notebook: 'laptop',
+  mug: 'cup', 'coffee cup': 'cup', coffee: 'cup', 'light bulb': 'bulb', lightbulb: 'bulb', lamp: 'bulb', idea: 'bulb', bot: 'robot', android: 'robot', money: 'coin', 'gold coin': 'coin', manual: 'book',
+  drop: 'droplet', 'water drop': 'droplet', raindrop: 'droplet', creature: 'monster', mascot: 'blob'};
+// What a person's set path becomes on a kind (a size), or null when it has no counterpart.
+const KIND_SIZE_OF = {'very-short': 'small', short: 'small', tall: 'large', 'very-tall': 'large'};
+const PERSON_PATHS = /^(build|height|age|skin|hair\.|outfit\.|accessories|headwear|mobility|colors\.(top|bottom|shoes))/;
 
 const words = name => name.split(/[-\s]+/);
 const key = tokens => tokens.join(' ');
@@ -116,6 +125,8 @@ function lexicon() {
   }
   for (const name of DRAWING_STYLES) for (const phrase of [`${key(words(name))} style`, `style ${key(words(name))}`, `${key(words(name))} drawing`]) add(phrase, [['style', name]]);
   for (const voice of KOKORO_VOICES) add(voice, [['voice', voice]]);
+  for (const name of KIND_NAMES) add(name, [['kind', name]]);
+  for (const [phrase, name] of Object.entries(KIND_WORDS)) if (KIND_NAMES.includes(name)) add(phrase, [['kind', name]]);
   // "a 30 year old" is an age in years, not a senior.
   for (const phrase of ['year old', 'years old']) add(phrase, []);
   for (const [phrase, sets] of Object.entries(SYNONYMS)) {
@@ -193,7 +204,8 @@ export function describeCharacter(text, {current = null} = {}) {
     }
     if (off) continue;
     const paths = entry.map(([path]) => path);
-    if (paths.includes('hair.style')) adjectives(at, entry.some(([, value]) => value === 'headscarf') ? {...hair, ...cloth} : hair, {to: 'hair.color', from: phrase});
+    if (paths.includes('kind')) adjectives(at, {...hair, ...skin, ...cloth, white: 'white', black: 'black', red: 'red', gold: 'mustard', golden: 'mustard'}, {to: 'colors.body', from: phrase});
+    else if (paths.includes('hair.style')) adjectives(at, entry.some(([, value]) => value === 'headscarf') ? {...hair, ...cloth} : hair, {to: 'hair.color', from: phrase});
     else if (paths.includes('outfit.top')) adjectives(at, cloth, {to: 'colors.top', from: phrase});
     else if (paths.includes('outfit.bottom')) adjectives(at, cloth, {to: 'colors.bottom', from: phrase});
     else if (paths.includes('outfit.over')) adjectives(at, cloth, {to: 'colors.accent', from: phrase});
@@ -225,11 +237,28 @@ export function describeCharacter(text, {current = null} = {}) {
     if (F_WORDS.includes(token.text)) voice ??= 'f';
     else if (M_WORDS.includes(token.text)) voice ??= 'm';
   }
+  // An animal, a mascot or an object: sizes for heights, and nothing of a person's.
+  const kindly = sets.some(set => set.path === 'kind') || (current?.kind !== undefined && current.kind !== 'person');
+  const dropped = [];
+  if (kindly) {
+    tokens.forEach((token, i) => {
+      if (claimed[i] && !['tiny', 'little'].includes(token.text)) return;
+      const size = {small: 'small', tiny: 'small', little: 'small', big: 'large', large: 'large', huge: 'large', giant: 'large', bigger: 'large', smaller: 'small'}[token.text];
+      if (size) { push(i, 'size', size, token.text); claimed[i] = true; }
+    });
+    for (const set of sets) {
+      if (set.path === 'height' && KIND_SIZE_OF[set.value]) Object.assign(set, {path: 'size', value: KIND_SIZE_OF[set.value]});
+      else if (PERSON_PATHS.test(set.path)) { dropped.push(set.from); set.path = null; }
+    }
+  }
+  const kept = sets.filter(set => set.path !== null);
+  sets.length = 0;
+  sets.push(...kept);
   sets.sort((a, b) => a.at - b.at);
   const unmatched = [...new Set(tokens.filter((token, i) => !claimed[i] && !token.proper && !STOP.has(token.text) && !/^\d+$/.test(token.text)).map(token => token.text))];
   const seen = new Set();
   const unique = sets.map(({at: _at, ...set}) => set).filter(set => { const id = `${set.path}${set.op}${set.value}`; if (seen.has(id)) return false; seen.add(id); return true; });
-  return {sets: unique, voice, accent, unmatched};
+  return {sets: unique, voice, accent, unmatched: [...new Set([...unmatched, ...dropped])]};
 }
 
 /** A Kokoro voice for a seed: a woman's or a man's when asked, British or American when asked. */
