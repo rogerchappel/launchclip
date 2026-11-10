@@ -2,7 +2,8 @@
 // {describe, words?, defaults: {strength, step}, honest?, presets(look),
 // variants?, variantAt?(plan, frame), under? (the grade sits under the
 // medium), grade?(plan, variant) → primitives
-// ending in "out", furniture?(plan) → {html, css}, vars?(plan, frame),
+// ending in "out", stage?(plan) → {planes, under} (a transform per scene
+// layer and markup under them), furniture?(plan) → {html, css}, vars?(plan, frame),
 // cast?: options for the cast's drawing (toon.mjs drawToon: pins)}.
 //
 // Imports only the look files, which import only parts.mjs, so the modules
@@ -17,6 +18,7 @@ import { LOOK as watercolour } from './watercolour.mjs';
 import { LOOK as animeCel } from './anime-cel.mjs';
 import { LOOK as asciiTerminal } from './ascii-terminal.mjs';
 import { LOOK as clay2d } from './clay-2d.mjs';
+import { LOOK as isometricLayers } from './isometric-layers.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
@@ -27,7 +29,8 @@ export const LOOKS = Object.freeze({
   watercolour,
   'anime-cel': animeCel,
   'ascii-terminal': asciiTerminal,
-  'clay-2d': clay2d
+  'clay-2d': clay2d,
+  'isometric-layers': isometricLayers
 });
 
 /** What a look (story.look: a name or {name}) asks of the cast's drawing, or null: {pins: true} for paper cutout, {face: "cute"} for anime cel. */
