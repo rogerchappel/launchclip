@@ -11,10 +11,11 @@ import {span, sky, skyBody, hills, tree, haze, rays} from './common.mjs';
 
 /**
  * Pixels per metre where the cast stands, as a share of the kit's own
- * (worlds/index.mjs ppm): a wide-shot horse is drawn about this much
- * larger than a person in an inside world, and story props match it.
+ * (worlds/index.mjs ppm): in a wide shot a mare is drawn about 400 px tall
+ * on a 1080 canvas, so two metres of horse is about this share. Story props
+ * are drawn at it wherever they stand.
  */
-export const STORY_SCALE = 1.15;
+export const STORY_SCALE = 0.7;
 
 function yard(k, {horizon = 0.5, ground = 0.84, quiet = 0.22} = {}) {
   const {W, H, portrait} = k;

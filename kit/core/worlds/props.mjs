@@ -806,7 +806,7 @@ const DEFS = {
       p.rect(x - 0.42 * s, y - 1.44 * s, 0.84 * s, 0.44 * s, 'none', {stroke: pal.primary, sw: 1.4, rx: 0.03 * s}),
       p.path(pts([[x - 0.26 * s, y - 1.26 * s], [x + 0.06 * s, y - 1.26 * s], [x + 0.06 * s, y - 1.34 * s], [x + 0.28 * s, y - 1.22 * s], [x + 0.06 * s, y - 1.1 * s], [x + 0.06 * s, y - 1.18 * s], [x - 0.26 * s, y - 1.18 * s]]), pal.accent, {stroke: false})];
   }, {story: true}),
-  'starting-gate': P('starting gate', GROUND, 2.4, 2.9, (k, x, y, s, anchor, opt = {}) => startingGate(k, x, y, s, opt.state ?? 'closed'), {story: true, states: ['closed', 'open'], at: 'centre'})
+  'starting-gate': P('starting gate', GROUND, 2.5, 3.9, (k, x, y, s, anchor, opt = {}) => startingGate(k, x, y, s, opt.state ?? 'closed'), {story: true, states: ['closed', 'open'], at: 'centre'})
 };
 
 /** How many stalls the starting gate has: two on a portrait canvas, three across a landscape one. */
@@ -821,11 +821,11 @@ export const gateBays = k => (k.portrait ? 2 : 3);
 function startingGate(k, x, y, s, state) {
   const {p, pal} = k;
   const n = gateBays(k);
-  const bay = 0.86 * s, post = 0.1 * s, h = 2.4 * s;
+  const bay = 1.15 * s, post = 0.11 * s, h = 2.5 * s;
   const w = n * bay + (n + 1) * post, left = x - w / 2;
   const pad = pal.accent, padS = pal.accentShade;
-  const out = [shadowUnder(k, x, y, w / s, s)];
-  const doorTop = y - 1.5 * s, doorBottom = y - 0.34 * s;
+  const out = [p.shadow(x, y, w * 0.52, 0.09 * s, 0.7)];
+  const doorTop = y - 1.55 * s, doorBottom = y - 0.3 * s;
   for (let i = 0; i < n; i++) {
     const bx = left + post + i * (bay + post);
     // The rails along each stall, seen end on behind the doors.

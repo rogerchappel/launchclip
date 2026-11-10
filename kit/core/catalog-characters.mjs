@@ -35,7 +35,7 @@ import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeO
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
 import {propCueOps, sceneProps, withoutForeground, worldCameraStates} from './catalog-world.mjs';
-import {PROP_STATES, STORY_PROP_IDS} from './worlds/index.mjs';
+import {PROP_STATES, RACING_WORLDS, STORY_PROP_IDS} from './worlds/index.mjs';
 import {OVERSCAN} from './worlds/index.mjs';
 import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
@@ -506,7 +506,7 @@ function resolveCastScene(params, ctx) {
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
-    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time)} : {})});
+    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time), bare: RACING_WORLDS.includes(stage.world.kind)} : {})});
   const slotOf = castSlots(b, p.cast, cast);
   const world = stage.world;
   const light = sceneLight(b, p.light, ctx, world);
