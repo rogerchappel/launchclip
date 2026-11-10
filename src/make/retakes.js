@@ -7,8 +7,10 @@
 // framing or set); step 3 replans every shot of the story beat. Only the
 // scenes the retake changed render again (finish --scene), then the critic
 // looks again. A round that fails, changes nothing or does not lower the
-// blocking and major findings is undone and the rounds stop. Every round is
-// recorded in qa/retakes.json (launchclip.retakes.v1).
+// blocking and major findings is undone and the rounds stop. A retake the
+// validator turns down goes back to the model once with its messages before
+// the round gives up. Every round is recorded in qa/retakes.json
+// (launchclip.retakes.v1), with each attempt's messages (attempts, rejected).
 //
 // Step 2 (drop a shot's handed-in art) belongs to the hand-in phases.
 //
@@ -54,7 +56,8 @@ You may not change: a scene's id, module, start, end or track; who speaks ("says
 Rules:
 - A character who speaks during the shot stays in it.
 - Use only the poses, expressions and sets listed, and only characters of the cast.
-- A cue's "at" is a word anchor ("word:<text>") from a line said during the shot, as in the scenes given.
+- A cue's "at" is a word said during the shot ("word:<text>": the word as it is said in this shot, even when the narration says it earlier too), or seconds from the shot's start. Never seconds from the start of the video.
+- A walk-to goes as far toward its target as the shot leaves time for; give it at least half a second before the shot ends.
 - Change as little as answers the findings. Do not return a scene unchanged.
 
 Return scenes_json (a JSON array holding every scene named, each complete) and note (one sentence: what you changed).`;
@@ -88,14 +91,18 @@ async function storyErrors(project, story, words) {
 
 /**
  * The default retake step: the model re-directs the scenes named and nothing
- * else. One call, and one repair call if the result does not validate.
+ * else. One call, and one corrective call with the validator's messages if
+ * the result does not validate.
  * options: {client (runStructured), project, story (storyboard.json as
  * written), words, step ("redirect"|"replan-beat"), shots (scene ids it may
- * change), shotList (the shot list's shots), problems (retakeProblems)}
- * → {story, changed, ignored, note, attempts, usage: [..], model}; throws
- * when the result changes no shot or still does not validate.
+ * change), shotList (the shot list's shots), problems (retakeProblems),
+ * check(story) → [errors] (the caller's own checks on the retaken storyboard,
+ * answered in the same corrective call)}
+ * → {story, changed, ignored, note, attempts, rejected: [{attempt, errors}],
+ * usage: [..], model}; throws when the result changes no shot or still does
+ * not validate, with the same attempts, rejected and usage on the error.
  */
-export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1 } = {}) {
+export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null } = {}) {
   if (!client || typeof client.runStructured !== "function") throw new Error("a retake needs a model client with runStructured(), or its own redirect hook");
   const wanted = new Set(shots);
   const scenes = (story?.scenes ?? []).filter((scene) => wanted.has(scene.id));
@@ -118,24 +125,37 @@ export async function redirectShots({ client, project, story, words = [], step =
   }
   lines.push("", "The scenes to return, as they are now:", JSON.stringify(scenes, null, 2));
   const usage = [];
+  const rejected = [];
   let model = null;
   let errors = [];
+  let attempts = 0;
   for (let attempt = 0; attempt <= maxRepairs; attempt += 1) {
     const input = errors.length ? `${lines.join("\n")}\n\nYour last answer did not validate. Fix these and return every scene again:\n${errors.map((error) => `- ${error}`).join("\n")}\n` : `${lines.join("\n")}\n`;
     const result = await client.runStructured({ instructions: REDIRECT_INSTRUCTIONS, input, schema: REDIRECT_SCHEMA, schemaName: "launchclip_retake", maxOutputTokens: 6000 });
+    attempts = attempt + 1;
     usage.push({ usage: result?.usage ?? {}, model: result?.model ?? null });
     model = result?.model ?? model;
     let proposed = null;
     try { proposed = JSON.parse(result?.value?.scenes_json ?? ""); } catch { proposed = null; }
     if (proposed && !Array.isArray(proposed) && Array.isArray(proposed.scenes)) proposed = proposed.scenes;
-    if (!Array.isArray(proposed)) { errors = ["scenes_json is not a JSON array of scenes"]; continue; }
-    const scoped = scopedRetake(story, { scenes: proposed }, shots);
-    if (!scoped.changed.length) { errors = ["no scene was changed; change the acting, the framing or the set of the shots named"]; continue; }
-    errors = await storyErrors(project, scoped.story, words);
-    if (!errors.length) return { ...scoped, note: String(result?.value?.note ?? "").trim() || null, attempts: attempt + 1, usage, model };
+    let scoped = null;
+    if (!Array.isArray(proposed)) errors = ["scenes_json is not a JSON array of scenes"];
+    else {
+      scoped = scopedRetake(story, { scenes: proposed }, shots);
+      if (!scoped.changed.length) errors = ["no scene was changed; change the acting, the framing or the set of the shots named"];
+      else {
+        errors = await storyErrors(project, scoped.story, words);
+        if (!errors.length && typeof check === "function") errors = [...(check(scoped.story) ?? [])];
+      }
+    }
+    if (!errors.length) return { ...scoped, note: String(result?.value?.note ?? "").trim() || null, attempts, rejected, usage, model };
+    rejected.push({ attempt: attempts, errors: errors.slice(0, RETAKE_ERRORS) });
   }
-  throw new Error(`the retake did not validate: ${errors.slice(0, 3).join("; ")}`);
+  throw Object.assign(new Error(`the retake did not validate after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${errors.slice(0, 3).join("; ")}`), { attempts, rejected, usage, model });
 }
+
+// How many of an attempt's validator messages go back to the model's record (qa/retakes.json).
+const RETAKE_ERRORS = 8;
 
 async function snapshot(project) {
   const dir = path.join(project, SNAPSHOT_DIR);
@@ -216,6 +236,8 @@ export async function runRetakes(options = {}) {
     try {
       const answer = await redirect({ project, round, step: plan.step, shots: plan.shots, failing: plan.failing, beats: plan.beats, problems: retakeProblems(findings, plan.failing), findings, story: state.raw, words: state.loaded.words, shotList: state.shots });
       if (Array.isArray(answer?.usage)) usage.push(...answer.usage.map((item) => ({ stage: `retake-${round}-${plan.step}`, ...item })));
+      if (Number.isInteger(answer?.attempts)) entry.attempts = answer.attempts;
+      if (Array.isArray(answer?.rejected) && answer.rejected.length) entry.rejected = answer.rejected;
       const proposed = answer?.story?.scenes ? answer.story : answer;
       const scoped = scopedRetake(state.raw, proposed, plan.shots);
       if (!scoped.changed.length) throw new Error("the retake changed no shot");
@@ -242,6 +264,10 @@ export async function runRetakes(options = {}) {
       Object.assign(entry, { verdict_after: score.verdict, findings_after: score, kept: criticImproved(before, score) });
     } catch (error) {
       entry.error = String(error?.message ?? error).split("\n")[0];
+      // A retake the validator turned down: what each attempt was told, and what the calls cost.
+      if (Number.isInteger(error?.attempts)) entry.attempts = error.attempts;
+      if (Array.isArray(error?.rejected) && error.rejected.length) entry.rejected = error.rejected;
+      if (Array.isArray(error?.usage)) usage.push(...error.usage.map((item) => ({ stage: `retake-${round}-${plan.step}`, ...item })));
     }
     entry.seconds = Math.round((now() - started) / 100) / 10;
     if (entry.kept) {

@@ -50,6 +50,11 @@
   limits how many model calls are in flight; `1` sends one at a time. A
   rate-limit answer is waited out instead of failing the stage, and
   `MAKE.json` `model_calls` says where calls overlapped.
+- An OpenAI model's answer is picked up sooner. A background response was
+  polled every 5 s, so each finished answer waited 2.5 s on average to be
+  seen; it is now polled after 1 s, 1 s, then every 2 s, and every 5 s once a
+  call has run two minutes. That is about 1.5 s less per call, or about 18 s
+  over the dozen calls of a `make` run, with the same answers.
 - The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
   starts beside others only when the most they can all cost fits under the
   limit, and otherwise waits its turn.
@@ -555,6 +560,22 @@
   module" card in it and fail the placeholder gate afterwards.
 
 ### Fixed
+
+- Character stories: a cue anchored to a word (`at: "word:<text>"`) now means
+  the word as it is said during the cue's scene, not the first time the
+  narration says it, and a word that starts just outside the scene plays at
+  the scene's edge. Cue times no longer come out negative, which had every
+  critic retake undone. A retake the validator turns down is sent back once
+  with the validator's messages and the plan's own checks, and
+  `qa/retakes.json` records each attempt (`attempts`, `rejected`).
+- A character moves its mouth on its own words in every scene it is in,
+  whether or not the scene sets `says` (`says: []` keeps it shut), including
+  a line a cut falls inside.
+- A `walk-to` in a shot too short for the whole walk goes as far toward its
+  target as the shot allows instead of failing the plan, and a plan for a
+  character story is held to the acting and lip-sync gates before it renders:
+  a line's action nobody on screen performs says whether the character needs
+  a cue or a place in the shot.
 
 - HyperFrames drew a video in a media layout (`picture-in-picture`,
   `landscape-card`, `media-compare`, `media-grid`, `media-list`,

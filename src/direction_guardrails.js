@@ -22,7 +22,7 @@ import { TEXT_FADE, resolveModule } from "@launchclip/core/modules.mjs";
 import { TRANSFORM_KEYS } from "@launchclip/core/physics.mjs";
 import { samePlaceCuts, twoCopies } from "@launchclip/core/story.mjs";
 import { sceneWindows } from "@launchclip/core/transitions.mjs";
-import { ACTION_INFO, LOOK_ACTIONS } from "@launchclip/core/characters/actions.mjs";
+import { ACTION_INFO, LOOK_ACTIONS, TARGET_REQUIRED, targetError } from "@launchclip/core/characters/actions.mjs";
 import { narrationWords } from "@launchclip/core/direction.mjs";
 import { abstractFindings } from "@launchclip/core/explainer.mjs";
 
@@ -193,9 +193,14 @@ export function actingGate(story, { map, words, rects = [] } = {}) {
         findings.push({ rule: "look-unread", severity: "error", at: hits[0].state.time, ids: [hits[0].model.id], detail: `${action.who} performs ${action.verb} facing the camera, so it does not read as looking at anything; give the cue a target (window, street, horizon, skyline, a prop) so the character turns to it` });
       }
       if (!done) {
-        const where = candidates.length ? `cast scenes ${candidates.map(({ entry }) => entry.id).join(", ")}` : "no cast scene";
-        const hint = ACTION_INFO[action.verb] ? `a cue {at: "word:…", action: "${action.verb}"${action.target ? `, target: ${JSON.stringify(action.target)}` : ""}}` : `a cue {at: "word:…", pose: "${action.verb}"}`;
-        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), detail: `"${String(line.text ?? "").slice(0, 60) || `words ${line.words.join("–")}`}" names ${action.who} ${action.verb}, but ${where} on it performs it (${round(first.start, 2)}–${round(last.end, 2)} s); give ${action.who} ${hint}` });
+        const hint = ACTION_INFO[action.verb] ? `{at: "word:…", action: "${action.verb}"${action.target !== undefined && action.target !== null && targetError(action.target) === null ? `, target: ${JSON.stringify(action.target)}` : TARGET_REQUIRED.includes(action.verb) ? ", target: left | right | {character: id} | {prop: id}" : ""}}` : `{at: "word:…", pose: "${action.verb}"}`;
+        // Who is on screen for the line: the fix is a cue for a character who is there, and a place in the shot for one who is not.
+        const present = candidates.filter(({ model }) => model.content.actors.some((actor) => actor.id === action.who));
+        const said = `"${String(line.text ?? "").slice(0, 60) || `words ${line.words.join("–")}`}" names ${action.who} ${action.verb}${typeof action.target === "string" && targetError(action.target) !== null ? ` (${action.target.slice(0, 60)})` : ""} at ${round(first.start, 2)}–${round(last.end, 2)} s`;
+        const detail = !candidates.length ? `${said}, but no cast scene plays on it; put a cast scene with ${action.who} on these words, with a cue ${hint}`
+          : present.length ? `${said}, but ${action.who} does not perform it in ${present.map(({ entry }) => entry.id).join(", ")}; give ${action.who} a cue ${hint} there, on a word of the line`
+            : `${said}, but ${action.who} is not in ${candidates.map(({ entry }) => entry.id).join(", ")}, the cast scene${candidates.length === 1 ? "" : "s"} on those words; add ${action.who} to that scene's params.cast with a cue ${hint}, or name a character who is in the shot in the map line's action.who`;
+        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), who: action.who, in_shot: present.length > 0, detail });
       }
     }
   }

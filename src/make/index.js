@@ -1807,7 +1807,8 @@ async function retakeRounds(ctx, { review, critique, rounds, label = "", render,
     redirect: async (args) => {
       held = { round: args.round, fields: Object.fromEntries(CRITIC_ROUND_FIELDS.map((field) => [field, structuredClone(report[field])])), finish: ctx.finish };
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (retake ${args.round}: ${args.step} ${args.shots.join(", ")})`);
-      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args });
+      // The plan's own checks are part of the retake's corrective pass (redirectShots check).
+      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args, ...(ctx.storyCheck ? { check: ctx.storyCheck } : {}) });
       const errors = ctx.storyCheck && answer?.story?.scenes ? ctx.storyCheck(answer.story) : [];
       if (errors.length) throw new Error(`the retake failed the storyboard's checks: ${errors.slice(0, 3).join("; ")}`);
       return answer;

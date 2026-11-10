@@ -100,7 +100,7 @@ test("the acting gate: a line's key action is performed by its character on that
   const idle = story([plate(), bench([{ id: "maya", expression: "happy" }])]);
   const failed = actingGate(idle, { map: map({ verb: "look-far", who: "maya", target: "street" }), words });
   assert.equal(failed.status, "failed");
-  assert.match(failed.findings[0].detail, /names maya look-far, but cast scenes c on it performs it.*action: "look-far", target: "street"/);
+  assert.match(failed.findings[0].detail, /names maya look-far at 1–2\.9 s, but maya does not perform it in c; give maya a cue \{at: "word:…", action: "look-far", target: "street"\}/);
   // Too late: an action after the line (past the slack) does not count.
   const late = story([plate(), bench([{ id: "maya", cues: [{ at: 4.5, action: "look-far" }] }])]);
   assert.equal(actingGate(late, { map: map({ verb: "look-far", who: "maya" }), words }).status, "failed");
