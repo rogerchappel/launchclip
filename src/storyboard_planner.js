@@ -50,6 +50,9 @@ import { featuredPrompt, unusedFeatured } from "./asset_understanding.js";
 import { bareNotesLine, mediaNotesLine, snapMediaWindows } from "./inventory_notes.js";
 import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSeconds } from "./short_form_checks.js";
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
+import { abstractErrors, castFromDirection, characterErrors, characterShare, defaultExplainerCast, openingErrors } from "@launchclip/core/explainer.mjs";
+import { readingFindings } from "./direction_guardrails.js";
+import { fitCastCuts } from "./cast_cut_fit.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -148,12 +151,21 @@ export async function planStoryboard(options = {}) {
   // seeded style's default roster takes the story's own names (src/cast_fit.js).
   const castPlan = plannedCast({ story: options.seed?.storyboard ?? null, style, bible });
   let boundCast = null;
+  // explainer: a character-led explainer (kit/core/explainer.mjs): a one-prompt
+  // explainer with nothing to show is carried by a small cast the direction
+  // map chooses, and the checks hold the storyboard to it. A seed storyboard
+  // (a repair of a planned video) keeps the cast it has.
+  const wantsCast = options.explainer === true && lane !== "footage-led" && !bible;
+  let explainer = null;
+  if (wantsCast && options.seed?.storyboard?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.seed.storyboard.cast)), roles: [], dropped: [] };
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan, script });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan, script, explainer: wantsCast && !explainer });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
-    if (direction && directionPlan.bound?.length) boundCast = directionPlan.cast;
+    if (wantsCast && !explainer) explainer = directionPlan.casting ?? { ...defaultExplainerCast(), dropped: [] };
+    else if (direction && directionPlan.bound?.length) boundCast = directionPlan.cast;
   } else if (direction) {
+    if (wantsCast && !explainer) explainer = castFromDirection(direction) ?? { ...defaultExplainerCast(), dropped: [] };
     // A given map gets the same fit: kit values for free text, names bound.
     const fit = fitDirectionCast(direction, { cast: castPlan, words: wordList });
     direction = fit.map;
@@ -163,9 +175,12 @@ export async function planStoryboard(options = {}) {
   // A bound cast is written into the storyboard (pinned like the brand), so
   // the style never re-applies its own roster; the prompt names it too.
   let planStyle = style;
+  if (wantsCast && !explainer) explainer = { ...defaultExplainerCast(), dropped: [] };
+  // The explainer's cast is the story's, pinned like a bound one.
+  if (explainer) boundCast = explainer.cast;
   if (boundCast) {
     fixed.cast = boundCast;
-    planStyle = { ...style, cast: { ...style.cast, members: boundCast.characters } };
+    if (style) planStyle = { ...style, cast: { ...(style.cast ?? {}), members: boundCast.characters, ...(explainer ? { drawing_style: boundCast.style } : {}) } };
   }
   // The show bible's cast is pinned the same way, whatever the style or the
   // map say, and both files name the bible they were planned against.
@@ -207,7 +222,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -262,6 +277,8 @@ export async function planStoryboard(options = {}) {
         // A repaired map's free-text cues get the kit's values, as the first map's did.
         const normalized = normalizeCastCues(repairedMap.map);
         direction = bible ? pinMap(fitDirectionCast(normalized.map, { cast: castPlan, words: wordList }).map) : normalized.map;
+        // A repaired map keeps the explainer's cast (the repair does not recast).
+        if (explainer) direction = { ...direction, cast: explainer.cast };
         if (normalized.changed.length) pinned.warnings = [...pinned.warnings, ...normalized.changed.map((entry) => `cast: tooling mapped DIRECTION.json ${entry}`)];
       }
       let shotErrors = [];
@@ -322,6 +339,13 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
       }
+      // One copy of a character at a time: a join between two character scenes that share one is a cut (src/cast_cut_fit.js).
+      // An explainer's character scenes sit on track 0 with transitions of their own; a character story's ride their world plates, which the kit already handles.
+      const cuts = explainer ? fitCastCuts(pinned.storyboard) : { changed: [] };
+      if (cuts.changed.length) {
+        pinned.storyboard = cuts.storyboard;
+        pinned.warnings = [...pinned.warnings, ...cuts.changed.map((entry) => `cast: tooling made ${entry}`)];
+      }
       // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
       if (bible && direction) {
         const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -330,7 +354,7 @@ export async function planStoryboard(options = {}) {
           pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
         }
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible ? { castGate: true } : {}) };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -421,6 +445,15 @@ export async function planStoryboard(options = {}) {
         // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
         const left = unusedFeatured(checked.storyboard, featured ?? []);
         if (left.length) { checked.errors = [...checked.errors, ...left]; checked.ok = false; }
+        // What the finish gates would fail, caught while a repair can still fix it: a card with more words than its time
+        // on screen allows (ghosting), an opening that draws itself from an empty plate (structure), a video of only
+        // diagrams and text cards (variety); and, for a character-led explainer, characters on screen for most of it.
+        const timed = lane === "footage-led" ? null : resolvedOrNull(checked.storyboard, wordList, beats);
+        if (timed) {
+          const picture = [...planReadingErrors(timed), ...openingErrors(timed), ...abstractErrors(timed), ...(explainer ? characterErrors(timed, { cast: explainer.cast }) : [])];
+          if (picture.length) { checked.errors = [...checked.errors, ...picture]; checked.ok = false; }
+          if (explainer) checked.character_share = characterShare(timed).share;
+        }
         if (laidOut) {
           const resolved = resolvedOrNull(checked.storyboard, wordList, beats);
           const laid = layout.check(resolved ?? checked.storyboard, { seconds });
@@ -543,6 +576,8 @@ export async function planStoryboard(options = {}) {
     cadence: last?.cadence ?? null,
     // The clip-led rule the plan ran under, and the clip share it reached.
     clip_led: { ...clipLed, share: last?.clip_share ?? null },
+    // A character-led explainer: the cast the map chose, what each plays, and the share of the runtime a character is on screen.
+    ...(explainer ? { explainer: { cast: explainer.cast, roles: explainer.roles, character_share: last?.character_share ?? null, ...(explainer.dropped?.length ? { dropped: explainer.dropped } : {}) } } : {}),
     long_form: longForm,
     usage: totals,
     cost: {
@@ -728,7 +763,16 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: "];
+const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
+
+/** Cards that hold more words than their time on screen allows (src/direction_guardrails.js readingFindings), as repair notes. */
+export function planReadingErrors(resolved) {
+  let found = [];
+  try { found = readingFindings(resolved); } catch { found = []; }
+  return found.map((entry) => entry.fits < 1
+    ? `reading: ${entry.id} (${entry.module}) is fully on screen for ${entry.hold} s, and a card needs at least ${entry.need} s to be read; lengthen the scene, or drop it and give its ${entry.words} word${entry.words === 1 ? "" : "s"} to the scene before or after it`
+    : `reading: ${entry.id} (${entry.module}) shows ${entry.words} words but is fully on screen for ${entry.hold} s, which is time to read ${entry.fits}; cut its copy to ${entry.fits} word${entry.fits === 1 ? "" : "s"} or fewer (title, body, labels and steps together), or split it into two scenes`);
+}
 
 // A card's text that only holds its place: dashes, question marks, an
 // ellipsis, "TBD". A model with nothing to say fills a list or a table with
@@ -865,10 +909,11 @@ export function pinInputs(story, fixed) {
  * → {map | null, attempts, warnings, cast?, bound?}: cast is the story cast
  * the map's cues name (a style default cast with the story's names bound).
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null, script = null }) {
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null, script = null, explainer = false }) {
   // cast: plannedCast() (src/cast_fit.js), the cast the story will have, or
   // null when the storyboard defines it (its cues are then checked there).
-  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null });
+  // explainer: the map casts the characters that carry the video (kit/core/explainer.mjs); → casting.
+  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null, explainer });
   const rules = constraints ? constraintsPrompt(constraints, { words }) : "";
   const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, "", ...(rules ? [rules] : [])].join("\n");
   const attempts = [];
@@ -891,7 +936,14 @@ export async function planDirection({ client, model = null, brief, fixed, profil
     const extracted = extractDirection(result);
     let errors = extracted.ok ? [] : [`json: ${extracted.error}`];
     let fit = null;
+    let casting = null;
     if (extracted.ok) {
+      // The explainer's cast: what the map chose, as a story cast (a character the kit cannot draw is dropped; none at all takes the default pair).
+      if (explainer) {
+        casting = castFromDirection(extracted.map) ?? { ...defaultExplainerCast(), dropped: ["the map cast no character the kit can draw; the default pair is used"] };
+        extracted.map.cast = casting.cast;
+        cast = { cast: casting.cast, source: "story", bindable: false };
+      }
       // Tooling first (src/cast_fit.js): free-text poses, expressions and
       // sets take the kit's nearest values, and a style default cast takes
       // the story's names; what is left goes back to the model.
@@ -903,7 +955,7 @@ export async function planDirection({ client, model = null, brief, fixed, profil
       errors = check.errors;
     }
     attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: fit?.warnings ?? [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });
-    if (!errors.length) return { map: extracted.map, attempts, warnings: [...warnings, ...fit.warnings], cast: fit.cast, bound: fit.bound };
+    if (!errors.length) return { map: extracted.map, attempts, warnings: [...warnings, ...fit.warnings, ...(casting?.dropped ?? []).map((entry) => `cast: ${entry}`)], cast: fit.cast, bound: fit.bound, ...(casting ? { casting } : {}) };
     previous = { errors, text: extracted.ok ? JSON.stringify(extracted.map) : extracted.text ?? null };
   }
   return { map: null, attempts, warnings };

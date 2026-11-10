@@ -154,7 +154,13 @@ emphasis. Plates appear only where they are needed.
   - Card and text entrances clamp their fade to `TEXT_FADE.max` (0.5 s); a
     cast's own fade takes at most 0.3 s.
   - Every text module holds fully opaque for its reading time (0.22 s a
-    word, at least 1.2 s; source and role lines do not count).
+    word, at least 1.2 s; source and role lines do not count). Only copy is
+    counted: a diagram's point names (`from`, `to`, `point`), a line's
+    weight and style, colour roles and layout modes are wiring, not words.
+- **Planner.** `launchclip make` and `story plan` run the same count before
+  anything is rendered (`readingFindings`): a card with more words than its
+  time on screen allows goes back to the model as a `reading:` note with the
+  number of words that fit, to cut or split.
 - **Validation.** A character in two scenes whose render windows overlap is an
   error (two copies at once).
 - **Finish gate `ghosting`** (op lists sampled at 10 Hz):
@@ -173,6 +179,8 @@ entrances and variants. The clamps only cap their timing.
 - No frame region stays empty for long.
 - No card sits alone over an empty set.
 - No shot repeats back to back.
+- A video pictures its subject: it is never only line diagrams, rows of dots
+  and text cards.
 
 **Enforced:**
 
@@ -196,6 +204,12 @@ entrances and variants. The clamps only cap their timing.
   - Two consecutive cast scenes with the same set, cast and poses fail, even
     over different worlds.
   - The same set and cast more than three times in a video is a warning.
+  - `abstract-only`: a video of 15 s or more whose five or more scenes are
+    all line or node diagrams (`line-diagram`, `process-steps`, `compare`,
+    `timeline` and the like) and text cards, with no character, photo,
+    footage, object, chart or interface in any scene, fails. Stories over a
+    recording are exempt. The planner reports the same thing as a `variety:`
+    note while a repair can still fix it.
 - **Planner prompt and skill: 9:16 composition.**
   - A card takes the top 30–40% of the frame and the cast stands in the lower
     half on the world's ground, so they share the frame.
@@ -215,6 +229,43 @@ the cast's actions within those bounds.
   - the direction-map reference requires `action` on narrative lines;
   - the storyboard reference shows the cues;
   - the review step names the new gates.
+
+## 6a. Explainers are carried by characters
+
+A one-prompt explainer with nothing to show (no footage, no product screens)
+used to come out as line diagrams and cards: correct, and nobody watches it.
+The director's default for one is a small recurring cast that carries the
+idea (`kit/core/explainer.mjs`):
+
+- **Casting.** The direction map casts one to three characters as its
+  top-level `cast`: the subject itself as an object with a face, its parts or
+  forces as mascots (for "why sourdough needs a starter": the starter as a
+  jar, the yeast and the bacteria as two small mascots), or a starter person
+  for a topic about people. Tooling turns it into the story's cast, drawn
+  `chibi`, and pins it like a brand. A map that casts nothing the kit can
+  draw gets a default pair.
+- **Scenes.** `character-cameo` (one character beside a card that carries
+  the line's words) for most beats, `cast-scene` where two or three meet;
+  poses, expressions and cues on the narration's words. Diagrams, charts and
+  cards support the cast, never two in a row.
+- **Checks (planner).** A character is on screen for at least 50% of the
+  runtime and in the opening scene (`characters:`); the opening is whole on
+  frame 0, never a module that draws itself from an empty plate
+  (`opening:`, what the structure gate measures on the render); and the cast
+  gate runs at planning time, so a limb outside the frame is repaired before
+  the render.
+- **Honest evidence.** A character illustrates what the narration says. No
+  card, label or speech bubble states a fact, a number or a quote the script
+  does not have, and a character never speaks lines of its own.
+- **When.** `launchclip make` plans this way when the video has no picture
+  of its own: a motion lane, no media in `--assets` and no asset provider,
+  an explainer or short-form script on its format's own skeleton, and make's
+  seeded style (a style the user chose keeps its look and cast). The seeded
+  style then takes a playful tone when the prompt names none (a lively
+  palette instead of the neutral range) and, where the topic is one a
+  whole-scene look pictures (an engine as a blueprint, heat loss as a
+  thermal camera), that look. `MAKE.json` `explainer` records the cast, what
+  each plays and the share of the runtime a character is on screen.
 
 ## 7. Movement grammar
 
@@ -252,7 +303,7 @@ something live moves in it.
 | layout (captions) | rendered frames | a caption line is below 3:1 or camouflaged after the plate pass |
 | ghosting | ops at 10 Hz | two copies of a character; half-transparent text or characters held too long |
 | density | layout rects at 2 Hz | an empty region for more than 4 s; a lone card over an empty set for more than 3 s |
-| variety | cast scenes | the same shot back to back |
+| variety | cast scenes, track-0 scenes | the same shot back to back; a video of only diagrams and text cards |
 | holds | windows and ops at 4 Hz | nothing moves for more than 3 s (only the drift moving warns) |
 | states | shots, states and events | a shot holds one state for more than 10 s |
 | lip-sync | character scenes' mouth changes, narration words | a mouth is open for more than 0.15 s (or 0.3 s in all) with no word of its own under it; a character on screen has a line and its mouth is open for under a quarter of it |

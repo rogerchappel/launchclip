@@ -18,7 +18,7 @@ import { fakeFinish } from "./helpers/make_fakes.js";
 
 const run = promisify(execFile);
 const PROMPT = "An 8-second tool explainer for Clipline, a CLI that snaps every clip on your timeline to the beat";
-const NARRATION = "Your timeline misses the beat again and again. Clipline snaps every clip to the grid. Twelve cuts unlocked today.";
+const NARRATION = "Your timeline misses the beat again and again. Clipline snaps every clip to the grid. Twelve cuts unlocked. Try it free today.";
 
 // The plan a model would return for NARRATION on the signal-ui style.
 function uiPlan(duration) {
@@ -112,7 +112,8 @@ test("make: a tool-explainer brief, --style signal-ui and a canned ui-scene plan
   const resolved = resolveStory(story, { words });
   const seconds = (text) => words.find((word) => word.text.replace(/\W/g, "").toLowerCase() === text).start;
   assert.ok(Math.abs(resolved.scenes[1].start - seconds("clipline")) < 0.05, "scene anchors resolve");
-  assert.ok(Math.abs(resolved.scenes[2].start - seconds("twelve")) < 0.05);
+  // The third scene starts on "twelve", or a little after it where tooling gave the scene before it its 2.5 s hold.
+  assert.ok(resolved.scenes[2].start > seconds("twelve") - 0.05 && resolved.scenes[2].start < seconds("twelve") + 0.4, `${resolved.scenes[2].start} vs ${seconds("twelve")}`);
   const burst = resolved.scenes[2].params.elements.find((el) => el.kind === "burst");
   assert.equal(typeof burst.at, "number", "element anchors resolve");
   assert.equal(story.style, "signal-ui");

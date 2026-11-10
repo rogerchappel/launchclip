@@ -1,0 +1,148 @@
+{
+  "errors": [
+    "stories of 20 seconds or longer require escalation",
+    "claims[0] requires evidence_ids unless confidence is creative",
+    "claims[1] requires evidence_ids unless confidence is creative",
+    "claims[2] requires evidence_ids unless confidence is creative"
+  ],
+  "candidate": {
+    "concept_id": "c2",
+    "format": {
+      "duration_seconds": 30,
+      "height": 1080,
+      "aspect": "16:9",
+      "width": 1920,
+      "language": "en"
+    },
+    "open_loop": {
+      "midpoint_rehook_beat_id": "b4",
+      "resolved_by_beat_id": "b7",
+      "question": "How does the starter connect the jar to the finished loaf?"
+    },
+    "project": {
+      "thesis": "Starter supplies the culture that ferments sourdough, producing gas that expands the dough and acids that develop its acidity.",
+      "title": "The Path to the Loaf",
+      "audience_promise": "Understand where starter fits in the journey from jar to loaf."
+    },
+    "claims": [
+      {
+        "text": "Starter supplies a microbial culture that helps sourdough rise and develop acidity.",
+        "qualifier": "General knowledge; no supporting source was supplied.",
+        "confidence": "qualified",
+        "evidence_ids": []
+      },
+      {
+        "text": "During sourdough fermentation, yeast produces gas and bacteria produce acids; trapped gas expands the dough.",
+        "qualifier": "General knowledge; no supporting source was supplied. Dough expansion alone would not establish the microbial mechanism or acidity.",
+        "confidence": "qualified",
+        "evidence_ids": []
+      },
+      {
+        "text": "Other leaveners can raise bread; starter supplies the culture used for sourdough fermentation.",
+        "qualifier": "General knowledge; no supporting source was supplied.",
+        "confidence": "qualified",
+        "evidence_ids": []
+      }
+    ],
+    "schema_version": "launchclip.cinematic-story.v1",
+    "narration": {
+      "full_text": "A sourdough starter supplies the living culture that helps dough rise and develop acidity. But how does a jar become a loaf? Mix it into flour and water: as microbes ferment, yeast produces gas and bacteria make acids. But where does the gas go? It gets trapped in the dough, making it expand. Other leaveners can raise bread, but starter supplies sourdough's culture. That's the path: culture, fermentation, rising dough, loaf.",
+      "beats": [
+        {
+          "desired_emotion": "Recognition",
+          "resource_ids": [],
+          "target_start_seconds": 0,
+          "id": "b1",
+          "role": "hook",
+          "narrative_turn": "Name the starter's practical contribution before opening the process question.",
+          "target_end_seconds": 5,
+          "visual_noun": "Starter jar",
+          "viewer_question": "How can the starter help dough rise and become acidic?",
+          "evidence_ids": [],
+          "spoken_text": "A sourdough starter supplies the living culture that helps dough rise and develop acidity."
+        },
+        {
+          "desired_emotion": "Curiosity",
+          "resource_ids": [],
+          "target_start_seconds": 5,
+          "id": "b2",
+          "role": "promise",
+          "narrative_turn": "Turn the jar and loaf into the endpoints of one pathway.",
+          "target_end_seconds": 8,
+          "visual_noun": "Bakery counter",
+          "viewer_question": "What connects the jar to the loaf?",
+          "evidence_ids": [],
+          "spoken_text": "But how does a jar become a loaf?"
+        },
+        {
+          "desired_emotion": "Understanding",
+          "resource_ids": [],
+          "target_start_seconds": 8,
+          "id": "b3",
+          "role": "mechanism",
+          "narrative_turn": "Move from the jar into the bowl and identify fermentation's products.",
+          "target_end_seconds": 15,
+          "visual_noun": "Mixing bowl",
+          "viewer_question": "What does the culture do in the dough?",
+          "evidence_ids": [],
+          "spoken_text": "Mix it into flour and water: as microbes ferment, yeast produces gas and bacteria make acids."
+        },
+        {
+          "desired_emotion": "Anticipation",
+          "resource_ids": [],
+          "target_start_seconds": 15,
+          "id": "b4",
+          "role": "rehook",
+          "narrative_turn": "Shift from producing gas to its effect on the dough.",
+          "target_end_seconds": 17,
+          "visual_noun": "Dough bubble",
+          "viewer_question": "Where does the fermentation gas go?",
+          "evidence_ids": [],
+          "spoken_text": "But where does the gas go?"
+        },
+        {
+          "desired_emotion": "Clarity",
+          "resource_ids": [],
+          "target_start_seconds": 17,
+          "id": "b5",
+          "role": "proof",
+          "narrative_turn": "Propose a dough-expansion demonstration; it would show expansion, not independently prove its microbial cause or acidity.",
+          "target_end_seconds": 22,
+          "visual_noun": "Marked dough container",
+          "viewer_question": "How does trapped gas change the dough?",
+          "evidence_ids": [],
+          "spoken_text": "It gets trapped in the dough, making it expand."
+        },
+        {
+          "desired_emotion": "Resolution",
+          "resource_ids": [],
+          "target_start_seconds": 22,
+          "id": "b6",
+          "role": "payoff",
+          "narrative_turn": "Clarify that starter is sourdough's culture, not the only way to raise bread.",
+          "target_end_seconds": 26,
+          "visual_noun": "Yeast packet",
+          "viewer_question": "Why use starter if other leaveners can raise bread?",
+          "evidence_ids": [],
+          "spoken_text": "Other leaveners can raise bread, but starter supplies sourdough's culture."
+        },
+        {
+          "desired_emotion": "Satisfaction",
+          "resource_ids": [],
+          "target_start_seconds": 26,
+          "id": "b7",
+          "role": "closing_reframe",
+          "narrative_turn": "Resolve the jar-to-loaf question with a compact process map.",
+          "target_end_seconds": 30,
+          "visual_noun": "Jar, bowl and loaf",
+          "viewer_question": "What is the complete path from starter to loaf?",
+          "evidence_ids": [],
+          "spoken_text": "That's the path: culture, fermentation, rising dough, loaf."
+        }
+      ],
+      "delivery": "Clear, conversational and curious, with a brief pause at the midpoint question.",
+      "source": "generated",
+      "target_wpm": 142
+    }
+  }
+}

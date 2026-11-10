@@ -41,8 +41,9 @@ test("the script pass prompt is driven by the plan: format, skeleton, goal, awar
   assert.deepEqual(script.beats.map((beat) => beat.beat), ["hook", "cta"]);
 });
 
-test("SCRIPT_SCHEMA keeps title and narration and adds title_options and beats (strict: every property required)", () => {
-  assert.deepEqual(SCRIPT_SCHEMA.required, ["title", "narration", "title_options", "beats"]);
+test("SCRIPT_SCHEMA keeps title and narration and adds title_options, beats and the call to action (strict: every property required)", () => {
+  assert.deepEqual(SCRIPT_SCHEMA.required, ["title", "narration", "title_options", "beats", "call_to_action"]);
+  assert.match(SCRIPT_SCHEMA.properties.call_to_action.description, /word for word as the narration ends on it/);
   assert.equal(SCRIPT_SCHEMA.properties.title.type, "string");
   assert.equal(SCRIPT_SCHEMA.properties.narration.type, "string");
   assert.deepEqual(SCRIPT_SCHEMA.properties.beats.items.required, ["beat", "text"]);
@@ -59,8 +60,11 @@ test("an older {title, narration} response still parses, from a value or from te
   assert.equal((await writeScript({ client: textClient, prompt: "x", duration: 20 })).narration, NARRATION);
   // Beats alone are enough: the narration is their text joined.
   const beatsOnly = await writeScript({ client: scriptClient({ title: "T", beats: [{ beat: "Hook", text: "One." }, { beat: "cta", text: "Two." }] }).client, prompt: "x", duration: 20 });
-  assert.equal(beatsOnly.narration, "One. Two.");
+  // No call to action anywhere in it: the script ends on the plain one (a script cannot omit it).
+  assert.equal(beatsOnly.narration, "One. Two. Save this for later.");
   assert.equal(beatsOnly.beats[0].beat, "hook");
+  assert.equal(beatsOnly.beats[1].text, "Two. Save this for later.");
+  assert.deepEqual(beatsOnly.fit, { call_to_action_added: "Save this for later." });
 });
 
 test("a resize keeps the plan and caps the new word target at the ceiling", async () => {

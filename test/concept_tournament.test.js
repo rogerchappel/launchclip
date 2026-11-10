@@ -41,23 +41,38 @@ test("reuses content-addressed concept artifacts without another model call", as
   assert.equal(second.cached, true);
 });
 
-test("repairs a judge result when its recommendation disagrees with computed scores", async () => {
+test("a judge whose recommendation disagrees with its own scores is corrected by tooling, with no second call", async () => {
   const workspace = await tempWorkspace();
   const judgeInputs = [];
   const candidateClient = { runStructured: async () => ({ response_id: "candidate", model: "gpt-5.6", status: "completed", value: sampleConcepts(), usage: {} }) };
   const judgeClient = { runStructured: async (request) => {
-    const input = JSON.parse(request.input);
-    judgeInputs.push(input);
+    judgeInputs.push(JSON.parse(request.input));
     const value = sampleJudgment();
-    if (judgeInputs.length === 1) value.recommended_id = "concept-5";
+    value.recommended_id = "concept-5";
+    return { response_id: `judge-${judgeInputs.length}`, model: "gpt-5.6", status: "completed", value, usage: {} };
+  } };
+
+  const result = await planConceptTournament(workspace, { semanticAttempts: 2 }, { candidateClient, judgeClient });
+  assert.equal(result.selected_id, "concept-1", "the winner is the deterministic top score, whatever id the judge wrote");
+  assert.equal(judgeInputs.length, 1);
+});
+
+test("repairs a judge result that leaves a candidate unscored, handing back the exact error", async () => {
+  const workspace = await tempWorkspace();
+  const judgeInputs = [];
+  const candidateClient = { runStructured: async () => ({ response_id: "candidate", model: "gpt-5.6", status: "completed", value: sampleConcepts(), usage: {} }) };
+  const judgeClient = { runStructured: async (request) => {
+    judgeInputs.push(JSON.parse(request.input));
+    const value = sampleJudgment();
+    if (judgeInputs.length === 1) value.evaluations = value.evaluations.slice(0, -1);
     return { response_id: `judge-${judgeInputs.length}`, model: "gpt-5.6", status: "completed", value, usage: {} };
   } };
 
   const result = await planConceptTournament(workspace, { semanticAttempts: 2 }, { candidateClient, judgeClient });
   assert.equal(result.selected_id, "concept-1");
   assert.equal(judgeInputs.length, 2);
-  assert.equal(judgeInputs[1].prior_attempt.recommended_id, "concept-5");
-  assert.match(judgeInputs[1].validation_errors_to_repair.join(" "), /deterministic top score/);
+  assert.equal(judgeInputs[1].prior_attempt.evaluations.length, sampleJudgment().evaluations.length - 1);
+  assert.match(judgeInputs[1].validation_errors_to_repair.join(" "), /evaluate every candidate exactly once/);
 });
 
 async function tempWorkspace() {

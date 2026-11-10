@@ -31,6 +31,7 @@ import { compositionPromptLines } from './composition.mjs';
 import { ACTION_VERBS } from './direction.mjs';
 import { COVER_MAX_WORDS, COVER_SECONDS } from './story.mjs';
 import { clipLedLines } from './clip-led.mjs';
+import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -799,7 +800,7 @@ function intentRuleLines() {
  * storyboard. words: the narration words; the lines are pre-split with their
  * suggested intents from the shared rules, so both paths classify the same way.
  */
-export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null, cast = null } = {}) {
+export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null, cast = null, explainer = false } = {}) {
   const hints = intentHints(words);
   const lines = [
     `You author DIRECTION.json (${DIRECTION_SCHEMA}) for LaunchClip: the visual decision for every line of the narration, made before the storyboard. The storyboard is planned against it next.`,
@@ -811,7 +812,9 @@ export function directionPrompt({ lane, format, profile = null, words, subject =
     ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.', ...(lane === 'footage-led' && profile.measures?.face_time?.p90 < 1 ? ['- Face time comes from the treatments too: only insert lines take the presenter off screen. Make the lines that name something the viewer could see (a thing, a place, a step) insert lines, so face time lands near its target and never above its ceiling.'] : [])]) : []),
     ...(profile?.id === 'youtube-long-form' || Number(format?.duration) >= LONG_FORM_SECONDS ? section('Long form', longFormLines().map((line) => `- ${line}`)) : []),
     ...(Array.isArray(segments) && segments.length ? section('Recurring segments (the style\'s)', ['When a section is one of these, set its "segment" to the id and title it like the segment, so the series looks like a series:', ...segments.map((segment) => `- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}`)]) : []),
-    ...(cast ? section('Cast (the character kit)', directionCastLines(cast).map((line) => `- ${line}`)) : []),
+    ...(cast && !explainer ? section('Cast (the character kit)', directionCastLines(cast).map((line) => `- ${line}`)) : []),
+    // explainer: a character-led explainer (kit/core/explainer.mjs): the map casts the characters that carry it.
+    ...(explainer ? section('Characters carry the explainer (cast them here)', explainerDirectionLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter', [subject?.usable ? `The presenter can be cut out (${subject.framing ?? 'unknown'} framing): split and framed layouts and behind-the-presenter scenes are available.` : 'No presenter cut-out: use full and insert layouts, or split on the base camera.']) : []),
     ...section('Narration lines (suggested intents)', ['Keep these lines unless two belong together or one holds two ideas; keep the word ranges exact.', '', ...hints.map((hint) => `- [${hint.words[0]}, ${hint.words[1]}] ${hint.intent}: "${hint.text.slice(0, 200)}" (${round2(hint.start)}–${round2(hint.end)} s)`)]),
     ...section('Example', [JSON.stringify(exampleDirection())])
@@ -941,7 +944,7 @@ export function profilesReference(profiles = []) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null, clipLed = null } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null, clipLed = null, explainer = null } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   // Subject modules are offered only to a footage-led story whose presenter can be cut out.
@@ -963,6 +966,8 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     // clipLed: the clip-led rule in force (kit/core/clip-led.mjs clipLedPlan), when footage and a low density dial call for it.
     ...(clipLedLines(clipLed).length ? section('Footage and graphics (density)', clipLedLines(clipLed).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
+    // explainer: {cast, roles}, a character-led explainer (kit/core/explainer.mjs).
+    ...(explainer?.cast ? section('Characters carry the explainer', explainerStoryboardLines(explainer).map((line) => `- ${line}`)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection, style }).map((line) => `- ${line}`)),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),

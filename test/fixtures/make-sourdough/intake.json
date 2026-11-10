@@ -1,0 +1,37 @@
+{
+  "workspace": "(the test workspace)",
+  "source": {
+    "kind": "prompt",
+    "value": "A 30-second explainer on why sourdough needs a starter"
+  },
+  "brief": {
+    "prompt": "A 30-second explainer on why sourdough needs a starter",
+    "audience": "Not stated: infer it from the prompt and the notes.",
+    "cta": null,
+    "language": "en",
+    "duration_seconds": 30,
+    "aspect": {
+      "id": "16:9",
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "model": {
+    "provider": "openai",
+    "id": "gpt-6.1-terra",
+    "reasoning_effort": "medium",
+    "reasoning_mode": "standard"
+  },
+  "profile": {
+    "id": "cinematic",
+    "planning": {
+      "concept_candidates": 5
+    },
+    "craft": {
+      "target_wpm_minimum": 90,
+      "target_wpm_maximum": 165
+    }
+  },
+  "policies": {},
+  "resources": []
+}

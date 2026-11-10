@@ -1,0 +1,144 @@
+{
+ "schema": "launchclip.direction-map.v1",
+ "profile": "explainer-motion",
+ "sections": [
+  {
+   "id": "s1",
+   "title": "The question",
+   "lines": [
+    {
+     "words": [
+      0,
+      7
+     ],
+     "intent": "hook",
+     "treatment": "insert",
+     "scenes": [
+      "starter-jar-and-loaf"
+     ],
+     "why": "Open on a starter jar beside a sourdough loaf, linked by a question mark; show the graphic from the first frame."
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "title": "The misconception",
+   "lines": [
+    {
+     "words": [
+      8,
+      19
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "sour-taste-assumption"
+     ],
+     "why": "Connect the jar to a slice of bread and a tang cue, presenting flavor as the assumed sole job."
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "title": "Inside the jar",
+   "lines": [
+    {
+     "words": [
+      20,
+      31
+     ],
+     "intent": "turn",
+     "treatment": "insert",
+     "scenes": [
+      "starter-ingredients-and-microbes"
+     ],
+     "why": "Move inside the jar to reveal distinct wild yeast and bacteria shapes suspended in flour and water."
+    },
+    {
+     "words": [
+      32,
+      35
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "two-jobs-reveal"
+     ],
+     "why": "Split the jar's contents into two visual paths, signaling that flavor is only one outcome."
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "title": "How rise and tang happen",
+   "lines": [
+    {
+     "words": [
+      36,
+      41
+     ],
+     "intent": "process",
+     "treatment": "insert",
+     "scenes": [
+      "yeast-makes-gas"
+     ],
+     "why": "Show yeast in dough releasing small gas bubbles."
+    },
+    {
+     "words": [
+      42,
+      52
+     ],
+     "intent": "process",
+     "treatment": "insert",
+     "scenes": [
+      "bubbles-raise-dough"
+     ],
+     "why": "Enlarge trapped bubbles inside a dough cross-section as it expands into a rising loaf."
+    },
+    {
+     "words": [
+      53,
+      61
+     ],
+     "intent": "process",
+     "treatment": "insert",
+     "scenes": [
+      "bacteria-make-acids"
+     ],
+     "why": "Show bacteria producing acid symbols that travel to a bread slice, resolving into a tang cue."
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "title": "Both jobs, one starter",
+   "lines": [
+    {
+     "words": [
+      62,
+      72
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "starter-rise-and-tang"
+     ],
+     "why": "Bring both paths together: the jar points to a lifted loaf and a tang cue."
+    },
+    {
+     "words": [
+      73,
+      79
+     ],
+     "intent": "cta",
+     "treatment": "insert",
+     "scenes": [
+      "save-for-next-bake"
+     ],
+     "why": "Hold the jar and loaf with a simple save icon and short save prompt through the end."
+    }
+   ]
+  }
+ ]
+}

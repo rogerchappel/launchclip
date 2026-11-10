@@ -198,7 +198,7 @@ test("a short video's script pass finds the angle and scores the titles in the s
     }
   };
   const result = await writeScript({ client, prompt: "How big is a billion", duration: 30, plan: { aspect: "9:16" } });
-  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "angle", "title_scores", "post_caption"]);
+  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "call_to_action", "angle", "title_scores", "post_caption"]);
   assert.match(request.instructions, /## Angle \(before you write\)/);
   assert.match(request.instructions, /title_scores: score every title option 0-10/);
   // The clear, concrete title wins; the tease (the model's own favourite on curiosity) loses 3 and falls to fourth; the best becomes the title.
@@ -211,7 +211,7 @@ test("a short video's script pass finds the angle and scores the titles in the s
   await writeScript({ client, prompt: "How big is a billion", duration: 30, plan: { aspect: "9:16" }, angle: result.angle, repair: { previous: "One. Two.", errors: ["x"] } });
   assert.match(request.input, /## Angle \(keep it\)[\s\S]*Get paid \$1 a second/);
   await writeScript({ client, prompt: "How big is a billion", duration: 300, plan: { aspect: "16:9" } });
-  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats"]);
+  assert.deepEqual(request.schema.required, ["title", "narration", "title_options", "beats", "call_to_action"]);
   assert.equal(parseAngle({ crowded: "", angles: [] }), null);
   assert.equal(rankTitles(["x".repeat(80), "short"], [{ title: "x".repeat(80), curiosity: 9, clarity: 9, match: 9 }, { title: "short", curiosity: 7, clarity: 7, match: 7 }])[0].title, "short");
 });

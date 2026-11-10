@@ -63,6 +63,22 @@ briefs (see "Measuring parity").
    beats. `--concepts off` keeps the one-pass script. The skill also writes
    `ANGLE.json` before its concepts; `make` still finds the angle in the
    script pass.
+   *Made to succeed on a bare prompt:* the story's claims must cite evidence,
+   and a one-line prompt is all a bare `make` has, so the evidence also
+   carries a `general-knowledge` item (what is widely taught about the
+   subject; never a figure, a date, a name or a quote). The writer and the
+   editor are given the checker's structure rules for the duration up front
+   (`storyStructureRules`), tooling sets what a story or a judgment repeats
+   from itself (the joined text, the pace, the timings, the winner's id), a
+   repair is handed each failure word for word, and no call of the stage
+   starts after 300 s (`CONCEPT_BUDGET_SECONDS`).
+   *The script fits and ends on its call to action:* the word ceiling is
+   stated as a hard limit, a narration over it is cut by whole sentences
+   (`fitWordBudget`: the hook, every beat and the call to action stay), and
+   `call_to_action` is a required field: a narration without one ends on it,
+   or on a plain one (`ensureCallToAction`). "Save this …" counts as a call
+   to action in the script checks, and a take that runs short is checked at
+   the rate it was spoken at (`takeClock`).
 4. **Length is a ceiling.** A chapter shorter than its slot is not padded; the
    video runs shorter, or the outline gives the time to the chapter with more
    material. No resize pass that adds words.

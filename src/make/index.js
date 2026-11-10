@@ -52,8 +52,9 @@ import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
+import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
-import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, WORDS_PER_MINUTE, writeScript } from "./script.js";
+import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, takeClock, WORDS_PER_MINUTE, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
@@ -718,7 +719,11 @@ async function prepareMotion(ctx) {
   const short = runsShort(take.duration, target);
   if (short) script.take.short_of_target_seconds = round1(target - take.duration);
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
-  script.check = checkScript({ narration: script.narration, duration: short ? Math.max(1, Math.round(take.duration)) : target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  // A short take is checked at the length it runs, and the take itself is the proof it fits that clock: a voice that
+  // reads faster than the plan's pace (Kokoro at 1.2×) is never reported as words that "cannot be read" in the time it read them.
+  script.check = checkScript({ narration: script.narration, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  if (script.fit?.cut?.length) report.notices.push(`script: ${script.fit.cut.length} sentence(s) cut to fit the ${plan.word_ceiling}-word ceiling (${script.fit.words_before} → ${script.word_count} words)`);
+  if (script.fit?.call_to_action_added) report.notices.push(`script: the narration had no call to action; it ends on "${script.fit.call_to_action_added}"`);
   auditNarration(ctx, research, script.narration);
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
@@ -1296,6 +1301,8 @@ async function stageStoryboard(ctx) {
   const brand = await loadBrand(ctx);
   const manifest = assetManifestLines(ctx);
   const brief = await composeBrief(ctx, manifest);
+  // A one-prompt explainer with nothing to show is carried by a small cast (src/make/explainer.js, kit/core/explainer.mjs).
+  const explainer = characterLed(explainerContentOf(ctx), style);
   // A character story (--animation): the frozen show bible is pinned in every plan, repair and replan, and the script's line ids are checked.
   const pinned = ctx.bible ? { bible: ctx.bible, script: ctx.script } : null;
   // A critic repair round (criticRepairs): a replan carries the critic's
@@ -1326,7 +1333,7 @@ async function stageStoryboard(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(explainer ? { explainer: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1394,8 +1401,13 @@ async function stageStoryboard(ctx) {
     ...(laidOut ? { layout: laidOut } : {}),
     ...(subjectTrack ? { subjectTrack } : {}),
     ...(pinned ?? {}),
+    ...(explainer ? { explainer: true } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
   }).finally(() => assets?.close?.());
+  if (plan.explainer) {
+    report.explainer = { cast: plan.explainer.cast.characters.map((member) => member.id), roles: plan.explainer.roles, character_share: plan.explainer.character_share };
+    ctx.say(`explainer: carried by ${plan.explainer.roles.map((role) => `${role.id} (${role.plays})`).join(", ") || plan.explainer.cast.characters.map((member) => member.id).join(", ")}${plan.explainer.character_share != null ? `; a character is on screen for ${Math.round(plan.explainer.character_share * 100)}% of it` : ""}`);
+  }
   for (const shot of plan.shots ?? []) {
     if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd, fallback: false });
   }
@@ -2303,7 +2315,10 @@ async function seededStyle(ctx) {
   if (seed == null) style = await projectSeedStyle(project, { name: state.style?.generated ?? null });
   if (style) ctx.say(style.line);
   else {
-    const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone: promptTone(ctx.text), constraints: promptConstraints(ctx.text), clock: ctx.adapters.clock });
+    // An explainer with nothing to show takes a lively tone when the prompt names none, and its topic's look (src/make/explainer.js).
+    const asked = { tone: promptTone(ctx.text), constraints: promptConstraints(ctx.text) };
+    const { tone, constraints } = explainerContentOf(ctx) ? explainerSeed(ctx.text, asked) : asked;
+    const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone, constraints, clock: ctx.adapters.clock });
     ctx.say(made.line);
     style = { name: made.name, pack: made.pack, file: made.file, source: "generated", warnings: [], summary: made.summary };
   }
@@ -2311,6 +2326,11 @@ async function seededStyle(ctx) {
   report.style = { name: style.name, source: "generated", seed: style.pack.generated.seed, summary: style.summary };
   ctx.generatedStyle = style.pack;
   return style;
+}
+
+// Whether this video's content calls for a character-led explainer (src/make/explainer.js), whatever its style.
+function explainerContentOf(ctx) {
+  return explainerContent({ lane: ctx.routing.lane, format: ctx.scriptPlan?.format ?? null, bible: ctx.bible ?? null, animation: Boolean(ctx.options.animation), media: assetManifestLines(ctx).filter((item) => item.src).length, provider: Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd), skeleton: ctx.skeleton ?? null, longForm: Boolean(ctx.longForm) });
 }
 
 async function loadBrand(ctx) {
