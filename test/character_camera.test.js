@@ -16,14 +16,16 @@ const scene = (story, id) => story.scenes.find((item) => item.id === id);
 const size = { width: 1080, height: 1920 };
 const FPS = 30;
 const withScene = (id, change) => (story) => ({ ...story, scenes: story.scenes.map((item) => (item.id === id ? change(item) : item)) });
+// The opening, framed on the foal alone while the narrator speaks: a character who only listens.
+const listening = withScene("gate-wide", (item) => ({ ...item, params: { ...item.params, shot: "medium", cast: [{ id: "foal", pose: "look", expression: "thinking" }] } }));
 
 test("each cast scene gets the move its shot calls for: a push on a speaker, a drift on a wide shot, a punch-in on a reaction", () => {
   const story = resolved();
   assert.deepEqual(story.scenes.map((item) => characterMove(story, item)), ["wide", "speaker", "wide", "speaker"]);
   // The same framing with nobody speaking is a reaction.
-  const quiet = resolved(withScene("mare-reassures", (item) => ({ ...item, params: { ...item.params, cast: item.params.cast.map(({ says, ...actor }) => actor) } })));
-  assert.equal(characterMove(quiet, scene(quiet, "mare-reassures")), "reaction");
-  const punch = characterKeys(quiet, scene(quiet, "mare-reassures"));
+  const quiet = resolved(listening);
+  assert.equal(characterMove(quiet, scene(quiet, "gate-wide")), "reaction");
+  const punch = characterKeys(quiet, scene(quiet, "gate-wide"));
   assert.equal(punch[0].duration <= CHARACTER_CAMERA.punch + 1e-9, true);
   assert.deepEqual(punch[0].from, { x: 540, y: 960, s: 1 }, "the punch-in starts on the shot's own framing");
   assert.ok(punch[0].to.s >= CHARACTER_CAMERA.closer, "and lands closer");
@@ -58,7 +60,7 @@ test("the planner adds nothing, and a story can say no: its own zooms, camera.mo
 });
 
 test("a move is slow, fast, slow with no overshoot, no jump in speed, and never leaves the plate", () => {
-  for (const edit of [(story) => story, withScene("mare-reassures", (item) => ({ ...item, params: { ...item.params, cast: item.params.cast.map(({ says, ...actor }) => actor) } }))]) {
+  for (const edit of [(story) => story, listening]) {
     const story = resolved(edit);
     for (const item of story.scenes) {
       const keys = characterKeys(story, item);
