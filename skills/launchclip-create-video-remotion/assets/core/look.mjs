@@ -28,6 +28,7 @@
 //
 // Canonical copy: kit/core/look.mjs.
 
+import { brandFrameLayout } from './brand-frame.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { LOOKS } from './looks/index.mjs';
 import { fe, hash, r } from './looks/parts.mjs';
@@ -145,7 +146,7 @@ export function stepIndex(frame, fps, step) {
 /**
  * The look pass for a story, or null when it has no look (the render is then
  * unchanged). → {name, strength, step, labels, width, height, fps, unit,
- * duration, frames, seed, safe, band, shots, cues, title, colors, variants,
+ * duration, frames, seed, safe, band, regions, shots, cues, title, colors, variants,
  * filters: [ids], grade: boolean, furniture: {html, css} | null}
  */
 export function lookPlan(story) {
@@ -157,6 +158,7 @@ export function lookPlan(story) {
   const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration ?? 0);
   const geometry = profileGeometry({ width, height });
+  const frame = brandFrameLayout(story, { width, height });
   const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).filter((scene) => isObject(scene) && typeof scene.start === 'number' && typeof scene.end === 'number');
   const shots = scenes.filter((scene) => (scene.track ?? 0) === 0).map((scene) => ({ id: scene.id, start: scene.start, end: scene.end })).sort((a, b) => a.start - b.start);
   // The cast's expression changes, in story seconds (a cue's `at` is from its scene's start).
@@ -172,7 +174,8 @@ export function lookPlan(story) {
     frames: Math.max(1, Math.round(duration * fps)),
     unit: Math.min(width, height) / 1080,
     seed: `${look.name}:${story?.title ?? ''}`,
-    safe: geometry.safeZone, band: geometry.captionBand,
+    // The safe zone inside the brand frame, and the frame's own boxes (kicker, section labels), for the furniture to keep clear of.
+    safe: frame?.safe ?? geometry.safeZone, band: geometry.captionBand, regions: (frame?.regions ?? []).map((region) => region.rect),
     shots, cues,
     title: typeof story?.title === 'string' ? story.title : '',
     world: typeof story?.world?.kind === 'string' ? story.world.kind : null,

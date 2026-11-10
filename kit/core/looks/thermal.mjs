@@ -44,7 +44,8 @@ export const LOOK = {
     const cross = `<svg class="lc-look-th-cross" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" fill="none" stroke="${WHITE}" stroke-width="${line}" stroke-linecap="square"><path d="M${cx - gap - arm} ${cy}H${cx - gap}M${cx + gap} ${cy}H${cx + gap + arm}M${cx} ${cy - gap - arm}V${cy - gap}M${cx} ${cy + gap}V${cy + gap + arm}"/><path d="${[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => `M${cx + sx * box} ${cy + sy * (box - arm * 0.6)}V${cy + sy * box}H${cx + sx * (box - arm * 0.6)}`).join('')}" opacity="0.8"/></svg>`;
     // The scale bar: down the right edge of the safe zone, hot at the top.
     const barW = Math.round(22 * u), barH = Math.round(Math.min(z.safe.height * 0.34, 420 * u));
-    const barX = z.safe.x + z.safe.width - barW, barY = z.safe.y + Math.round(z.safe.height * 0.08) + font + Math.round(10 * u);
+    // Below the clock when the top strip sits inside the safe zone (a brand frame took the strip above it).
+    const barX = z.safe.x + z.safe.width - barW, barY = Math.max(z.safe.y + Math.round(z.safe.height * 0.08), z.top.y + z.top.h + Math.round(8 * u)) + font + Math.round(10 * u);
     const [hot, cold] = [plan.labels[0] ?? '36.6°C', plan.labels[1] ?? '18.0°C'];
     const bar = `<div class="lc-look-th-temp" style="right:${W - barX - barW}px;top:${barY - font - Math.round(10 * u)}px">${hot}</div><div class="lc-look-th-bar" style="left:${barX}px;top:${barY}px;width:${barW}px;height:${barH}px"></div><div class="lc-look-th-temp" style="right:${W - barX - barW}px;top:${barY + barH + Math.round(10 * u)}px">${cold}</div>`;
     const top = z.top, mid = top.y + Math.round(top.h / 2);

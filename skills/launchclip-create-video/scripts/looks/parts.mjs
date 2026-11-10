@@ -104,18 +104,21 @@ const escapeText = (value) => String(value).replace(/[&<>"]/g, (c) => ({ '&': '&
 export const text = escapeText;
 
 /**
- * Where furniture may sit: a strip above the safe zone and, when the format
- * leaves room under the caption band, one below it; never the caption band.
- * → {top: {x, y, w, h}, bottom: {x, y, w, h} | null, safe, band}
+ * Where furniture may sit: a strip above the safe zone (inside its top edge
+ * when the brand frame's kicker or labels take that strip) and, when the
+ * format leaves room under the caption band, one below it; never the caption
+ * band. → {top: {x, y, w, h}, bottom: {x, y, w, h} | null, safe, band}
  */
 export function zones(plan) {
   const { width: W, height: H, safe, band } = plan;
   const h = Math.round(H * 0.06);
-  const topY = Math.max(Math.round(H * 0.03), safe.y - h - Math.round(H * 0.012));
   const x = safe.x, w = safe.width;
+  let top = { x, y: Math.max(Math.round(H * 0.03), safe.y - h - Math.round(H * 0.012)), w, h };
+  const meets = (a) => a.x < top.x + top.w && a.x + a.width > top.x && a.y < top.y + top.h && a.y + a.height > top.y;
+  if ((plan.regions ?? []).some(meets)) top = { x, y: safe.y + Math.round(H * 0.012), w, h };
   const under = Math.max(band.y + band.height, safe.y + safe.height) + Math.round(H * 0.008);
   const bottom = under + h <= H * 0.85 ? { x, y: under, w, h } : null;
-  return { top: { x, y: topY, w, h }, bottom, safe, band };
+  return { top, bottom, safe, band };
 }
 
 /** Horizontal scanlines over the whole frame that roll by `--lc-look-scan` (0..1 of one period). */
