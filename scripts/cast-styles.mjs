@@ -8,6 +8,9 @@
 //   node scripts/cast-styles.mjs [--out qa/cast-styles] [--styles flat,lifelike]
 //     [--sets phone,sofa,kitchen-counter] [--seed 7f3a91c2] [--set office-team]
 //     [--ids maya,theo,...] [--chromium <path>]
+//   node scripts/cast-styles.mjs --expressions maya[,mochi,…] [--styles chibi,flat]
+//     one character's face in every expression, per style:
+//     <out>/expressions-<style>.png
 //
 // Without --ids the cast is a mix of starter characters and a generated
 // cast (generateCast with the seed and character set), so the sheet shows
@@ -16,6 +19,7 @@ import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {EXPRESSIONS as ALL_EXPRESSIONS} from '@launchclip/core/characters/rig.mjs';
 import {sceneJoints} from '@launchclip/core/characters/acting.mjs';
 import {characterView} from '@launchclip/core/characters/view.mjs';
 import {castMember, resolveStoryCast} from '@launchclip/core/characters/cues.mjs';
@@ -96,6 +100,29 @@ h1{font-size:30px;margin:0 0 6px}p{margin:0 0 16px;opacity:.7}h2{font-size:18px;
 <h2>Line-up</h2><div class="row">${lineup}</div><h2>Faces</h2><div class="row">${faces}</div><h2>Sets</h2><div class="row">${scenes}</div></body></html>`;
 }
 
+/** One character's face in every expression, in one style, as HTML. */
+export function expressionSheetHtml(style, id) {
+  const cast = [{id}];
+  const resolved = resolveStoryCast({format: {width: 1920, height: 1080, fps: 30, duration: 4}, brand: BRAND, cast: {style, characters: cast}});
+  const member = castMember(resolved, id);
+  const geometry = styleGeometry(style, member.params);
+  const joints = sceneJoints('stand', {facing: 'right', geometry, params: member.params});
+  const headY = geometry.hipY - geometry.torso - geometry.neck * 0.6 + geometry.head.cy;
+  const faces = ALL_EXPRESSIONS.map((expression, i) => {
+    const drawing = drawCharacter(style, member.params, member.colors, {id: `e${i}`, joints, expression, expressions: [expression], static: true});
+    // Large, and again at the size a face has on a phone.
+    const face = (size, box) => renderNode(characterView(drawing, {id: `ev${i}-${size}`, x: box / 2, y: box * 0.52 - headY * (size / geometry.head.ry), scale: size / geometry.head.ry}));
+    return `<figure><div class="st" style="width:260px;height:260px">${face(88, 260)}</div><div class="st small" style="width:64px;height:64px">${face(22, 64)}</div><figcaption>${expression}</figcaption></figure>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${style} expressions</title><style>
+body{margin:0;padding:24px 28px;background:#ece7dd;font-family:Helvetica,Arial,sans-serif;color:#231e28}
+h1{font-size:30px;margin:0 0 16px}.row{display:flex;flex-wrap:wrap;gap:10px;width:1890px}
+figure{margin:0;background:#f8f5ef;border-radius:12px;overflow:hidden;position:relative}
+.st{position:relative;overflow:hidden}.small{position:absolute;right:0;top:0;background:#fff;border-bottom-left-radius:10px}
+figcaption{font-size:15px;text-align:center;padding:5px 0 7px;opacity:.8}
+</style></head><body><h1>${member.name} in ${style}: every expression</h1><div class="row">${faces}</div></body></html>`;
+}
+
 async function main() {
   const flags = args(process.argv.slice(2));
   const out = path.resolve(ROOT, flags.out ?? 'qa/cast-styles');
@@ -110,7 +137,15 @@ async function main() {
   await mkdir(out, {recursive: true});
   const written = [];
   try {
-    for (const style of styles) {
+    for (const style of flags.expressions ? styles : []) for (const who of flags.expressions === true ? ['maya'] : String(flags.expressions).split(',')) {
+      const page = await browser.newPage({viewport: {width: 1950, height: 900}, deviceScaleFactor: 1});
+      await page.setContent(expressionSheetHtml(style, who), {waitUntil: 'load'});
+      const file = path.join(out, `expressions-${style}${who === 'maya' ? '' : `-${who}`}.png`);
+      await page.screenshot({path: file, fullPage: true});
+      await page.close();
+      console.log(file);
+    }
+    for (const style of flags.expressions ? [] : styles) {
       const page = await browser.newPage({viewport: {width: 1980, height: 900}, deviceScaleFactor: 1});
       await page.setContent(styleSheetHtml(style, cast, {sets}), {waitUntil: 'load'});
       const file = path.join(out, `${style}.png`);
@@ -122,6 +157,7 @@ async function main() {
   } finally {
     await browser.close();
   }
+  if (flags.expressions) return;
   await writeFile(path.join(out, 'index.json'), `${JSON.stringify({schema: 'launchclip.cast-styles.v1', cast: cast.map(entry => entry.id), sets, sheets: written}, null, 2)}\n`);
 }
 

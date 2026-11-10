@@ -4122,7 +4122,13 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   as joint angles (a style's geometry may seat the legs and arms its own way:
   `sitLegs`, `sitArms`),
   and the named expressions (`neutral happy delighted frustrated confused
-  surprised focused`) as face parts. Positive arm and leg angles swing a limb
+  surprised focused`, and the acting expressions `sad crying worried scared
+  angry deadpan side-eye smirk sheepish in-love excited laughing wink
+  thinking`) as face parts: an eye kind, two brows (lift and tilt), a closed
+  and an open mouth, an optional blush and at most one mark (`extra`: `tears`,
+  `sweat`, a bead at the temple, or `anger`). Every drawing style draws every
+  part; a sideways look (`side-eye`, `thinking`) goes toward the side the
+  character faces. Positive arm and leg angles swing a limb
   away from the body on its own side.
 - `kinds.mjs`: the character kinds that are not people. A person is the
   rig's default and stores no `kind`, so every person keeps the params and

@@ -29,7 +29,8 @@ test('flat draws exactly as it did before the drawing styles', () => {
     // The poses that shipped with flat (look and stretch came later).
     for (const pose of POSES.slice(0, 10)) for (const facing of ['left', 'right']) for (const isStatic of [true, false]) {
       const joints = poseJoints(pose, {facing, seated: pose === 'sit', geometry});
-      trees.push(drawFlat(params, colors, {id: 'x', joints, expression: 'happy', expressions: EXPRESSIONS, static: isStatic}));
+      // The seven expressions that shipped with flat (the acting ones came later).
+      trees.push(drawFlat(params, colors, {id: 'x', joints, expression: 'happy', expressions: EXPRESSIONS.slice(0, 7), static: isStatic}));
     }
   }
   assert.equal(sha(trees), FLAT_SNAPSHOT);
@@ -92,6 +93,36 @@ test('cast-styles: a sheet for every style builds from the same cast', async () 
     assert.match(html, new RegExp(`Drawing style: ${style}`));
     assert.ok(!/undefined|NaN/.test(html), `${style} sheet draws cleanly`);
   }
+});
+
+test('expressions: every one draws its own face in every style, and the sheet shows them all', async () => {
+  const {params} = starterCharacter('maya');
+  const {colors} = characterLook(params, {});
+  assert.ok(EXPRESSIONS.length >= 20, 'enough expressions to act a story');
+  for (const style of DRAWING_STYLES) {
+    const joints = poseJoints('stand', {geometry: styleGeometry(style, params)});
+    const faces = new Map();
+    for (const expression of EXPRESSIONS) {
+      // The op-list drawing: the face group with its closed and open mouths.
+      const drawing = drawCharacter(style, params, colors, {id: 'c', joints, expression, expressions: [expression]});
+      let face = null;
+      const walk = node => { if (!node || typeof node !== 'object') return; if (node.id === `c-face-${expression}`) face = node; (node.children ?? []).forEach(walk); };
+      walk(drawing);
+      assert.ok(face, `${style} draws a face for ${expression}`);
+      const ids = [];
+      const collect = node => { if (!node || typeof node !== 'object') return; if (node.id) ids.push(node.id); (node.children ?? []).forEach(collect); };
+      collect(face);
+      for (const part of ['eyes', 'mouth', 'open']) assert.ok(ids.includes(`c-${part}-${expression}`), `${style} ${expression} has its ${part}`);
+      // Ids aside (clip paths and gradients carry the expression's name), no two faces are the same drawing.
+      const shape = JSON.stringify(face).replace(/"(id|clipPath)":"[^"]*",?/g, '').replaceAll(expression, '');
+      for (const [other, seen] of faces) assert.notEqual(shape, seen, `${style}: ${expression} draws differently from ${other}`);
+      faces.set(expression, shape);
+    }
+  }
+  const {expressionSheetHtml} = await import('../scripts/cast-styles.mjs');
+  const html = expressionSheetHtml('chibi', 'maya');
+  for (const expression of EXPRESSIONS) assert.ok(html.includes(`<figcaption>${expression}</figcaption>`), `the sheet shows ${expression}`);
+  assert.ok(!/undefined|NaN/.test(html));
 });
 
 test('stick-classic: black and white only (ink lines, paper head), coloured stick unchanged beside it', () => {

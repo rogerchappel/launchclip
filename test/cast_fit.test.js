@@ -90,6 +90,10 @@ test("free text maps to the nearest pose, expression and set; exact values pass 
   assert.equal(nearestExpression("unsure"), "confused");
   assert.equal(nearestExpression("defensive"), "frustrated");
   assert.equal(nearestExpression("annoyed"), "frustrated");
+  // The acting expressions take the words that name them.
+  for (const [text, expression] of [["furious", "angry"], ["nervous", "worried"], ["terrified", "scared"], ["sobbing", "crying"], ["disappointed", "sad"], ["unimpressed", "deadpan"], ["suspicious", "side-eye"], ["smug", "smirk"], ["embarrassed", "sheepish"], ["smitten", "in-love"], ["excited", "excited"], ["giggling", "laughing"], ["playful", "wink"], ["pondering", "thinking"]]) {
+    assert.equal(nearestExpression(text), expression, text);
+  }
   assert.equal(nearestExpression("reserved"), "neutral");
   assert.equal(nearestSet("shared kitchen"), "kitchen-counter");
   assert.equal(nearestSet("laundry area"), null);
