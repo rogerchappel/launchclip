@@ -465,3 +465,58 @@ test("the talking-head prompts ask for cutaways: face time's target and ceiling,
   assert.doesNotMatch(planningPrompt({ lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 30 }, profile: open }), /never more than/);
   assert.doesNotMatch(directionPrompt({ lane: "footage-led", profile: open, words: [] }), /only insert lines take the presenter off screen/);
 });
+
+// ---------------------------------------------------------------------------
+// Captions away from the bottom of the frame (a brand's style pack). From a
+// production run: captions "middle" at size 1.15 on 1080×1920, a plan that
+// missed a cadence band on every attempt and was kept as the closest one,
+// and a layout check that had never run on it, so every card sat in the
+// caption band when make checked the storyboard again.
+
+const brandCaptions = (position, size = 1.15) => ({ schema: STYLE_SCHEMA, name: "brand-look", captions: { preset: "kinetic-hierarchy", max_words: 3, position, size } });
+// What make checks again after the plan: the cadence bands only warn.
+const recheck = (story, style) => checkStoryboard(story, { words: WORDS, tier: "structured", style, direction: MAP, profile: { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 } } }, bandErrors: false });
+
+test("caption band: a plan kept on a cadence near miss is still laid out, and the captions dip under the cards in the band", async () => {
+  const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 } } };
+  const style = brandCaptions("middle");
+  // The pack supplies the captions: the model writes no overlay of its own.
+  const { overlays: _overlays, ...board } = goodStoryboard();
+  const client = fakeClient([envelope({ ...board, style: style.name })]);
+  const report = await plan(client, { direction: MAP, profile: tight, style, maxRepairs: 1 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.ok(report.warnings.some((line) => /kept the storyboard closest to the profile/.test(line)), "the cadence miss is still a kept near miss");
+  const hid = report.warnings.filter((line) => line.startsWith("layout: tooling hid captions"));
+  assert.ok(hid.length, report.warnings.join("\n"));
+  assert.match(hid.join("\n"), /under s4/);
+  const captions = report.storyboard.overlays.find((overlay) => overlay.type === "captions");
+  assert.equal(captions.position, "middle");
+  assert.ok(captions.hide.length, "the storyboard carries the hidden ranges");
+  const again = recheck(report.storyboard, style);
+  assert.deepEqual(again.errors.filter((line) => line.includes("caption-band")), []);
+  assert.equal(again.ok, true, again.errors.join("\n"));
+});
+
+test("caption band: errors in other families no longer keep the layout check from running", () => {
+  const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 } } };
+  const style = brandCaptions("middle");
+  const checked = checkStoryboard({ ...goodStoryboard(), overlays: [{ type: "captions" }], style: style.name }, { words: WORDS, tier: "structured", style, direction: MAP, profile: tight });
+  assert.ok(checked.errors.some((line) => line.startsWith("cadence: ")), checked.errors.join("\n"));
+  assert.ok(checked.errors.some((line) => line.startsWith("layout: caption-band ")), checked.errors.join("\n"));
+});
+
+for (const position of ["top", "middle", "low", "auto"]) {
+  for (const size of [1, 1.15, 1.4]) {
+    test(`caption band: captions ${position} at size ${size} plan to a storyboard that passes, with any adjustment recorded`, async () => {
+      const style = brandCaptions(position, size);
+      const client = fakeClient([envelope({ ...goodStoryboard(), overlays: [{ type: "captions" }], style: style.name })]);
+      const report = await plan(client, { style, maxRepairs: 0 });
+      assert.equal(report.status, "passed", report.errors.join("\n"));
+      assert.equal(client.calls.length, 1, "no repair call is spent on the caption band");
+      const captions = report.storyboard.overlays.find((overlay) => overlay.type === "captions");
+      const hid = report.warnings.filter((line) => line.startsWith("layout: tooling hid captions"));
+      assert.equal(Boolean(captions.hide?.length), hid.length > 0, "a hidden range is always reported");
+      assert.equal(checkStoryboard(report.storyboard, { words: WORDS, tier: "structured", style, bandErrors: false }).ok, true);
+    });
+  }
+}

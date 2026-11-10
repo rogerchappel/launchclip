@@ -25,10 +25,11 @@ const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms))
  * options: {callMs (a model call's time), stillMs (one still's), finishMs,
  * jitter (true: a later call of the same kind answers sooner, so answers
  * arrive out of order when calls overlap), screenshots (the handed-in
- * screenshots beside the fixture's clip and logo; [] for none)}.
+ * screenshots beside the fixture's clip and logo; [] for none), direction (the
+ * map the direction call answers with; none by default, so make drafts one)}.
  * → {run(makeOptions, {sleep, now, refuse}) → {report, lines, calls, peak}, project, cwd, assets, cleanup()}
  */
-export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false, screenshots = SCREENSHOTS } = {}) {
+export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false, screenshots = SCREENSHOTS, direction = null } = {}) {
   const assets = await assetsDir();
   for (const name of screenshots) await writeFile(path.join(assets, name), `screenshot ${name}`);
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-recorded-run-"));
@@ -41,6 +42,7 @@ export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitte
   const scores = (value) => Object.fromEntries(CANDIDATE_SCORE_FIELDS.map((field) => [field, value]));
   const seenByKind = new Map();
   const recorded = async (request) => {
+    if (direction && request.schemaName === "launchclip_direction") return { model: "gpt-5.6-luna", usage, value: { direction_json: JSON.stringify(direction) } };
     if (request.schemaName === "launchclip_asset_description") {
       const file = /File: (\S+)/.exec(request.input)[1];
       return { model: "gpt-5.6-luna", usage, value: { shows: `${file.replace(".png", "")} screen`, description: `The ${file.replace(".png", "")} page of Ledgerly.`, text: [], fits: ["how it works"], people: false, windows: [] } };

@@ -22,6 +22,7 @@ import { assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetPro
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
+import { captionBandWarning, settleCaptionBand } from "../caption_band_fit.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { profileForStory, resolveProfile } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
@@ -1429,11 +1430,20 @@ async function stageStoryboard(ctx) {
     if (plan.storyboard) await writeJson(path.join(project, "storyboard.rejected.json"), plan.storyboard);
     throw new Error(`the storyboard failed its checks after ${plan.attempts.length} attempt(s):\n- ${plan.errors.slice(0, 10).join("\n- ")}`);
   }
-  const story = pinned ? withBible(finalizeStory(plan.storyboard, ctx), pinned.bible) : finalizeStory(plan.storyboard, ctx);
+  let story = pinned ? withBible(finalizeStory(plan.storyboard, ctx), pinned.bible) : finalizeStory(plan.storyboard, ctx);
   // The look dials that would repeat the latest videos move to unused values
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
-  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
+  const checkFinal = (candidate) => checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
+  // A card in the caption band (captions in the middle of the frame, or a
+  // look make just changed) is tooling's to settle here, as the planner and
+  // finish do: the captions dip under the card, and the run says so.
+  const settled = settleCaptionBand(story, checkFinal(story), checkFinal);
+  const recheck = settled.checked;
+  if (settled.hidden.length) {
+    story = settled.storyboard;
+    report.warnings.push(captionBandWarning(settled.hidden));
+  }
   // The same checks, for a storyboard with one scene changed (the candidates stage).
   ctx.storyCheck = (candidate) => {
     const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
