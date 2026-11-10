@@ -277,7 +277,7 @@ test("redirectShots asks again when the answer does not validate, and gives up a
   assert.deepEqual(fixed.changed, ["ask"]);
   assert.match(client.requests[1].input, /Your last answer did not validate/);
   const stuck = recordedModel({ launchclip_retake: [{ scenes_json: "nope", note: "" }, { scenes_json: JSON.stringify([story.scenes[1]]), note: "" }] });
-  await assert.rejects(redirectShots({ client: stuck, project, story, words: state.loaded.words, shots: ["ask"], shotList: state.shots }), /the retake did not validate: no scene was changed/);
+  await assert.rejects(redirectShots({ client: stuck, project, story, words: state.loaded.words, shots: ["ask"], shotList: state.shots }), /the retake did not validate after 2 attempts: no scene was changed/);
 });
 
 test("launchclip finish --animatic --retake reviews the animatic and retakes the failing shot from the CLI", async (t) => {

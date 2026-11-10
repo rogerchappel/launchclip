@@ -22,7 +22,7 @@ export const ACTION_INFO = Object.freeze({
   'turn-to-look': {pose: null, gaze: true, target: 'far', describe: 'turns to face the target and looks at it, keeping the pose'},
   'gaze-at': {pose: null, gaze: true, target: null, describe: 'looks at the target (head and eyes), keeping the pose and facing'},
   'point-at': {pose: 'point', gaze: true, target: null, describe: 'faces the target and points at it'},
-  'walk-to': {pose: 'walk', gaze: true, target: null, describe: 'turns and walks to the target at a walking pace, then stands'},
+  'walk-to': {pose: 'walk', gaze: true, target: null, describe: 'turns and walks toward the target at a walking pace, then stands: all the way when the scene leaves time, else as far as it does'},
   'stand-up': {pose: 'stand', gaze: false, target: null, describe: 'gets up from a seat (seated sets) and stands'},
   'stretch': {pose: 'stretch', gaze: false, target: null, describe: 'stretches both arms overhead'}
 });
@@ -54,7 +54,8 @@ export function viewFor(point, {seated = false} = {}) {
   return point.far && !seated ? 'back' : 'three-quarter';
 }
 // A walking pace, metres per second, and a rig of 1000 units ≈ 1.7 m.
-export const WALK = Object.freeze({speed: 1.25, metresPerRig: 1.7 / 1000, minDuration: 0.6});
+// minDuration: the least a walk takes, however near its target; step: the least time a walk cut short needs (one stride).
+export const WALK = Object.freeze({speed: 1.25, metresPerRig: 1.7 / 1000, minDuration: 0.6, step: 0.4});
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -122,6 +123,11 @@ export function gazeOffset(point, actor, canvas) {
 export function walkDuration(dx, scale) {
   const metres = Math.abs(dx) / Math.max(1e-6, scale) * WALK.metresPerRig;
   return Math.max(WALK.minDuration, Math.round(metres / WALK.speed * 100) / 100);
+}
+
+/** Canvas px a walk of `seconds` covers at a walking pace for a character drawn at `scale` px per rig unit (walkDuration's inverse). */
+export function walkDistance(seconds, scale) {
+  return Math.max(0, seconds) * WALK.speed / WALK.metresPerRig * Math.max(1e-6, scale);
 }
 
 /** Planner lines on acting (kit/core/planning-prompt.mjs, the skills). */

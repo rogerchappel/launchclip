@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildStructuredRequest, OpenAIResponsesClient, parseStructuredOutput } from "../src/openai_responses.js";
+import { buildStructuredRequest, OpenAIResponsesClient, parseStructuredOutput, pollDelayMs } from "../src/openai_responses.js";
 
 const SCHEMA = {
   type: "object",
@@ -144,6 +144,61 @@ test("reports refusals, terminal failures, invalid JSON, and missing credentials
     sleep: async () => {}
   });
   await assert.rejects(() => client.runStructured({ input: "x", schema: SCHEMA, schemaName: "answer" }), /provider failed/);
+});
+
+// A background response that ends `finishesAtMs` after it was submitted, on a clock only `sleep` moves.
+function backgroundRun(finishesAtMs) {
+  let clock = 0;
+  const sleeps = [];
+  let polls = 0;
+  const client = new OpenAIResponsesClient({
+    apiKey: "test-key",
+    fetch: async (url, init) => {
+      if (init.method === "POST") return jsonResponse({ id: "resp_slow", status: "queued" });
+      polls += 1;
+      return clock >= finishesAtMs
+        ? jsonResponse({ id: "resp_slow", status: "completed", output_text: '{"answer":"done"}' })
+        : jsonResponse({ id: "resp_slow", status: "in_progress" });
+    },
+    sleep: async (ms) => { sleeps.push(ms); clock += ms; }
+  });
+  const run = (options = {}) => client.runStructured({ input: "x", schema: SCHEMA, schemaName: "answer", ...options });
+  return { run, sleeps, seenAtMs: () => clock, polls: () => polls };
+}
+
+test("polls a background response often at first, so a finished one is seen sooner", async () => {
+  const steady = backgroundRun(7_000);
+  const before = await steady.run({ pollIntervalMs: 5_000 });
+  assert.deepEqual(steady.sleeps, [5_000, 5_000]);
+  assert.equal(steady.seenAtMs(), 10_000);
+
+  const quick = backgroundRun(7_000);
+  const after = await quick.run();
+  assert.deepEqual(quick.sleeps, [1_000, 1_000, 2_000, 2_000, 2_000]);
+  assert.equal(quick.seenAtMs(), 8_000);
+  assert.deepEqual(after, before);
+});
+
+test("a long background response goes back to a 5 s poll", async () => {
+  assert.deepEqual([0, 1_000, 2_000, 118_000, 120_000, 600_000].map(pollDelayMs), [1_000, 1_000, 2_000, 2_000, 5_000, 5_000]);
+
+  const long = backgroundRun(10 * 60_000);
+  await long.run();
+  assert.equal(long.seenAtMs(), 10 * 60_000);
+  assert.equal(long.sleeps.at(-1), 5_000);
+  // A steady 5 s poll would take 120.
+  assert.equal(long.polls(), 157);
+  assert.ok(Math.max(...long.sleeps) <= 5_000);
+});
+
+test("gives up after the same wait as before", async () => {
+  const steady = backgroundRun(Infinity);
+  await assert.rejects(() => steady.run({ pollIntervalMs: 5_000, maxWaitMs: 60_000 }), /did not complete within 60000ms/);
+  assert.equal(steady.polls(), 12);
+
+  const quick = backgroundRun(Infinity);
+  await assert.rejects(() => quick.run({ maxWaitMs: 60_000 }), /did not complete within 60000ms/);
+  assert.equal(quick.seenAtMs(), 60_000);
 });
 
 function jsonResponse(value, status = 200, headers = {}) {
