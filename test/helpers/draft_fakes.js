@@ -30,7 +30,8 @@ export const DRAFT_DIRECTION = {
 };
 
 const usage = { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 };
-const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve());
+// unref: a call the draft stopped waiting for does not hold the test process open.
+const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms).unref()) : Promise.resolve());
 
 /**
  * A run of make on the recorded answers.

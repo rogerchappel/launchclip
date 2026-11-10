@@ -13,9 +13,8 @@
   deadline (a late clip's scene is drawn), and the run stops at the plan:
   no candidates, render or critic. Every check that needs no pixels still
   runs. `--refine` continues a draft project to the full-quality plan on the
-  same script and voice. `MAKE.json` has `draft` (what was draft-made) and,
-  in every run, `milestones` (seconds to the script, the voice and the
-  plan). See docs/guide/headless.md and benchmarks/MAKE_FAST_DRAFT.md.
+  same script and voice. `MAKE.json` then has `draft` (what was draft-made) and
+  `milestones` (seconds to the script, the voice and the plan). See docs/guide/headless.md and benchmarks/MAKE_FAST_DRAFT.md.
 - The OpenAI client streams a call that passes `onDelta`, and the cost
   tracker counts a streamed call when its stream ends.
 

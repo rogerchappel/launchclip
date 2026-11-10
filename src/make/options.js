@@ -221,6 +221,7 @@ export function validateMakeOptions(options = {}) {
   researchMode(options.research);
   conceptsMode(options.concepts);
   candidatesMode(options.candidates);
+  // makeSpeed is the caller's to read; this only refuses a bad one.
   const speed = makeSpeed(options.speed);
   if (options.refine != null && typeof options.refine !== "boolean") throw new Error(`--refine takes no value; got ${options.refine}`);
   if (options.refine && speed === "draft") throw new Error("--refine continues a draft at full quality; pass --speed draft or --refine, not both");
@@ -253,7 +254,7 @@ export function validateMakeOptions(options = {}) {
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   ctaPlanOptions(options);
   seriesPlanOptions(options);
-  return { voice, renderer, quality, speed, script: scriptPlanOptions(options) };
+  return { voice, renderer, quality, script: scriptPlanOptions(options) };
 }
 
 /**

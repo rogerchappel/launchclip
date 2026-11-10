@@ -17,7 +17,7 @@ import { readWav } from "../src/voice/words.js";
 import { DRAFT_DIRECTION, DRAFT_NARRATION, DRAFT_SENTENCES, draftRun } from "./helpers/draft_fakes.js";
 import { recordedRun } from "./helpers/make_recorded_run.js";
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref());
 
 test("--speed draft: one streamed script call, a take per sentence, a rule-made plan with one direction call, and a stop at the plan", async () => {
   const draft = await draftRun();
@@ -86,11 +86,11 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
 });
 
 test("a direction call that is late leaves the rule-made plan standing, and the run does not wait for it", async () => {
-  const draft = await draftRun({ directionMs: 400, env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "30" } });
+  const draft = await draftRun({ directionMs: 2500, env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "30" } });
   try {
     const started = performance.now();
     const { report } = await draft.run({ speed: "draft" });
-    assert.ok(performance.now() - started < 350, "the run ended before the late call answered");
+    assert.ok(performance.now() - started < 2400, "the run ended before the late call answered");
     assert.equal(report.status, "awaiting-approval");
     assert.equal(report.draft.storyboard.source, "rules");
     assert.equal(report.draft.storyboard.direction.status, "late");
@@ -100,7 +100,6 @@ test("a direction call that is late leaves the rule-made plan standing, and the 
     // What the late call cost is not known: the tally says so instead of leaving it out.
     assert.equal(report.costs.items.find((item) => item.stage === "draft-direction").estimated_usd, null);
     assert.equal(report.costs.complete, false);
-    await wait(420);
   } finally { await draft.cleanup(); }
 });
 
@@ -128,7 +127,7 @@ test("LAUNCHCLIP_DRAFT_DIRECTION_MS=0 sends no direction call: the draft is one 
 });
 
 test("a draft asks the asset provider for every shot at once; a clip that is late is drawn instead", async () => {
-  const draft = await draftRun({ env: { LAUNCHCLIP_DRAFT_SHOT_MS: "60", LAUNCHCLIP_DRAFT_DIRECTION_MS: "0" } });
+  const draft = await draftRun({ env: { LAUNCHCLIP_DRAFT_SHOT_MS: "200", LAUNCHCLIP_DRAFT_DIRECTION_MS: "0" } });
   const clip = path.join(draft.cwd, "clip.mp4");
   await writeFile(clip, "a clip");
   try {
@@ -142,14 +141,15 @@ test("a draft asks the asset provider for every shot at once; a clip that is lat
         open += 1;
         peak = Math.max(peak, open);
         // The first request answers at once; every other one takes longer than the draft waits.
-        await wait(asked.length === 1 ? 5 : 300);
+        const first = asked.length === 1;
+        await wait(first ? 5 : 2500);
         open -= 1;
-        return { file: clip, kind: "video" };
+        return first ? { file: clip, kind: "video" } : null;
       }
     };
     const started = performance.now();
     const { report } = await draft.run({ speed: "draft", minShots: 2 }, { assets });
-    assert.ok(performance.now() - started < 290, "the run did not wait for the late clips");
+    assert.ok(performance.now() - started < 2400, "the run did not wait for the late clips");
     assert.equal(report.status, "awaiting-approval");
     assert.ok(asked.length >= 2, `asked for ${asked.length} shots`);
     assert.equal(peak, asked.length, "every request was in flight together");
@@ -160,10 +160,9 @@ test("a draft asks the asset provider for every shot at once; a clip that is lat
     assert.ok(existsSync(path.join(draft.project, clips[0].params.media.src)));
     // The late ones: drawn scenes with the same ids, and the report says so.
     for (const request of asked.slice(1)) assert.equal(story.scenes.find((scene) => scene.id === request.scene_id).module, "character-cameo");
-    assert.deepEqual(report.draft.storyboard.shots, { asked: asked.length, answered: 1, late: asked.length - 1, deadline_seconds: 0.1 });
+    assert.deepEqual(report.draft.storyboard.shots, { asked: asked.length, answered: 1, late: asked.length - 1, deadline_seconds: 0.2 });
     assert.equal(report.warnings.filter((warning) => /^draft: scene d\d+: .*the scene is drawn instead \(character-cameo\)/.test(warning)).length, asked.length - 1);
     assert.equal(report.shots.length, 1);
-    await wait(320);
   } finally { await draft.cleanup(); }
 });
 
@@ -232,7 +231,7 @@ test("the default run has no draft in it: the same calls, stages and progress st
     assert.ok(calls.includes("launchclip_make_script") && calls.includes("launchclip_storyboard"));
     assert.ok(!calls.some((name) => /draft/.test(name)));
     assert.ok(!lines.some((line) => /"step":"(sentence|script|voice|plan)"/.test(line)));
-    assert.deepEqual(Object.keys(report.milestones), ["script_seconds", "voice_seconds", "plan_seconds"]);
+    assert.equal(report.milestones, undefined);
   } finally { await recorded.cleanup(); }
 });
 

@@ -232,8 +232,8 @@ The run ends with `status` `awaiting-approval` and `stopped.after`
 }
 ```
 
-`milestones` is in every run's `MAKE.json`, so you can compare a draft with
-an ordinary run. `storyboard.source` is `rules` when the direction call did
+`milestones` counts from the start of the run (a draft and a refine have
+it). `storyboard.source` is `rules` when the direction call did
 not make it in; `direction.status` is then `late`, `failed`, `invalid` or
 `off`.
 

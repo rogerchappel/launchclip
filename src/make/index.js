@@ -33,7 +33,7 @@ import { VOICE_SETTINGS, narrationCacheKey, narrationDocument, narrationRequest,
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
-import { approvals, validateMakeOptions } from "./options.js";
+import { approvals, makeSpeed, validateMakeOptions } from "./options.js";
 import { DRAFT_REASONING, DRAFT_VERSION, DRAFT_VOICE_CONCURRENCY, RULES_MODEL, applyDraftDirection, deadlineProvider, draftDirection, draftModelSpec, draftWaits, joinSentenceTakes, ruleClient, takeCached } from "./draft.js";
 import { draftStoryboard } from "./draft_plan.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
@@ -163,7 +163,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const clock = adapters.clock ?? (() => new Date().toISOString());
   const text = String(prompt ?? "").trim();
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
-  const { voice: voiceProvider, renderer, quality, speed, script: scriptOptions } = validateMakeOptions(options);
+  const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
+  const speed = makeSpeed(options.speed);
   const modelLimit = modelConcurrency(options.modelConcurrency, env);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   // Inside a library (options.library, src/library.js) a project without
@@ -188,8 +189,6 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     routing: null,
     stages: {},
     timings: {},
-    // Seconds from the start of the run to the script, the voice and the storyboard (script_seconds, voice_seconds, plan_seconds).
-    milestones: {},
     costs: { items: [], estimated_usd: 0, complete: true },
     model_calls: null,
     repairs: null,
@@ -208,11 +207,14 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const gate = createModelGate({ limit: modelLimit, now, say, ...(adapters.sleep ? { sleep: adapters.sleep } : {}) });
   const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir, gate };
   // A milestone is the first time something is ready in this run, in seconds from its start.
-  ctx.mark = (name) => { report.milestones[`${name}_seconds`] ??= round1((now() - started) / 1000); return report.milestones[`${name}_seconds`]; };
+  const milestones = {};
+  ctx.mark = (name) => { milestones[`${name}_seconds`] ??= round1((now() - started) / 1000); return milestones[`${name}_seconds`]; };
   // --speed draft (src/make/draft.js): the script, the voice and the storyboard the fast way, then stop. --refine: the full plan on a draft's script and voice.
   ctx.draft = speed === "draft" ? { waits: draftWaits(env) } : null;
   if (ctx.draft || options.refine) {
     report.draft = { schema_version: DRAFT_VERSION, mode: ctx.draft ? "draft" : "refine", parts: {} };
+    // Seconds from the start of the run to the first sentence, the script, the voice and the storyboard.
+    report.milestones = milestones;
     // A draft writes from the brief alone, and its refine keeps that script: nothing is researched.
     ctx.researchDecision = { mode: researchMode(options.research), run: false, reason: ctx.draft ? "--speed draft: the script is written from the brief alone" : "--refine: the draft's script is kept", signals: [] };
     report.research_decision = ctx.researchDecision;
