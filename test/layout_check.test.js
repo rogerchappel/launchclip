@@ -302,3 +302,34 @@ test("validate and layout-check agree on float bounds: one tolerance, bounds pri
     }
   }
 });
+
+test("layout-check measures a scene to its render end, as validate and both renderers do", async () => {
+  const { resolveModule, sceneRenderEnd } = await import("@launchclip/core/modules.mjs");
+  const { resolveStory } = await import("@launchclip/core/story.mjs");
+  // A 1.67 s line diagram is under the module's 2 s minimum on its cut alone,
+  // but it stays on screen through the next scene's 0.5 s transition.
+  const diagram = { points: { a: [20, 20], b: [80, 20], c: [50, 70] }, lines: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "a" }] };
+  const story = (into) => ({
+    schema: "launchclip.story.v1", lane: "motion", title: "Render end",
+    format: { width: 1080, height: 1920, fps: 30, duration: 6 },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#4f8cff", ink: "#14161c", paper: "#f2eee6" }, fonts: { display: "anton" } },
+    scenes: [
+      { id: "s1", module: "line-diagram", start: 0, end: 1.67, energy: 2, params: diagram },
+      { id: "s2", module: "motion-title", start: 1.67, end: 6, energy: 2, ...(into ? { in: into } : {}), params: { text: "What it holds up" } }
+    ]
+  });
+  const moduleSpec = async (into) => {
+    const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-render-end-"));
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story(into)));
+    return (await checkLayoutProject(project)).findings.filter((entry) => entry.rule === "module-spec").map((entry) => entry.detail);
+  };
+  for (const type of ["fade", "push", "dot-wipe"]) {
+    const resolved = resolveStory(story({ type, dur: 0.5 }));
+    const scene = resolved.scenes[0];
+    assert.ok(sceneRenderEnd(resolved, scene) > 2, `${type}: drawn past its cut`);
+    assert.doesNotThrow(() => resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) }));
+    assert.deepEqual(await moduleSpec({ type, dur: 0.5 }), [], `${type}: the layout check accepts what the renderers draw`);
+  }
+  // On a plain cut the scene really is 1.67 s, and the check still says so.
+  assert.match((await moduleSpec(null)).join("\n"), /duration must be between 2 and 3600/);
+});
