@@ -22,19 +22,22 @@ export class OpenAIResponsesClient {
 
   async wait(responseOrId, options = {}) {
     let response = typeof responseOrId === "string" ? await this.retrieve(responseOrId) : responseOrId;
-    const pollIntervalMs = Number(options.pollIntervalMs ?? 5000);
+    // A pollIntervalMs is a fixed interval; without one the interval follows pollDelayMs.
+    const fixedMs = options.pollIntervalMs == null ? null : Number(options.pollIntervalMs);
     const maxWaitMs = Number(options.maxWaitMs ?? 20 * 60 * 1000);
-    const maxPolls = Math.max(1, Math.ceil(maxWaitMs / Math.max(1, pollIntervalMs)));
-    for (let poll = 0; poll <= maxPolls; poll += 1) {
+    // The time slept so far (a zero interval counts as 1 ms, so the loop always ends).
+    let waitedMs = 0;
+    for (let poll = 0; ; poll += 1) {
       options.onStatus?.(response);
       if (response.status === "completed") return response;
       if (new Set(["failed", "cancelled", "incomplete"]).has(response.status)) throw responseFailure(response);
       if (!response.id) throw new Error("OpenAI background response did not include an id");
-      if (poll === maxPolls) throw new Error(`OpenAI response ${response.id} did not complete within ${maxWaitMs}ms`);
-      if (pollIntervalMs > 0) await this.sleep(pollIntervalMs);
+      if (poll > 0 && waitedMs >= maxWaitMs) throw new Error(`OpenAI response ${response.id} did not complete within ${maxWaitMs}ms`);
+      const delayMs = fixedMs ?? pollDelayMs(waitedMs);
+      if (delayMs > 0) await this.sleep(delayMs);
+      waitedMs += Math.max(1, delayMs);
       response = await this.retrieve(response.id);
     }
-    throw new Error("OpenAI response polling ended unexpectedly");
   }
 
   async runStructured(options) {
@@ -79,6 +82,19 @@ export class OpenAIResponsesClient {
     }
     throw new Error("OpenAI request exhausted retries");
   }
+}
+
+/**
+ * How long to sleep before the next poll of a background response, given the
+ * time slept so far. A finished response sits unseen until the next poll, so
+ * the interval is short while most calls end (1 s for the first two seconds,
+ * then 2 s) and goes back to 5 s after two minutes, which keeps a long call
+ * to about 40 more polls than a steady 5 s.
+ */
+export function pollDelayMs(waitedMs) {
+  if (waitedMs < 2_000) return 1_000;
+  if (waitedMs < 120_000) return 2_000;
+  return 5_000;
 }
 
 function structuredResult(response, options) {
