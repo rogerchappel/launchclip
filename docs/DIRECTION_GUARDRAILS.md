@@ -258,5 +258,6 @@ something live moves in it.
 renderers play (`speechChanges`), so it needs no render. With speakers on the
 narration's words a mouth is held to its own character's words; without, to
 any word. It is `skipped` with no character scene or nobody speaking and
-`not-checked` when mouths move with no narration words. `finish` does not
-call it yet.
+`not-checked` when mouths move with no narration words. `finish` runs it
+with the direction gates and files it as `lip-sync` in
+`qa/finish/gates.json`.
