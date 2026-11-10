@@ -391,6 +391,14 @@ export async function planStoryboard(options = {}) {
       if (!checked.ok) {
         const fitted = pinned.storyboard;
         direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+        // A short shot merged into its neighbour took its action cue with it: the map's action is placed again, in the shot that now plays the line.
+        if (bible && direction) {
+          const placed = placeActions(pinned.storyboard, { direction, words: wordList });
+          if (placed.changed.length) {
+            pinned.storyboard = placed.storyboard;
+            pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`).filter((entry) => !pinned.warnings.includes(entry))];
+          }
+        }
         if (pinned.storyboard !== fitted) {
           checkOptions.direction = direction;
           checked = checkStoryboard(pinned.storyboard, checkOptions);

@@ -40,6 +40,7 @@ const CAST_MAX = 3;
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const round = (value) => Math.round(value * 100) / 100;
+const ms = (value) => Math.round(value * 1000) / 1000;
 const floor2 = (value) => Math.floor(value * 100 + 1e-6) / 100;
 const ceil2 = (value) => Math.ceil(value * 100 - 1e-6) / 100;
 const minimum = (scene) => Math.max(Number(moduleTiming(scene?.module)?.minDuration) || 0, FLOOR);
@@ -110,7 +111,7 @@ function fitOverlaps(state) {
       if (!(times[b].start < times[a].end - EPS)) continue;
       const first = story.scenes[a], second = story.scenes[b];
       if (times[b].start - times[a].start >= minimum(first) - EPS) {
-        changed.push(`${label(first, a)} ran ${round(times[a].end - times[b].start)} s into ${label(second, b)} on track ${track}; its end moved ${round(times[a].end)} → ${round(times[b].start)} s`);
+        changed.push(`${label(first, a)} ran ${ms(times[a].end - times[b].start)} s into ${label(second, b)} on track ${track}; its end moved ${ms(times[a].end)} → ${ms(times[b].start)} s`);
         times[a].end = times[b].start;
         // Never past the next scene's start, however it rounds (an anchored start is a time to the millisecond).
         first.end = Math.floor(times[b].start * 1000 + 1e-6) / 1000;
