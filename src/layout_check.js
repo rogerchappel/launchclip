@@ -1,7 +1,7 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
-import { catalogModules, rectFitHint, resolveModule, subjectDensityFindings } from "@launchclip/core/modules.mjs";
+import { catalogModules, rectFitHint, resolveModule as resolveModuleAt, sceneRenderEnd, subjectDensityFindings } from "@launchclip/core/modules.mjs";
 import { profileForStory } from "./profile_store.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -17,6 +17,11 @@ import { brandFrameLayout, intersectRects } from "@launchclip/core/brand-frame.m
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "@launchclip/core/subject-layer.mjs";
 import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 import { probeFullFrameMedia } from "./media_presence.js";
+
+// A scene stays on screen through the next scene's transition, so it is drawn
+// to its render end, not its cut. Every check here measures that length, as
+// the planner, story validate and both renderers do; an explicit end wins.
+const resolveModule = (scene, resolved, options = {}) => resolveModuleAt(scene, resolved, { end: sceneRenderEnd(resolved, scene), ...options });
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = fileURLToPath(import.meta.resolve("@launchclip/core/story.mjs"));

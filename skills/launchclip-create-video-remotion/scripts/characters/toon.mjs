@@ -371,9 +371,12 @@ export function face(ctx, name) {
   if (cute) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * r1(g.head.rx * 0.52), cy + 48, 14, 9, 'blush', {outline: false, opacity: parts.blush ? 0.7 : 0.42}));
   else if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
   kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy, cute));
-  const mouthAt = cute ? `translate(0 ${cy + CUTE.mouthY}) scale(${CUTE.mouth})` : `translate(0 ${cy + 47})`;
-  const closed = group(mouthShape(parts.mouth.closed, P), {transform: mouthAt});
-  const open = group(mouthShape(parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open, P), {transform: mouthAt});
+  // The mouth's group only moves it to its centre (the view pivots an open
+  // mouth there for speech, view.mjs); the cute mouth's size is a group inside.
+  const mouthAt = `translate(0 ${cy + (cute ? CUTE.mouthY : 47)})`;
+  const sized = shapes => (cute ? [group(shapes, {transform: `scale(${CUTE.mouth})`})] : shapes);
+  const closed = group(sized(mouthShape(parts.mouth.closed, P)), {transform: mouthAt});
+  const open = group(sized(mouthShape(parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open, P)), {transform: mouthAt});
   const show = ctx.expression === name ? 1 : 0;
   if (ctx.static) return show ? group([...kids, closed]) : null;
   return el('g', `${ctx.id}-face-${name}`, {opacity: show}, [
