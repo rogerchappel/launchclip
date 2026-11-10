@@ -72,6 +72,7 @@ export class ChatCompletionsStructuredClient {
     this.supportsResume = false;
     this.supportsImages = route.supportsImages;
     this.reasoning = route.reasoning;
+    this.noTemperature = new Set();
   }
 
   async runStructured(options = {}) {
@@ -85,9 +86,11 @@ export class ChatCompletionsStructuredClient {
         type: "json_schema",
         json_schema: { name: String(options.schemaName), strict: true, schema: options.schema }
       },
-      temperature: Number(options.temperature ?? 0),
       stream: false
     };
+    // Some hosted models take no sampling parameters at all. Once a model
+    // has refused temperature, this client stops sending it.
+    if (!this.noTemperature.has(model)) body.temperature = Number(options.temperature ?? 0);
     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
     if (this.provider === "openrouter") {
       const dynamicFreeRouter = model === "openrouter/free";
@@ -96,7 +99,15 @@ export class ChatCompletionsStructuredClient {
         body.reasoning = { effort: options.reasoningEffort };
       }
     }
-    const payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+    let payload;
+    try {
+      payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+    } catch (error) {
+      if (!("temperature" in body) || !refusesParameters(error)) throw error;
+      this.noTemperature.add(model);
+      delete body.temperature;
+      payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+    }
     const result = chatStructuredResult(payload, model);
     await options.onSubmitted?.({ id: result.response_id, status: result.status, model: result.model });
     return result;
@@ -156,6 +167,14 @@ export class ChatCompletionsStructuredClient {
     }
     throw new Error(`${this.provider} request exhausted retries`);
   }
+}
+
+// A router with require_parameters answers 404 "No endpoints found that can
+// handle the requested parameters" when no host of the model accepts one of
+// them; a model that takes no temperature says so in a 400.
+function refusesParameters(error) {
+  const message = String(error?.message ?? "");
+  return /\((?:400|404)\)/.test(message) && /requested parameters|temperature/i.test(message);
 }
 
 export class OllamaStructuredClient extends ChatCompletionsStructuredClient {

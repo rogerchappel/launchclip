@@ -69,6 +69,21 @@ test("pins OpenRouter parameters and disables provider fallback", async () => {
   assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: false });
 });
 
+test("a model that takes no temperature is asked again without it, and not sent it after that", async () => {
+  const bodies = [];
+  const client = createStructuredClient({ provider: "openrouter", model: "example/no-sampling", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      bodies.push(body);
+      if ("temperature" in body) return new Response(JSON.stringify({ error: { message: "No endpoints found that can handle the requested parameters." } }), { status: 404 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "{\"ok\":true}" } }] }), { status: 200 });
+    }
+  });
+  await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" });
+  await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "again" });
+  assert.deepEqual(bodies.map((body) => "temperature" in body), [true, false, false]);
+});
+
 test("allows prompt-validated provider fallback for the dynamic OpenRouter free route", async () => {
   let body;
   const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
