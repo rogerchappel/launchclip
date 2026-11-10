@@ -35,6 +35,10 @@ import { explainerDirectionLines, explainerStoryboardLines } from './explainer.m
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
+// The share of the narration captions may be hidden under cards before a
+// storyboard fails (the gate is src/caption_visibility.js).
+export const CAPTION_HIDDEN_MAX = 0.15;
+
 // Params that place or restyle a module. The structured tier may not set them
 // (RFC §7: catalogue modules only, no raw coordinates).
 export const TUNING_PARAMS = Object.freeze(['rect', 'theme', 'accent', 'motion', 'presentation', 'track']);
@@ -473,7 +477,9 @@ function safeZoneLines(format, captions = null) {
   const lines = profiles.map((profile) => `${profile.id} (${profile.reference.width}x${profile.reference.height}): key content within ${box(profile.safeZone)}; caption band ${box(moved ? moved.band : profile.captionBand)}${moved ? ` (this story's captions: ${moved.position === 'auto' ? 'the usual position, with taller lines' : `position "${moved.position}"`})` : ''}; centre of mass near y ${profile.centerOfMassY}; key text at least ${profile.minTextPx} px${profile.lowerThird ? '; keep the lower third occupied' : ''}.`);
   return [
     ...lines,
-    ...(moved ? [`The style pack puts this story's captions ${moved.position === 'auto' ? 'in a taller band than usual' : moved.position === 'middle' ? 'in the middle of the frame' : moved.position === 'top' ? 'at the top of the frame' : 'low in the frame'}: wherever these rules say "the caption band", it is y ${moved.band.y}–${moved.band.y + moved.band.height}, and "above the caption band" means clear of it, above y ${moved.band.y} or below y ${moved.band.y + moved.band.height}. Modules place themselves and many will sit across that band; tooling then hides the captions under the card while it is up (the card carries the line), so a caption-band error is never a reason to change a module, drop a scene or shorten copy. Where you do set a rect or a position, keep key text clear of y ${moved.band.y}–${moved.band.y + moved.band.height}.`] : []),
+    // Scene text is planned outside the band the captions take; tooling settles what is left (src/caption_band_fit.js).
+    ...(moved ? [`The style pack puts this story's captions ${moved.position === 'auto' ? 'in a taller band than usual' : moved.position === 'middle' ? 'in the middle of the frame' : moved.position === 'top' ? 'at the top of the frame' : 'low in the frame'}: wherever these rules say "the caption band", it is y ${moved.band.y}–${moved.band.y + moved.band.height}, and "above the caption band" means clear of it, above y ${moved.band.y} or below y ${moved.band.y + moved.band.height}. Plan every scene's own text (a title, a card, a label) clear of that band, so the captions stay on screen with it: ${moved.position === 'top' ? 'keep a clip\'s callouts in their bottom slot' : 'give a clip\'s callouts position "top"'}, and where you set a rect or a position, keep key text clear of y ${moved.band.y}–${moved.band.y + moved.band.height}. A module that places itself may still sit across the band: tooling then moves the card out of it, or moves the captions for that scene, and hides the captions only when neither fits, so a caption-band error is never a reason to change a module, drop a scene or shorten copy. Captions hidden for more than ${Math.round(CAPTION_HIDDEN_MAX * 100)}% of the narration fail the storyboard (a "captions:" error names the scenes): give those scenes a module whose text sits clear of the band, or less text.`] : []),
+    'Captions are on for the whole narration: plan scene text (titles, cards, labels) outside the caption band, never across it.',
     'Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.',
     'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.'
   ];

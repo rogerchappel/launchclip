@@ -12,9 +12,10 @@
 
 import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
+import { CAPTION_HIDDEN_MAX } from "@launchclip/core/planning-prompt.mjs";
 
-/** The share of the narration captions may be hidden for before the gate fails. */
-export const CAPTION_HIDDEN_MAX = 0.15;
+// The share of the narration captions may be hidden for before the gate fails (the planner is told the same number).
+export { CAPTION_HIDDEN_MAX };
 
 const round = (value, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
 
@@ -68,7 +69,7 @@ export function captionVisibilityGate(resolved, words = [], { max = CAPTION_HIDD
     return { id: scene.id, module: scene.module, start: round(start), end: round(end), seconds: round(seconds(inScene)) };
   }).filter((scene) => scene.seconds > 0.05).sort((a, b) => b.seconds - a.seconds);
   const failed = share > max + 1e-9;
-  const where = band ? ` (y ${Math.round(band.y)}–${Math.round(band.y + band.height)})` : "";
+  const where = band ? ` (y ${Math.round(band.y)}–${Math.round(band.y) + Math.round(band.height)})` : "";
   return {
     status: failed ? "failed" : "passed",
     share: round(share, 3),

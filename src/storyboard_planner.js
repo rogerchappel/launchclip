@@ -23,7 +23,8 @@ import { isEditorialKind, knownModules, formatAspect, resolveModule, sceneRender
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
+import { captionBandAt, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
+import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
@@ -808,7 +809,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   // Captions that are on are seen: ranges hidden under cards (tooling's last
   // resort for a card in the caption band, src/caption_band_fit.js) may
   // cover only a small share of the narration (src/caption_visibility.js).
-  const captionGate = captionVisibilityGate(resolved, words, { band: captionBandFor(resolved, canvas) });
+  const captionGate = captionVisibilityGate(resolved, words, { band: captionBandAt(captionBandFor(resolved, canvas), canvas, captionsOverlayOf(resolved)?.position) });
   if (captionGate.status === "failed") errors.push(...captionGate.errors.map((entry) => `captions: ${entry}`));
   // minHold: a short video's shots hold at least this long (src/duration_fit.js paceErrors).
   if (minHold > 0) errors.push(...paceErrors(resolved, { hold: minHold }));

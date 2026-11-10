@@ -26,11 +26,15 @@
 // Every step is checked here against the same layout rules (checkLayout over
 // the scene's elements and everything on screen with it), so a move never
 // trades the clash for a collision, a safe-zone error or text under its
-// floor. The layout check stays strict: the caller checks the result again.
+// floor. In a talking-head story neither a moved card nor moved captions
+// may land on the presenter's face (the head src/face_clear_fit.js keeps
+// cards off). The layout check stays strict: the caller checks the result
+// again.
 
-import { CAPTION_ZONE_MIN_SCALE } from "@launchclip/core/captions.mjs";
+import { CAPTION_ZONE_MIN_SCALE, captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { captionBandAt, checkLayout, elementsFromEditorialLayout, layoutExtras, profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { catalogModules, isEditorialKind, moduleFit, resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
+import { FACE_CLEAR, presenterHeadLocator } from "./face_clear_fit.js";
 import { captionBandFor } from "./layout_check.js";
 
 export const CAPTION_BAND_FIT = Object.freeze({
@@ -53,10 +57,10 @@ export const PARAM_MOVES = Object.freeze({
   "footage-callout": () => [{ side: "above" }, { side: "below" }]
 });
 
-const BAND_ERROR = /^layout: caption-band @[\d.]+s \[([^,\]]+), ([^\]]+)\][^]*?caption band (-?[\d.]+),(-?[\d.]+) ([\d.]+)×([\d.]+) while captions are visible \(([\d.]+)s–([\d.]+)s\)/;
+const BAND_ERROR = /^layout: caption-band @[\d.]+s \[([^,\]]+), ([^\]]+)\][^]*?caption band(?: (-?[\d.]+),(-?[\d.]+) ([\d.]+)×([\d.]+))? while captions are visible \(([\d.]+)s–([\d.]+)s\)/;
 const EPS = 1e-6;
 
-/** The caption-band clashes in a list of check errors: [{scene, captions, rect, start, end}]. */
+/** The caption-band clashes in a list of check errors: [{scene, captions, rect (the band the error names, or null), start, end}]. */
 export function captionBandErrors(errors) {
   const out = [];
   for (const error of errors ?? []) {
@@ -64,7 +68,7 @@ export function captionBandErrors(errors) {
     if (!match) continue;
     const [, scene, captions, x, y, width, height, start, end] = match;
     if (!(Number(end) > Number(start))) continue;
-    out.push({ scene: scene.trim(), captions: captions.trim(), rect: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) }, start: Number(start), end: Number(end) });
+    out.push({ scene: scene.trim(), captions: captions.trim(), rect: x === undefined ? null : { x: Number(x), y: Number(y), width: Number(width), height: Number(height) }, start: Number(start), end: Number(end) });
   }
   return out;
 }
@@ -77,7 +81,7 @@ export function captionBandErrors(errors) {
  * only), lay(scene, resolved, canvas) → a scene's layout elements (default:
  * as the planner's check lays a scene out)}.
  * → {storyboard,
- *    moved:  ["ask moved above the caption band"],
+ *    moved:  ["ask (re-fitted above it)", "open (position \"top\")"],
  *    placed: ["captions 3–6 s moved below boards (y 1114)"],
  *    hidden: ["captions 0.28–1.42 s under cover-callouts: no free band …"],
  *    changes: every line above, in the order made}
@@ -120,7 +124,7 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
     }
     let why = picture ? "" : resolve && from < 4 ? "the story could not be laid out" : "";
     if (picture && owner && !inPlaced) {
-      const rect = clashes[0].rect;
+      const rect = clashes[0].rect ?? picture.band;
       if (from <= 1) {
         const move = moveContent(picture, owner, rect);
         if (move) {
@@ -129,7 +133,7 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
           // The rect is tooling's: the structured tier lets the model set none (tierErrors reads scene.fitted).
           if (move.patch.rect) target.fitted = [...new Set([...(Array.isArray(target.fitted) ? target.fitted : []), "rect"])];
           picture.patch(owner.id, move.patch, move.elements);
-          say(moved, `${owner.id} ${move.words}`);
+          say(moved, `${owner.id} (${move.words})`);
           continue;
         }
       }
@@ -142,7 +146,7 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
           say(placed, `captions ${zone.start}–${zone.end} s ${zone.scale < 1 ? `shrunk to ${Math.round(zone.scale * 100)}% and moved` : "moved"} ${zone.side} ${owner.id} (y ${Math.round(zone.rect.y)})`);
           continue;
         }
-        why = `${owner.id} cannot move and leaves no free band ${Math.round(picture.band.height * CAPTION_BAND_FIT.minScale)} px tall above or below it`;
+        why = `${owner.id} cannot move and leaves no other free band ${Math.round(picture.band.height * CAPTION_BAND_FIT.minScale)} px tall above or below it`;
       }
     } else if (inPlaced) why = "the band tooling moved them to is not clear either";
     overlay = overlayFor(clashes[0], true);
@@ -193,7 +197,7 @@ export function settleCaptionBand(storyboard, checked, check, { passes = 4, reso
 /** The warnings a stage records for what settleCaptionBand or fitCaptionBand changed: one line per kind. */
 export function captionBandWarnings({ moved = [], placed = [], hidden = [] } = {}) {
   return [
-    ...(moved.length ? [`layout: tooling moved ${moved.join("; ")}`] : []),
+    ...(moved.length ? [`layout: tooling cleared the caption band: ${moved.join("; ")}`] : []),
     ...(placed.length ? [`layout: tooling placed ${placed.join("; ")}`] : []),
     ...(hidden.length ? [`layout: tooling hid ${hidden.join("; ")}`] : [])
   ];
@@ -213,15 +217,35 @@ function pictureOf(storyboard, resolve, lay) {
   if (!(canvas.width > 0 && canvas.height > 0) || !Array.isArray(resolved.scenes)) return null;
   const { safeZone } = profileGeometry(canvas);
   let band;
-  try { band = captionBandFor(resolved, canvas); } catch { return null; }
+  // The band at the overlay's own position, grown to its tallest line (as the layout check places it).
+  try {
+    const overlay = captionsOverlayOf(resolved);
+    band = overlay?.rect ?? captionBandAt(captionBandFor(resolved, canvas), canvas, overlay?.position);
+  } catch { return null; }
   if (!band) return null;
   const elements = new Map();
   for (const scene of resolved.scenes) {
     try { elements.set(scene.id, lay(scene, resolved, canvas)); } catch { elements.set(scene.id, null); }
   }
   const ids = resolved.scenes.map((scene) => scene.id).sort((a, b) => b.length - a.length);
+  // A talking-head story: where the presenter's head is while a scene is up, or null.
+  let locator = null;
+  try { locator = presenterHeadLocator(resolved); } catch { locator = null; }
+  // Half the face margin less a pixel, the room fitFaceClear itself leaves under a chin.
+  const margin = Math.round(FACE_CLEAR.margin * Math.min(canvas.width, canvas.height)) / 2 - 1;
+  const headOver = (start, end) => {
+    if (!locator) return null;
+    let box = null;
+    for (let t = start; t < end - EPS; t += 1 / FACE_CLEAR.samplesPerSecond) {
+      const head = locator.at(t);
+      if (!head) continue;
+      const x = Math.min(box?.x ?? head.x, head.x), y = Math.min(box?.y ?? head.y, head.y);
+      box = { x, y, width: Math.max(box ? box.x + box.width : 0, head.x + head.width) - x, height: Math.max(box ? box.y + box.height : 0, head.y + head.height) - y };
+    }
+    return box && { x: box.x - margin, y: box.y - margin, width: box.width + 2 * margin, height: box.height + 2 * margin };
+  };
   return {
-    resolved, canvas, safe: safeZone, band, elements, lay,
+    resolved, canvas, safe: safeZone, band, elements, lay, headOver,
     gap: Math.round(CAPTION_BAND_FIT.gap * canvas.height),
     // The scene an element belongs to: its own id, or a part's ("cover-callouts" → cover).
     ownerOf(elementId) {
@@ -294,22 +318,26 @@ function moveContent(picture, scene, band) {
   const laid = picture.elements.get(scene.id);
   if (!laid?.length) return null;
   const before = errorsWith(picture, scene, laid, band);
+  // On the presenter's face: the scene's own elements that meet the head while it is up.
+  const head = picture.headOver(Number(scene.start), Number(scene.end));
+  const onFace = (elements) => (head ? elements.filter((element) => element.role !== "decor" && element.rect && !isFullFrame(element.rect, picture.canvas) && meets(element.rect, head)).length : 0);
+  const faceBefore = onFace(laid);
   const accept = (patch) => {
     const patched = { ...scene, params: { ...(scene.params ?? {}), ...patch } };
     let elements;
     try { elements = picture.lay(patched, picture.resolved, picture.canvas); } catch { return null; }
     if (!elements.length) return null;
     const after = errorsWith(picture, patched, elements, band);
-    return after.band === 0 && after.other <= before.other ? elements : null;
+    return after.band === 0 && after.other <= before.other && onFace(elements) <= faceBefore ? elements : null;
   };
   for (const candidate of rectMoves(picture, scene, laid, band)) {
     const elements = accept({ rect: candidate.rect });
-    if (elements) return { patch: { rect: candidate.rect }, elements, words: `${candidate.resized ? "re-fitted" : "moved"} ${candidate.side} the caption band` };
+    if (elements) return { patch: { rect: candidate.rect }, elements, words: `${candidate.resized ? "re-fitted" : "moved"} ${candidate.side} it` };
   }
   for (const patch of PARAM_MOVES[scene.module]?.(scene.params ?? {}) ?? []) {
     if (Object.entries(patch).every(([key, value]) => scene.params?.[key] === value)) continue;
     const elements = accept(patch);
-    if (elements) return { patch, elements, words: `set to ${Object.entries(patch).map(([key, value]) => `${key} ${JSON.stringify(value)}`).join(", ")}, clear of the caption band` };
+    if (elements) return { patch, elements, words: Object.entries(patch).map(([key, value]) => `${key} ${JSON.stringify(value)}`).join(", ") };
   }
   return null;
 }
@@ -319,7 +347,7 @@ function moveContent(picture, scene, band) {
 function rectMoves(picture, scene, laid, band) {
   if (!takesRect(scene)) return [];
   const box = laid.find((element) => element.id === scene.id)?.rect ?? scene.params?.rect;
-  if (!box || box.width * box.height >= CAPTION_BAND_FIT.fullFrame * picture.canvas.width * picture.canvas.height) return [];
+  if (!box || isFullFrame(box, picture.canvas)) return [];
   const { safe, gap } = picture;
   // Below the band a card may reach the safe zone's foot; a module that
   // keeps itself above the usual caption band refuses that rect, so the
@@ -364,6 +392,9 @@ function placeCaptions(picture, scene, clashRect) {
   if (!(end > start)) return null;
   const keyed = [...(picture.elements.get(scene.id) ?? []), ...picture.around(scene.id, start, end)]
     .filter((element) => (element.role === "text" || element.role === "hero") && !element.hidesCaptions && element.rect && element.rect.x < band.x + band.width && element.rect.x + element.rect.width > band.x);
+  // A presenter's face is as much in the way as a card.
+  const head = picture.headOver(start, end);
+  if (head && head.x < band.x + band.width && head.x + head.width > band.x) keyed.push({ rect: head });
   // Free vertical runs of the safe zone, each obstacle grown by the gap.
   let free = [[safe.y, safe.y + safe.height]];
   for (const { rect } of keyed) {
@@ -377,19 +408,21 @@ function placeCaptions(picture, scene, clashRect) {
   // run short of the band by less than the gap still holds them: the band
   // is the tallest line they can draw.
   const full = free.filter(([a, b]) => b - a >= band.height - gap)
-    .map(([a, b]) => ({ y: Math.min(Math.max(band.y, a), Math.max(a, b - band.height)), height: Math.min(band.height, b - a) }))
+    .map(([a, b]) => ({ a, b, y: Math.min(Math.max(band.y, a), Math.max(a, b - band.height)), height: Math.min(band.height, b - a) }))
     .sort((p, q) => Math.abs(p.y - band.y) - Math.abs(q.y - band.y))[0];
   if (full) {
     // A place captions are designed to sit (the usual band, low, the top)
-    // within two gaps of it wins, so moved captions land in the same place
-    // from scene to scene.
+    // in that same run wins over hugging the content, so moved captions land
+    // in the same place from scene to scene.
     const usual = profileGeometry(picture.canvas).captionBand;
     const grown = { ...usual, y: usual.y - (band.height - usual.height) / 2, height: band.height };
     const clear = (y) => !keyed.some(({ rect }) => rect.y - gap < y + band.height && rect.y + rect.height + gap > y);
     const designed = full.height < band.height ? undefined : ["auto", "low", "top"].map((position) => captionBandAt(grown, picture.canvas, position).y)
-      .filter((y) => Math.abs(y - full.y) <= 2 * gap && clear(y))
+      .filter((y) => y >= full.a - EPS && y + band.height <= full.b + EPS && clear(y))
       .sort((p, q) => Math.abs(p - full.y) - Math.abs(q - full.y))[0];
     const y = designed ?? full.y;
+    // The band the check failed, unmoved: this layout does not see the clash, so moving the captions fixes nothing.
+    if (Math.abs(y - clashRect.y) <= 1 && full.height >= clashRect.height - 1) return null;
     return { start, end, scale: 1, side: side(y, full.height), rect: { x: Math.round(band.x), y: Math.round(y), width: Math.round(band.width), height: Math.round(full.height) } };
   }
   // Step 3: shrunk into the tallest run that holds them at the least scale.
@@ -397,6 +430,14 @@ function placeCaptions(picture, scene, clashRect) {
   const scale = Math.floor(((b - a) / band.height) * 100) / 100;
   if (!(scale >= CAPTION_BAND_FIT.minScale)) return null;
   return { start, end, scale, side: side(a, b - a), rect: { x: Math.round(band.x), y: Math.round(a), width: Math.round(band.width), height: Math.round(b - a) } };
+}
+
+function meets(a, b) {
+  return Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > EPS && Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > EPS;
+}
+
+function isFullFrame(rect, canvas) {
+  return rect.width * rect.height >= CAPTION_BAND_FIT.fullFrame * canvas.width * canvas.height;
 }
 
 function round(value) {

@@ -253,7 +253,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "captions", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "critic"]);
     assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");
@@ -327,18 +327,21 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
   }
 });
 
-test("a card in a mid-frame caption band from 0 s hides the captions under it instead of failing validate", async () => {
+test("a card in a mid-frame caption band from 0 s moves out of it instead of failing validate, and the captions stay on", async () => {
   // Captions in the middle of the frame, where every card sits, and a card up
-  // from the first frame: the clash is closed with overlay.hide, not a failure.
+  // from the first frame: the cards move above the band, nothing is hidden.
   const project = await narratedProject({ mutate: (story) => { story.overlays[0].position = "middle"; } });
   try {
     const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
     assert.equal(report.stages.find((stage) => stage.name === "validate").status, "done", JSON.stringify(report.stages.find((stage) => stage.name === "validate")));
-    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions 0–/.test(line)), report.warnings.join("\n"));
+    assert.ok(report.warnings.some((line) => /^layout: tooling cleared the caption band: s1 \(/.test(line)), report.warnings.join("\n"));
+    assert.ok(!report.warnings.some((line) => line.startsWith("layout: tooling hid captions")), report.warnings.join("\n"));
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
-    assert.ok(resolved.overlays.find((overlay) => overlay.type === "captions").hide.some(([start]) => start === 0));
+    assert.equal(resolved.overlays.find((overlay) => overlay.type === "captions").hide, undefined);
+    assert.ok(resolved.scenes[0].params.rect, "the first card was given a rect clear of the band");
+    assert.deepEqual({ status: report.gates.captions.status, share: report.gates.captions.share }, { status: "passed", share: 0 });
     const user = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
-    assert.equal(user.overlays[0].hide, undefined, "the user's storyboard is not touched");
+    assert.equal(user.scenes[0].params.rect, undefined, "the user's storyboard is not touched");
   } finally {
     await rm(project, { recursive: true, force: true });
   }
@@ -348,7 +351,7 @@ test("a line time past a shortened scene and caption-band clashes are both repai
   // A plan written for a longer scene: line-diagram line times the scene's
   // settled window no longer allows (module-spec), next to cards in a
   // mid-frame caption band. Neither blocks the other: the times move into the
-  // window, the captions dip under the cards, and validate passes.
+  // window, the cards move out of the band, and validate passes.
   const roof = { title: "Planned roof", points: { a: [0, 30], b: [50, 0], c: [100, 30], d: [100, 60], e: [0, 60] },
     lines: [{ from: "e", to: "a", weight: "heavy", at: 0.6 }, { from: "d", to: "c", weight: "heavy", at: 0.9 }, { from: "a", to: "b", style: "dashed", label: "planned roof", at: 1.2 }, { from: "b", to: "c", style: "dashed", at: 2.7 }, { from: "e", to: "d", weight: "heavy", label: "deck", at: 2.8 }] };
   const project = await narratedProject({ mutate: (story) => {
@@ -359,10 +362,10 @@ test("a line time past a shortened scene and caption-band clashes are both repai
     const report = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
     const validate = report.stages.find((stage) => stage.name === "validate");
     assert.equal(validate.status, "done", JSON.stringify(validate));
-    const moved = report.warnings.find((line) => line.startsWith("layout: tooling moved "));
+    const moved = report.warnings.find((line) => line.startsWith("layout: tooling moved s2 params"));
     assert.match(moved ?? "", /s2 params\.lines\[2\]\.at 1\.2 → 0\.56 s/, report.warnings.join("\n"));
     assert.match(moved, /into the scene's settled window$/);
-    assert.ok(report.warnings.some((line) => /^layout: tooling hid captions .* under s1/.test(line)), report.warnings.join("\n"));
+    assert.ok(report.warnings.some((line) => /^layout: tooling cleared the caption band: s1 \(/.test(line)), report.warnings.join("\n"));
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
     const lines = resolved.scenes.find((scene) => scene.id === "s2").params.lines;
     assert.deepEqual(lines.slice(0, 2).map((line) => line.at), [0.6, 0.9], "times already inside the window are kept");
@@ -397,7 +400,8 @@ test("repairLayout moves cards off the face and fits the caption band even besid
   const repaired = await repairLayout({ copy: story }, layout, { resolveOptions: () => ({ track }) });
   const face = repaired.changes.find((line) => line.startsWith("face: tooling "));
   assert.match(face ?? "", /before-you-build (resized and )?moved .*three-and-a-half-weeks (resized and )?moved/, repaired.changes.join("\n"));
-  assert.ok(repaired.changes.includes("layout: tooling hid captions 4.98–9.52 s under three-and-a-half-weeks"), repaired.changes.join("\n"));
+  // The finding names no band and the moved card is clear of the usual one, so nothing can move: the captions hide, as a last resort.
+  assert.ok(repaired.changes.some((line) => line.startsWith("layout: tooling hid captions 4.98–9.52 s under three-and-a-half-weeks: ")), repaired.changes.join("\n"));
   for (const scene of repaired.storyboard.scenes) assert.ok(scene.params.rect, scene.id);
   assert.deepEqual(repaired.storyboard.overlays[0].hide, [[4.98, 9.52]]);
   assert.equal(story.scenes[0].params.rect, undefined, "the input is not mutated");

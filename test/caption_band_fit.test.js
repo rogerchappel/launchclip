@@ -65,7 +65,7 @@ test("settled in order, the captions stay on screen for the whole narration and 
     { start: 21, end: 24, rect: { x: 65, y: 1171, width: 853, height: 269 } }
   ]);
   assert.deepEqual(captionBandWarnings(settled), [
-    'layout: tooling moved open set to position "top", clear of the caption band; boards re-fitted above the caption band; pine set to share 0.3, clear of the caption band; ask re-fitted above the caption band; end moved above the caption band',
+    'layout: tooling cleared the caption band: open (position "top"); boards (re-fitted above it); pine (share 0.3); ask (re-fitted above it); end (moved above it)',
     "layout: tooling placed captions 15–18 s moved below mix (y 1171); captions 21–24 s moved below stat (y 1171)"
   ]);
   // The scenes that were clear are untouched.
@@ -114,7 +114,7 @@ test("steps 3 and 4 by geometry: a run of 70% of the band or more takes the capt
   // 200 px clear leaves 176 px (65%): under the floor, so the captions hide for the clash.
   const hid = fitCaptionBand(story, [boardsClash], { resolve, lay: diagram(200) });
   assert.deepEqual(hid.storyboard.overlays, [{ type: "captions", hide: [[2.98, 6.02]] }]);
-  assert.deepEqual(hid.hidden, ["captions 2.98–6.02 s under boards: boards cannot move and leaves no free band 188 px tall above or below it"]);
+  assert.deepEqual(hid.hidden, ["captions 2.98–6.02 s under boards: boards cannot move and leaves no other free band 188 px tall above or below it"]);
   assert.deepEqual([hid.moved, hid.placed], [[], []]);
 });
 
