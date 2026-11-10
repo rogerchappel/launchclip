@@ -57,7 +57,8 @@ export class OpenAIResponsesClient {
    */
   async streamStructured(options) {
     const body = { ...buildStructuredRequest(options), background: false, stream: true };
-    const response = await this.request("/responses", { method: "POST", body: JSON.stringify(body), headers: { Accept: "text/event-stream" } }, { raw: true });
+    // options.signal: a caller that stops waiting ends the request.
+    const response = await this.request("/responses", { method: "POST", body: JSON.stringify(body), headers: { Accept: "text/event-stream" }, ...(options.signal ? { signal: options.signal } : {}) }, { raw: true });
     let completed = null;
     for await (const event of serverSentEvents(response.body)) {
       if (event.type === "response.output_text.delta" && typeof event.delta === "string") options.onDelta(event.delta);
@@ -87,7 +88,7 @@ export class OpenAIResponsesClient {
           }
         });
       } catch (error) {
-        if (isCostLimitError(error)) throw error;
+        if (isCostLimitError(error) || init.signal?.aborted) throw error;
         if (attempt >= this.maxRetries) throw new Error(`OpenAI request failed: ${sanitize(String(error?.message ?? error))}`);
         await this.sleep(retryDelayMs(null, attempt));
         continue;

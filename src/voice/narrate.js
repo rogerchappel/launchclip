@@ -130,6 +130,19 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
   return { file: outFile, words, duration, sampleRate: result.sampleRate ?? null, loudness, cached: false, cache_key: key };
 }
 
+/**
+ * File a take made elsewhere (sentence takes joined into one, src/make/draft.js)
+ * in the cache under its request, so every later synthesizeNarration of the
+ * same request reuses it. take: {file, words, duration, sampleRate}. → the cache key
+ */
+export async function storeNarrationTake(request, take, cacheDir) {
+  const key = narrationCacheKey(request);
+  await mkdir(cacheDir, { recursive: true });
+  await copyFileAtomic(take.file, path.join(cacheDir, `${key}.wav`));
+  await writeFileAtomic(path.join(cacheDir, `${key}.json`), `${JSON.stringify({ schema_version: "launchclip.voice-cache.v1", request, words: take.words, duration_seconds: take.duration, sample_rate: take.sampleRate ?? null, loudness: take.loudness ?? null }, null, 2)}\n`);
+  return key;
+}
+
 /** The NARRATION.json document (launchclip.narration.v1) for a take. */
 export function narrationDocument(request, take) {
   return {

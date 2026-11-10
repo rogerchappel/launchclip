@@ -105,7 +105,8 @@ export function lineTitle(text, seconds) {
  * options: {words, format {width, height, fps, duration}, lane, title,
  *   cast ({style, characters}: the explainer's; default the guide and the
  *   spark), shots ({min, max}: an asset provider answers shot requests),
- *   media ([{src, kind}]: supplied images and clips to show)}
+ *   media ([{src, kind}]: supplied images and clips to show),
+ *   plain (true: characters and the call to action only)}
  * → {storyboard, fallbacks: {scene id: the drawn scene a missed shot falls back to}, lines, cast, character_share}
  */
 export function draftStoryboard(options = {}) {
@@ -116,8 +117,10 @@ export function draftStoryboard(options = {}) {
   const lines = draftLines(words);
   if (!lines.length) throw new Error("draftStoryboard needs the narration's word timings");
   const portrait = format.height > format.width;
-  const shots = options.shots && Number(options.shots.max) > 0 ? { min: Math.max(0, Number(options.shots.min) || 0), max: Number(options.shots.max) } : null;
+  const shots = options.plain !== true && options.shots && Number(options.shots.max) > 0 ? { min: Math.max(0, Number(options.shots.min) || 0), max: Number(options.shots.max) } : null;
   const media = (Array.isArray(options.media) ? options.media : []).filter((item) => item?.src && ["image", "video"].includes(item.kind));
+  // plain: one character beside the line's words in every scene, and the call to action: the plan that cannot fail on a layout.
+  const plainOnly = options.plain === true;
   // Each scene runs from its line's first word to the next line's (the last to the end of the video).
   const spans = lines.map((line, index) => ({ ...line, start: index === 0 ? 0 : round2(line.start), end: index === lines.length - 1 ? format.duration : round2(lines[index + 1].start) }));
   const last = spans.length - 1;
@@ -147,8 +150,9 @@ export function draftStoryboard(options = {}) {
     const seconds = span.end - span.start;
     if (index > 0 && index < last) {
       const items = extractFacts(span.text).items ?? [];
-      if (!shots && items.length >= 3 && seconds >= 3) return { id: `d${index + 1}`, module: "process-steps", start: span.start, end: span.end, energy: 2, params: { steps: items.slice(0, 4).map((item) => plain(item).replace(/^./, (letter) => letter.toUpperCase())) } };
-      if (members.length > 1 && index % 4 === 2 && seconds <= (portrait ? CAST_SCENE_SECONDS : DRAFT_LINE_SECONDS * 1.5)) return together(span, index);
+      // A list is shown as steps only when every item is a word or two the card has room for.
+      if (!plainOnly && !shots && items.length >= 3 && seconds >= 3 && items.slice(0, 4).every((item) => wordsOf(item).length <= 2 && plain(item).length <= 14)) return { id: `d${index + 1}`, module: "process-steps", start: span.start, end: span.end, energy: 2, params: { steps: items.slice(0, 4).map((item) => plain(item).replace(/^./, (letter) => letter.toUpperCase())) } };
+      if (!plainOnly && members.length > 1 && index % 4 === 2 && seconds <= (portrait ? CAST_SCENE_SECONDS : DRAFT_LINE_SECONDS * 1.5)) return together(span, index);
     }
     return cameo(span, index);
   };
@@ -174,7 +178,7 @@ export function draftStoryboard(options = {}) {
   };
   const middle = spans.map((_, index) => index).filter((index) => index > 0 && index < last);
   const free = () => middle.filter((index) => scenes[index].module === "character-cameo");
-  for (const [at, item] of media.entries()) {
+  for (const [at, item] of (plainOnly ? [] : media).entries()) {
     // Spread the files over the video, in the order given.
     const open = free();
     const index = open[Math.min(open.length - 1, Math.floor((at + 0.5) * open.length / Math.max(1, media.length)))];
