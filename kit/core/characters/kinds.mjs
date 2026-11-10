@@ -49,7 +49,7 @@ const single = (limbs, values) => ({plan: 'single', ...limbs, faceK: 1.9, turn: 
 // head (half-widths rx, ry; its centre `rise` above the barrel's top and hx
 // ahead of the body's centre), a mane and a tail. The front legs are the
 // rig's arms, the hind legs its legs.
-const quad = values => ({plan: 'quad', limbs: 'stubby', thigh: 112, shin: 108, foot: 30, legW: 40, b: 340, h: 166, rise: 156, hx: 186, rx: 124, ry: 138, neckW: 66, faceK: 1.55, top: 62, ...values});
+const quad = values => ({plan: 'quad', limbs: 'stubby', thigh: 112, shin: 108, foot: 30, legW: 40, b: 340, h: 166, rise: 156, hx: 186, rx: 124, ry: 138, neckW: 66, faceK: 1.45, top: 62, ...values});
 // A horse's markings (white): a blaze down the face, a star on the forehead, socks on the lower legs.
 const HORSE_MARKS = ['blaze', 'socks', 'star'];
 const HORSE_SLOTS = {body: 'coat', detail: 'mane and tail', accent: 'lower legs (the points)'};
@@ -59,7 +59,7 @@ export const KINDS = Object.freeze({
   // Horses (four legs; thoroughbred coats: bay, chestnut, grey, black)
   stallion: K('animal', 'a stallion (a sire): a tall horse on four legs with a deep chest, a thick neck and a full mane and tail', {body: '#3b2d2b', detail: '#1f1a1c', accent: '#1f1a1c'}, HORSE_SLOTS, quad({thigh: 118, shin: 114, b: 368, h: 190, rise: 166, hx: 200, rx: 130, ry: 142, neckW: 90, legW: 44}), HORSE_MARKS),
   mare: K('animal', 'a mare (a dam): a horse on four legs, finer than the stallion, with a long mane and tail', {body: '#8a4f2d', detail: '#2a2226', accent: '#2a2226'}, HORSE_SLOTS, quad({}), HORSE_MARKS),
-  foal: K('animal', 'a foal: a young horse, leggy with a short body and a short fluffy mane and tail', {body: '#b9652f', detail: '#e0a868', accent: '#b9652f'}, HORSE_SLOTS, quad({thigh: 100, shin: 100, foot: 26, legW: 30, b: 216, h: 108, rise: 118, hx: 120, rx: 110, ry: 118, neckW: 44, faceK: 1.4, top: 50}), HORSE_MARKS),
+  foal: K('animal', 'a foal: a young horse, leggy with a short body and a short fluffy mane and tail', {body: '#b9652f', detail: '#e0a868', accent: '#b9652f'}, HORSE_SLOTS, quad({thigh: 100, shin: 100, foot: 26, legW: 30, b: 216, h: 108, rise: 118, hx: 120, rx: 110, ry: 118, neckW: 44, faceK: 1.25, top: 50}), HORSE_MARKS),
   // Animals
   cat: K('animal', 'an upright cat: pointed ears, whiskers, a curled tail', {body: '#8f93a8', detail: '#f6efe6', accent: '#f29aa8'}, {body: 'fur', detail: 'muzzle and belly', accent: 'inner ears and nose'}, headed(STUBBY, {ry: 176, top: 86})),
   dog: K('animal', 'an upright dog: floppy ears, a light muzzle, a short tail', {body: '#d39a5b', detail: '#f8ead3', accent: '#7b4b2c'}, {body: 'fur', detail: 'muzzle and belly', accent: 'ears and tail tip'}, headed(STUBBY, {rx: 192, top: 8})),

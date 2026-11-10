@@ -460,7 +460,7 @@ function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic
       P.shape(`M${n(-rx * 0.36)} ${n(hc - ry * 0.9)}C${n(-rx * 0.2)} ${n(hc - ry * 1.2)} ${n(rx * 0.4)} ${n(hc - ry * 1.18)} ${n(rx * 0.44)} ${n(hc - ry * 0.84)}C${n(rx * 0.4)} ${n(hc - ry * 0.56)} ${n(rx * 0.16)} ${n(hc - ry * 0.5)} ${n(rx * 0.04)} ${n(hc - ry * 0.58)}C${n(-rx * 0.02)} ${n(hc - ry * 0.74)} ${n(-rx * 0.2)} ${n(hc - ry * 0.72)} ${n(-rx * 0.36)} ${n(hc - ry * 0.9)}Z`, 'detail')
     ],
     features: [F.ellipse(-9, 43, 3.2, 4.4, 'outline', {outline: false}), F.ellipse(9, 43, 3.2, 4.4, 'outline', {outline: false})],
-    dy: 0.12
+    dy: 0.2
   };
   return {head, near, far, front, hind, torso: farFront => [farFront, ...tail, ...mane, ...body]};
 }
