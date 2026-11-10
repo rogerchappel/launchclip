@@ -413,9 +413,13 @@ function faceMark(ctx, kind, cute) {
   const {rx, cy} = g.head;
   if (kind === 'tears') return [-1, 1].flatMap(sx => (cute ? drop(P, sx * 42, cy + 58, 1.25) : drop(P, sx * 34, cy + 33, 0.85)));
   // Beside the eye, below where a fringe or curls come down over the temple.
-  if (kind === 'sweat') return cute ? drop(P, rx * 0.68, cy + 14, 1.2) : drop(P, rx * 0.58, cy + 2, 0.85);
+  // A face with no room there (a narrow animal or object face, which has no
+  // hair) takes the mark above the outer brow.
+  const narrow = cute && rx * 0.68 < CUTE.eyeX + 30;
+  const at = narrow ? [CUTE.eyeX - 4, cy - 34] : cute ? [rx * 0.68, cy + (kind === 'anger' ? 6 : 14)] : [rx * (kind === 'anger' ? 0.56 : 0.58), cy + (kind === 'anger' ? -4 : 2)];
+  if (kind === 'sweat') return drop(P, at[0], at[1], cute ? 1.2 : 0.85);
   if (kind === 'anger') {
-    const k = cute ? 1.3 : 0.9, x = r1(rx * (cute ? 0.68 : 0.56)), y = r1(cy + (cute ? 6 : -4));
+    const k = cute ? 1.3 : 0.9, x = r1(at[0]), y = r1(at[1]);
     const arm = (ax, ay) => `M${r1(x + ax * 10 * k)} ${r1(y + ay * 3 * k)}Q${r1(x + ax * 3 * k)} ${r1(y + ay * 3 * k)} ${r1(x + ax * 3 * k)} ${r1(y + ay * 10 * k)}`;
     return [P.line(`${arm(-1, -1)}${arm(1, -1)}${arm(1, 1)}${arm(-1, 1)}`, ANGER, cute ? 6 : 5)];
   }

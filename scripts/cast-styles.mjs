@@ -8,7 +8,7 @@
 //   node scripts/cast-styles.mjs [--out qa/cast-styles] [--styles flat,lifelike]
 //     [--sets phone,sofa,kitchen-counter] [--seed 7f3a91c2] [--set office-team]
 //     [--ids maya,theo,...] [--chromium <path>]
-//   node scripts/cast-styles.mjs --expressions maya [--styles chibi,flat]
+//   node scripts/cast-styles.mjs --expressions maya[,mochi,…] [--styles chibi,flat]
 //     one character's face in every expression, per style:
 //     <out>/expressions-<style>.png
 //
@@ -137,10 +137,10 @@ async function main() {
   await mkdir(out, {recursive: true});
   const written = [];
   try {
-    for (const style of flags.expressions ? styles : []) {
+    for (const style of flags.expressions ? styles : []) for (const who of flags.expressions === true ? ['maya'] : String(flags.expressions).split(',')) {
       const page = await browser.newPage({viewport: {width: 1950, height: 900}, deviceScaleFactor: 1});
-      await page.setContent(expressionSheetHtml(style, flags.expressions === true ? 'maya' : String(flags.expressions)), {waitUntil: 'load'});
-      const file = path.join(out, `expressions-${style}.png`);
+      await page.setContent(expressionSheetHtml(style, who), {waitUntil: 'load'});
+      const file = path.join(out, `expressions-${style}${who === 'maya' ? '' : `-${who}`}.png`);
       await page.screenshot({path: file, fullPage: true});
       await page.close();
       console.log(file);

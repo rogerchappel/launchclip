@@ -550,7 +550,7 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const shift = (headed ? 0.4 : 0.75) * LOOK * k * (d.turn ?? 1);
   // The cheeks keep inside the face area at the widest look.
   const cheek = Math.max(40, Math.min(99, ((d.area ?? d.rx) - 14 * k - shift - 6) / (0.52 * k)));
-  const faceCtx = {id, g: {head: {rx: n(cheek), ry: 106, cy: 0}}, c: faceColors, p: FACE_PARAMS, j, expression, static: isStatic, P: F, cute: true, eyeScale: 1};
+  const faceCtx = {id, g: {head: {rx: n(cheek), ry: 106, cy: 0}}, c: faceColors, p: FACE_PARAMS, j, expression, static: isStatic, P: F, cute: true, eyeScale: 1, facing};
   const faces = [...new Set([expression, ...expressions])].map(name => face(faceCtx, name)).filter(Boolean);
   // Head frame: the pivot is the head joint's (the trunk's top, or the face area's chin).
   const centre = quad ? -d.ry * 0.9 + shapes.dy * d.ry : headed ? -d.up + (shapes.dy ?? 0.16) * d.ry : -d.ry;
