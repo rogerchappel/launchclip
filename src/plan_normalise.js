@@ -57,6 +57,7 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
   if (!isObject(storyboard) || !Array.isArray(storyboard.scenes)) return { storyboard, direction, changed: [] };
   const state = { story: structuredClone(storyboard), map: direction ? structuredClone(direction) : null, changed: [], words: Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [], beats, script };
   fitTargets(state);
+  fitHandleParts(state);
   fitPositions(state);
   fitOverlaps(state);
   fitSpeakers(state);
@@ -64,6 +65,21 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
   fitCueTimes(state);
   if (!state.changed.length) return { storyboard, direction, changed: [] };
   return { storyboard: state.story, direction: state.map ?? direction, changed: state.changed };
+}
+
+// A call to action's icon and follow button sit in or beside the handle pill.
+// A plan that names one without a handle has nothing to draw it in, so the
+// part is taken off (the action line and its detail stay as written).
+function fitHandleParts({ story, changed }) {
+  story.scenes.forEach((scene, index) => {
+    const params = scene?.params;
+    if (!isObject(params) || typeof params.handle === "string" && params.handle.trim()) return;
+    const label = scene.id ?? `scenes[${index}]`;
+    if (scene.module === "cta" && params.icon !== undefined && params.icon !== "none") {
+      delete params.icon;
+      changed.push(`${label}: icon taken off (a call to action's icon sits in its handle pill, and the scene has no handle)`);
+    }
+  });
 }
 
 // Scene times as the checks will see them ([{start, end}] by scene index), or null when the anchors do not resolve.

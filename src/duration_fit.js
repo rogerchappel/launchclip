@@ -20,8 +20,9 @@ import { resolveStory } from "@launchclip/core/story.mjs";
 
 // Two wordings: the shared bounds check ("duration must be between 2 and 3600,
 // got 1.29") and the title modules' own ("hook-title needs a scene of at least 1.5 s").
-const DURATION_ERROR = /^params: scenes\[(\d+)\][^]*?\bduration must be between ([\d.]+) and ([\d.]+), got ([\d.]+)/;
-const MINIMUM_ERROR = /^params: scenes\[(\d+)\][^]*?\bneeds a scene of at least ([\d.]+) s/;
+// A character scene's bounds are reported by the cast check, under its own prefix.
+const DURATION_ERROR = /^(?:params|cast): scenes\[(\d+)\][^]*?\bduration must be between ([\d.]+) and ([\d.]+), got ([\d.]+)/;
+const MINIMUM_ERROR = /^(?:params|cast): scenes\[(\d+)\][^]*?\bneeds a scene of at least ([\d.]+) s/;
 // The pace check's wording (paceErrors below): a short video's shot that
 // passes so fast it reads as a flicker.
 const PACE_ERROR = /^pace: scenes\[(\d+)\][^]*?\bholds ([\d.]+) s; [^]*?\bat least ([\d.]+) s/;

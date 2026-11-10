@@ -6,6 +6,11 @@ const format = { width: 1080, height: 1920, fps: 30, duration: 20 };
 const short = (index, id, module, min, got) => `params: scenes[${index}] (${id}): module "${module}" params: ${id} (${module}): duration must be between ${min} and 3600, got ${got}`;
 const scene = (id, module, start, end, extra = {}) => ({ id, module, start, end, params: {}, ...extra });
 
+test("a character scene's bounds, reported by the cast check, are fitted too", () => {
+  const error = 'cast: scenes[4] (sc6): module "character-cameo" params: sc6 (character-cameo): duration must be between 2 and 3600, got 1.805';
+  assert.deepEqual(durationErrors([error]), [{ scene: 4, min: 2, max: 3600, got: 1.805 }]);
+});
+
 test("only scene-length errors below the minimum are read", () => {
   assert.deepEqual(durationErrors([short(1, "a", "clip", 1, 0.98), "params: scenes[0] (x): params.at must fall between 0.5 s and 1 s after the scene start; got 0.2 s", "layout: something"]), [{ scene: 1, min: 1, max: 3600, got: 0.98 }]);
   assert.deepEqual(durationErrors(['params: scenes[0] (s1): module "hook-title" params: hook-title: hook-title needs a scene of at least 1.5 s']), [{ scene: 0, min: 1.5, max: null, got: null }]);

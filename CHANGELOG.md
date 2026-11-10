@@ -40,6 +40,12 @@
 
 ### Fixed
 
+- Storyboard: two slips that each cost a whole repair call are now tooling's
+  to fix. A character scene a little under its module's shortest length is
+  lengthened like any other scene (the cast check reports it under its own
+  prefix, which the fit did not read), and a call to action that names an
+  icon without a handle loses the icon. On real runs each repair resent the
+  full storyboard prompt and took over a minute.
 - Captions stay on screen when a style puts them in the middle of the frame
   (or at the top, low, or at a large size). Tooling used to hide them under
   every card that sat in their band, so a delivered video could have none
